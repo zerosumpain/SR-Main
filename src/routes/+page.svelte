@@ -84,19 +84,19 @@
       </h2>
       <ul class="space-y-3">
         <li>
-          <a href="#" class="text-sm font-light hover:text-[var(--accent)] transition-colors" style="color: var(--text-secondary)">
+          <span class="text-sm font-light cursor-default" style="color: var(--text-secondary)">
             Post title one
-          </a>
+          </span>
         </li>
         <li>
-          <a href="#" class="text-sm font-light hover:text-[var(--accent)] transition-colors" style="color: var(--text-secondary)">
+          <span class="text-sm font-light cursor-default" style="color: var(--text-secondary)">
             Post title two
-          </a>
+          </span>
         </li>
         <li>
-          <a href="#" class="text-sm font-light hover:text-[var(--accent)] transition-colors" style="color: var(--text-secondary)">
+          <span class="text-sm font-light cursor-default" style="color: var(--text-secondary)">
             Post title three
-          </a>
+          </span>
         </li>
       </ul>
       <a href="/blog" class="inline-block mt-4 text-[11px] uppercase tracking-[0.2em] hover:text-[var(--accent)] transition-colors" style="color: var(--text-ghost)">
