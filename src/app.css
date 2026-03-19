@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+:root {
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(255, 255, 255, 0.4);
+  --text-ghost: rgba(255, 255, 255, 0.2);
+  --text-whisper: rgba(255, 255, 255, 0.15);
+  --accent: #00ccff;
+}
+
+html {
+  background: #0a0a0a;
+  color: var(--text-primary);
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
