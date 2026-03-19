@@ -1,12 +1,34 @@
 <script lang="ts">
-	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
+  import '../app.css';
+  import { onMount, setContext } from 'svelte';
+  import BiomeBackground from '$lib/components/BiomeBackground.svelte';
+  import { createBiomeStore } from '$lib/biome/store.svelte';
 
-	let { children } = $props();
+  const store = createBiomeStore();
+  setContext('biome', store);
+
+  onMount(() => {
+    store.initTier();
+    store.startPolling();
+
+    let raf: number;
+    function loop() {
+      store.tick();
+      raf = requestAnimationFrame(loop);
+    }
+    loop();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      store.stopPolling();
+    };
+  });
+
+  let { children } = $props();
 </script>
 
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
+<BiomeBackground {store} />
 
-{@render children()}
+<div class="relative z-10 min-h-screen">
+  {@render children()}
+</div>
