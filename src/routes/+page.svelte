@@ -11,6 +11,9 @@
 
   const store = getContext<BiomeStore>('biome');
 
+  let { data } = $props();
+  const EXISTING_SITE = 'https://strangeramblings.com';
+
   let pulse = $derived(store.state.pulse);
   let temp = $derived(store.state.weather.temp);
   let condition = $derived(store.state.weather.condition);
@@ -110,21 +113,23 @@
         style="color: var(--text-ghost); font-family: var(--font-mono);"
       >Writing</h3>
       <ul class="space-y-4">
-        <li>
-          <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            Building a living background with biometric data
-          </span>
-        </li>
-        <li>
-          <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            Rewriting everything in Svelte, again
-          </span>
-        </li>
-        <li>
-          <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            On personal sites as creative expression
-          </span>
-        </li>
+        {#each data.posts as post}
+          <li>
+            <a
+              href="{EXISTING_SITE}/blog/{post.slug}"
+              class="text-sm font-normal tracking-wide hover:text-[var(--accent)] transition-colors"
+              style="color: var(--text-secondary);"
+              target="_blank"
+              rel="noopener"
+            >
+              {post.title}
+            </a>
+          </li>
+        {:else}
+          <li>
+            <span class="text-sm" style="color: var(--text-ghost);">No posts yet.</span>
+          </li>
+        {/each}
       </ul>
       <a
         href="/blog"
