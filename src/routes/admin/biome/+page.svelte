@@ -1,9 +1,11 @@
 <svelte:head><title>Biome Settings — Admin</title></svelte:head>
 <script lang="ts">
+  import { getContext } from 'svelte';
   import type { PageData } from './$types';
   import type { BiomeSettings } from '$lib/biome/settings';
 
   let { data }: { data: PageData } = $props();
+  const adminToken = getContext<string>('adminToken');
 
   let settings = $state<BiomeSettings>({ ...data.settings });
   let saving = $state(false);
@@ -29,8 +31,7 @@
     saveSuccess = false;
     saveError = null;
     try {
-      const token = new URLSearchParams(window.location.search).get('token') ?? '';
-      const res = await fetch(`/api/biome/config${token ? `?token=${token}` : ''}`, {
+      const res = await fetch(`/api/biome/config?token=${adminToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
@@ -54,7 +55,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-10">
     <a
-      href="/admin"
+      href="/admin?token={adminToken}"
       class="text-[10px] uppercase tracking-[0.3em]"
       style="color: var(--text-ghost); font-family: var(--font-mono);"
     >

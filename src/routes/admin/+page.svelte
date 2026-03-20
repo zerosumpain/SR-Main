@@ -1,8 +1,10 @@
 <svelte:head><title>Admin — Strange Ramblings</title></svelte:head>
 <script lang="ts">
+  import { getContext } from 'svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
+  const adminToken = getContext<string>('adminToken');
 
   function formatDate(unixTs: number | null | undefined): string {
     if (!unixTs) return 'Never';
@@ -20,8 +22,7 @@
     syncing = true;
     syncError = null;
     try {
-      const token = new URLSearchParams(window.location.search).get('token') || '';
-      const res = await fetch(`/api/health/sync?token=${token}`, { method: 'POST' });
+      const res = await fetch(`/api/health/sync?token=${adminToken}`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         syncError = body.error ?? `Error ${res.status}`;
@@ -230,7 +231,7 @@
   <!-- Biome Settings link -->
   <div class="mt-4">
     <a
-      href="/admin/biome"
+      href="/admin/biome?token={adminToken}"
       class="block p-5 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
