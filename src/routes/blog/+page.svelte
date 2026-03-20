@@ -1,5 +1,10 @@
 <svelte:head>
   <title>Writing — Strange Ramblings</title>
+  <meta name="description" content="Writing about code, design, and building things." />
+  <meta property="og:title" content="Writing — Strange Ramblings" />
+  <meta property="og:description" content="Writing about code, design, and building things." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://strangeramblings.com/blog" />
 </svelte:head>
 
 <script lang="ts">

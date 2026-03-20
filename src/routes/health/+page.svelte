@@ -1,5 +1,10 @@
 <svelte:head>
   <title>Health — Strange Ramblings</title>
+  <meta name="description" content="Live health dashboard — readiness, heart rate, sleep, training load." />
+  <meta property="og:title" content="Health — Strange Ramblings" />
+  <meta property="og:description" content="Live health dashboard — readiness, heart rate, sleep, training load." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://strangeramblings.com/health" />
 </svelte:head>
 
 <script lang="ts">

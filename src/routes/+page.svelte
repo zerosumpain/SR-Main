@@ -1,6 +1,13 @@
 <svelte:head>
   <title>Strange Ramblings</title>
   <meta name="description" content="Building things with code in London. A living canvas." />
+  <meta property="og:title" content="Strange Ramblings" />
+  <meta property="og:description" content="Building things with code in London. A living canvas." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://strangeramblings.com" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Strange Ramblings" />
+  <meta name="twitter:description" content="Building things with code in London. A living canvas." />
 </svelte:head>
 
 <script lang="ts">

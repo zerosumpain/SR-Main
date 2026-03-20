@@ -1,6 +1,13 @@
 <svelte:head>
   <title>{data.post.title} — Strange Ramblings</title>
   <meta name="description" content={data.post.excerpt} />
+  <meta property="og:title" content={data.post.title} />
+  <meta property="og:description" content={data.post.excerpt} />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://strangeramblings.com/blog/{data.post.slug}" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content={data.post.title} />
+  <meta name="twitter:description" content={data.post.excerpt} />
 </svelte:head>
 
 <script lang="ts">
