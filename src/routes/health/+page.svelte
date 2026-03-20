@@ -112,10 +112,32 @@
   <ActivityTimeline timeline={data.timeline} onselect={openActivityDetail} />
 </ScrollReveal>
 
-<!-- Footer -->
+<!-- Footer + Sync Status -->
 <div class="h-[6vh]"></div>
-<footer class="pb-12 text-center">
-  <a href="/" class="nav-link text-[10px] uppercase tracking-[0.2em]" style="color: var(--text-whisper); font-family: var(--font-mono);">Home</a>
+<footer class="pb-12 max-w-lg mx-auto px-6 sm:px-8">
+  {#if data.syncState?.length}
+    <div class="flex flex-wrap justify-center gap-4 mb-4">
+      {#each data.syncState as sync}
+        {@const lastSync = sync.lastSyncAt || sync.last_sync_at}
+        {@const ago = lastSync ? Math.round((Date.now() / 1000 - lastSync) / 60) : null}
+        {@const isStale = ago !== null && ago > 120}
+        <span class="text-[9px] tracking-[0.1em]" style="color: {isStale ? '#8b3a1a' : 'var(--text-whisper)'}; font-family: var(--font-mono);">
+          {sync.service}:
+          {#if ago !== null}
+            {ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`}
+            {#if sync.status === 'error' || sync.status === 'syncing'}
+              · <span style="color: {sync.status === 'error' ? '#8b3a1a' : 'var(--accent)'};">{sync.status}</span>
+            {/if}
+          {:else}
+            never
+          {/if}
+        </span>
+      {/each}
+    </div>
+  {/if}
+  <div class="text-center">
+    <a href="/" class="nav-link text-[10px] uppercase tracking-[0.2em]" style="color: var(--text-whisper); font-family: var(--font-mono);">Home</a>
+  </div>
 </footer>
 
 <!-- Slide-over Panel -->

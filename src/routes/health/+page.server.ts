@@ -12,5 +12,8 @@ export const load: PageServerLoad = async ({ fetch }) => {
       fetch('/api/health/stats').then((r) => r.json()).catch(() => null),
     ]);
 
-  return { readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats };
+  // Fetch sync state for staleness indicator
+  const syncState = await fetch('/api/health/sync-state').then((r) => r.json()).catch(() => null);
+
+  return { readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats, syncState, loadedAt: new Date().toISOString() };
 };
