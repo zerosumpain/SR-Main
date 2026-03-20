@@ -3,10 +3,12 @@
   let password = $state('');
   let errorMsg = $state('');
   let loading = $state(false);
+  let debugInfo = $state('');
 
   async function handleLogin() {
     loading = true;
     errorMsg = '';
+    debugInfo = 'Sending request...';
 
     try {
       const res = await window.fetch('/api/admin/login', {
@@ -15,15 +17,30 @@
         body: JSON.stringify({ password }),
       });
 
-      const data = await res.json();
+      debugInfo = `Response: ${res.status} ${res.statusText}`;
+
+      const text = await res.text();
+      debugInfo += ` | Body: ${text}`;
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        errorMsg = 'Invalid response from server';
+        loading = false;
+        return;
+      }
 
       if (res.ok && data.success) {
-        window.location.replace('/admin');
+        debugInfo += ' | Redirecting...';
+        document.location.href = '/admin';
+        return;
       } else {
-        errorMsg = data.error || 'Invalid password';
+        errorMsg = data.error || `Login failed (${res.status})`;
         loading = false;
       }
     } catch (e) {
+      debugInfo = `Fetch error: ${e}`;
       errorMsg = 'Request failed';
       loading = false;
     }
@@ -40,6 +57,9 @@
     </h1>
     {#if errorMsg}
       <p class="text-sm mb-4" style="color: #8b3a1a;">{errorMsg}</p>
+    {/if}
+    {#if debugInfo}
+      <p class="text-[10px] mb-4 break-all" style="color: var(--text-ghost); font-family: var(--font-mono);">{debugInfo}</p>
     {/if}
     <input
       type="password"
