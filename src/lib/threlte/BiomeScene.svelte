@@ -18,11 +18,13 @@
 </script>
 
 <SkyPlane {biomeState} {isDark} />
-<FogLayer {biomeState} {isDark} fogIntensity={s.fogIntensity} dreamMode={s.dreamMode} />
+{#if s.fogEnabled}
+  <FogLayer {biomeState} {isDark} fogIntensity={s.fogIntensity} dreamMode={s.dreamMode} />
+{/if}
 <ParticleField {biomeState} {isDark} {s} />
-{#if s.connectionLines}
+{#if s.connectionLinesEnabled}
   <ConnectionLines {biomeState} {isDark} />
 {/if}
-{#if s.weatherEffects}
+{#if s.weatherEnabled}
   <WeatherEffects {biomeState} {isDark} />
 {/if}

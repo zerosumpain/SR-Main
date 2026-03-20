@@ -3,37 +3,24 @@
   import { getContext } from 'svelte';
   import type { PageData } from './$types';
   import type { BiomeSettings } from '$lib/biome/settings';
+  import { BIOME_SETTINGS_DEFAULTS } from '$lib/biome/settings';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
   let { data }: { data: PageData } = $props();
   const adminToken = getContext<string>('adminToken');
   const biomeStore = getContext<BiomeStore>('biomeStore');
 
-  let settings = $state<BiomeSettings>({ ...data.settings });
+  let settings = $state<BiomeSettings>({ ...BIOME_SETTINGS_DEFAULTS, ...data.settings });
+  let saving = $state(false);
+  let saveSuccess = $state(false);
+  let saveError = $state<string | null>(null);
 
-  // Live preview — push settings to the biome store as they change
+  // Live preview
   $effect(() => {
     if (biomeStore) {
       biomeStore.settings = { ...settings };
     }
   });
-  let saving = $state(false);
-  let saveSuccess = $state(false);
-  let saveError = $state<string | null>(null);
-
-  const booleanFields: { key: keyof BiomeSettings; label: string }[] = [
-    { key: 'weatherEffects', label: 'Weather Effects' },
-    { key: 'connectionLines', label: 'Connection Lines' },
-    { key: 'dreamMode', label: 'Dream Mode' },
-    { key: 'bloodVessel', label: 'Blood Vessel' },
-    { key: 'shudderEffect', label: 'Shudder Effect' },
-    { key: 'combinationEffects', label: 'Combination Effects' },
-  ];
-
-  function toggleBool(key: keyof BiomeSettings) {
-    const current = settings[key] as unknown as boolean;
-    (settings as unknown as Record<string, unknown>)[key] = !current;
-  }
 
   async function save() {
     saving = true;
@@ -58,11 +45,102 @@
       saving = false;
     }
   }
+
+  function resetDefaults() {
+    settings = { ...BIOME_SETTINGS_DEFAULTS };
+  }
+
+  // Setting groups for the UI
+  const groups = [
+    {
+      label: 'Particles',
+      settings: [
+        { key: 'particleDensity', label: 'Density', min: 0.1, max: 5.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
+        { key: 'particleSize', label: 'Size', min: 0.1, max: 5.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
+        { key: 'particleOpacity', label: 'Opacity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Heartbeat',
+      toggle: 'pulseEnabled',
+      settings: [
+        { key: 'pulseIntensity', label: 'Intensity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Fog',
+      toggle: 'fogEnabled',
+      settings: [
+        { key: 'fogIntensity', label: 'Intensity', min: 0, max: 5.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
+      ],
+    },
+    {
+      label: 'Weather',
+      toggle: 'weatherEnabled',
+      settings: [
+        { key: 'weatherIntensity', label: 'Intensity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Connection Lines',
+      toggle: 'connectionLinesEnabled',
+      settings: [
+        { key: 'connectionLineOpacity', label: 'Opacity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Wind',
+      toggle: 'windEnabled',
+      settings: [
+        { key: 'windMultiplier', label: 'Strength', min: 0, max: 500, step: 10, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Blood Vessel Flow',
+      toggle: 'bloodVesselEnabled',
+      settings: [
+        { key: 'bloodVesselSpeed', label: 'Flow Speed', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+        { key: 'bloodVesselSurge', label: 'Pulse Surge', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Shudder',
+      toggle: 'shudderEnabled',
+      settings: [
+        { key: 'shudderIntensity', label: 'Intensity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Combination Amplification',
+      toggle: 'combinationEnabled',
+      settings: [
+        { key: 'combinationStrength', label: 'Strength', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+      ],
+    },
+    {
+      label: 'Dream Mode',
+      toggle: 'dreamMode',
+      settings: [],
+    },
+  ] as const;
+
+  function getVal(key: string): number {
+    return (settings as any)[key] as number;
+  }
+  function setVal(key: string, v: number) {
+    (settings as any)[key] = v;
+  }
+  function getBool(key: string): boolean {
+    return (settings as any)[key] as boolean;
+  }
+  function toggleBool(key: string) {
+    (settings as any)[key] = !(settings as any)[key];
+  }
 </script>
 
 <div class="max-w-2xl mx-auto px-6 py-12">
   <!-- Header -->
-  <div class="flex items-center justify-between mb-10">
+  <div class="flex items-center justify-between mb-4">
     <a
       href="/admin?token={adminToken}"
       class="text-[10px] uppercase tracking-[0.3em]"
@@ -83,201 +161,92 @@
   </p>
 
   {#if saveSuccess}
-    <div
-      class="mb-6 p-4 rounded-lg text-sm"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-    >
+    <div class="mb-4 p-3 rounded-lg text-[10px]" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--accent); font-family: var(--font-mono);">
       Settings saved.
     </div>
   {/if}
 
   {#if saveError}
-    <div
-      class="mb-6 p-4 rounded-lg text-sm"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);"
-    >
+    <div class="mb-4 p-3 rounded-lg text-[10px]" style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);">
       {saveError}
     </div>
   {/if}
 
-  <div class="space-y-4">
-    <!-- Numeric sliders card -->
-    <div
-      class="p-5 rounded-xl border"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
-      <p
-        class="text-[10px] uppercase tracking-[0.25em] mb-5"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
-      >
-        Intensity
-      </p>
-
-      <div class="space-y-5">
-        <!-- Pulse Intensity -->
-        <div>
-          <div class="flex justify-between mb-1">
-            <label
-              class="text-[10px] uppercase tracking-[0.2em]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-              for="pulseIntensity"
-            >
-              Pulse Intensity
-            </label>
-            <span
-              class="text-[10px]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-            >
-              {settings.pulseIntensity}
-            </span>
-          </div>
-          <input
-            id="pulseIntensity"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            bind:value={settings.pulseIntensity}
-            class="w-full"
-          />
-        </div>
-
-        <!-- Particle Density -->
-        <div>
-          <div class="flex justify-between mb-1">
-            <label
-              class="text-[10px] uppercase tracking-[0.2em]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-              for="particleDensity"
-            >
-              Particle Density
-            </label>
-            <span
-              class="text-[10px]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-            >
-              {settings.particleDensity.toFixed(2)}
-            </span>
-          </div>
-          <input
-            id="particleDensity"
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.05"
-            bind:value={settings.particleDensity}
-            class="w-full"
-          />
-        </div>
-
-        <!-- Fog Intensity -->
-        <div>
-          <div class="flex justify-between mb-1">
-            <label
-              class="text-[10px] uppercase tracking-[0.2em]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-              for="fogIntensity"
-            >
-              Fog Intensity
-            </label>
-            <span
-              class="text-[10px]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-            >
-              {settings.fogIntensity.toFixed(2)}
-            </span>
-          </div>
-          <input
-            id="fogIntensity"
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.05"
-            bind:value={settings.fogIntensity}
-            class="w-full"
-          />
-        </div>
-
-        <!-- Blood Flow Rate -->
-        <div>
-          <div class="flex justify-between mb-1">
-            <label
-              class="text-[10px] uppercase tracking-[0.2em]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-              for="bloodFlowRate"
-            >
-              Blood Flow Rate
-            </label>
-            <span
-              class="text-[10px]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-            >
-              {settings.bloodFlowRate}
-            </span>
-          </div>
-          <input
-            id="bloodFlowRate"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            bind:value={settings.bloodFlowRate}
-            class="w-full"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Toggles card -->
-    <div
-      class="p-5 rounded-xl border"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
-      <p
-        class="text-[10px] uppercase tracking-[0.25em] mb-5"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
-      >
-        Effects
-      </p>
-
-      <div class="space-y-4">
-        {#each booleanFields as { key, label }}
-          <div class="flex items-center justify-between">
-            <span
-              class="text-[10px] uppercase tracking-[0.2em]"
-              style="color: var(--text-ghost); font-family: var(--font-mono);"
-            >
-              {label}
-            </span>
+  <div class="space-y-3">
+    {#each groups as group}
+      <div class="p-4 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <!-- Group header with optional toggle -->
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] uppercase tracking-[0.25em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            {group.label}
+          </span>
+          {#if group.toggle}
             <button
               type="button"
               role="switch"
-              aria-label={label}
-              aria-checked={settings[key] as boolean}
-              onclick={() => toggleBool(key)}
-              class="relative w-10 h-5 rounded-full transition-colors"
-              style="background: {(settings[key] as boolean) ? 'var(--accent)' : 'rgba(0,0,0,0.15)'};"
+              aria-checked={getBool(group.toggle)}
+              onclick={() => toggleBool(group.toggle)}
+              class="relative w-9 h-[18px] rounded-full transition-colors"
+              style="background: {getBool(group.toggle) ? 'var(--accent)' : 'rgba(0,0,0,0.12)'};"
             >
               <span
-                class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform"
-                style="background: white; transform: translateX({(settings[key] as boolean) ? '20px' : '0'});"
+                class="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full transition-transform"
+                style="background: white; transform: translateX({getBool(group.toggle) ? '18px' : '0'});"
               ></span>
             </button>
+          {/if}
+        </div>
+
+        <!-- Sliders (dimmed if toggle is off) -->
+        {#if group.settings.length > 0}
+          <div
+            class="space-y-3 transition-opacity"
+            style="opacity: {group.toggle && !getBool(group.toggle) ? '0.3' : '1'}; pointer-events: {group.toggle && !getBool(group.toggle) ? 'none' : 'auto'};"
+          >
+            {#each group.settings as s}
+              <div>
+                <div class="flex justify-between mb-0.5">
+                  <label class="text-[9px] uppercase tracking-[0.15em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                    {s.label}
+                  </label>
+                  <span class="text-[9px]" style="color: var(--text-secondary); font-family: var(--font-mono);">
+                    {s.format(getVal(s.key))}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={s.min}
+                  max={s.max}
+                  step={s.step}
+                  value={getVal(s.key)}
+                  oninput={(e) => setVal(s.key, parseFloat((e.target as HTMLInputElement).value))}
+                  class="w-full h-1 rounded-full appearance-none cursor-pointer"
+                  style="accent-color: var(--accent);"
+                />
+              </div>
+            {/each}
           </div>
-        {/each}
+        {/if}
       </div>
-    </div>
+    {/each}
   </div>
 
-  <!-- Save button -->
-  <div class="mt-8 flex justify-end">
+  <!-- Actions -->
+  <div class="mt-6 flex justify-between">
+    <button
+      onclick={resetDefaults}
+      class="text-[10px] uppercase tracking-[0.2em] px-4 py-2.5 rounded-lg transition-colors"
+      style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
+    >
+      Reset Defaults
+    </button>
     <button
       onclick={save}
       disabled={saving}
-      class="text-[10px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
+      class="text-[10px] uppercase tracking-[0.2em] px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50"
       style="background: var(--accent); color: white; font-family: var(--font-mono);"
     >
-      {saving ? 'Saving…' : 'Save Settings'}
+      {saving ? 'Saving…' : 'Save'}
     </button>
   </div>
 </div>
