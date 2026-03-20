@@ -1,30 +1,39 @@
 <script lang="ts">
-  import { Chart, Svg, GeoPath } from 'layerchart';
-  import { geoMercator } from 'd3-geo';
   import { decodePolyline } from '$lib/health/polyline';
 
   let { activity }: { activity: any } = $props();
 
-  // Decode polyline into GeoJSON
-  let routeGeoJson = $derived.by(() => {
+  // Decode polyline and render as simple SVG
+  let routePoints = $derived.by(() => {
     if (!activity?.polyline) return null;
     const coords = decodePolyline(activity.polyline);
     if (coords.length < 2) return null;
-    return {
-      type: 'Feature' as const,
-      properties: {},
-      geometry: {
-        type: 'LineString' as const,
-        coordinates: coords.map(([lat, lng]) => [lng, lat]), // GeoJSON is [lng, lat]
-      },
-    };
+    return coords;
   });
 
-  // Wrap in FeatureCollection for fitGeojson
-  let routeCollection = $derived(routeGeoJson ? {
-    type: 'FeatureCollection' as const,
-    features: [routeGeoJson],
-  } : null);
+  // Compute SVG viewBox from coordinates
+  let svgData = $derived.by(() => {
+    if (!routePoints) return null;
+    const lats = routePoints.map(p => p[0]);
+    const lngs = routePoints.map(p => p[1]);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const padding = 0.001;
+
+    const width = (maxLng - minLng) + padding * 2;
+    const height = (maxLat - minLat) + padding * 2;
+
+    // Convert to SVG coordinates (flip Y axis since lat increases upward)
+    const points = routePoints.map(([lat, lng]) => {
+      const x = ((lng - minLng + padding) / width) * 100;
+      const y = ((maxLat - lat + padding) / height) * 100;
+      return `${x},${y}`;
+    }).join(' ');
+
+    return { points, viewBox: '0 0 100 100', aspectRatio: width / height };
+  });
 
   function formatDistance(m: number | null): string {
     if (!m) return '—';
@@ -39,8 +48,8 @@
     return h > 0 ? `${h}h ${m}m` : `${m}m ${sec}s`;
   }
 
-  function formatPace(speedTimesHundred: number | null, dist: number | null): string {
-    if (!speedTimesHundred || !dist) return '—';
+  function formatPace(speedTimesHundred: number | null): string {
+    if (!speedTimesHundred) return '—';
     const speedMs = speedTimesHundred / 100;
     if (speedMs <= 0) return '—';
     const paceSecPerKm = 1000 / speedMs;
@@ -52,12 +61,8 @@
   function formatDate(unix: number | null): string {
     if (!unix) return '—';
     return new Date(unix * 1000).toLocaleDateString('en-GB', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     });
   }
 </script>
@@ -72,27 +77,24 @@
       </p>
     </div>
 
-    <!-- Map -->
-    {#if routeCollection}
-      <div class="rounded-xl overflow-hidden border" style="border-color: var(--card-border); height: 220px;">
-        <Chart
-          geo={{
-            projection: geoMercator(),
-            fitGeojson: routeCollection,
-          }}
-          padding={{ top: 20, bottom: 20, left: 20, right: 20 }}
+    <!-- Route Map -->
+    {#if svgData}
+      <div class="rounded-xl overflow-hidden border p-4" style="border-color: var(--card-border); background: var(--card-bg);">
+        <svg
+          viewBox={svgData.viewBox}
+          class="w-full"
+          style="height: {Math.min(220, 220 / Math.max(0.5, svgData.aspectRatio))}px;"
+          preserveAspectRatio="xMidYMid meet"
         >
-          <Svg>
-            <GeoPath
-              geojson={routeGeoJson}
-              fill="none"
-              stroke="var(--accent)"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
-        </Chart>
+          <polyline
+            points={svgData.points}
+            fill="none"
+            stroke="var(--accent)"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
       </div>
     {/if}
 
@@ -101,7 +103,7 @@
       {#each [
         { label: 'Distance', value: formatDistance(activity.distance), desc: 'Total distance covered' },
         { label: 'Duration', value: formatDuration(activity.movingTime), desc: 'Moving time (excludes pauses)' },
-        { label: 'Pace', value: formatPace(activity.averageSpeed, activity.distance), desc: 'Average pace per kilometre' },
+        { label: 'Pace', value: formatPace(activity.averageSpeed), desc: 'Average pace per kilometre' },
         { label: 'Elevation', value: activity.totalElevationGain ? `${Math.round(activity.totalElevationGain)}m` : '—', desc: 'Total elevation gained' },
       ] as metric}
         <div class="p-3 rounded-lg" style="background: var(--card-bg);">
@@ -121,14 +123,12 @@
             <div class="p-3 rounded-lg" style="background: var(--card-bg);">
               <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Average</p>
               <p class="text-lg font-light mt-0.5" style="color: var(--text-primary);">{Math.round(activity.averageHeartrate)} <span class="text-xs" style="color: var(--text-ghost);">bpm</span></p>
-              <p class="text-[9px] mt-0.5" style="color: var(--text-whisper);">Mean HR during the activity</p>
             </div>
           {/if}
           {#if activity.maxHeartrate}
             <div class="p-3 rounded-lg" style="background: var(--card-bg);">
               <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Max</p>
               <p class="text-lg font-light mt-0.5" style="color: var(--text-primary);">{Math.round(activity.maxHeartrate)} <span class="text-xs" style="color: var(--text-ghost);">bpm</span></p>
-              <p class="text-[9px] mt-0.5" style="color: var(--text-whisper);">Peak heart rate reached</p>
             </div>
           {/if}
         </div>
@@ -152,7 +152,7 @@
           <span class="text-sm" style="color: var(--text-primary); font-family: var(--font-mono);">{activity.sufferScore}</span>
         </div>
       {/if}
-      {#if activity.elapsedTime && activity.movingTime}
+      {#if activity.elapsedTime && activity.movingTime && activity.elapsedTime !== activity.movingTime}
         <div class="flex justify-between py-1.5">
           <div>
             <span class="text-sm" style="color: var(--text-secondary);">Elapsed Time</span>
