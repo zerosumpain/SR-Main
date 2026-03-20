@@ -1,0 +1,114 @@
+import { json, error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
+import { db } from '$lib/db';
+import { appleHealthMetrics } from '$lib/db/schema';
+import { and, eq, gte, lte } from 'drizzle-orm';
+import type { RequestHandler } from './$types';
+
+const SUPPORTED_METRICS = [
+  'heart_rate',
+  'heart_rate_variability',
+  'resting_heart_rate',
+  'oxygen_saturation',
+  'respiratory_rate',
+  'body_temperature',
+  'step_count',
+  'walking_running_distance',
+  'flights_climbed',
+  'active_energy',
+];
+
+interface AppleHealthDataPoint {
+  date: string; // ISO 8601
+  qty?: number;
+  Avg?: number;
+  Min?: number;
+  Max?: number;
+}
+
+interface AppleHealthMetric {
+  name: string;
+  units: string;
+  data: AppleHealthDataPoint[];
+}
+
+export const POST: RequestHandler = async ({ request }) => {
+  // Auth check
+  const apiKey = request.headers.get('x-api-key');
+  if (!env.APPLE_HEALTH_API_KEY || apiKey !== env.APPLE_HEALTH_API_KEY) {
+    throw error(401, 'Invalid API key');
+  }
+
+  const start = Date.now();
+  const payload = await request.json();
+  const metrics: AppleHealthMetric[] = payload?.data?.metrics || [];
+
+  let totalSynced = 0;
+  const errors: string[] = [];
+
+  for (const metric of metrics) {
+    if (!SUPPORTED_METRICS.includes(metric.name)) continue;
+    if (!metric.data?.length) continue;
+
+    try {
+      const mapped = metric.data
+        .map((dp) => {
+          const value = dp.qty ?? dp.Avg;
+          if (value == null) return null;
+          const dateUnix = Math.floor(new Date(dp.date).getTime() / 1000);
+          return {
+            metricName: metric.name,
+            date: dateUnix,
+            dateLocal: dp.date,
+            value: Math.round(value * 100),
+            minValue: dp.Min != null ? Math.round(dp.Min * 100) : null,
+            maxValue: dp.Max != null ? Math.round(dp.Max * 100) : null,
+            units: metric.units,
+            // syncedAt omitted — DB default (extract(epoch from now())::integer) handles it
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      if (!mapped.length) continue;
+
+      // Delete stale data in date range for this metric
+      const dates = mapped.map((m) => m.date);
+      const minDate = Math.min(...dates);
+      const maxDate = Math.max(...dates);
+
+      await db.delete(appleHealthMetrics).where(
+        and(
+          eq(appleHealthMetrics.metricName, metric.name),
+          gte(appleHealthMetrics.date, minDate),
+          lte(appleHealthMetrics.date, maxDate),
+        ),
+      );
+
+      // Batch insert (500 at a time)
+      for (let i = 0; i < mapped.length; i += 500) {
+        const batch = mapped.slice(i, i + 500);
+        await db.insert(appleHealthMetrics).values(batch);
+      }
+
+      totalSynced += mapped.length;
+    } catch (e) {
+      errors.push(`${metric.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return json({
+    success: errors.length === 0,
+    recordsSynced: totalSynced,
+    errors: errors.length ? errors : undefined,
+    duration: Date.now() - start,
+  });
+};
+
+// GET — health check
+export const GET: RequestHandler = async () => {
+  return json({
+    status: env.APPLE_HEALTH_API_KEY ? 'ready' : 'not_configured',
+    endpoint: '/api/health/apple/ingest',
+    auth: 'X-API-Key header required',
+  });
+};
