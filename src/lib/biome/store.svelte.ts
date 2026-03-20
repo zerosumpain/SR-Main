@@ -1,5 +1,6 @@
 import { BIOME_DEFAULTS, POLL_INTERVAL, LERP_DURATION, type BiomeState, type RenderTier } from './state';
 import { interpolateBiomeState, easeOut } from './interpolate';
+import { BIOME_SETTINGS_DEFAULTS, type BiomeSettings } from './settings';
 
 export function createBiomeStore() {
   let state = $state<BiomeState>({ ...BIOME_DEFAULTS });
@@ -8,6 +9,7 @@ export function createBiomeStore() {
   let tier = $state<RenderTier>('webgl');
   let lerpStart = $state(0);
   let isLerping = $state(false);
+  let settings = $state<BiomeSettings>({ ...BIOME_SETTINGS_DEFAULTS });
 
   function setState(newState: BiomeState) {
     previousState = { ...state };
@@ -70,9 +72,21 @@ export function createBiomeStore() {
     }
   }
 
+  async function fetchSettings() {
+    try {
+      const res = await fetch('/api/biome/config');
+      if (!res.ok) return;
+      const data: BiomeSettings = await res.json();
+      settings = { ...BIOME_SETTINGS_DEFAULTS, ...data };
+    } catch {
+      // Silently fail — keep defaults
+    }
+  }
+
   let pollInterval: ReturnType<typeof setInterval> | undefined;
 
   function startPolling() {
+    fetchSettings();
     fetchState();
     pollInterval = setInterval(fetchState, POLL_INTERVAL);
   }
@@ -86,11 +100,13 @@ export function createBiomeStore() {
     get targetState() { return targetState; },
     get tier() { return tier; },
     get isLerping() { return isLerping; },
+    get settings() { return settings; },
     setState,
     tick,
     initTier,
     startPolling,
     stopPolling,
+    fetchSettings,
   };
 }
 

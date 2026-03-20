@@ -257,3 +257,13 @@ export const appleHealthMetrics = pgTable(
 
 export type AppleHealthMetricRecord = typeof appleHealthMetrics.$inferSelect;
 export type NewAppleHealthMetric = typeof appleHealthMetrics.$inferInsert;
+
+// ==========================================
+// Biome Config
+// ==========================================
+
+export const biomeConfig = pgTable('biome_config', {
+  id: serial('id').primaryKey(),
+  settings: text('settings').notNull(), // JSON blob
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
