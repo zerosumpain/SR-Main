@@ -49,6 +49,17 @@
     return Math.round(Math.max(200, Math.min(MAX_PARTICLES, base)));
   }
 
+  // --- Advanced effect toggles (will come from settings later) ---
+  const bloodVesselEnabled = true;
+  const bloodFlowRate = 50; // 0-100
+
+  const shudderEnabled = true;
+  let shudderEnergy = 0;
+  let prevBeat = 0;
+
+  const combinationEnabled = true;
+  let comboMultiplier = 1.0;
+
   let elapsed = 0;
   useTask((delta) => {
     elapsed += delta;
@@ -62,36 +73,81 @@
     // Cardiac pulse — use higher intensity for visible effect
     const beat = cardiacPulse(elapsed, biomeState.pulse, 100);
 
+    // --- Shudder: detect beat onset and inject energy ---
+    if (shudderEnabled) {
+      if (beat > 0.3 && prevBeat < 0.2) {
+        shudderEnergy = 1.0; // inject energy on beat
+      }
+      shudderEnergy *= 0.85; // decay each frame
+      prevBeat = beat;
+    }
+
+    // --- Combination multiplier ---
+    if (combinationEnabled) {
+      const strainFactor = biomeState.strain / 100;
+      const pulseFactor = Math.max(0, (biomeState.pulse - 40)) / 80;
+      comboMultiplier = 1 + (strainFactor * pulseFactor) * 0.8; // 1.0 to 1.8
+    } else {
+      comboMultiplier = 1.0;
+    }
+
     for (let i = 0; i < drawCount; i++) {
       const idx = i * 3;
 
-      // Apply velocity + wind
-      positions[idx] += velocities[idx] + windX * windScale;
-      positions[idx + 1] += velocities[idx + 1] + windY * windScale;
+      // --- Blood vessel mode vs normal wind drift ---
+      if (bloodVesselEnabled) {
+        const normalizedY = (positions[idx + 1] + 10) / 20; // 0-1
+        const distFromCenter = Math.abs(normalizedY - 0.5) * 2; // 0 at center, 1 at edges
+        const flowProfile = Math.pow(1 - distFromCenter * distFromCenter, 2); // steep parabolic
 
-      // Wrap around boundaries
-      if (positions[idx] > 10) positions[idx] = -10;
-      if (positions[idx] < -10) positions[idx] = 10;
-      if (positions[idx + 1] > 10) positions[idx + 1] = -10;
-      if (positions[idx + 1] < -10) positions[idx + 1] = 10;
+        const pulseSpeedMul = 1 + (bloodFlowRate / 100) * beat;
+        const baseFlow = (0.01 * flowProfile + 0.0001) * pulseSpeedMul;
+        const surgeFlow = 0.06 * beat * flowProfile * pulseSpeedMul;
 
-      // Scale — subtle size pulse
+        positions[idx] += baseFlow + surgeFlow;
+
+        // Vertical wobble
+        positions[idx + 1] += Math.sin(elapsed * 1.2 + i * 0.73) * 0.002 * flowProfile;
+
+        // Wrap horizontally
+        if (positions[idx] > 10) positions[idx] = -10;
+      } else {
+        // Existing wind drift logic
+        positions[idx] += velocities[idx] + windX * windScale;
+        positions[idx + 1] += velocities[idx + 1] + windY * windScale;
+
+        // Wrap around boundaries
+        if (positions[idx] > 10) positions[idx] = -10;
+        if (positions[idx] < -10) positions[idx] = 10;
+        if (positions[idx + 1] > 10) positions[idx + 1] = -10;
+        if (positions[idx + 1] < -10) positions[idx + 1] = 10;
+      }
+
+      // --- Shudder: add vibration offset on beat ---
+      if (shudderEnabled && shudderEnergy > 0.01) {
+        const particlePhase = i * 0.73;
+        const vibration = Math.sin(elapsed * 35 * Math.PI * 2 + particlePhase) * shudderEnergy * 0.02;
+        positions[idx] += vibration;
+        positions[idx + 1] += vibration * 0.7; // slightly less on Y
+      }
+
+      // Scale — subtle size pulse, amplified by combo multiplier
       const baseRadius = 0.03 + (i % 5) * 0.006; // slight size variation
-      const scale = (baseRadius + beat * 0.019) / 0.04;
+      const scale = (baseRadius + beat * 0.019 * comboMultiplier) / 0.04;
       dummy.position.set(positions[idx], positions[idx + 1], positions[idx + 2]);
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
 
-      // Color — warm shift on beat, stronger flash
+      // Color — warm shift on beat, stronger flash, amplified by combo multiplier
       const recoveryT = biomeState.recovery / 150;
       const restColor = baseColor.clone().lerp(peakColor, recoveryT);
-      const finalColor = restColor.clone().lerp(beatFlashColor, beat * 0.875);
+      const finalColor = restColor.clone().lerp(beatFlashColor, beat * 0.875 * comboMultiplier);
       mesh.setColorAt(i, finalColor);
     }
 
-    // Opacity pulse — big swing on each heartbeat
-    material.opacity = (isDark ? 0.25 : 0.08) + beat * (isDark ? 0.5 : 0.35);
+    // Opacity pulse — big swing on each heartbeat, amplified by combo multiplier
+    material.opacity = (isDark ? 0.25 : 0.08) + beat * (isDark ? 0.5 : 0.35) * comboMultiplier;
 
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
