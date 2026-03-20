@@ -42,7 +42,10 @@
           {roundPulse(pulse)}
         </p>
         <p class="label mt-2">
-          BPM&ensp;/&ensp;{data.steps?.toLocaleString() || '—'} STEPS&ensp;/&ensp;{Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
+          BPM&ensp;/&ensp;{data.steps?.toLocaleString() || '—'} STEPS
+        </p>
+        <p class="label mt-1">
+          {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}&ensp;/&ensp;LONDON
         </p>
       </div>
 
