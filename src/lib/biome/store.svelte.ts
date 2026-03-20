@@ -101,6 +101,7 @@ export function createBiomeStore() {
     get tier() { return tier; },
     get isLerping() { return isLerping; },
     get settings() { return settings; },
+    set settings(s: BiomeSettings) { settings = s; },
     setState,
     tick,
     initTier,

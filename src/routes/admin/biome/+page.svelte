@@ -3,11 +3,20 @@
   import { getContext } from 'svelte';
   import type { PageData } from './$types';
   import type { BiomeSettings } from '$lib/biome/settings';
+  import type { BiomeStore } from '$lib/biome/store.svelte';
 
   let { data }: { data: PageData } = $props();
   const adminToken = getContext<string>('adminToken');
+  const biomeStore = getContext<BiomeStore>('biomeStore');
 
   let settings = $state<BiomeSettings>({ ...data.settings });
+
+  // Live preview — push settings to the biome store as they change
+  $effect(() => {
+    if (biomeStore) {
+      biomeStore.settings = { ...settings };
+    }
+  });
   let saving = $state(false);
   let saveSuccess = $state(false);
   let saveError = $state<string | null>(null);
@@ -68,6 +77,10 @@
       Biome Settings
     </h1>
   </div>
+
+  <p class="text-[9px] mb-6" style="color: var(--text-whisper); font-family: var(--font-mono);">
+    Changes preview live in the background. Save to persist.
+  </p>
 
   {#if saveSuccess}
     <div
