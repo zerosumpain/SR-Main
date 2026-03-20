@@ -8,6 +8,9 @@
   async function handleLogin() {
     loading = true;
     errorMsg = '';
+    debugInfo = 'Clearing old session...';
+    // Clear any stale cookies by hitting the API with wrong password first
+    document.cookie = 'admin_session=; path=/; max-age=0';
     debugInfo = 'Sending request...';
 
     try {

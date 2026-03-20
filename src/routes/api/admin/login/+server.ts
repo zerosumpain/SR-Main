@@ -21,10 +21,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   const hash = createSessionCookie(password);
   console.log('[login] success, hash starts:', hash.slice(0, 8));
 
+  // Clear any stale cookie first
+  cookies.delete('admin_session', { path: '/' });
+
+  // Set fresh cookie — try without secure flag (Cloudflare handles HTTPS)
   cookies.set('admin_session', hash, {
     path: '/',
     httpOnly: true,
-    secure: true,
+    secure: false,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
   });
