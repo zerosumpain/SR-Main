@@ -47,11 +47,11 @@
       </div>
 
       <!-- Right: explainer with accent strip -->
-      <div class="accent-strip">
-        <p class="text-base sm:text-lg font-medium leading-relaxed" style="color: var(--text-primary);">
+      <div class="accent-strip max-w-[200px]">
+        <p class="text-base font-medium leading-relaxed" style="color: var(--text-primary);">
           This is me, from about 15 minutes ago.
         </p>
-        <p class="text-sm sm:text-base leading-relaxed mt-2" style="color: var(--text-secondary);">
+        <p class="text-sm leading-relaxed mt-2" style="color: var(--text-secondary);">
           The background is my heart rate. Below is today's steps, distance, and the weather
           wherever I am, right now.
         </p>
