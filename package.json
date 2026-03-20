@@ -25,6 +25,7 @@
 		"vitest": "^4.1.0"
 	},
 	"dependencies": {
+		"@sveltejs/adapter-node": "^5.5.4",
 		"@threlte/core": "^8.5.0",
 		"@threlte/extras": "^9.9.0",
 		"three": "^0.183.2"
