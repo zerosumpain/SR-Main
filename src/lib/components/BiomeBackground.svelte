@@ -11,11 +11,11 @@
 <div class="fixed inset-0 z-0 pointer-events-none">
   {#if store.tier === 'webgl'}
     <Canvas>
-      <BiomeScene state={store.state} isDark={false} />
+      <BiomeScene biomeState={store.state} isDark={false} />
     </Canvas>
   {:else if store.tier === 'canvas'}
-    <BiomeCssFallback state={store.state} />
+    <BiomeCssFallback biomeState={store.state} />
   {:else}
-    <BiomeReducedMotion state={store.state} />
+    <BiomeReducedMotion biomeState={store.state} />
   {/if}
 </div>

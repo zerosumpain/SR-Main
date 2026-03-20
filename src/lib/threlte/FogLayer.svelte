@@ -5,7 +5,7 @@
   import fogFrag from '$lib/shaders/fog.frag.glsl?raw';
   import type { BiomeState } from '$lib/biome/state';
 
-  let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
 
   const geometry = new PlaneGeometry(2, 2);
   const material = new ShaderMaterial({
@@ -26,8 +26,8 @@
   useTask((delta) => {
     elapsed += delta;
     material.uniforms.uTime.value = elapsed;
-    material.uniforms.uFogDensity.value = 1 - state.sleepQuality / 100;
-    material.uniforms.uDreaming.value = state.dreaming ? 1.0 : 0.0;
+    material.uniforms.uFogDensity.value = 1 - biomeState.sleepQuality / 100;
+    material.uniforms.uDreaming.value = biomeState.dreaming ? 1.0 : 0.0;
     material.uniforms.uIsDark.value = isDark ? 1.0 : 0.0;
   });
 </script>

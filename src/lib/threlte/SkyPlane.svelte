@@ -6,7 +6,7 @@
   import type { BiomeState } from '$lib/biome/state';
   import { DAY_PHASE_MAP } from '$lib/biome/state';
 
-  let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
 
   const geometry = new PlaneGeometry(2, 2);
   const material = new ShaderMaterial({
@@ -27,9 +27,9 @@
   useTask((delta) => {
     elapsed += delta;
     material.uniforms.uTime.value = elapsed;
-    material.uniforms.uRecovery.value = state.recovery;
-    material.uniforms.uDayPhase.value = DAY_PHASE_MAP[state.dayPhase];
-    material.uniforms.uDreaming.value = state.dreaming ? 1.0 : 0.0;
+    material.uniforms.uRecovery.value = biomeState.recovery;
+    material.uniforms.uDayPhase.value = DAY_PHASE_MAP[biomeState.dayPhase];
+    material.uniforms.uDreaming.value = biomeState.dreaming ? 1.0 : 0.0;
     material.uniforms.uIsDark.value = isDark ? 1.0 : 0.0;
   });
 </script>

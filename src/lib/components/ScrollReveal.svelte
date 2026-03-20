@@ -5,26 +5,45 @@
   let { children }: { children: Snippet } = $props();
 
   let element: HTMLElement;
-  let visible = $state(false);
+  let revealed = $state(false);
 
   onMount(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          visible = true;
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.05, rootMargin: '0px 0px -50px 0px' }
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
+    // Start revealed immediately if already in viewport
+    const rect = element.getBoundingClientRect();
+    if (rect.top < window.innerHeight) {
+      revealed = true;
+      return;
+    }
+
+    function onScroll() {
+      const rect = element.getBoundingClientRect();
+      if (rect.top < window.innerHeight - 50) {
+        revealed = true;
+        window.removeEventListener('scroll', onScroll);
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   });
 </script>
 
 <div
   bind:this={element}
-  style="transition: opacity 0.8s ease-out, transform 0.8s ease-out; opacity: {visible ? 1 : 0}; transform: translateY({visible ? 0 : 20}px);"
+  class={revealed ? 'sr-visible' : 'sr-hidden'}
 >
   {@render children()}
 </div>
+
+<style>
+  .sr-hidden {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  }
+  .sr-visible {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  }
+</style>

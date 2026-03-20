@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { BiomeState, DayPhase } from '$lib/biome/state';
 
-  let { state }: { state: BiomeState } = $props();
+  let { biomeState }: { biomeState: BiomeState } = $props();
 
   const DAY_PHASE_HUE: Record<DayPhase, number> = {
     night: 30, dawn: 35, day: 38, dusk: 25,
   };
 
-  let hue = $derived(DAY_PHASE_HUE[state.dayPhase]);
-  let saturation = $derived(Math.round(4 + state.recovery * 0.12));
+  let hue = $derived(DAY_PHASE_HUE[biomeState.dayPhase]);
+  let saturation = $derived(Math.round(4 + biomeState.recovery * 0.12));
 </script>
 
 <div

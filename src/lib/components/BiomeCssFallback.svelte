@@ -3,7 +3,7 @@
   import type { BiomeState, DayPhase } from '$lib/biome/state';
   import { cardiacPulse, windToVector } from '$lib/biome/state';
 
-  let { state }: { state: BiomeState } = $props();
+  let { biomeState }: { biomeState: BiomeState } = $props();
 
   let canvas: HTMLCanvasElement;
   const PARTICLE_COUNT = 120;
@@ -49,8 +49,8 @@
       const h = window.innerHeight;
 
       // Background gradient
-      const hue = DAY_PHASE_HUE[state.dayPhase];
-      const sat = Math.round(4 + state.recovery * 0.12);
+      const hue = DAY_PHASE_HUE[biomeState.dayPhase];
+      const sat = Math.round(4 + biomeState.recovery * 0.12);
       const grad = ctx!.createRadialGradient(w / 2, h, 0, w / 2, h, Math.max(w, h));
       grad.addColorStop(0, `hsl(${hue}, ${sat}%, 88%)`);
       grad.addColorStop(1, `hsl(${hue}, ${sat}%, 82%)`);
@@ -59,9 +59,9 @@
 
       // Particles — multiply blending for warm dark-on-light
       ctx!.globalCompositeOperation = 'multiply';
-      const [windX, windY] = windToVector(state.weather.windDirection, state.weather.windSpeed);
-      const beat = cardiacPulse(elapsed, state.pulse, 50);
-      const recoveryT = state.recovery / 150;
+      const [windX, windY] = windToVector(biomeState.weather.windDirection, biomeState.weather.windSpeed);
+      const beat = cardiacPulse(elapsed, biomeState.pulse, 50);
+      const recoveryT = biomeState.recovery / 150;
 
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         px[i] += vx[i] + windX * 0.02;

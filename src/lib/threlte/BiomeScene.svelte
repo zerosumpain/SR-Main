@@ -6,11 +6,11 @@
   import WeatherEffects from './WeatherEffects.svelte';
   import type { BiomeState } from '$lib/biome/state';
 
-  let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
 </script>
 
-<SkyPlane {state} {isDark} />
-<FogLayer {state} {isDark} />
-<ParticleField {state} {isDark} />
-<ConnectionLines {state} {isDark} />
-<WeatherEffects biomeState={state} {isDark} />
+<SkyPlane {biomeState} {isDark} />
+<FogLayer {biomeState} {isDark} />
+<ParticleField {biomeState} {isDark} />
+<ConnectionLines {biomeState} {isDark} />
+<WeatherEffects {biomeState} {isDark} />

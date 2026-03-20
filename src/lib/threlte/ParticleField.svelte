@@ -12,7 +12,7 @@
   import type { BiomeState } from '$lib/biome/state';
   import { cardiacPulse, windToVector, MAX_PARTICLES } from '$lib/biome/state';
 
-  let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
 
   const dummy = new Object3D();
   let baseSize = $derived(isDark ? 0.04 : 0.08);
@@ -45,7 +45,7 @@
   let mesh = $state.raw<InstancedMesh | undefined>(undefined);
 
   function getDrawCount(): number {
-    const base = 200 + (state.strain / 100) * (MAX_PARTICLES - 200);
+    const base = 200 + (biomeState.strain / 100) * (MAX_PARTICLES - 200);
     return Math.round(Math.max(200, Math.min(MAX_PARTICLES, base)));
   }
 
@@ -54,7 +54,7 @@
     elapsed += delta;
     if (!mesh) return;
 
-    const [windX, windY] = windToVector(state.weather.windDirection, state.weather.windSpeed);
+    const [windX, windY] = windToVector(biomeState.weather.windDirection, biomeState.weather.windSpeed);
     const windScale = 0.0002;
     const drawCount = getDrawCount();
     mesh.count = drawCount;
@@ -73,7 +73,7 @@
       if (positions[idx + 1] < -10) positions[idx + 1] = 10;
 
       // Cardiac pulse
-      const beat = cardiacPulse(elapsed, state.pulse, 50);
+      const beat = cardiacPulse(elapsed, biomeState.pulse, 50);
 
       // Scale
       const scale = baseSize + beat * 0.03;
@@ -83,7 +83,7 @@
       mesh.setMatrixAt(i, dummy.matrix);
 
       // Color
-      const recoveryT = state.recovery / 150;
+      const recoveryT = biomeState.recovery / 150;
       const restColor = baseGrey.clone().lerp(peakColor, recoveryT);
       const finalColor = restColor.clone().lerp(beatFlashColor, Math.pow(beat, 1.2));
       mesh.setColorAt(i, finalColor);

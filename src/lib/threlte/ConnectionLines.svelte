@@ -11,7 +11,7 @@
   import type { BiomeState } from '$lib/biome/state';
   import { cardiacPulse, MAX_CONNECTION_SEGMENTS, CONNECTION_MAX_DIST } from '$lib/biome/state';
 
-  let { state, isDark = true, particlePositions }: {
+  let { biomeState, isDark = true, particlePositions }: {
     state: BiomeState;
     isDark?: boolean;
     particlePositions?: Float32Array;
@@ -40,8 +40,8 @@
     elapsed += delta;
     if (!particlePositions) return;
 
-    const beat = cardiacPulse(elapsed, state.pulse, 50);
-    material.opacity = (0.03 + beat * 0.12) * (state.recovery / 100);
+    const beat = cardiacPulse(elapsed, biomeState.pulse, 50);
+    material.opacity = (0.03 + beat * 0.12) * (biomeState.recovery / 100);
 
     // Sample particles and find connections
     const drawCount = Math.min(2000, particlePositions.length / 3);
