@@ -1,10 +1,11 @@
 <svelte:head><title>Admin Login — Strange Ramblings</title></svelte:head>
 <script lang="ts">
+  import { enhance } from '$app/forms';
   let { form } = $props();
 </script>
 
 <div class="min-h-screen flex items-center justify-center p-8">
-  <form method="POST" class="w-full max-w-xs">
+  <form method="POST" use:enhance class="w-full max-w-xs">
     <h1
       class="text-[10px] uppercase tracking-[0.3em] mb-6"
       style="color: var(--text-ghost); font-family: var(--font-mono);"
