@@ -29,7 +29,11 @@
 		"@sveltejs/adapter-node": "^5.5.4",
 		"@threlte/core": "^8.5.0",
 		"@threlte/extras": "^9.9.0",
+		"d3-array": "^3.2.4",
+		"d3-scale": "^4.0.2",
+		"d3-shape": "^3.2.0",
 		"drizzle-orm": "^0.45.1",
+		"layerchart": "^1.0.13",
 		"pg": "^8.20.0",
 		"three": "^0.183.2"
 	}
