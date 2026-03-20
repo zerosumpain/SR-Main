@@ -16,8 +16,10 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
   console.log('[admin guard]', {
     pathname: url.pathname,
     hasCookie: !!session,
-    cookieLength: session?.length,
-    matches: session === expected,
+    cookieFirst8: session?.slice(0, 8),
+    expectedFirst8: expected.slice(0, 8),
+    envPasswordLength: (env.ADMIN_PASSWORD || '').length,
+    envPasswordValue: env.ADMIN_PASSWORD,
   });
 
   if (!session || session !== expected) {
