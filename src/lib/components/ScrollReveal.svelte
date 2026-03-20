@@ -15,7 +15,7 @@
           observer.disconnect();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.05, rootMargin: '0px 0px -50px 0px' }
     );
     observer.observe(element);
     return () => observer.disconnect();
@@ -24,9 +24,7 @@
 
 <div
   bind:this={element}
-  class="transition-all duration-700 ease-out {visible
-    ? 'opacity-100 translate-y-0'
-    : 'opacity-0 translate-y-5'}"
+  style="transition: opacity 0.8s ease-out, transform 0.8s ease-out; opacity: {visible ? 1 : 0}; transform: translateY({visible ? 0 : 20}px);"
 >
   {@render children()}
 </div>
