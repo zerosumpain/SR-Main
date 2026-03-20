@@ -19,6 +19,7 @@ export const actions: Actions = {
     cookies.set('admin_session', hash, {
       path: '/',
       httpOnly: true,
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
