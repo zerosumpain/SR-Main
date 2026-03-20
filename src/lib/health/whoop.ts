@@ -2,7 +2,7 @@ import { env } from '$env/dynamic/private';
 
 const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token';
-const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer/v1';
+const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer/v2';
 const WHOOP_SCOPES =
   'offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement';
 
