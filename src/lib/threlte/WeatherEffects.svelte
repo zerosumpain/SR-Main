@@ -19,11 +19,11 @@
   // Weather particle config per condition — reactive to isDark
   let WEATHER_CONFIG = $derived<Record<WeatherCondition, { count: number; gravity: number; size: number; color: string }>>({
     clear: { count: 0, gravity: 0, size: 0, color: '#000000' },
-    rain: { count: 400, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#4a6070' },
-    thunderstorm: { count: 500, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#4a6070' },
-    snow: { count: 300, gravity: 1.0, size: 0.06, color: isDark ? '#e8e8f0' : '#9a9aa0' },
-    cloudy: { count: 100, gravity: 0, size: 0.15, color: isDark ? '#334155' : '#9ca3af' },
-    fog: { count: 200, gravity: 0, size: 0.08, color: isDark ? '#445566' : '#b0a898' },
+    rain: { count: 400, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#7a8a7a' },
+    thunderstorm: { count: 500, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#6a7a6a' },
+    snow: { count: 300, gravity: 1.0, size: 0.06, color: isDark ? '#e8e8f0' : '#d4c4a8' },
+    cloudy: { count: 100, gravity: 0, size: 0.15, color: isDark ? '#334155' : '#b8a88c' },
+    fog: { count: 200, gravity: 0, size: 0.08, color: isDark ? '#445566' : '#c4b49a' },
   });
 
   // Initialize positions

@@ -102,17 +102,17 @@
       <ul class="space-y-4">
         <li>
           <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            Post title one
+            Building a living background with biometric data
           </span>
         </li>
         <li>
           <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            Post title two
+            Rewriting everything in Svelte, again
           </span>
         </li>
         <li>
           <span class="text-sm font-normal tracking-wide" style="color: var(--text-secondary);">
-            Post title three
+            On personal sites as creative expression
           </span>
         </li>
       </ul>

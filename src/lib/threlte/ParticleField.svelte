@@ -15,10 +15,10 @@
   let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
 
   const dummy = new Object3D();
-  let baseSize = $derived(isDark ? 0.04 : 0.05);
-  let peakColor = $derived(new Color(isDark ? '#00ccff' : '#1a3a4a'));
-  let baseGrey = $derived(new Color(isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55));
-  let beatFlashColor = $derived(new Color(isDark ? '#ff2222' : '#cc1111'));
+  let baseSize = $derived(isDark ? 0.04 : 0.06);
+  let peakColor = $derived(new Color(isDark ? '#00ccff' : '#8b6914'));
+  let baseGrey = $derived(new Color(isDark ? '#404040' : '#c4a882'));
+  let beatFlashColor = $derived(new Color(isDark ? '#ff2222' : '#a0522d'));
 
   // Initialize particle positions and velocities
   const positions = new Float32Array(MAX_PARTICLES * 3);

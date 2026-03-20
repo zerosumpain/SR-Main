@@ -23,7 +23,7 @@
   geometry.setAttribute('position', new Float32BufferAttribute(linePositions, 3));
   geometry.setDrawRange(0, 0);
 
-  let lineColor = $derived(new Color(isDark ? '#8b5cf6' : '#a78bfa'));
+  let lineColor = $derived(new Color(isDark ? '#8b5cf6' : '#8b6914'));
   const material = new LineBasicMaterial({
     transparent: true,
     opacity: 0.03,

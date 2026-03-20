@@ -9,7 +9,7 @@
   const PARTICLE_COUNT = 120;
 
   const DAY_PHASE_HUE: Record<DayPhase, number> = {
-    night: 252, dawn: 29, day: 209, dusk: 299,
+    night: 30, dawn: 35, day: 38, dusk: 25,
   };
 
   // Particle data
@@ -50,15 +50,15 @@
 
       // Background gradient
       const hue = DAY_PHASE_HUE[state.dayPhase];
-      const sat = Math.round(state.recovery * 0.6);
+      const sat = Math.round(4 + state.recovery * 0.12);
       const grad = ctx!.createRadialGradient(w / 2, h, 0, w / 2, h, Math.max(w, h));
-      grad.addColorStop(0, `hsl(${hue}, ${sat}%, 12%)`);
-      grad.addColorStop(1, `hsl(${hue}, ${sat}%, 4%)`);
+      grad.addColorStop(0, `hsl(${hue}, ${sat}%, 88%)`);
+      grad.addColorStop(1, `hsl(${hue}, ${sat}%, 82%)`);
       ctx!.fillStyle = grad;
       ctx!.fillRect(0, 0, w, h);
 
-      // Particles
-      ctx!.globalCompositeOperation = 'lighter';
+      // Particles — multiply blending for warm dark-on-light
+      ctx!.globalCompositeOperation = 'multiply';
       const [windX, windY] = windToVector(state.weather.windDirection, state.weather.windSpeed);
       const beat = cardiacPulse(elapsed, state.pulse, 50);
       const recoveryT = state.recovery / 150;
@@ -73,10 +73,10 @@
         if (py[i] < 0) py[i] = h;
 
         const size = 2 + beat * 3;
-        const r = Math.round(64 + recoveryT * 0 + beat * 200);
-        const g = Math.round(64 + recoveryT * 140);
-        const b = Math.round(64 + recoveryT * 180);
-        const alpha = 0.1 + beat * 0.4;
+        const r = Math.round(180 - recoveryT * 40 - beat * 60);
+        const g = Math.round(160 - recoveryT * 30 - beat * 50);
+        const b = Math.round(130 - recoveryT * 20 - beat * 40);
+        const alpha = 0.15 + beat * 0.3;
 
         ctx!.beginPath();
         ctx!.arc(px[i], py[i], size, 0, Math.PI * 2);
