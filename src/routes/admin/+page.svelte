@@ -228,6 +228,38 @@
     </div>
   </div>
 
+  <!-- Blog Posts link -->
+  <div class="mt-4">
+    <a
+      href="/admin/blog?token={adminToken}"
+      class="block p-5 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div class="flex items-center justify-between">
+        <div>
+          <p
+            class="text-[10px] uppercase tracking-[0.25em] mb-1"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            Blog Posts
+          </p>
+          <p
+            class="text-xs"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            Create, edit, and publish posts
+          </p>
+        </div>
+        <span
+          class="text-[10px] uppercase tracking-[0.2em]"
+          style="color: var(--text-ghost); font-family: var(--font-mono);"
+        >
+          &rarr;
+        </span>
+      </div>
+    </a>
+  </div>
+
   <!-- Biome Settings link -->
   <div class="mt-4">
     <a
