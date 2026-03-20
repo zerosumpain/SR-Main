@@ -1,13 +1,20 @@
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import crypto from 'crypto';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
-  const { password } = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Invalid request body' }, { status: 400 });
+  }
 
-  if (!password || password !== env.ADMIN_PASSWORD) {
-    throw error(401, JSON.stringify({ error: 'Invalid password' }));
+  const password = body?.password;
+
+  if (!password || !env.ADMIN_PASSWORD || password !== env.ADMIN_PASSWORD) {
+    return json({ error: 'Invalid password' }, { status: 401 });
   }
 
   const hash = crypto
