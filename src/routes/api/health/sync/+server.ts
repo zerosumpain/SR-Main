@@ -1,19 +1,14 @@
-import { json, error } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
-import crypto from 'crypto';
+import { json } from '@sveltejs/kit';
+import { validateSession } from '$lib/auth';
 import { syncAll } from '$lib/health/sync-service';
 import type { RequestHandler } from './$types';
 
-function isValidSession(cookies: any): boolean {
+export const POST: RequestHandler = async ({ request, cookies, url }) => {
   const session = cookies.get('admin_session');
-  if (!session || !env.ADMIN_PASSWORD) return false;
-  const expected = crypto.createHash('sha256').update(env.ADMIN_PASSWORD + 'strange-ramblings-admin').digest('hex');
-  return session === expected;
-}
+  const token = url.searchParams.get('token');
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
-  if (!isValidSession(cookies)) {
-    throw error(401, 'Unauthorized');
+  if (!validateSession(session) && !validateSession(token || undefined)) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));

@@ -20,7 +20,8 @@
     syncing = true;
     syncError = null;
     try {
-      const res = await fetch('/api/health/sync', { method: 'POST' });
+      const token = new URLSearchParams(window.location.search).get('token') || '';
+      const res = await fetch(`/api/health/sync?token=${token}`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         syncError = body.error ?? `Error ${res.status}`;
