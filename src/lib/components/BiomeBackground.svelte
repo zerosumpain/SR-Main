@@ -11,7 +11,7 @@
 <div class="fixed inset-0 z-0 pointer-events-none">
   {#if store.tier === 'webgl'}
     <Canvas>
-      <BiomeScene state={store.state} isDark={true} />
+      <BiomeScene state={store.state} isDark={false} />
     </Canvas>
   {:else if store.tier === 'canvas'}
     <BiomeCssFallback state={store.state} />
