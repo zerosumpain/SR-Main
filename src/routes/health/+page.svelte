@@ -37,12 +37,19 @@
     loadingActivity = true;
 
     try {
-      const res = await fetch(`/api/health/activity/${event.stravaId}`);
+      const url = `/api/health/activity/${event.stravaId}`;
+      console.log('[activity] fetching:', url);
+      const res = await window.fetch(url);
+      console.log('[activity] response:', res.status);
       if (res.ok) {
-        panelData = await res.json();
+        const json = await res.json();
+        console.log('[activity] got data:', json.name);
+        panelData = json;
+      } else {
+        console.log('[activity] error:', res.status);
       }
-    } catch {
-      // silently fail
+    } catch (e) {
+      console.error('[activity] fetch failed:', e);
     }
     loadingActivity = false;
   }
