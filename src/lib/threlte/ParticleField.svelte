@@ -77,7 +77,7 @@
 
       // Scale — subtle size pulse
       const baseRadius = 0.03 + (i % 5) * 0.006; // slight size variation
-      const scale = (baseRadius + beat * 0.015) / 0.04;
+      const scale = (baseRadius + beat * 0.019) / 0.04;
       dummy.position.set(positions[idx], positions[idx + 1], positions[idx + 2]);
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
@@ -86,12 +86,12 @@
       // Color — warm shift on beat, stronger flash
       const recoveryT = biomeState.recovery / 150;
       const restColor = baseColor.clone().lerp(peakColor, recoveryT);
-      const finalColor = restColor.clone().lerp(beatFlashColor, beat * 0.7);
+      const finalColor = restColor.clone().lerp(beatFlashColor, beat * 0.875);
       mesh.setColorAt(i, finalColor);
     }
 
     // Opacity pulse — big swing on each heartbeat
-    material.opacity = (isDark ? 0.25 : 0.08) + beat * (isDark ? 0.4 : 0.28);
+    material.opacity = (isDark ? 0.25 : 0.08) + beat * (isDark ? 0.5 : 0.35);
 
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
