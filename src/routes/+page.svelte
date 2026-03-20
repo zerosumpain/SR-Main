@@ -45,7 +45,7 @@
           BPM&ensp;/&ensp;{data.steps?.toLocaleString() || '—'} STEPS
         </p>
         <p class="label mt-1">
-          {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}&ensp;/&ensp;LONDON
+          {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
         </p>
       </div>
 
