@@ -15,10 +15,10 @@
   let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
 
   const dummy = new Object3D();
-  const baseSize = isDark ? 0.04 : 0.05;
-  const peakColor = new Color(isDark ? '#00ccff' : '#1a3a4a');
-  const baseGrey = new Color(isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55);
-  const beatFlashColor = new Color(isDark ? '#ff2222' : '#cc1111');
+  let baseSize = $derived(isDark ? 0.04 : 0.05);
+  let peakColor = $derived(new Color(isDark ? '#00ccff' : '#1a3a4a'));
+  let baseGrey = $derived(new Color(isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55, isDark ? 0.25 : 0.55));
+  let beatFlashColor = $derived(new Color(isDark ? '#ff2222' : '#cc1111'));
 
   // Initialize particle positions and velocities
   const positions = new Float32Array(MAX_PARTICLES * 3);
@@ -35,7 +35,11 @@
   const geometry = new SphereGeometry(0.05, 6, 6);
   const material = new MeshBasicMaterial({
     transparent: true,
-    blending: isDark ? AdditiveBlending : NormalBlending,
+    blending: NormalBlending,
+  });
+  $effect(() => {
+    material.blending = isDark ? AdditiveBlending : NormalBlending;
+    material.needsUpdate = true;
   });
 
   let mesh = $state.raw<InstancedMesh | undefined>(undefined);

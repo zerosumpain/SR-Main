@@ -13,4 +13,4 @@
 <FogLayer {state} {isDark} />
 <ParticleField {state} {isDark} />
 <ConnectionLines {state} {isDark} />
-<WeatherEffects {state} {isDark} />
+<WeatherEffects biomeState={state} {isDark} />

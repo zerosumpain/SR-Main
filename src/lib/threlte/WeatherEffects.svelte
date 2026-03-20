@@ -5,29 +5,26 @@
     SphereGeometry,
     MeshBasicMaterial,
     Object3D,
-    Color,
     AdditiveBlending,
     NormalBlending,
-    PlaneGeometry,
-    ShaderMaterial,
   } from 'three';
   import type { BiomeState, WeatherCondition } from '$lib/biome/state';
   import { windToVector } from '$lib/biome/state';
 
-  let { state, isDark = true }: { state: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
 
   const MAX_WEATHER_PARTICLES = 500;
   const dummy = new Object3D();
 
-  // Weather particle config per condition
-  const WEATHER_CONFIG: Record<WeatherCondition, { count: number; gravity: number; size: number; color: string }> = {
+  // Weather particle config per condition — reactive to isDark
+  let WEATHER_CONFIG = $derived<Record<WeatherCondition, { count: number; gravity: number; size: number; color: string }>>({
     clear: { count: 0, gravity: 0, size: 0, color: '#000000' },
     rain: { count: 400, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#4a6070' },
     thunderstorm: { count: 500, gravity: 8.0, size: 0.02, color: isDark ? '#6ea8d7' : '#4a6070' },
     snow: { count: 300, gravity: 1.0, size: 0.06, color: isDark ? '#e8e8f0' : '#9a9aa0' },
     cloudy: { count: 100, gravity: 0, size: 0.15, color: isDark ? '#334155' : '#9ca3af' },
     fog: { count: 200, gravity: 0, size: 0.08, color: isDark ? '#445566' : '#b0a898' },
-  };
+  });
 
   // Initialize positions
   const positions = new Float32Array(MAX_WEATHER_PARTICLES * 3);
@@ -44,8 +41,13 @@
   const geometry = new SphereGeometry(0.05, 4, 4);
   const material = new MeshBasicMaterial({
     transparent: true,
-    opacity: isDark ? 0.5 : 0.35,
-    blending: isDark ? AdditiveBlending : NormalBlending,
+    opacity: 0.5,
+    blending: NormalBlending,
+  });
+  $effect(() => {
+    material.opacity = isDark ? 0.5 : 0.35;
+    material.blending = isDark ? AdditiveBlending : NormalBlending;
+    material.needsUpdate = true;
   });
 
   let mesh = $state.raw<InstancedMesh | undefined>(undefined);
@@ -64,7 +66,7 @@
     elapsed += delta;
     if (!mesh) return;
 
-    const config = WEATHER_CONFIG[state.weather.condition];
+    const config = WEATHER_CONFIG[biomeState.weather.condition];
     if (config.count === 0) {
       mesh.count = 0;
       return;
@@ -80,8 +82,8 @@
     gustIntensity *= 0.97;
 
     const [baseWindX, baseWindY] = windToVector(
-      state.weather.windDirection + gustDirOffset,
-      state.weather.windSpeed * (1 + gustIntensity * 0.6)
+      biomeState.weather.windDirection + gustDirOffset,
+      biomeState.weather.windSpeed * (1 + gustIntensity * 0.6)
     );
 
     const count = Math.min(config.count, MAX_WEATHER_PARTICLES);
@@ -96,7 +98,7 @@
       positions[idx + 1] -= config.gravity * delta + velocities[idx + 1];
 
       // Snow wobble
-      if (state.weather.condition === 'snow') {
+      if (biomeState.weather.condition === 'snow') {
         positions[idx] += Math.sin(elapsed * 1.5 + i * 0.5) * 0.003;
       }
 
@@ -118,7 +120,7 @@
     mesh.instanceMatrix.needsUpdate = true;
 
     // Lightning for thunderstorms
-    if (state.weather.condition === 'thunderstorm') {
+    if (biomeState.weather.condition === 'thunderstorm') {
       lightningTimer -= delta;
       if (lightningTimer <= 0) {
         lightningOpacity = isDark ? 0.15 : 0.08;

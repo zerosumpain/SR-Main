@@ -23,12 +23,16 @@
   geometry.setAttribute('position', new Float32BufferAttribute(linePositions, 3));
   geometry.setDrawRange(0, 0);
 
-  const lineColor = new Color(isDark ? '#8b5cf6' : '#a78bfa');
+  let lineColor = $derived(new Color(isDark ? '#8b5cf6' : '#a78bfa'));
   const material = new LineBasicMaterial({
-    color: lineColor,
     transparent: true,
     opacity: 0.03,
-    blending: isDark ? AdditiveBlending : NormalBlending,
+    blending: NormalBlending,
+  });
+  $effect(() => {
+    material.color.set(lineColor);
+    material.blending = isDark ? AdditiveBlending : NormalBlending;
+    material.needsUpdate = true;
   });
 
   let elapsed = 0;

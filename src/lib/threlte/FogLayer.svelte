@@ -12,9 +12,9 @@
     vertexShader: fogVert,
     fragmentShader: fogFrag,
     uniforms: {
-      uFogDensity: { value: 1 - state.sleepQuality / 100 },
-      uDreaming: { value: state.dreaming ? 1.0 : 0.0 },
-      uIsDark: { value: isDark ? 1.0 : 0.0 },
+      uFogDensity: { value: 0 },
+      uDreaming: { value: 0 },
+      uIsDark: { value: 0 },
       uTime: { value: 0 },
     },
     transparent: true,
