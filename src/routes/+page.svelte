@@ -1,6 +1,6 @@
 <svelte:head>
   <title>Strange Ramblings</title>
-  <meta name="description" content="A living canvas. Personal experiments in code, design, and everything between." />
+  <meta name="description" content="Building things with code in London. A living canvas." />
 </svelte:head>
 
 <script lang="ts">
@@ -18,140 +18,135 @@
   let condition = $derived(store.state.weather.condition);
 </script>
 
-<!-- Act 1: The Breath -->
-<section class="h-screen flex flex-col justify-between p-6 sm:p-8 md:p-12 lg:p-16">
+<!-- HERO — full viewport, heavy type -->
+<section class="min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8">
   <!-- Top bar -->
   <div class="flex justify-between items-start">
-    <!-- Monogram -->
-    <a href="/" class="group flex items-baseline no-underline select-none">
-      <span
-        class="text-[48px] sm:text-[56px] md:text-[64px] font-thin tracking-[0.15em] leading-none"
-        style="color: var(--text-primary); font-family: var(--font-sans);"
-      >S</span><span
-        class="text-[48px] sm:text-[56px] md:text-[64px] font-thin tracking-[0.15em] leading-none transition-opacity duration-500"
-        style="color: var(--accent); font-family: var(--font-sans); opacity: 0.55;"
-      >R</span>
+    <a href="/" class="display text-[28px] sm:text-[32px] leading-none no-underline" style="color: var(--text-primary);">
+      STRANGE<br>RAMBLINGS
     </a>
 
-    <!-- Navigation -->
-    <nav class="flex gap-5 sm:gap-8 pt-4 sm:pt-5">
-      <a href="/blog" class="nav-link text-[10px] sm:text-[11px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Writing
-      </a>
-      <a href="/projects" class="nav-link text-[10px] sm:text-[11px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Projects
-      </a>
-      <a href="#about" class="nav-link text-[10px] sm:text-[11px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        About
-      </a>
+    <nav class="flex gap-6 pt-1">
+      <a href="/blog" class="nav-link">Writing</a>
+      <a href="/health" class="nav-link">Health</a>
+      <a href="#about" class="nav-link">About</a>
     </nav>
   </div>
 
-  <!-- Center vitals -->
+  <!-- Center — vitals as a statement -->
   <div class="flex-1 flex items-center justify-center">
-    <p
-      class="text-[9px] sm:text-[10px] uppercase tracking-[0.5em]"
-      style="color: var(--text-whisper); font-family: var(--font-mono);"
-    >
-      {roundPulse(pulse)} bpm&ensp;·&ensp;{Math.round(temp)}°c&ensp;·&ensp;{condition}
-    </p>
+    <div class="text-center">
+      <p class="display text-[64px] sm:text-[96px] md:text-[128px]" style="color: var(--accent);">
+        {roundPulse(pulse)}
+      </p>
+      <p class="label mt-2">
+        BPM&ensp;/&ensp;{Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
+      </p>
+    </div>
   </div>
 
-  <!-- Subtle scroll cue -->
-  <div class="flex justify-center pb-4 opacity-20">
-    <svg width="16" height="24" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--text-ghost);">
-      <rect x="1" y="1" width="14" height="22" rx="7" />
-      <circle cx="8" cy="7" r="1.5" fill="currentColor" class="animate-bounce" style="animation-duration: 2s;" />
-    </svg>
+  <!-- Bottom — scroll prompt -->
+  <div class="text-center">
+    <p class="label" style="opacity: 0.4;">SCROLL</p>
   </div>
 </section>
 
-<!-- Act 2: The Trail -->
-
-<!-- About -->
-<div class="h-[25vh] sm:h-[30vh]"></div>
-<section id="about" class="max-w-lg mx-auto px-6 sm:px-8">
+<!-- ABOUT — wide, dense, no card wrapper -->
+<section id="about" class="px-6 sm:px-10 md:px-16 py-12" style="background: var(--bg-section);">
   <ScrollReveal>
-    <div class="backdrop-blur-md border rounded-xl p-6 sm:p-8" style="background: var(--card-bg); border-color: var(--card-border);">
-      <p class="text-base font-normal leading-relaxed tracking-wide" style="color: var(--text-primary);">
-        John.
-      </p>
-      <p class="text-sm sm:text-base font-normal leading-relaxed tracking-wide mt-2" style="color: var(--text-secondary);">
-        Building things with code in London. This site is a canvas —
-        a place to think out loud and share what I'm working on.
-      </p>
+    <div class="max-w-4xl">
+      <p class="label mb-4">About</p>
+      <h2 class="display text-[32px] sm:text-[40px] md:text-[48px] mb-6" style="color: var(--text-primary);">
+        BUILDING THINGS<br>WITH CODE IN LONDON.
+      </h2>
+      <div class="accent-strip max-w-2xl">
+        <p class="text-base sm:text-lg leading-relaxed" style="color: var(--text-secondary);">
+          This site is a canvas — a place to think out loud and share what I'm working on.
+          The background you see is alive. It's driven by my heart rate, the local weather,
+          and the time of day.
+        </p>
+      </div>
     </div>
   </ScrollReveal>
 </section>
 
-<!-- The Biome -->
-<div class="h-[25vh] sm:h-[30vh]"></div>
-<section class="max-w-lg mx-auto px-6 sm:px-8">
+<!-- DIVIDER -->
+<hr class="rule" />
+
+<!-- THE BIOME — explanation as a bold callout -->
+<section class="px-6 sm:px-10 md:px-16 py-12">
   <ScrollReveal>
-    <div class="backdrop-blur-md border rounded-xl p-6 sm:p-8" style="background: var(--card-bg); border-color: var(--card-border);">
-      <h3
-        class="text-[10px] uppercase tracking-[0.3em] mb-4"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
-      >The Biome</h3>
-      <p class="text-sm font-normal leading-relaxed tracking-wide" style="color: var(--text-secondary);">
-        The background you see is alive. It's driven by my heart rate,
-        the local weather, and the time of day. When my pulse rises,
-        the particles quicken. When it rains outside, it rains here too.
-      </p>
+    <div class="max-w-4xl">
+      <p class="label mb-4">The Biome</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="accent-strip">
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">PULSE</p>
+          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+            When my heart rate rises, the particles quicken. Each beat pulses through the field.
+          </p>
+        </div>
+        <div class="accent-strip">
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">WEATHER</p>
+          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+            When it rains outside, it rains here too. Wind direction and speed drive particle drift.
+          </p>
+        </div>
+        <div class="accent-strip">
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">RECOVERY</p>
+          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+            Colour intensity tracks recovery score. Higher recovery means more vivid particles.
+          </p>
+        </div>
+      </div>
     </div>
   </ScrollReveal>
 </section>
 
-<!-- Writing -->
-<div class="h-[25vh] sm:h-[30vh]"></div>
-<section class="max-w-lg mx-auto px-6 sm:px-8 pb-24 sm:pb-32">
+<!-- DIVIDER -->
+<hr class="rule" />
+
+<!-- WRITING — full width, list style -->
+<section class="px-6 sm:px-10 md:px-16 py-12" style="background: var(--bg-section);">
   <ScrollReveal>
-    <div class="backdrop-blur-md border rounded-xl p-6 sm:p-8" style="background: var(--card-bg); border-color: var(--card-border);">
-      <h3
-        class="text-[10px] uppercase tracking-[0.3em] mb-6"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
-      >Writing</h3>
-      <ul class="space-y-4">
-        {#each data.posts as post}
-          <li>
+    <div class="max-w-4xl">
+      <div class="flex justify-between items-end mb-6">
+        <p class="label">Writing</p>
+        <a href="/blog" class="nav-link">All posts →</a>
+      </div>
+
+      {#if data.posts.length}
+        <div class="space-y-0">
+          {#each data.posts as post, i}
             <a
               href="/blog/{post.slug}"
-              class="text-sm font-normal tracking-wide hover:text-[var(--accent)] transition-colors"
-              style="color: var(--text-secondary);"
+              class="block py-4 group transition-colors hover:bg-[rgba(196,87,10,0.04)]"
+              style="border-top: 1px solid var(--divider);"
             >
-              {post.title}
+              <div class="flex justify-between items-baseline gap-4">
+                <span class="text-base sm:text-lg font-medium group-hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
+                  {post.title}
+                </span>
+                <span class="label shrink-0" style="font-size: 10px;">
+                  {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
+                </span>
+              </div>
             </a>
-          </li>
-        {:else}
-          <li>
-            <span class="text-sm" style="color: var(--text-ghost);">No posts yet.</span>
-          </li>
-        {/each}
-      </ul>
-      <a
-        href="/blog"
-        class="nav-link inline-block mt-6 text-[10px] uppercase tracking-[0.2em]"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
-      >
-        See all →
-      </a>
+          {/each}
+          <div style="border-top: 1px solid var(--divider);"></div>
+        </div>
+      {:else}
+        <p class="text-sm" style="color: var(--text-muted);">Nothing published yet.</p>
+      {/if}
     </div>
   </ScrollReveal>
 </section>
 
-<!-- Footer -->
-<footer class="pb-12 flex justify-center gap-6">
-  <a
-    href="https://github.com/jkrup"
-    target="_blank"
-    rel="noopener"
-    class="nav-link text-[10px] uppercase tracking-[0.2em]"
-    style="color: var(--text-whisper); font-family: var(--font-mono);"
-  >GitHub</a>
-  <span style="color: var(--text-whisper); opacity: 0.4;">·</span>
-  <a
-    href="mailto:john@strangeramblings.com"
-    class="nav-link text-[10px] uppercase tracking-[0.2em]"
-    style="color: var(--text-whisper); font-family: var(--font-mono);"
-  >Email</a>
+<!-- FOOTER — dense, utilitarian -->
+<footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
+  <p class="display text-[14px]" style="color: var(--text-ghost);">STRANGE RAMBLINGS</p>
+  <div class="flex gap-6">
+    <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+    <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
+    <a href="/health" class="nav-link">Health</a>
+  </div>
 </footer>
