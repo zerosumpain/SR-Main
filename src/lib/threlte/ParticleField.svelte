@@ -83,15 +83,15 @@
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
 
-      // Color — subtle shift on beat
+      // Color — warm shift on beat, stronger flash
       const recoveryT = biomeState.recovery / 150;
       const restColor = baseColor.clone().lerp(peakColor, recoveryT);
-      const finalColor = restColor.clone().lerp(beatFlashColor, Math.pow(beat, 2));
+      const finalColor = restColor.clone().lerp(beatFlashColor, beat * 0.7);
       mesh.setColorAt(i, finalColor);
     }
 
-    // Opacity pulse
-    material.opacity = (isDark ? 0.3 : 0.12) + beat * (isDark ? 0.15 : 0.08);
+    // Opacity pulse — big swing on each heartbeat
+    material.opacity = (isDark ? 0.25 : 0.08) + beat * (isDark ? 0.4 : 0.28);
 
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
