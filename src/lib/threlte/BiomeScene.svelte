@@ -5,12 +5,24 @@
   import ConnectionLines from './ConnectionLines.svelte';
   import WeatherEffects from './WeatherEffects.svelte';
   import type { BiomeState } from '$lib/biome/state';
+  import type { BiomeSettings } from '$lib/biome/settings';
+  import { BIOME_SETTINGS_DEFAULTS } from '$lib/biome/settings';
 
-  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true, settings }: {
+    biomeState: BiomeState;
+    isDark?: boolean;
+    settings?: BiomeSettings;
+  } = $props();
+
+  let s = $derived(settings || BIOME_SETTINGS_DEFAULTS);
 </script>
 
 <SkyPlane {biomeState} {isDark} />
-<FogLayer {biomeState} {isDark} />
-<ParticleField {biomeState} {isDark} />
-<ConnectionLines {biomeState} {isDark} />
-<WeatherEffects {biomeState} {isDark} />
+<FogLayer {biomeState} {isDark} fogIntensity={s.fogIntensity} dreamMode={s.dreamMode} />
+<ParticleField {biomeState} {isDark} {s} />
+{#if s.connectionLines}
+  <ConnectionLines {biomeState} {isDark} />
+{/if}
+{#if s.weatherEffects}
+  <WeatherEffects {biomeState} {isDark} />
+{/if}

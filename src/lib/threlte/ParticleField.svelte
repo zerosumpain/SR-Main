@@ -10,8 +10,11 @@
   } from 'three';
   import type { BiomeState } from '$lib/biome/state';
   import { cardiacPulse, windToVector, MAX_PARTICLES } from '$lib/biome/state';
+  import type { BiomeSettings } from '$lib/biome/settings';
+  import { BIOME_SETTINGS_DEFAULTS } from '$lib/biome/settings';
 
-  let { biomeState, isDark = true }: { biomeState: BiomeState; isDark?: boolean } = $props();
+  let { biomeState, isDark = true, s }: { biomeState: BiomeState; isDark?: boolean; s?: BiomeSettings } = $props();
+  let settings = $derived(s || BIOME_SETTINGS_DEFAULTS);
 
   const dummy = new Object3D();
 
@@ -46,18 +49,12 @@
 
   function getDrawCount(): number {
     const base = 200 + (biomeState.strain / 100) * (MAX_PARTICLES - 200);
-    return Math.round(Math.max(200, Math.min(MAX_PARTICLES, base)));
+    return Math.round(Math.max(100, Math.min(MAX_PARTICLES, base * settings.particleDensity)));
   }
 
-  // --- Advanced effect toggles (will come from settings later) ---
-  const bloodVesselEnabled = true;
-  const bloodFlowRate = 50; // 0-100
-
-  const shudderEnabled = true;
+  // Advanced effect state (persists between frames)
   let shudderEnergy = 0;
   let prevBeat = 0;
-
-  const combinationEnabled = true;
   let comboMultiplier = 1.0;
 
   let elapsed = 0;
@@ -70,11 +67,11 @@
     const drawCount = getDrawCount();
     mesh.count = drawCount;
 
-    // Cardiac pulse — use higher intensity for visible effect
-    const beat = cardiacPulse(elapsed, biomeState.pulse, 100);
+    // Cardiac pulse — intensity from settings
+    const beat = cardiacPulse(elapsed, biomeState.pulse, settings.pulseIntensity);
 
     // --- Shudder: detect beat onset and inject energy ---
-    if (shudderEnabled) {
+    if (settings.shudderEffect) {
       if (beat > 0.3 && prevBeat < 0.2) {
         shudderEnergy = 1.0; // inject energy on beat
       }
@@ -83,7 +80,7 @@
     }
 
     // --- Combination multiplier ---
-    if (combinationEnabled) {
+    if (settings.combinationEffects) {
       const strainFactor = biomeState.strain / 100;
       const pulseFactor = Math.max(0, (biomeState.pulse - 40)) / 80;
       comboMultiplier = 1 + (strainFactor * pulseFactor) * 0.8; // 1.0 to 1.8
@@ -95,12 +92,12 @@
       const idx = i * 3;
 
       // --- Blood vessel mode vs normal wind drift ---
-      if (bloodVesselEnabled) {
+      if (settings.bloodVessel) {
         const normalizedY = (positions[idx + 1] + 10) / 20; // 0-1
         const distFromCenter = Math.abs(normalizedY - 0.5) * 2; // 0 at center, 1 at edges
         const flowProfile = Math.pow(1 - distFromCenter * distFromCenter, 2); // steep parabolic
 
-        const pulseSpeedMul = 1 + (bloodFlowRate / 100) * beat;
+        const pulseSpeedMul = 1 + (settings.bloodFlowRate / 100) * beat;
         const baseFlow = (0.01 * flowProfile + 0.0001) * pulseSpeedMul;
         const surgeFlow = 0.06 * beat * flowProfile * pulseSpeedMul;
 
@@ -124,7 +121,7 @@
       }
 
       // --- Shudder: add vibration offset on beat ---
-      if (shudderEnabled && shudderEnergy > 0.01) {
+      if (settings.shudderEffect && shudderEnergy > 0.01) {
         const particlePhase = i * 0.73;
         const vibration = Math.sin(elapsed * 35 * Math.PI * 2 + particlePhase) * shudderEnergy * 0.02;
         positions[idx] += vibration;
