@@ -33,15 +33,29 @@
     </nav>
   </div>
 
-  <!-- Center — vitals as a statement -->
-  <div class="flex-1 flex items-center justify-center">
-    <div class="text-center">
-      <p class="display text-[64px] sm:text-[96px] md:text-[128px]" style="color: var(--accent);">
-        {roundPulse(pulse)}
-      </p>
-      <p class="label mt-2">
-        BPM&ensp;/&ensp;{Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
-      </p>
+  <!-- Center — stats + explainer side by side -->
+  <div class="flex-1 flex items-center">
+    <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
+      <!-- Left: vitals -->
+      <div class="text-center md:text-right">
+        <p class="display text-[64px] sm:text-[96px] md:text-[120px]" style="color: var(--accent);">
+          {roundPulse(pulse)}
+        </p>
+        <p class="label mt-2">
+          BPM&ensp;/&ensp;{Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
+        </p>
+      </div>
+
+      <!-- Right: explainer with accent strip -->
+      <div class="accent-strip">
+        <p class="text-base sm:text-lg font-medium leading-relaxed" style="color: var(--text-primary);">
+          This is me, from about 15 minutes ago.
+        </p>
+        <p class="text-sm sm:text-base leading-relaxed mt-2" style="color: var(--text-secondary);">
+          The background is my heart rate. Below is today's steps, distance, and the weather
+          wherever I am, right now.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -49,25 +63,6 @@
   <div class="text-center">
     <p class="label" style="opacity: 0.4;">SCROLL</p>
   </div>
-</section>
-
-<!-- ABOUT — wide, dense, no card wrapper -->
-<section id="about" class="px-6 sm:px-10 md:px-16 py-12" style="background: var(--bg-section);">
-  <ScrollReveal>
-    <div class="max-w-4xl">
-      <p class="label mb-4">About</p>
-      <h2 class="display text-[32px] sm:text-[40px] md:text-[48px] mb-6" style="color: var(--text-primary);">
-        BUILDING THINGS<br>WITH CODE IN LONDON.
-      </h2>
-      <div class="accent-strip max-w-2xl">
-        <p class="text-base sm:text-lg leading-relaxed" style="color: var(--text-secondary);">
-          This site is a canvas — a place to think out loud and share what I'm working on.
-          The background you see is alive. It's driven by my heart rate, the local weather,
-          and the time of day.
-        </p>
-      </div>
-    </div>
-  </ScrollReveal>
 </section>
 
 <!-- DIVIDER -->

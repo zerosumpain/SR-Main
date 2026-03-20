@@ -61,13 +61,11 @@
 </script>
 
 <!-- Nav -->
-<div class="fixed top-0 left-0 right-0 z-20 p-6 sm:p-8 flex justify-between items-start">
-  <a href="/" class="group flex items-baseline no-underline select-none">
-    <span class="text-[36px] font-thin tracking-[0.15em] leading-none" style="color: var(--text-primary); font-family: var(--font-sans);">S</span><span class="text-[36px] font-thin tracking-[0.15em] leading-none" style="color: var(--accent); font-family: var(--font-sans); opacity: 0.55;">R</span>
-  </a>
-  <nav class="flex gap-5 pt-2">
-    <a href="/" class="nav-link text-[10px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Home</a>
-    <a href="/blog" class="nav-link text-[10px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Writing</a>
+<div class="fixed top-0 left-0 right-0 z-20 px-6 sm:px-10 md:px-16 py-6 flex justify-between items-start" style="background: linear-gradient(to bottom, var(--bg) 60%, transparent);">
+  <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
+  <nav class="flex gap-6 pt-1">
+    <a href="/" class="nav-link">Home</a>
+    <a href="/blog" class="nav-link">Writing</a>
   </nav>
 </div>
 
@@ -114,30 +112,28 @@
 
 <!-- Footer + Sync Status -->
 <div class="h-[6vh]"></div>
-<footer class="pb-12 max-w-lg mx-auto px-6 sm:px-8">
-  {#if data.syncState?.length}
-    <div class="flex flex-wrap justify-center gap-4 mb-4">
+<footer class="px-6 sm:px-10 md:px-16 py-6 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
+  <div class="flex flex-wrap gap-4">
+    {#if data.syncState?.length}
       {#each data.syncState as sync}
         {@const lastSync = sync.lastSyncAt || sync.last_sync_at}
         {@const ago = lastSync ? Math.round((Date.now() / 1000 - lastSync) / 60) : null}
         {@const isStale = ago !== null && ago > 120}
-        <span class="text-[9px] tracking-[0.1em]" style="color: {isStale ? '#8b3a1a' : 'var(--text-whisper)'}; font-family: var(--font-mono);">
+        <span class="label" style="font-size: 9px; color: {isStale ? '#c4570a' : 'var(--text-ghost)'};">
           {sync.service}:
           {#if ago !== null}
             {ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`}
             {#if sync.status === 'error' || sync.status === 'syncing'}
-              · <span style="color: {sync.status === 'error' ? '#8b3a1a' : 'var(--accent)'};">{sync.status}</span>
+              · {sync.status}
             {/if}
           {:else}
             never
           {/if}
         </span>
       {/each}
-    </div>
-  {/if}
-  <div class="text-center">
-    <a href="/" class="nav-link text-[10px] uppercase tracking-[0.2em]" style="color: var(--text-whisper); font-family: var(--font-mono);">Home</a>
+    {/if}
   </div>
+  <a href="/" class="nav-link">Home</a>
 </footer>
 
 <!-- Slide-over Panel -->
