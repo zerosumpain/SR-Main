@@ -3,15 +3,10 @@
   let password = $state('');
   let errorMsg = $state('');
   let loading = $state(false);
-  let debugInfo = $state('');
 
   async function handleLogin() {
     loading = true;
     errorMsg = '';
-    debugInfo = 'Clearing old session...';
-    // Clear any stale cookies by hitting the API with wrong password first
-    document.cookie = 'admin_session=; path=/; max-age=0';
-    debugInfo = 'Sending request...';
 
     try {
       const res = await window.fetch('/api/admin/login', {
@@ -20,31 +15,16 @@
         body: JSON.stringify({ password }),
       });
 
-      debugInfo = `Response: ${res.status} ${res.statusText}`;
-
-      const text = await res.text();
-      debugInfo += ` | Body: ${text}`;
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        errorMsg = 'Invalid response from server';
-        loading = false;
-        return;
-      }
+      const data = await res.json();
 
       if (res.ok && data.success) {
-        debugInfo += ' | Redirecting...';
-        // Use token in URL as cookie fallback
         document.location.href = '/admin?token=' + data.token;
         return;
       } else {
-        errorMsg = data.error || `Login failed (${res.status})`;
+        errorMsg = data.error || 'Login failed';
         loading = false;
       }
-    } catch (e) {
-      debugInfo = `Fetch error: ${e}`;
+    } catch {
       errorMsg = 'Request failed';
       loading = false;
     }
@@ -61,9 +41,6 @@
     </h1>
     {#if errorMsg}
       <p class="text-sm mb-4" style="color: #8b3a1a;">{errorMsg}</p>
-    {/if}
-    {#if debugInfo}
-      <p class="text-[10px] mb-4 break-all" style="color: var(--text-ghost); font-family: var(--font-mono);">{debugInfo}</p>
     {/if}
     <input
       type="password"
