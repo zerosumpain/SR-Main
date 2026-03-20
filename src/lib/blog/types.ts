@@ -4,3 +4,7 @@ export interface PostMeta {
   excerpt: string;
   publishedAt: string | null;
 }
+
+export interface Post extends PostMeta {
+  content: string;
+}

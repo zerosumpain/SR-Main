@@ -12,7 +12,6 @@
   const store = getContext<BiomeStore>('biome');
 
   let { data } = $props();
-  const EXISTING_SITE = 'https://strangeramblings.com';
 
   let pulse = $derived(store.state.pulse);
   let temp = $derived(store.state.weather.temp);
@@ -116,11 +115,9 @@
         {#each data.posts as post}
           <li>
             <a
-              href="{EXISTING_SITE}/blog/{post.slug}"
+              href="/blog/{post.slug}"
               class="text-sm font-normal tracking-wide hover:text-[var(--accent)] transition-colors"
               style="color: var(--text-secondary);"
-              target="_blank"
-              rel="noopener"
             >
               {post.title}
             </a>

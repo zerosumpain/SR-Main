@@ -5,7 +5,6 @@
 <script lang="ts">
   let { data } = $props();
 
-  const EXISTING_SITE = 'https://strangeramblings.com';
 </script>
 
 <section class="min-h-screen p-6 sm:p-8 md:p-12 lg:p-16">
@@ -44,10 +43,8 @@
         {#each data.posts as post}
           <li>
             <a
-              href="{EXISTING_SITE}/blog/{post.slug}"
+              href="/blog/{post.slug}"
               class="group block"
-              target="_blank"
-              rel="noopener"
             >
               <span class="text-base font-normal tracking-wide group-hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
                 {post.title}
