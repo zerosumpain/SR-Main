@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import crypto from 'crypto';
+import { createSessionCookie } from '$lib/auth';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -14,13 +14,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   const password = body?.password;
 
   if (!password || !env.ADMIN_PASSWORD || password !== env.ADMIN_PASSWORD) {
+    console.log('[login] failed', { passwordLength: password?.length, envLength: env.ADMIN_PASSWORD?.length });
     return json({ error: 'Invalid password' }, { status: 401 });
   }
 
-  const hash = crypto
-    .createHash('sha256')
-    .update(password + 'strange-ramblings-admin')
-    .digest('hex');
+  const hash = createSessionCookie(password);
+  console.log('[login] success, hash starts:', hash.slice(0, 8));
 
   cookies.set('admin_session', hash, {
     path: '/',
