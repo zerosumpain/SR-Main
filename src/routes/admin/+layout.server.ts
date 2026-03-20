@@ -13,6 +13,13 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
   const session = cookies.get('admin_session');
   const expected = getSessionHash(env.ADMIN_PASSWORD || '');
 
+  console.log('[admin guard]', {
+    pathname: url.pathname,
+    hasCookie: !!session,
+    cookieLength: session?.length,
+    matches: session === expected,
+  });
+
   if (!session || session !== expected) {
     throw redirect(302, '/admin/login');
   }
