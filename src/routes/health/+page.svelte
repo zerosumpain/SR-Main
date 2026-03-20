@@ -11,6 +11,7 @@
   import SleepBreakdown from '$lib/components/health/SleepBreakdown.svelte';
   import BodySignals from '$lib/components/health/BodySignals.svelte';
   import WeeklyStats from '$lib/components/health/WeeklyStats.svelte';
+  import ActivityDetail from '$lib/components/health/ActivityDetail.svelte';
 
   let { data } = $props();
 
@@ -19,12 +20,31 @@
   let panelTitle = $state('');
   let panelType = $state<'sleep' | 'activity' | 'signals' | 'stats' | 'readiness' | null>(null);
   let panelData = $state<any>(null);
+  let loadingActivity = $state(false);
 
   function openPanel(type: typeof panelType, title: string, pData?: any) {
     panelType = type;
     panelTitle = title;
     panelData = pData;
     panelOpen = true;
+  }
+
+  async function openActivityDetail(event: any) {
+    panelType = 'activity';
+    panelTitle = event.title || 'Activity';
+    panelData = null;
+    panelOpen = true;
+    loadingActivity = true;
+
+    try {
+      const res = await fetch(`/api/health/activity/${event.stravaId}`);
+      if (res.ok) {
+        panelData = await res.json();
+      }
+    } catch {
+      // silently fail
+    }
+    loadingActivity = false;
   }
 
   function closePanel() {
@@ -82,7 +102,7 @@
 <!-- Activity Timeline -->
 <div class="h-[8vh]"></div>
 <ScrollReveal>
-  <ActivityTimeline timeline={data.timeline} />
+  <ActivityTimeline timeline={data.timeline} onselect={openActivityDetail} />
 </ScrollReveal>
 
 <!-- Footer -->
@@ -286,6 +306,17 @@
         </div>
       {/each}
     </div>
+
+  {:else if panelType === 'activity'}
+    {#if loadingActivity}
+      <div class="flex items-center justify-center py-12">
+        <p class="text-sm" style="color: var(--text-ghost); font-family: var(--font-mono);">Loading activity...</p>
+      </div>
+    {:else if panelData}
+      <ActivityDetail activity={panelData} />
+    {:else}
+      <p class="text-sm" style="color: var(--text-ghost);">Activity not found.</p>
+    {/if}
 
   {:else if panelType === 'stats' && panelData}
     <div class="space-y-6">
