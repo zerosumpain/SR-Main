@@ -14,24 +14,22 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   const password = body?.password;
 
   if (!password || !env.ADMIN_PASSWORD || password !== env.ADMIN_PASSWORD) {
-    console.log('[login] failed', { passwordLength: password?.length, envLength: env.ADMIN_PASSWORD?.length });
     return json({ error: 'Invalid password' }, { status: 401 });
   }
 
   const hash = createSessionCookie(password);
-  console.log('[login] success, hash starts:', hash.slice(0, 8));
 
-  // Clear any stale cookie first
+  // Delete any old secure cookies, set new one without secure flag
+  cookies.delete('admin_session', { path: '/', secure: true });
   cookies.delete('admin_session', { path: '/' });
 
-  // Set fresh cookie — try without secure flag (Cloudflare handles HTTPS)
   cookies.set('admin_session', hash, {
     path: '/',
     httpOnly: true,
-    secure: false,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
   });
 
-  return json({ success: true });
+  // Return the token so client can use it as URL fallback
+  return json({ success: true, token: hash });
 };

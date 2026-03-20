@@ -36,7 +36,8 @@
 
       if (res.ok && data.success) {
         debugInfo += ' | Redirecting...';
-        document.location.href = '/admin';
+        // Use token in URL as cookie fallback
+        document.location.href = '/admin?token=' + data.token;
         return;
       } else {
         errorMsg = data.error || `Login failed (${res.status})`;
