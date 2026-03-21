@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { researchSessions, facts, entities, sources, relationships, entityMentions } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { requestStop } from '$lib/deepdive/worker';
+import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
 
 export const GET: RequestHandler = async ({ params }) => {
   const [session] = await db
@@ -53,6 +53,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if (body.action === 'stop') {
     requestStop(params.id);
     return json({ message: 'Stop signal sent' });
+  }
+
+  if (body.action === 'skip') {
+    requestSkipPhase(params.id);
+    return json({ message: 'Skip signal sent' });
   }
 
   return json({ error: 'Unknown action' }, { status: 400 });

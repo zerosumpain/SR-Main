@@ -11,6 +11,7 @@ import { runPostProcessing } from './postprocess';
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();
 const stopSignals = new Map<string, boolean>();
+const skipSignals = new Map<string, boolean>();
 
 export function getEmitter(sessionId: string): EventEmitter {
   let emitter = activeEmitters.get(sessionId);
@@ -49,8 +50,16 @@ export function shouldStop(sessionId: string): boolean {
   return stopSignals.get(sessionId) === true;
 }
 
+export function shouldSkipPhase(sessionId: string): boolean {
+  return skipSignals.get(sessionId) === true;
+}
+
 export function requestStop(sessionId: string): void {
   stopSignals.set(sessionId, true);
+}
+
+export function requestSkipPhase(sessionId: string): void {
+  skipSignals.set(sessionId, true);
 }
 
 async function updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void> {
@@ -89,28 +98,38 @@ async function runResearch(sessionId: string): Promise<void> {
 
     function isTimeUp(): boolean {
       if (shouldStop(sessionId)) return true;
+      if (shouldSkipPhase(sessionId)) return true;
       if (!timeLimitMs) return false;
       return Date.now() - startTime > timeLimitMs;
     }
 
     // Phase 1
     if (!shouldStop(sessionId)) {
+      skipSignals.delete(sessionId);
       await updateSessionStatus(sessionId, 'phase1');
       emitStatus(sessionId, 'phase1');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 1: Lead Generation');
       await runPhase1(sessionId, session, isTimeUp);
+      if (shouldSkipPhase(sessionId)) {
+        emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
+      }
     }
 
     // Phase 2
     if (!shouldStop(sessionId)) {
+      skipSignals.delete(sessionId);
       await updateSessionStatus(sessionId, 'phase2');
       emitStatus(sessionId, 'phase2');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 2: Deep Research');
       await runPhase2(sessionId, session, isTimeUp);
+      if (shouldSkipPhase(sessionId)) {
+        emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
+      }
     }
 
     // Phase 3
     if (!shouldStop(sessionId)) {
+      skipSignals.delete(sessionId);
       await updateSessionStatus(sessionId, 'phase3');
       emitStatus(sessionId, 'phase3');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 3: Red Teaming');
@@ -132,6 +151,7 @@ async function runResearch(sessionId: string): Promise<void> {
     setTimeout(() => {
       activeEmitters.delete(sessionId);
       stopSignals.delete(sessionId);
+      skipSignals.delete(sessionId);
     }, 30000);
   }
 }

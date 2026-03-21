@@ -22,6 +22,7 @@
     counterfactualsRaised: 0,
   });
   let stopping = $state(false);
+  let skipping = $state(false);
   let elapsed = $state(0);
 
   let eventSource: EventSource | null = null;
@@ -75,6 +76,16 @@
     eventSource?.close();
     if (elapsedInterval) clearInterval(elapsedInterval);
   });
+
+  async function skipPhase() {
+    skipping = true;
+    await fetch(`/api/deepdive/${data.session.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'skip' }),
+    });
+    setTimeout(() => (skipping = false), 3000);
+  }
 
   async function stopAndFinalise() {
     stopping = true;
@@ -213,8 +224,16 @@
     {/if}
   </div>
 
-  <!-- Stop button -->
-  <div class="flex justify-end">
+  <!-- Action buttons -->
+  <div class="flex justify-end gap-3">
+    <button
+      onclick={skipPhase}
+      disabled={skipping || stopping || currentStatus === 'post_processing' || currentStatus === 'complete'}
+      class="text-[10px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
+      style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+    >
+      {skipping ? 'Skipping...' : 'Next Phase'}
+    </button>
     <button
       onclick={stopAndFinalise}
       disabled={stopping || currentStatus === 'post_processing' || currentStatus === 'complete'}
