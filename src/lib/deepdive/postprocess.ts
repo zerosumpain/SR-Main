@@ -115,7 +115,7 @@ export async function runPostProcessing(
         clusters: { title: string; summary: string; fact_ids: string[] }[];
       }>(
         systemPrompt,
-        `Group these facts into 4-8 coherent topic clusters aligned with the research goals. For each cluster return:\n- title: a short descriptive label\n- summary: 2-3 sentence overview\n- fact_ids: list of fact IDs in this cluster\n\nFacts:\n${factsForClustering.map((f) => `[${f.id}] ${f.content}`).join('\n')}\n\nRespond with JSON: { "clusters": [...] }`,
+        `Group these facts into 4-8 coherent topic clusters aligned with the research goals. For each cluster return:\n- title: a short descriptive label\n- summary: 2-3 sentences that ONLY restate or synthesise the facts listed below. Do NOT add any information, claims, or context that isn't directly present in these facts.\n- fact_ids: list of fact IDs in this cluster\n\nFacts:\n${factsForClustering.map((f) => `[${f.id}] ${f.content}`).join('\n')}\n\nRespond with JSON: { "clusters": [...] }`,
         { maxTokens: 8192 },
       );
 
@@ -149,8 +149,8 @@ export async function runPostProcessing(
 
   try {
     report.executive_summary = await chatCompletion(
-      systemPrompt,
-      `Write a 3-5 paragraph narrative summary of the research findings. Reference the most important facts and entities by name. Note any significant counterfactuals. Relate findings back to the original research goals.\n\nTop facts:\n${topFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nKey entities: ${topEntities.join(', ')}\n\nCounterfactuals found: ${counterfactuals.length}\n\nResearch goals: ${goals.join('; ')}`,
+      systemPrompt + '\n\nCRITICAL: You must ONLY reference information that appears in the facts provided below. Do NOT add any claims, context, background knowledge, or speculation that is not directly stated in these facts. Every sentence in your summary must be traceable to one or more of the listed facts.',
+      `Write a 3-5 paragraph summary of the research findings. ONLY use information from the facts listed below — do not add anything else.\n\nFacts:\n${topFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nKey entities mentioned: ${topEntities.join(', ')}\n\nCounterfactuals found: ${counterfactuals.length}\n\nResearch goals: ${goals.join('; ')}`,
       { maxTokens: 2048 },
     );
   } catch (err) {

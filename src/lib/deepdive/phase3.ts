@@ -100,22 +100,32 @@ export async function runPhase3(
     emitLog(sessionId, '\u{1F534}', `Challenging: "${fact.content.slice(0, 60)}..."`);
 
     try {
-      // Generate adversarial queries
+      // Generate adversarial queries (1-2 focused queries to conserve search credits)
       const queryResult = await jsonCompletion<{ queries: string[] }>(
         systemPrompt,
-        `Generate 2-4 adversarial search queries designed to find counter-evidence, alternative interpretations, or expert disagreement with this claim:\n\n"${fact.content}"\n\nRespond with JSON: { "queries": [...] }`,
+        `Generate 1-2 focused adversarial search queries designed to find counter-evidence or expert disagreement with this claim:\n\n"${fact.content}"\n\nRespond with JSON: { "queries": [...] }`,
       );
 
       let contradictions = 0;
       let supports = 0;
 
-      for (const query of queryResult.queries ?? []) {
+      // Collect existing source URLs for this session to avoid redundant searches
+      const existingUrls = new Set(
+        (await db.select({ url: sources.url }).from(sources).where(eq(sources.sessionId, sessionId)))
+          .map((s) => s.url),
+      );
+
+      for (const query of (queryResult.queries ?? []).slice(0, 2)) {
         if (isTimeUp()) break;
 
         try {
-          const results = await search(query, { maxResults: 5 });
+          const results = await search(query, { maxResults: 3 });
 
           for (const result of results.results ?? []) {
+            // Skip URLs we already have as sources
+            if (existingUrls.has(result.url)) continue;
+            existingUrls.add(result.url);
+
             // Evaluate the result
             const evaluation = await jsonCompletion<{
               verdict: 'supports' | 'contradicts' | 'qualifies' | 'irrelevant';
