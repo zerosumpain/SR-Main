@@ -125,8 +125,8 @@
   <div class="mb-10">
     <a
       href="/projects"
-      class="text-[11px] uppercase tracking-[0.3em] mb-4 block"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.3em] mb-4 block"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       &larr; Projects
     </a>
@@ -157,8 +157,8 @@
   <!-- Topic input -->
   <div class="mb-6">
     <label
-      class="block text-[11px] uppercase tracking-[0.25em] mb-2"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="block text-[13px] uppercase tracking-[0.25em] mb-2"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       What do you want to research?
     </label>
@@ -178,15 +178,15 @@
   >
     <div class="flex items-center justify-between mb-3">
       <p
-        class="text-[11px] uppercase tracking-[0.25em]"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
+        class="text-[13px] uppercase tracking-[0.25em]"
+        style="color: var(--text-muted); font-family: var(--font-mono);"
       >
         Research Goals
       </p>
       <button
         onclick={suggestGoals}
         disabled={suggestingGoals || !topic.trim()}
-        class="text-[11px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        class="text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
         style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
       >
         {suggestingGoals ? 'Thinking...' : 'Suggest goals'}
@@ -215,7 +215,7 @@
 
     <button
       onclick={addGoal}
-      class="mt-3 text-[11px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
+      class="mt-3 text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
       style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       + Add goal
@@ -226,8 +226,8 @@
   <div class="mb-6">
     <button
       onclick={() => (showAdvanced = !showAdvanced)}
-      class="text-[11px] uppercase tracking-[0.25em] mb-3"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.25em] mb-3"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       {showAdvanced ? '- Hide' : '+'} Advanced options
     </button>
@@ -239,14 +239,14 @@
       >
         <!-- Time limit -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Time limit
           </p>
           <div class="flex flex-wrap gap-2">
             {#each [{ v: 15, l: '15 min' }, { v: 30, l: '30 min' }, { v: 60, l: '1 hour' }, { v: 120, l: '2 hours' }, { v: null, l: 'Run to completion' }] as opt}
               <button
                 onclick={() => (timeLimit = opt.v as number | null)}
-                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
                 style="font-family: var(--font-mono); background: {timeLimit === opt.v ? 'var(--accent)' : 'var(--bg)'}; color: {timeLimit === opt.v ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt.l}
@@ -257,7 +257,7 @@
 
         <!-- Max sources -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Phase 1 — Max sources: {maxSources}
           </p>
           <input
@@ -272,14 +272,14 @@
 
         <!-- Diversity threshold -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Phase 1 — Diversity threshold
           </p>
           <div class="flex gap-2">
             {#each ['low', 'medium', 'high'] as opt}
               <button
                 onclick={() => (diversityThreshold = opt as any)}
-                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
                 style="font-family: var(--font-mono); background: {diversityThreshold === opt ? 'var(--accent)' : 'var(--bg)'}; color: {diversityThreshold === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -290,14 +290,14 @@
 
         <!-- Analysis depth -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Phase 2 — Analysis depth
           </p>
           <div class="flex gap-2">
             {#each ['shallow', 'standard', 'deep'] as opt}
               <button
                 onclick={() => (analysisDepth = opt as any)}
-                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
                 style="font-family: var(--font-mono); background: {analysisDepth === opt ? 'var(--accent)' : 'var(--bg)'}; color: {analysisDepth === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -308,14 +308,14 @@
 
         <!-- Red team aggression -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Phase 3 — Red team aggression
           </p>
           <div class="flex gap-2">
             {#each ['gentle', 'standard', 'aggressive'] as opt}
               <button
                 onclick={() => (redTeamAggression = opt as any)}
-                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
                 style="font-family: var(--font-mono); background: {redTeamAggression === opt ? 'var(--accent)' : 'var(--bg)'}; color: {redTeamAggression === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -326,7 +326,7 @@
 
         <!-- Max facts before phase 3 -->
         <div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Max facts before Phase 3
           </p>
           <input
@@ -359,8 +359,8 @@
   {#if data.sessions.length > 0}
     <div>
       <p
-        class="text-[11px] uppercase tracking-[0.25em] mb-4"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
+        class="text-[13px] uppercase tracking-[0.25em] mb-4"
+        style="color: var(--text-muted); font-family: var(--font-mono);"
       >
         Previous Sessions
       </p>
@@ -383,14 +383,14 @@
                 </p>
                 <div class="flex items-center gap-3 mt-1">
                   <span
-                    class="text-[11px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
+                    class="text-[13px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
                     style="font-family: var(--font-mono); color: {statusColor(session.status)};"
                   >
                     {session.status}
                   </span>
                   <span
                     class="text-[11px]"
-                    style="color: var(--text-ghost); font-family: var(--font-mono);"
+                    style="color: var(--text-muted); font-family: var(--font-mono);"
                   >
                     {session.factCount} facts &middot; {session.entityCount} entities
                   </span>
@@ -399,7 +399,7 @@
               <div class="flex items-center gap-2 ml-3 shrink-0">
                 <span
                   class="text-[11px]"
-                  style="color: var(--text-ghost); font-family: var(--font-mono);"
+                  style="color: var(--text-muted); font-family: var(--font-mono);"
                 >
                   {formatDate(session.createdAt)}
                 </span>
@@ -415,7 +415,7 @@
                   <button
                     onclick={() => (confirmDeleteId = null)}
                     class="text-[10px] px-1"
-                    style="color: var(--text-ghost); font-family: var(--font-mono);"
+                    style="color: var(--text-muted); font-family: var(--font-mono);"
                   >
                     x
                   </button>

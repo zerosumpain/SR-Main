@@ -196,7 +196,7 @@
 
 <div class="max-w-4xl mx-auto px-6 py-12">
   <div class="mb-2">
-    <span class="text-[11px] uppercase tracking-[0.3em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+    <span class="text-[13px] uppercase tracking-[0.3em]" style="color: var(--text-muted); font-family: var(--font-mono);">
       Deep Dive — Shared Report
     </span>
   </div>
@@ -208,7 +208,7 @@
     {data.session.topic}
   </h1>
 
-  <p class="text-xs mb-8" style="color: var(--text-ghost); font-family: var(--font-mono);">
+  <p class="text-xs mb-8" style="color: var(--text-muted); font-family: var(--font-mono);">
     {(data.session.goals as string[]).join(' / ')}
   </p>
 
@@ -216,7 +216,7 @@
     {#each tabs as tab}
       <button
         onclick={() => (activeTab = tab.id)}
-        class="text-[11px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg whitespace-nowrap"
+        class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg whitespace-nowrap"
         style="font-family: var(--font-mono); background: {activeTab === tab.id ? 'var(--accent)' : 'var(--card-bg)'}; color: {activeTab === tab.id ? 'white' : 'var(--text-muted)'}; border: 1px solid {activeTab === tab.id ? 'var(--accent)' : 'var(--card-border)'};"
       >
         {tab.label}
@@ -235,14 +235,14 @@
       ] as stat}
         <div class="text-center">
           <p class="text-lg font-bold" style="color: var(--text-primary); font-family: var(--font-mono);">{stat.value}</p>
-          <p class="text-[10px] uppercase tracking-[0.15em]" style="color: var(--text-ghost); font-family: var(--font-mono);">{stat.label}</p>
+          <p class="text-[10px] uppercase tracking-[0.15em]" style="color: var(--text-muted); font-family: var(--font-mono);">{stat.label}</p>
         </div>
       {/each}
     </div>
 
     {#if data.report.identity_clusters?.length}
       <div class="mb-6 p-4 rounded-xl border" style="background: rgba(196, 87, 10, 0.06); border-color: var(--accent);">
-        <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--accent); font-family: var(--font-mono);">Identity Disambiguation</p>
+        <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--accent); font-family: var(--font-mono);">Identity Disambiguation</p>
         {#each data.report.identity_clusters as cluster}
           <div class="mb-2 pl-3" style="border-left: 2px solid var(--accent);">
             <p class="text-sm font-bold" style="color: var(--text-primary);">{cluster.name}</p>
@@ -254,7 +254,7 @@
 
     {#if data.report.executive_summary}
       <div class="mb-8">
-        <p class="text-[11px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">Executive Summary</p>
+        <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">Executive Summary</p>
         <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
           {#each data.report.executive_summary.split('\n\n') as para}
             {#if para.trim()}
@@ -266,7 +266,7 @@
     {/if}
 
     <div>
-      <p class="text-[11px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">Top Facts</p>
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">Top Facts</p>
       <div class="space-y-2">
         {#each topFacts as fact}
           <div class="p-4 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
@@ -277,7 +277,7 @@
                   <span class="text-[11px] px-2 py-0.5 rounded" style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}15;">{fact.confidence.toFixed(2)}</span>
                 </div>
               </div>
-              <button onclick={() => toggleExpand(fact.id)} class="text-[11px] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              <button onclick={() => toggleExpand(fact.id)} class="text-[11px] shrink-0" style="color: var(--text-muted); font-family: var(--font-mono);">
                 {expandedFacts.has(fact.id) ? '-' : '+'}
               </button>
             </div>
@@ -286,7 +286,7 @@
                 {#each getFactSources(fact.id) as source}
                   <div>
                     <a href={source.url} target="_blank" rel="noopener noreferrer" class="text-[11px] block" style="color: var(--accent); font-family: var(--font-mono);">{source.title ?? source.url}</a>
-                    <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{source.domain}</span>
+                    <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">{source.domain}</span>
                   </div>
                 {/each}
                 {#if getFactEntities(fact.id).length > 0}
@@ -326,9 +326,9 @@
       {#if selectedEntity}
         <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
           <p class="text-sm font-bold mb-1" style="color: var(--text-primary);">{selectedEntity.name}</p>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">{selectedEntity.type} &middot; Centrality: {selectedEntity.centrality.toFixed(2)}</p>
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">{selectedEntity.type} &middot; Centrality: {selectedEntity.centrality.toFixed(2)}</p>
           {#if selectedEntity.description}<p class="text-xs mb-4" style="color: var(--text-muted);">{selectedEntity.description}</p>{/if}
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Facts ({selectedEntityFacts.length})</p>
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">Facts ({selectedEntityFacts.length})</p>
           <div class="space-y-2 mb-4 max-h-40 overflow-y-auto">
             {#each selectedEntityFacts as fact}
               {#if fact}
@@ -340,7 +340,7 @@
               {/if}
             {/each}
           </div>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Relationships ({selectedEntityRelationships.length})</p>
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">Relationships ({selectedEntityRelationships.length})</p>
           <div class="space-y-1 max-h-40 overflow-y-auto">
             {#each selectedEntityRelationships as rel}
               {@const otherEntityId = rel.fromEntityId === selectedEntityId ? rel.toEntityId : rel.fromEntityId}
@@ -354,7 +354,7 @@
       {/if}
     </div>
     <div class="mt-6">
-      <p class="text-[11px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">Relationship Graph</p>
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">Relationship Graph</p>
       <div bind:this={graphContainer} class="h-96 rounded-xl border" style="background: var(--bg); border-color: var(--card-border);"></div>
     </div>
   {/if}
@@ -362,14 +362,14 @@
   {#if activeTab === 'timeline'}
     <div class="flex gap-3 mb-4">
       <div>
-        <label class="text-[11px] uppercase tracking-[0.2em] block mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Min confidence</label>
+        <label class="text-[13px] uppercase tracking-[0.2em] block mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">Min confidence</label>
         <input type="range" bind:value={timelineMinConfidence} min="0" max="1" step="0.1" class="w-32" />
-        <span class="text-xs ml-2" style="color: var(--text-ghost); font-family: var(--font-mono);">{timelineMinConfidence.toFixed(1)}</span>
+        <span class="text-xs ml-2" style="color: var(--text-muted); font-family: var(--font-mono);">{timelineMinConfidence.toFixed(1)}</span>
       </div>
     </div>
     {#if timelineFacts.length === 0}
       <div class="p-8 rounded-xl border text-center" style="background: var(--card-bg); border-color: var(--card-border);">
-        <p class="text-sm" style="color: var(--text-ghost); font-family: var(--font-mono);">No facts with dates found</p>
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">No facts with dates found</p>
       </div>
     {:else}
       <div class="relative pl-6">
@@ -379,7 +379,7 @@
           <div class="relative mb-4">
             <div class="absolute -left-4 top-1 w-3 h-3 rounded-full" style="background: {confidenceColor(fact.confidence)};"></div>
             <div class="p-4 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-              <p class="text-[11px] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">{new Date(fact.eventDate!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+              <p class="text-[11px] mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">{new Date(fact.eventDate!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               <p class="text-sm" style="color: var(--text-primary);">{fact.content}</p>
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-[11px] inline-block px-2 py-0.5 rounded" style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)};">{fact.confidence.toFixed(2)}</span>
@@ -395,7 +395,7 @@
   {#if activeTab === 'counterfactuals'}
     {#if counterfactualGroups().length === 0}
       <div class="p-8 rounded-xl border text-center" style="background: var(--card-bg); border-color: var(--card-border);">
-        <p class="text-sm" style="color: var(--text-ghost); font-family: var(--font-mono);">No counterfactuals found</p>
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">No counterfactuals found</p>
       </div>
     {:else}
       <div class="space-y-4">
@@ -404,7 +404,7 @@
           <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
             <div class="flex items-start justify-between mb-3">
               <p class="text-sm flex-1" style="color: var(--text-primary);">{group.original.content}</p>
-              <span class="text-[11px] uppercase tracking-[0.15em] px-2 py-0.5 rounded ml-3 shrink-0" style="font-family: var(--font-mono); color: {badge.color}; border: 1px solid {badge.color};">{badge.label}</span>
+              <span class="text-[13px] uppercase tracking-[0.15em] px-2 py-0.5 rounded ml-3 shrink-0" style="font-family: var(--font-mono); color: {badge.color}; border: 1px solid {badge.color};">{badge.label}</span>
             </div>
             <div class="space-y-2">
               {#each group.counters as counter}
@@ -428,7 +428,7 @@
           <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
             <p class="text-sm font-bold mb-2" style="color: var(--text-primary);">{cluster.title}</p>
             <p class="text-xs mb-3" style="color: var(--text-muted);">{cluster.summary}</p>
-            <button onclick={() => toggleExpand(`cluster-${cluster.title}`)} class="text-[11px] uppercase tracking-[0.2em]" style="color: var(--accent); font-family: var(--font-mono);">
+            <button onclick={() => toggleExpand(`cluster-${cluster.title}`)} class="text-[13px] uppercase tracking-[0.2em]" style="color: var(--accent); font-family: var(--font-mono);">
               {expandedFacts.has(`cluster-${cluster.title}`) ? 'Hide' : 'Show'} facts ({cluster.fact_ids?.length ?? 0})
             </button>
             {#if expandedFacts.has(`cluster-${cluster.title}`)}

@@ -124,14 +124,14 @@
   <div class="flex items-center justify-between mb-6">
     <a
       href="/deepdive"
-      class="text-[11px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.3em]"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       &larr; Deep Dive
     </a>
     <span
-      class="text-[11px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.3em]"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       {data.session.topic.slice(0, 40)}
     </span>
@@ -147,7 +147,7 @@
           style="background: {state === 'done' ? '#2d7d46' : state === 'active' ? 'var(--accent)' : 'var(--card-border)'};"
         ></div>
         <p
-          class="text-[11px] uppercase tracking-[0.15em]"
+          class="text-[13px] uppercase tracking-[0.15em]"
           style="font-family: var(--font-mono); color: {state === 'active' ? 'var(--accent)' : state === 'done' ? '#2d7d46' : 'var(--text-ghost)'};"
         >
           {state === 'done' ? '\u2713 ' : ''}{phase.label}
@@ -174,7 +174,7 @@
         <p class="text-lg font-bold" style="color: var(--text-primary); font-family: var(--font-mono);">
           {stat.value}
         </p>
-        <p class="text-[11px] uppercase tracking-[0.15em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <p class="text-[13px] uppercase tracking-[0.15em]" style="color: var(--text-muted); font-family: var(--font-mono);">
           {stat.label}
         </p>
       </div>
@@ -184,15 +184,15 @@
   <!-- Time bar -->
   <div class="flex items-center justify-between mb-4">
     <span
-      class="text-[11px] uppercase tracking-[0.2em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.2em]"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       Elapsed: {formatElapsed(elapsed)}
     </span>
     {#if estimatedRemaining() !== null}
       <span
-        class="text-[11px] uppercase tracking-[0.2em]"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
+        class="text-[13px] uppercase tracking-[0.2em]"
+        style="color: var(--text-muted); font-family: var(--font-mono);"
       >
         Remaining: ~{estimatedRemaining()}
       </span>
@@ -208,7 +208,7 @@
     {#if logs.length === 0}
       <p
         class="text-xs"
-        style="color: var(--text-ghost); font-family: var(--font-mono);"
+        style="color: var(--text-muted); font-family: var(--font-mono);"
       >
         Waiting for events...
       </p>
@@ -229,7 +229,7 @@
     <button
       onclick={skipPhase}
       disabled={skipping || stopping || currentStatus === 'post_processing' || currentStatus === 'complete'}
-      class="text-[11px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
+      class="text-[13px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
       style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
     >
       {skipping ? 'Skipping...' : 'Next Phase'}
@@ -237,7 +237,7 @@
     <button
       onclick={stopAndFinalise}
       disabled={stopping || currentStatus === 'post_processing' || currentStatus === 'complete'}
-      class="text-[11px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
+      class="text-[13px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
       style="background: #8b3a1a; color: white; font-family: var(--font-mono);"
     >
       {stopping ? 'Stopping...' : 'Stop & Finalise'}

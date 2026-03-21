@@ -398,8 +398,8 @@
   <div class="flex items-center justify-between mb-2">
     <a
       href="/deepdive"
-      class="text-[11px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
+      class="text-[13px] uppercase tracking-[0.3em]"
+      style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       &larr; Deep Dive
     </a>
@@ -407,7 +407,7 @@
       <div class="flex gap-2">
         <button
           onclick={() => (showRerunModal = true)}
-          class="text-[11px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
+          class="text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
           style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
         >
           Re-run
@@ -415,7 +415,7 @@
         <button
           onclick={toggleShare}
           disabled={sharing}
-          class="text-[11px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
+          class="text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
           style="background: {shareUrl ? 'var(--accent)' : 'var(--card-bg)'}; border: 1px solid {shareUrl ? 'var(--accent)' : 'var(--card-border)'}; color: {shareUrl ? 'white' : 'var(--text-muted)'}; font-family: var(--font-mono);"
         >
           {sharing ? '...' : shareUrl ? 'Shared' : 'Share'}
@@ -438,14 +438,14 @@
       />
       <button
         onclick={copyShareUrl}
-        class="text-[11px] uppercase tracking-[0.15em] px-2 py-1 rounded"
+        class="text-[13px] uppercase tracking-[0.15em] px-2 py-1 rounded"
         style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
       >
         {copied ? 'Copied' : 'Copy'}
       </button>
       <button
         onclick={toggleShare}
-        class="text-[11px] uppercase tracking-[0.15em] px-2 py-1 rounded"
+        class="text-[13px] uppercase tracking-[0.15em] px-2 py-1 rounded"
         style="color: #8b3a1a; font-family: var(--font-mono);"
       >
         Unshare
@@ -460,7 +460,7 @@
     {data.session.topic}
   </h1>
 
-  <p class="text-xs mb-8" style="color: var(--text-ghost); font-family: var(--font-mono);">
+  <p class="text-xs mb-8" style="color: var(--text-muted); font-family: var(--font-mono);">
     {(data.session.goals as string[]).join(' / ')}
   </p>
 
@@ -469,7 +469,7 @@
     {#each tabs as tab}
       <button
         onclick={() => (activeTab = tab.id)}
-        class="text-[11px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg whitespace-nowrap"
+        class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg whitespace-nowrap"
         style="font-family: var(--font-mono); background: {activeTab === tab.id ? 'var(--accent)' : 'var(--card-bg)'}; color: {activeTab === tab.id ? 'white' : 'var(--text-muted)'}; border: 1px solid {activeTab === tab.id ? 'var(--accent)' : 'var(--card-border)'};"
       >
         {tab.label}
@@ -495,7 +495,7 @@
           <p class="text-lg font-bold" style="color: var(--text-primary); font-family: var(--font-mono);">
             {stat.value}
           </p>
-          <p class="text-[10px] uppercase tracking-[0.15em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[10px] uppercase tracking-[0.15em]" style="color: var(--text-muted); font-family: var(--font-mono);">
             {stat.label}
           </p>
         </div>
@@ -508,7 +508,7 @@
         class="mb-6 p-4 rounded-xl border"
         style="background: rgba(196, 87, 10, 0.06); border-color: var(--accent);"
       >
-        <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--accent); font-family: var(--font-mono);">
+        <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--accent); font-family: var(--font-mono);">
           Identity Disambiguation
         </p>
         <p class="text-sm mb-3" style="color: var(--text-secondary);">
@@ -526,7 +526,7 @@
     <!-- Executive summary -->
     {#if data.report.executive_summary}
       <div class="mb-8">
-        <p class="text-[11px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
           Executive Summary
         </p>
         <div
@@ -546,7 +546,7 @@
 
     <!-- Top facts -->
     <div>
-      <p class="text-[11px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
         Top Facts {#if data.report.chronological_fact_ids?.length}(chronological){/if}
       </p>
       <div class="space-y-2">
@@ -581,7 +581,7 @@
               <button
                 onclick={() => toggleExpand(fact.id)}
                 class="text-[11px] shrink-0"
-                style="color: var(--text-ghost); font-family: var(--font-mono);"
+                style="color: var(--text-muted); font-family: var(--font-mono);"
               >
                 {expandedFacts.has(fact.id) ? '-' : '+'}
               </button>
@@ -600,7 +600,7 @@
                     >
                       {source.title ?? source.url}
                     </a>
-                    <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                    <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
                       {source.domain}
                     </span>
                   </div>
@@ -675,7 +675,7 @@
           <p class="text-sm font-bold mb-1" style="color: var(--text-primary);">
             {selectedEntity.name}
           </p>
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
             {selectedEntity.type} &middot; Centrality: {selectedEntity.centrality.toFixed(2)}
           </p>
           {#if selectedEntity.description}
@@ -684,7 +684,7 @@
             </p>
           {/if}
 
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Facts ({selectedEntityFacts.length})
           </p>
           <div class="space-y-2 mb-4 max-h-40 overflow-y-auto">
@@ -711,7 +711,7 @@
 
           <!-- Sources section -->
           {#if selectedEntitySources().length > 0}
-            <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
               Sources ({selectedEntitySources().length})
             </p>
             <div class="space-y-1 mb-4 max-h-32 overflow-y-auto">
@@ -729,7 +729,7 @@
             </div>
           {/if}
 
-          <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
             Relationships ({selectedEntityRelationships.length})
           </p>
           <div class="space-y-1 max-h-40 overflow-y-auto">
@@ -751,12 +751,12 @@
     <!-- Graph -->
     <div class="mt-6">
       <div class="flex items-center justify-between mb-3">
-        <p class="text-[11px] uppercase tracking-[0.25em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <p class="text-[13px] uppercase tracking-[0.25em]" style="color: var(--text-muted); font-family: var(--font-mono);">
           Relationship Graph
         </p>
         <button
           onclick={openGraphModal}
-          class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
+          class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
           style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
         >
           Expand
@@ -774,7 +774,7 @@
   {#if activeTab === 'timeline'}
     <div class="flex gap-3 mb-4">
       <div>
-        <label class="text-[11px] uppercase tracking-[0.2em] block mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <label class="text-[13px] uppercase tracking-[0.2em] block mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
           Min confidence
         </label>
         <input
@@ -785,7 +785,7 @@
           step="0.1"
           class="w-32"
         />
-        <span class="text-xs ml-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <span class="text-xs ml-2" style="color: var(--text-muted); font-family: var(--font-mono);">
           {timelineMinConfidence.toFixed(1)}
         </span>
       </div>
@@ -796,7 +796,7 @@
         class="p-8 rounded-xl border text-center"
         style="background: var(--card-bg); border-color: var(--card-border);"
       >
-        <p class="text-sm" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
           No facts with dates found
         </p>
       </div>
@@ -821,7 +821,7 @@
               class="p-4 rounded-xl border"
               style="background: var(--card-bg); border-color: var(--card-border);"
             >
-              <p class="text-[11px] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              <p class="text-[11px] mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
                 {new Date(fact.eventDate!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
               <p class="text-sm" style="color: var(--text-primary);">
@@ -860,7 +860,7 @@
         class="p-8 rounded-xl border text-center"
         style="background: var(--card-bg); border-color: var(--card-border);"
       >
-        <p class="text-sm" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
           No counterfactuals found
         </p>
       </div>
@@ -877,14 +877,14 @@
                 {group.original.content}
               </p>
               <span
-                class="text-[11px] uppercase tracking-[0.15em] px-2 py-0.5 rounded ml-3 shrink-0"
+                class="text-[13px] uppercase tracking-[0.15em] px-2 py-0.5 rounded ml-3 shrink-0"
                 style="font-family: var(--font-mono); color: {badge.color}; border: 1px solid {badge.color};"
               >
                 {badge.label}
               </span>
             </div>
 
-            <p class="text-[11px] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            <p class="text-[11px] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
               Confidence: {group.original.confidence.toFixed(2)}
             </p>
 
@@ -924,7 +924,7 @@
     <div class="mb-6">
       <a
         href="/api/deepdive/{data.session.id}/export/docx"
-        class="inline-block text-[11px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg"
+        class="inline-block text-[13px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg"
         style="background: var(--accent); color: white; font-family: var(--font-mono);"
       >
         Download full report (.docx)
@@ -948,7 +948,7 @@
 
             <button
               onclick={() => toggleExpand(`cluster-${cluster.title}`)}
-              class="text-[11px] uppercase tracking-[0.2em]"
+              class="text-[13px] uppercase tracking-[0.2em]"
               style="color: var(--accent); font-family: var(--font-mono);"
             >
               {expandedFacts.has(`cluster-${cluster.title}`) ? 'Hide' : 'Show'} facts ({cluster.fact_ids?.length ?? 0})
@@ -988,7 +988,7 @@
     style="background: var(--bg);"
   >
     <div class="flex items-center justify-between p-4">
-      <p class="text-[11px] uppercase tracking-[0.25em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+      <p class="text-[13px] uppercase tracking-[0.25em]" style="color: var(--text-muted); font-family: var(--font-mono);">
         Relationship Graph — {data.session.topic}
       </p>
       <button
@@ -1024,7 +1024,7 @@
         Existing facts and entities will be kept. New research builds on top.
       </p>
 
-      <p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
+      <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
         Goals
       </p>
       <div class="space-y-2 mb-4">
@@ -1047,7 +1047,7 @@
         {/each}
         <button
           onclick={() => (rerunGoals = [...rerunGoals, ''])}
-          class="text-[11px] uppercase tracking-[0.15em]"
+          class="text-[13px] uppercase tracking-[0.15em]"
           style="color: var(--text-muted); font-family: var(--font-mono);"
         >
           + Add goal
@@ -1057,7 +1057,7 @@
       <div class="flex justify-end gap-2">
         <button
           onclick={() => (showRerunModal = false)}
-          class="text-[11px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg"
+          class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg"
           style="color: var(--text-muted); font-family: var(--font-mono);"
         >
           Cancel
@@ -1065,7 +1065,7 @@
         <button
           onclick={rerunResearch}
           disabled={rerunning}
-          class="text-[11px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg disabled:opacity-50"
+          class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg disabled:opacity-50"
           style="background: var(--accent); color: white; font-family: var(--font-mono);"
         >
           {rerunning ? 'Starting...' : 'Re-run'}
