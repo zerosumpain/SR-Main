@@ -237,9 +237,13 @@
       style: getGraphStyle(),
       layout: {
         name: 'cose',
-        padding: 30,
-        nodeRepulsion: () => 8000,
-        idealEdgeLength: () => 120,
+        padding: 40,
+        nodeRepulsion: () => 15000,
+        idealEdgeLength: () => 150,
+        edgeElasticity: () => 100,
+        gravity: 0.3,
+        numIter: 1500,
+        nodeDimensionsIncludeLabels: true,
         animate: false,
       },
     });
@@ -260,9 +264,13 @@
       style: getGraphStyle(),
       layout: {
         name: 'cose',
-        padding: 50,
-        nodeRepulsion: () => 12000,
-        idealEdgeLength: () => 180,
+        padding: 60,
+        nodeRepulsion: () => 20000,
+        idealEdgeLength: () => 200,
+        edgeElasticity: () => 100,
+        gravity: 0.25,
+        numIter: 2000,
+        nodeDimensionsIncludeLabels: true,
         animate: false,
       },
     });
@@ -679,7 +687,7 @@
             {selectedEntity.type} &middot; Centrality: {selectedEntity.centrality.toFixed(2)}
           </p>
           {#if selectedEntity.description}
-            <p class="text-xs mb-4" style="color: var(--text-muted);">
+            <p class="text-sm mb-4" style="color: var(--text-muted);">
               {selectedEntity.description}
             </p>
           {/if}
@@ -692,7 +700,7 @@
               {#if fact}
                 {@const source = sourceMap.get(fact.sourceId)}
                 <div>
-                  <p class="text-xs" style="color: var(--text-secondary);">{fact.content}</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">{fact.content}</p>
                   {#if source}
                     <a
                       href={source.url}
@@ -736,7 +744,7 @@
             {#each selectedEntityRelationships as rel}
               {@const otherEntityId = rel.fromEntityId === selectedEntityId ? rel.toEntityId : rel.fromEntityId}
               {@const otherEntity = data.entities.find((e) => e.id === otherEntityId)}
-              <p class="text-xs" style="color: var(--text-secondary);">
+              <p class="text-sm" style="color: var(--text-secondary);">
                 <span style="color: {rel.sentiment === 'positive' ? '#2d7d46' : rel.sentiment === 'negative' ? '#8b3a1a' : 'var(--text-muted)'};">
                   {rel.relationshipType}
                 </span>
@@ -824,7 +832,7 @@
               <p class="text-[11px] mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
                 {new Date(fact.eventDate!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
-              <p class="text-sm" style="color: var(--text-primary);">
+              <p class="text-[15px]" style="color: var(--text-primary);">
                 {fact.content}
               </p>
               <div class="flex items-center gap-2 mt-1">
@@ -873,7 +881,7 @@
             style="background: var(--card-bg); border-color: var(--card-border);"
           >
             <div class="flex items-start justify-between mb-3">
-              <p class="text-sm flex-1" style="color: var(--text-primary);">
+              <p class="text-[15px] flex-1" style="color: var(--text-primary);">
                 {group.original.content}
               </p>
               <span
@@ -895,7 +903,7 @@
                   class="p-3 rounded-lg"
                   style="background: var(--bg);"
                 >
-                  <p class="text-xs" style="color: var(--text-secondary);">
+                  <p class="text-sm" style="color: var(--text-secondary);">
                     {counter.content}
                   </p>
                   {#if source}
@@ -942,7 +950,7 @@
             <p class="text-sm font-bold mb-2" style="color: var(--text-primary);">
               {cluster.title}
             </p>
-            <p class="text-xs mb-3" style="color: var(--text-muted);">
+            <p class="text-sm mb-3" style="color: var(--text-muted);">
               {cluster.summary}
             </p>
 
@@ -966,7 +974,7 @@
                       >
                         [{fact.confidence.toFixed(2)}]
                       </span>
-                      <p class="text-xs" style="color: var(--text-secondary);">
+                      <p class="text-sm" style="color: var(--text-secondary);">
                         {fact.content}
                       </p>
                     </div>

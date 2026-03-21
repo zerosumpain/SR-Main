@@ -327,14 +327,14 @@
         <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
           <p class="text-sm font-bold mb-1" style="color: var(--text-primary);">{selectedEntity.name}</p>
           <p class="text-[13px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">{selectedEntity.type} &middot; Centrality: {selectedEntity.centrality.toFixed(2)}</p>
-          {#if selectedEntity.description}<p class="text-xs mb-4" style="color: var(--text-muted);">{selectedEntity.description}</p>{/if}
+          {#if selectedEntity.description}<p class="text-sm mb-4" style="color: var(--text-muted);">{selectedEntity.description}</p>{/if}
           <p class="text-[13px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">Facts ({selectedEntityFacts.length})</p>
           <div class="space-y-2 mb-4 max-h-40 overflow-y-auto">
             {#each selectedEntityFacts as fact}
               {#if fact}
                 {@const source = sourceMap.get(fact.sourceId)}
                 <div>
-                  <p class="text-xs" style="color: var(--text-secondary);">{fact.content}</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">{fact.content}</p>
                   {#if source}<a href={source.url} target="_blank" rel="noopener noreferrer" class="text-[10px]" style="color: var(--accent); font-family: var(--font-mono);">{source.title ?? source.domain}</a>{/if}
                 </div>
               {/if}
@@ -345,7 +345,7 @@
             {#each selectedEntityRelationships as rel}
               {@const otherEntityId = rel.fromEntityId === selectedEntityId ? rel.toEntityId : rel.fromEntityId}
               {@const otherEntity = data.entities.find((e) => e.id === otherEntityId)}
-              <p class="text-xs" style="color: var(--text-secondary);">
+              <p class="text-sm" style="color: var(--text-secondary);">
                 <span style="color: {rel.sentiment === 'positive' ? '#2d7d46' : rel.sentiment === 'negative' ? '#8b3a1a' : 'var(--text-muted)'};">{rel.relationshipType}</span> &rarr; {otherEntity?.name ?? 'Unknown'}
               </p>
             {/each}
@@ -380,7 +380,7 @@
             <div class="absolute -left-4 top-1 w-3 h-3 rounded-full" style="background: {confidenceColor(fact.confidence)};"></div>
             <div class="p-4 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
               <p class="text-[11px] mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">{new Date(fact.eventDate!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-              <p class="text-sm" style="color: var(--text-primary);">{fact.content}</p>
+              <p class="text-[15px]" style="color: var(--text-primary);">{fact.content}</p>
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-[11px] inline-block px-2 py-0.5 rounded" style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)};">{fact.confidence.toFixed(2)}</span>
                 {#if source}<a href={source.url} target="_blank" rel="noopener noreferrer" class="text-[10px]" style="color: var(--accent); font-family: var(--font-mono);">{source.title ?? source.domain}</a>{/if}
@@ -403,14 +403,14 @@
           {@const badge = resolutionBadge(group.counters)}
           <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
             <div class="flex items-start justify-between mb-3">
-              <p class="text-sm flex-1" style="color: var(--text-primary);">{group.original.content}</p>
+              <p class="text-[15px] flex-1" style="color: var(--text-primary);">{group.original.content}</p>
               <span class="text-[13px] uppercase tracking-[0.15em] px-2 py-0.5 rounded ml-3 shrink-0" style="font-family: var(--font-mono); color: {badge.color}; border: 1px solid {badge.color};">{badge.label}</span>
             </div>
             <div class="space-y-2">
               {#each group.counters as counter}
                 {@const source = sourceMap.get(counter.sourceId)}
                 <div class="p-3 rounded-lg" style="background: var(--bg);">
-                  <p class="text-xs" style="color: var(--text-secondary);">{counter.content}</p>
+                  <p class="text-sm" style="color: var(--text-secondary);">{counter.content}</p>
                   {#if source}<a href={source.url} target="_blank" rel="noopener noreferrer" class="text-[11px] mt-1 block" style="color: var(--accent); font-family: var(--font-mono);">{source.domain}</a>{/if}
                 </div>
               {/each}
@@ -427,7 +427,7 @@
         {#each data.report.clusters as cluster}
           <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
             <p class="text-sm font-bold mb-2" style="color: var(--text-primary);">{cluster.title}</p>
-            <p class="text-xs mb-3" style="color: var(--text-muted);">{cluster.summary}</p>
+            <p class="text-sm mb-3" style="color: var(--text-muted);">{cluster.summary}</p>
             <button onclick={() => toggleExpand(`cluster-${cluster.title}`)} class="text-[13px] uppercase tracking-[0.2em]" style="color: var(--accent); font-family: var(--font-mono);">
               {expandedFacts.has(`cluster-${cluster.title}`) ? 'Hide' : 'Show'} facts ({cluster.fact_ids?.length ?? 0})
             </button>
@@ -438,7 +438,7 @@
                   {#if fact}
                     <div class="flex items-start gap-2">
                       <span class="text-[11px] shrink-0 mt-0.5" style="color: {confidenceColor(fact.confidence)}; font-family: var(--font-mono);">[{fact.confidence.toFixed(2)}]</span>
-                      <p class="text-xs" style="color: var(--text-secondary);">{fact.content}</p>
+                      <p class="text-sm" style="color: var(--text-secondary);">{fact.content}</p>
                     </div>
                   {/if}
                 {/each}
