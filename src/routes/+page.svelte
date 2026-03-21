@@ -68,7 +68,7 @@
       </div>
 
       <!-- Right: explainer with accent strip -->
-      <div class="accent-strip max-w-[200px]">
+      <div class="accent-strip max-w-[240px]">
         <p class="text-base font-medium leading-relaxed" style="color: var(--text-primary);">
           I'm John Kelly and these are my vitals, right now.
         </p>
