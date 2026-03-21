@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
-import { emitLog, emitStats, shouldStop } from './worker';
+import { emitLog, emitStats, shouldStop, getAbortSignal, throwIfStopped } from './worker';
 import { classifyDomain } from './credibility';
 import { DIVERSITY_THRESHOLDS } from './types';
 import type { SessionConfig, SessionStats, SeedContext } from './types';
@@ -123,6 +123,7 @@ export async function runPhase1(
           stats.sourcesFound = totalSourcesStored;
 
           emitLog(sessionId, '\u{1F4C4}', `Source: ${result.title?.slice(0, 60) ?? result.url}`);
+          throwIfStopped(sessionId);
 
           // Categorise source and get follow-up queries
           try {

@@ -5,6 +5,7 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3)
     try {
       return await fn();
     } catch (err: any) {
+      if (err?.name === 'AbortError') throw err;
       const isRateLimit = err?.status === 429;
       const isLastAttempt = attempt === maxRetries;
 
@@ -24,22 +25,25 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3)
 export async function chatCompletion(
   systemPrompt: string,
   userPrompt: string,
-  options?: { temperature?: number; maxTokens?: number },
+  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
 ): Promise<string> {
   const client = getOpenAIClient();
   const model = getModel();
 
   const response = await withRetry(
     () =>
-      client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-      }),
+      client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 4096,
+        },
+        { signal: options?.signal as any },
+      ),
     'chatCompletion',
   );
 
@@ -49,23 +53,26 @@ export async function chatCompletion(
 export async function jsonCompletion<T>(
   systemPrompt: string,
   userPrompt: string,
-  options?: { temperature?: number; maxTokens?: number },
+  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
 ): Promise<T> {
   const client = getOpenAIClient();
   const model = getModel();
 
   const response = await withRetry(
     () =>
-      client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.' },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: options?.temperature ?? 0.3,
-        max_tokens: options?.maxTokens ?? 4096,
-        response_format: { type: 'json_object' },
-      }),
+      client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.' },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: options?.temperature ?? 0.3,
+          max_tokens: options?.maxTokens ?? 4096,
+          response_format: { type: 'json_object' },
+        },
+        { signal: options?.signal as any },
+      ),
     'jsonCompletion',
   );
 

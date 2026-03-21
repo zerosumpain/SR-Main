@@ -13,6 +13,7 @@ import { linkSessionEntitiesToGlobal } from './cross-session';
 const activeEmitters = new Map<string, EventEmitter>();
 const stopSignals = new Map<string, boolean>();
 const skipSignals = new Map<string, boolean>();
+const abortControllers = new Map<string, AbortController>();
 
 export function getEmitter(sessionId: string): EventEmitter {
   let emitter = activeEmitters.get(sessionId);
@@ -57,6 +58,22 @@ export function shouldSkipPhase(sessionId: string): boolean {
 
 export function requestStop(sessionId: string): void {
   stopSignals.set(sessionId, true);
+  // Abort any in-flight HTTP requests
+  const ac = abortControllers.get(sessionId);
+  if (ac) ac.abort();
+}
+
+export function getAbortSignal(sessionId: string): AbortSignal | undefined {
+  return abortControllers.get(sessionId)?.signal;
+}
+
+/** Throws if session has been stopped — call this between async operations */
+export function throwIfStopped(sessionId: string): void {
+  if (shouldStop(sessionId)) {
+    const err = new Error('Research stopped');
+    err.name = 'AbortError';
+    throw err;
+  }
 }
 
 export function requestSkipPhase(sessionId: string): void {
@@ -82,6 +99,8 @@ export async function startResearch(sessionId: string): Promise<void> {
 
 async function runResearch(sessionId: string): Promise<void> {
   const emitter = getEmitter(sessionId);
+  const ac = new AbortController();
+  abortControllers.set(sessionId, ac);
 
   try {
     // Load session
@@ -113,8 +132,12 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase1(sessionId, session, isTimeUp);
       } catch (err: any) {
-        console.error('[deepdive] Phase 1 error:', err);
-        emitLog(sessionId, '\u26A0\uFE0F', `Phase 1 error: ${err.message ?? 'unknown'}. Continuing...`);
+        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+          emitLog(sessionId, '\u2139\uFE0F', 'Phase 1 stopped.');
+        } else {
+          console.error('[deepdive] Phase 1 error:', err);
+          emitLog(sessionId, '\u26A0\uFE0F', `Phase 1 error: ${err.message ?? 'unknown'}. Continuing...`);
+        }
       }
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
@@ -130,8 +153,12 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase2(sessionId, session, isTimeUp);
       } catch (err: any) {
-        console.error('[deepdive] Phase 2 error:', err);
-        emitLog(sessionId, '\u26A0\uFE0F', `Phase 2 error: ${err.message ?? 'unknown'}. Continuing...`);
+        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+          emitLog(sessionId, '\u2139\uFE0F', 'Phase 2 stopped.');
+        } else {
+          console.error('[deepdive] Phase 2 error:', err);
+          emitLog(sessionId, '\u26A0\uFE0F', `Phase 2 error: ${err.message ?? 'unknown'}. Continuing...`);
+        }
       }
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
@@ -147,8 +174,12 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase3(sessionId, session, isTimeUp);
       } catch (err: any) {
-        console.error('[deepdive] Phase 3 error:', err);
-        emitLog(sessionId, '\u26A0\uFE0F', `Phase 3 error: ${err.message ?? 'unknown'}. Continuing...`);
+        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+          emitLog(sessionId, '\u2139\uFE0F', 'Phase 3 stopped.');
+        } else {
+          console.error('[deepdive] Phase 3 error:', err);
+          emitLog(sessionId, '\u26A0\uFE0F', `Phase 3 error: ${err.message ?? 'unknown'}. Continuing...`);
+        }
       }
     }
 
@@ -181,6 +212,7 @@ async function runResearch(sessionId: string): Promise<void> {
       activeEmitters.delete(sessionId);
       stopSignals.delete(sessionId);
       skipSignals.delete(sessionId);
+      abortControllers.delete(sessionId);
     }, 30000);
   }
 }

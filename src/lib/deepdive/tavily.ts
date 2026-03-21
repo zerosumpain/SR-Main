@@ -5,7 +5,8 @@ const TAVILY_BASE = 'https://api.tavily.com';
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
     return await fn();
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
     console.error(`[deepdive] ${label} failed, retrying once:`, err);
     await new Promise((r) => setTimeout(r, 2000));
     return fn();
@@ -25,7 +26,7 @@ export interface TavilySearchResponse {
 
 export async function search(
   query: string,
-  options?: { maxResults?: number; searchDepth?: 'basic' | 'advanced' },
+  options?: { maxResults?: number; searchDepth?: 'basic' | 'advanced'; signal?: AbortSignal },
 ): Promise<TavilySearchResponse> {
   const apiKey = getTavilyKey();
 
@@ -40,6 +41,7 @@ export async function search(
         search_depth: options?.searchDepth ?? 'basic',
         include_raw_content: false,
       }),
+      signal: options?.signal,
     });
 
     if (!res.ok) {
@@ -60,7 +62,7 @@ export interface TavilyExtractResponse {
   failed_results: { url: string; error: string }[];
 }
 
-export async function extract(urls: string[]): Promise<TavilyExtractResponse> {
+export async function extract(urls: string[], signal?: AbortSignal): Promise<TavilyExtractResponse> {
   const apiKey = getTavilyKey();
 
   return withRetry(async () => {
@@ -71,6 +73,7 @@ export async function extract(urls: string[]): Promise<TavilyExtractResponse> {
         api_key: apiKey,
         urls,
       }),
+      signal,
     });
 
     if (!res.ok) {

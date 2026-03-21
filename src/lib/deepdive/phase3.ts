@@ -4,7 +4,7 @@ import type { ResearchSession, Fact } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
-import { emitLog, emitStats, shouldStop } from './worker';
+import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import type { SessionConfig, SessionStats, RedTeamReport } from './types';
 
 export async function runPhase3(
@@ -122,6 +122,7 @@ export async function runPhase3(
           const results = await search(query, { maxResults: 3 });
 
           for (const result of results.results ?? []) {
+            if (shouldStop(sessionId)) break;
             // Skip URLs we already have as sources
             if (existingUrls.has(result.url)) continue;
             existingUrls.add(result.url);

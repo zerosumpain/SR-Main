@@ -4,7 +4,7 @@ import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
 import { extract, search as tavilySearch } from './tavily';
-import { emitLog, emitStats, shouldStop } from './worker';
+import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { loadKeys } from './keys';
 import type { SessionConfig, SessionStats } from './types';
 
@@ -138,6 +138,7 @@ export async function runPhase2(
     }
 
     if (!content) return 0;
+    throwIfStopped(sessionId);
 
     const contentSlice = content.slice(0, 6000);
     const isShortContent = content.length < 1000;
@@ -280,7 +281,7 @@ export async function runPhase2(
     }
 
     // Pass 3: Relationship extraction (Deep only)
-    if (depth === 'deep') {
+    if (depth === 'deep' && !shouldStop(sessionId)) {
       try {
         const relResult = await jsonCompletion<{
           relationships: {
@@ -358,7 +359,7 @@ export async function runPhase2(
     }
 
     // Pass 4: LinkedIn relationship mapping (Deep only, for person entities)
-    if (depth === 'deep') {
+    if (depth === 'deep' && !shouldStop(sessionId)) {
       try {
         // Find person entities from this source
         const sourcePersonEntities = await db
