@@ -186,7 +186,7 @@ export async function getReadiness(): Promise<ReadinessResponse> {
 		recommendation,
 		factors: {
 			recovery: { value: recoveryValue, weight: 0.4 },
-			hrvTrend: { value: hrvNormalized, weight: 0.2, direction: hrvDirection },
+			hrvTrend: { value: hrvNormalized, weight: 0.2, direction: hrvDirection, raw: hrvTodayVal ?? undefined, avg7d: hrv7DayAvg ?? undefined },
 			sleepQuality: { value: sleepValue, weight: 0.2 },
 			loadBalance: { value: loadValue, weight: 0.2, zone: loadZone },
 		},

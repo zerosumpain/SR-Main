@@ -25,7 +25,12 @@
             {key.replace(/([A-Z])/g, ' $1').trim().toUpperCase()}
           </p>
           <p class="display text-[24px] sm:text-[28px] mt-1" style="color: var(--text-primary);">
-            {Math.round((factor as any).value)}
+            {#if key === 'hrvTrend' && (factor as any).raw != null}
+              {Math.round((factor as any).raw)}
+              <span class="text-xs" style="color: var(--text-ghost);">ms</span>
+            {:else}
+              {Math.round((factor as any).value)}
+            {/if}
           </p>
         </div>
       {/each}

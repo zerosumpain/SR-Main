@@ -178,7 +178,11 @@
                 {key.replace(/([A-Z])/g, ' $1').trim()}
               </span>
               <span class="text-sm font-normal" style="color: {val >= meta.goodMin ? 'var(--accent)' : val >= meta.goodMin * 0.7 ? 'var(--text-secondary)' : '#8b3a1a'};">
-                {val}{meta.unit}
+                {#if key === 'hrvTrend' && (factor as any).raw != null}
+                  {Math.round((factor as any).raw)} ms
+                {:else}
+                  {val}{meta.unit}
+                {/if}
               </span>
             </div>
             <!-- Range bar with marker -->
@@ -192,6 +196,7 @@
             <p class="text-[10px] mt-1 leading-relaxed" style="color: var(--text-ghost);">{meta.desc}</p>
             <p class="text-[9px] mt-0.5" style="color: var(--text-whisper); font-family: var(--font-mono);">
               Contributes {((factor as any).weight * 100).toFixed(0)}% to readiness
+              {#if key === 'hrvTrend' && (factor as any).raw != null} · {Math.round((factor as any).raw)} ms vs 7d avg {Math.round((factor as any).avg7d)} ms{/if}
               {#if (factor as any).direction} · trending {(factor as any).direction}{/if}
               {#if (factor as any).zone} · zone: {(factor as any).zone}{/if}
             </p>

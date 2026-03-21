@@ -23,7 +23,7 @@ export interface ReadinessResponse {
   label: string;
   factors: {
     recovery: { value: number; weight: number };
-    hrvTrend: { value: number; weight: number; direction: 'up' | 'down' | 'stable' };
+    hrvTrend: { value: number; weight: number; direction: 'up' | 'down' | 'stable'; raw?: number; avg7d?: number };
     sleepQuality: { value: number; weight: number };
     loadBalance: { value: number; weight: number; zone: string };
   };

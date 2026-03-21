@@ -16,13 +16,23 @@
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
+  import { onMount } from 'svelte';
   const store = getContext<BiomeStore>('biome');
 
   let { data } = $props();
 
-  let pulse = $derived(store.state.pulse);
-  let temp = $derived(store.state.weather.temp);
-  let condition = $derived(store.state.weather.condition);
+  // Use live store values once available, fall back to server-fetched biome for SSR
+  let hasLiveData = $derived(store.state.sources.heartRate);
+  let pulse = $derived(hasLiveData ? store.state.pulse : (data.initialBiome?.pulse ?? 60));
+  let temp = $derived(hasLiveData ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15));
+  let condition = $derived(hasLiveData ? store.state.weather.condition : (data.initialBiome?.weather?.condition ?? 'clear'));
+
+  // Also seed the store immediately so biome background matches
+  onMount(() => {
+    if (data.initialBiome) {
+      store.setState(data.initialBiome);
+    }
+  });
 </script>
 
 <!-- HERO — full viewport, heavy type -->
