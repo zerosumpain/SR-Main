@@ -7,7 +7,7 @@ export interface SessionConfig {
 }
 
 export const DEFAULT_CONFIG: SessionConfig = {
-  maxSources: 40,
+  maxSources: 25,
   diversityThreshold: 'medium',
   analysisDepth: 'standard',
   redTeamAggression: 'standard',

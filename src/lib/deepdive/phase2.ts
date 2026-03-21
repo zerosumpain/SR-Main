@@ -89,11 +89,11 @@ export async function runPhase2(
   let recentNewFacts = 0;
   let sourcesProcessed = 0;
 
-  // Process in batches of 5
-  for (let i = 0; i < allSources.length; i += 5) {
+  // Process in batches of 12
+  for (let i = 0; i < allSources.length; i += 12) {
     if (isTimeUp()) break;
 
-    const batch = allSources.slice(i, i + 5);
+    const batch = allSources.slice(i, i + 12);
     const batchPromises = batch.map((source) => processSource(source));
 
     const results = await Promise.allSettled(batchPromises);
@@ -124,126 +124,156 @@ export async function runPhase2(
 
     emitLog(sessionId, '\u{1F50D}', `Analysing: ${source.title?.slice(0, 50) ?? source.url}`);
 
-    // Try to fetch full content
+    // Fetch content — skip Tavily extract if snippet is already rich
     let content = source.snippet ?? '';
-    try {
-      const extracted = await extract([source.url]);
-      if (extracted.results?.[0]?.raw_content) {
-        content = extracted.results[0].raw_content.slice(0, 10000);
+    if (content.length < 500) {
+      try {
+        const extracted = await extract([source.url]);
+        if (extracted.results?.[0]?.raw_content) {
+          content = extracted.results[0].raw_content.slice(0, 10000);
+        }
+      } catch {
+        // Fall back to snippet
       }
-    } catch {
-      // Fall back to snippet
     }
 
     if (!content) return 0;
 
-    // Pass 1: Extract facts
+    const contentSlice = content.slice(0, 6000);
+    const isShortContent = content.length < 1000;
+
+    // For short content or shallow depth: combined fact+entity extraction in one call
+    // For longer content at standard/deep: run fact extraction and NER in parallel
     let newFacts = 0;
-    try {
-      const factResult = await jsonCompletion<{
-        facts: {
-          content: string;
-          event_date: string | null;
-          confidence: number;
-          tags: string[];
-        }[];
-      }>(
-        systemPrompt,
-        `Extract all factual claims from this source content. For each fact return:\n- content: the factual claim as a single clear sentence\n- event_date: best estimate of when this fact became true (ISO date string or null)\n- confidence: 0.0-1.0 based on how clearly the source supports it\n- tags: 2-4 short topic tags\n\nSource: ${source.title}\nContent:\n${content.slice(0, 6000)}\n\nRespond with JSON: { "facts": [...] }`,
-        { maxTokens: 8192 },
-      );
 
-      for (const f of factResult.facts ?? []) {
+    if (isShortContent || depth === 'shallow') {
+      // Single combined LLM call
+      try {
+        const combinedResult = await jsonCompletion<{
+          facts: { content: string; event_date: string | null; confidence: number; tags: string[] }[];
+          entities: { name: string; type: string; description: string }[];
+        }>(
+          systemPrompt,
+          `Analyse this source content. Return two things:\n\n1. FACTS: Extract all factual claims. For each:\n- content: the factual claim as a single clear sentence\n- event_date: ISO date string or null\n- confidence: 0.0-1.0\n- tags: 2-4 short topic tags\n\n2. ENTITIES: Named Entity Recognition. For each:\n- name: the entity name\n- type: one of person, organisation, location, event, concept, product, other\n- description: a one-sentence description\n\nSource: ${source.title}\nContent:\n${contentSlice}\n\nRespond with JSON: { "facts": [...], "entities": [...] }`,
+          { maxTokens: 8192 },
+        );
+
+        newFacts = await storeFacts(combinedResult.facts ?? [], source);
+        if (depth !== 'shallow') {
+          await storeEntities(combinedResult.entities ?? [], source);
+        }
+      } catch (err) {
+        console.error('[deepdive] Combined extraction failed:', err);
+      }
+    } else {
+      // Parallel fact extraction + NER
+      const [factResult, nerResult] = await Promise.allSettled([
+        jsonCompletion<{
+          facts: { content: string; event_date: string | null; confidence: number; tags: string[] }[];
+        }>(
+          systemPrompt,
+          `Extract all factual claims from this source content. For each fact return:\n- content: the factual claim as a single clear sentence\n- event_date: best estimate of when this fact became true (ISO date string or null)\n- confidence: 0.0-1.0 based on how clearly the source supports it\n- tags: 2-4 short topic tags\n\nSource: ${source.title}\nContent:\n${contentSlice}\n\nRespond with JSON: { "facts": [...] }`,
+          { maxTokens: 8192 },
+        ),
+        jsonCompletion<{
+          entities: { name: string; type: string; description: string }[];
+        }>(
+          systemPrompt,
+          `Perform Named Entity Recognition on this content. For each entity found, return:\n- name: the entity name\n- type: one of person, organisation, location, event, concept, product, other\n- description: a one-sentence description\n\nContent:\n${contentSlice}\n\nRespond with JSON: { "entities": [...] }`,
+        ),
+      ]);
+
+      if (factResult.status === 'fulfilled') {
+        newFacts = await storeFacts(factResult.value.facts ?? [], source);
+      } else {
+        console.error('[deepdive] Fact extraction failed:', factResult.reason);
+      }
+
+      if (nerResult.status === 'fulfilled') {
+        await storeEntities(nerResult.value.entities ?? [], source);
+      } else {
+        console.error('[deepdive] NER failed:', nerResult.reason);
+      }
+    }
+
+    emitLog(sessionId, '\u2705', `${newFacts} facts from: ${source.title?.slice(0, 40) ?? 'source'}`);
+
+    async function storeFacts(
+      extractedFacts: { content: string; event_date: string | null; confidence: number; tags: string[] }[],
+      src: Source,
+    ): Promise<number> {
+      let count = 0;
+      for (const f of extractedFacts) {
         if (!f.content || f.content.length < 10) continue;
-
-        // Dedup check
         const { duplicate, embedding } = await isDuplicate(sessionId, f.content);
         if (duplicate) continue;
-
         await db.insert(facts).values({
           sessionId,
-          sourceId: source.id,
+          sourceId: src.id,
           content: f.content,
           eventDate: f.event_date ? new Date(f.event_date) : null,
           confidence: Math.max(0, Math.min(1, f.confidence ?? 0.5)),
           tags: f.tags ?? [],
           embedding,
         });
-
-        newFacts++;
+        count++;
         stats.factsExtracted++;
       }
-
-      emitLog(sessionId, '\u2705', `${newFacts} facts from: ${source.title?.slice(0, 40) ?? 'source'}`);
-    } catch (err) {
-      console.error('[deepdive] Fact extraction failed:', err);
+      return count;
     }
 
-    // Pass 2: NER (Standard + Deep)
-    if (depth !== 'shallow') {
-      try {
-        const nerResult = await jsonCompletion<{
-          entities: { name: string; type: string; description: string }[];
-        }>(
-          systemPrompt,
-          `Perform Named Entity Recognition on this content. For each entity found, return:\n- name: the entity name\n- type: one of person, organisation, location, event, concept, product, other\n- description: a one-sentence description\n\nContent:\n${content.slice(0, 6000)}\n\nRespond with JSON: { "entities": [...] }`,
-        );
+    async function storeEntities(
+      extractedEntities: { name: string; type: string; description: string }[],
+      src: Source,
+    ): Promise<void> {
+      for (const e of extractedEntities) {
+        if (!e.name) continue;
+        const normalised = e.name.toLowerCase().trim();
 
-        for (const e of nerResult.entities ?? []) {
-          if (!e.name) continue;
+        const existing = await db
+          .select()
+          .from(entities)
+          .where(
+            and(
+              eq(entities.sessionId, sessionId),
+              sql`lower(trim(${entities.name})) = ${normalised}`,
+            ),
+          )
+          .limit(1);
 
-          const normalised = e.name.toLowerCase().trim();
-
-          // Check if entity already exists for this session
-          const existing = await db
-            .select()
-            .from(entities)
-            .where(
-              and(
-                eq(entities.sessionId, sessionId),
-                sql`lower(trim(${entities.name})) = ${normalised}`,
-              ),
-            )
-            .limit(1);
-
-          let entityId: string;
-          if (existing.length > 0) {
-            entityId = existing[0].id;
-          } else {
-            const [created] = await db
-              .insert(entities)
-              .values({
-                sessionId,
-                name: e.name,
-                type: e.type || 'other',
-                description: e.description,
-              })
-              .returning();
-            entityId = created.id;
-            stats.entitiesIdentified++;
-          }
-
-          // Link entity to facts from this source
-          const sourceFacts = await db
-            .select()
-            .from(facts)
-            .where(and(eq(facts.sessionId, sessionId), eq(facts.sourceId, source.id)));
-
-          for (const fact of sourceFacts) {
-            if (fact.content.toLowerCase().includes(normalised)) {
-              await db.insert(entityMentions).values({
-                entityId,
-                factId: fact.id,
-                context: fact.content.slice(0, 200),
-              });
-            }
-          }
+        let entityId: string;
+        if (existing.length > 0) {
+          entityId = existing[0].id;
+        } else {
+          const [created] = await db
+            .insert(entities)
+            .values({
+              sessionId,
+              name: e.name,
+              type: e.type || 'other',
+              description: e.description,
+            })
+            .returning();
+          entityId = created.id;
+          stats.entitiesIdentified++;
         }
 
-        emitLog(sessionId, '\u{1F9E9}', `Entities identified from: ${source.title?.slice(0, 40) ?? 'source'}`);
-      } catch (err) {
-        console.error('[deepdive] NER failed:', err);
+        const sourceFacts = await db
+          .select()
+          .from(facts)
+          .where(and(eq(facts.sessionId, sessionId), eq(facts.sourceId, src.id)));
+
+        for (const fact of sourceFacts) {
+          if (fact.content.toLowerCase().includes(normalised)) {
+            await db.insert(entityMentions).values({
+              entityId,
+              factId: fact.id,
+              context: fact.content.slice(0, 200),
+            });
+          }
+        }
       }
+      emitLog(sessionId, '\u{1F9E9}', `Entities from: ${src.title?.slice(0, 40) ?? 'source'}`);
     }
 
     // Pass 3: Relationship extraction (Deep only)

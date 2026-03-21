@@ -14,7 +14,7 @@
 
   // Advanced options
   let timeLimit = $state<number | null>(null);
-  let maxSources = $state(40);
+  let maxSources = $state(25);
   let diversityThreshold = $state<'low' | 'medium' | 'high'>('medium');
   let analysisDepth = $state<'shallow' | 'standard' | 'deep'>('standard');
   let redTeamAggression = $state<'gentle' | 'standard' | 'aggressive'>('standard');
