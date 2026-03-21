@@ -109,7 +109,12 @@ async function runResearch(sessionId: string): Promise<void> {
       await updateSessionStatus(sessionId, 'phase1');
       emitStatus(sessionId, 'phase1');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 1: Lead Generation');
-      await runPhase1(sessionId, session, isTimeUp);
+      try {
+        await runPhase1(sessionId, session, isTimeUp);
+      } catch (err: any) {
+        console.error('[deepdive] Phase 1 error:', err);
+        emitLog(sessionId, '\u26A0\uFE0F', `Phase 1 error: ${err.message ?? 'unknown'}. Continuing...`);
+      }
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
       }
@@ -121,7 +126,12 @@ async function runResearch(sessionId: string): Promise<void> {
       await updateSessionStatus(sessionId, 'phase2');
       emitStatus(sessionId, 'phase2');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 2: Deep Research');
-      await runPhase2(sessionId, session, isTimeUp);
+      try {
+        await runPhase2(sessionId, session, isTimeUp);
+      } catch (err: any) {
+        console.error('[deepdive] Phase 2 error:', err);
+        emitLog(sessionId, '\u26A0\uFE0F', `Phase 2 error: ${err.message ?? 'unknown'}. Continuing...`);
+      }
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
       }
@@ -133,14 +143,24 @@ async function runResearch(sessionId: string): Promise<void> {
       await updateSessionStatus(sessionId, 'phase3');
       emitStatus(sessionId, 'phase3');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 3: Red Teaming');
-      await runPhase3(sessionId, session, isTimeUp);
+      try {
+        await runPhase3(sessionId, session, isTimeUp);
+      } catch (err: any) {
+        console.error('[deepdive] Phase 3 error:', err);
+        emitLog(sessionId, '\u26A0\uFE0F', `Phase 3 error: ${err.message ?? 'unknown'}. Continuing...`);
+      }
     }
 
     // Post-processing
     await updateSessionStatus(sessionId, 'post_processing');
     emitStatus(sessionId, 'post_processing');
     emitLog(sessionId, '\u2139\uFE0F', 'Starting post-processing');
-    await runPostProcessing(sessionId, session);
+    try {
+      await runPostProcessing(sessionId, session);
+    } catch (err: any) {
+      console.error('[deepdive] Post-processing error:', err);
+      emitLog(sessionId, '\u26A0\uFE0F', `Post-processing error: ${err.message ?? 'unknown'}`);
+    }
 
     // Complete
     await updateSessionStatus(sessionId, 'complete');

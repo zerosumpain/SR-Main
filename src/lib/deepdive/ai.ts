@@ -1,13 +1,24 @@
 import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel } from './keys';
 
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    console.error(`[deepdive] ${label} failed, retrying once:`, err);
-    await new Promise((r) => setTimeout(r, 2000));
-    return fn();
+async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isRateLimit = err?.status === 429;
+      const isLastAttempt = attempt === maxRetries;
+
+      if (isLastAttempt) throw err;
+
+      const delay = isRateLimit
+        ? Math.min(2000 * Math.pow(2, attempt), 30000) // 2s, 4s, 8s for rate limits
+        : 2000;
+
+      console.error(`[deepdive] ${label} failed (attempt ${attempt + 1}/${maxRetries + 1}${isRateLimit ? ', rate limited' : ''}), retrying in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
+  throw new Error('Unreachable');
 }
 
 export async function chatCompletion(

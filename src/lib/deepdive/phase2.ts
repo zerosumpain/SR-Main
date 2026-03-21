@@ -89,11 +89,11 @@ export async function runPhase2(
   let recentNewFacts = 0;
   let sourcesProcessed = 0;
 
-  // Process in batches of 12
-  for (let i = 0; i < allSources.length; i += 12) {
+  // Process in batches of 8
+  for (let i = 0; i < allSources.length; i += 8) {
     if (isTimeUp()) break;
 
-    const batch = allSources.slice(i, i + 12);
+    const batch = allSources.slice(i, i + 8);
     const batchPromises = batch.map((source) => processSource(source));
 
     const results = await Promise.allSettled(batchPromises);
