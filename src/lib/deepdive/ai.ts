@@ -1,4 +1,4 @@
-import { getOpenAIClient, getModel } from './keys';
+import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel } from './keys';
 
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
@@ -60,5 +60,21 @@ export async function jsonCompletion<T>(
 
   const text = response.choices[0]?.message?.content ?? '{}';
   return JSON.parse(text) as T;
+}
+
+export async function generateEmbedding(text: string): Promise<number[]> {
+  const client = getOpenRouterClient();
+  const model = getEmbeddingModel();
+
+  const response = await withRetry(
+    () =>
+      client.embeddings.create({
+        model,
+        input: text,
+      }),
+    'generateEmbedding',
+  );
+
+  return response.data[0].embedding;
 }
 

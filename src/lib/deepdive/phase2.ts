@@ -2,9 +2,10 @@ import { db } from '$lib/db';
 import { sources, facts, entities, entityMentions, relationships } from '$lib/db/schema';
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { jsonCompletion } from './ai';
+import { jsonCompletion, generateEmbedding } from './ai';
 import { extract } from './tavily';
 import { emitLog, emitStats, shouldStop } from './worker';
+import { loadKeys } from './keys';
 import type { SessionConfig, SessionStats } from './types';
 
 function normalise(text: string): string {
@@ -20,21 +21,44 @@ function bigramSimilarity(a: string, b: string): number {
   const bigramsB = new Set<string>();
   for (let i = 0; i < nb.length - 1; i++) bigramsB.add(nb.slice(i, i + 2));
   let intersection = 0;
-  for (const b of bigramsA) if (bigramsB.has(b)) intersection++;
+  for (const bg of bigramsA) if (bigramsB.has(bg)) intersection++;
   const union = bigramsA.size + bigramsB.size - intersection;
   return union === 0 ? 0 : intersection / union;
 }
 
-async function isDuplicate(sessionId: string, content: string): Promise<boolean> {
+const embeddingsAvailable = (): boolean => !!loadKeys().openrouterApiKey;
+
+async function isDuplicate(sessionId: string, content: string): Promise<{ duplicate: boolean; embedding: number[] | null }> {
+  // Try embedding-based dedup via OpenRouter + pgvector
+  if (embeddingsAvailable()) {
+    try {
+      const embedding = await generateEmbedding(content);
+      const vectorStr = `[${embedding.join(',')}]`;
+
+      const result = await db.execute(
+        sql`SELECT id FROM fact
+            WHERE session_id = ${sessionId}
+              AND embedding IS NOT NULL
+              AND embedding <=> ${vectorStr}::vector < 0.08
+            LIMIT 1`,
+      );
+
+      return { duplicate: result.rows.length > 0, embedding };
+    } catch (err) {
+      console.error('[deepdive] Embedding dedup failed, falling back to bigram:', err);
+    }
+  }
+
+  // Fallback: bigram similarity
   const existing = await db
     .select({ content: facts.content })
     .from(facts)
     .where(eq(facts.sessionId, sessionId));
 
   for (const row of existing) {
-    if (bigramSimilarity(content, row.content) > 0.85) return true;
+    if (bigramSimilarity(content, row.content) > 0.85) return { duplicate: true, embedding: null };
   }
-  return false;
+  return { duplicate: false, embedding: null };
 }
 
 export async function runPhase2(
@@ -133,8 +157,8 @@ export async function runPhase2(
         if (!f.content || f.content.length < 10) continue;
 
         // Dedup check
-        const dupe = await isDuplicate(sessionId, f.content);
-        if (dupe) continue;
+        const { duplicate, embedding } = await isDuplicate(sessionId, f.content);
+        if (duplicate) continue;
 
         await db.insert(facts).values({
           sessionId,
@@ -143,6 +167,7 @@ export async function runPhase2(
           eventDate: f.event_date ? new Date(f.event_date) : null,
           confidence: Math.max(0, Math.min(1, f.confidence ?? 0.5)),
           tags: f.tags ?? [],
+          embedding,
         });
 
         newFacts++;

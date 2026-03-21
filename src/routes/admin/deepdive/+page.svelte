@@ -10,6 +10,8 @@
   let zaiBaseUrl = $state(data.keys.zaiBaseUrl);
   let zaiModel = $state(data.keys.zaiModel);
   let tavilyApiKey = $state('');
+  let openrouterApiKey = $state('');
+  let embeddingModel = $state(data.keys.embeddingModel);
 
   let saving = $state(false);
   let saveMsg = $state('');
@@ -23,9 +25,10 @@
     saving = true;
     saveMsg = '';
     try {
-      const body: Record<string, string> = { zaiBaseUrl, zaiModel };
+      const body: Record<string, string> = { zaiBaseUrl, zaiModel, embeddingModel };
       if (zaiApiKey) body.zaiApiKey = zaiApiKey;
       if (tavilyApiKey) body.tavilyApiKey = tavilyApiKey;
+      if (openrouterApiKey) body.openrouterApiKey = openrouterApiKey;
 
       const res = await fetch(`/api/admin/deepdive/keys?token=${adminToken}`, {
         method: 'POST',
@@ -39,6 +42,7 @@
         saveMsg = 'Saved';
         zaiApiKey = '';
         tavilyApiKey = '';
+        openrouterApiKey = '';
         setTimeout(() => (saveMsg = ''), 3000);
       } else {
         saveMsg = 'Save failed';
@@ -227,6 +231,58 @@
           {:else if tavilyTest === 'fail'}
             <span style="color: #8b3a1a; font-family: var(--font-mono);" class="text-xs">{tavilyTestError}</span>
           {/if}
+        </div>
+      </div>
+    </div>
+
+    <!-- OpenRouter Configuration (Embeddings) -->
+    <div
+      class="p-5 rounded-xl border"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <p
+        class="text-[10px] uppercase tracking-[0.25em] mb-1"
+        style="color: var(--text-ghost); font-family: var(--font-mono);"
+      >
+        OpenRouter (Embeddings)
+      </p>
+      <p
+        class="text-[9px] mb-4"
+        style="color: var(--text-ghost); font-family: var(--font-mono);"
+      >
+        Used for fact deduplication via pgvector. Optional — falls back to text similarity.
+      </p>
+
+      <div class="space-y-3">
+        <div>
+          <label
+            class="block text-xs mb-1"
+            style="color: var(--text-muted); font-family: var(--font-mono);"
+          >
+            API Key {data.keys.openrouterConfigured ? '(configured)' : '(not set)'}
+          </label>
+          <input
+            type="password"
+            bind:value={openrouterApiKey}
+            placeholder={data.keys.openrouterConfigured ? '********' : 'Enter API key'}
+            class="w-full px-3 py-2 rounded-lg text-sm"
+            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+          />
+        </div>
+
+        <div>
+          <label
+            class="block text-xs mb-1"
+            style="color: var(--text-muted); font-family: var(--font-mono);"
+          >
+            Embedding Model
+          </label>
+          <input
+            type="text"
+            bind:value={embeddingModel}
+            class="w-full px-3 py-2 rounded-lg text-sm"
+            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+          />
         </div>
       </div>
     </div>

@@ -9,6 +9,8 @@ export interface DeepDiveKeys {
   zaiBaseUrl?: string;
   zaiModel?: string;
   tavilyApiKey?: string;
+  openrouterApiKey?: string;
+  embeddingModel?: string;
 }
 
 export function loadKeys(): DeepDiveKeys {
@@ -44,12 +46,35 @@ export function getTavilyKey(): string {
   return keys.tavilyApiKey;
 }
 
-export function getKeysStatus(): { zaiConfigured: boolean; tavilyConfigured: boolean; zaiBaseUrl: string; zaiModel: string } {
+export function getOpenRouterClient(): OpenAI {
+  const keys = loadKeys();
+  if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
+  return new OpenAI({
+    apiKey: keys.openrouterApiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+  });
+}
+
+export function getEmbeddingModel(): string {
+  const keys = loadKeys();
+  return keys.embeddingModel || 'openai/text-embedding-3-small';
+}
+
+export function getKeysStatus(): {
+  zaiConfigured: boolean;
+  tavilyConfigured: boolean;
+  openrouterConfigured: boolean;
+  zaiBaseUrl: string;
+  zaiModel: string;
+  embeddingModel: string;
+} {
   const keys = loadKeys();
   return {
     zaiConfigured: !!keys.zaiApiKey,
     tavilyConfigured: !!keys.tavilyApiKey,
+    openrouterConfigured: !!keys.openrouterApiKey,
     zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/paas/v4/',
     zaiModel: keys.zaiModel || 'glm-4-plus',
+    embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-small',
   };
 }
