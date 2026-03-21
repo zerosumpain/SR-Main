@@ -18,13 +18,11 @@
 
 <button
   onclick={toggle}
-  class="fixed top-16 right-6 sm:right-10 md:right-16 z-30 flex items-center gap-2 transition-opacity"
-  style="opacity: 0.6;"
+  class="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 transition-opacity hover:opacity-100"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); opacity: 0.7;"
   title={visible ? 'Hide biome background' : 'Show biome background'}
   aria-label={visible ? 'Hide biome background' : 'Show biome background'}
 >
   <span class="text-[9px] uppercase tracking-[0.15em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Biome {visible ? 'on' : 'off'}</span>
-  <span class="w-6 h-6 rounded-full flex items-center justify-center" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-    <span class="text-[10px]" style="color: var(--text-ghost);">{visible ? '◉' : '○'}</span>
-  </span>
+  <span class="text-[10px]" style="color: var(--text-ghost);">{visible ? '◉' : '○'}</span>
 </button>
