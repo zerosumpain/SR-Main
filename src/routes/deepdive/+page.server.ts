@@ -9,6 +9,7 @@ export const load: PageServerLoad = async () => {
       id: researchSessions.id,
       topic: researchSessions.topic,
       status: researchSessions.status,
+      parentSessionId: researchSessions.parentSessionId,
       createdAt: researchSessions.createdAt,
     })
     .from(researchSessions)

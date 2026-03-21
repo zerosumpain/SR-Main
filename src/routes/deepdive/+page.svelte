@@ -379,6 +379,9 @@
                 class="flex-1 min-w-0"
               >
                 <p class="text-sm truncate" style="color: var(--text-primary);">
+                  {#if session.parentSessionId}
+                    <span class="text-[10px] mr-1" style="color: var(--text-muted);">&hookrightarrow;</span>
+                  {/if}
                   {session.topic}
                 </p>
                 <div class="flex items-center gap-3 mt-1">

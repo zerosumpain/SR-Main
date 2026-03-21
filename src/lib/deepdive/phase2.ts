@@ -207,12 +207,15 @@ export async function runPhase2(
         if (!f.content || f.content.length < 10) continue;
         const { duplicate, embedding } = await isDuplicate(sessionId, f.content);
         if (duplicate) continue;
+        const extractedConf = Math.max(0, Math.min(1, f.confidence ?? 0.5));
+        const srcCredibility = src.credibilityScore ?? 0.5;
+        const blendedConfidence = extractedConf * 0.7 + srcCredibility * 0.3;
         await db.insert(facts).values({
           sessionId,
           sourceId: src.id,
           content: f.content,
           eventDate: f.event_date ? new Date(f.event_date) : null,
-          confidence: Math.max(0, Math.min(1, f.confidence ?? 0.5)),
+          confidence: Math.max(0, Math.min(1, blendedConfidence)),
           tags: f.tags ?? [],
           embedding,
         });

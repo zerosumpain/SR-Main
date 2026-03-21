@@ -11,7 +11,8 @@ import type { ResearchSession } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { chatCompletion, jsonCompletion } from './ai';
 import { emitLog } from './worker';
-import type { ResearchReport, IdentityCluster } from './types';
+import { computeSourceAgreement } from './credibility';
+import type { ResearchReport, IdentityCluster, KnowledgeGap, Hypothesis, Contradiction, FollowUpSuggestion, SourceDiversity } from './types';
 
 export async function runPostProcessing(
   sessionId: string,
@@ -45,6 +46,14 @@ export async function runPostProcessing(
 
   factScores.sort((a, b) => b.score - a.score);
   report.ranked_facts = factScores.map((f) => f.id);
+
+  // 1b. Source agreement
+  emitLog(sessionId, '\u2139\uFE0F', 'Computing source agreement...');
+  try {
+    await computeSourceAgreement(sessionId);
+  } catch (err) {
+    console.error('[deepdive] Source agreement computation failed:', err);
+  }
 
   // 2. Entity centrality
   emitLog(sessionId, '\u2139\uFE0F', 'Computing entity centrality...');
@@ -232,7 +241,186 @@ export async function runPostProcessing(
     }
   }
 
-  // 7. Store report and complete
+  // 7. Knowledge Gap Analysis
+  emitLog(sessionId, '\u2139\uFE0F', 'Analysing knowledge gaps...');
+
+  try {
+    const clusterSummaries = report.clusters.map((c) => `${c.title}: ${c.summary}`).join('\n');
+    const topEntityNames = allEntities
+      .sort((a, b) => (centralityScores[b.id] ?? 0) - (centralityScores[a.id] ?? 0))
+      .slice(0, 15)
+      .map((e) => e.name);
+
+    const gapResult = await jsonCompletion<{ gaps: KnowledgeGap[] }>(
+      systemPrompt,
+      `Analyse these research findings for knowledge gaps and blind spots.
+
+Research goals: ${goals.map((g, i) => `${i + 1}. ${g}`).join('\n')}
+
+Topic clusters found:
+${clusterSummaries}
+
+Key entities: ${topEntityNames.join(', ')}
+Total facts: ${allFacts.length}, Counterfactuals: ${counterfactuals.length}
+
+Identify what the research DID NOT adequately cover:
+- Goals that remain unanswered or only partially answered (type: unanswered_goal, include goal_index)
+- Geographic regions mentioned but not explored (type: geographic)
+- Time periods with significant gaps (type: temporal)
+- Stakeholders or perspectives missing (type: stakeholder)
+- Methodological limitations (type: methodological)
+
+For each gap, rate severity: high (critical to research goals), medium (would improve understanding), low (nice to have).
+
+Respond with JSON: { "gaps": [{ "gap": "...", "type": "...", "severity": "...", "goal_index": null }] }`,
+      { maxTokens: 4096 },
+    );
+
+    report.knowledge_gaps = gapResult.gaps ?? [];
+    emitLog(sessionId, '\u2139\uFE0F', `Found ${report.knowledge_gaps.length} knowledge gaps`);
+  } catch (err) {
+    console.error('[deepdive] Knowledge gap analysis failed:', err);
+  }
+
+  // 8. Hypothesis Generation
+  emitLog(sessionId, '\u2139\uFE0F', 'Generating hypotheses...');
+
+  try {
+    const topFactsForHypotheses = factScores.slice(0, 30).map((f) => `[${f.id}] ${f.content}`).join('\n');
+    const clusterSummaries = report.clusters.map((c) => `${c.title}: ${c.summary}`).join('\n');
+
+    const hypoResult = await jsonCompletion<{
+      hypotheses: Hypothesis[];
+      contradictions: Contradiction[];
+    }>(
+      systemPrompt,
+      `Based on these research findings, generate 3-5 testable hypotheses and identify internal contradictions.
+
+Top facts:
+${topFactsForHypotheses}
+
+Topic clusters:
+${clusterSummaries}
+
+For each hypothesis:
+- hypothesis: a clear, testable claim synthesised from the evidence
+- supporting_fact_ids: fact IDs that support it
+- tension_fact_ids: fact IDs that create tension with it
+- testability: high (easily verifiable), medium (requires effort), low (hard to test)
+- suggested_queries: 2-3 search queries that would help test this hypothesis
+
+Also identify contradictions — pairs of facts that are in tension with each other:
+- fact_a_id, fact_b_id: the two facts
+- tension: a sentence explaining the contradiction
+
+Respond with JSON: { "hypotheses": [...], "contradictions": [...] }`,
+      { maxTokens: 8192 },
+    );
+
+    report.hypotheses = hypoResult.hypotheses ?? [];
+    report.contradictions_map = hypoResult.contradictions ?? [];
+    emitLog(sessionId, '\u2139\uFE0F', `Generated ${report.hypotheses.length} hypotheses, ${report.contradictions_map.length} contradictions`);
+  } catch (err) {
+    console.error('[deepdive] Hypothesis generation failed:', err);
+  }
+
+  // 9. Follow-up Suggestions
+  emitLog(sessionId, '\u2139\uFE0F', 'Generating follow-up suggestions...');
+
+  try {
+    const gapsSummary = (report.knowledge_gaps ?? []).map((g) => g.gap).join('; ');
+    const clusterTitles = report.clusters.map((c) => c.title).join(', ');
+
+    const followupResult = await jsonCompletion<{ followups: FollowUpSuggestion[] }>(
+      systemPrompt,
+      `Based on the research findings, suggest 3-5 follow-up investigations that would be most valuable.
+
+Executive summary: ${report.executive_summary.slice(0, 500)}
+Knowledge gaps: ${gapsSummary || 'None identified'}
+Topic clusters: ${clusterTitles}
+Research goals: ${goals.join('; ')}
+
+For each follow-up:
+- question: a focused research question
+- context: 1-2 sentences explaining why this is worth investigating
+- seed_fact_ids: up to 3 fact IDs from the current research that motivate this follow-up
+
+Respond with JSON: { "followups": [...] }`,
+      { maxTokens: 4096 },
+    );
+
+    report.suggested_followups = followupResult.followups ?? [];
+    emitLog(sessionId, '\u2139\uFE0F', `Generated ${report.suggested_followups.length} follow-up suggestions`);
+  } catch (err) {
+    console.error('[deepdive] Follow-up suggestions failed:', err);
+  }
+
+  // 10. Source Diversity Metrics
+  emitLog(sessionId, '\u2139\uFE0F', 'Computing source diversity...');
+
+  try {
+    const allSourcesForDiversity = await db
+      .select({ domain: sources.domain, credibilityType: sources.credibilityType })
+      .from(sources)
+      .where(eq(sources.sessionId, sessionId));
+
+    const domains = new Set(allSourcesForDiversity.map((s) => s.domain).filter(Boolean));
+    const byType: Record<string, number> = {};
+    for (const s of allSourcesForDiversity) {
+      const t = s.credibilityType || 'other';
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+
+    // Herfindahl concentration index (lower = more diverse, 0-1 scale)
+    const total = allSourcesForDiversity.length;
+    let hhi = 0;
+    if (total > 0) {
+      for (const count of Object.values(byType)) {
+        hhi += (count / total) ** 2;
+      }
+    }
+
+    report.source_diversity = {
+      total_domains: domains.size,
+      by_type: byType,
+      concentration_index: Math.round(hhi * 100) / 100,
+    };
+  } catch (err) {
+    console.error('[deepdive] Source diversity metrics failed:', err);
+  }
+
+  // 11. Novelty scoring
+  emitLog(sessionId, '\u2139\uFE0F', 'Computing novelty scores...');
+
+  try {
+    const factsWithEmbeddings = allFacts.filter((f) => f.embedding);
+    if (factsWithEmbeddings.length > 1) {
+      for (const fact of factsWithEmbeddings) {
+        if (!fact.embedding) continue;
+        const vectorStr = `[${fact.embedding.join(',')}]`;
+
+        // Average cosine distance to all other facts
+        const distResult = await db.execute(
+          sql`SELECT AVG(f.embedding <=> ${vectorStr}::vector) as avg_dist
+              FROM fact f
+              WHERE f.session_id = ${sessionId}
+                AND f.id != ${fact.id}
+                AND NOT f.is_counterfactual
+                AND f.embedding IS NOT NULL`,
+        );
+
+        const avgDist = Number((distResult.rows[0] as any)?.avg_dist ?? 0);
+        // Novelty = high distance + low confidence = surprising outlier
+        const novelty = avgDist * 0.6 + (1 - fact.confidence) * 0.4;
+
+        await db.update(facts).set({ noveltyScore: Math.round(novelty * 1000) / 1000 }).where(eq(facts.id, fact.id));
+      }
+    }
+  } catch (err) {
+    console.error('[deepdive] Novelty scoring failed:', err);
+  }
+
+  // 12. Store report and complete
   await db
     .update(researchSessions)
     .set({ report })

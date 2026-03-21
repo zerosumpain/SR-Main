@@ -5,8 +5,9 @@ import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
 import { emitLog, emitStats, shouldStop } from './worker';
+import { classifyDomain } from './credibility';
 import { DIVERSITY_THRESHOLDS } from './types';
-import type { SessionConfig, SessionStats } from './types';
+import type { SessionConfig, SessionStats, SeedContext } from './types';
 
 function getDomain(url: string): string {
   try {
@@ -26,14 +27,40 @@ export async function runPhase1(
   const threshold = DIVERSITY_THRESHOLDS[config.diversityThreshold ?? 'medium'];
   const goals = (session.goals ?? []) as string[];
 
-  const systemPrompt = `You are a research assistant. The research topic is: "${session.topic}"\nResearch goals: ${goals.join('; ')}`;
+  const seedContext = session.seedContext as SeedContext | null;
+  let systemPrompt = `You are a research assistant. The research topic is: "${session.topic}"\nResearch goals: ${goals.join('; ')}`;
+
+  if (seedContext) {
+    systemPrompt += `\n\nThis is a follow-up investigation from a parent research session on "${seedContext.parentTopic}".`;
+    if (seedContext.factContents?.length) {
+      systemPrompt += `\nKey facts from parent research:\n${seedContext.factContents.slice(0, 5).map((f) => `- ${f}`).join('\n')}`;
+    }
+    if (seedContext.entityNames?.length) {
+      systemPrompt += `\nKey entities: ${seedContext.entityNames.join(', ')}`;
+    }
+    if (seedContext.clusterSummary) {
+      systemPrompt += `\nParent cluster context: ${seedContext.clusterSummary}`;
+    }
+    if (seedContext.gapDescription) {
+      systemPrompt += `\nKnowledge gap being investigated: ${seedContext.gapDescription}`;
+    }
+    if (seedContext.hypothesisText) {
+      systemPrompt += `\nHypothesis being tested: ${seedContext.hypothesisText}`;
+    }
+  }
 
   // Step 1: Generate initial search queries
   emitLog(sessionId, '\u{1F50D}', 'Generating initial search queries...');
 
+  let queryPrompt = `Generate 8-12 diverse search queries covering different angles of this topic. Include biographical, technical, historical, critical, contextual, geographical, legal, and economic angles as relevant. Vary the phrasing to minimize result overlap.`;
+  if (seedContext?.suggestedQueries?.length) {
+    queryPrompt += `\n\nSuggested starting queries from prior research (use as inspiration but also generate fresh angles):\n${seedContext.suggestedQueries.map((q) => `- ${q}`).join('\n')}`;
+  }
+  queryPrompt += `\n\nRespond with JSON: { "queries": ["query1", "query2", ...] }`;
+
   const queryResult = await jsonCompletion<{ queries: string[] }>(
     systemPrompt,
-    `Generate 8-12 diverse search queries covering different angles of this topic. Include biographical, technical, historical, critical, contextual, geographical, legal, and economic angles as relevant. Vary the phrasing to minimize result overlap.\n\nRespond with JSON: { "queries": ["query1", "query2", ...] }`,
+    queryPrompt,
   );
 
   let queries = queryResult.queries ?? [];
@@ -74,6 +101,7 @@ export async function runPhase1(
           seenUrls.add(result.url);
 
           const domain = getDomain(result.url);
+          const credibility = classifyDomain(domain);
 
           // Store source
           const [stored] = await db
@@ -85,6 +113,8 @@ export async function runPhase1(
               snippet: result.content?.slice(0, 500),
               domain,
               phase: 1,
+              credibilityScore: credibility.score,
+              credibilityType: credibility.type,
             })
             .returning();
 

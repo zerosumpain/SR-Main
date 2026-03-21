@@ -50,6 +50,39 @@ export interface IdentityCluster {
   fact_ids: string[];
 }
 
+export interface KnowledgeGap {
+  gap: string;
+  type: 'geographic' | 'temporal' | 'stakeholder' | 'methodological' | 'unanswered_goal';
+  severity: 'high' | 'medium' | 'low';
+  goal_index?: number;
+}
+
+export interface Hypothesis {
+  hypothesis: string;
+  supporting_fact_ids: string[];
+  tension_fact_ids: string[];
+  testability: 'high' | 'medium' | 'low';
+  suggested_queries: string[];
+}
+
+export interface Contradiction {
+  fact_a_id: string;
+  fact_b_id: string;
+  tension: string;
+}
+
+export interface FollowUpSuggestion {
+  question: string;
+  context: string;
+  seed_fact_ids: string[];
+}
+
+export interface SourceDiversity {
+  total_domains: number;
+  by_type: Record<string, number>;
+  concentration_index: number;
+}
+
 export interface ResearchReport {
   ranked_facts: string[];
   timeline: { date: string; facts: string[] }[];
@@ -62,6 +95,11 @@ export interface ResearchReport {
   entity_centrality: Record<string, number>;
   identity_clusters?: IdentityCluster[];
   chronological_fact_ids?: string[];
+  knowledge_gaps?: KnowledgeGap[];
+  hypotheses?: Hypothesis[];
+  contradictions_map?: Contradiction[];
+  suggested_followups?: FollowUpSuggestion[];
+  source_diversity?: SourceDiversity;
 }
 
 export interface RedTeamReport {
@@ -70,6 +108,19 @@ export interface RedTeamReport {
   facts_nuanced: number;
   facts_strengthened: number;
   facts_unchanged: number;
+}
+
+export interface SeedContext {
+  type: 'fact' | 'entity' | 'cluster' | 'gap' | 'hypothesis';
+  parentTopic: string;
+  parentGoals: string[];
+  factContents?: string[];
+  entityNames?: string[];
+  clusterTitle?: string;
+  clusterSummary?: string;
+  gapDescription?: string;
+  hypothesisText?: string;
+  suggestedQueries?: string[];
 }
 
 export const DIVERSITY_THRESHOLDS: Record<string, number> = {

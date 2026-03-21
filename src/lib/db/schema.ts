@@ -297,6 +297,8 @@ export const researchSessions = pgTable('research_session', {
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   report: jsonb('report'),
   shareToken: text('share_token').unique(),
+  parentSessionId: text('parent_session_id'),
+  seedContext: jsonb('seed_context'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 });
@@ -313,6 +315,8 @@ export const sources = pgTable('source', {
   domain: text('domain'),
   category: text('category'),
   phase: integer('phase').notNull(),
+  credibilityScore: doublePrecision('credibility_score'),
+  credibilityType: text('credibility_type'),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -330,6 +334,8 @@ export const facts = pgTable('fact', {
   refutesFactId: text('refutes_fact_id').references((): any => facts.id),
   tags: jsonb('tags').notNull().default(sql`'[]'::jsonb`),
   embedding: vector('embedding'),
+  noveltyScore: doublePrecision('novelty_score'),
+  sourceAgreement: integer('source_agreement'),
 });
 
 export type Fact = typeof facts.$inferSelect;
@@ -368,3 +374,85 @@ export const relationships = pgTable('relationship', {
 });
 
 export type Relationship = typeof relationships.$inferSelect;
+
+// ==========================================
+// Deep Dive — Global Entities (cross-session)
+// ==========================================
+
+export const globalEntities = pgTable('global_entity', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  canonicalName: text('canonical_name').notNull(),
+  type: text('type').notNull(),
+  description: text('description'),
+  embedding: vector('embedding'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type GlobalEntity = typeof globalEntities.$inferSelect;
+
+export const globalEntityLinks = pgTable('global_entity_link', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  globalEntityId: text('global_entity_id').notNull().references(() => globalEntities.id),
+  sessionEntityId: text('session_entity_id').notNull().references(() => entities.id),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  confidence: doublePrecision('confidence').notNull().default(0.8),
+});
+
+export type GlobalEntityLink = typeof globalEntityLinks.$inferSelect;
+
+// ==========================================
+// Deep Dive — Narrative Builder
+// ==========================================
+
+export const narrativeItems = pgTable('narrative_item', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  factId: text('fact_id').references(() => facts.id),
+  sortOrder: integer('sort_order').notNull(),
+  annotation: text('annotation'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type NarrativeItem = typeof narrativeItems.$inferSelect;
+
+// ==========================================
+// JKAI 2.0 — Autonomous Assistant
+// ==========================================
+
+export const jkaiConversations = pgTable('jkai_conversations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  title: text('title'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiConversation = typeof jkaiConversations.$inferSelect;
+
+export const jkaiMessages = pgTable('jkai_messages', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  conversationId: text('conversation_id')
+    .notNull()
+    .references(() => jkaiConversations.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
+  content: text('content').notNull(),
+  thinking: text('thinking'), // thinking/reasoning content when in thinking mode
+  attachments: jsonb('attachments').default(sql`'[]'::jsonb`), // media/file references
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiMessage = typeof jkaiMessages.$inferSelect;
+
+export const jkaiActions = pgTable('jkai_actions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  conversationId: text('conversation_id')
+    .notNull()
+    .references(() => jkaiConversations.id, { onDelete: 'cascade' }),
+  messageId: text('message_id').references(() => jkaiMessages.id, { onDelete: 'set null' }),
+  type: text('type').notNull(), // 'plan' | 'code_exec' | 'file_create' | 'web_fetch' | 'pulse' | 'cron'
+  description: text('description').notNull(),
+  status: text('status').notNull().default('pending'), // 'pending' | 'running' | 'completed' | 'failed'
+  input: jsonb('input'),
+  output: jsonb('output'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});

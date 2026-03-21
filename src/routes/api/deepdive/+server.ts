@@ -42,7 +42,7 @@ export const GET: RequestHandler = async () => {
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { topic, goals, timeLimitMinutes, config } = body;
+  const { topic, goals, timeLimitMinutes, config, parentSessionId, seedContext } = body;
 
   if (!topic || typeof topic !== 'string') {
     return json({ error: 'Topic is required' }, { status: 400 });
@@ -57,6 +57,8 @@ export const POST: RequestHandler = async ({ request }) => {
       goals: goals ?? [],
       timeLimitMinutes: timeLimitMinutes ?? null,
       config: sessionConfig,
+      parentSessionId: parentSessionId ?? null,
+      seedContext: seedContext ?? null,
     })
     .returning();
 

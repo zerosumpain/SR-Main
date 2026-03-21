@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, facts, entities, sources, relationships, entityMentions } from '$lib/db/schema';
+import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
 
@@ -74,6 +74,10 @@ export const DELETE: RequestHandler = async ({ params }) => {
   }
 
   // Cascade delete in correct order
+  // 0. narrative items and global entity links
+  await db.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));
+  await db.delete(globalEntityLinks).where(eq(globalEntityLinks.sessionId, params.id));
+
   // 1. entity_mentions (references entities and facts)
   const sessionEntities = await db
     .select({ id: entities.id })

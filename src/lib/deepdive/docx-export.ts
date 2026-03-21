@@ -16,8 +16,8 @@ import {
   FootnoteReferenceRun,
 } from 'docx';
 import { db } from '$lib/db';
-import { researchSessions, facts, entities, sources, entityMentions } from '$lib/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { researchSessions, facts, entities, sources, entityMentions, narrativeItems } from '$lib/db/schema';
+import { eq, and, sql, asc } from 'drizzle-orm';
 import type { ResearchReport } from './types';
 
 function slugify(text: string): string {
@@ -337,5 +337,128 @@ export async function generateReport(sessionId: string): Promise<{ buffer: Buffe
   return {
     buffer: Buffer.from(buffer),
     filename: `deepdive-${slug}-${dateStr}.docx`,
+  };
+}
+
+export async function generateNarrativeReport(
+  sessionId: string,
+): Promise<{ buffer: Buffer; filename: string } | null> {
+  const [session] = await db
+    .select()
+    .from(researchSessions)
+    .where(eq(researchSessions.id, sessionId));
+
+  if (!session) return null;
+
+  const items = await db
+    .select()
+    .from(narrativeItems)
+    .where(eq(narrativeItems.sessionId, sessionId))
+    .orderBy(asc(narrativeItems.sortOrder));
+
+  if (items.length === 0) return null;
+
+  const children: Paragraph[] = [];
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const slug = slugify(session.topic);
+
+  // Title
+  children.push(
+    new Paragraph({
+      text: session.topic,
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+    }),
+  );
+  children.push(
+    new Paragraph({
+      text: `Custom Narrative Report — ${dateStr}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+      children: [
+        new TextRun({
+          text: `Custom Narrative Report — ${dateStr}`,
+          size: 22,
+          color: '888888',
+        }),
+      ],
+    }),
+  );
+
+  for (const item of items) {
+    if (item.annotation) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 200, after: 200 },
+          children: [
+            new TextRun({
+              text: item.annotation,
+              size: 24,
+            }),
+          ],
+        }),
+      );
+    }
+
+    if (item.factId) {
+      const [fact] = await db
+        .select()
+        .from(facts)
+        .where(eq(facts.id, item.factId))
+        .limit(1);
+
+      if (fact) {
+        const [source] = await db
+          .select()
+          .from(sources)
+          .where(eq(sources.id, fact.sourceId))
+          .limit(1);
+
+        children.push(
+          new Paragraph({
+            indent: { left: 400 },
+            spacing: { before: 100, after: 50 },
+            border: {
+              left: { style: BorderStyle.SINGLE, size: 3, color: 'C4570A' },
+            },
+            children: [
+              new TextRun({
+                text: fact.content,
+                size: 22,
+              }),
+            ],
+          }),
+        );
+
+        const metaParts: string[] = [`Confidence: ${fact.confidence.toFixed(2)}`];
+        if (source) metaParts.push(`Source: ${source.title ?? source.domain}`);
+
+        children.push(
+          new Paragraph({
+            indent: { left: 400 },
+            spacing: { after: 200 },
+            children: [
+              new TextRun({
+                text: metaParts.join(' | '),
+                size: 18,
+                color: '888888',
+                italics: true,
+              }),
+            ],
+          }),
+        );
+      }
+    }
+  }
+
+  const doc = new Document({
+    sections: [{ children }],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+
+  return {
+    buffer: Buffer.from(buffer),
+    filename: `narrative-${slug}-${dateStr}.docx`,
   };
 }

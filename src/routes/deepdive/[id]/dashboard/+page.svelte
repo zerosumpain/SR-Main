@@ -12,7 +12,7 @@
   // Readonly mode (for share pages that reuse this component)
   const readonly = data.readonly ?? false;
 
-  type TabId = 'overview' | 'entities' | 'timeline' | 'counterfactuals' | 'reports';
+  type TabId = 'overview' | 'entities' | 'timeline' | 'counterfactuals' | 'gaps' | 'hypotheses' | 'explore' | 'reports';
   let activeTab = $state<TabId>('overview');
 
   const tabs: { id: TabId; label: string }[] = [
@@ -20,6 +20,9 @@
     { id: 'entities', label: 'Entities' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'counterfactuals', label: 'Counterfactuals' },
+    { id: 'gaps', label: 'Gaps' },
+    { id: 'hypotheses', label: 'Hypotheses' },
+    { id: 'explore', label: 'Explore' },
     { id: 'reports', label: 'Reports' },
   ];
 
@@ -392,10 +395,200 @@
     }
   }
 
+  // Narrative builder state
+  let narrativeMode = $state(false);
+  let narrativeItems_state = $state<{ factId: string | null; annotation: string | null; sortOrder: number }[]>([]);
+  let savingNarrative = $state(false);
+  let narrativeLoaded = $state(false);
+
+  async function loadNarrative() {
+    if (narrativeLoaded) return;
+    try {
+      const res = await fetch(`/api/deepdive/${data.session.id}/narrative`);
+      if (res.ok) {
+        const items = await res.json();
+        narrativeItems_state = items.map((item: any) => ({
+          factId: item.factId,
+          annotation: item.annotation,
+          sortOrder: item.sortOrder,
+        }));
+        narrativeLoaded = true;
+      }
+    } catch { /* ignore */ }
+  }
+
+  function addToNarrative(factId: string) {
+    if (narrativeItems_state.some((i) => i.factId === factId)) return;
+    narrativeItems_state = [
+      ...narrativeItems_state,
+      { factId, annotation: null, sortOrder: narrativeItems_state.length },
+    ];
+  }
+
+  function removeFromNarrative(index: number) {
+    narrativeItems_state = narrativeItems_state.filter((_, i) => i !== index).map((item, i) => ({ ...item, sortOrder: i }));
+  }
+
+  function addAnnotation(index: number) {
+    const newItems = [...narrativeItems_state];
+    newItems.splice(index, 0, { factId: null, annotation: '', sortOrder: 0 });
+    narrativeItems_state = newItems.map((item, i) => ({ ...item, sortOrder: i }));
+  }
+
+  function moveNarrativeItem(from: number, to: number) {
+    const newItems = [...narrativeItems_state];
+    const [removed] = newItems.splice(from, 1);
+    newItems.splice(to, 0, removed);
+    narrativeItems_state = newItems.map((item, i) => ({ ...item, sortOrder: i }));
+  }
+
+  let dragIndex = $state<number | null>(null);
+
+  async function saveNarrative() {
+    savingNarrative = true;
+    try {
+      await fetch(`/api/deepdive/${data.session.id}/narrative`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: narrativeItems_state }),
+      });
+    } finally {
+      savingNarrative = false;
+    }
+  }
+
+  $effect(() => {
+    if (narrativeMode && !narrativeLoaded) {
+      loadNarrative();
+    }
+  });
+
   // Share state
   let shareUrl = $state(data.session.shareToken ? `${location?.origin ?? ''}/deepdive/share/${data.session.shareToken}` : '');
   let sharing = $state(false);
   let copied = $state(false);
+
+  // Explore state
+  let exploring = $state(false);
+  let exploreError = $state('');
+  let globalSearchQuery = $state('');
+  let globalSearchResults = $state<any>(null);
+  let searchingGlobal = $state(false);
+  let relatedSessions = $state<any[]>([]);
+  let loadingRelated = $state(false);
+
+  // Surprise state
+  let surpriseFact = $state<any>(null);
+  let loadingSurprise = $state(false);
+
+  // Filter state
+  let filterConfMin = $state(0);
+  let filterConfMax = $state(1);
+  let filterCategory = $state('');
+  let filterCredType = $state('');
+
+  const allTags = $derived([...new Set(nonCounterfactualFacts.flatMap((f) => (f.tags as string[]) ?? []))].sort());
+  const allCategories = $derived([...new Set(data.sources.map((s) => s.category).filter(Boolean))].sort());
+  const allCredTypes = $derived([...new Set(data.sources.map((s) => s.credibilityType).filter(Boolean))].sort());
+
+  const filteredFacts = $derived(
+    nonCounterfactualFacts.filter((f) => {
+      if (f.confidence < filterConfMin || f.confidence > filterConfMax) return false;
+      if (filterCategory) {
+        const source = sourceMap.get(f.sourceId);
+        if (source?.category !== filterCategory) return false;
+      }
+      if (filterCredType) {
+        const source = sourceMap.get(f.sourceId);
+        if (source?.credibilityType !== filterCredType) return false;
+      }
+      return true;
+    }),
+  );
+
+  async function exploreItem(type: string, itemId: string) {
+    exploring = true;
+    exploreError = '';
+    try {
+      const res = await fetch(`/api/deepdive/${data.session.id}/explore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, itemId }),
+      });
+      if (res.ok) {
+        const child = await res.json();
+        goto(`/deepdive/${child.id}/progress`);
+      } else {
+        const body = await res.json();
+        exploreError = body.error ?? 'Failed to start exploration';
+      }
+    } catch (e: any) {
+      exploreError = e.message ?? 'Network error';
+    } finally {
+      exploring = false;
+    }
+  }
+
+  async function loadRelatedSessions() {
+    loadingRelated = true;
+    try {
+      const res = await fetch(`/api/deepdive/${data.session.id}/related`);
+      if (res.ok) relatedSessions = await res.json();
+    } finally {
+      loadingRelated = false;
+    }
+  }
+
+  async function searchGlobal() {
+    if (!globalSearchQuery.trim()) return;
+    searchingGlobal = true;
+    try {
+      const res = await fetch(`/api/deepdive/search?q=${encodeURIComponent(globalSearchQuery)}`);
+      if (res.ok) globalSearchResults = await res.json();
+    } finally {
+      searchingGlobal = false;
+    }
+  }
+
+  async function loadSurprise() {
+    loadingSurprise = true;
+    try {
+      const res = await fetch(`/api/deepdive/${data.session.id}/surprise`);
+      if (res.ok) {
+        const results = await res.json();
+        if (results.length > 0) {
+          surpriseFact = results[Math.floor(Math.random() * Math.min(results.length, 5))];
+        }
+      }
+    } finally {
+      loadingSurprise = false;
+    }
+  }
+
+  function credibilityBadge(type: string | null | undefined): { label: string; color: string } {
+    switch (type) {
+      case 'academic': return { label: 'ACADEMIC', color: '#2d7d46' };
+      case 'government': return { label: 'GOV', color: '#2d7d46' };
+      case 'major_news': return { label: 'MAJOR NEWS', color: '#3a6b8b' };
+      case 'news': return { label: 'NEWS', color: '#3a6b8b' };
+      case 'wiki': return { label: 'WIKI', color: '#8b7a3a' };
+      case 'blog': return { label: 'BLOG', color: 'var(--accent)' };
+      case 'social': return { label: 'SOCIAL', color: '#8b3a1a' };
+      default: return { label: 'OTHER', color: 'var(--text-muted)' };
+    }
+  }
+
+  function severityColor(severity: string): string {
+    if (severity === 'high') return '#8b3a1a';
+    if (severity === 'medium') return 'var(--accent)';
+    return 'var(--text-muted)';
+  }
+
+  $effect(() => {
+    if (activeTab === 'explore' && relatedSessions.length === 0 && !loadingRelated) {
+      loadRelatedSessions();
+    }
+  });
 
   async function toggleShare() {
     sharing = true;
@@ -482,6 +675,18 @@
     </div>
   {/if}
 
+  {#if data.parentSession}
+    <div class="mb-2">
+      <a
+        href="/deepdive/{data.parentSession.id}/dashboard"
+        class="text-[11px] uppercase tracking-[0.2em]"
+        style="color: var(--accent); font-family: var(--font-mono);"
+      >
+        Parent: {data.parentSession.topic}
+      </a>
+    </div>
+  {/if}
+
   <h1
     class="text-2xl font-bold mb-1"
     style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"
@@ -529,6 +734,103 @@
           </p>
         </div>
       {/each}
+    </div>
+
+    <!-- Source diversity -->
+    {#if data.report.source_diversity}
+      {@const sd = data.report.source_diversity}
+      <div
+        class="mb-6 p-4 rounded-xl border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[13px] uppercase tracking-[0.2em]" style="color: var(--text-muted); font-family: var(--font-mono);">
+            Source Diversity — {sd.total_domains} domains
+          </p>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded"
+            style="font-family: var(--font-mono); color: {sd.concentration_index < 0.3 ? '#2d7d46' : sd.concentration_index < 0.5 ? 'var(--accent)' : '#8b3a1a'};"
+          >
+            {sd.concentration_index < 0.3 ? 'DIVERSE' : sd.concentration_index < 0.5 ? 'MODERATE' : 'CONCENTRATED'}
+          </span>
+        </div>
+        <div class="flex gap-1 flex-wrap">
+          {#each Object.entries(sd.by_type) as [type, count]}
+            {@const badge = credibilityBadge(type)}
+            <span
+              class="text-[10px] px-2 py-0.5 rounded"
+              style="font-family: var(--font-mono); color: {badge.color}; background: {badge.color}12;"
+            >
+              {badge.label}: {count}
+            </span>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Surprise Me -->
+    <div class="mb-6 flex items-center gap-3">
+      <button
+        onclick={loadSurprise}
+        disabled={loadingSurprise}
+        class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg disabled:opacity-50"
+        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
+      >
+        {loadingSurprise ? 'Finding...' : 'Surprise me'}
+      </button>
+      {#if surpriseFact}
+        <div
+          class="flex-1 p-3 rounded-xl border"
+          style="background: rgba(196, 87, 10, 0.06); border-color: var(--accent);"
+        >
+          <p class="text-[10px] uppercase tracking-[0.15em] mb-1" style="color: var(--accent); font-family: var(--font-mono);">
+            High novelty ({surpriseFact.noveltyScore?.toFixed(2) ?? '?'}) / Low confidence ({surpriseFact.confidence.toFixed(2)})
+          </p>
+          <p class="text-sm" style="color: var(--text-primary);">{surpriseFact.content}</p>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Filter bar -->
+    <div
+      class="mb-6 p-3 rounded-xl border flex flex-wrap gap-3 items-center"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div class="flex items-center gap-1">
+        <span class="text-[10px] uppercase tracking-[0.15em]" style="color: var(--text-muted); font-family: var(--font-mono);">Conf:</span>
+        <input type="range" bind:value={filterConfMin} min="0" max="1" step="0.1" class="w-16" />
+        <span class="text-[10px]" style="font-family: var(--font-mono); color: var(--text-muted);">{filterConfMin.toFixed(1)}-{filterConfMax.toFixed(1)}</span>
+        <input type="range" bind:value={filterConfMax} min="0" max="1" step="0.1" class="w-16" />
+      </div>
+      {#if allCategories.length > 0}
+        <select
+          bind:value={filterCategory}
+          class="text-[11px] px-2 py-1 rounded"
+          style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+        >
+          <option value="">All categories</option>
+          {#each allCategories as cat}
+            <option value={cat}>{cat}</option>
+          {/each}
+        </select>
+      {/if}
+      {#if allCredTypes.length > 0}
+        <select
+          bind:value={filterCredType}
+          class="text-[11px] px-2 py-1 rounded"
+          style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+        >
+          <option value="">All source types</option>
+          {#each allCredTypes as ct}
+            <option value={ct}>{ct}</option>
+          {/each}
+        </select>
+      {/if}
+      {#if filterConfMin > 0 || filterConfMax < 1 || filterCategory || filterCredType}
+        <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+          {filteredFacts.length} / {nonCounterfactualFacts.length} facts
+        </span>
+      {/if}
     </div>
 
     <!-- Identity disambiguation notice -->
@@ -640,12 +942,12 @@
               {#if expandedFacts.has(fact.id)}
                 <div class="mt-3 pt-3 space-y-2" style="border-top: 1px solid var(--card-border);">
                   {#each getFactSources(fact.id) as source}
-                    <div>
+                    <div class="flex items-center gap-2">
                       <a
                         href={source.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="text-[11px] block"
+                        class="text-[11px]"
                         style="color: var(--accent); font-family: var(--font-mono);"
                       >
                         {source.title ?? source.url}
@@ -653,8 +955,22 @@
                       <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
                         {source.domain}
                       </span>
+                      {#if source.credibilityType}
+                        {@const cb = credibilityBadge(source.credibilityType)}
+                        <span
+                          class="text-[9px] px-1.5 py-0.5 rounded"
+                          style="font-family: var(--font-mono); color: {cb.color}; background: {cb.color}12;"
+                        >
+                          {cb.label}
+                        </span>
+                      {/if}
                     </div>
                   {/each}
+                  {#if fact.sourceAgreement}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded" style="color: #2d7d46; background: #2d7d4612; font-family: var(--font-mono);">
+                      Corroborated by {fact.sourceAgreement} other source{fact.sourceAgreement > 1 ? 's' : ''}
+                    </span>
+                  {/if}
                   {#if getFactEntities(fact.id).length > 0}
                     <div class="flex flex-wrap gap-1 mt-1">
                       {#each getFactEntities(fact.id) as entity}
@@ -665,6 +981,39 @@
                           {entity.name}
                         </span>
                       {/each}
+                    </div>
+                  {/if}
+                  {#if (fact.tags as string[])?.length > 0}
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      {#each (fact.tags as string[]) as tag}
+                        <span
+                          class="text-[9px] px-1.5 py-0.5 rounded"
+                          style="background: var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
+                        >
+                          {tag}
+                        </span>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if !readonly}
+                    <div class="flex gap-2 mt-1">
+                      <button
+                        onclick={() => exploreItem('fact', fact.id)}
+                        disabled={exploring}
+                        class="text-[11px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg disabled:opacity-50"
+                        style="background: var(--accent); color: white; font-family: var(--font-mono);"
+                      >
+                        {exploring ? '...' : 'Explore further'}
+                      </button>
+                      {#if narrativeMode}
+                        <button
+                          onclick={() => addToNarrative(fact.id)}
+                          class="text-[11px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg"
+                          style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+                        >
+                          + Narrative
+                        </button>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -833,6 +1182,17 @@
               </p>
             {/each}
           </div>
+
+          {#if !readonly && selectedEntityId}
+            <button
+              onclick={() => exploreItem('entity', selectedEntityId!)}
+              disabled={exploring}
+              class="mt-4 text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg disabled:opacity-50"
+              style="background: var(--accent); color: white; font-family: var(--font-mono);"
+            >
+              {exploring ? '...' : 'Explore this entity'}
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -1007,10 +1367,421 @@
     {/if}
   {/if}
 
+  <!-- ==================== GAPS TAB ==================== -->
+  {#if activeTab === 'gaps'}
+    {#if !data.report.knowledge_gaps?.length}
+      <div
+        class="p-8 rounded-xl border text-center"
+        style="background: var(--card-bg); border-color: var(--card-border);"
+      >
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
+          No knowledge gaps identified
+        </p>
+      </div>
+    {:else}
+      <div class="space-y-3">
+        {#each data.report.knowledge_gaps as gap, i}
+          <div
+            class="p-4 rounded-xl border"
+            style="background: var(--card-bg); border-color: var(--card-border);"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <span
+                    class="text-[11px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+                    style="font-family: var(--font-mono); color: {severityColor(gap.severity)}; border: 1px solid {severityColor(gap.severity)};"
+                  >
+                    {gap.severity}
+                  </span>
+                  <span
+                    class="text-[11px] px-2 py-0.5 rounded"
+                    style="font-family: var(--font-mono); color: var(--text-muted); background: var(--bg);"
+                  >
+                    {gap.type.replace('_', ' ')}
+                  </span>
+                  {#if gap.goal_index != null}
+                    <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                      Goal #{gap.goal_index + 1}
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-[15px]" style="color: var(--text-primary);">
+                  {gap.gap}
+                </p>
+              </div>
+              {#if !readonly}
+                <button
+                  onclick={() => exploreItem('gap', String(i))}
+                  disabled={exploring}
+                  class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg ml-3 shrink-0 disabled:opacity-50"
+                  style="background: var(--accent); color: white; font-family: var(--font-mono);"
+                >
+                  {exploring ? '...' : 'Investigate'}
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  {/if}
+
+  <!-- ==================== HYPOTHESES TAB ==================== -->
+  {#if activeTab === 'hypotheses'}
+    {#if !data.report.hypotheses?.length}
+      <div
+        class="p-8 rounded-xl border text-center"
+        style="background: var(--card-bg); border-color: var(--card-border);"
+      >
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
+          No hypotheses generated
+        </p>
+      </div>
+    {:else}
+      <div class="space-y-4">
+        {#each data.report.hypotheses as hypo, i}
+          <div
+            class="p-5 rounded-xl border"
+            style="background: var(--card-bg); border-color: var(--card-border);"
+          >
+            <div class="flex items-start justify-between mb-3">
+              <p class="text-[15px] flex-1" style="color: var(--text-primary);">
+                {hypo.hypothesis}
+              </p>
+              <div class="flex items-center gap-2 ml-3 shrink-0">
+                <span
+                  class="text-[11px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+                  style="font-family: var(--font-mono); color: {hypo.testability === 'high' ? '#2d7d46' : hypo.testability === 'medium' ? 'var(--accent)' : 'var(--text-muted)'}; border: 1px solid currentColor;"
+                >
+                  {hypo.testability} testability
+                </span>
+                {#if !readonly}
+                  <button
+                    onclick={() => exploreItem('hypothesis', String(i))}
+                    disabled={exploring}
+                    class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg disabled:opacity-50"
+                    style="background: var(--accent); color: white; font-family: var(--font-mono);"
+                  >
+                    {exploring ? '...' : 'Test this'}
+                  </button>
+                {/if}
+              </div>
+            </div>
+
+            {#if hypo.supporting_fact_ids?.length}
+              <div class="mb-2">
+                <p class="text-[10px] uppercase tracking-[0.15em] mb-1" style="color: #2d7d46; font-family: var(--font-mono);">Supporting ({hypo.supporting_fact_ids.length})</p>
+                {#each hypo.supporting_fact_ids.slice(0, 3) as fid}
+                  {@const f = factMap.get(fid)}
+                  {#if f}
+                    <p class="text-[13px] pl-2 mb-0.5" style="color: var(--text-secondary); border-left: 2px solid #2d7d46;">{f.content.slice(0, 120)}{f.content.length > 120 ? '...' : ''}</p>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+
+            {#if hypo.tension_fact_ids?.length}
+              <div class="mb-2">
+                <p class="text-[10px] uppercase tracking-[0.15em] mb-1" style="color: #8b3a1a; font-family: var(--font-mono);">In tension ({hypo.tension_fact_ids.length})</p>
+                {#each hypo.tension_fact_ids.slice(0, 3) as fid}
+                  {@const f = factMap.get(fid)}
+                  {#if f}
+                    <p class="text-[13px] pl-2 mb-0.5" style="color: var(--text-secondary); border-left: 2px solid #8b3a1a;">{f.content.slice(0, 120)}{f.content.length > 120 ? '...' : ''}</p>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+
+            {#if hypo.suggested_queries?.length}
+              <div class="flex flex-wrap gap-1 mt-2">
+                {#each hypo.suggested_queries as q}
+                  <span
+                    class="text-[10px] px-2 py-0.5 rounded"
+                    style="background: var(--bg); color: var(--text-muted); font-family: var(--font-mono);"
+                  >
+                    {q}
+                  </span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+
+      <!-- Contradictions map -->
+      {#if data.report.contradictions_map?.length}
+        <div class="mt-8">
+          <p class="text-[13px] uppercase tracking-[0.25em] mb-4" style="color: var(--text-muted); font-family: var(--font-mono);">
+            Internal Contradictions
+          </p>
+          <div class="space-y-3">
+            {#each data.report.contradictions_map as contradiction}
+              {@const factA = factMap.get(contradiction.fact_a_id)}
+              {@const factB = factMap.get(contradiction.fact_b_id)}
+              <div
+                class="p-4 rounded-xl border"
+                style="background: var(--card-bg); border-color: var(--card-border);"
+              >
+                <p class="text-[11px] uppercase tracking-[0.15em] mb-2" style="color: #8b3a1a; font-family: var(--font-mono);">
+                  {contradiction.tension}
+                </p>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="p-2 rounded" style="background: var(--bg);">
+                    <p class="text-sm" style="color: var(--text-secondary);">{factA?.content ?? 'Unknown fact'}</p>
+                  </div>
+                  <div class="p-2 rounded" style="background: var(--bg);">
+                    <p class="text-sm" style="color: var(--text-secondary);">{factB?.content ?? 'Unknown fact'}</p>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    {/if}
+  {/if}
+
+  <!-- ==================== EXPLORE TAB ==================== -->
+  {#if activeTab === 'explore'}
+    {#if exploreError}
+      <div class="mb-4 p-3 rounded-lg" style="background: #8b3a1a15; color: #8b3a1a; font-family: var(--font-mono); font-size: 13px;">
+        {exploreError}
+      </div>
+    {/if}
+
+    <!-- Research tree -->
+    <div class="mb-6">
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
+        Research Tree
+      </p>
+      <div
+        class="p-4 rounded-xl border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
+      >
+        {#if data.parentSession}
+          <a
+            href="/deepdive/{data.parentSession.id}/dashboard"
+            class="text-sm block mb-2"
+            style="color: var(--accent); font-family: var(--font-mono);"
+          >
+            &larr; {data.parentSession.topic}
+          </a>
+        {/if}
+        <p class="text-sm font-bold" style="color: var(--text-primary);">
+          {data.session.topic}
+        </p>
+        {#if data.childSessions.length > 0}
+          <div class="mt-3 pl-4 space-y-2" style="border-left: 2px solid var(--card-border);">
+            {#each data.childSessions as child}
+              <a
+                href={child.status === 'complete' ? `/deepdive/${child.id}/dashboard` : `/deepdive/${child.id}/progress`}
+                class="block text-sm"
+                style="color: var(--text-secondary);"
+              >
+                {child.topic}
+                <span
+                  class="text-[10px] ml-1"
+                  style="color: {child.status === 'complete' ? '#2d7d46' : child.status === 'failed' ? '#8b3a1a' : 'var(--accent)'}; font-family: var(--font-mono);"
+                >
+                  {child.status}
+                </span>
+              </a>
+            {/each}
+          </div>
+        {:else}
+          <p class="text-xs mt-2" style="color: var(--text-muted); font-family: var(--font-mono);">
+            No child investigations yet. Use "Explore further" on facts, gaps, or hypotheses.
+          </p>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Follow-up suggestions -->
+    {#if data.report.suggested_followups?.length}
+      <div class="mb-6">
+        <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
+          Suggested Follow-ups
+        </p>
+        <div class="space-y-3">
+          {#each data.report.suggested_followups as followup, i}
+            <div
+              class="p-4 rounded-xl border"
+              style="background: var(--card-bg); border-color: var(--card-border);"
+            >
+              <p class="text-[15px] mb-1" style="color: var(--text-primary);">
+                {followup.question}
+              </p>
+              <p class="text-sm mb-2" style="color: var(--text-muted);">
+                {followup.context}
+              </p>
+              {#if !readonly}
+                <button
+                  onclick={() => {
+                    // Create a child session from the followup question
+                    exploring = true;
+                    fetch(`/api/deepdive`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        topic: followup.question,
+                        goals: [followup.context],
+                        parentSessionId: data.session.id,
+                        seedContext: {
+                          type: 'fact',
+                          parentTopic: data.session.topic,
+                          parentGoals: data.session.goals,
+                          factContents: followup.seed_fact_ids?.map((id: string) => factMap.get(id)?.content).filter(Boolean),
+                        },
+                      }),
+                    })
+                      .then((res) => res.json())
+                      .then((child) => goto(`/deepdive/${child.id}/progress`))
+                      .catch((e) => (exploreError = e.message))
+                      .finally(() => (exploring = false));
+                  }}
+                  disabled={exploring}
+                  class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg disabled:opacity-50"
+                  style="background: var(--accent); color: white; font-family: var(--font-mono);"
+                >
+                  {exploring ? '...' : 'Investigate'}
+                </button>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Related sessions -->
+    <div class="mb-6">
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
+        Related Sessions
+      </p>
+      {#if loadingRelated}
+        <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">Loading...</p>
+      {:else if relatedSessions.length === 0}
+        <div
+          class="p-4 rounded-xl border text-center"
+          style="background: var(--card-bg); border-color: var(--card-border);"
+        >
+          <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
+            No related sessions found
+          </p>
+        </div>
+      {:else}
+        <div class="space-y-2">
+          {#each relatedSessions as related}
+            <a
+              href="/deepdive/{related.sessionId}/dashboard"
+              class="block p-3 rounded-xl border transition-colors hover:bg-black/5"
+              style="background: var(--card-bg); border-color: var(--card-border);"
+            >
+              <p class="text-sm" style="color: var(--text-primary);">{related.topic}</p>
+              <div class="flex gap-1 mt-1 flex-wrap">
+                {#each related.sharedEntities.slice(0, 5) as entity}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded" style="background: var(--bg); color: var(--text-muted); font-family: var(--font-mono);">
+                    {entity}
+                  </span>
+                {/each}
+                <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                  ({Math.round(related.overlapScore * 100)}% overlap)
+                </span>
+              </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Global search -->
+    <div>
+      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
+        Cross-Session Search
+      </p>
+      <div class="flex gap-2 mb-4">
+        <input
+          type="text"
+          bind:value={globalSearchQuery}
+          placeholder="Search across all sessions..."
+          class="flex-1 px-3 py-2 rounded-lg text-sm"
+          style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+          onkeydown={(e) => e.key === 'Enter' && searchGlobal()}
+        />
+        <button
+          onclick={searchGlobal}
+          disabled={searchingGlobal}
+          class="text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg disabled:opacity-50"
+          style="background: var(--accent); color: white; font-family: var(--font-mono);"
+        >
+          {searchingGlobal ? '...' : 'Search'}
+        </button>
+      </div>
+
+      {#if globalSearchResults}
+        {#if globalSearchResults.entities.length > 0}
+          <p class="text-[11px] uppercase tracking-[0.15em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
+            Entities ({globalSearchResults.entities.length})
+          </p>
+          <div class="space-y-2 mb-4">
+            {#each globalSearchResults.entities as entity}
+              <div
+                class="p-3 rounded-lg"
+                style="background: var(--card-bg); border: 1px solid var(--card-border);"
+              >
+                <p class="text-sm font-bold" style="color: var(--text-primary);">
+                  {entity.name} <span class="text-[10px] font-normal" style="color: var(--text-muted);">({entity.type})</span>
+                </p>
+                <div class="flex gap-1 mt-1 flex-wrap">
+                  {#each entity.sessions as s}
+                    <a
+                      href="/deepdive/{s.id}/dashboard"
+                      class="text-[10px] px-1.5 py-0.5 rounded"
+                      style="background: var(--bg); color: var(--accent); font-family: var(--font-mono);"
+                    >
+                      {s.topic.slice(0, 30)}
+                    </a>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if globalSearchResults.facts.length > 0}
+          <p class="text-[11px] uppercase tracking-[0.15em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
+            Facts ({globalSearchResults.facts.length})
+          </p>
+          <div class="space-y-2">
+            {#each globalSearchResults.facts as fact}
+              <div
+                class="p-3 rounded-lg"
+                style="background: var(--card-bg); border: 1px solid var(--card-border);"
+              >
+                <p class="text-sm" style="color: var(--text-primary);">{fact.content}</p>
+                <a
+                  href="/deepdive/{fact.sessionId}/dashboard"
+                  class="text-[10px] mt-1 block"
+                  style="color: var(--accent); font-family: var(--font-mono);"
+                >
+                  from: {fact.sessionTopic}
+                </a>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if globalSearchResults.entities.length === 0 && globalSearchResults.facts.length === 0}
+          <p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">No results found</p>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
   <!-- ==================== REPORTS TAB ==================== -->
   {#if activeTab === 'reports'}
-    <!-- Download button -->
-    <div class="mb-6">
+    <!-- Download buttons -->
+    <div class="mb-6 flex flex-wrap gap-3">
       <a
         href="/api/deepdive/{data.session.id}/export/docx"
         class="inline-block text-[13px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg"
@@ -1018,7 +1789,131 @@
       >
         Download full report (.docx)
       </a>
+      {#if !readonly}
+        <button
+          onclick={() => (narrativeMode = !narrativeMode)}
+          class="text-[13px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg"
+          style="background: {narrativeMode ? 'var(--accent)' : 'var(--card-bg)'}; color: {narrativeMode ? 'white' : 'var(--text-muted)'}; border: 1px solid {narrativeMode ? 'var(--accent)' : 'var(--card-border)'}; font-family: var(--font-mono);"
+        >
+          {narrativeMode ? 'Exit narrative mode' : 'Build custom narrative'}
+        </button>
+      {/if}
     </div>
+
+    <!-- Narrative builder -->
+    {#if narrativeMode}
+      <div
+        class="mb-8 p-5 rounded-xl border"
+        style="background: rgba(196, 87, 10, 0.04); border-color: var(--accent);"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[13px] uppercase tracking-[0.25em]" style="color: var(--accent); font-family: var(--font-mono);">
+            Custom Narrative ({narrativeItems_state.length} items)
+          </p>
+          <div class="flex gap-2">
+            <button
+              onclick={saveNarrative}
+              disabled={savingNarrative}
+              class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg disabled:opacity-50"
+              style="background: var(--accent); color: white; font-family: var(--font-mono);"
+            >
+              {savingNarrative ? 'Saving...' : 'Save'}
+            </button>
+            {#if narrativeItems_state.length > 0}
+              <a
+                href="/api/deepdive/{data.session.id}/export/narrative-md"
+                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+              >
+                Export MD
+              </a>
+              <a
+                href="/api/deepdive/{data.session.id}/export/narrative-docx"
+                class="text-[11px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+              >
+                Export DOCX
+              </a>
+            {/if}
+          </div>
+        </div>
+
+        {#if narrativeItems_state.length === 0}
+          <p class="text-sm" style="color: var(--text-muted);">
+            Expand facts in other tabs and click "+ Narrative" to add them here.
+            You can also add text annotations between facts.
+          </p>
+        {:else}
+          <div class="space-y-1">
+            {#each narrativeItems_state as item, i}
+              <!-- Add annotation button -->
+              <button
+                onclick={() => addAnnotation(i)}
+                class="w-full text-center text-[10px] py-0.5 rounded opacity-30 hover:opacity-100 transition-opacity"
+                style="color: var(--text-muted); font-family: var(--font-mono);"
+              >
+                + add note
+              </button>
+
+              <div
+                class="p-3 rounded-lg flex items-start gap-2 cursor-move"
+                style="background: var(--card-bg); border: 1px solid var(--card-border);"
+                draggable="true"
+                ondragstart={(e) => { dragIndex = i; e.dataTransfer?.setData('text/plain', String(i)); }}
+                ondragover={(e) => e.preventDefault()}
+                ondrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null && dragIndex !== i) {
+                    moveNarrativeItem(dragIndex, i);
+                  }
+                  dragIndex = null;
+                }}
+              >
+                <span class="text-[10px] shrink-0 mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                  {i + 1}.
+                </span>
+                <div class="flex-1 min-w-0">
+                  {#if item.factId}
+                    {@const fact = factMap.get(item.factId)}
+                    {#if fact}
+                      <p class="text-sm" style="color: var(--text-primary);">{fact.content}</p>
+                      <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                        Confidence: {fact.confidence.toFixed(2)}
+                      </span>
+                    {:else}
+                      <p class="text-sm italic" style="color: var(--text-muted);">Fact not found</p>
+                    {/if}
+                  {:else}
+                    <textarea
+                      bind:value={narrativeItems_state[i].annotation}
+                      placeholder="Write a note..."
+                      rows="2"
+                      class="w-full px-2 py-1 rounded text-sm resize-y"
+                      style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+                    ></textarea>
+                  {/if}
+                </div>
+                <button
+                  onclick={() => removeFromNarrative(i)}
+                  class="text-[10px] shrink-0 px-1 opacity-40 hover:opacity-100"
+                  style="color: #8b3a1a; font-family: var(--font-mono);"
+                >
+                  x
+                </button>
+              </div>
+            {/each}
+            <!-- Trailing add annotation button -->
+            <button
+              onclick={() => addAnnotation(narrativeItems_state.length)}
+              class="w-full text-center text-[10px] py-0.5 rounded opacity-30 hover:opacity-100 transition-opacity"
+              style="color: var(--text-muted); font-family: var(--font-mono);"
+            >
+              + add note
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Topic clusters -->
     {#if data.report.clusters}
@@ -1035,13 +1930,28 @@
               {cluster.summary}
             </p>
 
-            <button
-              onclick={() => toggleExpand(`cluster-${cluster.title}`)}
-              class="text-[13px] uppercase tracking-[0.2em]"
-              style="color: var(--accent); font-family: var(--font-mono);"
-            >
-              {expandedFacts.has(`cluster-${cluster.title}`) ? 'Hide' : 'Show'} facts ({cluster.fact_ids?.length ?? 0})
-            </button>
+            <div class="flex items-center gap-3">
+              <button
+                onclick={() => toggleExpand(`cluster-${cluster.title}`)}
+                class="text-[13px] uppercase tracking-[0.2em]"
+                style="color: var(--accent); font-family: var(--font-mono);"
+              >
+                {expandedFacts.has(`cluster-${cluster.title}`) ? 'Hide' : 'Show'} facts ({cluster.fact_ids?.length ?? 0})
+              </button>
+              {#if !readonly}
+                <button
+                  onclick={() => {
+                    const idx = data.report.clusters?.indexOf(cluster);
+                    if (idx != null && idx >= 0) exploreItem('cluster', String(idx));
+                  }}
+                  disabled={exploring}
+                  class="text-[11px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg disabled:opacity-50"
+                  style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+                >
+                  Explore
+                </button>
+              {/if}
+            </div>
 
             {#if expandedFacts.has(`cluster-${cluster.title}`)}
               <div class="mt-3 space-y-1">

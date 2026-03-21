@@ -7,6 +7,7 @@ import { runPhase1 } from './phase1';
 import { runPhase2 } from './phase2';
 import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
+import { linkSessionEntitiesToGlobal } from './cross-session';
 
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();
@@ -160,6 +161,14 @@ async function runResearch(sessionId: string): Promise<void> {
     } catch (err: any) {
       console.error('[deepdive] Post-processing error:', err);
       emitLog(sessionId, '\u26A0\uFE0F', `Post-processing error: ${err.message ?? 'unknown'}`);
+    }
+
+    // Cross-session entity linking
+    try {
+      await linkSessionEntitiesToGlobal(sessionId);
+    } catch (err: any) {
+      console.error('[deepdive] Cross-session linking error:', err);
+      emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
     }
 
     // Complete

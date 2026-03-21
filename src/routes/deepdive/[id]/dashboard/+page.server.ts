@@ -30,6 +30,8 @@ export const load: PageServerLoad = async ({ params }) => {
       refutesFactId: facts.refutesFactId,
       sourceId: facts.sourceId,
       tags: facts.tags,
+      noveltyScore: facts.noveltyScore,
+      sourceAgreement: facts.sourceAgreement,
     }).from(facts).where(eq(facts.sessionId, params.id)),
 
     db.select().from(entities).where(eq(entities.sessionId, params.id)),
@@ -41,6 +43,8 @@ export const load: PageServerLoad = async ({ params }) => {
       domain: sources.domain,
       category: sources.category,
       phase: sources.phase,
+      credibilityScore: sources.credibilityScore,
+      credibilityType: sources.credibilityType,
     }).from(sources).where(eq(sources.sessionId, params.id)),
 
     db.select().from(relationships).where(eq(relationships.sessionId, params.id)),
@@ -49,6 +53,27 @@ export const load: PageServerLoad = async ({ params }) => {
       .innerJoin(entities, eq(entityMentions.entityId, entities.id))
       .where(eq(entities.sessionId, params.id)),
   ]);
+
+  // Load parent/child session info
+  let parentSession: { id: string; topic: string } | null = null;
+  if (session.parentSessionId) {
+    const [p] = await db
+      .select({ id: researchSessions.id, topic: researchSessions.topic })
+      .from(researchSessions)
+      .where(eq(researchSessions.id, session.parentSessionId))
+      .limit(1);
+    if (p) parentSession = p;
+  }
+
+  const childSessions = await db
+    .select({
+      id: researchSessions.id,
+      topic: researchSessions.topic,
+      status: researchSessions.status,
+      createdAt: researchSessions.createdAt,
+    })
+    .from(researchSessions)
+    .where(eq(researchSessions.parentSessionId, params.id));
 
   const report = session.report as any;
   const entityCentrality = report?.entity_centrality ?? {};
@@ -97,5 +122,10 @@ export const load: PageServerLoad = async ({ params }) => {
       entities: allEntities.length,
       sources: allSources.length,
     },
+    parentSession,
+    childSessions: childSessions.map((c) => ({
+      ...c,
+      createdAt: c.createdAt.toISOString(),
+    })),
   };
 };
