@@ -21,17 +21,18 @@
 
   let { data } = $props();
 
-  // Use live store values once available, fall back to server-fetched biome for SSR
-  let hasLiveData = $derived(store.state.sources.heartRate);
-  let pulse = $derived(hasLiveData ? store.state.pulse : (data.initialBiome?.pulse ?? 60));
-  let temp = $derived(hasLiveData ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15));
-  let condition = $derived(hasLiveData ? store.state.weather.condition : (data.initialBiome?.weather?.condition ?? 'clear'));
+  let mounted = $state(false);
 
-  // Also seed the store immediately so biome background matches
+  // Before mount: use server-fetched biome data. After mount: use live store.
+  let pulse = $derived(mounted ? store.state.pulse : (data.initialBiome?.pulse ?? 60));
+  let temp = $derived(mounted ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15));
+  let condition = $derived(mounted ? store.state.weather.condition : (data.initialBiome?.weather?.condition ?? 'clear'));
+
   onMount(() => {
     if (data.initialBiome) {
       store.setState(data.initialBiome);
     }
+    mounted = true;
   });
 </script>
 
