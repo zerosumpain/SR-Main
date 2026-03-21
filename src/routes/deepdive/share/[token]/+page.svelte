@@ -277,8 +277,8 @@
                   <span class="text-[11px] px-2 py-0.5 rounded" style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}15;">{fact.confidence.toFixed(2)}</span>
                 </div>
               </div>
-              <button onclick={() => toggleExpand(fact.id)} class="text-[11px] shrink-0" style="color: var(--text-muted); font-family: var(--font-mono);">
-                {expandedFacts.has(fact.id) ? '-' : '+'}
+              <button onclick={() => toggleExpand(fact.id)} class="text-xl w-8 h-8 flex items-center justify-center shrink-0 rounded-lg hover:bg-black/5 transition-colors" style="color: var(--text-secondary); font-family: var(--font-mono); line-height: 1;">
+                {expandedFacts.has(fact.id) ? '\u2212' : '+'}
               </button>
             </div>
             {#if expandedFacts.has(fact.id)}
