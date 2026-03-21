@@ -154,12 +154,22 @@ export async function runPostProcessing(
       content: f.content,
     }));
 
+    // Get source categories to use as clustering hints
+    const allSources = await db
+      .select({ id: sources.id, category: sources.category })
+      .from(sources)
+      .where(eq(sources.sessionId, sessionId));
+    const sourceCategories = [...new Set(allSources.map((s) => s.category).filter(Boolean))];
+    const categoryHint = sourceCategories.length > 0
+      ? `\n\nSource categories discovered during research (use as hints for cluster themes, but don't be limited by them): ${sourceCategories.join(', ')}`
+      : '';
+
     try {
       const clusterResult = await jsonCompletion<{
         clusters: { title: string; summary: string; fact_ids: string[] }[];
       }>(
         systemPrompt,
-        `Group these facts into 4-8 coherent topic clusters aligned with the research goals. For each cluster return:\n- title: a short descriptive label\n- summary: 2-3 sentences that ONLY restate or synthesise the facts listed below. Do NOT add any information, claims, or context that isn't directly present in these facts.\n- fact_ids: list of fact IDs in this cluster\n\nFacts:\n${factsForClustering.map((f) => `[${f.id}] ${f.content}`).join('\n')}\n\nRespond with JSON: { "clusters": [...] }`,
+        `Group these facts into 4-8 coherent topic clusters aligned with the research goals. For each cluster return:\n- title: a short descriptive label\n- summary: 2-3 sentences that ONLY restate or synthesise the facts listed below. Do NOT add any information, claims, or context that isn't directly present in these facts.\n- fact_ids: list of fact IDs in this cluster${categoryHint}\n\nFacts:\n${factsForClustering.map((f) => `[${f.id}] ${f.content}`).join('\n')}\n\nRespond with JSON: { "clusters": [...] }`,
         { maxTokens: 8192 },
       );
 

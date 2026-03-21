@@ -52,6 +52,27 @@
       .slice(0, 10);
   })();
 
+  // Facts grouped by source category
+  const factsByCategory = (() => {
+    const groups = new Map<string, typeof data.facts>();
+    for (const fact of nonCounterfactualFacts) {
+      const source = sourceMap.get(fact.sourceId);
+      const cat = source?.category ?? 'Uncategorised';
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(fact);
+    }
+    // Sort categories by fact count descending, then sort facts within by confidence
+    return Array.from(groups.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([category, catFacts]) => ({
+        category,
+        facts: catFacts.sort((a, b) => b.confidence - a.confidence).slice(0, 5),
+        total: catFacts.length,
+      }));
+  })();
+
+  let overviewView = $state<'top' | 'category'>('top');
+
   // Source count per fact
   function getFactSources(factId: string): typeof data.sources {
     const fact = factMap.get(factId);
@@ -552,84 +573,144 @@
       </div>
     {/if}
 
-    <!-- Top facts -->
+    <!-- Facts section -->
     <div>
-      <p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
-        Top Facts {#if data.report.chronological_fact_ids?.length}(chronological){/if}
-      </p>
-      <div class="space-y-2">
-        {#each topFacts as fact}
-          <div
-            class="p-4 rounded-xl border"
-            style="background: var(--card-bg); border-color: var(--card-border);"
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[13px] uppercase tracking-[0.25em]" style="color: var(--text-muted); font-family: var(--font-mono);">
+          {overviewView === 'top' ? 'Top Facts' : 'Facts by Category'}
+          {#if overviewView === 'top' && data.report.chronological_fact_ids?.length}(chronological){/if}
+        </p>
+        <div class="flex gap-1">
+          <button
+            onclick={() => (overviewView = 'top')}
+            class="text-[11px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg"
+            style="font-family: var(--font-mono); background: {overviewView === 'top' ? 'var(--accent)' : 'var(--card-bg)'}; color: {overviewView === 'top' ? 'white' : 'var(--text-muted)'}; border: 1px solid {overviewView === 'top' ? 'var(--accent)' : 'var(--card-border)'};"
           >
-            <div class="flex items-start gap-3">
-              <div class="flex-1">
-                <p class="text-[15px]" style="color: var(--text-primary);">
-                  {fact.content}
-                </p>
-                <div class="flex items-center gap-2 mt-2">
-                  <span
-                    class="text-[11px] px-2 py-0.5 rounded"
-                    style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}15;"
-                  >
-                    {fact.confidence.toFixed(2)}
-                  </span>
-                  <span
-                    class="text-[10px] px-1.5 py-0.5 rounded"
-                    style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}10;"
-                  >
-                    {confidenceLabel(fact.confidence)}
-                  </span>
-                  {#if hasCounterfactual(fact.id)}
-                    <span class="text-[11px]" style="color: #8b3a1a;" title="Has counterfactual evidence">!</span>
+            Top
+          </button>
+          <button
+            onclick={() => (overviewView = 'category')}
+            class="text-[11px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg"
+            style="font-family: var(--font-mono); background: {overviewView === 'category' ? 'var(--accent)' : 'var(--card-bg)'}; color: {overviewView === 'category' ? 'white' : 'var(--text-muted)'}; border: 1px solid {overviewView === 'category' ? 'var(--accent)' : 'var(--card-border)'};"
+          >
+            By Category
+          </button>
+        </div>
+      </div>
+
+      {#if overviewView === 'top'}
+        <div class="space-y-2">
+          {#each topFacts as fact}
+            <div
+              class="p-4 rounded-xl border"
+              style="background: var(--card-bg); border-color: var(--card-border);"
+            >
+              <div class="flex items-start gap-3">
+                <div class="flex-1">
+                  <p class="text-[15px]" style="color: var(--text-primary);">
+                    {fact.content}
+                  </p>
+                  <div class="flex items-center gap-2 mt-2">
+                    <span
+                      class="text-[11px] px-2 py-0.5 rounded"
+                      style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}15;"
+                    >
+                      {fact.confidence.toFixed(2)}
+                    </span>
+                    <span
+                      class="text-[10px] px-1.5 py-0.5 rounded"
+                      style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}10;"
+                    >
+                      {confidenceLabel(fact.confidence)}
+                    </span>
+                    {#if hasCounterfactual(fact.id)}
+                      <span class="text-[11px]" style="color: #8b3a1a;" title="Has counterfactual evidence">!</span>
+                    {/if}
+                  </div>
+                </div>
+                <button
+                  onclick={() => toggleExpand(fact.id)}
+                  class="text-xl w-8 h-8 flex items-center justify-center shrink-0 rounded-lg hover:bg-black/5 transition-colors"
+                  style="color: var(--text-secondary); font-family: var(--font-mono); line-height: 1;"
+                >
+                  {expandedFacts.has(fact.id) ? '\u2212' : '+'}
+                </button>
+              </div>
+
+              {#if expandedFacts.has(fact.id)}
+                <div class="mt-3 pt-3 space-y-2" style="border-top: 1px solid var(--card-border);">
+                  {#each getFactSources(fact.id) as source}
+                    <div>
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-[11px] block"
+                        style="color: var(--accent); font-family: var(--font-mono);"
+                      >
+                        {source.title ?? source.url}
+                      </a>
+                      <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                        {source.domain}
+                      </span>
+                    </div>
+                  {/each}
+                  {#if getFactEntities(fact.id).length > 0}
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      {#each getFactEntities(fact.id) as entity}
+                        <span
+                          class="text-[10px] px-1.5 py-0.5 rounded"
+                          style="background: {typeColors[entity.type] ?? '#666'}15; color: {typeColors[entity.type] ?? '#666'}; font-family: var(--font-mono);"
+                        >
+                          {entity.name}
+                        </span>
+                      {/each}
+                    </div>
                   {/if}
                 </div>
-              </div>
-              <button
-                onclick={() => toggleExpand(fact.id)}
-                class="text-xl w-8 h-8 flex items-center justify-center shrink-0 rounded-lg hover:bg-black/5 transition-colors"
-                style="color: var(--text-secondary); font-family: var(--font-mono); line-height: 1;"
-              >
-                {expandedFacts.has(fact.id) ? '\u2212' : '+'}
-              </button>
+              {/if}
             </div>
-
-            {#if expandedFacts.has(fact.id)}
-              <div class="mt-3 pt-3 space-y-2" style="border-top: 1px solid var(--card-border);">
-                {#each getFactSources(fact.id) as source}
-                  <div>
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-[11px] block"
-                      style="color: var(--accent); font-family: var(--font-mono);"
+          {/each}
+        </div>
+      {:else}
+        <div class="space-y-4">
+          {#each factsByCategory as group}
+            <div
+              class="p-4 rounded-xl border"
+              style="background: var(--card-bg); border-color: var(--card-border);"
+            >
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-sm font-bold" style="color: var(--text-primary);">
+                  {group.category}
+                </p>
+                <span class="text-[11px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                  {group.total} facts
+                </span>
+              </div>
+              <div class="space-y-2">
+                {#each group.facts as fact}
+                  <div class="flex items-start gap-3">
+                    <span
+                      class="text-[11px] shrink-0 mt-1 px-1.5 py-0.5 rounded"
+                      style="font-family: var(--font-mono); color: {confidenceColor(fact.confidence)}; background: {confidenceColor(fact.confidence)}10;"
                     >
-                      {source.title ?? source.url}
-                    </a>
-                    <span class="text-[10px]" style="color: var(--text-muted); font-family: var(--font-mono);">
-                      {source.domain}
+                      {fact.confidence.toFixed(2)}
                     </span>
+                    <p class="text-sm" style="color: var(--text-secondary);">
+                      {fact.content}
+                    </p>
                   </div>
                 {/each}
-                {#if getFactEntities(fact.id).length > 0}
-                  <div class="flex flex-wrap gap-1 mt-1">
-                    {#each getFactEntities(fact.id) as entity}
-                      <span
-                        class="text-[10px] px-1.5 py-0.5 rounded"
-                        style="background: {typeColors[entity.type] ?? '#666'}15; color: {typeColors[entity.type] ?? '#666'}; font-family: var(--font-mono);"
-                      >
-                        {entity.name}
-                      </span>
-                    {/each}
-                  </div>
+                {#if group.total > 5}
+                  <p class="text-[11px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+                    + {group.total - 5} more
+                  </p>
                 {/if}
               </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 

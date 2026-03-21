@@ -39,6 +39,7 @@ export const load: PageServerLoad = async ({ params }) => {
       url: sources.url,
       title: sources.title,
       domain: sources.domain,
+      category: sources.category,
       phase: sources.phase,
     }).from(sources).where(eq(sources.sessionId, params.id)),
 
