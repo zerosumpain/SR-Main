@@ -62,17 +62,3 @@ export async function jsonCompletion<T>(
   return JSON.parse(text) as T;
 }
 
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const client = getOpenAIClient();
-
-  const response = await withRetry(
-    () =>
-      client.embeddings.create({
-        model: 'embedding-3',
-        input: text,
-      }),
-    'generateEmbedding',
-  );
-
-  return response.data[0].embedding;
-}

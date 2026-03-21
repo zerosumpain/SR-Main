@@ -29,7 +29,7 @@ export function getOpenAIClient(): OpenAI {
   if (!keys.zaiApiKey) throw new Error('Z.AI API key not configured');
   return new OpenAI({
     apiKey: keys.zaiApiKey,
-    baseURL: keys.zaiBaseUrl || 'https://api.z.ai/v1',
+    baseURL: keys.zaiBaseUrl || 'https://api.z.ai/api/paas/v4/',
   });
 }
 
@@ -49,7 +49,7 @@ export function getKeysStatus(): { zaiConfigured: boolean; tavilyConfigured: boo
   return {
     zaiConfigured: !!keys.zaiApiKey,
     tavilyConfigured: !!keys.tavilyApiKey,
-    zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/v1',
+    zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/paas/v4/',
     zaiModel: keys.zaiModel || 'glm-4-plus',
   };
 }

@@ -2,41 +2,39 @@ import { db } from '$lib/db';
 import { sources, facts, entities, entityMentions, relationships } from '$lib/db/schema';
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { jsonCompletion, generateEmbedding } from './ai';
+import { jsonCompletion } from './ai';
 import { extract } from './tavily';
 import { emitLog, emitStats, shouldStop } from './worker';
 import type { SessionConfig, SessionStats } from './types';
 
-async function isDuplicate(sessionId: string, content: string): Promise<boolean> {
-  try {
-    const embedding = await generateEmbedding(content);
-    const vectorStr = `[${embedding.join(',')}]`;
-
-    // Query for similar facts using cosine distance
-    const result = await db.execute(
-      sql`SELECT id FROM fact
-          WHERE session_id = ${sessionId}
-            AND embedding IS NOT NULL
-            AND embedding <=> ${vectorStr}::vector < 0.08
-          LIMIT 1`,
-    );
-
-    if (result.rows.length > 0) return true;
-
-    // Store embedding for future comparisons
-    return false;
-  } catch (err) {
-    console.error('[deepdive] Embedding dedup failed, skipping:', err);
-    return false;
-  }
+function normalise(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-async function getEmbeddingForInsert(content: string): Promise<number[] | null> {
-  try {
-    return await generateEmbedding(content);
-  } catch {
-    return null;
+function bigramSimilarity(a: string, b: string): number {
+  const na = normalise(a);
+  const nb = normalise(b);
+  if (na === nb) return 1;
+  const bigramsA = new Set<string>();
+  for (let i = 0; i < na.length - 1; i++) bigramsA.add(na.slice(i, i + 2));
+  const bigramsB = new Set<string>();
+  for (let i = 0; i < nb.length - 1; i++) bigramsB.add(nb.slice(i, i + 2));
+  let intersection = 0;
+  for (const b of bigramsA) if (bigramsB.has(b)) intersection++;
+  const union = bigramsA.size + bigramsB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+async function isDuplicate(sessionId: string, content: string): Promise<boolean> {
+  const existing = await db
+    .select({ content: facts.content })
+    .from(facts)
+    .where(eq(facts.sessionId, sessionId));
+
+  for (const row of existing) {
+    if (bigramSimilarity(content, row.content) > 0.85) return true;
   }
+  return false;
 }
 
 export async function runPhase2(
@@ -138,8 +136,6 @@ export async function runPhase2(
         const dupe = await isDuplicate(sessionId, f.content);
         if (dupe) continue;
 
-        const embedding = await getEmbeddingForInsert(f.content);
-
         await db.insert(facts).values({
           sessionId,
           sourceId: source.id,
@@ -147,7 +143,6 @@ export async function runPhase2(
           eventDate: f.event_date ? new Date(f.event_date) : null,
           confidence: Math.max(0, Math.min(1, f.confidence ?? 0.5)),
           tags: f.tags ?? [],
-          embedding,
         });
 
         newFacts++;
