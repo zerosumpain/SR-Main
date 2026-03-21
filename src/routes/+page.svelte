@@ -34,9 +34,9 @@
     </a>
 
     <nav class="flex gap-6 pt-1">
+      <a href="/projects" class="nav-link">Projects</a>
       <a href="/blog" class="nav-link">Writing</a>
       <a href="/health" class="nav-link">Health</a>
-      <a href="#about" class="nav-link">About</a>
     </nav>
   </div>
 

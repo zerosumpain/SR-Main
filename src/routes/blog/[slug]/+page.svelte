@@ -28,6 +28,7 @@
     <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
     <nav class="flex gap-6 pt-1">
       <a href="/blog" class="nav-link">All writing</a>
+      <a href="/projects" class="nav-link">Projects</a>
       <a href="/" class="nav-link">Home</a>
     </nav>
   </div>

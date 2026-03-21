@@ -12,8 +12,8 @@
   --accent-hover: #a84808;
   --bg: #ede4d4;            /* Warm cream, slightly darker */
   --bg-section: rgba(26, 16, 8, 0.04);  /* Subtle tinted sections */
-  --card-bg: rgba(26, 16, 8, 0.035);
-  --card-border: rgba(26, 16, 8, 0.12); /* Thicker, more visible */
+  --card-bg: rgba(26, 16, 8, 0.07);
+  --card-border: rgba(26, 16, 8, 0.18);
   --divider: rgba(26, 16, 8, 0.08);
 
   --font-display: 'Archivo Black', Impact, sans-serif;

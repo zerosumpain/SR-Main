@@ -108,11 +108,11 @@
   <!-- Header -->
   <div class="mb-10">
     <a
-      href="/"
+      href="/projects"
       class="text-[10px] uppercase tracking-[0.3em] mb-4 block"
       style="color: var(--text-ghost); font-family: var(--font-mono);"
     >
-      SR
+      &larr; Projects
     </a>
     <h1
       class="text-3xl font-bold mb-2"
