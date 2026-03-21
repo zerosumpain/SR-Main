@@ -296,6 +296,7 @@ export const researchSessions = pgTable('research_session', {
   timeLimitMinutes: integer('time_limit_minutes'),
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   report: jsonb('report'),
+  shareToken: text('share_token').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 });

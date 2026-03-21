@@ -3,7 +3,7 @@ import { sources, facts, entities, entityMentions, relationships } from '$lib/db
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
-import { extract } from './tavily';
+import { extract, search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop } from './worker';
 import { loadKeys } from './keys';
 import type { SessionConfig, SessionStats } from './types';
@@ -321,6 +321,112 @@ export async function runPhase2(
         }
       } catch (err) {
         console.error('[deepdive] Relationship extraction failed:', err);
+      }
+    }
+
+    // Pass 4: LinkedIn relationship mapping (Deep only, for person entities)
+    if (depth === 'deep') {
+      try {
+        // Find person entities from this source
+        const sourcePersonEntities = await db
+          .select()
+          .from(entities)
+          .where(
+            and(
+              eq(entities.sessionId, sessionId),
+              eq(entities.type, 'person'),
+            ),
+          );
+
+        // Only search for high-centrality persons we haven't searched yet (limit to 2 per source)
+        const linkedinSearched = new Set<string>();
+        for (const pe of sourcePersonEntities.slice(0, 2)) {
+          if (linkedinSearched.has(pe.name.toLowerCase())) continue;
+          linkedinSearched.add(pe.name.toLowerCase());
+
+          try {
+            const liResults = await tavilySearch(
+              `site:linkedin.com/in/ "${pe.name}"`,
+              { maxResults: 3, searchDepth: 'basic' },
+            );
+
+            if (liResults.results?.length > 0) {
+              const topResult = liResults.results[0];
+
+              // Try to extract profile content
+              let profileContent = topResult.content ?? '';
+              try {
+                const extracted = await extract([topResult.url]);
+                if (extracted.results?.[0]?.raw_content) {
+                  profileContent = extracted.results[0].raw_content.slice(0, 5000);
+                }
+              } catch {
+                // Use snippet
+              }
+
+              if (profileContent) {
+                const liResult = await jsonCompletion<{
+                  connections: { name: string; role: string; company: string; relationship: string }[];
+                }>(
+                  systemPrompt,
+                  `Extract professional connections and relationships from this LinkedIn profile content for "${pe.name}". Return:\n- name: connected person's name\n- role: their job title\n- company: their company\n- relationship: nature of connection (e.g. "colleague at X", "co-founder", "reports to")\n\nProfile content:\n${profileContent.slice(0, 4000)}\n\nRespond with JSON: { "connections": [...] }. Return empty array if no clear connections found.`,
+                  { maxTokens: 4096 },
+                );
+
+                for (const conn of liResult.connections ?? []) {
+                  if (!conn.name) continue;
+
+                  // Create or find the connected entity
+                  const connNorm = conn.name.toLowerCase().trim();
+                  const [existing] = await db
+                    .select()
+                    .from(entities)
+                    .where(
+                      and(
+                        eq(entities.sessionId, sessionId),
+                        sql`lower(trim(${entities.name})) = ${connNorm}`,
+                      ),
+                    )
+                    .limit(1);
+
+                  let connEntityId: string;
+                  if (existing) {
+                    connEntityId = existing.id;
+                  } else {
+                    const [created] = await db
+                      .insert(entities)
+                      .values({
+                        sessionId,
+                        name: conn.name,
+                        type: 'person',
+                        description: `${conn.role} at ${conn.company}`,
+                      })
+                      .returning();
+                    connEntityId = created.id;
+                    stats.entitiesIdentified++;
+                  }
+
+                  // Create relationship
+                  await db.insert(relationships).values({
+                    sessionId,
+                    fromEntityId: pe.id,
+                    toEntityId: connEntityId,
+                    relationshipType: conn.relationship || 'connected_to',
+                    sentiment: 'neutral',
+                    strength: 0.5,
+                    sourceId: source.id,
+                  });
+                }
+
+                emitLog(sessionId, '\u{1F517}', `LinkedIn connections for: ${pe.name}`);
+              }
+            }
+          } catch (err) {
+            console.error('[deepdive] LinkedIn lookup failed for', pe.name, err);
+          }
+        }
+      } catch (err) {
+        console.error('[deepdive] LinkedIn pass failed:', err);
       }
     }
 

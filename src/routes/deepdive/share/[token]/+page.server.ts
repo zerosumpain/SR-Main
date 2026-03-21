@@ -8,18 +8,18 @@ import {
   relationships,
   sources,
 } from '$lib/db/schema';
-import { eq, and, sql, desc } from 'drizzle-orm';
-import { redirect } from '@sveltejs/kit';
+import { eq, sql } from 'drizzle-orm';
+import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params }) => {
   const [session] = await db
     .select()
     .from(researchSessions)
-    .where(eq(researchSessions.id, params.id));
+    .where(eq(researchSessions.shareToken, params.token));
 
-  if (!session) throw redirect(302, '/deepdive');
+  if (!session) throw error(404, 'Not found');
 
-  // Load all data in parallel
+  // Load all data in parallel (same as dashboard)
   const [allFacts, allEntities, allSources, allRelationships, allMentions] = await Promise.all([
     db.select({
       id: facts.id,
@@ -30,9 +30,9 @@ export const load: PageServerLoad = async ({ params }) => {
       refutesFactId: facts.refutesFactId,
       sourceId: facts.sourceId,
       tags: facts.tags,
-    }).from(facts).where(eq(facts.sessionId, params.id)),
+    }).from(facts).where(eq(facts.sessionId, session.id)),
 
-    db.select().from(entities).where(eq(entities.sessionId, params.id)),
+    db.select().from(entities).where(eq(entities.sessionId, session.id)),
 
     db.select({
       id: sources.id,
@@ -40,31 +40,29 @@ export const load: PageServerLoad = async ({ params }) => {
       title: sources.title,
       domain: sources.domain,
       phase: sources.phase,
-    }).from(sources).where(eq(sources.sessionId, params.id)),
+    }).from(sources).where(eq(sources.sessionId, session.id)),
 
-    db.select().from(relationships).where(eq(relationships.sessionId, params.id)),
+    db.select().from(relationships).where(eq(relationships.sessionId, session.id)),
 
     db.select().from(entityMentions)
       .innerJoin(entities, eq(entityMentions.entityId, entities.id))
-      .where(eq(entities.sessionId, params.id)),
+      .where(eq(entities.sessionId, session.id)),
   ]);
 
   const report = session.report as any;
   const entityCentrality = report?.entity_centrality ?? {};
 
-  // Compute elapsed time
   const elapsedMs = session.completedAt
     ? new Date(session.completedAt).getTime() - new Date(session.createdAt).getTime()
     : 0;
 
-  // Serialize dates
   const serializedFacts = allFacts.map((f) => ({
     ...f,
     eventDate: f.eventDate?.toISOString() ?? null,
   }));
 
   return {
-    readonly: false,
+    readonly: true,
     session: {
       id: session.id,
       topic: session.topic,

@@ -11,7 +11,7 @@ import type { ResearchSession } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { chatCompletion, jsonCompletion } from './ai';
 import { emitLog } from './worker';
-import type { ResearchReport } from './types';
+import type { ResearchReport, IdentityCluster } from './types';
 
 export async function runPostProcessing(
   sessionId: string,
@@ -101,6 +101,50 @@ export async function runPostProcessing(
     facts: factIds,
   }));
 
+  // 3.5. Identity disambiguation
+  emitLog(sessionId, '\u2139\uFE0F', 'Checking for identity disambiguation...');
+
+  const personEntities = allEntities.filter((e) => e.type === 'person');
+  if (personEntities.length > 0) {
+    try {
+      // Group facts by person entity
+      const personFacts: { name: string; entityId: string; facts: string[] }[] = [];
+      for (const pe of personEntities.slice(0, 20)) {
+        const mentionRows = await db
+          .select({ factId: entityMentions.factId })
+          .from(entityMentions)
+          .where(eq(entityMentions.entityId, pe.id));
+        const factContents = mentionRows
+          .map((m) => allFacts.find((f) => f.id === m.factId)?.content)
+          .filter(Boolean) as string[];
+        if (factContents.length > 0) {
+          personFacts.push({ name: pe.name, entityId: pe.id, facts: factContents });
+        }
+      }
+
+      if (personFacts.length > 0) {
+        const disambigResult = await jsonCompletion<{
+          clusters: { name: string; identifier: string; fact_indices: number[] }[];
+        }>(
+          systemPrompt,
+          `Given the following person entities and their associated facts, identify if any person name refers to MULTIPLE distinct real-world individuals. Only report cases where you are confident there are genuinely different people sharing the same name.\n\nFor each distinct identity found, return:\n- name: the person's name\n- identifier: a short distinguishing description (e.g. "CEO of X" vs "footballer")\n- fact_indices: which fact numbers belong to this identity\n\nIf all facts about a name refer to the same person, do NOT include that name.\n\nPeople and their facts:\n${personFacts.map((pf, i) => `\n[${pf.name}]\n${pf.facts.map((f, j) => `  ${j + 1}. ${f}`).join('\n')}`).join('\n')}\n\nRespond with JSON: { "clusters": [...] }. Return empty array if no disambiguation needed.`,
+          { maxTokens: 4096 },
+        );
+
+        if (disambigResult.clusters?.length > 0) {
+          report.identity_clusters = disambigResult.clusters.map((c) => ({
+            name: c.name,
+            identifier: c.identifier,
+            fact_ids: [], // We store the cluster info; fact_ids could be populated if needed
+          }));
+          emitLog(sessionId, '\u2139\uFE0F', `Found ${disambigResult.clusters.length} disambiguated identities`);
+        }
+      }
+    } catch (err) {
+      console.error('[deepdive] Identity disambiguation failed:', err);
+    }
+  }
+
   // 4. Topic clustering
   emitLog(sessionId, '\u2139\uFE0F', 'Clustering topics...');
 
@@ -158,7 +202,27 @@ export async function runPostProcessing(
     report.executive_summary = 'Executive summary generation failed.';
   }
 
-  // 6. Store report and complete
+  // 6. Chronological fact ordering
+  emitLog(sessionId, '\u2139\uFE0F', 'Ordering facts chronologically...');
+
+  const topFactsForOrdering = factScores.slice(0, 20);
+  if (topFactsForOrdering.length > 0) {
+    try {
+      const chronoResult = await jsonCompletion<{ ordered_fact_ids: string[] }>(
+        systemPrompt,
+        `Order these facts chronologically, from earliest to most recent. For facts without explicit dates, infer the likely chronological position from context (e.g. birth/origin before career, early career before later career).\n\nFacts:\n${topFactsForOrdering.map((f) => `[${f.id}] ${f.content}`).join('\n')}\n\nRespond with JSON: { "ordered_fact_ids": ["id1", "id2", ...] }`,
+        { maxTokens: 2048 },
+      );
+
+      if (chronoResult.ordered_fact_ids?.length > 0) {
+        report.chronological_fact_ids = chronoResult.ordered_fact_ids;
+      }
+    } catch (err) {
+      console.error('[deepdive] Chronological ordering failed:', err);
+    }
+  }
+
+  // 7. Store report and complete
   await db
     .update(researchSessions)
     .set({ report })

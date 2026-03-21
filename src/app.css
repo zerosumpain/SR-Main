@@ -5,8 +5,8 @@
   /* Warm brutalist palette — high contrast */
   --text-primary: #1a1008;
   --text-secondary: #3d2e1a;
-  --text-muted: rgba(26, 16, 8, 0.55);
-  --text-ghost: rgba(26, 16, 8, 0.35);
+  --text-muted: rgba(26, 16, 8, 0.65);
+  --text-ghost: rgba(26, 16, 8, 0.45);
 
   --accent: #c4570a;        /* Burnt orange — punchy, not regal */
   --accent-hover: #a84808;

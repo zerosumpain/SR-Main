@@ -62,3 +62,44 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
   return json({ error: 'Unknown action' }, { status: 400 });
 };
+
+export const DELETE: RequestHandler = async ({ params }) => {
+  const [session] = await db
+    .select({ id: researchSessions.id })
+    .from(researchSessions)
+    .where(eq(researchSessions.id, params.id));
+
+  if (!session) {
+    return json({ error: 'Session not found' }, { status: 404 });
+  }
+
+  // Cascade delete in correct order
+  // 1. entity_mentions (references entities and facts)
+  const sessionEntities = await db
+    .select({ id: entities.id })
+    .from(entities)
+    .where(eq(entities.sessionId, params.id));
+
+  if (sessionEntities.length > 0) {
+    for (const e of sessionEntities) {
+      await db.delete(entityMentions).where(eq(entityMentions.entityId, e.id));
+    }
+  }
+
+  // 2. relationships
+  await db.delete(relationships).where(eq(relationships.sessionId, params.id));
+
+  // 3. entities
+  await db.delete(entities).where(eq(entities.sessionId, params.id));
+
+  // 4. facts
+  await db.delete(facts).where(eq(facts.sessionId, params.id));
+
+  // 5. sources
+  await db.delete(sources).where(eq(sources.sessionId, params.id));
+
+  // 6. session
+  await db.delete(researchSessions).where(eq(researchSessions.id, params.id));
+
+  return json({ message: 'Deleted' });
+};

@@ -44,6 +44,12 @@ export interface LogEvent {
 
 export type TimeLimitOption = 15 | 30 | 60 | 120 | null;
 
+export interface IdentityCluster {
+  name: string;
+  identifier: string;
+  fact_ids: string[];
+}
+
 export interface ResearchReport {
   ranked_facts: string[];
   timeline: { date: string; facts: string[] }[];
@@ -54,6 +60,8 @@ export interface ResearchReport {
   }[];
   executive_summary: string;
   entity_centrality: Record<string, number>;
+  identity_clusters?: IdentityCluster[];
+  chronological_fact_ids?: string[];
 }
 
 export interface RedTeamReport {
