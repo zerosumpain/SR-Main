@@ -70,11 +70,10 @@
       <!-- Right: explainer with accent strip -->
       <div class="accent-strip max-w-[200px]">
         <p class="text-base font-medium leading-relaxed" style="color: var(--text-primary);">
-          This is me, from about 15 minutes ago.
+          I'm John Kelly and these are my vitals, right now.
         </p>
         <p class="text-sm leading-relaxed mt-2" style="color: var(--text-secondary);">
-          The background is my heart rate. Below is today's steps, distance, and the weather
-          wherever I am, right now.
+          The pulsing background is my heart rate. You can toggle it off if it's distracting (bottom right). Weather is what I am experiencing where I am right now. This site is a place to blog, experiment, and share.
         </p>
       </div>
     </div>
