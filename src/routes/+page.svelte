@@ -153,5 +153,6 @@
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
     <a href="/health" class="nav-link">Health</a>
+    <a href="/admin" class="nav-link">Admin</a>
   </div>
 </footer>

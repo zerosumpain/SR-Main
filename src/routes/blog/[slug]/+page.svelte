@@ -58,6 +58,7 @@
 
 <footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--card-border);">
   <a href="/" class="nav-link">← Home</a>
+  <a href="/admin" class="nav-link">Admin</a>
 </footer>
 
 <style>

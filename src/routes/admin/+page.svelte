@@ -292,6 +292,38 @@
     </a>
   </div>
 
+  <!-- Deep Dive link -->
+  <div class="mt-4">
+    <a
+      href="/admin/deepdive?token={adminToken}"
+      class="block p-5 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div class="flex items-center justify-between">
+        <div>
+          <p
+            class="text-[10px] uppercase tracking-[0.25em] mb-1"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            Deep Dive
+          </p>
+          <p
+            class="text-xs"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            API keys for research agent (Z.AI, Tavily)
+          </p>
+        </div>
+        <span
+          class="text-[10px] uppercase tracking-[0.2em]"
+          style="color: var(--text-ghost); font-family: var(--font-mono);"
+        >
+          &rarr;
+        </span>
+      </div>
+    </a>
+  </div>
+
   <!-- Sync Now button -->
   <div class="mt-8 flex justify-end">
     <button

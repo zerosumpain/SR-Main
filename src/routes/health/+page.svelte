@@ -139,6 +139,7 @@
     {/if}
   </div>
   <a href="/" class="nav-link">Home</a>
+  <a href="/admin" class="nav-link">Admin</a>
 </footer>
 
 <!-- Slide-over Panel -->

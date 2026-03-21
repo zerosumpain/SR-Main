@@ -8,8 +8,24 @@ import {
   doublePrecision,
   boolean,
   uniqueIndex,
+  jsonb,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+
+// pgvector custom type for embedding columns
+const vector = customType<{ data: number[]; driverParam: string }>({
+  dataType() {
+    return 'vector(1536)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: unknown): number[] {
+    if (typeof value === 'string') return JSON.parse(value);
+    return value as number[];
+  },
+});
 
 export const blogPosts = pgTable('blog_posts', {
   id: serial('id').primaryKey(),
@@ -267,3 +283,87 @@ export const biomeConfig = pgTable('biome_config', {
   settings: text('settings').notNull(), // JSON blob
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+// ==========================================
+// Deep Dive — Research Agent
+// ==========================================
+
+export const researchSessions = pgTable('research_session', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  topic: text('topic').notNull(),
+  goals: jsonb('goals').notNull().default(sql`'[]'::jsonb`),
+  status: text('status').notNull().default('draft'),
+  timeLimitMinutes: integer('time_limit_minutes'),
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  report: jsonb('report'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export type ResearchSession = typeof researchSessions.$inferSelect;
+export type NewResearchSession = typeof researchSessions.$inferInsert;
+
+export const sources = pgTable('source', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  url: text('url').notNull(),
+  title: text('title'),
+  snippet: text('snippet'),
+  domain: text('domain'),
+  category: text('category'),
+  phase: integer('phase').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Source = typeof sources.$inferSelect;
+
+export const facts = pgTable('fact', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  sourceId: text('source_id').notNull().references(() => sources.id),
+  content: text('content').notNull(),
+  eventDate: timestamp('event_date', { withTimezone: true }),
+  discoveredAt: timestamp('discovered_at', { withTimezone: true }).notNull().defaultNow(),
+  confidence: doublePrecision('confidence').notNull().default(0.5),
+  isCounterfactual: boolean('is_counterfactual').notNull().default(false),
+  refutesFactId: text('refutes_fact_id').references((): any => facts.id),
+  tags: jsonb('tags').notNull().default(sql`'[]'::jsonb`),
+  embedding: vector('embedding'),
+});
+
+export type Fact = typeof facts.$inferSelect;
+
+export const entities = pgTable('entity', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  description: text('description'),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Entity = typeof entities.$inferSelect;
+
+export const entityMentions = pgTable('entity_mention', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  entityId: text('entity_id').notNull().references(() => entities.id),
+  factId: text('fact_id').notNull().references(() => facts.id),
+  context: text('context'),
+});
+
+export type EntityMention = typeof entityMentions.$inferSelect;
+
+export const relationships = pgTable('relationship', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  fromEntityId: text('from_entity_id').references(() => entities.id),
+  toEntityId: text('to_entity_id').references(() => entities.id),
+  fromFactId: text('from_fact_id').references(() => facts.id),
+  toFactId: text('to_fact_id').references(() => facts.id),
+  relationshipType: text('relationship_type').notNull(),
+  sentiment: text('sentiment').notNull(),
+  strength: doublePrecision('strength').notNull().default(0.5),
+  sourceId: text('source_id').references(() => sources.id),
+});
+
+export type Relationship = typeof relationships.$inferSelect;
