@@ -88,7 +88,10 @@ export function createBiomeStore() {
   function startPolling() {
     fetchSettings();
     fetchState();
-    pollInterval = setInterval(fetchState, POLL_INTERVAL);
+    pollInterval = setInterval(() => {
+      fetchState();
+      fetchSettings();
+    }, POLL_INTERVAL);
   }
 
   function stopPolling() {

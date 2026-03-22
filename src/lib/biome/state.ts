@@ -79,3 +79,34 @@ export const LERP_DURATION = 5000;
 export const MAX_PARTICLES = 2000;
 export const MAX_CONNECTION_SEGMENTS = 500;
 export const CONNECTION_MAX_DIST = 1.5;
+
+// Vessel spline paths for blood flow simulation
+export const VESSEL_PATHS: number[][][] = [
+  // Main trunk — straight through center
+  [[-10, 0], [-5, 0], [0, 0], [5, 0.3], [10, 0]],
+  // Upper branch — shared trunk then forks up at center
+  [[-10, 0], [-5, 0], [0, 0], [3, 3], [7, 5.5], [10, 6]],
+  // Lower branch — shared trunk then forks down at center
+  [[-10, 0], [-5, 0], [0, 0], [3, -3], [7, -5.5], [10, -6]],
+];
+
+// Evaluate a point along a vessel path at t (0..1)
+export function evalVesselPath(pathIdx: number, t: number): { x: number; y: number } {
+  const idx = ((pathIdx | 0) % 3 + 3) % 3;
+  const path = VESSEL_PATHS[idx];
+  if (!path) return { x: 0, y: 0 };
+  const len = path.length;
+  if (len < 2) return { x: 0, y: 0 };
+  const ct = Math.max(0, Math.min(1, isNaN(t) ? 0 : t));
+  const segs = len - 1;
+  const raw = ct * segs;
+  const seg = Math.max(0, Math.min(Math.floor(raw), segs - 1));
+  const frac = raw - seg;
+  const p0 = path[seg];
+  const p1 = path[seg + 1];
+  if (!p0 || !p1) return { x: 0, y: 0 };
+  return {
+    x: (p0[0] ?? 0) + ((p1[0] ?? 0) - (p0[0] ?? 0)) * frac,
+    y: (p0[1] ?? 0) + ((p1[1] ?? 0) - (p0[1] ?? 0)) * frac,
+  };
+}

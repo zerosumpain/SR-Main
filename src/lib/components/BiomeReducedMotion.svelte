@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BiomeState, DayPhase } from '$lib/biome/state';
 
-  let { biomeState }: { biomeState: BiomeState } = $props();
+  let { biomeState, position = 'fixed' }: { biomeState: BiomeState; position?: 'fixed' | 'absolute' } = $props();
 
   const DAY_PHASE_HUE: Record<DayPhase, number> = {
     night: 30, dawn: 35, day: 38, dusk: 25,
@@ -12,6 +12,6 @@
 </script>
 
 <div
-  class="fixed inset-0 z-0"
-  style="background: radial-gradient(ellipse at 50% 100%, hsl({hue}, {saturation}%, 88%) 0%, hsl({hue}, {saturation}%, 82%) 100%)"
+  class="inset-0 z-0"
+  style="position: {position}; background: radial-gradient(ellipse at 50% 100%, hsl({hue}, {saturation}%, 88%) 0%, hsl({hue}, {saturation}%, 82%) 100%)"
 ></div>

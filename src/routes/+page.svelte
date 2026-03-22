@@ -11,13 +11,15 @@
 </svelte:head>
 
 <script lang="ts">
-  import { getContext } from 'svelte';
+  import { getContext, onMount } from 'svelte';
   import ScrollReveal from '$lib/components/ScrollReveal.svelte';
+  import BiomeBackground from '$lib/components/BiomeBackground.svelte';
+  import BiomeToggle from '$lib/components/BiomeToggle.svelte';
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
-  import { onMount } from 'svelte';
   const store = getContext<BiomeStore>('biome');
+  let biomeVisible = $state(true);
 
   let { data } = $props();
 
@@ -33,13 +35,25 @@
       store.setState(data.initialBiome);
     }
     mounted = true;
+
+    const stored = localStorage.getItem('biome-visible');
+    if (stored === 'false') biomeVisible = false;
+
+    function handleBiomeToggle(e: Event) {
+      biomeVisible = (e as CustomEvent<{ visible: boolean }>).detail.visible;
+    }
+    window.addEventListener('biome-toggle', handleBiomeToggle);
+    return () => window.removeEventListener('biome-toggle', handleBiomeToggle);
   });
 </script>
 
 <!-- HERO — full viewport, heavy type -->
-<section class="min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8">
+<section class="relative min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden">
+  {#if biomeVisible}
+    <BiomeBackground {store} position="absolute" transparent />
+  {/if}
   <!-- Top bar -->
-  <div class="flex justify-between items-start">
+  <div class="relative z-10 flex justify-between items-start">
     <a href="/" class="display text-[28px] sm:text-[32px] leading-none no-underline" style="color: var(--text-primary);">
       STRANGE<br>RAMBLINGS
     </a>
@@ -52,7 +66,7 @@
   </div>
 
   <!-- Center — stats + explainer side by side -->
-  <div class="flex-1 flex items-center">
+  <div class="relative z-10 flex-1 flex items-center">
     <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
       <!-- Left: vitals -->
       <div class="text-center md:text-right">
@@ -80,7 +94,7 @@
   </div>
 
   <!-- Bottom — scroll prompt -->
-  <div class="text-center">
+  <div class="relative z-10 text-center">
     <p class="label" style="opacity: 0.4;">SCROLL</p>
   </div>
 </section>
@@ -166,3 +180,5 @@
     <a href="/admin" class="nav-link">Admin</a>
   </div>
 </footer>
+
+<BiomeToggle />

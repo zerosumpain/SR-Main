@@ -8,16 +8,19 @@
   import type { BiomeSettings } from '$lib/biome/settings';
   import { BIOME_SETTINGS_DEFAULTS } from '$lib/biome/settings';
 
-  let { biomeState, isDark = true, settings }: {
+  let { biomeState, isDark = true, settings, noSky = false }: {
     biomeState: BiomeState;
     isDark?: boolean;
     settings?: BiomeSettings;
+    noSky?: boolean;
   } = $props();
 
   let s = $derived(settings || BIOME_SETTINGS_DEFAULTS);
 </script>
 
-<SkyPlane {biomeState} {isDark} />
+{#if !noSky}
+  <SkyPlane {biomeState} {isDark} />
+{/if}
 {#if s.fogEnabled}
   <FogLayer {biomeState} {isDark} fogIntensity={s.fogIntensity} dreamMode={s.dreamMode} />
 {/if}

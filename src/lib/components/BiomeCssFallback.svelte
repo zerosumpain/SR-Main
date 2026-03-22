@@ -3,7 +3,7 @@
   import type { BiomeState, DayPhase } from '$lib/biome/state';
   import { cardiacPulse, windToVector } from '$lib/biome/state';
 
-  let { biomeState }: { biomeState: BiomeState } = $props();
+  let { biomeState, position = 'fixed' }: { biomeState: BiomeState; position?: 'fixed' | 'absolute' } = $props();
 
   let canvas: HTMLCanvasElement;
   const PARTICLE_COUNT = 120;
@@ -24,18 +24,26 @@
 
     const dpr = Math.min(window.devicePixelRatio, 2);
 
+    function getSize() {
+      const parent = canvas.parentElement;
+      if (parent) return { w: parent.clientWidth, h: parent.clientHeight };
+      return { w: window.innerWidth, h: window.innerHeight };
+    }
+
     function resize() {
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      ctx!.scale(dpr, dpr);
+      const { w, h } = getSize();
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     resize();
     window.addEventListener('resize', resize);
 
     // Init particles
+    const { w: initW, h: initH } = getSize();
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      px[i] = Math.random() * window.innerWidth;
-      py[i] = Math.random() * window.innerHeight;
+      px[i] = Math.random() * initW;
+      py[i] = Math.random() * initH;
       vx[i] = (Math.random() - 0.5) * 0.5;
       vy[i] = (Math.random() - 0.5) * 0.5;
     }
@@ -45,8 +53,7 @@
 
     function draw() {
       elapsed += 0.016;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const { w, h } = getSize();
 
       // Background gradient
       const hue = DAY_PHASE_HUE[biomeState.dayPhase];
@@ -97,4 +104,4 @@
   });
 </script>
 
-<canvas bind:this={canvas} class="fixed inset-0 z-0 w-full h-full" style="pointer-events: none;"></canvas>
+<canvas bind:this={canvas} class="inset-0 z-0 w-full h-full" style="position: {position}; pointer-events: none;"></canvas>
