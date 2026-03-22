@@ -330,8 +330,7 @@
                             {:else}
                               <span class="exec-icon exec-err">err</span>
                             {/if}
-                            <span class="exec-lang">{exec.lang}</span>
-                            <span class="exec-label">{exec.running ? 'Running...' : `Executed (${exec.code.split('\n').length} lines)`}</span>
+                            <span class="exec-label">{exec.running ? `Running ${exec.lang}...` : summariseCode(exec.lang, exec.code)}</span>
                           </summary>
                           <pre class="exec-code"><code>{exec.code}</code></pre>
                           {#if exec.output !== null}
@@ -450,10 +449,22 @@
     // Wrap consecutive <li> in <ul> so list spacing is controlled
     result = result.replace(/((?:<li>.*?<\/li>\n?)+)/g, '<ul>$1</ul>');
 
-    return result
+    // Protect block-level HTML (details, pre, ul) from paragraph wrapping
+    const blocks: string[] = [];
+    result = result.replace(/<(details|pre|ul|div)[\s\S]*?<\/\1>/g, (match) => {
+      blocks.push(match);
+      return `\x00BLOCK${blocks.length - 1}\x00`;
+    });
+
+    result = result
       .replace(/\n\n/g, '</p><p>')
       .replace(/\n/g, '<br>')
       .replace(/^(.+)/, '<p>$1</p>');
+
+    // Restore protected blocks
+    result = result.replace(/\x00BLOCK(\d+)\x00/g, (_, i) => blocks[parseInt(i)]);
+
+    return result;
   }
 </script>
 
