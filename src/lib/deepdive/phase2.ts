@@ -3,7 +3,8 @@ import { sources, facts, entities, entityMentions, relationships } from '$lib/db
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
-import { extract, search as tavilySearch } from './tavily';
+import { extractContent } from './extract-content';
+import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { loadKeys } from './keys';
 import type { SessionConfig, SessionStats } from './types';
@@ -124,16 +125,13 @@ export async function runPhase2(
 
     emitLog(sessionId, '\u{1F50D}', `Analysing: ${source.title?.slice(0, 50) ?? source.url}`);
 
-    // Fetch content — skip Tavily extract if snippet is already rich
+    // Fetch content — skip extraction if snippet is already rich
     let content = source.snippet ?? '';
     if (content.length < 500) {
-      try {
-        const extracted = await extract([source.url]);
-        if (extracted.results?.[0]?.raw_content) {
-          content = extracted.results[0].raw_content.slice(0, 10000);
-        }
-      } catch {
-        // Fall back to snippet
+      const result = await extractContent(source.url, content);
+      content = result.content.slice(0, 10000);
+      if (result.method !== 'snippet') {
+        emitLog(sessionId, '\u{1F4E5}', `Extracted via ${result.method}: ${source.title?.slice(0, 40) ?? source.url}`);
       }
     }
 
@@ -388,15 +386,8 @@ export async function runPhase2(
               const topResult = liResults.results[0];
 
               // Try to extract profile content
-              let profileContent = topResult.content ?? '';
-              try {
-                const extracted = await extract([topResult.url]);
-                if (extracted.results?.[0]?.raw_content) {
-                  profileContent = extracted.results[0].raw_content.slice(0, 5000);
-                }
-              } catch {
-                // Use snippet
-              }
+              const profileResult = await extractContent(topResult.url, topResult.content ?? '');
+              let profileContent = profileResult.content.slice(0, 5000);
 
               if (profileContent) {
                 const liResult = await jsonCompletion<{

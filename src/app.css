@@ -16,6 +16,15 @@
   --card-border: rgba(26, 16, 8, 0.18);
   --divider: rgba(26, 16, 8, 0.08);
 
+  /* Code blocks — inverted contrast for readability */
+  --code-bg: #1a1008;
+  --code-text: #ede4d4;
+  --code-border: rgba(26, 16, 8, 0.3);
+
+  /* Drawer / panel surfaces */
+  --surface-elevated: #e8dece;
+  --surface-overlay: rgba(26, 16, 8, 0.05);
+
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;

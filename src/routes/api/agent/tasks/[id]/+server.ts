@@ -62,7 +62,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     id: 0,
     actionId: null,
     taskId: updated.id,
-    eventType: body.status === 'completed' ? 'task_created' : 'step_started',
+    eventType: body.status === 'completed' ? 'tool_completed' : 'step_started',
     summary: `Task "${updated.title}" → ${updated.status}`,
     metadata: { status: updated.status, currentStep: updated.currentStep },
     createdAt: new Date(),

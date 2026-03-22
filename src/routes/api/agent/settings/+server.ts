@@ -1,9 +1,11 @@
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { agentSettings } from '$lib/db/schema';
+import { validateAgentKey, unauthorized } from '$lib/agent/auth';
 import { eq } from 'drizzle-orm';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, request }) => {
+  if (!validateAgentKey(request)) return unauthorized();
   const key = url.searchParams.get('key');
 
   if (key) {
@@ -20,6 +22,7 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 export const PUT: RequestHandler = async ({ request }) => {
+  if (!validateAgentKey(request)) return unauthorized();
   const { key, value } = await request.json();
 
   if (!key) {

@@ -12,11 +12,10 @@
 
   async function savePrompt() {
     promptSaving = true;
-    await fetch('/api/agent/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'system_prompt', value: systemPrompt }),
-    });
+    const form = new FormData();
+    form.set('key', 'system_prompt');
+    form.set('value', systemPrompt);
+    await fetch('?/save', { method: 'POST', body: form });
     promptSaving = false;
     promptSaved = true;
     setTimeout(() => promptSaved = false, 2000);
@@ -29,11 +28,10 @@
 
   async function saveMemory() {
     memorySaving = true;
-    await fetch('/api/agent/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'memory', value: memory }),
-    });
+    const form = new FormData();
+    form.set('key', 'memory');
+    form.set('value', memory);
+    await fetch('?/save', { method: 'POST', body: form });
     memorySaving = false;
     memorySaved = true;
     setTimeout(() => memorySaved = false, 2000);

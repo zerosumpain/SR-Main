@@ -803,7 +803,6 @@
   }
   .exec-block.exec-running { border-color: var(--accent); }
   .exec-block.exec-fail { border-left: 3px solid #c0392b; }
-  .exec-details, .exec-output-details { }
   .exec-summary {
     display: flex;
     align-items: center;
@@ -844,12 +843,12 @@
   .exec-code {
     margin: 0;
     padding: 14px 16px;
-    background: #1a1008;
+    background: var(--code-bg);
     border-top: 1px solid var(--card-border);
     font-family: var(--font-mono);
     font-size: 13px;
     line-height: 1.5;
-    color: #ede4d4;
+    color: var(--code-text);
     overflow-x: auto;
     white-space: pre;
     tab-size: 4;
@@ -873,8 +872,8 @@
   .exec-output {
     margin: 0;
     padding: 14px 16px;
-    background: #1a1008;
-    color: #ede4d4;
+    background: var(--code-bg);
+    color: var(--code-text);
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
@@ -975,7 +974,7 @@
   }
   .message-content :global(.copy-btn) {
     background: none;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--code-border);
     color: var(--text-ghost);
     font-family: var(--font-mono);
     font-size: 10px;
@@ -991,7 +990,7 @@
     border-color: var(--accent);
   }
   .message-content :global(.code-block) {
-    background: #1a1008;
+    background: var(--code-bg);
     border-top: 1px solid var(--card-border);
     padding: 14px 16px;
     overflow-x: auto;
@@ -1003,7 +1002,7 @@
   }
   .message-content :global(.code-block code) {
     font-family: var(--font-mono);
-    color: #ede4d4;
+    color: var(--code-text);
     white-space: pre;
   }
   .message-content :global(.inline-code) {
@@ -1090,7 +1089,7 @@
   .input-wrapper {
     max-width: 900px; margin: 0 auto; display: flex;
     align-items: flex-end; gap: 8px;
-    background: white; border: 2px solid var(--card-border);
+    background: var(--bg); border: 2px solid var(--card-border);
     padding: 6px 10px; transition: border-color 0.15s;
   }
   .input-wrapper:focus-within { border-color: var(--accent); }
@@ -1179,7 +1178,7 @@
     align-items: center;
     gap: 4px;
     padding: 10px 8px;
-    background: rgba(26, 16, 8, 0.9);
+    background: var(--surface-elevated);
     border: 2px solid var(--card-border);
     border-right: none;
     border-radius: 6px 0 0 6px;
@@ -1190,7 +1189,7 @@
   }
   .drawer-toggle:hover, .drawer-toggle.drawer-active {
     color: var(--accent);
-    background: rgba(26, 16, 8, 0.95);
+    background: var(--card-bg);
   }
   .drawer-toggle.drawer-coding {
     border-color: var(--accent);
@@ -1219,7 +1218,7 @@
     right: 0;
     width: 0;
     height: 100vh;
-    background: rgba(10, 8, 6, 0.97);
+    background: var(--surface-elevated);
     border-left: 2px solid var(--card-border);
     z-index: 25;
     display: flex;
@@ -1263,14 +1262,14 @@
   /* Artifact items in drawer */
   .artifact-item {
     margin-bottom: 4px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--surface-overlay);
     border: 1px solid transparent;
     border-radius: 4px;
     transition: border-color 0.15s;
   }
   .artifact-item.artifact-expanded {
     border-color: var(--card-border);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-overlay);
   }
   .artifact-item.artifact-running {
     border-left: 2px solid var(--accent);
@@ -1291,7 +1290,7 @@
     color: inherit;
   }
   .artifact-header-btn:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-overlay);
   }
   .artifact-chevron {
     color: var(--text-ghost);
@@ -1360,12 +1359,12 @@
   .artifact-code {
     margin: 0;
     padding: 10px 12px;
-    background: #1a1008;
+    background: var(--code-bg);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.6;
-    color: #ede4d4;
+    color: var(--code-text);
     overflow-x: auto;
     overflow-y: auto;
     white-space: pre-wrap;
@@ -1391,9 +1390,9 @@
   .artifact-output {
     margin: 0;
     padding: 10px 12px;
-    background: #1a1008;
-    border: 1px solid var(--card-border);
-    color: #ede4d4;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    color: var(--code-text);
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.4;
