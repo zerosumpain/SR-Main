@@ -170,8 +170,6 @@
             };
             artifacts = [...artifacts, artifact];
             executions = [...executions, { lang: data.lang, code: data.code, output: null, running: true }];
-            drawerOpen = true;
-            expandedArtifact = artifact.id;
             await tick();
             scrollToBottom();
           } else if (data.type === 'exec_result') {
@@ -433,9 +431,13 @@
 
   <!-- Code Drawer -->
   {#if artifacts.length > 0}
-    <button class="drawer-toggle" class:drawer-active={drawerOpen} onclick={() => drawerOpen = !drawerOpen} aria-label="Toggle code drawer">
+    {@const isCoding = artifacts.some(a => a.running)}
+    <button class="drawer-toggle" class:drawer-active={drawerOpen} class:drawer-coding={isCoding} onclick={() => drawerOpen = !drawerOpen} aria-label="Toggle code drawer">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l2-2-2-2"/><path d="M8 18l-2-2 2-2"/><path d="M12 2v20"/></svg>
       <span class="drawer-toggle-count">{artifacts.length}</span>
+      {#if isCoding}
+        <span class="drawer-coding-dot"></span>
+      {/if}
     </button>
   {/if}
 
@@ -448,14 +450,13 @@
     </div>
     <div class="drawer-body">
       {#each [...artifacts].reverse() as artifact}
-        <button
+        <div
           class="artifact-item"
           class:artifact-running={artifact.running}
           class:artifact-error={artifact.exitCode !== undefined && artifact.exitCode !== 0}
           class:artifact-expanded={expandedArtifact === artifact.id}
-          onclick={() => expandedArtifact = expandedArtifact === artifact.id ? null : artifact.id}
         >
-          <div class="artifact-header">
+          <button class="artifact-header-btn" onclick={() => expandedArtifact = expandedArtifact === artifact.id ? null : artifact.id}>
             <div class="artifact-status">
               {#if artifact.running}
                 <span class="exec-spinner"></span>
@@ -471,22 +472,23 @@
               <span class="artifact-title">{artifact.title}</span>
               <span class="artifact-time">{artifact.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-          </div>
+            <span class="artifact-chevron">{expandedArtifact === artifact.id ? '▾' : '▸'}</span>
+          </button>
 
           {#if expandedArtifact === artifact.id}
-            <div class="artifact-content" onclick={(e) => e.stopPropagation()}>
+            <div class="artifact-content">
               <div class="artifact-code-header">
                 <span class="artifact-code-lang">{artifact.lang || 'code'}</span>
-                <button class="copy-btn-sm" onclick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(artifact.code).then(() => { (e.target as HTMLElement).textContent = 'Copied'; setTimeout(() => { (e.target as HTMLElement).textContent = 'Copy'; }, 1500); }); }}>Copy</button>
+                <button class="copy-btn-sm" onclick={() => navigator.clipboard.writeText(artifact.code)}>Copy</button>
               </div>
-              <pre class="artifact-code"><code>{artifact.code}</code></pre>
+              <pre class="artifact-code">{artifact.code}</pre>
               {#if artifact.output !== undefined && artifact.output !== null}
                 <div class="artifact-output-label">Output</div>
                 <pre class="artifact-output">{artifact.output}</pre>
               {/if}
             </div>
           {/if}
-        </button>
+        </div>
       {/each}
     </div>
   </div>
@@ -1132,10 +1134,24 @@
     color: var(--accent);
     background: rgba(26, 16, 8, 0.95);
   }
+  .drawer-toggle.drawer-coding {
+    border-color: var(--accent);
+  }
   .drawer-toggle-count {
     font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 700;
+  }
+  .drawer-coding-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: coding-pulse 1s ease-in-out infinite;
+  }
+  @keyframes coding-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.7); }
   }
 
   /* Code drawer */
@@ -1188,18 +1204,11 @@
 
   /* Artifact items in drawer */
   .artifact-item {
-    width: 100%;
-    text-align: left;
-    padding: 10px 12px;
     margin-bottom: 4px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid transparent;
     border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .artifact-item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    transition: border-color 0.15s;
   }
   .artifact-item.artifact-expanded {
     border-color: var(--card-border);
@@ -1211,10 +1220,26 @@
   .artifact-item.artifact-error {
     border-left: 2px solid #c0392b;
   }
-  .artifact-header {
+  .artifact-header-btn {
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+  }
+  .artifact-header-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .artifact-chevron {
+    color: var(--text-ghost);
+    font-size: 10px;
+    margin-top: 2px;
+    flex-shrink: 0;
   }
   .artifact-status {
     flex-shrink: 0;
@@ -1280,15 +1305,18 @@
     background: #1a1008;
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.5;
     color: #ede4d4;
     overflow-x: auto;
-    white-space: pre;
-    max-height: 300px;
     overflow-y: auto;
+    white-space: pre;
+    word-wrap: normal;
+    word-break: normal;
+    max-height: 400px;
+    tab-size: 2;
+    display: block;
   }
-  .artifact-code code { font-family: inherit; white-space: pre; }
   .artifact-output-label {
     font-family: var(--font-mono);
     font-size: 10px;
