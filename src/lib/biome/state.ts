@@ -76,7 +76,7 @@ export const DAY_PHASE_MAP: Record<DayPhase, number> = {
 export const STALENESS_THRESHOLD = 21600;
 export const POLL_INTERVAL = 900_000;
 export const LERP_DURATION = 5000;
-export const MAX_PARTICLES = 2000;
+export const MAX_PARTICLES = 8000;
 export const MAX_CONNECTION_SEGMENTS = 500;
 export const CONNECTION_MAX_DIST = 1.5;
 

@@ -85,17 +85,19 @@ export function createBiomeStore() {
 
   let pollInterval: ReturnType<typeof setInterval> | undefined;
 
+  let settingsInterval: ReturnType<typeof setInterval> | undefined;
+
   function startPolling() {
     fetchSettings();
     fetchState();
-    pollInterval = setInterval(() => {
-      fetchState();
-      fetchSettings();
-    }, POLL_INTERVAL);
+    pollInterval = setInterval(fetchState, POLL_INTERVAL);
+    // Poll settings more frequently so admin changes show up quickly
+    settingsInterval = setInterval(fetchSettings, 10_000);
   }
 
   function stopPolling() {
     if (pollInterval) clearInterval(pollInterval);
+    if (settingsInterval) clearInterval(settingsInterval);
   }
 
   return {

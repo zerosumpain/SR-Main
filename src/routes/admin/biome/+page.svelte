@@ -55,7 +55,7 @@
     {
       label: 'Particles',
       settings: [
-        { key: 'particleDensity', label: 'Density', min: 0.1, max: 5.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
+        { key: 'particleDensity', label: 'Density', min: 0.1, max: 20.0, step: 0.5, format: (v: number) => v.toFixed(1) + 'x' },
         { key: 'particleSize', label: 'Size', min: 0.1, max: 5.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
         { key: 'particleOpacity', label: 'Opacity', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
       ],
