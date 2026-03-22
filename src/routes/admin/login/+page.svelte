@@ -18,7 +18,10 @@
       const data = await res.json();
 
       if (res.ok && data.success) {
-        document.location.href = '/admin?token=' + data.token;
+        const params = new URLSearchParams(window.location.search);
+        const redirectTo = params.get('redirectTo') || '/admin';
+        const sep = redirectTo.includes('?') ? '&' : '?';
+        document.location.href = redirectTo + sep + 'token=' + data.token;
         return;
       } else {
         errorMsg = data.error || 'Login failed';

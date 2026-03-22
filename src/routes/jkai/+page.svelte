@@ -16,6 +16,22 @@
   let showThinking = $state(false);
   let executions = $state<Array<{ lang: string; code: string; output: string | null; exitCode?: number; running: boolean }>>([]);
 
+  // Code drawer
+  interface CodeArtifact {
+    id: string;
+    lang: string;
+    code: string;
+    title: string;
+    output?: string | null;
+    exitCode?: number;
+    running?: boolean;
+    timestamp: Date;
+    type: 'block' | 'exec';
+  }
+  let artifacts = $state<CodeArtifact[]>([]);
+  let drawerOpen = $state(false);
+  let expandedArtifact = $state<string | null>(null);
+
   let chatContainer: HTMLDivElement;
   let inputEl: HTMLTextAreaElement;
 
@@ -54,6 +70,7 @@
         createdAt: m.createdAt,
       }));
       sidebarOpen = false;
+      collectArtifactsFromMessages();
       await tick();
       scrollToBottom();
       highlightCode();
@@ -65,8 +82,26 @@
     messages = [];
     streamingContent = '';
     streamingThinking = '';
+    artifacts = [];
+    drawerOpen = false;
+    expandedArtifact = null;
     sidebarOpen = false;
     inputEl?.focus();
+  }
+
+  function collectArtifactsFromMessages() {
+    artifacts = [];
+    const collector: Array<{ id: string; lang: string; code: string; title: string }> = [];
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && msg.content) {
+        renderMarkdown(msg.content, collector);
+      }
+    }
+    artifacts = collector.map(c => ({
+      ...c,
+      timestamp: new Date(),
+      type: 'block' as const,
+    }));
   }
 
   async function sendMessage() {
@@ -124,13 +159,33 @@
           } else if (data.type === 'thinking') {
             streamingThinking += data.content;
           } else if (data.type === 'exec_start') {
+            const artifact: CodeArtifact = {
+              id: `exec-${Date.now()}-${artifacts.length}`,
+              lang: data.lang,
+              code: data.code,
+              title: summariseCode(data.lang, data.code),
+              running: true,
+              timestamp: new Date(),
+              type: 'exec',
+            };
+            artifacts = [...artifacts, artifact];
             executions = [...executions, { lang: data.lang, code: data.code, output: null, running: true }];
+            drawerOpen = true;
+            expandedArtifact = artifact.id;
             await tick();
             scrollToBottom();
           } else if (data.type === 'exec_result') {
             if (executions.length > 0) {
               const last = executions[executions.length - 1];
               executions = [...executions.slice(0, -1), { ...last, output: data.output, exitCode: data.exitCode, running: false }];
+            }
+            // Update the matching artifact
+            const lastArtifact = artifacts.findLast(a => a.type === 'exec' && a.running);
+            if (lastArtifact) {
+              artifacts = artifacts.map(a => a.id === lastArtifact.id
+                ? { ...a, output: data.output, exitCode: data.exitCode, running: false }
+                : a
+              );
             }
             await tick();
             scrollToBottom();
@@ -140,6 +195,17 @@
             streamingContent += `\n\n**Error:** ${data.content}`;
           }
         }
+      }
+
+      // Collect code blocks from the response as artifacts
+      const inlineCollector: Array<{ id: string; lang: string; code: string; title: string }> = [];
+      renderMarkdown(streamingContent, inlineCollector);
+      if (inlineCollector.length > 0) {
+        artifacts = [...artifacts, ...inlineCollector.map(c => ({
+          ...c,
+          timestamp: new Date(),
+          type: 'block' as const,
+        }))];
       }
 
       messages = [
@@ -201,6 +267,14 @@
     await import('prismjs/components/prism-markup');
     loadConversations();
     inputEl?.focus();
+
+    function handleOpenArtifact(e: Event) {
+      const id = (e as CustomEvent).detail;
+      drawerOpen = true;
+      expandedArtifact = id;
+    }
+    window.addEventListener('open-artifact', handleOpenArtifact);
+    return () => window.removeEventListener('open-artifact', handleOpenArtifact);
   });
 </script>
 
@@ -304,45 +378,18 @@
                 {@const anyRunning = executions.some(e => e.running)}
                 {@const completedCount = executions.filter(e => !e.running).length}
                 {@const failedCount = executions.filter(e => e.exitCode !== undefined && e.exitCode !== 0).length}
-                <details class="exec-group" open={anyRunning || executions.length === 1}>
-                  <summary class="exec-group-summary">
-                    {#if anyRunning}
-                      <span class="exec-spinner"></span>
-                      <span class="exec-group-label">Coding activity — running step {completedCount + 1} of {executions.length}...</span>
-                    {:else}
-                      <span class="exec-icon" class:exec-ok={failedCount === 0} class:exec-err={failedCount > 0}>
-                        {failedCount === 0 ? 'ok' : 'err'}
-                      </span>
-                      <span class="exec-group-label">
-                        Coding activity — {completedCount} step{completedCount !== 1 ? 's' : ''}{failedCount > 0 ? ` (${failedCount} failed)` : ''}
-                      </span>
-                    {/if}
-                  </summary>
-                  <div class="exec-group-body">
-                    {#each executions as exec}
-                      <div class="exec-block" class:exec-running={exec.running} class:exec-fail={exec.exitCode !== undefined && exec.exitCode !== 0}>
-                        <details class="exec-details">
-                          <summary class="exec-summary">
-                            {#if exec.running}
-                              <span class="exec-spinner"></span>
-                            {:else if exec.exitCode === 0}
-                              <span class="exec-icon exec-ok">ok</span>
-                            {:else}
-                              <span class="exec-icon exec-err">err</span>
-                            {/if}
-                            <span class="exec-label">{exec.running ? `Running ${exec.lang}...` : summariseCode(exec.lang, exec.code)}</span>
-                          </summary>
-                          <pre class="exec-code"><code>{exec.code}</code></pre>
-                          {#if exec.output !== null}
-                            <div class="exec-output-inline">
-                              <pre class="exec-output">{exec.output}</pre>
-                            </div>
-                          {/if}
-                        </details>
-                      </div>
-                    {/each}
-                  </div>
-                </details>
+                <button class="exec-status-pill" onclick={() => drawerOpen = true}>
+                  {#if anyRunning}
+                    <span class="exec-spinner"></span>
+                    <span>Running step {completedCount + 1} of {executions.length}...</span>
+                  {:else}
+                    <span class="exec-icon" class:exec-ok={failedCount === 0} class:exec-err={failedCount > 0}>
+                      {failedCount === 0 ? 'ok' : 'err'}
+                    </span>
+                    <span>{completedCount} step{completedCount !== 1 ? 's' : ''} completed</span>
+                  {/if}
+                  <span class="exec-status-arrow">→</span>
+                </button>
               {/if}
 
               {#if !streamingContent && executions.length === 0}
@@ -383,6 +430,66 @@
       <p class="input-hint">Enter to send, Shift+Enter for new line</p>
     </div>
   </div>
+
+  <!-- Code Drawer -->
+  {#if artifacts.length > 0}
+    <button class="drawer-toggle" class:drawer-active={drawerOpen} onclick={() => drawerOpen = !drawerOpen} aria-label="Toggle code drawer">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l2-2-2-2"/><path d="M8 18l-2-2 2-2"/><path d="M12 2v20"/></svg>
+      <span class="drawer-toggle-count">{artifacts.length}</span>
+    </button>
+  {/if}
+
+  <div class="code-drawer" class:open={drawerOpen}>
+    <div class="drawer-header">
+      <span class="drawer-title">Code &amp; Artifacts</span>
+      <button class="drawer-close" onclick={() => drawerOpen = false} aria-label="Close drawer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      {#each [...artifacts].reverse() as artifact}
+        <button
+          class="artifact-item"
+          class:artifact-running={artifact.running}
+          class:artifact-error={artifact.exitCode !== undefined && artifact.exitCode !== 0}
+          class:artifact-expanded={expandedArtifact === artifact.id}
+          onclick={() => expandedArtifact = expandedArtifact === artifact.id ? null : artifact.id}
+        >
+          <div class="artifact-header">
+            <div class="artifact-status">
+              {#if artifact.running}
+                <span class="exec-spinner"></span>
+              {:else if artifact.type === 'exec'}
+                <span class="exec-icon" class:exec-ok={artifact.exitCode === 0} class:exec-err={artifact.exitCode !== 0}>
+                  {artifact.exitCode === 0 ? 'ok' : 'err'}
+                </span>
+              {:else}
+                <span class="artifact-type-icon">&#x25B6;</span>
+              {/if}
+            </div>
+            <div class="artifact-info">
+              <span class="artifact-title">{artifact.title}</span>
+              <span class="artifact-time">{artifact.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          </div>
+
+          {#if expandedArtifact === artifact.id}
+            <div class="artifact-content" onclick={(e) => e.stopPropagation()}>
+              <div class="artifact-code-header">
+                <span class="artifact-code-lang">{artifact.lang || 'code'}</span>
+                <button class="copy-btn-sm" onclick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(artifact.code).then(() => { (e.target as HTMLElement).textContent = 'Copied'; setTimeout(() => { (e.target as HTMLElement).textContent = 'Copy'; }, 1500); }); }}>Copy</button>
+              </div>
+              <pre class="artifact-code"><code>{artifact.code}</code></pre>
+              {#if artifact.output !== undefined && artifact.output !== null}
+                <div class="artifact-output-label">Output</div>
+                <pre class="artifact-output">{artifact.output}</pre>
+              {/if}
+            </div>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </div>
 </div>
 
 <script lang="ts" module>
@@ -416,25 +523,17 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function renderMarkdown(text: string): string {
+  function renderMarkdown(text: string, artifactCollector?: Array<{ id: string; lang: string; code: string; title: string }>): string {
     if (!text) return '';
-    // Handle code blocks first — replace with collapsible details elements
+    // Replace code blocks with inline reference pills that point to the drawer
     let result = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
       const id = `codeblock-${++codeBlockId}`;
-      const summary = escapeHtml(summariseCode(lang, code));
-      const escaped = escapeHtml(code.trimEnd());
-      return `<details class="code-collapse" data-code-id="${id}"><summary class="code-summary"><span class="code-summary-text">${summary}</span><button class="copy-btn" data-copy-target="${id}" onclick="event.stopPropagation();navigator.clipboard.writeText(document.getElementById('${id}').textContent).then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button></summary><pre class="code-block" id="${id}"><code class="language-${lang}">${escaped}</code></pre></details>`;
-    });
-
-    // Group 2+ consecutive code-collapse blocks into a single "coding activity" wrapper
-    result = result.replace(
-      /(<details class="code-collapse"[\s\S]*?<\/details>\s*){2,}/g,
-      (match) => {
-        const blocks = match.match(/<details class="code-collapse"[\s\S]*?<\/details>/g) ?? [];
-        const inner = blocks.join('\n');
-        return `<details class="code-activity-group"><summary class="code-activity-summary"><span class="code-activity-icon">&#9654;</span> Coding activity — ${blocks.length} blocks</summary><div class="code-activity-body">${inner}</div></details>`;
+      const title = summariseCode(lang, code);
+      if (artifactCollector) {
+        artifactCollector.push({ id, lang, code: code.trimEnd(), title });
       }
-    );
+      return `<button class="code-ref-pill" data-artifact-id="${id}" onclick="window.dispatchEvent(new CustomEvent('open-artifact',{detail:'${id}'}))"><span class="code-ref-icon">&#x25B6;</span> ${escapeHtml(title)}</button>`;
+    });
 
     result = result
       .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
@@ -956,5 +1055,261 @@
   .input-hint {
     text-align: center; font-size: 11px; color: var(--text-ghost);
     margin-top: 8px; font-family: var(--font-mono);
+  }
+
+  /* Inline code reference pill */
+  .message-content :global(.code-ref-pill) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+    padding: 6px 12px;
+    background: rgba(26, 16, 8, 0.06);
+    border: 1px solid var(--card-border);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    width: 100%;
+    text-align: left;
+  }
+  .message-content :global(.code-ref-pill:hover) {
+    background: rgba(26, 16, 8, 0.1);
+    border-color: var(--accent);
+  }
+  .message-content :global(.code-ref-icon) {
+    font-size: 9px;
+    color: var(--text-ghost);
+  }
+
+  /* Exec status pill (inline in chat) */
+  .exec-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px 14px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    width: 100%;
+    text-align: left;
+  }
+  .exec-status-pill:hover {
+    background: rgba(26, 16, 8, 0.08);
+  }
+  .exec-status-arrow {
+    margin-left: auto;
+    color: var(--text-ghost);
+  }
+
+  /* Drawer toggle button */
+  .drawer-toggle {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 8px;
+    background: rgba(26, 16, 8, 0.9);
+    border: 2px solid var(--card-border);
+    border-right: none;
+    border-radius: 6px 0 0 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    flex-direction: column;
+  }
+  .drawer-toggle:hover, .drawer-toggle.drawer-active {
+    color: var(--accent);
+    background: rgba(26, 16, 8, 0.95);
+  }
+  .drawer-toggle-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  /* Code drawer */
+  .code-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 100vh;
+    background: rgba(10, 8, 6, 0.97);
+    border-left: 2px solid var(--card-border);
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.2s ease;
+  }
+  .code-drawer.open {
+    width: 420px;
+  }
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--card-border);
+    flex-shrink: 0;
+  }
+  .drawer-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-ghost);
+  }
+  .drawer-close {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    padding: 4px;
+  }
+  .drawer-close:hover { color: var(--text-primary); }
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    scrollbar-width: thin;
+  }
+
+  /* Artifact items in drawer */
+  .artifact-item {
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .artifact-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .artifact-item.artifact-expanded {
+    border-color: var(--card-border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .artifact-item.artifact-running {
+    border-left: 2px solid var(--accent);
+  }
+  .artifact-item.artifact-error {
+    border-left: 2px solid #c0392b;
+  }
+  .artifact-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .artifact-status {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .artifact-type-icon {
+    font-size: 8px;
+    color: var(--text-ghost);
+  }
+  .artifact-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .artifact-title {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+  }
+  .artifact-time {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    margin-top: 2px;
+  }
+
+  /* Expanded artifact content */
+  .artifact-content {
+    margin-top: 10px;
+    border-top: 1px solid var(--card-border);
+    padding-top: 8px;
+  }
+  .artifact-code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .artifact-code-lang {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .copy-btn-sm {
+    background: none;
+    border: 1px solid var(--card-border);
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .copy-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
+  .artifact-code {
+    margin: 0;
+    padding: 10px 12px;
+    background: #1a1008;
+    border: 1px solid var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    color: #ede4d4;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .artifact-code code { font-family: inherit; white-space: pre; }
+  .artifact-output-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .artifact-output {
+    margin: 0;
+    padding: 10px 12px;
+    background: #1a1008;
+    border: 1px solid var(--card-border);
+    color: #ede4d4;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 200px;
+    overflow-y: auto;
   }
 </style>

@@ -25,5 +25,6 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
     return { adminToken: token };
   }
 
-  throw redirect(302, '/admin/login');
+  const redirectTo = url.pathname + url.search;
+  throw redirect(302, `/admin/login?redirectTo=${encodeURIComponent(redirectTo)}`);
 };
