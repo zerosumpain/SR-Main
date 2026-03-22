@@ -48,7 +48,7 @@
           {#each tasks as task}
             <button
               class="w-full text-left p-4 rounded-lg transition-colors"
-              style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);"
+              style="background: var(--card-bg); border: 1px solid var(--card-border);"
               onclick={() => expandedId = expandedId === task.id ? null : task.id}
             >
               <div class="flex items-center justify-between">
@@ -70,14 +70,14 @@
                   {#each task.steps as _, i}
                     <div
                       class="h-1 rounded-full flex-1"
-                      style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) && task.status === 'active' ? '#b08d3e' : 'rgba(255,255,255,0.08)'};"
+                      style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) && task.status === 'active' ? '#b08d3e' : 'var(--card-border)'};"
                     ></div>
                   {/each}
                 </div>
               {/if}
 
               {#if expandedId === task.id}
-                <div class="mt-4 pt-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
+                <div class="mt-4 pt-4" style="border-top: 1px solid var(--card-border);">
                   {#if task.description}
                     <p class="text-xs mb-3" style="color: var(--text-secondary);">{task.description}</p>
                   {/if}
@@ -95,7 +95,7 @@
                     </div>
                   {/if}
                   {#if task.result}
-                    <div class="mt-3 p-2 rounded text-xs" style="background: rgba(255,255,255,0.03); color: var(--text-secondary);">
+                    <div class="mt-3 p-2 rounded text-xs" style="background: var(--card-bg); color: var(--text-secondary);">
                       <span class="text-[10px] uppercase" style="color: var(--text-ghost);">Result:</span>
                       <p class="mt-1">{task.result}</p>
                     </div>

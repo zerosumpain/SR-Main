@@ -55,13 +55,13 @@
   <div class="flex gap-2 mb-6 flex-wrap">
     <button
       class="text-[10px] uppercase tracking-wider px-2 py-1 rounded"
-      style="background: {filter === 'all' ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)'}; color: var(--text-secondary); font-family: var(--font-mono);"
+      style="background: {filter === 'all' ? 'var(--card-border)' : 'var(--card-bg)'}; color: var(--text-secondary); font-family: var(--font-mono);"
       onclick={() => filter = 'all'}
     >all</button>
     {#each actionTypes as type}
       <button
         class="text-[10px] uppercase tracking-wider px-2 py-1 rounded"
-        style="background: {filter === type ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)'}; color: {typeColor(type)}; font-family: var(--font-mono);"
+        style="background: {filter === type ? 'var(--card-border)' : 'var(--card-bg)'}; color: {typeColor(type)}; font-family: var(--font-mono);"
         onclick={() => filter = type}
       >{type.replace('_', ' ')}</button>
     {/each}
@@ -72,7 +72,7 @@
     {#each filtered as action}
       <button
         class="w-full text-left p-3 rounded transition-colors"
-        style="background: rgba(255,255,255,0.02); border: 1px solid {expandedId === action.id ? 'rgba(255,255,255,0.1)' : 'transparent'};"
+        style="background: var(--card-bg); border: 1px solid {expandedId === action.id ? 'var(--card-border)' : 'transparent'};"
         onclick={() => expandedId = expandedId === action.id ? null : action.id}
       >
         <div class="flex items-center gap-3">
@@ -98,7 +98,7 @@
         </div>
 
         {#if expandedId === action.id}
-          <div class="mt-3 pt-3 space-y-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
+          <div class="mt-3 pt-3 space-y-3" style="border-top: 1px solid var(--card-border);">
             {#if action.reasoning}
               <div>
                 <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Reasoning</div>
@@ -110,13 +110,13 @@
               {#if action.input}
                 <div>
                   <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Input</div>
-                  <pre class="text-[11px] p-2 rounded overflow-x-auto max-h-48" style="background: rgba(0,0,0,0.3); color: var(--text-secondary); font-family: var(--font-mono);">{formatJson(action.input)}</pre>
+                  <pre class="text-[11px] p-2 rounded overflow-x-auto max-h-48" style="background: var(--card-bg); color: var(--text-secondary); font-family: var(--font-mono);">{formatJson(action.input)}</pre>
                 </div>
               {/if}
               {#if action.output}
                 <div>
                   <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Output</div>
-                  <pre class="text-[11px] p-2 rounded overflow-x-auto max-h-48" style="background: rgba(0,0,0,0.3); color: var(--text-secondary); font-family: var(--font-mono);">{formatJson(action.output)}</pre>
+                  <pre class="text-[11px] p-2 rounded overflow-x-auto max-h-48" style="background: var(--card-bg); color: var(--text-secondary); font-family: var(--font-mono);">{formatJson(action.output)}</pre>
                 </div>
               {/if}
             </div>

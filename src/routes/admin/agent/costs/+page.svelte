@@ -16,17 +16,17 @@
 
   <!-- Period Summary -->
   <div class="grid grid-cols-3 gap-4 mb-10">
-    <div class="p-5 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-5 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Today</div>
       <div class="text-2xl font-light mb-1" style="color: var(--text-primary);">${(data.today?.cost ?? 0).toFixed(4)}</div>
       <div class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{data.today?.count ?? 0} actions</div>
     </div>
-    <div class="p-5 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-5 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">This Week</div>
       <div class="text-2xl font-light mb-1" style="color: var(--text-primary);">${(data.week?.cost ?? 0).toFixed(4)}</div>
       <div class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{data.week?.count ?? 0} actions</div>
     </div>
-    <div class="p-5 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-5 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">30 Days</div>
       <div class="text-2xl font-light mb-1" style="color: var(--text-primary);">${(data.month?.cost ?? 0).toFixed(4)}</div>
       <div class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{data.month?.count ?? 0} actions</div>
@@ -35,7 +35,7 @@
 
   <!-- Token Summary -->
   {#if (data.today?.tokensIn ?? 0) > 0}
-    <div class="mb-10 p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="mb-10 p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">Today's Tokens</div>
       <div class="flex gap-8">
         <div>
@@ -58,7 +58,7 @@
       </h2>
       <div class="space-y-2">
         {#each data.byModel as m}
-          <div class="flex items-center gap-3 p-3 rounded" style="background: rgba(255,255,255,0.02);">
+          <div class="flex items-center gap-3 p-3 rounded" style="background: var(--card-bg);">
             <span class="text-xs flex-1" style="color: var(--text-secondary);">
               {m.provider ?? '?'}/{m.model ?? '?'}
             </span>
@@ -85,7 +85,7 @@
       </h2>
       <div class="space-y-2">
         {#each data.byTool as t}
-          <div class="flex items-center gap-3 p-3 rounded" style="background: rgba(255,255,255,0.02);">
+          <div class="flex items-center gap-3 p-3 rounded" style="background: var(--card-bg);">
             <span class="text-xs flex-1" style="color: var(--text-secondary);">
               {t.toolName ?? 'unknown'}
             </span>

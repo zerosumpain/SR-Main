@@ -57,7 +57,7 @@
     {#each [['prompt', 'System Prompt'], ['memory', 'Memory'], ['cron', 'Cron / Pulse']] as [id, label]}
       <button
         class="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
-        style="background: {activeTab === id ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)'}; color: {activeTab === id ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono); border: 1px solid {activeTab === id ? 'rgba(255,255,255,0.1)' : 'transparent'};"
+        style="background: {activeTab === id ? 'var(--card-border)' : 'var(--card-bg)'}; color: {activeTab === id ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono); border: 1px solid {activeTab === id ? 'var(--card-border)' : 'transparent'};"
         onclick={() => activeTab = id as 'prompt' | 'memory' | 'cron'}
       >{label}</button>
     {/each}
@@ -85,7 +85,7 @@
       <textarea
         bind:value={systemPrompt}
         class="w-full rounded-lg p-4 text-sm leading-relaxed resize-y"
-        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
+        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
         spellcheck="false"
       ></textarea>
       <p class="text-[10px] mt-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
@@ -116,7 +116,7 @@
       <textarea
         bind:value={memory}
         class="w-full rounded-lg p-4 text-sm leading-relaxed resize-y"
-        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
+        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
         placeholder="Add facts, preferences, and context the agent should remember across conversations..."
         spellcheck="false"
       ></textarea>
@@ -157,11 +157,11 @@
       {:else}
         <div class="space-y-3">
           {#each cronJobs as job}
-            <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+            <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
               <div class="flex items-center gap-3 mb-3">
                 <button
                   class="w-8 h-4 rounded-full relative transition-colors"
-                  style="background: {job.enabled ? 'var(--accent)' : 'rgba(255,255,255,0.1)'};"
+                  style="background: {job.enabled ? 'var(--accent)' : 'var(--card-border)'};"
                   onclick={() => job.enabled = !job.enabled}
                   aria-label="Toggle job"
                 >
@@ -175,7 +175,7 @@
                   bind:value={job.schedule}
                   placeholder="0 9 * * *"
                   class="px-2 py-1 rounded text-xs w-32"
-                  style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); font-family: var(--font-mono);"
+                  style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono);"
                 />
                 <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">cron</span>
                 <button
@@ -188,7 +188,7 @@
                 bind:value={job.task}
                 placeholder="What should the agent do? e.g. 'Check competitor pricing and report changes'"
                 class="w-full rounded p-3 text-xs resize-y"
-                style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); color: var(--text-secondary); font-family: var(--font-mono); min-height: 60px;"
+                style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 60px;"
               ></textarea>
               {#if job.lastRun}
                 <p class="text-[10px] mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">

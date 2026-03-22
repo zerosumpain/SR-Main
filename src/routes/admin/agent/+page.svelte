@@ -93,19 +93,19 @@
 
   <!-- Stats Row -->
   <div class="grid grid-cols-4 gap-4 mb-10">
-    <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Active Tasks</div>
       <div class="text-2xl font-light" style="color: var(--text-primary);">{activeTasks.length}</div>
     </div>
-    <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Completed</div>
       <div class="text-2xl font-light" style="color: var(--text-primary);">{completedTasks.length}</div>
     </div>
-    <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Today's Cost</div>
       <div class="text-2xl font-light" style="color: var(--text-primary);">${(data.todayCosts?.totalCost ?? 0).toFixed(4)}</div>
     </div>
-    <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
       <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Actions Today</div>
       <div class="text-2xl font-light" style="color: var(--text-primary);">{data.todayCosts?.actionCount ?? 0}</div>
     </div>
@@ -113,16 +113,16 @@
 
   <!-- Navigation -->
   <div class="flex gap-4 mb-8">
-    <a href="/admin/agent/tasks" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
+    <a href="/admin/agent/tasks" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
       Tasks
     </a>
-    <a href="/admin/agent/actions" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
+    <a href="/admin/agent/actions" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
       Action Log
     </a>
-    <a href="/admin/agent/costs" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
+    <a href="/admin/agent/costs" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
       Costs
     </a>
-    <a href="/admin/agent/config" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
+    <a href="/admin/agent/config" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
       Config
     </a>
   </div>
@@ -135,7 +135,7 @@
       </h2>
       <div class="space-y-3">
         {#each activeTasks as task}
-          <div class="p-4 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+          <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm" style="color: var(--text-primary);">{task.title}</span>
               <span class="text-[10px] px-2 py-0.5 rounded" style="background: {statusBadge(task.status)}22; color: {statusBadge(task.status)}; font-family: var(--font-mono);">
@@ -150,7 +150,7 @@
                 {#each task.steps as step, i}
                   <div
                     class="h-1.5 rounded-full flex-1"
-                    style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) ? '#b08d3e' : 'rgba(255,255,255,0.1)'};"
+                    style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) ? '#b08d3e' : 'var(--card-border)'};"
                   ></div>
                 {/each}
               </div>
@@ -168,8 +168,8 @@
     </h2>
     <div bind:this={feedEl} class="space-y-1 max-h-[500px] overflow-y-auto" style="scrollbar-width: thin;">
       {#each liveEvents as event}
-        <div class="flex items-start gap-3 py-2 px-3 rounded" style="background: rgba(255,255,255,0.02);">
-          <span class="text-[10px] shrink-0 w-6 text-center rounded" style="color: var(--text-ghost); font-family: var(--font-mono); background: rgba(255,255,255,0.05);">
+        <div class="flex items-start gap-3 py-2 px-3 rounded" style="background: var(--card-bg);">
+          <span class="text-[10px] shrink-0 w-6 text-center rounded" style="color: var(--text-ghost); font-family: var(--font-mono); background: var(--card-bg);">
             {eventIcon(event.eventType)}
           </span>
           <span class="text-xs flex-1" style="color: var(--text-secondary);">

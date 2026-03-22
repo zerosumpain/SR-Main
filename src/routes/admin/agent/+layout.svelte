@@ -2,7 +2,6 @@
   let { children } = $props();
 </script>
 
-<!-- Solid background covers the biome canvas behind it -->
-<div style="background: #0a0a0f; min-height: 100vh; position: relative; z-index: 10;">
+<div style="background: var(--bg, #f5f0e8); min-height: 100vh; position: relative; z-index: 10;">
   {@render children()}
 </div>
