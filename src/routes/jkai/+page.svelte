@@ -243,7 +243,11 @@
         <span class="logo">JKAI <span class="version">2.0</span></span>
       </div>
       <div class="top-bar-right">
-        <a href="/jkai/admin" class="admin-link">Admin</a>
+        <a href="/admin/agent" class="admin-link">Dashboard</a>
+        <a href="/admin/agent/tasks" class="admin-link">Tasks</a>
+        <a href="/admin/agent/actions" class="admin-link">Actions</a>
+        <a href="/admin/agent/costs" class="admin-link">Costs</a>
+        <a href="/jkai/admin" class="admin-link">Sandbox</a>
       </div>
     </div>
 
