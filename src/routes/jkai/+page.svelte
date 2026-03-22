@@ -34,6 +34,21 @@
 
   let chatContainer: HTMLDivElement;
   let inputEl: HTMLTextAreaElement;
+  let drawerEl: HTMLDivElement;
+
+  // Highlight code in drawer when artifact is expanded
+  $effect(() => {
+    if (expandedArtifact && Prism && drawerEl) {
+      tick().then(() => {
+        drawerEl?.querySelectorAll('pre.artifact-code code[class*="language-"]').forEach((el) => {
+          if (!(el as HTMLElement).dataset.highlighted) {
+            Prism.highlightElement(el);
+            (el as HTMLElement).dataset.highlighted = 'true';
+          }
+        });
+      });
+    }
+  });
 
   function scrollToBottom() {
     if (chatContainer) {
@@ -448,7 +463,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
-    <div class="drawer-body">
+    <div class="drawer-body" bind:this={drawerEl}>
       {#each [...artifacts].reverse() as artifact}
         <div
           class="artifact-item"
@@ -481,7 +496,7 @@
                 <span class="artifact-code-lang">{artifact.lang || 'code'}</span>
                 <button class="copy-btn-sm" onclick={() => navigator.clipboard.writeText(artifact.code)}>Copy</button>
               </div>
-              <pre class="artifact-code">{artifact.code}</pre>
+              <pre class="artifact-code"><code class="language-{artifact.lang || 'text'}">{artifact.code}</code></pre>
               {#if artifact.output !== undefined && artifact.output !== null}
                 <div class="artifact-output-label">Output</div>
                 <pre class="artifact-output">{artifact.output}</pre>
@@ -501,24 +516,66 @@
     const lines = code.trim().split('\n');
     const lineCount = lines.length;
     const langLabel = lang || 'code';
+    const linesSuffix = lineCount > 1 ? ` (${lineCount} lines)` : '';
 
-    // Try to extract a meaningful summary from the code
-    const firstMeaningful = lines.find(l => l.trim() && !l.trim().startsWith('#') && !l.trim().startsWith('//') && !l.trim().startsWith('import'));
+    // 1. Check for leading comments that describe purpose
     const comments = lines.filter(l => l.trim().startsWith('#') || l.trim().startsWith('//'));
     const firstComment = comments[0]?.trim().replace(/^[#/]+\s*/, '');
-
     if (firstComment && firstComment.length > 5) {
-      return `${langLabel} — ${firstComment} (${lineCount} lines)`;
+      return `${firstComment}${linesSuffix}`;
     }
 
-    // Look for function/class definitions
+    // 2. Look for function/class definitions
     const defLine = lines.find(l => /^(def |class |function |const |export |async )/.test(l.trim()));
     if (defLine) {
-      const name = defLine.trim().slice(0, 60);
-      return `${langLabel} — ${name}... (${lineCount} lines)`;
+      const name = defLine.trim().replace(/[{(:].*$/, '').slice(0, 50);
+      return `${name}${linesSuffix}`;
     }
 
-    return `${langLabel} — ${lineCount} lines`;
+    // 3. For bash/shell: describe what the commands do
+    if (['bash', 'sh', 'shell', 'zsh'].includes(lang)) {
+      const cmds = lines.filter(l => l.trim() && !l.trim().startsWith('#'));
+      const firstCmd = cmds[0]?.trim() ?? '';
+      // Extract the main command
+      const cmd = firstCmd.split(/\s+/)[0]?.replace(/^sudo\s+/, '');
+      const descriptions: Record<string, string> = {
+        pip: 'Install Python packages', pip3: 'Install Python packages',
+        npm: 'Run npm command', npx: 'Run npx command',
+        curl: 'HTTP request', wget: 'Download file',
+        docker: 'Docker operation', 'docker-compose': 'Docker compose',
+        git: 'Git operation', cd: 'Navigate directory',
+        mkdir: 'Create directory', rm: 'Remove files',
+        cat: 'Read file', echo: 'Output text',
+        python: 'Run Python script', python3: 'Run Python script',
+        node: 'Run Node script', apt: 'Install system packages',
+        'apt-get': 'Install system packages',
+        brew: 'Homebrew install', cargo: 'Cargo command',
+        ls: 'List files', grep: 'Search text', find: 'Find files',
+        sed: 'Transform text', awk: 'Process text',
+        ssh: 'SSH connection', scp: 'Copy files remotely',
+        tar: 'Archive files', unzip: 'Extract archive',
+      };
+      const desc = descriptions[cmd ?? ''];
+      if (desc) return `${desc}${cmds.length > 1 ? ` + ${cmds.length - 1} more` : ''}`;
+      if (firstCmd.length > 0) return `${firstCmd.slice(0, 60)}${firstCmd.length > 60 ? '...' : ''}`;
+    }
+
+    // 4. For Python: look for imports to guess purpose
+    if (lang === 'python') {
+      const imports = lines.filter(l => /^(import |from )/.test(l.trim()));
+      if (imports.length > 0) {
+        const modules = imports.map(l => l.trim().replace(/^(?:from |import )(\S+).*/, '$1')).slice(0, 3);
+        return `Python: ${modules.join(', ')}${linesSuffix}`;
+      }
+    }
+
+    // 5. Fallback: show first meaningful line, truncated
+    const firstLine = lines.find(l => l.trim().length > 0)?.trim() ?? '';
+    if (firstLine.length > 0) {
+      return `${langLabel}: ${firstLine.slice(0, 50)}${firstLine.length > 50 ? '...' : ''}${linesSuffix}`;
+    }
+
+    return `${langLabel}${linesSuffix}`;
   }
 
   function escapeHtml(str: string): string {
@@ -570,34 +627,34 @@
 </script>
 
 <style>
-  /* Prism syntax theme — warm brutalist */
-  :global(.code-block code[class*="language-"] .token.comment),
-  :global(.code-block code[class*="language-"] .token.prolog),
-  :global(.code-block code[class*="language-"] .token.doctype),
-  :global(.code-block code[class*="language-"] .token.cdata) { color: #8a7a66; font-style: italic; }
-  :global(.code-block code[class*="language-"] .token.punctuation) { color: #7a6b58; }
-  :global(.code-block code[class*="language-"] .token.property),
-  :global(.code-block code[class*="language-"] .token.tag),
-  :global(.code-block code[class*="language-"] .token.boolean),
-  :global(.code-block code[class*="language-"] .token.number),
-  :global(.code-block code[class*="language-"] .token.constant),
-  :global(.code-block code[class*="language-"] .token.symbol) { color: #c4570a; }
-  :global(.code-block code[class*="language-"] .token.selector),
-  :global(.code-block code[class*="language-"] .token.attr-name),
-  :global(.code-block code[class*="language-"] .token.string),
-  :global(.code-block code[class*="language-"] .token.char),
-  :global(.code-block code[class*="language-"] .token.builtin) { color: #8a6d3b; }
-  :global(.code-block code[class*="language-"] .token.operator),
-  :global(.code-block code[class*="language-"] .token.entity),
-  :global(.code-block code[class*="language-"] .token.url) { color: #7a6b58; }
-  :global(.code-block code[class*="language-"] .token.atrule),
-  :global(.code-block code[class*="language-"] .token.attr-value),
-  :global(.code-block code[class*="language-"] .token.keyword) { color: #a84808; font-weight: 700; }
-  :global(.code-block code[class*="language-"] .token.function),
-  :global(.code-block code[class*="language-"] .token.class-name) { color: #5a4a38; font-weight: 700; }
-  :global(.code-block code[class*="language-"] .token.regex),
-  :global(.code-block code[class*="language-"] .token.important),
-  :global(.code-block code[class*="language-"] .token.variable) { color: #c4570a; }
+  /* Prism syntax theme — warm brutalist (applies to inline code blocks + drawer artifacts) */
+  :global(code[class*="language-"] .token.comment),
+  :global(code[class*="language-"] .token.prolog),
+  :global(code[class*="language-"] .token.doctype),
+  :global(code[class*="language-"] .token.cdata) { color: #8a7a66; font-style: italic; }
+  :global(code[class*="language-"] .token.punctuation) { color: #7a6b58; }
+  :global(code[class*="language-"] .token.property),
+  :global(code[class*="language-"] .token.tag),
+  :global(code[class*="language-"] .token.boolean),
+  :global(code[class*="language-"] .token.number),
+  :global(code[class*="language-"] .token.constant),
+  :global(code[class*="language-"] .token.symbol) { color: #c4570a; }
+  :global(code[class*="language-"] .token.selector),
+  :global(code[class*="language-"] .token.attr-name),
+  :global(code[class*="language-"] .token.string),
+  :global(code[class*="language-"] .token.char),
+  :global(code[class*="language-"] .token.builtin) { color: #8a6d3b; }
+  :global(code[class*="language-"] .token.operator),
+  :global(code[class*="language-"] .token.entity),
+  :global(code[class*="language-"] .token.url) { color: #7a6b58; }
+  :global(code[class*="language-"] .token.atrule),
+  :global(code[class*="language-"] .token.attr-value),
+  :global(code[class*="language-"] .token.keyword) { color: #a84808; font-weight: 700; }
+  :global(code[class*="language-"] .token.function),
+  :global(code[class*="language-"] .token.class-name) { color: #5a4a38; font-weight: 700; }
+  :global(code[class*="language-"] .token.regex),
+  :global(code[class*="language-"] .token.important),
+  :global(code[class*="language-"] .token.variable) { color: #c4570a; }
 
   /* Sidebar */
   .sidebar {
@@ -1306,16 +1363,20 @@
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
     font-size: 11px;
-    line-height: 1.5;
+    line-height: 1.6;
     color: #ede4d4;
     overflow-x: auto;
     overflow-y: auto;
-    white-space: pre;
-    word-wrap: normal;
-    word-break: normal;
+    white-space: pre-wrap;
+    word-wrap: break-word;
     max-height: 400px;
     tab-size: 2;
     display: block;
+  }
+  .artifact-code code {
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
   .artifact-output-label {
     font-family: var(--font-mono);
@@ -1336,8 +1397,9 @@
     font-size: 11px;
     line-height: 1.4;
     overflow-x: auto;
-    white-space: pre;
-    max-height: 200px;
     overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 200px;
   }
 </style>
