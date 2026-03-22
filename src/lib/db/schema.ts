@@ -456,3 +456,62 @@ export const jkaiActions = pgTable('jkai_actions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 });
+
+// ==========================================
+// Agent Transparency — Tasks, Actions, Activity
+// ==========================================
+
+export const agentTasks = pgTable('agent_tasks', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  title: text('title').notNull(),
+  description: text('description'),
+  status: text('status').notNull().default('pending'), // pending | planning | active | paused | completed | failed
+  priority: integer('priority').default(0),
+  originChannel: text('origin_channel'), // whatsapp | telegram | web | etc
+  originSender: text('origin_sender'), // sender ID for reply routing
+  steps: jsonb('steps').default(sql`'[]'::jsonb`),
+  currentStep: integer('current_step').default(0),
+  result: text('result'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export type AgentTask = typeof agentTasks.$inferSelect;
+export type NewAgentTask = typeof agentTasks.$inferInsert;
+
+export const agentActions = pgTable('agent_actions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  taskId: text('task_id').references(() => agentTasks.id, { onDelete: 'set null' }),
+  sessionId: text('session_id'),
+  actionType: text('action_type').notNull(), // tool_call | llm_call | decision | message_in | message_out
+  toolName: text('tool_name'),
+  input: jsonb('input'),
+  output: jsonb('output'),
+  reasoning: text('reasoning'),
+  durationMs: integer('duration_ms'),
+  tokensInput: integer('tokens_input'),
+  tokensOutput: integer('tokens_output'),
+  costUsd: doublePrecision('cost_usd'),
+  provider: text('provider'),
+  model: text('model'),
+  status: text('status').default('completed'), // pending | running | completed | failed
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AgentAction = typeof agentActions.$inferSelect;
+export type NewAgentAction = typeof agentActions.$inferInsert;
+
+export const agentActivity = pgTable('agent_activity', {
+  id: serial('id').primaryKey(),
+  actionId: text('action_id').references(() => agentActions.id, { onDelete: 'set null' }),
+  taskId: text('task_id').references(() => agentTasks.id, { onDelete: 'set null' }),
+  eventType: text('event_type').notNull(), // task_created | step_started | tool_started | tool_completed | research_progress | message_in | message_out | decision | error
+  summary: text('summary').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AgentActivityRecord = typeof agentActivity.$inferSelect;
+export type NewAgentActivity = typeof agentActivity.$inferInsert;
