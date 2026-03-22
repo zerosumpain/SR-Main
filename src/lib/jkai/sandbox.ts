@@ -130,6 +130,61 @@ export async function getDockerContainers(): Promise<
   }
 }
 
+export interface SandboxComponent {
+  name: string;
+  version: string;
+  category: 'runtime' | 'python-pkg' | 'npm-global' | 'system-tool';
+}
+
+export async function getSandboxComponents(): Promise<SandboxComponent[]> {
+  const components: SandboxComponent[] = [];
+
+  // Runtimes
+  const runtimeChecks: Array<{ name: string; cmd: string; category: SandboxComponent['category'] }> = [
+    { name: 'Python', cmd: 'python3 --version 2>&1', category: 'runtime' },
+    { name: 'Node.js', cmd: 'node --version 2>&1', category: 'runtime' },
+    { name: 'bash', cmd: 'bash --version 2>&1 | head -1', category: 'runtime' },
+    { name: 'git', cmd: 'git --version 2>&1', category: 'system-tool' },
+    { name: 'curl', cmd: 'curl --version 2>&1 | head -1', category: 'system-tool' },
+    { name: 'wget', cmd: 'wget --version 2>&1 | head -1', category: 'system-tool' },
+    { name: 'jq', cmd: 'jq --version 2>&1', category: 'system-tool' },
+    { name: 'TypeScript', cmd: 'tsc --version 2>&1', category: 'npm-global' },
+    { name: 'tsx', cmd: 'tsx --version 2>&1', category: 'npm-global' },
+  ];
+
+  for (const check of runtimeChecks) {
+    const result = await execInSandbox(check.cmd, 5000);
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      const version = result.stdout.trim().replace(/^[A-Za-z ]+/, '').trim() || result.stdout.trim();
+      components.push({ name: check.name, version, category: check.category });
+    }
+  }
+
+  // Python packages
+  const pipResult = await execInSandbox('pip list --format=json 2>/dev/null', 10000);
+  if (pipResult.exitCode === 0 && pipResult.stdout.trim()) {
+    try {
+      const packages: Array<{ name: string; version: string }> = JSON.parse(pipResult.stdout);
+      for (const pkg of packages) {
+        components.push({ name: pkg.name, version: pkg.version, category: 'python-pkg' });
+      }
+    } catch {}
+  }
+
+  // Playwright browsers
+  const pwResult = await execInSandbox('python3 -c "from playwright.sync_api import sync_playwright; print(\'installed\')" 2>&1', 10000);
+  if (pwResult.exitCode === 0 && pwResult.stdout.includes('installed')) {
+    const browserResult = await execInSandbox('ls ~/.cache/ms-playwright/ 2>/dev/null || ls /home/jkai/.cache/ms-playwright/ 2>/dev/null', 5000);
+    if (browserResult.exitCode === 0 && browserResult.stdout.trim()) {
+      for (const line of browserResult.stdout.trim().split('\n').filter(Boolean)) {
+        components.push({ name: `Playwright: ${line.trim()}`, version: 'installed', category: 'python-pkg' });
+      }
+    }
+  }
+
+  return components;
+}
+
 function formatUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);

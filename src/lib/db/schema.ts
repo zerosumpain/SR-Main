@@ -521,3 +521,20 @@ export const agentSettings = pgTable('agent_settings', {
   value: text('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ==========================================
+// JKAI — Sandbox Component Usage Tracking
+// ==========================================
+
+export const jkaiComponentUsage = pgTable('jkai_component_usage', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  component: text('component').notNull(), // e.g. 'pandas', 'playwright', 'node'
+  category: text('category').notNull(), // 'runtime' | 'python-pkg' | 'npm-global' | 'system-tool'
+  context: text('context'), // brief description of what it was used for
+  code: text('code'), // the code block that used it
+  conversationId: text('conversation_id').references(() => jkaiConversations.id, { onDelete: 'set null' }),
+  source: text('source').notNull().default('chat'), // 'chat' | 'cron' | 'heartbeat'
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiComponentUsage = typeof jkaiComponentUsage.$inferSelect;

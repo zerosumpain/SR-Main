@@ -2,10 +2,11 @@ import type { RequestHandler } from './$types';
 import { collectResponse, extractCodeBlock } from '$lib/jkai/client';
 import { execInSandbox, getSandboxStatus } from '$lib/jkai/sandbox';
 import { db } from '$lib/db';
-import { jkaiConversations, jkaiMessages } from '$lib/db/schema';
+import { jkaiConversations, jkaiMessages, jkaiComponentUsage } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ChatMessage } from '$lib/jkai/types';
 import { validateSession } from '$lib/auth';
+import { detectComponents } from '$lib/jkai/component-detector';
 
 const MAX_EXEC_ROUNDS = 10;
 
@@ -125,6 +126,24 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
             || '(no output)';
 
           send({ type: 'exec_result', output, exitCode: result.exitCode });
+
+          // Log component usage (fire-and-forget)
+          const detected = detectComponents(block.lang, block.code);
+          if (detected.length > 0) {
+            const contextSnippet = block.code.slice(0, 120);
+            db.insert(jkaiComponentUsage)
+              .values(
+                detected.map((d) => ({
+                  component: d.component,
+                  category: d.category,
+                  context: contextSnippet,
+                  code: block.code,
+                  conversationId: convId,
+                  source: 'chat' as const,
+                })),
+              )
+              .catch(() => {});
+          }
 
           // Add this turn + execution result to the conversation for next round
           conversation.push({ role: 'assistant', content: turnContent });
