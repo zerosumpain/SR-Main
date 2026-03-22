@@ -5,6 +5,9 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async ({ cookies, url }) => {
   if (url.pathname === '/admin/login') return {};
 
+  // Agent dashboard pages bypass admin auth — they have their own API key auth
+  if (url.pathname.startsWith('/admin/agent')) return {};
+
   const session = cookies.get('admin_session');
   const token = url.searchParams.get('token');
 

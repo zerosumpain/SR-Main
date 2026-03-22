@@ -122,6 +122,9 @@
     <a href="/admin/agent/costs" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
       Costs
     </a>
+    <a href="/admin/agent/config" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: rgba(255,255,255,0.05); font-family: var(--font-mono);">
+      Config
+    </a>
   </div>
 
   <!-- Active Tasks -->

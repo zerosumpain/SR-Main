@@ -515,3 +515,9 @@ export const agentActivity = pgTable('agent_activity', {
 
 export type AgentActivityRecord = typeof agentActivity.$inferSelect;
 export type NewAgentActivity = typeof agentActivity.$inferInsert;
+
+export const agentSettings = pgTable('agent_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

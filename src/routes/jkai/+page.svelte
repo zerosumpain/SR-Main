@@ -334,6 +334,7 @@
         <a href="/admin/agent/tasks" class="admin-link">Tasks</a>
         <a href="/admin/agent/actions" class="admin-link">Actions</a>
         <a href="/admin/agent/costs" class="admin-link">Costs</a>
+        <a href="/admin/agent/config" class="admin-link">Config</a>
         <a href="/jkai/admin" class="admin-link">Sandbox</a>
       </div>
     </div>
