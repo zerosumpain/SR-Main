@@ -2,8 +2,12 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { jkaiConversations, jkaiMessages } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
+import { validateSession } from '$lib/auth';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
+  if (!validateSession(cookies.get('admin_session'))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const id = url.searchParams.get('id');
 
   if (id) {
@@ -33,7 +37,10 @@ export const GET: RequestHandler = async ({ url }) => {
   return Response.json(conversations);
 };
 
-export const DELETE: RequestHandler = async ({ url }) => {
+export const DELETE: RequestHandler = async ({ url, cookies }) => {
+  if (!validateSession(cookies.get('admin_session'))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const id = url.searchParams.get('id');
   if (!id) {
     return new Response(JSON.stringify({ error: 'No id provided' }), { status: 400 });

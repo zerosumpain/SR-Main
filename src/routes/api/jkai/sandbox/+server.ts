@@ -7,8 +7,12 @@ import {
   execInSandbox,
   getDockerContainers,
 } from '$lib/jkai/sandbox';
+import { validateSession } from '$lib/auth';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
+  if (!validateSession(cookies.get('admin_session'))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const action = url.searchParams.get('action');
 
   if (action === 'containers') {
@@ -20,7 +24,10 @@ export const GET: RequestHandler = async ({ url }) => {
   return Response.json(status);
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
+  if (!validateSession(cookies.get('admin_session'))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const { action, command, timeout } = await request.json();
 
   switch (action) {

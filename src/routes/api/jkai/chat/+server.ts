@@ -5,10 +5,14 @@ import { db } from '$lib/db';
 import { jkaiConversations, jkaiMessages } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ChatMessage } from '$lib/jkai/types';
+import { validateSession } from '$lib/auth';
 
 const MAX_EXEC_ROUNDS = 10;
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
+  if (!validateSession(cookies.get('admin_session'))) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   const body = await request.json();
   const {
     messages: inputMessages,
