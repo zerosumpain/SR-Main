@@ -8,12 +8,9 @@
 
 <style>
   .jkai-root {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
+    min-height: 100vh;
     background: var(--bg, #ede4d4);
     color: var(--text-primary, #1a1008);
     font-family: var(--font-body);
-    overflow: hidden;
   }
 </style>
