@@ -1,0 +1,72 @@
+import { db } from '$lib/db';
+import { jkaiIterations } from '$lib/db/schema';
+import { eq, and, gte } from 'drizzle-orm';
+import type { BudgetConfig, BudgetCheckResult } from './types';
+import type { JkaiBuild } from '$lib/db/schema';
+
+export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> {
+  const config = build.budgetConfig as BudgetConfig;
+
+  if (config.maxIterations && build.iterationsCompleted >= config.maxIterations) {
+    return { canProceed: false, shouldComplete: true, reason: `Reached max iterations (${config.maxIterations})` };
+  }
+
+  if (config.maxTotalMinutes && build.activeMinutesUsed >= config.maxTotalMinutes) {
+    return { canProceed: false, shouldComplete: true, reason: `Reached total time cap (${config.maxTotalMinutes}m)` };
+  }
+
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000);
+
+  const recentIterations = await db
+    .select()
+    .from(jkaiIterations)
+    .where(
+      and(
+        eq(jkaiIterations.buildId, build.id),
+        eq(jkaiIterations.status, 'completed'),
+        gte(jkaiIterations.createdAt, windowStart),
+      ),
+    );
+
+  if (config.activeMinutesPerHour) {
+    const minutesInWindow = recentIterations.reduce(
+      (sum, it) => sum + (it.durationMs || 0) / 60000,
+      0,
+    );
+    if (minutesInWindow >= config.activeMinutesPerHour) {
+      const oldestInWindow = recentIterations
+        .map((it) => it.createdAt.getTime())
+        .sort((a, b) => a - b)[0];
+      const sleepMs = oldestInWindow
+        ? oldestInWindow + 60 * 60 * 1000 - Date.now()
+        : 60 * 1000;
+      return {
+        canProceed: false,
+        sleepMs: Math.max(sleepMs, 1000),
+        reason: `Active minutes limit reached (${minutesInWindow.toFixed(1)}/${config.activeMinutesPerHour}m). Cooling down.`,
+      };
+    }
+  }
+
+  if (config.maxTokensPerHour) {
+    const tokensInWindow = recentIterations.reduce(
+      (sum, it) => sum + (it.tokensUsed || 0),
+      0,
+    );
+    if (tokensInWindow >= config.maxTokensPerHour) {
+      const oldestInWindow = recentIterations
+        .map((it) => it.createdAt.getTime())
+        .sort((a, b) => a - b)[0];
+      const sleepMs = oldestInWindow
+        ? oldestInWindow + 60 * 60 * 1000 - Date.now()
+        : 60 * 1000;
+      return {
+        canProceed: false,
+        sleepMs: Math.max(sleepMs, 1000),
+        reason: `Token limit reached (${tokensInWindow}/${config.maxTokensPerHour}). Cooling down.`,
+      };
+    }
+  }
+
+  return { canProceed: true };
+}
