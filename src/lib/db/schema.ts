@@ -416,48 +416,6 @@ export const narrativeItems = pgTable('narrative_item', {
 export type NarrativeItem = typeof narrativeItems.$inferSelect;
 
 // ==========================================
-// JKAI 2.0 — Autonomous Assistant
-// ==========================================
-
-export const jkaiConversations = pgTable('jkai_conversations', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  title: text('title'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type JkaiConversation = typeof jkaiConversations.$inferSelect;
-
-export const jkaiMessages = pgTable('jkai_messages', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  conversationId: text('conversation_id')
-    .notNull()
-    .references(() => jkaiConversations.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
-  content: text('content').notNull(),
-  thinking: text('thinking'), // thinking/reasoning content when in thinking mode
-  attachments: jsonb('attachments').default(sql`'[]'::jsonb`), // media/file references
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type JkaiMessage = typeof jkaiMessages.$inferSelect;
-
-export const jkaiActions = pgTable('jkai_actions', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  conversationId: text('conversation_id')
-    .notNull()
-    .references(() => jkaiConversations.id, { onDelete: 'cascade' }),
-  messageId: text('message_id').references(() => jkaiMessages.id, { onDelete: 'set null' }),
-  type: text('type').notNull(), // 'plan' | 'code_exec' | 'file_create' | 'web_fetch' | 'pulse' | 'cron'
-  description: text('description').notNull(),
-  status: text('status').notNull().default('pending'), // 'pending' | 'running' | 'completed' | 'failed'
-  input: jsonb('input'),
-  output: jsonb('output'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-});
-
-// ==========================================
 // Agent Transparency — Tasks, Actions, Activity
 // ==========================================
 
@@ -523,18 +481,52 @@ export const agentSettings = pgTable('agent_settings', {
 });
 
 // ==========================================
-// JKAI — Sandbox Component Usage Tracking
+// JKAI — Autonomous Build System
 // ==========================================
 
-export const jkaiComponentUsage = pgTable('jkai_component_usage', {
+export const jkaiBuilds = pgTable('jkai_builds', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  component: text('component').notNull(), // e.g. 'pandas', 'playwright', 'node'
-  category: text('category').notNull(), // 'runtime' | 'python-pkg' | 'npm-global' | 'system-tool'
-  context: text('context'), // brief description of what it was used for
-  code: text('code'), // the code block that used it
-  conversationId: text('conversation_id').references(() => jkaiConversations.id, { onDelete: 'set null' }),
-  source: text('source').notNull().default('chat'), // 'chat' | 'cron' | 'heartbeat'
+  title: text('title'),
+  prompt: text('prompt').notNull(),
+  status: text('status').notNull().default('pending'),
+  budgetConfig: jsonb('budget_config').notNull().default(sql`'{}'::jsonb`),
+  tokensUsed: integer('tokens_used').notNull().default(0),
+  iterationsCompleted: integer('iterations_completed').notNull().default(0),
+  activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
+  serveConfig: jsonb('serve_config'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
+export type NewJkaiBuild = typeof jkaiBuilds.$inferInsert;
+
+export const jkaiIterations = pgTable('jkai_iterations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  number: integer('number').notNull(),
+  status: text('status').notNull().default('running'),
+  goals: text('goals'),
+  plan: text('plan'),
+  actions: jsonb('actions').notNull().default(sql`'[]'::jsonb`),
+  messages: jsonb('messages').notNull().default(sql`'[]'::jsonb`),
+  evaluation: text('evaluation'),
+  nextSteps: text('next_steps'),
+  tokensUsed: integer('tokens_used').notNull().default(0),
+  durationMs: integer('duration_ms'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type JkaiComponentUsage = typeof jkaiComponentUsage.$inferSelect;
+export type JkaiIteration = typeof jkaiIterations.$inferSelect;
+export type NewJkaiIteration = typeof jkaiIterations.$inferInsert;
+
+export const jkaiLogs = pgTable('jkai_logs', {
+  id: serial('id').primaryKey(),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  iterationId: text('iteration_id').references(() => jkaiIterations.id, { onDelete: 'set null' }),
+  type: text('type').notNull(),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiLog = typeof jkaiLogs.$inferSelect;
