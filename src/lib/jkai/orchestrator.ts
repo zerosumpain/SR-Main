@@ -117,6 +117,17 @@ class Orchestrator {
     this.loopTimer = null;
     this.activeBuildId = null;
 
+    // Mark any running iterations as failed (they were interrupted)
+    await db
+      .update(jkaiIterations)
+      .set({ status: 'failed' })
+      .where(
+        and(
+          eq(jkaiIterations.buildId, buildId),
+          eq(jkaiIterations.status, 'running'),
+        ),
+      );
+
     await db
       .update(jkaiBuilds)
       .set({ status: 'paused', updatedAt: new Date() })
@@ -129,6 +140,17 @@ class Orchestrator {
     if (this.activeBuildId) {
       throw new Error(`Build ${this.activeBuildId} is already active`);
     }
+
+    // Clean up any orphaned running iterations before resuming
+    await db
+      .update(jkaiIterations)
+      .set({ status: 'failed' })
+      .where(
+        and(
+          eq(jkaiIterations.buildId, buildId),
+          eq(jkaiIterations.status, 'running'),
+        ),
+      );
 
     this.activeBuildId = buildId;
     this.stopped = false;
@@ -147,6 +169,17 @@ class Orchestrator {
     if (this.loopTimer) clearTimeout(this.loopTimer);
     this.loopTimer = null;
     this.activeBuildId = null;
+
+    // Mark any running iterations as failed
+    await db
+      .update(jkaiIterations)
+      .set({ status: 'failed' })
+      .where(
+        and(
+          eq(jkaiIterations.buildId, buildId),
+          eq(jkaiIterations.status, 'running'),
+        ),
+      );
 
     await db
       .update(jkaiBuilds)
@@ -195,6 +228,7 @@ class Orchestrator {
     if (this.stopped || this.activeBuildId !== buildId) return;
 
     try {
+      // Re-fetch build to get latest counters
       const [build] = await db
         .select()
         .from(jkaiBuilds)
@@ -218,6 +252,15 @@ class Orchestrator {
         return;
       }
 
+      // Get the highest iteration number (completed or failed) to avoid duplicates
+      const [lastIteration] = await db
+        .select()
+        .from(jkaiIterations)
+        .where(eq(jkaiIterations.buildId, buildId))
+        .orderBy(desc(jkaiIterations.number))
+        .limit(1);
+
+      // Get last completed iteration for context
       const [prevIteration] = await db
         .select()
         .from(jkaiIterations)
@@ -230,7 +273,7 @@ class Orchestrator {
         .orderBy(desc(jkaiIterations.number))
         .limit(1);
 
-      const iterationNumber = (prevIteration?.number || 0) + 1;
+      const iterationNumber = (lastIteration?.number || 0) + 1;
 
       const [iteration] = await db
         .insert(jkaiIterations)
@@ -241,7 +284,7 @@ class Orchestrator {
         })
         .returning();
 
-      await emitLog(buildId, 'system', `Starting iteration #${iterationNumber}`, iteration.id);
+      await emitLog(buildId, 'system', `━━━ Iteration #${iterationNumber} started ━━━`, iteration.id);
 
       const startTime = Date.now();
 
@@ -249,6 +292,7 @@ class Orchestrator {
 
       const durationMs = Date.now() - startTime;
 
+      // Always update the iteration record, even if no evaluation was produced
       await db
         .update(jkaiIterations)
         .set({
@@ -264,6 +308,7 @@ class Orchestrator {
         })
         .where(eq(jkaiIterations.id, iteration.id));
 
+      // Update build counters
       await db
         .update(jkaiBuilds)
         .set({
@@ -274,9 +319,17 @@ class Orchestrator {
         })
         .where(eq(jkaiBuilds.id, buildId));
 
+      // Check for serve.json
       await this.checkServeConfig(buildId);
 
-      await emitLog(buildId, 'system', `Iteration #${iterationNumber} completed (${(durationMs / 1000).toFixed(0)}s)`, iteration.id);
+      // Log iteration summary
+      const summary = [
+        `━━━ Iteration #${iterationNumber} complete ━━━`,
+        `Duration: ${(durationMs / 1000).toFixed(0)}s | Tokens: ${result.tokensUsed} | Actions: ${result.actions.length}`,
+        result.evaluation ? `Evaluation: ${result.evaluation.slice(0, 200)}` : 'No evaluation produced (max turns reached)',
+        result.nextSteps ? `Next: ${result.nextSteps.slice(0, 200)}` : '',
+      ].filter(Boolean).join('\n');
+      await emitLog(buildId, 'system', summary, iteration.id);
 
       this.scheduleNext(buildId, 1000);
     } catch (err: any) {
@@ -319,6 +372,14 @@ class Orchestrator {
     for (let turn = 0; turn < maxTurns; turn++) {
       if (this.stopped) break;
 
+      // On the last turn, if no evaluation yet, force the LLM to evaluate
+      if (turn === maxTurns - 1 && !evaluation) {
+        messages.push({
+          role: 'user',
+          content: 'You have reached the maximum number of steps for this iteration. Write your ## Evaluation and ## Next Steps now. Do not write any code blocks.',
+        });
+      }
+
       const response = await client.chat.completions.create({
         model,
         messages,
@@ -331,9 +392,13 @@ class Orchestrator {
 
       messages.push({ role: 'assistant', content: assistantContent });
 
+      // Persist messages incrementally
       await db
         .update(jkaiIterations)
-        .set({ messages: messages.filter((m) => m.role !== 'system') })
+        .set({
+          messages: messages.filter((m) => m.role !== 'system'),
+          tokensUsed: totalTokens,
+        })
         .where(eq(jkaiIterations.id, iteration.id));
 
       if (turn === 0) {
@@ -342,6 +407,7 @@ class Orchestrator {
         plan = codeStart > 0 ? assistantContent.slice(0, codeStart).trim() : assistantContent;
       }
 
+      // Check for evaluation (signals iteration complete)
       if (hasEvaluation(assistantContent)) {
         evaluation = extractSection(assistantContent, 'Evaluation');
         nextSteps = extractSection(assistantContent, 'Next Steps');
@@ -357,6 +423,7 @@ class Orchestrator {
         break;
       }
 
+      // Check for code block
       const codeBlock = extractCodeBlock(assistantContent);
       if (codeBlock) {
         const textBefore = assistantContent.split('```')[0].trim();
@@ -404,13 +471,21 @@ class Orchestrator {
           content: `Command output (exit code ${execResult.exitCode}):\n${execResult.stdout}\n${execResult.stderr ? `stderr: ${execResult.stderr}` : ''}`,
         });
       } else {
+        // Plain text response (no code, no evaluation)
         await emitLog(build.id, 'text', assistantContent, iteration.id);
 
         messages.push({
           role: 'user',
-          content: 'Continue with your next step.',
+          content: 'Continue with your next step. Remember: write exactly ONE code block per response, or if you are done with this iteration, write your ## Evaluation and ## Next Steps.',
         });
       }
+    }
+
+    // If we exhausted maxTurns without an evaluation, synthesize one
+    if (!evaluation) {
+      evaluation = `Iteration reached maximum turns (${maxTurns}) without completing evaluation. ${actions.length} actions were executed.`;
+      nextSteps = 'Continue from where this iteration left off.';
+      await emitLog(build.id, 'system', `Auto-evaluation: ${evaluation}`, iteration.id);
     }
 
     return { goals, plan, actions, messages: messages.filter((m) => m.role !== 'system'), evaluation, nextSteps, tokensUsed: totalTokens };

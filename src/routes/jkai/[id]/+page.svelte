@@ -20,7 +20,6 @@
   });
 
   function connectSSE() {
-    const lastId = logs.length > 0 ? logs[logs.length - 1].id : 0;
     eventSource = new EventSource(`/api/jkai/builds/${build.id}/stream`);
 
     eventSource.onmessage = (e) => {
@@ -36,6 +35,22 @@
       setTimeout(connectSSE, 3000);
     };
   }
+
+  // Poll build data to keep counters fresh
+  let pollTimer: ReturnType<typeof setInterval>;
+  onMount(() => {
+    pollTimer = setInterval(async () => {
+      if (build.status !== 'running') return;
+      try {
+        const res = await fetch(`/api/jkai/builds/${build.id}`);
+        if (res.ok) {
+          const fresh = await res.json();
+          build = { ...fresh };
+        }
+      } catch {}
+    }, 10000);
+  });
+  onDestroy(() => clearInterval(pollTimer));
 
   async function controlAction(action: 'pause' | 'resume' | 'stop') {
     const res = await fetch(`/api/jkai/builds/${build.id}/${action}`, { method: 'POST' });
