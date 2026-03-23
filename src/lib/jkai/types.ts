@@ -1,34 +1,32 @@
-export interface ChatMessage {
-  id?: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  thinking?: string | null;
-  attachments?: Attachment[];
-  createdAt?: string;
+export interface BudgetConfig {
+  activeMinutesPerHour?: number;
+  maxTokensPerHour?: number;
+  maxIterations?: number;
+  maxTotalMinutes?: number;
 }
 
-export interface Attachment {
-  type: 'image' | 'file' | 'code' | 'artifact';
-  name: string;
-  mimeType?: string;
-  url?: string;
-  content?: string;
+export interface ServeConfig {
+  port: number;
+  startCommand: string;
+  healthCheck: string;
+  description: string;
 }
 
-export interface Conversation {
-  id: string;
-  title: string | null;
-  createdAt: string;
-  updatedAt: string;
-  messages?: ChatMessage[];
+export interface ActionRecord {
+  lang: string;
+  code: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
 }
 
-export interface StreamChunk {
-  type: 'text' | 'thinking' | 'done' | 'error' | 'plan' | 'action';
-  content: string;
+export interface BudgetCheckResult {
+  canProceed: boolean;
+  sleepMs?: number;
+  reason?: string;
+  shouldComplete?: boolean;
 }
 
-export interface JkaiConfig {
-  thinkingEnabled: boolean;
-  model: string;
-}
+export type BuildStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed';
+export type IterationStatus = 'running' | 'completed' | 'failed';
+export type LogType = 'thinking' | 'text' | 'code' | 'output' | 'error' | 'system';
