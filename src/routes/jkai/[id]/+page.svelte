@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { tick } from 'svelte';
   import type { PageData } from './$types';
 
   let { data } = $props();
@@ -8,6 +9,21 @@
   let build = $state(data.build);
   let eventSource: EventSource | null = null;
   let logContainer: HTMLDivElement;
+  let Prism: any = null;
+
+  onMount(async () => {
+    // Dynamic import to avoid SSR issues
+    const mod = await import('prismjs');
+    Prism = mod.default || mod;
+    // Load extra languages
+    await import('prismjs/components/prism-bash');
+    await import('prismjs/components/prism-python');
+    await import('prismjs/components/prism-javascript');
+    await import('prismjs/components/prism-typescript');
+    await import('prismjs/components/prism-json');
+    await import('prismjs/components/prism-markup');
+    highlightAll();
+  });
 
   onMount(() => {
     if (build.status === 'running') {
@@ -19,6 +35,33 @@
     eventSource?.close();
   });
 
+  function highlightAll() {
+    if (!Prism || !logContainer) return;
+    tick().then(() => {
+      logContainer?.querySelectorAll('pre code[class*="language-"]').forEach((el: Element) => {
+        if (!(el as HTMLElement).dataset.highlighted) {
+          Prism.highlightElement(el);
+          (el as HTMLElement).dataset.highlighted = 'true';
+        }
+      });
+    });
+  }
+
+  function parseCodeLog(content: string): { lang: string; code: string } | null {
+    const match = content.match(/^```(\w+)\n([\s\S]*?)```$/);
+    if (!match) return null;
+    return { lang: match[1], code: match[2].trimEnd() };
+  }
+
+  function prismLang(lang: string): string {
+    const map: Record<string, string> = {
+      bash: 'bash', sh: 'bash', python: 'python', py: 'python',
+      javascript: 'javascript', js: 'javascript', typescript: 'typescript',
+      ts: 'typescript', node: 'javascript', json: 'json', html: 'markup',
+    };
+    return map[lang] || 'bash';
+  }
+
   function connectSSE() {
     eventSource = new EventSource(`/api/jkai/builds/${build.id}/stream`);
 
@@ -28,6 +71,7 @@
       requestAnimationFrame(() => {
         logContainer?.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
       });
+      highlightAll();
     };
 
     eventSource.onerror = () => {
@@ -84,6 +128,7 @@
 
 <svelte:head>
   <title>{build.title || 'Build'} — JKAI</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
 </svelte:head>
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
@@ -132,7 +177,12 @@
         {#each logs as log}
           <div class="mb-1" style="color: {logTypeColor(log.type)};">
             {#if log.type === 'code'}
-              <pre class="whitespace-pre-wrap bg-black/5 p-2 rounded my-1">{log.content}</pre>
+              {@const parsed = parseCodeLog(log.content)}
+              {#if parsed}
+                <pre class="code-block rounded my-1 !bg-[#1e1e1e] !p-3 overflow-x-auto"><code class="language-{prismLang(parsed.lang)}">{parsed.code}</code></pre>
+              {:else}
+                <pre class="whitespace-pre-wrap bg-black/5 p-2 rounded my-1">{log.content}</pre>
+              {/if}
             {:else if log.type === 'output'}
               <pre class="whitespace-pre-wrap bg-blue-500/5 p-2 rounded my-1">{log.content}</pre>
             {:else if log.type === 'error'}
@@ -250,3 +300,22 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .code-block {
+    font-size: 12px;
+    line-height: 1.5;
+    tab-size: 2;
+  }
+  .code-block code {
+    font-family: var(--font-mono), 'JetBrains Mono', monospace;
+    white-space: pre;
+  }
+  :global(.code-block .token.comment) { color: #6a9955; }
+  :global(.code-block .token.string) { color: #ce9178; }
+  :global(.code-block .token.keyword) { color: #569cd6; }
+  :global(.code-block .token.function) { color: #dcdcaa; }
+  :global(.code-block .token.number) { color: #b5cea8; }
+  :global(.code-block .token.operator) { color: #d4d4d4; }
+  :global(.code-block .token.punctuation) { color: #d4d4d4; }
+</style>
