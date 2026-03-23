@@ -111,13 +111,13 @@ export async function execBuildCommand(
 // --- Workspace Management ---
 
 export async function ensureWorkspace(buildId: string): Promise<string> {
-  const dir = `/home/jkai/workspace/${buildId}`;
-  await execInSandbox(`mkdir -p ${dir}`);
-  return dir;
+  const base = `/home/jkai/workspace/${buildId}`;
+  await execInSandbox(`mkdir -p ${base}/dev ${base}/live`);
+  return `${base}/dev`;
 }
 
 export async function listWorkspaceFiles(buildId: string): Promise<string> {
-  const dir = `/home/jkai/workspace/${buildId}`;
+  const dir = `/home/jkai/workspace/${buildId}/dev`;
   const result = await execInSandbox(
     `find ${dir} -type f -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100 | sed 's|${dir}/||'`,
     10000,
@@ -128,7 +128,7 @@ export async function listWorkspaceFiles(buildId: string): Promise<string> {
 // --- Serve Management ---
 
 export async function readServeJson(buildId: string): Promise<any | null> {
-  const dir = `/home/jkai/workspace/${buildId}`;
+  const dir = `/home/jkai/workspace/${buildId}/dev`;
   const result = await execInSandbox(`cat ${dir}/serve.json 2>/dev/null`, 5000);
   if (result.exitCode !== 0 || !result.stdout.trim()) return null;
   try {
@@ -154,7 +154,7 @@ export async function startProjectServer(
 ): Promise<boolean> {
   await killProjectServer();
 
-  const dir = `/home/jkai/workspace/${buildId}`;
+  const dir = `/home/jkai/workspace/${buildId}/live`;
   await execInSandbox(
     `cd ${dir} && nohup bash -c '${startCommand.replace(/'/g, "'\\''")}' > /tmp/jkai-serve.log 2>&1 & echo $! > /tmp/jkai-serve.pid`,
     10000,
@@ -170,6 +170,34 @@ export async function startProjectServer(
     if (check.stdout.trim() === 'OK') return true;
   }
   return false;
+}
+
+// --- Dev/Live Workspace Management ---
+
+export async function promoteDevToLive(buildId: string): Promise<void> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  // rsync dev to live, delete files in live that aren't in dev
+  await execInSandbox(
+    `rsync -a --delete --exclude='node_modules' --exclude='.git' ${base}/dev/ ${base}/live/`,
+    60000,
+  );
+  // If node_modules exists in dev but not live, copy it too
+  await execInSandbox(
+    `if [ -d ${base}/dev/node_modules ] && [ ! -d ${base}/live/node_modules ]; then cp -r ${base}/dev/node_modules ${base}/live/node_modules; fi`,
+    60000,
+  ).catch(() => {});
+}
+
+export async function seedDevFromLive(buildId: string): Promise<void> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  // Only seed if live has content and dev is empty or doesn't exist
+  const liveCheck = await execInSandbox(`ls ${base}/live/ 2>/dev/null | head -1`, 5000);
+  if (liveCheck.stdout.trim()) {
+    await execInSandbox(
+      `rsync -a --delete ${base}/live/ ${base}/dev/`,
+      60000,
+    );
+  }
 }
 
 // --- Utilities ---

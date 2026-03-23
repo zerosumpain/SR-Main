@@ -10,6 +10,9 @@ import {
   listWorkspaceFiles,
   readServeJson,
   startProjectServer,
+  killProjectServer,
+  promoteDevToLive,
+  seedDevFromLive,
 } from './sandbox';
 import { validateServeConfig } from './serve';
 import type { ActionRecord } from './types';
@@ -286,6 +289,9 @@ class Orchestrator {
 
       await emitLog(buildId, 'system', `━━━ Iteration #${iterationNumber} started ━━━`, iteration.id);
 
+      // Seed dev from live so the LLM starts with the latest working version
+      await seedDevFromLive(buildId);
+
       const startTime = Date.now();
 
       const result = await this.executeIteration(build, iteration, prevIteration);
@@ -434,7 +440,7 @@ class Orchestrator {
         await emitLog(build.id, 'code', `\`\`\`${codeBlock.lang}\n${codeBlock.code}\n\`\`\``, iteration.id);
 
         // Execute — wrap code appropriately for its language
-        const workdir = `/home/jkai/workspace/${build.id}`;
+        const workdir = `/home/jkai/workspace/${build.id}/dev`;
         let execCmd: string;
         if (['python'].includes(codeBlock.lang)) {
           execCmd = `cd ${workdir} && python3 -c ${JSON.stringify(codeBlock.code)}`;
@@ -507,30 +513,43 @@ class Orchestrator {
       .where(eq(jkaiBuilds.id, buildId));
 
     const currentConfig = build?.serveConfig as any;
-    if (
-      currentConfig?.port === config.port &&
-      currentConfig?.startCommand === config.startCommand
-    ) {
-      return;
-    }
+    const configChanged = currentConfig?.port !== config.port || currentConfig?.startCommand !== config.startCommand;
 
-    await emitLog(buildId, 'system', `Starting project server on port ${config.port}: ${config.startCommand}`);
+    // Always promote dev to live after a successful iteration
+    await emitLog(buildId, 'system', 'Promoting dev → live');
+    await promoteDevToLive(buildId);
 
-    const healthy = await startProjectServer(
-      buildId,
-      config.startCommand,
-      config.port,
-      config.healthCheck,
-    );
+    if (configChanged) {
+      await emitLog(buildId, 'system', `Starting project server on port ${config.port}: ${config.startCommand}`);
 
-    if (healthy) {
-      await db
-        .update(jkaiBuilds)
-        .set({ serveConfig: config, updatedAt: new Date() })
-        .where(eq(jkaiBuilds.id, buildId));
-      await emitLog(buildId, 'system', `Project server healthy at port ${config.port}`);
-    } else {
-      await emitLog(buildId, 'error', `Project server failed health check on port ${config.port}`);
+      const healthy = await startProjectServer(
+        buildId,
+        config.startCommand,
+        config.port,
+        config.healthCheck,
+      );
+
+      if (healthy) {
+        await db
+          .update(jkaiBuilds)
+          .set({ serveConfig: config, updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, buildId));
+        await emitLog(buildId, 'system', `Project server healthy at port ${config.port}`);
+      } else {
+        await emitLog(buildId, 'error', `Project server failed health check on port ${config.port}`);
+      }
+    } else if (currentConfig) {
+      // Config unchanged but still promote and restart to pick up code changes
+      await killProjectServer();
+      const healthy = await startProjectServer(
+        buildId,
+        config.startCommand,
+        config.port,
+        config.healthCheck,
+      );
+      if (healthy) {
+        await emitLog(buildId, 'system', `Project server restarted from live`);
+      }
     }
   }
 }

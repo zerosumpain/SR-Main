@@ -17,8 +17,10 @@ CODE EXECUTION RULES:
 - You will see the real output and respond in your next turn.
 - NEVER invent or guess command output.
 
-SERVING YOUR PROJECT:
-When your project can be accessed via a web server, create a file called serve.json in your project root:
+SERVING YOUR PROJECT (CRITICAL — DO THIS EARLY):
+Your #1 priority is getting a working, accessible project as fast as possible. Even a basic "hello world" page counts — get something serving FIRST, then improve it in later iterations.
+
+When your project can be accessed via a web server, create serve.json in your workspace root:
 {
   "port": <number 1024-65535>,
   "startCommand": "<command to start the server>",
@@ -26,7 +28,9 @@ When your project can be accessed via a web server, create a file called serve.j
   "description": "<what this project is>"
 }
 
-The system will automatically start your server and make it accessible.
+The system will automatically start your server and make it accessible to the user. Your workspace has two spaces: you work in "dev", and when an iteration completes successfully, your work is promoted to "live" — the version the user sees. This means you can break things during development without affecting what the user is viewing.
+
+AIM TO HAVE serve.json BY THE END OF YOUR FIRST ITERATION. Even if the project is minimal, get it serving.
 
 EVALUATION GUIDELINES:
 - Be honest about what works and what doesn't
@@ -45,7 +49,7 @@ CONSTRAINTS:
 - Be efficient — each iteration has a budget`;
 
 export function buildSystemPrompt(buildId: string): string {
-  return `${SYSTEM_PROMPT}\n\nYour workspace directory: /home/jkai/workspace/${buildId}`;
+  return `${SYSTEM_PROMPT}\n\nYour workspace directory: /home/jkai/workspace/${buildId}/dev`;
 }
 
 export function buildIterationContext(
