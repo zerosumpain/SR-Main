@@ -1,0 +1,7 @@
+{
+  "dialect": "postgresql",
+  "schema": "./src/lib/db/schema.ts",
+  "dbCredentials": {
+    "url": "postgresql://app:test@localhost:5433/strange_rambling"
+  }
+}

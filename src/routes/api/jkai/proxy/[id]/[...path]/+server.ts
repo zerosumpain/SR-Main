@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { proxyToSandbox } from '$lib/jkai/serve';
-import { authorize } from '../../../../auth';
+import { authorize } from '../../../auth';
 
 const handler: RequestHandler = async ({ params, cookies, request, url }) => {
   if (!authorize(cookies, url)) return new Response('Unauthorized', { status: 401 });
