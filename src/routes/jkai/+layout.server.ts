@@ -14,7 +14,6 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
     cookies.set('admin_session', token, {
       path: '/',
       httpOnly: true,
-      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,
     });

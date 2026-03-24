@@ -325,7 +325,7 @@
           </div>
         </div>
         <iframe
-          src="/api/jkai/proxy/{build.id}/"
+          src={apiUrl(`/api/jkai/proxy/${build.id}/`)}
           class="w-full rounded-lg border"
           style="height: {fullscreen ? '100vh' : '70vh'}; border-color: var(--card-border);"
           title="Project preview"
