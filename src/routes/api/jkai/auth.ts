@@ -1,8 +1,7 @@
-import { validateSession } from '$lib/auth';
-import type { Cookies } from '@sveltejs/kit';
+// Auth is now handled centrally by hooks.server.ts
+// This file is kept for backward compatibility but authorize() always returns true
+// since the hooks middleware already rejected unauthenticated requests before they reach here.
 
-export function authorize(cookies: Cookies, url: URL): boolean {
-  const session = cookies.get('admin_session');
-  const token = url.searchParams.get('token');
-  return validateSession(session) || validateSession(token ?? undefined);
+export function authorize(): boolean {
+  return true;
 }

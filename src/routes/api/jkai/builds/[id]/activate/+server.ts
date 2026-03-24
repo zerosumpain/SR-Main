@@ -5,11 +5,8 @@ import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { activateSnapshot, readServeJson } from '$lib/jkai/sandbox';
 import { validateServeConfig } from '$lib/jkai/serve';
-import { authorize } from '../../../auth';
 
-export const POST: RequestHandler = async ({ params, cookies, request, url }) => {
-  if (!authorize(cookies, url)) return json({ error: 'Unauthorized' }, { status: 401 });
-
+export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json();
   const { iterationNumber } = body;
 

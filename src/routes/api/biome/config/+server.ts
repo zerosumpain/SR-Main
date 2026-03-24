@@ -2,7 +2,6 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { biomeConfig } from '$lib/db/schema';
 import { BIOME_SETTINGS_DEFAULTS, type BiomeSettings } from '$lib/biome/settings';
-import { validateSession } from '$lib/auth';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {
@@ -20,15 +19,7 @@ export const GET: RequestHandler = async () => {
   }
 };
 
-export const POST: RequestHandler = async ({ request, cookies, url }) => {
-  const sessionCookie = cookies.get('admin_session');
-  const tokenParam = url.searchParams.get('token') ?? undefined;
-
-  const authed = validateSession(sessionCookie) || validateSession(tokenParam);
-  if (!authed) {
-    return json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const POST: RequestHandler = async ({ request }) => {
   let body: Partial<BiomeSettings>;
   try {
     body = await request.json();

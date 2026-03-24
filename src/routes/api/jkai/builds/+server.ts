@@ -4,16 +4,13 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { orchestrator } from '$lib/jkai/orchestrator';
-import { authorize } from '../auth';
 
-export const GET: RequestHandler = async ({ cookies, url }) => {
-  if (!authorize(cookies, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const GET: RequestHandler = async () => {
   const builds = await db.select().from(jkaiBuilds).orderBy(desc(jkaiBuilds.createdAt));
   return json(builds);
 };
 
-export const POST: RequestHandler = async ({ cookies, request, url }) => {
-  if (!authorize(cookies, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const { prompt, title, budgetConfig } = body;
   if (!prompt || typeof prompt !== 'string') {

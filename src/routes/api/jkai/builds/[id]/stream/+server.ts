@@ -3,12 +3,8 @@ import { db } from '$lib/db';
 import { jkaiLogs } from '$lib/db/schema';
 import { eq, gt, and, asc } from 'drizzle-orm';
 import { onBuildLog } from '$lib/jkai/orchestrator';
-import { authorize } from '../../../auth';
 
-export const GET: RequestHandler = async ({ params, cookies, request, url }) => {
-  if (!authorize(cookies, url))
-    return new Response('Unauthorized', { status: 401 });
-
+export const GET: RequestHandler = async ({ params, request }) => {
   const buildId = params.id;
   const lastEventId = request.headers.get('Last-Event-ID');
 

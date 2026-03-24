@@ -1,16 +1,8 @@
 import { json } from '@sveltejs/kit';
-import { validateSession } from '$lib/auth';
 import { syncAll } from '$lib/health/sync-service';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request, cookies, url }) => {
-  const session = cookies.get('admin_session');
-  const token = url.searchParams.get('token');
-
-  if (!validateSession(session) && !validateSession(token || undefined)) {
-    return json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json().catch(() => ({}));
   const fullBackfill = body.fullBackfill === true;
 

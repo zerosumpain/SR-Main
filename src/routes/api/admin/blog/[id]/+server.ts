@@ -1,23 +1,11 @@
 import { json } from '@sveltejs/kit';
-import { validateSession } from '$lib/auth';
 import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
-function authorize(request: Request, url: URL): boolean {
-  const token = url.searchParams.get('token');
-  const cookie = request.headers.get('cookie');
-  const session = cookie
-    ?.split(';')
-    .find((c) => c.trim().startsWith('admin_session='))
-    ?.split('=')[1];
-  return validateSession(session) || validateSession(token ?? undefined);
-}
-
 // GET /api/admin/blog/:id — get single post with tags
-export const GET: RequestHandler = async ({ request, url, params }) => {
-  if (!authorize(request, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const GET: RequestHandler = async ({ params }) => {
 
   const id = parseInt(params.id);
   if (isNaN(id)) return json({ error: 'Invalid ID' }, { status: 400 });
@@ -34,8 +22,7 @@ export const GET: RequestHandler = async ({ request, url, params }) => {
 };
 
 // PUT /api/admin/blog/:id — update post
-export const PUT: RequestHandler = async ({ request, url, params }) => {
-  if (!authorize(request, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const PUT: RequestHandler = async ({ request, params }) => {
 
   const id = parseInt(params.id);
   if (isNaN(id)) return json({ error: 'Invalid ID' }, { status: 400 });
@@ -67,8 +54,7 @@ export const PUT: RequestHandler = async ({ request, url, params }) => {
 };
 
 // DELETE /api/admin/blog/:id — delete post
-export const DELETE: RequestHandler = async ({ request, url, params }) => {
-  if (!authorize(request, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const DELETE: RequestHandler = async ({ params }) => {
 
   const id = parseInt(params.id);
   if (isNaN(id)) return json({ error: 'Invalid ID' }, { status: 400 });

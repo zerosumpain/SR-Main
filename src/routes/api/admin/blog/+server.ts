@@ -1,23 +1,11 @@
 import { json } from '@sveltejs/kit';
-import { validateSession } from '$lib/auth';
 import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
-function authorize(request: Request, url: URL): boolean {
-  const token = url.searchParams.get('token');
-  const cookie = request.headers.get('cookie');
-  const session = cookie
-    ?.split(';')
-    .find((c) => c.trim().startsWith('admin_session='))
-    ?.split('=')[1];
-  return validateSession(session) || validateSession(token ?? undefined);
-}
-
 // GET /api/admin/blog — list all posts (drafts + published)
-export const GET: RequestHandler = async ({ request, url }) => {
-  if (!authorize(request, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const GET: RequestHandler = async () => {
 
   const posts = await db
     .select({
@@ -37,8 +25,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 };
 
 // POST /api/admin/blog — create a new post
-export const POST: RequestHandler = async ({ request, url }) => {
-  if (!authorize(request, url)) return json({ error: 'Unauthorized' }, { status: 401 });
+export const POST: RequestHandler = async ({ request }) => {
 
   const body = await request.json();
   const { title, slug, excerpt, content, tags } = body;

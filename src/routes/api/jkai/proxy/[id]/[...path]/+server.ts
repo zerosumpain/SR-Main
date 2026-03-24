@@ -3,10 +3,8 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { proxyToSandbox } from '$lib/jkai/serve';
-import { authorize } from '../../../auth';
 
-const handler: RequestHandler = async ({ params, cookies, request, url }) => {
-  if (!authorize(cookies, url)) return new Response('Unauthorized', { status: 401 });
+const handler: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build?.serveConfig) return new Response('Project not serving', { status: 404 });
   const config = build.serveConfig as { port: number };
