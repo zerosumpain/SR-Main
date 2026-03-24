@@ -19,11 +19,22 @@ export const POST: RequestHandler = async ({ cookies, request, url }) => {
   if (!prompt || typeof prompt !== 'string') {
     return json({ error: 'prompt is required' }, { status: 400 });
   }
+
   const [build] = await db.insert(jkaiBuilds).values({
     title: title || null,
     prompt,
     budgetConfig: budgetConfig || {},
   }).returning();
-  await orchestrator.startBuild(build.id);
+
+  try {
+    await orchestrator.startBuild(build.id);
+  } catch (err: any) {
+    // Build record created but orchestrator failed to start — update status
+    await db.update(jkaiBuilds).set({ status: 'failed' }).where(
+      (await import('drizzle-orm')).eq(jkaiBuilds.id, build.id),
+    );
+    return json({ error: `Build created but failed to start: ${err.message}` }, { status: 500 });
+  }
+
   return json(build, { status: 201 });
 };
