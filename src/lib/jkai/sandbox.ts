@@ -88,8 +88,10 @@ export async function execInSandbox(
   timeout = 120000,
 ): Promise<ExecResult> {
   try {
+    // Base64-encode the command to preserve newlines and special characters
+    const b64 = Buffer.from(command).toString('base64');
     const { stdout, stderr } = await execAsync(
-      `docker exec ${CONTAINER_NAME} bash -c ${JSON.stringify(command)}`,
+      `docker exec ${CONTAINER_NAME} bash -c "echo '${b64}' | base64 -d > /tmp/jkai-exec.sh && bash /tmp/jkai-exec.sh"`,
       { timeout, maxBuffer: 5 * 1024 * 1024 },
     );
     return { stdout, stderr, exitCode: 0 };

@@ -484,15 +484,21 @@ class Orchestrator {
 
         await emitLog(build.id, 'code', `\`\`\`${codeBlock.lang}\n${codeBlock.code}\n\`\`\``, iteration.id);
 
-        // Execute — wrap code appropriately for its language
+        // Execute code in the sandbox
+        // execInSandbox now properly preserves newlines via base64, so all
+        // multi-line scripts work correctly. For python/JS, we write to a
+        // temp file and run with the correct interpreter.
         const workdir = `/home/jkai/workspace/${build.id}/dev`;
         let execCmd: string;
         if (['python'].includes(codeBlock.lang)) {
-          execCmd = `cd ${workdir} && python3 -c ${JSON.stringify(codeBlock.code)}`;
+          // Write python code to temp file via bash heredoc (inside container, newlines preserved)
+          const escaped = codeBlock.code.replace(/'/g, "'\\''");
+          execCmd = `cd ${workdir} && cat > /tmp/jkai-code.py << 'JKAI_PYTHON_EOF'\n${codeBlock.code}\nJKAI_PYTHON_EOF\npython3 /tmp/jkai-code.py`;
         } else if (['javascript', 'typescript', 'node'].includes(codeBlock.lang)) {
-          execCmd = `cd ${workdir} && node -e ${JSON.stringify(codeBlock.code)}`;
+          execCmd = `cd ${workdir} && cat > /tmp/jkai-code.js << 'JKAI_JS_EOF'\n${codeBlock.code}\nJKAI_JS_EOF\nnode /tmp/jkai-code.js`;
         } else {
-          execCmd = `cd ${workdir} && ${codeBlock.code}`;
+          // Bash — executed directly (newlines preserved by execInSandbox)
+          execCmd = `cd ${workdir}\n${codeBlock.code}`;
         }
         const execResult = await execInSandboxChecked(
           execCmd,
