@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { validateSession } from '$lib/auth';
+import { validateSession, getExpectedHash } from '$lib/auth';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ cookies, url }) => {
@@ -7,17 +7,18 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
   const token = url.searchParams.get('token');
 
   if (validateSession(session)) {
-    return {};
+    return { adminToken: session };
   }
 
   if (token && validateSession(token)) {
     cookies.set('admin_session', token, {
       path: '/',
       httpOnly: true,
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,
     });
-    return {};
+    return { adminToken: token };
   }
 
   const redirectTo = url.pathname + url.search;

@@ -1,7 +1,12 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, getContext } from 'svelte';
   import { tick } from 'svelte';
   import type { PageData } from './$types';
+
+  const adminToken = getContext<string>('adminToken');
+  function apiUrl(path: string): string {
+    return adminToken ? `${path}${path.includes('?') ? '&' : '?'}token=${adminToken}` : path;
+  }
 
   let { data } = $props();
   let activeTab = $state<'activity' | 'iterations' | 'preview' | 'controls'>('activity');
@@ -65,7 +70,7 @@
 
   function connectSSE() {
     if (closed) return;
-    eventSource = new EventSource(`/api/jkai/builds/${build.id}/stream`);
+    eventSource = new EventSource(apiUrl(`/api/jkai/builds/${build.id}/stream`));
 
     eventSource.onmessage = (e) => {
       const log = JSON.parse(e.data);
@@ -92,7 +97,7 @@
     pollTimer = setInterval(async () => {
       if (build.status !== 'running') return;
       try {
-        const res = await fetch(`/api/jkai/builds/${build.id}`);
+        const res = await fetch(apiUrl(`/api/jkai/builds/${build.id}`));
         if (res.ok) {
           const fresh = await res.json();
           build = { ...fresh };
@@ -111,7 +116,7 @@
   async function activateIteration(iterationNumber: number) {
     activating = true;
     try {
-      const res = await fetch(`/api/jkai/builds/${build.id}/activate`, {
+      const res = await fetch(apiUrl(`/api/jkai/builds/${build.id}/activate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ iterationNumber }),
@@ -128,7 +133,7 @@
 
   async function controlAction(action: 'pause' | 'resume' | 'stop') {
     try {
-      const res = await fetch(`/api/jkai/builds/${build.id}/${action}`, { method: 'POST' });
+      const res = await fetch(apiUrl(`/api/jkai/builds/${build.id}/${action}`), { method: 'POST' });
       if (res.ok) {
         const statusMap = { pause: 'paused', resume: 'running', stop: 'completed' } as const;
         build = { ...build, status: statusMap[action] };

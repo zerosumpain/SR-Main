@@ -1,5 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { getContext } from 'svelte';
+
+  const adminToken = getContext<string>('adminToken');
 
   let prompt = $state('');
   let activeMinutesPerHour = $state(15);
@@ -8,6 +11,10 @@
   let maxTotalMinutes = $state<number | null>(null);
   let submitting = $state(false);
   let error = $state('');
+
+  function apiUrl(path: string): string {
+    return adminToken ? `${path}?token=${adminToken}` : path;
+  }
 
   async function submit() {
     if (!prompt.trim()) return;
@@ -21,7 +28,7 @@
     if (maxTotalMinutes) budgetConfig.maxTotalMinutes = maxTotalMinutes;
 
     try {
-      const res = await fetch('/api/jkai/builds', {
+      const res = await fetch(apiUrl('/api/jkai/builds'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), budgetConfig }),
