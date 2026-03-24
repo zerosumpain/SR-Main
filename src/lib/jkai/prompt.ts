@@ -31,6 +31,16 @@ ERROR RECOVERY:
 - Check: Is the file path correct? Is the package installed? Is the syntax valid?
 - If you're stuck after 2 failed attempts at the same thing, try a completely different approach
 
+TESTING (MANDATORY):
+- Create and maintain tests alongside your application code in a tests/ directory.
+- For Python projects: use pytest. Create tests/test_app.py (or similar).
+- For Node projects: use the built-in node:test runner. Create tests/test.js (or similar).
+- Tests should cover: API endpoints return correct status codes, core business logic, data validation.
+- After each iteration, the system will automatically run your test suite. If tests fail, you will receive the failures and must fix them in the next iteration.
+- Write tests EARLY — by the end of the first iteration you should have at least a basic smoke test.
+- Test file naming: tests/test_*.py for Python, tests/*.test.js for Node.
+- A test runner script should be at tests/run.sh — create this file with the command to run your tests (e.g., "cd .. && python3 -m pytest tests/ -v" or "cd .. && node --test tests/").
+
 SERVING YOUR PROJECT (CRITICAL — DO THIS EARLY):
 Your #1 priority is getting a working, accessible project as fast as possible. Even a basic "hello world" page counts — get something serving FIRST, then improve it in later iterations.
 
@@ -117,8 +127,29 @@ print('app.py created')
 
 [continues with more steps, then wraps up...]
 
+\`\`\`bash
+mkdir -p tests && python3 -c "
+open('tests/test_app.py','w').write('''
+import requests
+
+def test_home_returns_200():
+    r = requests.get(\"http://localhost:5000/\")
+    assert r.status_code == 200
+
+def test_weather_api_returns_json():
+    r = requests.get(\"http://localhost:5000/api/weather\")
+    assert r.status_code == 200
+    data = r.json()
+    assert \"current_weather\" in data
+''')
+print('tests created')
+"
+\`\`\`
+
+[system runs tests automatically after evaluation]
+
 ## Evaluation
-Set up Flask with a real weather API integration from Open-Meteo. The API endpoint works and returns live London weather data. Created a basic HTML template with Tailwind CDN. Server starts and health check passes. Progress: 30% — foundation is working but the dashboard needs charts, better layout, and more data points.
+Set up Flask with a real weather API integration from Open-Meteo. The API endpoint works and returns live London weather data. Created a basic HTML template with Tailwind CDN. Server starts and health check passes. Progress: 30% — 2/2 tests passing. — foundation is working but the dashboard needs charts, better layout, and more data points.
 
 ## Next Steps
 1. Add interactive charts using Chart.js CDN to visualize temperature and wind data
