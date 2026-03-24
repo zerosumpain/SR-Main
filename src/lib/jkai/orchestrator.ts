@@ -13,6 +13,7 @@ import {
   killProjectServer,
   promoteDevToLive,
   seedDevFromLive,
+  snapshotIteration,
 } from './sandbox';
 import { validateServeConfig } from './serve';
 import type { ActionRecord } from './types';
@@ -324,6 +325,9 @@ class Orchestrator {
           updatedAt: new Date(),
         })
         .where(eq(jkaiBuilds.id, buildId));
+
+      // Snapshot this iteration's dev state
+      await snapshotIteration(buildId, iterationNumber);
 
       // Check for serve.json
       await this.checkServeConfig(buildId);

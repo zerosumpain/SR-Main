@@ -96,6 +96,25 @@
   });
   onDestroy(() => clearInterval(pollTimer));
 
+  let activeIteration = $state<number | null>(null);
+  let activating = $state(false);
+  let fullscreen = $state(false);
+
+  async function activateIteration(iterationNumber: number) {
+    activating = true;
+    try {
+      const res = await fetch(`/api/jkai/builds/${build.id}/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ iterationNumber }),
+      });
+      if (res.ok) {
+        activeIteration = iterationNumber;
+      }
+    } catch {}
+    activating = false;
+  }
+
   async function controlAction(action: 'pause' | 'resume' | 'stop') {
     const res = await fetch(`/api/jkai/builds/${build.id}/${action}`, { method: 'POST' });
     if (res.ok) {
@@ -209,10 +228,28 @@
                 style="font-family: var(--font-mono); background: rgba(100,100,100,0.1); color: var(--text-ghost);">
                 {iter.status}
               </span>
+              {#if activeIteration === iter.number}
+                <span class="text-[10px] uppercase ml-2 px-1.5 py-0.5 rounded"
+                  style="font-family: var(--font-mono); background: rgba(45, 125, 70, 0.12); color: #2d7d46;">
+                  active
+                </span>
+              {/if}
             </span>
-            <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {iter.durationMs ? `${(iter.durationMs / 1000).toFixed(0)}s` : '...'} · {iter.tokensUsed} tokens
-            </span>
+            <div class="flex items-center gap-3">
+              <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                {iter.durationMs ? `${(iter.durationMs / 1000).toFixed(0)}s` : '...'} · {iter.tokensUsed} tokens
+              </span>
+              {#if iter.status === 'completed' && build.serveConfig}
+                <button
+                  onclick={(e) => { e.stopPropagation(); activateIteration(iter.number); }}
+                  disabled={activating || activeIteration === iter.number}
+                  class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border transition-colors disabled:opacity-40"
+                  style="border-color: var(--accent); color: var(--accent);"
+                >
+                  {activating ? '...' : activeIteration === iter.number ? 'Active' : 'Activate'}
+                </button>
+              {/if}
+            </div>
           </summary>
 
           <div class="mt-3 space-y-3 text-sm" style="color: var(--text-secondary);">
@@ -249,12 +286,40 @@
 
   {:else if activeTab === 'preview'}
     {#if build.serveConfig}
-      <iframe
-        src="/api/jkai/proxy/{build.id}/"
-        class="w-full rounded-lg border"
-        style="height: 70vh; border-color: var(--card-border);"
-        title="Project preview"
-      ></iframe>
+      <div class="relative" class:fullscreen-preview={fullscreen}>
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between mb-2 px-1">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              {activeIteration ? `Viewing iteration #${activeIteration}` : 'Latest (live)'}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              onclick={() => fullscreen = !fullscreen}
+              class="px-2 py-1 rounded text-[11px] border transition-colors"
+              style="border-color: var(--card-border); color: var(--text-ghost);"
+            >
+              {fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </button>
+          </div>
+        </div>
+        <iframe
+          src="/api/jkai/proxy/{build.id}/"
+          class="w-full rounded-lg border"
+          style="height: {fullscreen ? '100vh' : '70vh'}; border-color: var(--card-border);"
+          title="Project preview"
+        ></iframe>
+        {#if fullscreen}
+          <button
+            onclick={() => fullscreen = false}
+            class="fixed top-4 right-4 z-[60] px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg"
+            style="background: var(--accent); color: white;"
+          >
+            Exit Fullscreen
+          </button>
+        {/if}
+      </div>
     {:else}
       <div class="text-center py-16 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
         <p class="text-sm" style="color: var(--text-ghost);">
@@ -318,4 +383,18 @@
   :global(.code-block .token.number) { color: #b5cea8; }
   :global(.code-block .token.operator) { color: #d4d4d4; }
   :global(.code-block .token.punctuation) { color: #d4d4d4; }
+  .fullscreen-preview {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--bg, #ede4d4);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fullscreen-preview iframe {
+    flex: 1;
+    border-radius: 0 !important;
+    height: 100% !important;
+  }
 </style>

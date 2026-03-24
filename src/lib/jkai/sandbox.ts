@@ -200,6 +200,58 @@ export async function seedDevFromLive(buildId: string): Promise<void> {
   }
 }
 
+// --- Iteration Snapshots ---
+
+export async function snapshotIteration(buildId: string, iterationNumber: number): Promise<void> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const snapDir = `${base}/snapshots/${iterationNumber}`;
+  await execInSandbox(`mkdir -p ${snapDir}`, 5000);
+  await execInSandbox(
+    `rsync -a --exclude='node_modules' --exclude='.git' ${base}/dev/ ${snapDir}/`,
+    60000,
+  );
+}
+
+export async function activateSnapshot(
+  buildId: string,
+  iterationNumber: number,
+  startCommand: string,
+  port: number,
+  healthCheck: string,
+): Promise<boolean> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const snapDir = `${base}/snapshots/${iterationNumber}`;
+
+  // Check snapshot exists
+  const check = await execInSandbox(`test -d ${snapDir} && echo OK`, 5000);
+  if (check.stdout.trim() !== 'OK') return false;
+
+  // Copy snapshot to live
+  await execInSandbox(
+    `rsync -a --delete --exclude='node_modules' --exclude='.git' ${snapDir}/ ${base}/live/`,
+    60000,
+  );
+  // Copy node_modules if they exist in snapshot
+  await execInSandbox(
+    `if [ -d ${snapDir}/node_modules ]; then rsync -a ${snapDir}/node_modules/ ${base}/live/node_modules/; fi`,
+    60000,
+  ).catch(() => {});
+
+  // Restart server from live
+  await killProjectServer();
+  return startProjectServer(buildId, startCommand, port, healthCheck);
+}
+
+export async function listSnapshots(buildId: string): Promise<number[]> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const result = await execInSandbox(
+    `ls -1 ${base}/snapshots/ 2>/dev/null | sort -n`,
+    5000,
+  );
+  if (result.exitCode !== 0 || !result.stdout.trim()) return [];
+  return result.stdout.trim().split('\n').map(Number).filter(n => !isNaN(n));
+}
+
 // --- Utilities ---
 
 function formatUptime(ms: number): string {

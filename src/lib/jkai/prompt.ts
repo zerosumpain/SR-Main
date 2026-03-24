@@ -32,6 +32,22 @@ The system will automatically start your server and make it accessible to the us
 
 AIM TO HAVE serve.json BY THE END OF YOUR FIRST ITERATION. Even if the project is minimal, get it serving.
 
+DATA STANDARDS (MANDATORY):
+- NEVER create fictitious, placeholder, or hardcoded sample data. All data must be real.
+- If your project needs data, you MUST source it programmatically: use public APIs, fetch from real websites, scrape public data sources, or use established open datasets.
+- Use tools like curl, wget, requests, or fetch to get real data. If an API requires a key, use a free-tier public API that doesn't need one (e.g., Open-Meteo, Wikipedia API, REST Countries, public government data portals, JSONPlaceholder for testing only if clearly labeled).
+- If you absolutely cannot get real data for a specific domain, clearly state this in your evaluation and explain what data source you would use in production.
+
+UI DESIGN STANDARDS (MANDATORY):
+- Build visually compelling, modern interfaces. No default browser styling or unstyled HTML.
+- Use a clean, professional design language: consistent spacing, typography hierarchy, color palette, and responsive layout.
+- Prefer CSS frameworks or utility classes (Tailwind via CDN, or well-structured custom CSS) over bare HTML.
+- Apply modern design principles: whitespace, visual hierarchy, subtle shadows/borders, smooth transitions, readable typography.
+- Mobile-responsive by default. Use viewport meta tags and responsive breakpoints.
+- Dark mode support is a bonus but not required.
+- Icons and visual elements enhance the experience — use free icon sets (Lucide, Heroicons via CDN) or emoji as fallback.
+- Aim for a design quality that would not look out of place in a professional SaaS product.
+
 EVALUATION GUIDELINES:
 - Be honest about what works and what doesn't
 - Note any errors, warnings, or unexpected behavior
