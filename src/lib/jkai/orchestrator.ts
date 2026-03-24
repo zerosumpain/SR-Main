@@ -7,6 +7,7 @@ import {
   ensureSandboxRunning,
   ensureWorkspace,
   execInSandbox,
+  execInSandboxChecked,
   listWorkspaceFiles,
   readServeJson,
   startProjectServer,
@@ -329,6 +330,18 @@ class Orchestrator {
       // Snapshot this iteration's dev state
       await snapshotIteration(buildId, iterationNumber);
 
+      // Append workspace state to evaluation for next iteration's context
+      const currentFiles = await listWorkspaceFiles(buildId);
+      if (currentFiles && result.evaluation) {
+        const progressNote = `\n\nWorkspace state after this iteration:\n${currentFiles}`;
+        result.evaluation = result.evaluation + progressNote;
+        // Update the iteration record with enriched evaluation
+        await db
+          .update(jkaiIterations)
+          .set({ evaluation: result.evaluation })
+          .where(eq(jkaiIterations.id, iteration.id));
+      }
+
       // Check for serve.json
       await this.checkServeConfig(buildId);
 
@@ -378,16 +391,22 @@ class Orchestrator {
     let nextSteps: string | null = null;
     let totalTokens = 0;
     const maxTurns = 20;
+    const maxTokensPerIteration = 100000; // Hard cap per iteration
 
     for (let turn = 0; turn < maxTurns; turn++) {
       if (this.stopped) break;
 
-      // On the last turn, if no evaluation yet, force the LLM to evaluate
-      if (turn === maxTurns - 1 && !evaluation) {
-        messages.push({
-          role: 'user',
-          content: 'You have reached the maximum number of steps for this iteration. Write your ## Evaluation and ## Next Steps now. Do not write any code blocks.',
-        });
+      // Progressive nudging toward evaluation
+      if (turn >= 12 && !evaluation) {
+        const turnsLeft = maxTurns - turn - 1;
+        if (turnsLeft <= 0) {
+          messages.push({
+            role: 'user',
+            content: 'This is your FINAL step. Write your ## Evaluation and ## Next Steps NOW. No code blocks.',
+          });
+        } else if (turnsLeft <= 3) {
+          // Don't add extra message, but the continue prompt below will include the nudge
+        }
       }
 
       const response = await client.chat.completions.create({
@@ -399,6 +418,28 @@ class Orchestrator {
 
       const assistantContent = response.choices[0]?.message?.content || '';
       totalTokens += response.usage?.total_tokens || 0;
+
+      // Check per-iteration token cap
+      if (totalTokens >= maxTokensPerIteration && !hasEvaluation(assistantContent)) {
+        await emitLog(build.id, 'system', `Token cap reached (${totalTokens} tokens). Forcing evaluation.`, iteration.id);
+        messages.push({
+          role: 'user',
+          content: 'You have exceeded the token budget for this iteration. Write your ## Evaluation and ## Next Steps NOW. No more code blocks.',
+        });
+        // Do one more turn to get the evaluation
+        const evalResponse = await client.chat.completions.create({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 2048,
+        });
+        const evalContent = evalResponse.choices[0]?.message?.content || '';
+        totalTokens += evalResponse.usage?.total_tokens || 0;
+        evaluation = extractSection(evalContent, 'Evaluation') || `Iteration stopped at token cap (${totalTokens} tokens). ${actions.length} actions executed.`;
+        nextSteps = extractSection(evalContent, 'Next Steps') || 'Continue from where this iteration left off.';
+        await emitLog(build.id, 'text', evalContent || evaluation, iteration.id);
+        break;
+      }
 
       messages.push({ role: 'assistant', content: assistantContent });
 
@@ -453,7 +494,7 @@ class Orchestrator {
         } else {
           execCmd = `cd ${workdir} && ${codeBlock.code}`;
         }
-        const execResult = await execInSandbox(
+        const execResult = await execInSandboxChecked(
           execCmd,
           codeBlock.code.includes('install') ? 300000 : 120000,
         );
@@ -476,18 +517,26 @@ class Orchestrator {
           .join('\n');
         await emitLog(build.id, 'output', outputStr, iteration.id);
 
-        messages.push({
-          role: 'user',
-          content: `Command output (exit code ${execResult.exitCode}):\n${execResult.stdout}\n${execResult.stderr ? `stderr: ${execResult.stderr}` : ''}`,
-        });
+        const turnsRemaining = maxTurns - turn - 1;
+        let outputMsg = `Command output (exit code ${execResult.exitCode}):\n${execResult.stdout}\n${execResult.stderr ? `stderr: ${execResult.stderr}` : ''}`;
+        if (turnsRemaining <= 5 && turnsRemaining > 2) {
+          outputMsg += `\n\n[${turnsRemaining} steps remaining — start wrapping up soon]`;
+        } else if (turnsRemaining <= 2 && turnsRemaining > 0) {
+          outputMsg += `\n\n[Only ${turnsRemaining} step(s) left — write your ## Evaluation and ## Next Steps next]`;
+        }
+        messages.push({ role: 'user', content: outputMsg });
       } else {
         // Plain text response (no code, no evaluation)
         await emitLog(build.id, 'text', assistantContent, iteration.id);
 
-        messages.push({
-          role: 'user',
-          content: 'Continue with your next step. Remember: write exactly ONE code block per response, or if you are done with this iteration, write your ## Evaluation and ## Next Steps.',
-        });
+        const turnsLeft = maxTurns - turn - 1;
+        let continueMsg = 'Continue with your next step. Write exactly ONE code block per response, or if you are done, write your ## Evaluation and ## Next Steps.';
+        if (turnsLeft <= 5 && turnsLeft > 2) {
+          continueMsg = `You have ${turnsLeft} steps remaining in this iteration. Start planning your evaluation. Continue with code or write your ## Evaluation and ## Next Steps.`;
+        } else if (turnsLeft <= 2 && turnsLeft > 0) {
+          continueMsg = `Only ${turnsLeft} step(s) left! Write your ## Evaluation and ## Next Steps now, or execute ONE final critical command.`;
+        }
+        messages.push({ role: 'user', content: continueMsg });
       }
     }
 
