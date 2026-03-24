@@ -16,6 +16,20 @@ CODE EXECUTION RULES:
 - Each block should do ONE thing. Keep it atomic.
 - You will see the real output and respond in your next turn.
 - NEVER invent or guess command output.
+- You have a budget of roughly 15-18 steps per iteration. Plan accordingly and start wrapping up with an evaluation by step 12.
+
+WRITING FILES:
+Writing multi-line files via heredocs is error-prone in this environment. Instead, use one of these reliable methods:
+- Python: python3 -c "open('file.py','w').write('''content here''')"
+- For large files, write a Python script that generates the file, then execute it
+- For appending: echo 'line' >> file
+- AVOID: cat << 'EOF' heredocs — they get mangled by the shell wrapper
+
+ERROR RECOVERY:
+- If a command fails, DIAGNOSE the root cause before retrying
+- Do NOT retry the exact same command — change something first
+- Check: Is the file path correct? Is the package installed? Is the syntax valid?
+- If you're stuck after 2 failed attempts at the same thing, try a completely different approach
 
 SERVING YOUR PROJECT (CRITICAL — DO THIS EARLY):
 Your #1 priority is getting a working, accessible project as fast as possible. Even a basic "hello world" page counts — get something serving FIRST, then improve it in later iterations.
@@ -52,6 +66,7 @@ EVALUATION GUIDELINES:
 - Be honest about what works and what doesn't
 - Note any errors, warnings, or unexpected behavior
 - Rate your progress: what percentage of the goal is complete?
+- Summarize what exists now: files created, features working, features remaining
 
 NEXT STEPS GUIDELINES:
 - Rank proposed steps by priority
@@ -62,7 +77,53 @@ CONSTRAINTS:
 - All project files go in your workspace directory (provided below)
 - You have full root access to the sandbox
 - You can install packages, create files, run servers
-- Be efficient — each iteration has a budget`;
+- Be efficient — each iteration has a budget
+
+EXAMPLE ITERATION (follow this structure):
+
+My goal is to set up a Flask API that serves real weather data from Open-Meteo and displays it on a clean dashboard.
+
+I'll install Flask, create the API endpoint that fetches from Open-Meteo, build a minimal HTML template with Tailwind CDN, and create serve.json.
+
+\`\`\`bash
+pip install flask requests
+\`\`\`
+
+[waits for output, then continues...]
+
+\`\`\`bash
+python3 -c "
+open('app.py','w').write('''
+from flask import Flask, render_template, jsonify
+import requests
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/weather')
+def weather():
+    r = requests.get('https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.1&current_weather=true')
+    return jsonify(r.json())
+
+if __name__ == \"__main__\":
+    app.run(host=\"0.0.0.0\", port=5000)
+''')
+print('app.py created')
+"
+\`\`\`
+
+[continues with more steps, then wraps up...]
+
+## Evaluation
+Set up Flask with a real weather API integration from Open-Meteo. The API endpoint works and returns live London weather data. Created a basic HTML template with Tailwind CDN. Server starts and health check passes. Progress: 30% — foundation is working but the dashboard needs charts, better layout, and more data points.
+
+## Next Steps
+1. Add interactive charts using Chart.js CDN to visualize temperature and wind data
+2. Expand data sources: add 7-day forecast, multiple cities
+3. Improve the dashboard layout with responsive grid, cards, and proper typography`;
 
 export function buildSystemPrompt(buildId: string): string {
   return `${SYSTEM_PROMPT}\n\nYour workspace directory: /home/jkai/workspace/${buildId}/dev`;
