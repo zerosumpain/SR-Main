@@ -117,16 +117,10 @@ class Orchestrator {
 
     await emitLog(buildId, 'system', 'Build started');
 
-    await ensureSandboxRunning();
-    await ensureWorkspace(buildId);
-
-    // Run planning phase before first iteration
-    const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-    if (buildRecord) {
-      await this.planBuild(buildId, buildRecord.prompt);
-    }
-
-    this.scheduleNext(buildId);
+    // Run setup and planning asynchronously so the API returns immediately
+    this.initAndPlan(buildId).catch(async (err) => {
+      await emitLog(buildId, 'error', `Build init failed: ${err.message}`);
+    });
   }
 
   async pauseBuild(buildId: string): Promise<void> {
@@ -234,6 +228,20 @@ class Orchestrator {
     this.activeBuildId = runningBuild.id;
     this.stopped = false;
     this.scheduleNext(runningBuild.id);
+  }
+
+  private async initAndPlan(buildId: string): Promise<void> {
+    await ensureSandboxRunning();
+    await ensureWorkspace(buildId);
+
+    const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (buildRecord && !this.stopped) {
+      await this.planBuild(buildId, buildRecord.prompt);
+    }
+
+    if (!this.stopped) {
+      this.scheduleNext(buildId);
+    }
   }
 
   // --- Private: Planning Phase ---

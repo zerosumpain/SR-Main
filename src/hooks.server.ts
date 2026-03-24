@@ -32,10 +32,12 @@ const { handle: authHandle } = SvelteKitAuth({
   secret: env.AUTH_SECRET,
   trustHost: true,
   callbacks: {
-    async signIn({ profile }) {
+    async signIn({ user, profile }) {
       const allowed = getAllowedEmails();
       if (allowed.length === 0) return true;
-      return allowed.includes(profile?.email || '');
+      const email = user?.email || (profile as any)?.email || '';
+      console.log(`[auth] Sign-in attempt: ${email} (allowed: ${allowed.join(',')})`);
+      return allowed.includes(email);
     },
     async session({ session }) {
       return session;
