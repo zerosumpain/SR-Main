@@ -213,26 +213,20 @@ export async function startProjectServer(
 
 export async function promoteDevToLive(buildId: string): Promise<void> {
   const base = `/home/jkai/workspace/${buildId}`;
-  // rsync dev to live, delete files in live that aren't in dev
+  // Clear live (except node_modules) then copy dev contents
   await execInSandbox(
-    `rsync -a --delete --exclude='node_modules' --exclude='.git' ${base}/dev/ ${base}/live/`,
-    60000,
+    `find ${base}/live -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null; cp -a ${base}/dev/. ${base}/live/ 2>/dev/null; echo done`,
+    120000,
   );
-  // If node_modules exists in dev but not live, copy it too
-  await execInSandbox(
-    `if [ -d ${base}/dev/node_modules ] && [ ! -d ${base}/live/node_modules ]; then cp -r ${base}/dev/node_modules ${base}/live/node_modules; fi`,
-    60000,
-  ).catch(() => {});
 }
 
 export async function seedDevFromLive(buildId: string): Promise<void> {
   const base = `/home/jkai/workspace/${buildId}`;
-  // Only seed if live has content and dev is empty or doesn't exist
   const liveCheck = await execInSandbox(`ls ${base}/live/ 2>/dev/null | head -1`, 5000);
   if (liveCheck.stdout.trim()) {
     await execInSandbox(
-      `rsync -a --delete ${base}/live/ ${base}/dev/`,
-      60000,
+      `find ${base}/dev -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; cp -a ${base}/live/. ${base}/dev/ 2>/dev/null; echo done`,
+      120000,
     );
   }
 }
@@ -242,9 +236,10 @@ export async function seedDevFromLive(buildId: string): Promise<void> {
 export async function snapshotIteration(buildId: string, iterationNumber: number): Promise<void> {
   const base = `/home/jkai/workspace/${buildId}`;
   const snapDir = `${base}/snapshots/${iterationNumber}`;
-  await execInSandbox(`mkdir -p ${snapDir}`, 5000);
+  await execInSandbox(`rm -rf ${snapDir} && mkdir -p ${snapDir}`, 5000);
+  // Copy dev to snapshot, excluding node_modules and .git for space
   await execInSandbox(
-    `rsync -a --exclude='node_modules' --exclude='.git' ${base}/dev/ ${snapDir}/`,
+    `cd ${base}/dev && find . -maxdepth 1 ! -name node_modules ! -name .git ! -name . -exec cp -a {} ${snapDir}/ \\;`,
     60000,
   );
 }
@@ -263,16 +258,11 @@ export async function activateSnapshot(
   const check = await execInSandbox(`test -d ${snapDir} && echo OK`, 5000);
   if (check.stdout.trim() !== 'OK') return false;
 
-  // Copy snapshot to live
+  // Copy snapshot to live (keep node_modules in live)
   await execInSandbox(
-    `rsync -a --delete --exclude='node_modules' --exclude='.git' ${snapDir}/ ${base}/live/`,
-    60000,
+    `find ${base}/live -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null; cp -a ${snapDir}/. ${base}/live/ 2>/dev/null; echo done`,
+    120000,
   );
-  // Copy node_modules if they exist in snapshot
-  await execInSandbox(
-    `if [ -d ${snapDir}/node_modules ]; then rsync -a ${snapDir}/node_modules/ ${base}/live/node_modules/; fi`,
-    60000,
-  ).catch(() => {});
 
   // Restart server from live
   await killProjectServer();
