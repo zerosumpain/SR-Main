@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { setContext } from 'svelte';
-  let { data, children } = $props();
-  setContext('adminToken', data?.adminToken || '');
+  let { children } = $props();
 </script>
 
 <div class="jkai-root">
