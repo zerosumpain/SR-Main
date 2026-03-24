@@ -334,28 +334,40 @@ class Orchestrator {
         })
         .where(eq(jkaiBuilds.id, buildId));
 
+      // Run test suite
+      const testResult = await this.runTests(buildId, iteration.id);
+
       // Snapshot this iteration's dev state
       await snapshotIteration(buildId, iterationNumber);
 
-      // Append workspace state to evaluation for next iteration's context
+      // Append workspace state and test results to evaluation for next iteration's context
       const currentFiles = await listWorkspaceFiles(buildId);
-      if (currentFiles && result.evaluation) {
-        const progressNote = `\n\nWorkspace state after this iteration:\n${currentFiles}`;
-        result.evaluation = result.evaluation + progressNote;
-        // Update the iteration record with enriched evaluation
+      if (result.evaluation) {
+        const extras = [
+          currentFiles ? `\n\nWorkspace state after this iteration:\n${currentFiles}` : '',
+          testResult.testCount > 0
+            ? `\n\nTest results: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? `\nFailing tests:\n${testResult.output.slice(0, 1000)}` : ''}`
+            : '',
+        ].join('');
+        result.evaluation = result.evaluation + extras;
         await db
           .update(jkaiIterations)
           .set({ evaluation: result.evaluation })
           .where(eq(jkaiIterations.id, iteration.id));
       }
 
-      // Check for serve.json
-      await this.checkServeConfig(buildId);
+      // Only promote to live if tests pass (or no tests exist)
+      if (testResult.passed) {
+        await this.checkServeConfig(buildId);
+      } else {
+        await emitLog(buildId, 'system', 'Skipping promotion to live — tests failed. Next iteration will receive failure context.', iteration.id);
+      }
 
       // Log iteration summary
       const summary = [
         `━━━ Iteration #${iterationNumber} complete ━━━`,
         `Duration: ${(durationMs / 1000).toFixed(0)}s | Tokens: ${result.tokensUsed} | Actions: ${result.actions.length}`,
+        testResult.testCount > 0 ? `Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed` : 'No tests',
         result.evaluation ? `Evaluation: ${result.evaluation.slice(0, 200)}` : 'No evaluation produced (max turns reached)',
         result.nextSteps ? `Next: ${result.nextSteps.slice(0, 200)}` : '',
       ].filter(Boolean).join('\n');
@@ -617,6 +629,70 @@ class Orchestrator {
         await emitLog(buildId, 'system', `Project server restarted from live`);
       }
     }
+  }
+
+  private async runTests(buildId: string, iterationId: string): Promise<{ passed: boolean; output: string; testCount: number; failCount: number }> {
+    const workdir = `/home/jkai/workspace/${buildId}/dev`;
+
+    // Check if tests/run.sh exists
+    const hasRunner = await execInSandbox(`test -f ${workdir}/tests/run.sh && echo YES`, 5000);
+    if (hasRunner.stdout.trim() !== 'YES') {
+      // Check for any test files
+      const hasTests = await execInSandbox(
+        `find ${workdir}/tests -name "test_*.py" -o -name "*.test.js" -o -name "*.test.ts" 2>/dev/null | head -1`,
+        5000,
+      );
+      if (!hasTests.stdout.trim()) {
+        return { passed: true, output: 'No tests found', testCount: 0, failCount: 0 };
+      }
+      // Auto-detect test runner
+      const hasPytest = await execInSandbox(`find ${workdir}/tests -name "test_*.py" | head -1`, 5000);
+      const hasNodeTest = await execInSandbox(`find ${workdir}/tests -name "*.test.js" -o -name "*.test.ts" | head -1`, 5000);
+
+      if (hasPytest.stdout.trim()) {
+        // Create a run.sh for pytest
+        await execInSandbox(`echo 'cd ${workdir} && python3 -m pytest tests/ -v --tb=short 2>&1' > ${workdir}/tests/run.sh`, 5000);
+      } else if (hasNodeTest.stdout.trim()) {
+        await execInSandbox(`echo 'cd ${workdir} && node --test tests/ 2>&1' > ${workdir}/tests/run.sh`, 5000);
+      }
+    }
+
+    // Run tests
+    await emitLog(buildId, 'system', '🧪 Running tests...', iterationId);
+    const result = await execInSandbox(`bash ${workdir}/tests/run.sh 2>&1`, 120000);
+    const output = sanitize((result.stdout + '\n' + result.stderr).trim());
+
+    // Parse results — look for common test output patterns
+    let testCount = 0;
+    let failCount = 0;
+
+    // pytest pattern: "X passed, Y failed"
+    const pytestMatch = output.match(/(\d+) passed/);
+    const pytestFail = output.match(/(\d+) failed/);
+    if (pytestMatch) testCount += parseInt(pytestMatch[1]);
+    if (pytestFail) { failCount += parseInt(pytestFail[1]); testCount += failCount; }
+
+    // node:test pattern: "# tests X" "# fail Y"
+    const nodeTestMatch = output.match(/# tests (\d+)/);
+    const nodeFailMatch = output.match(/# fail (\d+)/);
+    if (nodeTestMatch) testCount = parseInt(nodeTestMatch[1]);
+    if (nodeFailMatch) failCount = parseInt(nodeFailMatch[1]);
+
+    // Generic: count lines with PASS/FAIL/ok/not ok
+    if (testCount === 0) {
+      const passLines = (output.match(/\b(PASS|ok |✓|passed)\b/gi) || []).length;
+      const failLines = (output.match(/\b(FAIL|not ok|✗|failed|ERROR)\b/gi) || []).length;
+      testCount = passLines + failLines;
+      failCount = failLines;
+    }
+
+    const passed = result.exitCode === 0 && failCount === 0;
+
+    const emoji = passed ? '✅' : '❌';
+    const summary = `${emoji} Tests: ${testCount - failCount}/${testCount} passed${failCount > 0 ? ` (${failCount} failed)` : ''}`;
+    await emitLog(buildId, passed ? 'system' : 'error', `${summary}\n${output.slice(0, 2000)}`, iterationId);
+
+    return { passed, output: output.slice(0, 5000), testCount, failCount };
   }
 }
 
