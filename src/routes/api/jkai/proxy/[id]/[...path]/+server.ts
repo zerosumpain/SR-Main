@@ -9,7 +9,9 @@ const handler: RequestHandler = async ({ params, request }) => {
   if (!build?.serveConfig) return new Response('Project not serving', { status: 404 });
   const config = build.serveConfig as { port: number };
   const path = '/' + (params.path || '');
-  return proxyToSandbox(config.port, path, request);
+  // Base href ensures all relative URLs in the proxied app resolve through the proxy
+  const baseHref = `/api/jkai/proxy/${params.id}/`;
+  return proxyToSandbox(config.port, path, request, baseHref);
 };
 
 export const GET = handler;
