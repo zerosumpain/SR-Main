@@ -1,12 +1,12 @@
 <script lang="ts">
   import { signIn } from '@auth/sveltekit/client';
-  import { page } from '$app/state';
+  import { page } from '$app/stores';
 
-  const callbackUrl = page.url.searchParams.get('callbackUrl') || '/';
   let loading = $state(false);
 
   function handleSignIn() {
     loading = true;
+    const callbackUrl = $page.url.searchParams.get('callbackUrl') || '/';
     signIn('google', { callbackUrl });
   }
 </script>
