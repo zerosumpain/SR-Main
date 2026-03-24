@@ -32,6 +32,7 @@
   });
 
   onDestroy(() => {
+    closed = true;
     eventSource?.close();
   });
 
@@ -63,6 +64,7 @@
   }
 
   function connectSSE() {
+    if (closed) return;
     eventSource = new EventSource(`/api/jkai/builds/${build.id}/stream`);
 
     eventSource.onmessage = (e) => {
@@ -72,11 +74,15 @@
         logContainer?.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
       });
       highlightAll();
+      // Reset backoff on successful message
+      reconnectDelay = 3000;
     };
 
     eventSource.onerror = () => {
       eventSource?.close();
-      setTimeout(connectSSE, 3000);
+      // Exponential backoff: 3s → 6s → 12s → 24s → 60s max
+      setTimeout(connectSSE, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 60000);
     };
   }
 
@@ -96,6 +102,8 @@
   });
   onDestroy(() => clearInterval(pollTimer));
 
+  let reconnectDelay = $state(3000);
+  let closed = $state(false);
   let activeIteration = $state<number | null>(null);
   let activating = $state(false);
   let fullscreen = $state(false);
@@ -111,18 +119,25 @@
       if (res.ok) {
         activeIteration = iterationNumber;
       }
-    } catch {}
-    activating = false;
+    } catch (err) {
+      console.error('Failed to activate iteration:', err);
+    } finally {
+      activating = false;
+    }
   }
 
   async function controlAction(action: 'pause' | 'resume' | 'stop') {
-    const res = await fetch(`/api/jkai/builds/${build.id}/${action}`, { method: 'POST' });
-    if (res.ok) {
-      const statusMap = { pause: 'paused', resume: 'running', stop: 'completed' } as const;
-      build = { ...build, status: statusMap[action] };
+    try {
+      const res = await fetch(`/api/jkai/builds/${build.id}/${action}`, { method: 'POST' });
+      if (res.ok) {
+        const statusMap = { pause: 'paused', resume: 'running', stop: 'completed' } as const;
+        build = { ...build, status: statusMap[action] };
 
-      if (action === 'resume') connectSSE();
-      if (action === 'pause' || action === 'stop') eventSource?.close();
+        if (action === 'resume') { reconnectDelay = 3000; connectSSE(); }
+        if (action === 'pause' || action === 'stop') eventSource?.close();
+      }
+    } catch (err) {
+      console.error(`Failed to ${action} build:`, err);
     }
   }
 
