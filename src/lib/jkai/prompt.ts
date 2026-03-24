@@ -164,10 +164,18 @@ export function buildIterationContext(
   userPrompt: string,
   previousIteration: JkaiIteration | null,
   fileList: string,
+  projectPlan: string | null = null,
+  iterationNumber: number = 1,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
   let contextMessage = `## Project Goal\n${userPrompt}`;
+
+  // Include the delivery plan so every iteration knows the roadmap
+  if (projectPlan) {
+    contextMessage += `\n\n## Delivery Plan\n${projectPlan}`;
+    contextMessage += `\n\n**You are now executing Iteration ${iterationNumber}.** Follow the plan above for this iteration's scope.`;
+  }
 
   if (previousIteration) {
     contextMessage += `\n\n## Previous Iteration (#${previousIteration.number})\n`;
@@ -185,7 +193,7 @@ export function buildIterationContext(
     contextMessage += `\n\n## Current Workspace\nEmpty — this is a fresh project.`;
   }
 
-  contextMessage += `\n\nBegin your next iteration. Start by stating your goals.`;
+  contextMessage += `\n\nBegin iteration ${iterationNumber}. Start by stating your goals for this iteration (based on the plan).`;
 
   messages.push({ role: 'user', content: contextMessage });
   return messages;

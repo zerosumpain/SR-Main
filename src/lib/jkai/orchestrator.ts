@@ -120,6 +120,12 @@ class Orchestrator {
     await ensureSandboxRunning();
     await ensureWorkspace(buildId);
 
+    // Run planning phase before first iteration
+    const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (buildRecord) {
+      await this.planBuild(buildId, buildRecord.prompt);
+    }
+
     this.scheduleNext(buildId);
   }
 
@@ -230,6 +236,116 @@ class Orchestrator {
     this.scheduleNext(runningBuild.id);
   }
 
+  // --- Private: Planning Phase ---
+
+  private async planBuild(buildId: string, prompt: string): Promise<void> {
+    const { client, model } = getLLMClient();
+
+    // Create iteration #0 for the plan
+    const [planIteration] = await db
+      .insert(jkaiIterations)
+      .values({ buildId, number: 0, status: 'running' })
+      .returning();
+
+    await emitLog(buildId, 'system', '━━━ Planning Phase ━━━', planIteration.id);
+
+    const planSystemPrompt = `You are a senior software architect planning a project. You do NOT write code — you plan.
+
+Given a project objective, produce a delivery plan in three steps:
+
+STEP 1 — INITIAL PROPOSAL
+Propose a high-level plan covering:
+- Architecture: tech stack, key components, data flow
+- UI/UX: layout, key screens, interaction patterns, design system
+- Delivery: what gets built in each of 5 iterations, with clear milestones
+- Testing: what tests cover at each stage
+
+STEP 2 — RED TEAM
+Critically evaluate your own proposal:
+- What could go wrong? What's over-engineered? What's missing?
+- Are the iteration milestones realistic for ~15 code steps each?
+- Will the user have something working and visible by iteration 1?
+- Are there API/data dependencies that could block progress?
+- Is the UI approach achievable with CDN-only tools (Tailwind, Chart.js, etc)?
+
+STEP 3 — FINAL PLAN
+Write the definitive plan incorporating red team feedback. Format as:
+
+## Architecture
+(tech stack, components, data flow — 3-5 sentences)
+
+## UI Design
+(layout approach, design system, key screens — 3-5 sentences)
+
+## Iteration Plan
+
+### Iteration 1: [title]
+- Goal: [one sentence]
+- Deliverables: [bullet list]
+- Tests: [what to test]
+- Milestone: [what the user sees]
+
+### Iteration 2: [title]
+(same format)
+
+... through Iteration 5
+
+## Risks & Mitigations
+(2-3 key risks and how to handle them)`;
+
+    let totalTokens = 0;
+
+    try {
+      // Single LLM call — the prompt asks for all three steps in one response
+      await emitLog(buildId, 'text', 'Developing project plan...', planIteration.id);
+
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: planSystemPrompt },
+          { role: 'user', content: `Project objective:\n${prompt}\n\nProduce your three-step plan (proposal, red team, final plan). Write all three steps in a single response.` },
+        ],
+        temperature: 0.7,
+        max_tokens: 4096,
+      });
+
+      const planContent = response.choices[0]?.message?.content || '';
+      totalTokens += response.usage?.total_tokens || 0;
+
+      await emitLog(buildId, 'text', planContent, planIteration.id);
+
+      // Extract the final plan section (everything after "STEP 3" or "## Architecture")
+      let finalPlan = planContent;
+      const step3Match = planContent.match(/(?:STEP 3|## Architecture)([\s\S]*)/i);
+      if (step3Match) {
+        finalPlan = step3Match[0];
+      }
+
+      // Save plan as iteration #0
+      await db
+        .update(jkaiIterations)
+        .set({
+          status: 'completed',
+          goals: 'Project planning — architecture, UI, delivery roadmap',
+          plan: finalPlan,
+          evaluation: planContent,
+          tokensUsed: totalTokens,
+          durationMs: 0,
+          actions: [],
+          messages: [{ role: 'assistant', content: planContent }],
+        })
+        .where(eq(jkaiIterations.id, planIteration.id));
+
+      await emitLog(buildId, 'system', '━━━ Planning Phase Complete ━━━', planIteration.id);
+    } catch (err: any) {
+      await emitLog(buildId, 'error', `Planning failed: ${err.message}`, planIteration.id);
+      await db
+        .update(jkaiIterations)
+        .set({ status: 'failed', tokensUsed: totalTokens })
+        .where(eq(jkaiIterations.id, planIteration.id));
+    }
+  }
+
   // --- Private: Loop ---
 
   private scheduleNext(buildId: string, delayMs = 0): void {
@@ -298,12 +414,26 @@ class Orchestrator {
 
       await emitLog(buildId, 'system', `━━━ Iteration #${iterationNumber} started ━━━`, iteration.id);
 
+      // Fetch the project plan (iteration #0) if it exists
+      const [planIteration] = await db
+        .select()
+        .from(jkaiIterations)
+        .where(
+          and(
+            eq(jkaiIterations.buildId, buildId),
+            eq(jkaiIterations.number, 0),
+            eq(jkaiIterations.status, 'completed'),
+          ),
+        )
+        .limit(1);
+      const projectPlan = planIteration?.plan || null;
+
       // Seed dev from live so the LLM starts with the latest working version
       await seedDevFromLive(buildId);
 
       const startTime = Date.now();
 
-      const result = await this.executeIteration(build, iteration, prevIteration);
+      const result = await this.executeIteration(build, iteration, prevIteration, projectPlan, iterationNumber);
 
       const durationMs = Date.now() - startTime;
 
@@ -384,6 +514,8 @@ class Orchestrator {
     build: JkaiBuild,
     iteration: JkaiIteration,
     prevIteration: JkaiIteration | null,
+    projectPlan: string | null = null,
+    iterationNumber: number = 1,
   ): Promise<{
     goals: string | null;
     plan: string | null;
@@ -396,7 +528,7 @@ class Orchestrator {
     const { client, model } = getLLMClient();
     const systemPrompt = buildSystemPrompt(build.id);
     const fileList = await listWorkspaceFiles(build.id);
-    const contextMessages = buildIterationContext(build.prompt, prevIteration, fileList);
+    const contextMessages = buildIterationContext(build.prompt, prevIteration, fileList, projectPlan, iterationNumber);
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
