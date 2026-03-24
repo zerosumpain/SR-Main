@@ -28,7 +28,7 @@
     </p>
 
     <a
-      href="/auth/signin"
+      href="/login"
       class="inline-block px-4 py-2 rounded-lg text-sm font-medium transition-colors"
       style="background: var(--accent); color: white;"
     >

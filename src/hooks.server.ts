@@ -42,8 +42,8 @@ const { handle: authHandle } = SvelteKitAuth({
     },
   },
   pages: {
-    signIn: '/auth/signin',
-    error: '/auth/error',
+    signIn: '/login',
+    error: '/auth-error',
   },
 });
 
@@ -71,7 +71,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   const session = await event.locals.auth();
   if (!session?.user) {
     const callbackUrl = encodeURIComponent(pathname + event.url.search);
-    throw redirect(302, `/auth/signin?callbackUrl=${callbackUrl}`);
+    throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
   }
 
   return resolve(event);
