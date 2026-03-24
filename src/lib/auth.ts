@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   '/api/biome/config',
   '/api/health/apple',
   '/api/agent',
+  '/api/jkai/proxy',
 ];
 
 export function isPublicPath(pathname: string): boolean {
