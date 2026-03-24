@@ -37,15 +37,22 @@ export function onBuildLog(
   return () => emitter.off(key, handler);
 }
 
+// Strip null bytes and other control chars that break Postgres text columns
+function sanitize(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 async function emitLog(
   buildId: string,
   type: string,
   content: string,
   iterationId: string | null = null,
 ): Promise<void> {
+  const safeContent = sanitize(content);
   const [log] = await db
     .insert(jkaiLogs)
-    .values({ buildId, iterationId, type, content })
+    .values({ buildId, iterationId, type, content: safeContent })
     .returning();
   emitter.emit(`log:${buildId}`, {
     id: log.id,
