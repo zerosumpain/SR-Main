@@ -42,7 +42,7 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
         : 60 * 1000;
       return {
         canProceed: false,
-        sleepMs: Math.max(sleepMs, 1000),
+        sleepMs: Math.min(Math.max(sleepMs, 1000), 5 * 60 * 1000), // Cap at 5 minutes, re-check after
         reason: `Active minutes limit reached (${minutesInWindow.toFixed(1)}/${config.activeMinutesPerHour}m). Cooling down.`,
       };
     }
@@ -62,7 +62,7 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
         : 60 * 1000;
       return {
         canProceed: false,
-        sleepMs: Math.max(sleepMs, 1000),
+        sleepMs: Math.min(Math.max(sleepMs, 1000), 5 * 60 * 1000), // Cap at 5 minutes, re-check after
         reason: `Token limit reached (${tokensInWindow}/${config.maxTokensPerHour}). Cooling down.`,
       };
     }

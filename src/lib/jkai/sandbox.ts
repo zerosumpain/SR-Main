@@ -55,6 +55,7 @@ export async function ensureSandboxRunning(): Promise<void> {
     `--memory 2g --cpus 2 ` +
     `--network bridge -v jkai-workspace:/home/jkai/workspace ${IMAGE_NAME}`,
   );
+  clearContainerIpCache();
 }
 
 export async function buildSandboxImage(): Promise<void> {
@@ -101,6 +102,27 @@ export async function execInSandbox(
   }
 }
 
+export async function execInSandboxChecked(
+  command: string,
+  timeout = 120000,
+): Promise<ExecResult> {
+  const result = await execInSandbox(command, timeout);
+  // Detect container-level failures vs normal command failures
+  if (result.exitCode !== 0 && (
+    result.stderr.includes('No such container') ||
+    result.stderr.includes('is not running') ||
+    result.stderr.includes('Cannot connect to the Docker daemon')
+  )) {
+    // Container is dead — try to restart it
+    console.error('[jkai] Container appears dead, attempting restart...');
+    clearContainerIpCache();
+    await ensureSandboxRunning();
+    // Retry the command once
+    return execInSandbox(command, timeout);
+  }
+  return result;
+}
+
 export async function execBuildCommand(
   command: string,
   workdir: string,
@@ -109,6 +131,19 @@ export async function execBuildCommand(
 }
 
 // --- Workspace Management ---
+
+export async function writeFileInSandbox(
+  filePath: string,
+  content: string,
+  timeout = 30000,
+): Promise<ExecResult> {
+  // Use base64 encoding to safely pass any content through bash
+  const b64 = Buffer.from(content).toString('base64');
+  return execInSandbox(
+    `echo '${b64}' | base64 -d > ${filePath}`,
+    timeout,
+  );
+}
 
 export async function ensureWorkspace(buildId: string): Promise<string> {
   const base = `/home/jkai/workspace/${buildId}`;
@@ -160,7 +195,7 @@ export async function startProjectServer(
     10000,
   );
 
-  const maxAttempts = 15;
+  const maxAttempts = 30; // 60 seconds total
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const check = await execInSandbox(
