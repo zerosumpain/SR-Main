@@ -17,6 +17,31 @@ export function validateServeConfig(raw: any): ServeConfig | null {
   };
 }
 
+// Script injected into proxied HTML to rewrite fetch/XHR to route through the proxy
+function proxyRewriteScript(baseHref: string): string {
+  return `<script>
+(function(){
+  var B="${baseHref}";
+  // Patch fetch
+  var _f=window.fetch;
+  window.fetch=function(u,o){
+    if(typeof u==='string'&&u.startsWith('/')){u=B+u.slice(1);}
+    else if(u instanceof Request&&u.url){
+      var p=new URL(u.url).pathname;
+      if(p.startsWith('/')&&!p.startsWith(B)){u=new Request(B+p.slice(1),u);}
+    }
+    return _f.call(this,u,o);
+  };
+  // Patch XMLHttpRequest
+  var _o=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,u){
+    if(typeof u==='string'&&u.startsWith('/')){u=B+u.slice(1);}
+    return _o.apply(this,[m,u].concat(Array.prototype.slice.call(arguments,2)));
+  };
+})();
+</script>`;
+}
+
 export async function proxyToSandbox(
   port: number,
   path: string,
@@ -46,23 +71,24 @@ export async function proxyToSandbox(
 
     const contentType = resp.headers.get('content-type') || '';
 
-    // For HTML responses, inject a <base> tag so relative URLs resolve through the proxy
+    // For HTML responses, inject <base> tag and fetch/XHR proxy rewrite script
     if (baseHref && contentType.includes('text/html')) {
       let html = await resp.text();
-      // Inject <base href> right after <head> (or at the start if no <head>)
+      const injection = `<base href="${baseHref}">${proxyRewriteScript(baseHref)}`;
+
       if (html.includes('<head>')) {
-        html = html.replace('<head>', `<head><base href="${baseHref}">`);
+        html = html.replace('<head>', `<head>${injection}`);
       } else if (html.includes('<head ')) {
-        html = html.replace(/<head([^>]*)>/, `<head$1><base href="${baseHref}">`);
+        html = html.replace(/<head([^>]*)>/, `<head$1>${injection}`);
       } else if (html.includes('<html')) {
-        html = html.replace(/<html([^>]*)>/, `<html$1><head><base href="${baseHref}"></head>`);
+        html = html.replace(/<html([^>]*)>/, `<html$1><head>${injection}</head>`);
       } else {
-        html = `<base href="${baseHref}">` + html;
+        html = injection + html;
       }
 
       const respHeaders = new Headers(resp.headers);
-      respHeaders.delete('content-length'); // Length changed
-      respHeaders.delete('content-encoding'); // Don't claim compression on rewritten body
+      respHeaders.delete('content-length');
+      respHeaders.delete('content-encoding');
 
       return new Response(html, {
         status: resp.status,
