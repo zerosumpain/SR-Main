@@ -125,7 +125,7 @@
 </script>
 
 <div class="live-page">
-  {#if !state.active}
+  {#if !state.active || state.status === 'finished'}
     <div class="live-empty">
       <p class="display text-[24px]" style="color: var(--text-primary);">No active walk</p>
       <p class="text-sm mt-2" style="color: var(--text-secondary);">
@@ -199,7 +199,9 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: var(--bg-primary, #0f0f0f);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body);
   }
 
   .live-empty {
@@ -229,10 +231,10 @@
   .live-dot-sm {
     width: 6px;
     height: 6px;
-    background: #3db87a;
+    background: var(--accent);
     border-radius: 50%;
     animation: pulse-live 1.5s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(61, 184, 122, 0.6);
+    box-shadow: 0 0 6px rgba(196, 87, 10, 0.5);
   }
 
   @keyframes pulse-live {
@@ -244,7 +246,7 @@
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.12em;
-    color: #3db87a;
+    color: var(--accent);
   }
 
   .live-map {
@@ -266,7 +268,7 @@
   }
 
   .live-stat-value {
-    font-family: 'JetBrains Mono', 'DM Sans', monospace;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
     font-size: 18px;
     font-weight: 600;
     color: var(--text-primary, #e8eaf0);
@@ -307,7 +309,7 @@
 
   .live-progress-fill {
     height: 100%;
-    background: #3db87a;
+    background: var(--accent);
     border-radius: 2px;
     transition: width 0.5s ease;
   }
