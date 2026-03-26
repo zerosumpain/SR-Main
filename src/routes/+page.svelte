@@ -92,9 +92,11 @@
         </p>
       </div>
     </div>
-    <div class="mt-6 flex justify-center relative z-10">
-      <LiveWalkBanner />
-    </div>
+  </div>
+
+  <!-- Live walk banner — centred below hero content -->
+  <div class="relative z-10 text-center mt-4">
+    <LiveWalkBanner />
   </div>
 
   <!-- Bottom — scroll prompt -->
