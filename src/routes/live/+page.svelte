@@ -1,7 +1,7 @@
 <svelte:head>
   <title>Live Walk — Strange Ramblings</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+  <link rel="stylesheet" href="/vendor/leaflet.min.css" />
+  <script src="/vendor/leaflet.min.js"></script>
 </svelte:head>
 
 <script lang="ts">
