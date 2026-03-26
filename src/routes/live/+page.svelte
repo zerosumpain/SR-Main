@@ -1,10 +1,11 @@
 <svelte:head>
   <title>Live Walk — Strange Ramblings</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 </svelte:head>
 
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
 
   interface LiveState {
     active: boolean;
@@ -25,31 +26,18 @@
   }
 
   let state = $state<LiveState>({ active: false });
-  let mapContainer: HTMLDivElement;
+  let mapContainer: HTMLDivElement | undefined = $state(undefined);
   let map: any = null;
   let trackLine: any = null;
   let posMarker: any = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
-  let L: any = null;
+  let mapInitialized = false;
+
+  let isLive = $derived(state.active && state.status !== 'finished');
 
   onMount(async () => {
-    // Load Leaflet from CDN — not installed in this project
-    L = await new Promise((resolve) => {
-      if ((window as any).L) { resolve((window as any).L); return; }
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => resolve((window as any).L);
-      document.head.appendChild(script);
-    });
-
-    map = L.map(mapContainer).setView([54.0, -2.0], 7);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 18
-    }).addTo(map);
-
     await fetchState();
-    pollInterval = setInterval(fetchState, 15000); // 15s poll for live page
+    pollInterval = setInterval(fetchState, 15000);
   });
 
   onDestroy(() => {
@@ -62,25 +50,41 @@
       const res = await fetch('/api/live-walk');
       if (res.ok) {
         state = await res.json();
+        if (isLive && !mapInitialized) {
+          await tick(); // wait for DOM to update with the map container
+          initMap();
+        }
         updateMap();
       }
     } catch {}
   }
 
+  function initMap() {
+    if (mapInitialized || !mapContainer) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    map = L.map(mapContainer).setView([54.0, -2.0], 7);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+    mapInitialized = true;
+  }
+
   function updateMap() {
+    const L = (window as any).L;
     if (!map || !L || !state.track || state.track.length === 0) return;
 
     const latlngs = state.track.map((p: any) => [p.lat, p.lng]);
 
-    // Update track line
     if (trackLine) trackLine.remove();
     trackLine = L.polyline(latlngs, {
-      color: '#3db87a',
+      color: 'var(--accent, #c4570a)',
       weight: 4,
       opacity: 0.9
     }).addTo(map);
 
-    // Update position marker
     const last = state.track[state.track.length - 1];
     if (posMarker) posMarker.remove();
     posMarker = L.circleMarker([last.lat, last.lng], {
@@ -91,11 +95,9 @@
       weight: 2
     }).addTo(map);
 
-    // Fit bounds on first load or if only a few points
     if (state.track.length <= 5) {
       map.fitBounds(trackLine.getBounds(), { padding: [40, 40] });
     } else {
-      // Just pan to latest position
       map.panTo([last.lat, last.lng]);
     }
   }
@@ -118,14 +120,10 @@
     const secs = Math.round((paceMinPerKm - mins) * 60);
     return `${mins}:${String(secs).padStart(2, '0')} /km`;
   }
-
-  let lastUpdatedAgo = $derived(state.updatedAt
-    ? Math.round((Date.now() - state.updatedAt) / 60000)
-    : null);
 </script>
 
 <div class="live-page">
-  {#if !state.active || state.status === 'finished'}
+  {#if !isLive}
     <div class="live-empty">
       <p class="display text-[24px]" style="color: var(--text-primary);">No active walk</p>
       <p class="text-sm mt-2" style="color: var(--text-secondary);">
@@ -134,12 +132,11 @@
       <a href="/" class="nav-link mt-4" style="display: inline-block;">&larr; Back to home</a>
     </div>
   {:else}
-    <!-- Header -->
     <div class="live-header">
       <div class="live-header-left">
         <a href="/" class="nav-link">&larr;</a>
         <div>
-          <div class="flex items-center gap-2">
+          <div style="display: flex; align-items: center; gap: 6px;">
             <span class="live-dot-sm"></span>
             <span class="live-status-label">
               {state.status === 'paused' ? 'PAUSED' : 'LIVE'}
@@ -148,25 +145,18 @@
           <h1 class="display text-[18px] mt-1" style="color: var(--text-primary);">{state.routeName}</h1>
         </div>
       </div>
-      {#if lastUpdatedAgo !== null}
-        <span class="text-xs" style="color: var(--text-secondary);">
-          Updated {lastUpdatedAgo < 1 ? 'just now' : `${lastUpdatedAgo}m ago`}
-        </span>
-      {/if}
     </div>
 
-    <!-- Map -->
     <div class="live-map" bind:this={mapContainer}></div>
 
-    <!-- Stats bar -->
     <div class="live-stats">
       <div class="live-stat">
-        <div class="live-stat-value">{state.stats?.distanceKm.toFixed(2) ?? '0'}<span class="live-stat-unit">km</span></div>
+        <div class="live-stat-value">{state.stats?.distanceKm?.toFixed(2) ?? '0'}<span class="live-stat-unit">km</span></div>
         <div class="live-stat-label">Distance</div>
       </div>
       <div class="live-stat-divider"></div>
       <div class="live-stat">
-        <div class="live-stat-value">{formatElapsed(state.startedAt!)}</div>
+        <div class="live-stat-value">{state.startedAt ? formatElapsed(state.startedAt) : '--'}</div>
         <div class="live-stat-label">Elapsed</div>
       </div>
       <div class="live-stat-divider"></div>
@@ -181,7 +171,7 @@
       </div>
     </div>
 
-    {#if state.routeDistanceKm && state.stats}
+    {#if state.routeDistanceKm && state.routeDistanceKm > 0 && state.stats}
       <div class="live-progress">
         <div class="live-progress-bar">
           <div class="live-progress-fill" style="width: {Math.min(100, (state.stats.distanceKm / state.routeDistanceKm) * 100).toFixed(1)}%"></div>
@@ -219,7 +209,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--divider, rgba(255,255,255,0.08));
+    border-bottom: 1px solid var(--divider);
   }
 
   .live-header-left {
@@ -259,8 +249,8 @@
     justify-content: space-around;
     align-items: center;
     padding: 16px;
-    background: var(--bg-secondary, #161616);
-    border-top: 1px solid var(--divider, rgba(255,255,255,0.08));
+    background: var(--bg-section);
+    border-top: 1px solid var(--divider);
   }
 
   .live-stat {
@@ -268,21 +258,21 @@
   }
 
   .live-stat-value {
-    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-family: var(--font-mono, monospace);
     font-size: 18px;
     font-weight: 600;
-    color: var(--text-primary, #e8eaf0);
+    color: var(--text-primary);
   }
 
   .live-stat-unit {
     font-size: 11px;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     margin-left: 1px;
   }
 
   .live-stat-label {
     font-size: 10px;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     margin-top: 2px;
@@ -291,12 +281,12 @@
   .live-stat-divider {
     width: 1px;
     height: 24px;
-    background: var(--divider, rgba(255,255,255,0.08));
+    background: var(--divider);
   }
 
   .live-progress {
     padding: 12px 16px;
-    background: var(--bg-secondary, #161616);
+    background: var(--bg-section);
   }
 
   .live-progress-bar {
@@ -316,8 +306,8 @@
 
   .live-progress-text {
     font-size: 11px;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     text-align: center;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono, monospace);
   }
 </style>
