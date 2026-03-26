@@ -41,11 +41,10 @@ The params function is called by the action each rAF frame to get current values
 
 ### Wind skew (transform)
 
-- Each rAF frame, compares current wind values to previously seen values
-- When wind changes, starts a `Tween` (Svelte 5 `svelte/motion`) to the new target skew
-- Wind direction mapping: `skewDeg = maxSkew * sin(directionRad) * clamp(speed / 30, 0, 1)` — only the east-west component of wind produces horizontal skew. Northerly/southerly winds produce zero skew.
+- Each rAF frame, compares current skew to target and applies an exponential lerp: `currentSkew += (target - current) * (1 - e^(-0.002 * dt))` — reaches ~98% of target in ~2 seconds
+- Wind direction mapping: `skewDeg = maxSkew * -sin(directionRad) * clamp(speed / 30, 0, 1)` — only the east-west component of wind produces horizontal skew. Negated for meteorological convention (wind "from" direction). Northerly/southerly winds produce zero skew.
 - Max skew: 3 degrees
-- Tween duration: 2000ms with `cubicOut` easing
+- Uses manual lerp instead of `Tween` from `svelte/motion` to avoid reactive-context issues (`Tween` requires `$effect` internally, which doesn't work inside a raw rAF loop)
 
 ### Destroy and re-init
 
