@@ -2,6 +2,8 @@
   import type { PageData } from './$types';
 
   let { data } = $props();
+  let builds = $state(data.builds);
+  let publishing = $state<string | null>(null);
 
   const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
     running: { bg: 'rgba(45, 125, 70, 0.12)', text: '#2d7d46' },
@@ -26,6 +28,25 @@
     if (config?.maxIterations) parts.push(`${config.maxIterations} iters`);
     if (config?.maxTotalMinutes) parts.push(`${config.maxTotalMinutes}m total`);
     return parts.join(' · ') || 'No limits';
+  }
+
+  async function publishBuild(buildId: string, e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    publishing = buildId;
+    try {
+      const res = await fetch(`/api/jkai/builds/${buildId}/publish`, { method: 'POST' });
+      const result = await res.json();
+      if (res.ok && result.slug) {
+        builds = builds.map(b =>
+          b.id === buildId ? { ...b, publishedSlug: result.slug } : b
+        );
+      }
+    } catch (err) {
+      console.error('Publish failed:', err);
+    } finally {
+      publishing = null;
+    }
   }
 </script>
 
@@ -64,13 +85,14 @@
     </div>
   {:else}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {#each data.builds as build}
+      {#each builds as build}
         {@const colors = STATUS_COLORS[build.status] || STATUS_COLORS.pending}
-        <a
-          href="/jkai/{build.id}"
-          class="group block p-5 rounded-xl border transition-colors"
+        <div
+          class="group relative p-5 rounded-xl border transition-colors"
           style="background: var(--card-bg); border-color: var(--card-border);"
         >
+          <a href="/jkai/{build.id}" class="absolute inset-0 z-0" aria-label="View build"></a>
+
           <div class="flex items-start justify-between mb-3">
             <span
               class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
@@ -97,11 +119,35 @@
             {build.prompt}
           </p>
 
-          <div class="flex items-center gap-4 text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-            <span>{build.iterationsCompleted} iterations</span>
-            <span>{budgetSummary(build.budgetConfig)}</span>
+          <div class="flex items-center justify-between relative z-10">
+            <div class="flex items-center gap-4 text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              <span>{build.iterationsCompleted} iterations</span>
+              <span>{budgetSummary(build.budgetConfig)}</span>
+            </div>
+
+            {#if (build.status === 'completed' || build.status === 'paused')}
+              {#if build.publishedSlug}
+                <a
+                  href="/projects/jkai/{build.publishedSlug}/"
+                  target="_blank"
+                  class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border transition-colors hover:opacity-80"
+                  style="border-color: #2d7d46; color: #2d7d46;"
+                >
+                  Published
+                </a>
+              {:else}
+                <button
+                  onclick={(e) => publishBuild(build.id, e)}
+                  disabled={publishing === build.id}
+                  class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border transition-colors hover:opacity-80"
+                  style="border-color: var(--accent); color: var(--accent); opacity: {publishing === build.id ? 0.5 : 1};"
+                >
+                  {publishing === build.id ? 'Publishing...' : 'Publish'}
+                </button>
+              {/if}
+            {/if}
           </div>
-        </a>
+        </div>
       {/each}
     </div>
   {/if}

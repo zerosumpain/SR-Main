@@ -56,11 +56,38 @@ The system will automatically start your server and make it accessible to the us
 
 AIM TO HAVE serve.json BY THE END OF YOUR FIRST ITERATION. Even if the project is minimal, get it serving.
 
+ARCHITECTURE — CLIENT-SIDE FIRST (CRITICAL):
+Your project will be published as a static site (HTML/JS/CSS served without a backend). This means:
+- ALL data fetching MUST happen client-side in the browser using fetch() or XMLHttpRequest
+- Do NOT build server-side API routes (Flask, Express, etc.) as the primary data source — they won't exist in the published version
+- Fetch data directly from public APIs in your frontend JavaScript
+- If an API has CORS restrictions, use the CORS proxy: fetch("/api/jkai/cors/" + encodeURIComponent("https://example.com/api/data"))
+- You can use a lightweight dev server (python3 -m http.server, npx serve) for serve.json, but your app logic must work without it
+- Store configuration and API URLs as JavaScript constants, not environment variables
+- For data that needs processing, fetch it client-side and transform it in the browser
+
+GOOD PATTERN (client-side fetch — works when published):
+  async function loadWeather() {
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.1&current_weather=true");
+    const data = await res.json();
+    renderWeather(data);
+  }
+
+BAD PATTERN (server-side route — breaks when published):
+  # Flask route that fetches data server-side
+  @app.route("/api/weather")
+  def weather():
+      return requests.get("https://api.open-meteo.com/...").json()
+
+If you need a one-time data build step (scraping, aggregation), that's fine — write a build script that generates a .json file, then have the frontend fetch that .json file with a relative path like fetch("data.json").
+
 DATA STANDARDS (MANDATORY):
 - NEVER create fictitious, placeholder, or hardcoded sample data. All data must be real.
 - If your project needs data, you MUST source it programmatically: use public APIs, fetch from real websites, scrape public data sources, or use established open datasets.
+- Prefer LIVE data from public APIs that the browser fetches directly. This makes your project dynamic — showing real-time information, not stale snapshots.
 - Use tools like curl, wget, requests, or fetch to get real data. If an API requires a key, use a free-tier public API that doesn't need one (e.g., Open-Meteo, Wikipedia API, REST Countries, public government data portals, JSONPlaceholder for testing only if clearly labeled).
 - If you absolutely cannot get real data for a specific domain, clearly state this in your evaluation and explain what data source you would use in production.
+- For the CORS proxy: any public API that blocks browser requests can be accessed via /api/jkai/cors/{encoded-url}. This is available in both development and published versions.
 
 UI DESIGN STANDARDS (MANDATORY):
 - Build visually compelling, modern interfaces. No default browser styling or unstyled HTML.
@@ -91,56 +118,71 @@ CONSTRAINTS:
 
 EXAMPLE ITERATION (follow this structure):
 
-My goal is to set up a Flask API that serves real weather data from Open-Meteo and displays it on a clean dashboard.
+My goal is to create a weather dashboard that fetches live data from Open-Meteo directly in the browser and displays it with a clean UI.
 
-I'll install Flask, create the API endpoint that fetches from Open-Meteo, build a minimal HTML template with Tailwind CDN, and create serve.json.
+I'll create index.html with Tailwind CDN, write app.js that fetches from Open-Meteo client-side, set up a static server with serve.json, and create basic tests.
 
 \`\`\`bash
-pip install flask requests
+python3 -c "
+open('index.html','w').write('''<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>Weather Dashboard</title>
+  <script src=\"https://cdn.tailwindcss.com\"></script>
+</head>
+<body class=\"bg-gray-50 min-h-screen p-8\">
+  <h1 class=\"text-3xl font-bold mb-6\">Weather Dashboard</h1>
+  <div id=\"weather\" class=\"text-gray-500\">Loading...</div>
+  <script src=\"app.js\"></script>
+</body>
+</html>''')
+print('index.html created')
+"
 \`\`\`
 
 [waits for output, then continues...]
 
 \`\`\`bash
 python3 -c "
-open('app.py','w').write('''
-from flask import Flask, render_template, jsonify
-import requests
-
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/api/weather')
-def weather():
-    r = requests.get('https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.1&current_weather=true')
-    return jsonify(r.json())
-
-if __name__ == \"__main__\":
-    app.run(host=\"0.0.0.0\", port=5000)
+open('app.js','w').write('''
+async function loadWeather() {
+  const res = await fetch(\"https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.1&current_weather=true\");
+  const data = await res.json();
+  const w = data.current_weather;
+  document.getElementById(\"weather\").innerHTML =
+    \"<div class=\\\\\"bg-white rounded-xl shadow p-6\\\\\">\" +
+    \"<p class=\\\\\"text-4xl font-bold\\\\\">\" + w.temperature + \"°C</p>\" +
+    \"<p class=\\\\\"text-gray-500 mt-2\\\\\">Wind: \" + w.windspeed + \" km/h</p></div>\";
+}
+loadWeather();
 ''')
-print('app.py created')
+print('app.js created')
 "
 \`\`\`
 
 [continues with more steps, then wraps up...]
 
 \`\`\`bash
+python3 -c "
+open('serve.json','w').write('{\"port\": 8080, \"startCommand\": \"python3 -m http.server 8080\", \"healthCheck\": \"/\", \"description\": \"Weather dashboard\"}')
+"
+\`\`\`
+
+\`\`\`bash
 mkdir -p tests && python3 -c "
+open('tests/run.sh','w').write('cd .. && python3 -m pytest tests/ -v')
 open('tests/test_app.py','w').write('''
-import requests
+import pathlib
 
-def test_home_returns_200():
-    r = requests.get(\"http://localhost:5000/\")
-    assert r.status_code == 200
+def test_index_html_exists():
+    assert pathlib.Path(\"index.html\").exists()
 
-def test_weather_api_returns_json():
-    r = requests.get(\"http://localhost:5000/api/weather\")
-    assert r.status_code == 200
-    data = r.json()
-    assert \"current_weather\" in data
+def test_app_js_fetches_open_meteo():
+    js = pathlib.Path(\"app.js\").read_text()
+    assert \"open-meteo.com\" in js
+    assert \"fetch\" in js
 ''')
 print('tests created')
 "
@@ -149,7 +191,7 @@ print('tests created')
 [system runs tests automatically after evaluation]
 
 ## Evaluation
-Set up Flask with a real weather API integration from Open-Meteo. The API endpoint works and returns live London weather data. Created a basic HTML template with Tailwind CDN. Server starts and health check passes. Progress: 30% — 2/2 tests passing. — foundation is working but the dashboard needs charts, better layout, and more data points.
+Created a static weather dashboard that fetches live data from Open-Meteo directly in the browser. No server-side data fetching — the HTML page loads app.js which calls the Open-Meteo API client-side. Tailwind CDN for styling. Static server via python3 -m http.server. Progress: 30% — 2/2 tests passing. Foundation is working but needs charts, better layout, and more data points.
 
 ## Next Steps
 1. Add interactive charts using Chart.js CDN to visualize temperature and wind data

@@ -27,3 +27,6 @@ vite.config.ts.timestamp-*
 
 # Deep Dive API keys
 keys.json
+
+# Published jkai projects (runtime data)
+data/

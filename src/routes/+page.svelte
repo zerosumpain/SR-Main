@@ -15,6 +15,7 @@
   import ScrollReveal from '$lib/components/ScrollReveal.svelte';
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BiomeToggle from '$lib/components/BiomeToggle.svelte';
+  import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
@@ -81,14 +82,15 @@
         </p>
       </div>
 
-      <!-- Right: explainer with accent strip -->
-      <div class="accent-strip max-w-[240px]">
+      <!-- Right: explainer with accent strip + live walk -->
+      <div class="accent-strip max-w-[280px]">
         <p class="text-base font-medium leading-relaxed" style="color: var(--text-primary);">
           I'm John Kelly and these are my vitals, right now.
         </p>
         <p class="text-sm leading-relaxed mt-2" style="color: var(--text-secondary);">
           The pulsing background is my heart rate. You can toggle it off if it's distracting (bottom right). Weather is what I am experiencing where I am right now. This site is a place to blog, experiment, and share.
         </p>
+        <LiveWalkBanner />
       </div>
     </div>
   </div>

@@ -494,6 +494,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   iterationsCompleted: integer('iterations_completed').notNull().default(0),
   activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
   serveConfig: jsonb('serve_config'),
+  publishedSlug: text('published_slug'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

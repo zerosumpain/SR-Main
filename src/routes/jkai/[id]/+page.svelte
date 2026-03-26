@@ -107,6 +107,10 @@
   let activeIteration = $state<number | null>(null);
   let activating = $state(false);
   let fullscreen = $state(false);
+  let publishing = $state(false);
+  let publishedUrl = $state<string | null>(build.publishedSlug ? `/projects/jkai/${build.publishedSlug}/` : null);
+  let continuePrompt = $state('');
+  let continuing = $state(false);
 
   async function activateIteration(iterationNumber: number) {
     activating = true;
@@ -138,6 +142,50 @@
       }
     } catch (err) {
       console.error(`Failed to ${action} build:`, err);
+    }
+  }
+
+  async function publishProject() {
+    publishing = true;
+    try {
+      const res = await fetch(`/api/jkai/builds/${build.id}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        publishedUrl = data.url;
+        build = { ...build, publishedSlug: data.slug };
+      } else {
+        console.error('Publish failed:', data.error);
+      }
+    } catch (err) {
+      console.error('Publish failed:', err);
+    } finally {
+      publishing = false;
+    }
+  }
+
+  async function continueProject() {
+    if (!continuePrompt.trim()) return;
+    continuing = true;
+    try {
+      const res = await fetch(`/api/jkai/builds/${build.id}/continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: continuePrompt }),
+      });
+      if (res.ok) {
+        build = { ...build, status: 'running' };
+        continuePrompt = '';
+        reconnectDelay = 3000;
+        connectSSE();
+        activeTab = 'activity';
+      } else {
+        const data = await res.json();
+        console.error('Continue failed:', data.error);
+      }
+    } catch (err) {
+      console.error('Continue failed:', err);
+    } finally {
+      continuing = false;
     }
   }
 
@@ -174,16 +222,33 @@
           {build.title || build.prompt.slice(0, 60)}
         </h1>
         <p class="text-sm mt-1 max-w-xl" style="color: var(--text-secondary);">{build.prompt}</p>
-      </div>
-      <span
-        class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded shrink-0"
-        style="font-family: var(--font-mono); background: rgba(100,100,100,0.1); color: var(--text-ghost);"
-      >
-        {build.status}
-        {#if build.status === 'running'}
-          <span class="inline-block w-1.5 h-1.5 rounded-full ml-1 animate-pulse" style="background: #2d7d46;"></span>
+        {#if publishedUrl}
+          <a href={publishedUrl} target="_blank" class="text-xs mt-1 inline-block underline" style="color: var(--accent);">
+            Published at {publishedUrl}
+          </a>
         {/if}
-      </span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if build.status === 'completed' || build.status === 'paused'}
+          <button
+            onclick={publishProject}
+            disabled={publishing}
+            class="px-3 py-1 rounded text-[11px] uppercase tracking-wider border transition-colors"
+            style="border-color: var(--accent); color: var(--accent); opacity: {publishing ? 0.5 : 1};"
+          >
+            {publishing ? 'Publishing...' : publishedUrl ? 'Re-publish' : 'Publish'}
+          </button>
+        {/if}
+        <span
+          class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+          style="font-family: var(--font-mono); background: rgba(100,100,100,0.1); color: var(--text-ghost);"
+        >
+          {build.status}
+          {#if build.status === 'running'}
+            <span class="inline-block w-1.5 h-1.5 rounded-full ml-1 animate-pulse" style="background: #2d7d46;"></span>
+          {/if}
+        </span>
+      </div>
     </div>
   </div>
 
@@ -358,6 +423,59 @@
             <p class="text-sm" style="color: var(--text-ghost);">Build is {build.status}.</p>
           {/if}
         </div>
+      </div>
+
+      {#if build.status === 'completed'}
+        <div class="p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+          <h3 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Continue Improving</h3>
+          <p class="text-xs mb-3" style="color: var(--text-ghost);">
+            Describe what you'd like to improve or add. A new planning cycle will review the existing project and propose further iterations.
+          </p>
+          <textarea
+            bind:value={continuePrompt}
+            placeholder="e.g., Add dark mode, improve the charts, make it mobile-responsive..."
+            class="w-full px-3 py-2 rounded-lg border text-sm resize-none"
+            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary); min-height: 80px;"
+            disabled={continuing}
+          ></textarea>
+          <button
+            onclick={continueProject}
+            disabled={continuing || !continuePrompt.trim()}
+            class="mt-2 px-4 py-1.5 rounded text-sm font-medium transition-colors"
+            style="background: var(--accent); color: white; opacity: {continuing || !continuePrompt.trim() ? 0.5 : 1};"
+          >
+            {continuing ? 'Starting...' : 'Continue Build'}
+          </button>
+        </div>
+      {/if}
+
+      <div class="p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <h3 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Share</h3>
+        <div class="flex items-center gap-3">
+          <button
+            onclick={publishProject}
+            disabled={publishing}
+            class="px-3 py-1.5 rounded text-sm"
+            style="background: var(--accent); color: white; opacity: {publishing ? 0.5 : 1};"
+          >
+            {publishing ? 'Publishing...' : publishedUrl ? 'Re-publish' : 'Publish'}
+          </button>
+          {#if publishedUrl}
+            <a
+              href={publishedUrl}
+              target="_blank"
+              class="text-sm underline"
+              style="color: var(--accent);"
+            >
+              {publishedUrl}
+            </a>
+          {/if}
+        </div>
+        {#if !publishedUrl}
+          <p class="text-xs mt-2" style="color: var(--text-ghost);">
+            Copies the live project files to a public URL at /projects/jkai/
+          </p>
+        {/if}
       </div>
 
       <div class="p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">

@@ -15,6 +15,9 @@ const PUBLIC_PATHS = [
   '/api/health/apple',
   '/api/agent',
   '/api/jkai/proxy',
+  '/api/jkai/cors',
+  '/api/live-walk',
+  '/projects',
 ];
 
 export function isPublicPath(pathname: string): boolean {

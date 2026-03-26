@@ -176,11 +176,18 @@ export async function readServeJson(buildId: string): Promise<any | null> {
 }
 
 export async function killProjectServer(): Promise<void> {
+  // Kill via PID file first
   await execInSandbox(
     'if [ -f /tmp/jkai-serve.pid ]; then kill $(cat /tmp/jkai-serve.pid) 2>/dev/null; rm -f /tmp/jkai-serve.pid; fi',
     5000,
   ).catch(() => {});
-  await execInSandbox('pkill -f "node.*server" 2>/dev/null; pkill -f "python.*serve" 2>/dev/null', 5000).catch(() => {});
+  // pkill may not exist in minimal containers — use grep+kill as fallback
+  await execInSandbox(
+    `for pid in $(grep -rl "http.server\\|node.*serve\\|python.*serve" /proc/[0-9]*/cmdline 2>/dev/null | grep -oP '/proc/\\K[0-9]+'); do kill $pid 2>/dev/null; done`,
+    5000,
+  ).catch(() => {});
+  // Wait briefly for ports to release
+  await new Promise((r) => setTimeout(r, 500));
 }
 
 export async function startProjectServer(
@@ -277,6 +284,167 @@ export async function listSnapshots(buildId: string): Promise<number[]> {
   );
   if (result.exitCode !== 0 || !result.stdout.trim()) return [];
   return result.stdout.trim().split('\n').map(Number).filter(n => !isNaN(n));
+}
+
+// --- Publishing (copy live files out of sandbox to local filesystem + VPS) ---
+
+const PUBLISHED_DIR = `${process.cwd()}/data/jkai-projects`;
+
+const VPS_HOST = '157.180.19.38';
+const VPS_USER = 'johnk';
+const VPS_KEY = `${process.env.HOME}/.ssh/id_ed25519`;
+const VPS_PUBLISHED_DIR = '/opt/strange-rambling-svelte/data/jkai-projects';
+
+function isRunningOnVps(): boolean {
+  // If the published dir is already the VPS path, we're on the VPS
+  return PUBLISHED_DIR === VPS_PUBLISHED_DIR;
+}
+
+async function syncToVps(localDir: string, slug: string): Promise<void> {
+  if (isRunningOnVps()) return; // Already on VPS, files are in place
+  try {
+    await execAsync(
+      `ssh -i ${VPS_KEY} ${VPS_USER}@${VPS_HOST} "mkdir -p ${VPS_PUBLISHED_DIR}/${slug}"`,
+      { timeout: 10000 },
+    );
+    await execAsync(
+      `rsync -avz --delete -e "ssh -i ${VPS_KEY}" ${localDir}/ ${VPS_USER}@${VPS_HOST}:${VPS_PUBLISHED_DIR}/${slug}/`,
+      { timeout: 120000 },
+    );
+  } catch (err) {
+    console.error('[jkai] VPS sync failed (non-fatal):', err);
+  }
+}
+
+async function removeFromVps(slug: string): Promise<void> {
+  if (isRunningOnVps()) return;
+  try {
+    await execAsync(
+      `ssh -i ${VPS_KEY} ${VPS_USER}@${VPS_HOST} "rm -rf ${VPS_PUBLISHED_DIR}/${slug}"`,
+      { timeout: 10000 },
+    );
+  } catch (err) {
+    console.error('[jkai] VPS remove failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Inject a <base href> into index.html so relative asset/data paths resolve correctly
+ * when served from /projects/jkai/{slug}/
+ */
+async function injectBaseHref(destDir: string, slug: string): Promise<void> {
+  const { readFileSync, writeFileSync, existsSync } = await import('fs');
+  const indexPath = `${destDir}/index.html`;
+  if (!existsSync(indexPath)) return;
+
+  let html = readFileSync(indexPath, 'utf-8');
+  const baseTag = `<base href="/projects/jkai/${slug}/">`;
+
+  // Don't double-inject
+  if (html.includes('<base href=')) return;
+
+  if (html.includes('<head>')) {
+    html = html.replace('<head>', `<head>${baseTag}`);
+  } else if (html.includes('<head ')) {
+    html = html.replace(/<head([^>]*)>/, `<head$1>${baseTag}`);
+  } else if (html.includes('<html')) {
+    html = html.replace(/<html([^>]*)>/, `<html$1><head>${baseTag}</head>`);
+  } else {
+    html = baseTag + html;
+  }
+
+  writeFileSync(indexPath, html);
+}
+
+export async function publishBuild(buildId: string, slug: string): Promise<string> {
+  const { mkdirSync, rmSync, existsSync } = await import('fs');
+  const destDir = `${PUBLISHED_DIR}/${slug}`;
+  const liveDir = `/home/jkai/workspace/${buildId}/live`;
+
+  // Try to produce a static build inside the sandbox first
+  // Check for package.json with a build script
+  const hasBuildScript = await execInSandbox(
+    `cd ${liveDir} && node -e "const p=require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null`,
+    5000,
+  );
+
+  if (hasBuildScript.exitCode === 0) {
+    // Install deps if needed and run build
+    await execInSandbox(`cd ${liveDir} && npm install --prefer-offline 2>&1 | tail -3`, 120000);
+    const buildResult = await execInSandbox(`cd ${liveDir} && npm run build 2>&1 | tail -20`, 120000);
+
+    if (buildResult.exitCode === 0) {
+      // Check for common build output directories
+      const distCheck = await execInSandbox(
+        `cd ${liveDir} && for d in dist build public/build out .next/static; do [ -d "$d" ] && echo "$d" && break; done`,
+        5000,
+      );
+      if (distCheck.stdout.trim()) {
+        // Copy build output instead of full source
+        rmSync(destDir, { recursive: true, force: true });
+        mkdirSync(destDir, { recursive: true });
+        const buildDir = `${liveDir}/${distCheck.stdout.trim()}`;
+        await execAsync(`docker cp ${CONTAINER_NAME}:${buildDir}/. ${destDir}/`, { timeout: 120000 });
+        // Also copy index.html from root if the build dir doesn't have one
+        if (!existsSync(`${destDir}/index.html`)) {
+          await execAsync(
+            `docker cp ${CONTAINER_NAME}:${liveDir}/index.html ${destDir}/ 2>/dev/null`,
+            { timeout: 10000 },
+          ).catch(() => {});
+        }
+        await injectBaseHref(destDir, slug);
+        await syncToVps(destDir, slug);
+        return destDir;
+      }
+    }
+    // Build failed or no dist dir — fall through to full copy
+  }
+
+  // For Python projects with templates/static dirs, try to grab those specifically
+  const hasPythonTemplates = await execInSandbox(
+    `test -d ${liveDir}/templates -o -d ${liveDir}/static && echo YES`,
+    5000,
+  );
+
+  // Full copy — the project is either static already or we can't easily extract just the frontend
+  rmSync(destDir, { recursive: true, force: true });
+  mkdirSync(destDir, { recursive: true });
+  await execAsync(`docker cp ${CONTAINER_NAME}:${liveDir}/. ${destDir}/`, { timeout: 120000 });
+
+  // Clean up server-side artifacts that won't work outside the sandbox
+  rmSync(`${destDir}/node_modules`, { recursive: true, force: true });
+  rmSync(`${destDir}/.git`, { recursive: true, force: true });
+  rmSync(`${destDir}/__pycache__`, { recursive: true, force: true });
+  rmSync(`${destDir}/.venv`, { recursive: true, force: true });
+
+  // If it's a Python project with templates, restructure for static serving:
+  // Move templates/index.html to root index.html if no root index exists
+  if (hasPythonTemplates.stdout.trim() === 'YES' && !existsSync(`${destDir}/index.html`)) {
+    const { readdirSync, copyFileSync } = await import('fs');
+    const templatesDir = `${destDir}/templates`;
+    if (existsSync(templatesDir)) {
+      try {
+        const templates = readdirSync(templatesDir);
+        const index = templates.find(f => f === 'index.html' || f === 'base.html');
+        if (index) copyFileSync(`${templatesDir}/${index}`, `${destDir}/index.html`);
+      } catch {}
+    }
+  }
+
+  await injectBaseHref(destDir, slug);
+  await syncToVps(destDir, slug);
+  return destDir;
+}
+
+export async function unpublishBuild(slug: string): Promise<void> {
+  const { rmSync } = await import('fs');
+  const destDir = `${PUBLISHED_DIR}/${slug}`;
+  rmSync(destDir, { recursive: true, force: true });
+  await removeFromVps(slug);
+}
+
+export function getPublishedDir(): string {
+  return PUBLISHED_DIR;
 }
 
 // --- Utilities ---
