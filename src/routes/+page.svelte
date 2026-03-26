@@ -18,6 +18,7 @@
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
+  import { livingType } from '$lib/biome/actions';
 
   const store = getContext<BiomeStore>('biome');
   let biomeVisible = $state(true);
@@ -55,7 +56,7 @@
   {/if}
   <!-- Top bar -->
   <div class="relative z-10 flex justify-between items-start">
-    <a href="/" class="display text-[28px] sm:text-[32px] leading-none no-underline" style="color: var(--text-primary);">
+    <a href="/" class="display text-[28px] sm:text-[32px] leading-none no-underline" style="color: var(--text-primary);" use:livingType={() => ({ store, enabled: biomeVisible })}>
       STRANGE<br>RAMBLINGS
     </a>
 
@@ -71,7 +72,7 @@
     <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
       <!-- Left: vitals -->
       <div class="text-center md:text-right">
-        <p class="display text-[64px] sm:text-[96px] md:text-[120px]" style="color: var(--accent);">
+        <p class="display text-[64px] sm:text-[96px] md:text-[120px]" style="color: var(--accent);" use:livingType={() => ({ store, enabled: biomeVisible })}>
           {roundPulse(pulse)}
         </p>
         <p class="label mt-2">
@@ -115,19 +116,19 @@
       <p class="label mb-4">The Biome</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">PULSE</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);" use:livingType={() => ({ store, enabled: biomeVisible })}>PULSE</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             When my heart rate rises, the particles quicken. Each beat pulses through the field.
           </p>
         </div>
         <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">WEATHER</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);" use:livingType={() => ({ store, enabled: biomeVisible })}>WEATHER</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             When it rains outside, it rains here too. Wind direction and speed drive particle drift.
           </p>
         </div>
         <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">RECOVERY</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);" use:livingType={() => ({ store, enabled: biomeVisible })}>RECOVERY</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             Colour intensity tracks recovery score. Higher recovery means more vivid particles.
           </p>
