@@ -84,7 +84,9 @@ describe('livingType action', () => {
     const store = mockStore({ pulse: 72, stale: false, sources: { heartRate: true, weather: true } });
     const action = livingType(node, () => ({ store, enabled: true }));
     flushRaf(500);
-    expect(node.style.letterSpacing).toBeDefined();
+    // Should have set a letter-spacing value containing 'em'
+    expect(node.style.letterSpacing).not.toBe('');
+    expect(node.style.letterSpacing).toContain('em');
     action.destroy();
   });
 
@@ -137,7 +139,9 @@ describe('livingType action', () => {
     const freshSpacing = parseFloat(freshNode.style.letterSpacing);
     const staleSpacing = parseFloat(staleNode.style.letterSpacing);
 
-    expect(freshSpacing).toBeGreaterThanOrEqual(staleSpacing);
+    // Fresh data (intensity=40) should produce strictly larger modulation than stale (intensity=20)
+    // at time=100ms which hits a beat peak for 72 BPM
+    expect(freshSpacing).toBeGreaterThan(staleSpacing);
 
     freshAction.destroy();
     staleAction.destroy();
