@@ -80,9 +80,6 @@
         <p class="label mt-1">
           {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
         </p>
-        <div class="mt-4">
-          <LiveWalkBanner />
-        </div>
       </div>
 
       <!-- Right: explainer with accent strip + live walk -->
@@ -94,6 +91,9 @@
           The pulsing background is my heart rate. You can toggle it off if it's distracting (bottom right). Weather is what I am experiencing where I am right now. This site is a place to blog, experiment, and share.
         </p>
       </div>
+    </div>
+    <div class="mt-6 flex justify-center relative z-10">
+      <LiveWalkBanner />
     </div>
   </div>
 
