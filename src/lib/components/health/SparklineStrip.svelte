@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Line } from 'layerchart';
+  import { Chart, Svg, Area, Spline } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { curveMonotoneX } from 'd3-shape';
 
@@ -50,7 +50,7 @@
             >
               <Svg>
                 <Area fill="var(--accent)" fillOpacity={0.1} curve={curveMonotoneX} />
-                <Line stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+                <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
               </Svg>
             </Chart>
           {/if}

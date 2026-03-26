@@ -29,8 +29,26 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
   }
 
-  const state = await request.json();
-  state.receivedAt = Date.now();
+  const incoming = await request.json();
+  incoming.receivedAt = Date.now();
+
+  // Merge: append incoming track points to existing accumulated track
+  let existingTrack: { lat: number; lng: number; timestamp: number }[] = [];
+  try {
+    const raw = await readFile(LIVE_STATE_PATH, 'utf-8');
+    const prev = JSON.parse(raw);
+    // Only carry forward track from the same session
+    if (prev.startedAt === incoming.startedAt && Array.isArray(prev.track)) {
+      existingTrack = prev.track;
+    }
+  } catch {
+    // No existing state — start fresh
+  }
+
+  const state = {
+    ...incoming,
+    track: [...existingTrack, ...incoming.track]
+  };
 
   await writeFile(LIVE_STATE_PATH, JSON.stringify(state), 'utf-8');
 

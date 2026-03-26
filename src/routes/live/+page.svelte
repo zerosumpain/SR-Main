@@ -25,7 +25,7 @@
     updatedAt?: number;
   }
 
-  let state = $state<LiveState>({ active: false });
+  let liveState = $state<LiveState>({ active: false });
   let mapContainer: HTMLDivElement | undefined = $state(undefined);
   let map: any = null;
   let trackLine: any = null;
@@ -33,7 +33,7 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let mapInitialized = false;
 
-  let isLive = $derived(state.active && state.status !== 'finished');
+  let isLive = $derived(liveState.active && liveState.status !== 'finished');
 
   onMount(async () => {
     await fetchState();
@@ -49,7 +49,7 @@
     try {
       const res = await fetch('/api/live-walk');
       if (res.ok) {
-        state = await res.json();
+        liveState = await res.json();
         if (isLive && !mapInitialized) {
           await tick(); // wait for DOM to update with the map container
           initMap();
@@ -74,9 +74,9 @@
 
   function updateMap() {
     const L = (window as any).L;
-    if (!map || !L || !state.track || state.track.length === 0) return;
+    if (!map || !L || !liveState.track || liveState.track.length === 0) return;
 
-    const latlngs = state.track.map((p: any) => [p.lat, p.lng]);
+    const latlngs = liveState.track.map((p: any) => [p.lat, p.lng]);
 
     if (trackLine) trackLine.remove();
     trackLine = L.polyline(latlngs, {
@@ -85,7 +85,7 @@
       opacity: 0.9
     }).addTo(map);
 
-    const last = state.track[state.track.length - 1];
+    const last = liveState.track[liveState.track.length - 1];
     if (posMarker) posMarker.remove();
     posMarker = L.circleMarker([last.lat, last.lng], {
       radius: 8,
@@ -95,7 +95,7 @@
       weight: 2
     }).addTo(map);
 
-    if (state.track.length <= 5) {
+    if (liveState.track.length <= 5) {
       map.fitBounds(trackLine.getBounds(), { padding: [40, 40] });
     } else {
       map.panTo([last.lat, last.lng]);
@@ -139,10 +139,10 @@
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="live-dot-sm"></span>
             <span class="live-status-label">
-              {state.status === 'paused' ? 'PAUSED' : 'LIVE'}
+              {liveState.status === 'paused' ? 'PAUSED' : 'LIVE'}
             </span>
           </div>
-          <h1 class="display text-[18px] mt-1" style="color: var(--text-primary);">{state.routeName}</h1>
+          <h1 class="display text-[18px] mt-1" style="color: var(--text-primary);">{liveState.routeName}</h1>
         </div>
       </div>
     </div>
@@ -151,33 +151,33 @@
 
     <div class="live-stats">
       <div class="live-stat">
-        <div class="live-stat-value">{state.stats?.distanceKm?.toFixed(2) ?? '0'}<span class="live-stat-unit">km</span></div>
+        <div class="live-stat-value">{liveState.stats?.distanceKm?.toFixed(2) ?? '0'}<span class="live-stat-unit">km</span></div>
         <div class="live-stat-label">Distance</div>
       </div>
       <div class="live-stat-divider"></div>
       <div class="live-stat">
-        <div class="live-stat-value">{state.startedAt ? formatElapsed(state.startedAt) : '--'}</div>
+        <div class="live-stat-value">{liveState.startedAt ? formatElapsed(liveState.startedAt) : '--'}</div>
         <div class="live-stat-label">Elapsed</div>
       </div>
       <div class="live-stat-divider"></div>
       <div class="live-stat">
-        <div class="live-stat-value">+{Math.round(state.stats?.elevationGainM ?? 0)}<span class="live-stat-unit">m</span></div>
+        <div class="live-stat-value">+{Math.round(liveState.stats?.elevationGainM ?? 0)}<span class="live-stat-unit">m</span></div>
         <div class="live-stat-label">Elevation</div>
       </div>
       <div class="live-stat-divider"></div>
       <div class="live-stat">
-        <div class="live-stat-value">{formatPace(state.stats?.avgSpeedKmh ?? 0)}</div>
+        <div class="live-stat-value">{formatPace(liveState.stats?.avgSpeedKmh ?? 0)}</div>
         <div class="live-stat-label">Pace</div>
       </div>
     </div>
 
-    {#if state.routeDistanceKm && state.routeDistanceKm > 0 && state.stats}
+    {#if liveState.routeDistanceKm && liveState.routeDistanceKm > 0 && liveState.stats}
       <div class="live-progress">
         <div class="live-progress-bar">
-          <div class="live-progress-fill" style="width: {Math.min(100, (state.stats.distanceKm / state.routeDistanceKm) * 100).toFixed(1)}%"></div>
+          <div class="live-progress-fill" style="width: {Math.min(100, (liveState.stats.distanceKm / liveState.routeDistanceKm) * 100).toFixed(1)}%"></div>
         </div>
         <div class="live-progress-text">
-          {state.stats.distanceKm.toFixed(1)} / {state.routeDistanceKm.toFixed(1)} km
+          {liveState.stats.distanceKm.toFixed(1)} / {liveState.routeDistanceKm.toFixed(1)} km
         </div>
       </div>
     {/if}

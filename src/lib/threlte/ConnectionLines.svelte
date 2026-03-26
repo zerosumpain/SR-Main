@@ -12,7 +12,7 @@
   import { cardiacPulse, MAX_CONNECTION_SEGMENTS, CONNECTION_MAX_DIST } from '$lib/biome/state';
 
   let { biomeState, isDark = true, particlePositions }: {
-    state: BiomeState;
+    biomeState: BiomeState;
     isDark?: boolean;
     particlePositions?: Float32Array;
   } = $props();

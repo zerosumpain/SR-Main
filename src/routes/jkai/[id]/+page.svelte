@@ -7,6 +7,7 @@
   let activeTab = $state<'activity' | 'iterations' | 'preview' | 'controls'>('activity');
   let logs = $state(data.logs);
   let build = $state(data.build);
+  let budget = $derived(build.budgetConfig as { maxIterations?: number; maxTotalMinutes?: number } | null);
   let eventSource: EventSource | null = null;
   let logContainer: HTMLDivElement;
   let Prism: any = null;
@@ -483,11 +484,11 @@
         <div class="space-y-2 text-sm" style="font-family: var(--font-mono);">
           <div class="flex justify-between" style="color: var(--text-ghost);">
             <span>Iterations</span>
-            <span>{build.iterationsCompleted}{build.budgetConfig?.maxIterations ? ` / ${build.budgetConfig.maxIterations}` : ''}</span>
+            <span>{build.iterationsCompleted}{budget?.maxIterations ? ` / ${budget.maxIterations}` : ''}</span>
           </div>
           <div class="flex justify-between" style="color: var(--text-ghost);">
             <span>Active time</span>
-            <span>{build.activeMinutesUsed.toFixed(1)}m{build.budgetConfig?.maxTotalMinutes ? ` / ${build.budgetConfig.maxTotalMinutes}m` : ''}</span>
+            <span>{build.activeMinutesUsed.toFixed(1)}m{budget?.maxTotalMinutes ? ` / ${budget.maxTotalMinutes}m` : ''}</span>
           </div>
           <div class="flex justify-between" style="color: var(--text-ghost);">
             <span>Tokens</span>

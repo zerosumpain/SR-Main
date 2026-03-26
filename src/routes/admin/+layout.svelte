@@ -4,10 +4,12 @@
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import { createBiomeStore } from '$lib/biome/store.svelte';
 
-  let { children, data } = $props();
+  import { page } from '$app/stores';
 
-  // Make admin token available to all admin pages
-  setContext('adminToken', data?.adminToken || '');
+  let { children } = $props();
+
+  // Make admin token available to all admin pages (passed via ?token= URL param)
+  setContext('adminToken', $page.url.searchParams.get('token') || '');
 
   // Biome store for admin pages
   const store = createBiomeStore();

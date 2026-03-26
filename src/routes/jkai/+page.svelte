@@ -13,7 +13,7 @@
     pending: { bg: 'rgba(100, 100, 200, 0.12)', text: '#6464c8' },
   };
 
-  function formatDate(d: string) {
+  function formatDate(d: string | Date) {
     return new Date(d).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'short',

@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { whoopRecovery, whoopSleep, whoopCycles, appleHealthMetrics } from '$lib/db/schema';
-import { desc, gte, eq } from 'drizzle-orm';
+import { desc, gte, eq, and } from 'drizzle-orm';
 import type { SparklineData } from './types';
 
 export async function getSparklines(): Promise<SparklineData[]> {
@@ -16,8 +16,7 @@ export async function getSparklines(): Promise<SparklineData[]> {
       .orderBy(whoopSleep.startDate),
     db.select({ date: appleHealthMetrics.date, value: appleHealthMetrics.value })
       .from(appleHealthMetrics)
-      .where(gte(appleHealthMetrics.date, sevenDaysAgo))
-      .where(eq(appleHealthMetrics.metricName, 'heart_rate'))
+      .where(and(gte(appleHealthMetrics.date, sevenDaysAgo), eq(appleHealthMetrics.metricName, 'heart_rate')))
       .orderBy(appleHealthMetrics.date),
     db.select({ date: whoopCycles.startDate, value: whoopCycles.strain })
       .from(whoopCycles).where(gte(whoopCycles.startDate, sevenDaysAgo))

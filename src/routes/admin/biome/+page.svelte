@@ -51,7 +51,13 @@
   }
 
   // Setting groups for the UI
-  const groups = [
+  interface SettingGroup {
+    label: string;
+    toggle?: string;
+    settings: { key: string; label: string; min: number; max: number; step: number; format: (v: number) => string }[];
+  }
+
+  const groups: SettingGroup[] = [
     {
       label: 'Particles',
       settings: [
@@ -101,6 +107,9 @@
       settings: [
         { key: 'bloodVesselSpeed', label: 'Flow Speed', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
         { key: 'bloodVesselSurge', label: 'Pulse Surge', min: 0, max: 200, step: 5, format: (v: number) => v + '%' },
+        { key: 'bloodVesselWidth', label: 'Vessel Width', min: 0.5, max: 4.0, step: 0.1, format: (v: number) => v.toFixed(1) + 'x' },
+        { key: 'bloodVesselSubBranches', label: 'Sub-Branches', min: 0, max: 4, step: 1, format: (v: number) => v.toString() },
+        { key: 'bloodVesselSpread', label: 'Branch Spread', min: 20, max: 100, step: 5, format: (v: number) => v + '%' },
       ],
     },
     {
@@ -122,7 +131,7 @@
       toggle: 'dreamMode',
       settings: [],
     },
-  ] as const;
+  ];
 
   function getVal(key: string): number {
     return (settings as any)[key] as number;
@@ -130,10 +139,12 @@
   function setVal(key: string, v: number) {
     (settings as any)[key] = v;
   }
-  function getBool(key: string): boolean {
+  function getBool(key: string | undefined): boolean {
+    if (!key) return true;
     return (settings as any)[key] as boolean;
   }
-  function toggleBool(key: string) {
+  function toggleBool(key: string | undefined) {
+    if (!key) return;
     (settings as any)[key] = !(settings as any)[key];
   }
 </script>
@@ -181,17 +192,18 @@
             {group.label}
           </span>
           {#if group.toggle}
+            {@const tog = group.toggle}
             <button
               type="button"
               role="switch"
-              aria-checked={getBool(group.toggle)}
-              onclick={() => toggleBool(group.toggle)}
+              aria-checked={getBool(tog)}
+              onclick={() => toggleBool(tog)}
               class="relative w-9 h-[18px] rounded-full transition-colors"
-              style="background: {getBool(group.toggle) ? 'var(--accent)' : 'rgba(0,0,0,0.12)'};"
+              style="background: {getBool(tog) ? 'var(--accent)' : 'rgba(0,0,0,0.12)'};"
             >
               <span
                 class="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full transition-transform"
-                style="background: white; transform: translateX({getBool(group.toggle) ? '18px' : '0'});"
+                style="background: white; transform: translateX({getBool(tog) ? '18px' : '0'});"
               ></span>
             </button>
           {/if}
