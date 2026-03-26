@@ -90,7 +90,6 @@
         <p class="text-sm leading-relaxed mt-2" style="color: var(--text-secondary);">
           The pulsing background is my heart rate. You can toggle it off if it's distracting (bottom right). Weather is what I am experiencing where I am right now. This site is a place to blog, experiment, and share.
         </p>
-        <LiveWalkBanner />
       </div>
     </div>
   </div>
@@ -100,6 +99,11 @@
     <p class="label" style="opacity: 0.4;">SCROLL</p>
   </div>
 </section>
+
+<!-- Live walk banner — full width, between hero and biome section -->
+<div class="px-6 sm:px-10 md:px-16 relative z-10">
+  <LiveWalkBanner />
+</div>
 
 <!-- DIVIDER -->
 <hr class="rule" />
