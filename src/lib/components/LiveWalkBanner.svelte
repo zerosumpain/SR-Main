@@ -51,29 +51,27 @@
   let isActive = $derived(state.active && state.status !== 'finished');
 </script>
 
-{#if isActive}
-  <div class="live-walk-banner">
-    <div class="live-walk-indicator">
-      <span class="live-dot"></span>
-      <span class="live-label">ACTIVITY IN PROGRESS</span>
-    </div>
-    <div class="live-walk-info">
-      <span class="live-walk-name">{state.routeName}</span>
-      <div class="live-walk-stats">
-        <span>{state.stats?.distanceKm.toFixed(1)} km</span>
-        <span class="live-sep">&middot;</span>
-        <span>{formatElapsed(state.startedAt!)}</span>
-        <span class="live-sep">&middot;</span>
-        <span>+{Math.round(state.stats?.elevationGainM ?? 0)}m</span>
-      </div>
-    </div>
-    <a href="/live" class="live-walk-link" aria-label="View live activity">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-        <path d="M5 12h14M12 5l7 7-7 7"/>
-      </svg>
-    </a>
+<div class="live-walk-banner" style="display: {isActive ? 'flex' : 'none'}">
+  <div class="live-walk-indicator">
+    <span class="live-dot"></span>
+    <span class="live-label">ACTIVITY IN PROGRESS</span>
   </div>
-{/if}
+  <div class="live-walk-info">
+    <span class="live-walk-name">{state.routeName ?? ''}</span>
+    <div class="live-walk-stats">
+      <span>{state.stats?.distanceKm?.toFixed(1) ?? '0'} km</span>
+      <span class="live-sep">&middot;</span>
+      <span>{state.startedAt ? formatElapsed(state.startedAt) : '--'}</span>
+      <span class="live-sep">&middot;</span>
+      <span>+{Math.round(state.stats?.elevationGainM ?? 0)}m</span>
+    </div>
+  </div>
+  <a href="/live" class="live-walk-link" aria-label="View live activity">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+      <path d="M5 12h14M12 5l7 7-7 7"/>
+    </svg>
+  </a>
+</div>
 
 <style>
   .live-walk-banner {
