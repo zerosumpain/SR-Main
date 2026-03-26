@@ -20,9 +20,9 @@ export function computeWindSkew(directionDeg: number, speed: number): number {
 }
 
 const BASE_LETTER_SPACING = -0.02; // em — matches .display in app.css
-const BREATH_RANGE = 0.01; // em — max expansion at peak beat
-const NORMAL_INTENSITY = 40;
-const STALE_INTENSITY = 20;
+const BREATH_RANGE = 0.15; // em — max expansion at peak beat
+const NORMAL_INTENSITY = 100;
+const STALE_INTENSITY = 50;
 const WIND_LERP_SPEED = 0.002; // per ms — ~2s to reach target
 
 export function livingType(
