@@ -80,6 +80,9 @@
         <p class="label mt-1">
           {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
         </p>
+        <div class="mt-4">
+          <LiveWalkBanner />
+        </div>
       </div>
 
       <!-- Right: explainer with accent strip + live walk -->
@@ -99,11 +102,6 @@
     <p class="label" style="opacity: 0.4;">SCROLL</p>
   </div>
 </section>
-
-<!-- Live walk banner — full width, between hero and biome section -->
-<div class="px-6 sm:px-10 md:px-16 relative z-10">
-  <LiveWalkBanner />
-</div>
 
 <!-- DIVIDER -->
 <hr class="rule" />
