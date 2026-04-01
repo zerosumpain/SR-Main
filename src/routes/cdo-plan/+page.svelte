@@ -1,21 +1,27 @@
 <svelte:head>
-	<title>CDO 100-Day Plan — DfE</title>
+	<title>100-Day Plan — CDO DfE</title>
 </svelte:head>
 
 <script lang="ts">
 	import type { PageData } from './$types';
-	import type { PlanSection, PlanChangelog } from '$lib/cdo/types';
+	import type { KanbanPlan, KanbanCard, ThemeKey, PlanChangelog } from '$lib/cdo/types';
+	import { THEME_COLORS } from '$lib/cdo/types';
 
 	let { data }: { data: PageData } = $props();
 
 	let running = $state(false);
 	let planId = $state<string | null>(null);
-	let logs = $state<{ icon: string; message: string; timestamp: number }[]>([]);
+	let logs = $state<{ message: string; timestamp: number }[]>([]);
 	let phase = $state<string>('idle');
 	let error = $state('');
+	let selectedCard = $state<KanbanCard | null>(null);
+	let filterTheme = $state<string | null>(null);
 	let showHistory = $state(false);
 	let viewingPlan = $state<any>(null);
 	let showChangelog = $state<string | null>(null);
+
+	let plan = $derived(viewingPlan?.structure ?? data.plan?.structure as KanbanPlan | null);
+	let isViewingOld = $derived(viewingPlan !== null);
 
 	function formatDate(iso: string): string {
 		return new Date(iso).toLocaleDateString('en-GB', {
@@ -25,6 +31,19 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function themeColor(theme: string) {
+		return THEME_COLORS[theme as ThemeKey] ?? THEME_COLORS.governance;
+	}
+
+	function priorityBadge(priority: string): { bg: string; text: string } {
+		switch (priority) {
+			case 'critical': return { bg: '#7f1d1d', text: '#fca5a5' };
+			case 'high': return { bg: '#78350f', text: '#fcd34d' };
+			case 'medium': return { bg: '#1e3a5f', text: '#93c5fd' };
+			default: return { bg: '#374151', text: '#9ca3af' };
+		}
 	}
 
 	async function runResearch() {
@@ -45,20 +64,18 @@
 			const { planId: id } = await res.json();
 			planId = id;
 
-			// Connect to SSE stream
 			const eventSource = new EventSource(`/api/cdo-plan/status?planId=${id}`);
 
 			eventSource.onmessage = (event) => {
 				try {
-					const data = JSON.parse(event.data);
-
-					if (data.type === 'log') {
-						logs = [...logs, { icon: '', message: data.message, timestamp: Date.now() }];
-					} else if (data.type === 'status') {
-						const status = data.data?.status;
+					const d = JSON.parse(event.data);
+					if (d.type === 'log') {
+						logs = [...logs, { message: d.message, timestamp: Date.now() }];
+					} else if (d.type === 'status') {
+						const status = d.data?.status;
 						if (status === 'complete') {
 							phase = 'synthesizing';
-							logs = [...logs, { icon: '', message: 'Research complete. Synthesizing plan...', timestamp: Date.now() }];
+							logs = [...logs, { message: 'Research complete. Synthesizing plan...', timestamp: Date.now() }];
 						} else if (status === 'failed') {
 							error = 'Research failed';
 							running = false;
@@ -66,40 +83,33 @@
 						} else if (status && status !== 'connected') {
 							phase = status;
 						}
-					} else if (data.type === 'error') {
-						error = data.message ?? 'Unknown error';
+					} else if (d.type === 'error') {
+						error = d.message ?? 'Unknown error';
 						eventSource.close();
 						running = false;
 					}
-				} catch {
-					// ignore parse errors
-				}
+				} catch { /* ignore */ }
 			};
 
-			// Poll for plan completion
 			const pollInterval = setInterval(async () => {
 				try {
 					const planRes = await fetch('/api/cdo-plan');
-					const plan = await planRes.json();
-
-					if (plan?.status === 'complete') {
+					const p = await planRes.json();
+					if (p?.status === 'complete') {
 						clearInterval(pollInterval);
 						eventSource.close();
-						data.plan = plan;
+						data.plan = p;
 						running = false;
 						phase = 'complete';
-						// Refresh history
 						const histRes = await fetch('/api/cdo-plan/history');
 						data.history = await histRes.json();
-					} else if (plan?.status === 'failed') {
+					} else if (p?.status === 'failed') {
 						clearInterval(pollInterval);
 						eventSource.close();
 						error = 'Plan synthesis failed';
 						running = false;
 					}
-				} catch {
-					// ignore poll errors
-				}
+				} catch { /* ignore */ }
 			}, 5000);
 		} catch (e: any) {
 			error = e.message ?? 'Network error';
@@ -109,300 +119,211 @@
 
 	async function viewVersion(id: string) {
 		const res = await fetch(`/api/cdo-plan/${id}`);
-		if (res.ok) {
-			viewingPlan = await res.json();
+		if (res.ok) viewingPlan = await res.json();
+	}
+
+	// Filtered cards by theme
+	let filteredCards = $derived(
+		plan?.cards?.filter((c: KanbanCard) => !filterTheme || c.theme === filterTheme) ?? []
+	);
+
+	// Group cards by week
+	let cardsByWeek = $derived(() => {
+		const weeks: Record<number, KanbanCard[]> = {};
+		for (const card of filteredCards) {
+			if (!weeks[card.week]) weeks[card.week] = [];
+			weeks[card.week].push(card);
 		}
+		return weeks;
+	});
+
+	function getCardsForWeek(week: number): KanbanCard[] {
+		return filteredCards.filter((c: KanbanCard) => c.week === week);
 	}
 
-	function closeVersionViewer() {
-		viewingPlan = null;
-	}
-
-	// Get the plan to display — either the current one or a viewed version
-	let displayPlan = $derived(viewingPlan ?? data.plan);
-
-	function renderSection(section: PlanSection, depth: number = 0): string {
-		const heading = depth === 0 ? 'h2' : depth === 1 ? 'h3' : 'h4';
-		const size = depth === 0 ? '1.25rem' : depth === 1 ? '1.1rem' : '1rem';
-		const marginTop = depth === 0 ? '2rem' : depth === 1 ? '1.5rem' : '1rem';
-		return '';
-	}
+	let totalCards = $derived(plan?.cards?.length ?? 0);
+	let themeCounts = $derived(() => {
+		const counts: Record<string, number> = {};
+		for (const card of plan?.cards ?? []) {
+			counts[card.theme] = (counts[card.theme] ?? 0) + 1;
+		}
+		return counts;
+	});
 </script>
 
-<div class="max-w-3xl mx-auto px-6 py-12">
+<div class="min-h-screen" style="background: var(--bg);">
 	<!-- Header -->
-	<div class="mb-10">
-		<a
-			href="/projects"
-			class="text-[13px] uppercase tracking-[0.3em] mb-4 block"
-			style="color: var(--text-muted); font-family: var(--font-mono);"
-		>
-			&larr; Projects
-		</a>
-		<h1
-			class="text-3xl font-bold mb-2"
-			style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"
-		>
-			First 100 Days
-		</h1>
-		<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-mono);">
-			CDO Plan — Department for Education
-		</p>
-	</div>
+	<header class="border-b" style="border-color: var(--card-border); background: var(--card-bg);">
+		<div class="max-w-[1800px] mx-auto px-6 py-4">
+			<div class="flex items-center justify-between">
+				<div>
+					<a href="/projects" class="text-[11px] uppercase tracking-[0.3em] block mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">&larr; Projects</a>
+					<h1 class="text-xl font-bold" style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;">
+						{isViewingOld ? `v${viewingPlan.version} — Historical` : 'First 100 Days'}
+					</h1>
+					<p class="text-[11px]" style="color: var(--text-muted); font-family: var(--font-mono);">
+						CDO Plan — Department for Education
+						{#if data.plan?.status === 'complete'}
+							&middot; v{data.plan.version} &middot; {totalCards} actions
+							&middot; {formatDate(data.plan.updatedAt)}
+						{/if}
+					</p>
+				</div>
 
-	<!-- Error banner -->
-	{#if error}
-		<div
-			class="mb-6 p-4 rounded-lg text-sm"
-			style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);"
-		>
-			{error}
+				<div class="flex items-center gap-2">
+					{#if isViewingOld}
+						<button onclick={() => (viewingPlan = null)} class="px-3 py-2 rounded-lg text-[11px] uppercase tracking-[0.15em]" style="background: var(--accent); color: white; font-family: var(--font-mono);">
+							Back to Current
+						</button>
+					{/if}
+					{#if data.history?.length > 1}
+						<button onclick={() => (showHistory = !showHistory)} class="px-3 py-2 rounded-lg text-[11px] uppercase tracking-[0.15em]" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);">
+							History ({data.history.length})
+						</button>
+					{/if}
+					<button onclick={runResearch} disabled={running} class="px-4 py-2 rounded-lg text-[11px] uppercase tracking-[0.15em] disabled:opacity-50" style="background: var(--accent); color: white; font-family: var(--font-mono);">
+						{running ? (phase === 'synthesizing' ? 'Synthesizing...' : 'Researching...') : (plan ? 'Refresh' : 'Run Research')}
+					</button>
+				</div>
+			</div>
+
+			<!-- Theme filter bar -->
+			{#if plan?.themes}
+				<div class="flex gap-1.5 mt-3 overflow-x-auto pb-1">
+					<button onclick={() => (filterTheme = null)} class="shrink-0 px-3 py-1 rounded text-[10px] uppercase tracking-[0.15em] transition-all" style="font-family: var(--font-mono); background: {filterTheme === null ? 'var(--accent)' : 'var(--bg)'}; color: {filterTheme === null ? 'white' : 'var(--text-muted)'}; border: 1px solid {filterTheme === null ? 'var(--accent)' : 'var(--card-border)'};">
+						All ({totalCards})
+					</button>
+					{#each plan.themes as theme}
+						{@const tc = themeColor(theme.key)}
+						{@const count = themeCounts()[theme.key] ?? 0}
+						<button onclick={() => (filterTheme = filterTheme === theme.key ? null : theme.key)} class="shrink-0 px-3 py-1 rounded text-[10px] uppercase tracking-[0.15em] transition-all" style="font-family: var(--font-mono); background: {filterTheme === theme.key ? tc.border : tc.bg}; color: {filterTheme === theme.key ? 'white' : tc.text}; border: 1px solid {filterTheme === theme.key ? tc.border : 'transparent'};">
+							{theme.label} ({count})
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
-	{/if}
-
-	<!-- Action bar -->
-	<div class="flex items-center gap-3 mb-8">
-		<button
-			onclick={runResearch}
-			disabled={running}
-			class="px-5 py-2.5 rounded-xl text-sm uppercase tracking-[0.2em] transition-colors disabled:opacity-50"
-			style="background: var(--accent); color: white; font-family: var(--font-mono);"
-		>
-			{running ? (phase === 'synthesizing' ? 'Synthesizing...' : 'Researching...') : (data.plan ? 'Refresh Research' : 'Run Research')}
-		</button>
-
-		{#if data.history.length > 1}
-			<button
-				onclick={() => (showHistory = !showHistory)}
-				class="px-4 py-2.5 rounded-xl text-sm uppercase tracking-[0.2em]"
-				style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
-			>
-				{showHistory ? 'Hide History' : `History (${data.history.length})`}
-			</button>
-		{/if}
-
-		{#if data.plan?.status === 'complete' && data.plan.updatedAt}
-			<span class="text-[11px] ml-auto" style="color: var(--text-ghost); font-family: var(--font-mono);">
-				v{data.plan.version} &middot; {formatDate(data.plan.updatedAt)}
-			</span>
-		{/if}
-	</div>
+	</header>
 
 	<!-- Research progress -->
 	{#if running}
-		<div
-			class="mb-8 p-5 rounded-xl border"
-			style="background: var(--card-bg); border-color: var(--card-border);"
-		>
-			<p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
-				{phase === 'synthesizing' ? 'Synthesizing Plan' : 'Research in Progress'}
-			</p>
-			<div class="space-y-1 max-h-60 overflow-y-auto">
-				{#each logs as log}
-					<p class="text-xs" style="color: var(--text-muted); font-family: var(--font-mono);">
-						{log.message}
-					</p>
-				{/each}
-				{#if logs.length === 0}
-					<p class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">
-						Starting research engine...
-					</p>
-				{/if}
-			</div>
-		</div>
-	{/if}
-
-	<!-- Version viewer overlay -->
-	{#if viewingPlan}
-		<div class="mb-6">
-			<button
-				onclick={closeVersionViewer}
-				class="text-[13px] uppercase tracking-[0.2em] mb-3"
-				style="color: var(--text-muted); font-family: var(--font-mono);"
-			>
-				&larr; Back to current
-			</button>
-			<p class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-				Viewing version {viewingPlan.version} &middot; {formatDate(viewingPlan.createdAt)}
-			</p>
-		</div>
-	{/if}
-
-	<!-- History sidebar -->
-	{#if showHistory && data.history.length > 1}
-		<div
-			class="mb-8 p-4 rounded-xl border"
-			style="background: var(--card-bg); border-color: var(--card-border);"
-		>
-			<p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
-				Version History
-			</p>
-			<div class="space-y-2">
-				{#each data.history as h}
-					<button
-						onclick={() => viewVersion(h.id)}
-						class="w-full text-left p-3 rounded-lg flex items-center justify-between"
-						style="background: var(--bg); border: 1px solid var(--card-border);"
-					>
-						<span class="text-xs" style="color: var(--text-primary); font-family: var(--font-mono);">
-							v{h.version} &mdash; {formatDate(h.createdAt)}
-						</span>
-						{#if h.changelog}
-							<button
-								onclick={(e) => { e.stopPropagation(); showChangelog = showChangelog === h.id ? null : h.id; }}
-								class="text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
-								style="color: var(--accent); font-family: var(--font-mono);"
-							>
-								changes
-							</button>
-						{/if}
-					</button>
-					{#if showChangelog === h.id && h.changelog}
-						{@const cl = h.changelog as PlanChangelog}
-						<div class="ml-4 p-3 rounded-lg text-xs" style="background: var(--bg); font-family: var(--font-mono);">
-							{#if cl.reasoning}
-								<p class="mb-2" style="color: var(--text-muted);">{cl.reasoning}</p>
-							{/if}
-							{#if cl.added?.length}
-								<p style="color: #2d7d46;">+ Added: {cl.added.join(', ')}</p>
-							{/if}
-							{#if cl.modified?.length}
-								<p style="color: var(--accent);">~ Modified: {cl.modified.join(', ')}</p>
-							{/if}
-							{#if cl.removed?.length}
-								<p style="color: #8b3a1a;">- Removed: {cl.removed.join(', ')}</p>
-							{/if}
-						</div>
-					{/if}
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	<!-- Plan content -->
-	{#if displayPlan?.status === 'complete' && displayPlan.structure}
-		{@const structure = displayPlan.structure}
-		<div class="mb-8">
-			{#if structure.summary}
-				<div
-					class="p-5 rounded-xl border mb-8"
-					style="background: var(--card-bg); border-color: var(--card-border);"
-				>
-					<p class="text-[13px] uppercase tracking-[0.25em] mb-3" style="color: var(--text-muted); font-family: var(--font-mono);">
-						Executive Summary
-					</p>
-					<p class="text-sm leading-relaxed" style="color: var(--text-primary); font-family: var(--font-body); white-space: pre-line;">
-						{structure.summary}
-					</p>
+		<div class="max-w-[1800px] mx-auto px-6 py-4">
+			<div class="p-4 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
+				<p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
+					{phase === 'synthesizing' ? 'Synthesizing Plan...' : 'Research in Progress'}
+				</p>
+				<div class="space-y-0.5 max-h-32 overflow-y-auto">
+					{#each logs as log}
+						<p class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{log.message}</p>
+					{/each}
 				</div>
-			{/if}
+			</div>
+		</div>
+	{/if}
 
-			{#if structure.sections}
-				{#each structure.sections as section, i}
-					{@render planSection(section, 0)}
+	<!-- Error -->
+	{#if error}
+		<div class="max-w-[1800px] mx-auto px-6 py-2">
+			<div class="p-3 rounded-lg text-[11px]" style="background: #3b1a1a; color: #fca5a5; font-family: var(--font-mono);">{error}</div>
+		</div>
+	{/if}
+
+	<!-- History panel -->
+	{#if showHistory && data.history?.length > 1}
+		<div class="max-w-[1800px] mx-auto px-6 py-2">
+			<div class="p-3 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
+				<div class="flex gap-2 flex-wrap">
+					{#each data.history as h}
+						<button onclick={() => viewVersion(h.id)} class="px-3 py-1.5 rounded-lg text-[10px]" style="background: var(--bg); border: 1px solid var(--card-border); font-family: var(--font-mono); color: var(--text-primary);">
+							v{h.version} &mdash; {formatDate(h.createdAt)}
+						</button>
+					{/each}
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Executive Summary -->
+	{#if plan?.summary}
+		<div class="max-w-[1800px] mx-auto px-6 py-4">
+			<div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
+				<p class="text-[11px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">Executive Summary</p>
+				<p class="text-sm leading-relaxed" style="color: var(--text-secondary); white-space: pre-line;">{plan.summary}</p>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Kanban Board -->
+	{#if plan?.columns}
+		<div class="overflow-x-auto pb-8">
+			<div class="flex gap-3 px-6 min-w-max">
+				{#each plan.columns as col}
+					<div class="w-72 shrink-0">
+						<!-- Column header -->
+						<div class="mb-2 px-1">
+							<p class="text-[11px] font-bold uppercase tracking-[0.15em]" style="font-family: var(--font-mono); color: var(--text-primary);">
+								{col.label}
+							</p>
+							<p class="text-[10px] mt-0.5" style="color: var(--text-muted); font-family: var(--font-mono);">
+								{col.focus}
+							</p>
+						</div>
+
+						<!-- Cards -->
+						<div class="space-y-2 min-h-[200px]">
+							{#each getCardsForWeek(col.week) as card (card.id)}
+								{@const tc = themeColor(card.theme)}
+								{@const pb = priorityBadge(card.priority)}
+								<button
+									onclick={() => (selectedCard = selectedCard?.id === card.id ? null : card)}
+									class="w-full text-left p-3 rounded-lg border-l-[3px] transition-all"
+									style="background: var(--card-bg); border-left-color: {tc.border}; border-top: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); {selectedCard?.id === card.id ? 'box-shadow: 0 0 0 1px var(--accent);' : ''}"
+								>
+									<div class="flex items-start justify-between gap-2 mb-1">
+										<p class="text-[12px] font-medium leading-tight" style="color: var(--text-primary);">{card.title}</p>
+									</div>
+									<div class="flex items-center gap-1.5 flex-wrap">
+										<span class="text-[8px] uppercase tracking-[0.15em] px-1.5 py-0.5 rounded" style="background: {tc.bg}; color: {tc.text}; font-family: var(--font-mono);">
+											{plan.themes.find((t: any) => t.key === card.theme)?.label ?? card.theme}
+										</span>
+										<span class="text-[8px] uppercase tracking-[0.15em] px-1.5 py-0.5 rounded" style="background: {pb.bg}; color: {pb.text}; font-family: var(--font-mono);">
+											{card.priority}
+										</span>
+									</div>
+									{#if card.description && selectedCard?.id === card.id}
+										<p class="text-[11px] mt-2 leading-relaxed" style="color: var(--text-muted);">{card.description}</p>
+										{#if card.stakeholders?.length}
+											<div class="mt-2">
+												<p class="text-[9px] uppercase tracking-[0.15em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Stakeholders</p>
+												<div class="flex gap-1 flex-wrap">
+													{#each card.stakeholders as s}
+														<span class="text-[9px] px-1.5 py-0.5 rounded" style="background: var(--bg); font-family: var(--font-mono); color: var(--text-muted);">{s}</span>
+													{/each}
+												</div>
+											</div>
+										{/if}
+										{#if card.outcomes?.length}
+											<div class="mt-2">
+												<p class="text-[9px] uppercase tracking-[0.15em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Outcomes</p>
+												{#each card.outcomes as o}
+													<p class="text-[10px]" style="color: var(--text-muted);">&bull; {o}</p>
+												{/each}
+											</div>
+										{/if}
+									{/if}
+								</button>
+							{/each}
+						</div>
+					</div>
 				{/each}
-			{/if}
+			</div>
 		</div>
 	{:else if !running}
-		<div
-			class="p-8 rounded-xl border text-center"
-			style="background: var(--card-bg); border-color: var(--card-border);"
-		>
-			<p class="text-sm mb-2" style="color: var(--text-muted); font-family: var(--font-mono);">
-				No plan yet
-			</p>
-			<p class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">
-				Click "Run Research" to begin gathering intelligence for your 100-day plan.
-			</p>
+		<div class="max-w-[1800px] mx-auto px-6 py-16 text-center">
+			<div class="p-12 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
+				<p class="text-sm mb-2" style="color: var(--text-muted); font-family: var(--font-mono;">No plan yet</p>
+				<p class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">Click "Run Research" to begin gathering intelligence for your 100-day plan.</p>
+			</div>
 		</div>
 	{/if}
 </div>
-
-{#snippet planSection(section: PlanSection, depth: number)}
-	<div style="margin-top: {depth === 0 ? '2rem' : depth === 1 ? '1.5rem' : '1rem'};">
-		{#if section.type === 'kpi'}
-			<div
-				class="p-4 rounded-xl border"
-				style="background: var(--card-bg); border-color: var(--card-border);"
-			>
-				<p class="text-[11px] uppercase tracking-[0.2em] mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
-					KPI
-				</p>
-				<p class="text-sm font-bold" style="color: var(--text-primary);">{section.title}</p>
-				{#if section.content}
-					<p class="text-xs mt-1" style="color: var(--text-muted);">{section.content}</p>
-				{/if}
-			</div>
-		{:else if section.type === 'milestone'}
-			<div
-				class="p-4 rounded-xl border-l-4"
-				style="background: var(--card-bg); border-left-color: var(--accent);"
-			>
-				<div class="flex items-center gap-2 mb-1">
-					<span class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded" style="background: var(--accent); color: white; font-family: var(--font-mono);">
-						Milestone
-					</span>
-					{#if section.metadata?.deadline}
-						<span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-							{section.metadata.deadline}
-						</span>
-					{/if}
-				</div>
-				<p class="text-sm font-bold" style="color: var(--text-primary);">{section.title}</p>
-				{#if section.content}
-					<p class="text-xs mt-1" style="color: var(--text-muted);">{section.content}</p>
-				{/if}
-			</div>
-		{:else if section.type === 'task'}
-			<div class="flex items-start gap-2 py-1">
-				<span class="mt-1 shrink-0 w-4 h-4 rounded border" style="border-color: var(--card-border);"></span>
-				<div class="flex-1">
-					<p class="text-sm" style="color: var(--text-primary);">{section.title}</p>
-					{#if section.content}
-						<p class="text-xs mt-0.5" style="color: var(--text-muted);">{section.content}</p>
-					{/if}
-					{#if section.metadata}
-						<div class="flex gap-2 mt-1">
-							{#if section.metadata.priority}
-								<span class="text-[10px] uppercase tracking-[0.15em] px-1.5 py-0.5 rounded" style="background: var(--card-border); color: var(--text-muted); font-family: var(--font-mono);">
-									{section.metadata.priority}
-								</span>
-							{/if}
-							{#if section.metadata.deadline}
-								<span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-									{section.metadata.deadline}
-								</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</div>
-		{:else if section.type === 'note'}
-			<div
-				class="p-3 rounded-lg text-xs"
-				style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-muted); font-family: var(--font-mono);"
-			>
-				<span style="color: var(--accent);">Note:</span> {section.content ?? section.title}
-			</div>
-		{:else}
-			<!-- section or unknown type -->
-			<p
-				class="font-bold"
-				style="font-size: {depth === 0 ? '1.25rem' : depth === 1 ? '1.1rem' : '1rem'}; color: var(--text-primary); margin-bottom: 0.5rem;"
-			>
-				{section.title}
-			</p>
-			{#if section.content}
-				<p class="text-sm mb-3" style="color: var(--text-muted);">{section.content}</p>
-			{/if}
-		{/if}
-
-		{#if section.children?.length}
-			<div class="ml-4">
-				{#each section.children as child}
-					{@render planSection(child, depth + 1)}
-				{/each}
-			</div>
-		{/if}
-	</div>
-{/snippet}
