@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { researchSessions, cdoPlans } from '$lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { researchSessions, cdoPlans, facts, entities, sources } from '$lib/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import { startResearch, getEmitter } from '$lib/deepdive/worker';
 import { synthesizePlan } from './synthesizer';
 import { CDO_RESEARCH_TOPICS } from './topics';
@@ -21,18 +21,81 @@ export async function getCurrentPlan() {
 }
 
 /**
- * Get all plan versions ordered by version desc.
+ * Get research activity across all CDO-related sessions.
+ * Returns aggregate stats and per-run details.
  */
-export async function getPlanHistory() {
-	return db.select().from(cdoPlans).orderBy(desc(cdoPlans.version));
+export async function getResearchActivity() {
+	// Get all CDO plan records with their session info
+	const cdoSessions = await db
+		.select({
+			sessionId: cdoPlans.sessionId,
+			planId: cdoPlans.id,
+			planStatus: cdoPlans.status,
+			version: cdoPlans.version,
+			createdAt: cdoPlans.createdAt
+		})
+		.from(cdoPlans)
+		.orderBy(desc(cdoPlans.createdAt));
+
+	let totalSources = 0;
+	let totalFacts = 0;
+	let totalEntities = 0;
+
+	const runs = await Promise.all(
+		cdoSessions.map(async (cdo) => {
+			const [session] = await db
+				.select({ topic: researchSessions.topic, status: researchSessions.status })
+				.from(researchSessions)
+				.where(eq(researchSessions.id, cdo.sessionId));
+
+			const [fc] = await db
+				.select({ count: sql<number>`count(*)` })
+				.from(facts)
+				.where(eq(facts.sessionId, cdo.sessionId));
+
+			const [ec] = await db
+				.select({ count: sql<number>`count(*)` })
+				.from(entities)
+				.where(eq(entities.sessionId, cdo.sessionId));
+
+			const [sc] = await db
+				.select({ count: sql<number>`count(*)` })
+				.from(sources)
+				.where(eq(sources.sessionId, cdo.sessionId));
+
+			const factCount = Number(fc.count);
+			const entityCount = Number(ec.count);
+			const sourceCount = Number(sc.count);
+
+			totalSources += sourceCount;
+			totalFacts += factCount;
+			totalEntities += entityCount;
+
+			return {
+				id: cdo.sessionId,
+				planId: cdo.planId,
+				topic: session?.topic ?? 'Unknown',
+				status: session?.status ?? cdo.planStatus,
+				createdAt: cdo.createdAt,
+				factCount,
+				entityCount,
+				sourceCount
+			};
+		})
+	);
+
+	return { runs, totalSources, totalFacts, totalEntities };
 }
 
 /**
  * Start a new CDO research run.
- * Creates a Deep Dive session + a CDO plan record, then kicks off research.
- * When research completes, synthesis begins automatically.
+ * Creates a Deep Dive session + a CDO plan record.
+ * The synthesizer will see ALL previous research sessions and composite them.
  */
-export async function startCdoResearch(previousPlanId?: string): Promise<string> {
+export async function startCdoResearch(): Promise<string> {
+	// Get the current plan for compositing
+	const previous = await getCurrentPlan();
+
 	// Create the Deep Dive session with CDO-specific topics
 	const [session] = await db
 		.insert(researchSessions)
@@ -55,19 +118,20 @@ export async function startCdoResearch(previousPlanId?: string): Promise<string>
 		})
 		.returning();
 
-	// Create the CDO plan record
+	// Create a new CDO plan record — composite, not a version
 	const [plan] = await db
 		.insert(cdoPlans)
 		.values({
 			sessionId: session.id,
-			status: 'draft'
+			status: 'draft',
+			previousPlanId: previous?.id ?? null
 		})
 		.returning();
 
 	activeCdoRuns.set(plan.id, session.id);
 
 	// Start research in background — don't await
-	runCdoPipeline(plan.id, session.id, previousPlanId).catch((err) => {
+	runCdoPipeline(plan.id, session.id, previous?.id).catch((err) => {
 		console.error(`[cdo] Pipeline failed for plan ${plan.id}:`, err);
 		db.update(cdoPlans)
 			.set({ status: 'failed', updatedAt: new Date() })
@@ -82,15 +146,9 @@ async function runCdoPipeline(
 	sessionId: string,
 	previousPlanId?: string
 ): Promise<void> {
-	// Start the Deep Dive research (runs in background within startResearch)
 	await startResearch(sessionId);
-
-	// Poll until research is complete
 	await waitForCompletion(sessionId);
-
-	// Run synthesis — reads research findings and produces the plan
 	await synthesizePlan(planId, sessionId, previousPlanId);
-
 	activeCdoRuns.delete(planId);
 }
 

@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
-import { getCurrentPlan, getPlanHistory } from '$lib/cdo/orchestrator';
+import { getCurrentPlan, getResearchActivity } from '$lib/cdo/orchestrator';
 
 export const load: PageServerLoad = async () => {
-	const [plan, history] = await Promise.all([getCurrentPlan(), getPlanHistory()]);
-	return { plan, history };
+	const [plan, activity] = await Promise.all([getCurrentPlan(), getResearchActivity()]);
+	return { plan, activity };
 };
