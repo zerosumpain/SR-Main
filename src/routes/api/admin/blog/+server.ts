@@ -14,6 +14,8 @@ export const GET: RequestHandler = async () => {
       title: blogPosts.title,
       excerpt: blogPosts.excerpt,
       status: blogPosts.status,
+      coverImageUrl: blogPosts.coverImageUrl,
+      contentFormat: blogPosts.contentFormat,
       publishedAt: blogPosts.publishedAt,
       createdAt: blogPosts.createdAt,
       updatedAt: blogPosts.updatedAt,
@@ -28,7 +30,7 @@ export const GET: RequestHandler = async () => {
 export const POST: RequestHandler = async ({ request }) => {
 
   const body = await request.json();
-  const { title, slug, excerpt, content, tags } = body;
+  const { title, slug, excerpt, content, contentFormat, tags } = body;
 
   if (!title || !slug) return json({ error: 'Title and slug are required' }, { status: 400 });
 
@@ -40,6 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
       slug,
       excerpt: excerpt || '',
       content: content || '',
+      contentFormat: contentFormat || 'markdown',
       status: 'draft',
       createdAt: now,
       updatedAt: now,

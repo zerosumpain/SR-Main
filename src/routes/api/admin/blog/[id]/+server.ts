@@ -10,7 +10,24 @@ export const GET: RequestHandler = async ({ params }) => {
   const id = parseInt(params.id);
   if (isNaN(id)) return json({ error: 'Invalid ID' }, { status: 400 });
 
-  const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, id)).limit(1);
+  const [post] = await db
+    .select({
+      id: blogPosts.id,
+      slug: blogPosts.slug,
+      title: blogPosts.title,
+      excerpt: blogPosts.excerpt,
+      content: blogPosts.content,
+      coverImageUrl: blogPosts.coverImageUrl,
+      contentFormat: blogPosts.contentFormat,
+      previewToken: blogPosts.previewToken,
+      status: blogPosts.status,
+      publishedAt: blogPosts.publishedAt,
+      createdAt: blogPosts.createdAt,
+      updatedAt: blogPosts.updatedAt,
+    })
+    .from(blogPosts)
+    .where(eq(blogPosts.id, id))
+    .limit(1);
   if (!post) return json({ error: 'Not found' }, { status: 404 });
 
   const tags = await db
@@ -28,13 +45,16 @@ export const PUT: RequestHandler = async ({ request, params }) => {
   if (isNaN(id)) return json({ error: 'Invalid ID' }, { status: 400 });
 
   const body = await request.json();
-  const { title, slug, excerpt, content, status, tags } = body;
+  const { title, slug, excerpt, content, status, tags, contentFormat, coverImageUrl, previewToken } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title;
   if (slug !== undefined) updates.slug = slug;
   if (excerpt !== undefined) updates.excerpt = excerpt;
   if (content !== undefined) updates.content = content;
+  if (contentFormat !== undefined) updates.contentFormat = contentFormat;
+  if (coverImageUrl !== undefined) updates.coverImageUrl = coverImageUrl;
+  if (previewToken !== undefined) updates.previewToken = previewToken;
   if (status !== undefined) {
     updates.status = status;
     if (status === 'published') updates.publishedAt = new Date();
