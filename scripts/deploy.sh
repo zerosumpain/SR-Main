@@ -30,6 +30,9 @@ echo "==> Updating systemd service (if needed)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo sed -i 's|ExecStart=.*index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/build/index.js|' /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload"
 
+echo "==> Ensuring image upload directory exists..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p /opt/strange-rambling/static/images/blog && chmod 755 /opt/strange-rambling/static/images/blog"
+
 echo "==> Restarting service..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo systemctl restart $SERVICE"
