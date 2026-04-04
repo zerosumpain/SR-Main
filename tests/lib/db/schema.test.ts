@@ -13,4 +13,12 @@ describe('blog schema', () => {
     expect(blogPostTags.postId).toBeDefined();
     expect(blogPostTags.tag).toBeDefined();
   });
+
+  it('blogPosts has contentFormat column', () => {
+    expect(blogPosts.contentFormat).toBeDefined();
+  });
+
+  it('blogPosts has previewToken column', () => {
+    expect(blogPosts.previewToken).toBeDefined();
+  });
 });

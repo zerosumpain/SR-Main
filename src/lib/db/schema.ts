@@ -34,6 +34,8 @@ export const blogPosts = pgTable('blog_posts', {
   excerpt: text('excerpt').notNull(),
   content: text('content').notNull(),
   coverImageUrl: text('cover_image_url'),
+  contentFormat: text('content_format').default('html').notNull(),
+  previewToken: text('preview_token').$defaultFn(() => crypto.randomUUID()),
   status: text('status').notNull().default('draft'),
   publishedAt: timestamp('published_at'),
   createdAt: timestamp('created_at'),
