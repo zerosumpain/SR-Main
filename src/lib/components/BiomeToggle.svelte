@@ -18,7 +18,7 @@
 
 <button
   onclick={toggle}
-  class="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 transition-opacity hover:opacity-100"
+  class="fixed bottom-4 left-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 transition-opacity hover:opacity-100"
   style="background: var(--card-bg); border: 1px solid var(--card-border); opacity: 0.7;"
   title={visible ? 'Hide biome background' : 'Show biome background'}
   aria-label={visible ? 'Hide biome background' : 'Show biome background'}
