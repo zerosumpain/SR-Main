@@ -41,18 +41,41 @@
           class="block py-5 group transition-colors hover:bg-[rgba(196,87,10,0.04)]"
           style="border-bottom: 1px solid var(--divider);"
         >
-          <div class="flex justify-between items-baseline gap-4">
-            <div>
-              <span class="text-base sm:text-lg font-medium group-hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
-                {post.title}
-              </span>
-              {#if post.excerpt}
-                <p class="text-sm mt-1" style="color: var(--text-muted);">{post.excerpt}</p>
+          <div class="flex gap-5">
+            {#if post.coverImageUrl}
+              <img
+                src={post.coverImageUrl}
+                alt={post.title}
+                class="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded shrink-0 hidden sm:block"
+              />
+            {/if}
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between items-baseline gap-4">
+                <div class="min-w-0">
+                  <span class="text-base sm:text-lg font-medium group-hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
+                    {post.title}
+                  </span>
+                  {#if post.excerpt}
+                    <p class="text-sm mt-1 line-clamp-2" style="color: var(--text-muted);">{post.excerpt}</p>
+                  {/if}
+                </div>
+                <span class="label shrink-0" style="font-size: 10px;">
+                  {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                </span>
+              </div>
+              {#if post.tags && post.tags.length > 0}
+                <div class="flex flex-wrap gap-1.5 mt-2">
+                  {#each post.tags as tag}
+                    <span
+                      class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full"
+                      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted);"
+                    >
+                      {tag}
+                    </span>
+                  {/each}
+                </div>
               {/if}
             </div>
-            <span class="label shrink-0" style="font-size: 10px;">
-              {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-            </span>
           </div>
         </a>
       {/each}
