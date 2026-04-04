@@ -8,7 +8,24 @@ export const load: PageServerLoad = async ({ params }) => {
   const id = parseInt(params.id);
   if (isNaN(id)) throw error(400, 'Invalid ID');
 
-  const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, id)).limit(1);
+  const [post] = await db
+    .select({
+      id: blogPosts.id,
+      slug: blogPosts.slug,
+      title: blogPosts.title,
+      excerpt: blogPosts.excerpt,
+      content: blogPosts.content,
+      coverImageUrl: blogPosts.coverImageUrl,
+      contentFormat: blogPosts.contentFormat,
+      previewToken: blogPosts.previewToken,
+      status: blogPosts.status,
+      publishedAt: blogPosts.publishedAt,
+      createdAt: blogPosts.createdAt,
+      updatedAt: blogPosts.updatedAt,
+    })
+    .from(blogPosts)
+    .where(eq(blogPosts.id, id))
+    .limit(1);
   if (!post) throw error(404, 'Post not found');
 
   const tags = await db

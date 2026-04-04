@@ -2,6 +2,7 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
+  import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -12,11 +13,17 @@
   let content = $state(data.post.content);
   let tags = $state(data.post.tags.join(', '));
   let status = $state(data.post.status);
+  let coverImageUrl = $state<string | null>(data.post.coverImageUrl ?? null);
+  let previewToken = $state(data.post.previewToken);
 
   let saving = $state(false);
   let saved = $state(false);
   let deleting = $state(false);
   let errorMsg = $state<string | null>(null);
+  let coverUploading = $state(false);
+  let previewCopied = $state(false);
+
+  const isMarkdown = data.post.contentFormat === 'markdown';
 
   // Track if content has been modified
   let dirty = $derived(
@@ -24,7 +31,8 @@
     slug !== data.post.slug ||
     excerpt !== data.post.excerpt ||
     content !== data.post.content ||
-    tags !== data.post.tags.join(', ')
+    tags !== data.post.tags.join(', ') ||
+    coverImageUrl !== (data.post.coverImageUrl ?? null)
   );
 
   function slugify(str: string): string {
@@ -34,7 +42,7 @@
       .replace(/(^-|-$)/g, '');
   }
 
-  async function save() {
+  async function save(overrides: Record<string, unknown> = {}) {
     saving = true;
     errorMsg = null;
     try {
@@ -43,10 +51,20 @@
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const payload = {
+        title,
+        slug,
+        excerpt,
+        content,
+        tags: tagList,
+        coverImageUrl,
+        ...overrides,
+      };
+
       const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, slug, excerpt, content, tags: tagList }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -61,12 +79,77 @@
       data.post.excerpt = excerpt;
       data.post.content = content;
       data.post.tags = tagList;
+      if (overrides.coverImageUrl !== undefined) data.post.coverImageUrl = overrides.coverImageUrl as string | null;
+      if (overrides.previewToken !== undefined) {
+        data.post.previewToken = overrides.previewToken as string;
+        previewToken = overrides.previewToken as string;
+      }
 
       saved = true;
       setTimeout(() => (saved = false), 2000);
     } finally {
       saving = false;
     }
+  }
+
+  async function saveContent(newContent: string) {
+    content = newContent;
+    await save();
+  }
+
+  async function uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('postId', String(data.post.id));
+
+    const res = await fetch(`/api/admin/blog/upload-image?token=${adminToken}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Upload failed: ${res.status}`);
+    }
+
+    const body = await res.json();
+    return body.url;
+  }
+
+  async function uploadCoverImage() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/webp';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      coverUploading = true;
+      try {
+        const url = await uploadImage(file);
+        coverImageUrl = url;
+        await save({ content: undefined, tags: undefined, coverImageUrl: url });
+      } finally {
+        coverUploading = false;
+      }
+    };
+    input.click();
+  }
+
+  async function removeCoverImage() {
+    coverImageUrl = null;
+    await save({ content: undefined, tags: undefined, coverImageUrl: null });
+  }
+
+  function copyPreviewLink() {
+    const url = `${window.location.origin}/blog/preview/${previewToken}`;
+    navigator.clipboard.writeText(url);
+    previewCopied = true;
+    setTimeout(() => (previewCopied = false), 2000);
+  }
+
+  async function regeneratePreviewToken() {
+    const newToken = crypto.randomUUID();
+    previewToken = newToken;
+    await save({ content: undefined, tags: undefined, previewToken: newToken });
   }
 
   async function togglePublish() {
@@ -103,7 +186,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    // Only handle Ctrl+S for HTML mode — MarkdownEditor handles its own shortcuts
+    if (!isMarkdown && (e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
       save();
     }
@@ -203,16 +287,77 @@
     />
   </div>
 
+  <!-- Cover image -->
+  <div class="mb-6">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        Cover Image
+      </span>
+      <button
+        onclick={uploadCoverImage}
+        disabled={coverUploading}
+        class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded disabled:opacity-50"
+        style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
+      >
+        {coverUploading ? 'Uploading…' : 'Upload'}
+      </button>
+      {#if coverImageUrl}
+        <button
+          onclick={removeCoverImage}
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
+          style="color: #8b3a1a; font-family: var(--font-mono); border: 1px solid rgba(139,58,26,0.2);"
+        >
+          Remove
+        </button>
+      {/if}
+    </div>
+    {#if coverImageUrl}
+      <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--card-border); max-width: 320px;">
+        <img src={coverImageUrl} alt="Cover" class="w-full h-auto block" />
+      </div>
+    {/if}
+  </div>
+
+  <!-- Preview link -->
+  <div class="flex items-center gap-3 mb-6">
+    <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
+      Preview
+    </span>
+    <button
+      onclick={copyPreviewLink}
+      class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
+      style="color: var(--text-secondary); font-family: var(--font-mono); border: 1px solid var(--card-border);"
+    >
+      {previewCopied ? 'Copied!' : 'Copy Preview Link'}
+    </button>
+    <button
+      onclick={regeneratePreviewToken}
+      class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
+      style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
+    >
+      Regenerate
+    </button>
+  </div>
+
   <hr class="rule mb-6" />
 
   <!-- Content editor -->
-  <textarea
-    bind:value={content}
-    placeholder="Write your post content here… (HTML supported)"
-    rows="24"
-    class="w-full px-4 py-3 text-sm rounded-lg resize-y leading-relaxed"
-    style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); outline: none; min-height: 400px;"
-  ></textarea>
+  {#if isMarkdown}
+    <MarkdownEditor
+      {content}
+      onSave={saveContent}
+      onAutoSave={saveContent}
+      {uploadImage}
+    />
+  {:else}
+    <textarea
+      bind:value={content}
+      placeholder="Write your post content here… (HTML supported)"
+      rows="24"
+      class="w-full px-4 py-3 text-sm rounded-lg resize-y leading-relaxed"
+      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); outline: none; min-height: 400px;"
+    ></textarea>
+  {/if}
 
   <!-- Actions -->
   <div class="flex items-center justify-between mt-6">
@@ -235,19 +380,21 @@
         {status === 'published' ? 'Unpublish' : 'Publish'}
       </button>
 
-      <button
-        onclick={save}
-        disabled={saving || !dirty}
-        class="text-[10px] uppercase tracking-[0.2em] px-5 py-2 rounded-lg transition-colors disabled:opacity-50"
-        style="background: var(--accent); color: white; font-family: var(--font-mono);"
-      >
-        {saving ? 'Saving…' : 'Save'}
-      </button>
+      {#if !isMarkdown}
+        <button
+          onclick={() => save()}
+          disabled={saving || !dirty}
+          class="text-[10px] uppercase tracking-[0.2em] px-5 py-2 rounded-lg transition-colors disabled:opacity-50"
+          style="background: var(--accent); color: white; font-family: var(--font-mono);"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      {/if}
     </div>
   </div>
 
-  <!-- Preview -->
-  {#if content}
+  <!-- Preview for HTML posts only -->
+  {#if !isMarkdown && content}
     <div class="mt-10">
       <p class="label mb-4">Preview</p>
       <hr class="rule mb-6" />
