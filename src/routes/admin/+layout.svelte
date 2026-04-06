@@ -2,6 +2,7 @@
   import '../../app.css';
   import { onMount, setContext } from 'svelte';
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
+  import BiomeToggle from '$lib/components/BiomeToggle.svelte';
   import { createBiomeStore } from '$lib/biome/store.svelte';
 
   import { page } from '$app/stores';
@@ -15,7 +16,12 @@
   const store = createBiomeStore();
   setContext('biomeStore', store);
 
+  let biomeVisible = $state(true);
+
   onMount(() => {
+    const stored = localStorage.getItem('biome-visible');
+    if (stored === 'false') biomeVisible = false;
+
     store.initTier();
     store.startPolling();
 
@@ -26,15 +32,25 @@
     }
     loop();
 
+    function handleBiomeToggle(e: Event) {
+      biomeVisible = (e as CustomEvent<{ visible: boolean }>).detail.visible;
+    }
+    window.addEventListener('biome-toggle', handleBiomeToggle);
+
     return () => {
       cancelAnimationFrame(raf);
       store.stopPolling();
+      window.removeEventListener('biome-toggle', handleBiomeToggle);
     };
   });
 </script>
 
-<BiomeBackground {store} />
+{#if biomeVisible}
+  <BiomeBackground {store} />
+{/if}
 
 <div class="relative z-10 min-h-screen">
   {@render children()}
 </div>
+
+<BiomeToggle />
