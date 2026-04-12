@@ -24,6 +24,7 @@ vite.config.ts.timestamp-*
 
 # Superpowers
 .superpowers/
+.worktrees/
 
 # Deep Dive API keys
 keys.json
