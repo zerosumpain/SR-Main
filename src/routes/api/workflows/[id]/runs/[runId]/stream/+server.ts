@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ params }) => {
       send({ type: 'connected', runId, timestamp: new Date().toISOString() });
 
       const unsubscribe = onWorkflowEvent(runId, (event: WorkflowEvent) => {
-        send(event);
+        send(event as unknown as Record<string, unknown>);
         if (event.type === 'run_completed' || event.type === 'run_failed') {
           try {
             controller.close();

@@ -24,15 +24,15 @@
     import('$lib/components/workflows/Canvas.svelte').then(m => Canvas = m.default);
     import('$lib/components/workflows/NodePalette.svelte').then(m => NodePalette = m.default);
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
-    import('$lib/workflows').then(m => registryModule = m);
+    import('$lib/workflows/registry-client').then(m => registryModule = m);
   }
 
-  let definitions = $derived(registryModule?.registry?.listDefinitions() ?? []);
+  let definitions = $derived(registryModule?.nodeDefinitions ?? []);
 
   function handleDragStart(_type: string, _event: DragEvent) {}
 
   function handleDrop(type: string, position: { x: number; y: number }) {
-    const def = registryModule?.registry?.getDefinition(type);
+    const def = registryModule?.getDefinition(type);
     if (!def) return;
 
     const newNode: CanvasNode = {
@@ -81,7 +81,7 @@
 
 <div class="flex flex-col h-screen">
   {#if WorkflowToolbar}
-    <svelte:component this={WorkflowToolbar}
+    <WorkflowToolbar
       {workflowName}
       onSave={handleSave}
       onRun={handleRun}
@@ -92,11 +92,11 @@
 
   <div class="flex flex-1 overflow-hidden">
     {#if NodePalette}
-      <svelte:component this={NodePalette} {definitions} onDragStart={handleDragStart} />
+      <NodePalette {definitions} onDragStart={handleDragStart} />
     {/if}
 
     {#if Canvas}
-      <svelte:component this={Canvas}
+      <Canvas
         bind:nodes
         bind:edges
         onDrop={handleDrop}
