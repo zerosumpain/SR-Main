@@ -53,4 +53,4 @@ export interface ResearchFindings {
 }
 
 /** Status of a CDO research run */
-export type CdoPlanStatus = 'draft' | 'synthesizing' | 'complete' | 'failed';
+export type CdoPlanStatus = 'draft' | 'synthesizing' | 'partial' | 'complete' | 'failed';

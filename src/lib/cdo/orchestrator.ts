@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { researchSessions, cdoPlans, facts, entities, sources } from '$lib/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { startResearch, getEmitter } from '$lib/deepdive/worker';
-import { synthesizePlan } from './synthesizer';
+import { synthesizePlan, synthesizePartialPlan } from './synthesizer';
 import { CDO_RESEARCH_TOPICS } from './topics';
 
 // Track active CDO runs: planId -> sessionId
@@ -147,12 +147,30 @@ async function runCdoPipeline(
 	previousPlanId?: string
 ): Promise<void> {
 	await startResearch(sessionId);
-	await waitForCompletion(sessionId);
+
+	// Wait for phase2 to complete (session moves to phase3 or beyond)
+	await waitForPhase(sessionId, ['phase3', 'post_processing', 'complete']);
+
+	// Run partial synthesis with data gathered so far
+	try {
+		await synthesizePartialPlan(planId, sessionId);
+	} catch (err) {
+		console.error(`[cdo] Partial synthesis failed for plan ${planId}:`, err);
+		// Non-fatal: continue to full synthesis
+	}
+
+	// Wait for full completion
+	await waitForPhase(sessionId, ['complete']);
+
+	// Run full synthesis with all enriched data
 	await synthesizePlan(planId, sessionId, previousPlanId);
 	activeCdoRuns.delete(planId);
 }
 
-function waitForCompletion(sessionId: string): Promise<void> {
+function waitForPhase(
+	sessionId: string,
+	targetStatuses: string[]
+): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const interval = setInterval(async () => {
 			try {
@@ -167,7 +185,7 @@ function waitForCompletion(sessionId: string): Promise<void> {
 					return;
 				}
 
-				if (session.status === 'complete') {
+				if (targetStatuses.includes(session.status)) {
 					clearInterval(interval);
 					resolve();
 				} else if (session.status === 'failed') {

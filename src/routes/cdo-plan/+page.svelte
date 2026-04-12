@@ -6,6 +6,10 @@
 	import type { PageData } from './$types';
 	import type { KanbanPlan, KanbanCard, ThemeKey } from '$lib/cdo/types';
 	import { THEME_COLORS } from '$lib/cdo/types';
+	import StakeholderMap from '$lib/cdo/components/StakeholderMap.svelte';
+	import PriorityMatrix from '$lib/cdo/components/PriorityMatrix.svelte';
+	import RiskMatrix from '$lib/cdo/components/RiskMatrix.svelte';
+	import DependencyGraph from '$lib/cdo/components/DependencyGraph.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -84,6 +88,12 @@
 						if (status === 'complete') {
 							phase = 'synthesizing';
 							logs = [...logs, { message: 'Research complete. Synthesizing plan...', timestamp: Date.now() }];
+						} else if (status === 'partial') {
+							// Fetch the partial plan asynchronously
+							fetch('/api/cdo-plan').then(r => r.json()).then(p => {
+								if (p?.structure) data.plan = p;
+							});
+							logs = [...logs, { message: 'Draft plan ready. Continuing deep analysis...', timestamp: Date.now() }];
 						} else if (status === 'failed') {
 							error = 'Research failed';
 							running = false;
@@ -133,6 +143,17 @@
 
 	function getCardsForWeek(week: number): KanbanCard[] {
 		return filteredCards.filter((c: KanbanCard) => c.week === week);
+	}
+
+	function dominantThemeForWeek(week: number): ThemeKey | null {
+		const weekCards = getCardsForWeek(week);
+		if (weekCards.length === 0) return null;
+		const counts: Record<string, number> = {};
+		for (const card of weekCards) {
+			counts[card.theme] = (counts[card.theme] ?? 0) + 1;
+		}
+		const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+		return (dominant?.[0] as ThemeKey) ?? null;
 	}
 
 	let totalCards = $derived(plan?.cards?.length ?? 0);
@@ -284,9 +305,29 @@
 			<!-- Kanban Board -->
 			{#if plan?.columns}
 				<div class="overflow-x-auto pb-8">
+					<!-- Timeline header -->
+					<div class="flex gap-3 px-6 min-w-max mb-1">
+						{#each plan.columns as col}
+							<div class="w-72 shrink-0 px-1">
+								<p class="text-[10px] font-bold uppercase tracking-[0.15em]"
+								   style="font-family: var(--font-mono); color: var(--text-ghost);">
+									Day {(col.week - 1) * 5 + 1}–{Math.min(col.week * 5, 100)}
+								</p>
+								<div class="grid grid-cols-5 gap-px mt-1">
+									{#each ['M','T','W','T','F'] as day}
+										<div class="text-center text-[8px] py-0.5 rounded-sm"
+											 style="color: var(--text-ghost); font-family: var(--font-mono); background: var(--card-bg);">
+											{day}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
 					<div class="flex gap-3 px-6 min-w-max">
 						{#each plan.columns as col}
-							<div class="w-72 shrink-0">
+							{@const _dt = dominantThemeForWeek(col.week)}
+							<div class="w-72 shrink-0 rounded-lg" style="background: {_dt ? themeColor(_dt).light + '22' : 'transparent'};">
 								<!-- Column header -->
 								<div class="mb-2 px-1">
 									<p class="text-[11px] font-bold uppercase tracking-[0.15em]" style="font-family: var(--font-mono); color: var(--text-primary);">
