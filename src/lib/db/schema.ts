@@ -553,3 +553,99 @@ export const cdoPlans = pgTable('cdo_plans', {
 
 export type CdoPlan = typeof cdoPlans.$inferSelect;
 export type NewCdoPlan = typeof cdoPlans.$inferInsert;
+
+// ==========================================
+// Workflows — Visual Automation Engine
+// ==========================================
+
+export const workflows = pgTable('workflows', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  name: text('name').notNull(),
+  description: text('description'),
+  trigger: jsonb('trigger').default(sql`'{"type":"manual"}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Workflow = typeof workflows.$inferSelect;
+export type NewWorkflow = typeof workflows.$inferInsert;
+
+export const workflowNodes = pgTable('workflow_nodes', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  position: jsonb('position').notNull().default(sql`'{"x":0,"y":0}'::jsonb`),
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  label: text('label').notNull(),
+});
+
+export type WorkflowNode = typeof workflowNodes.$inferSelect;
+export type NewWorkflowNode = typeof workflowNodes.$inferInsert;
+
+export const workflowEdges = pgTable('workflow_edges', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  sourceNodeId: text('source_node_id').notNull().references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  targetNodeId: text('target_node_id').notNull().references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  sourceHandle: text('source_handle'),
+  targetHandle: text('target_handle'),
+});
+
+export type WorkflowEdge = typeof workflowEdges.$inferSelect;
+export type NewWorkflowEdge = typeof workflowEdges.$inferInsert;
+
+export const workflowRuns = pgTable('workflow_runs', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id),
+  status: text('status').notNull().default('pending'),
+  trigger: text('trigger').notNull().default('manual'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  error: text('error'),
+});
+
+export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type NewWorkflowRun = typeof workflowRuns.$inferInsert;
+
+export const nodeExecutions = pgTable('node_executions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  runId: text('run_id').notNull().references(() => workflowRuns.id, { onDelete: 'cascade' }),
+  nodeId: text('node_id').notNull().references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('pending'),
+  inputData: jsonb('input_data'),
+  outputData: jsonb('output_data'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  error: text('error'),
+  logs: jsonb('logs').default(sql`'[]'::jsonb`),
+});
+
+export type NodeExecution = typeof nodeExecutions.$inferSelect;
+export type NewNodeExecution = typeof nodeExecutions.$inferInsert;
+
+export const workflowSchedules = pgTable('workflow_schedules', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  enabled: boolean('enabled').notNull().default(true),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+});
+
+export type WorkflowSchedule = typeof workflowSchedules.$inferSelect;
+export type NewWorkflowSchedule = typeof workflowSchedules.$inferInsert;
+
+export const integrations = pgTable('integrations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  name: text('name').notNull(),
+  description: text('description'),
+  baseUrl: text('base_url'),
+  authType: text('auth_type').notNull().default('none'),
+  authConfig: jsonb('auth_config').default(sql`'{}'::jsonb`),
+  operations: jsonb('operations').notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Integration = typeof integrations.$inferSelect;
+export type NewIntegration = typeof integrations.$inferInsert;
