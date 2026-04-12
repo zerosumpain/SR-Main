@@ -37,6 +37,8 @@
 		"@sveltejs/adapter-node": "^5.5.4",
 		"@threlte/core": "^8.5.0",
 		"@threlte/extras": "^9.9.0",
+		"@xyflow/svelte": "^1.5.2",
+		"croner": "^10.0.1",
 		"d3-array": "^3.2.4",
 		"d3-geo": "^3.1.1",
 		"d3-scale": "^4.0.2",
