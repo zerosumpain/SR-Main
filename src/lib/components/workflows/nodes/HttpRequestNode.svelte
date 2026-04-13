@@ -1,6 +1,6 @@
 <!-- src/lib/components/workflows/nodes/HttpRequestNode.svelte -->
 <script lang="ts">
-  import BaseNode from '../BaseNode.svelte';
+  import BaseNode from './BaseNode.svelte';
 
   let { data, id } = $props();
   const method = data.config?.method || 'GET';
