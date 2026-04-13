@@ -16,6 +16,20 @@ startWorkflowScheduler().catch((err) => {
   console.error('[hooks.server] Workflow scheduler failed to start:', err);
 });
 
+// Graceful shutdown — stop schedulers so process can exit on SIGTERM
+import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
+import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
+
+function gracefulShutdown() {
+  console.log('[hooks.server] Shutting down...');
+  stopHealthScheduler();
+  stopWorkflowScheduler();
+  process.exit(0);
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
 // Recover any in-progress builds on server startup
 orchestrator.recoverOnStartup().catch((err) => {
   console.error('[jkai] Failed to recover build on startup:', err);
