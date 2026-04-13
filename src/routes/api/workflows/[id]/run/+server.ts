@@ -63,8 +63,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
     // Update node execution records
     for (const [nodeId, output] of result.nodeOutputs) {
+      const inputData = result.nodeInputs.get(nodeId);
       await db.update(nodeExecutions).set({
         status: 'completed',
+        inputData: inputData ?? null,
         outputData: output,
         completedAt: new Date(),
       }).where(

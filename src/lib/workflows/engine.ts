@@ -13,12 +13,28 @@ import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events'
 export interface EngineResult {
   status: RunStatus;
   nodeOutputs: Map<string, Record<string, unknown>>;
+  nodeInputs: Map<string, Record<string, unknown>>;
   nodeErrors: Map<string, string>;
   error?: string;
 }
 
 export class WorkflowEngine {
+  private breakpointResolvers = new Map<string, (modifiedInput?: Record<string, unknown>) => void>();
+
   constructor(private registry: NodeRegistry) {}
+
+  resumeBreakpoint(runId: string, nodeId: string, modifiedInput?: Record<string, unknown>): void {
+    const key = `${runId}:${nodeId}`;
+    const resolver = this.breakpointResolvers.get(key);
+    if (resolver) {
+      resolver(modifiedInput);
+      this.breakpointResolvers.delete(key);
+    }
+  }
+
+  getBreakpointResolver(runId: string, nodeId: string): ((data?: Record<string, unknown>) => void) | undefined {
+    return this.breakpointResolvers.get(`${runId}:${nodeId}`);
+  }
 
   onEvent(runId: string, handler: (event: WorkflowEvent) => void): () => void {
     return onWorkflowEvent(runId, handler);
@@ -31,10 +47,9 @@ export class WorkflowEngine {
     breakpoints?: Set<string>,
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
+    const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
     const abortController = new AbortController();
-
-    const breakpointResolvers = new Map<string, () => void>();
 
     const emit = (type: WorkflowEventType, nodeId?: string, data?: Record<string, unknown>) => {
       emitWorkflowEvent({
@@ -81,10 +96,14 @@ export class WorkflowEngine {
           if (breakpoints?.has(nodeId)) {
             emit('breakpoint_hit', nodeId, mergedInput);
             emit('node_paused', nodeId);
-            await new Promise<void>((resolve) => {
-              breakpointResolvers.set(nodeId, resolve);
+            mergedInput = await new Promise<Record<string, unknown>>((resolve) => {
+              const key = `${runId}:${nodeId}`;
+              this.breakpointResolvers.set(key, (modifiedInput) => resolve(modifiedInput ?? mergedInput));
             });
           }
+
+          // Capture input before execution
+          nodeInputs.set(nodeId, { ...mergedInput });
 
           emit('node_started', nodeId);
 
@@ -114,12 +133,12 @@ export class WorkflowEngine {
 
       emit('run_completed');
       cleanupRunEmitter(runId);
-      return { status: 'completed', nodeOutputs, nodeErrors };
+      return { status: 'completed', nodeOutputs, nodeInputs, nodeErrors };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
       cleanupRunEmitter(runId);
-      return { status: 'failed', nodeOutputs, nodeErrors, error: message };
+      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message };
     }
   }
 }
