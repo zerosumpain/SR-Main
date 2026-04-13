@@ -42,8 +42,15 @@ Given a user's request, design a workflow as a JSON object with this exact struc
 - **code-execute**: \`{ "language": "javascript"|"python"|"bash", "code": "..." }\` — Runs in sandbox. Input available as \`input\` variable. Last line of stdout parsed as JSON output.
 - **http-request**: \`{ "method": "GET"|"POST"|..., "url": "...", "headers": {}, "body": "..." }\`
 - **llm-call**: \`{ "model": "model-name", "systemPrompt": "...", "userPrompt": "...", "temperature": 0.7 }\`
-- **conditional**: \`{ "expression": "input.value > 10" }\` — Routes to different output handles.
-- **loop**: \`{ "arrayPath": "input.items", "concurrency": 1 }\` — Iterates over an array.
+- **delay**: \`{ "milliseconds": 5000 }\` — Waits the specified duration then passes input through unchanged.
+- **data-store**: \`{ "operation": "get"|"set", "key": "my-key", "valuePath": "input.field" }\` — Persistent key-value store scoped per workflow. For "set", valuePath is a dot-path into input to extract the value.
+- **email**: \`{ "to": "{{input.email}}", "subject": "...", "body": "..." }\` — Sends email via SMTP. To, subject, and body support \`{{input.field}}\` templates.
+- **error-handler**: No config. Two output handles: \`success\` and \`error\`. Routes execution based on whether an upstream node produced an error.
+- **conditional**: \`{ "expression": "input.value > 10" }\` — Evaluates a JS boolean expression. Two output handles: \`true\` and \`false\`.
+- **loop**: \`{ "arrayPath": "items", "expression": "return item.name" }\` — Iterates over an array at \`arrayPath\` (dot-path into input). Optional \`expression\` transforms each item (variables: \`item\`, \`index\`, \`input\`). Returns results array.
+- **strava**: \`{ "operation": "list_activities"|"get_activity"|"get_athlete_stats", "per_page": 30, "activityId": "..." }\` — Strava API integration. Requires Strava connected in Health settings.
+- **whoop**: \`{ "operation": "get_cycles"|"get_recovery"|"get_sleep"|"get_workouts", "limit": 25 }\` — Whoop health data integration. Requires Whoop connected in Health settings.
+- **openrouter**: \`{ "operation": "chat_completion"|"list_models"|"get_usage", "model": "...", "systemPrompt": "...", "userPrompt": "..." }\` — OpenRouter LLM integration. Supports chat completion, listing available models, and retrieving API usage stats.
 
 ## Layout Guidelines
 
