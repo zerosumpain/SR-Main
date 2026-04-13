@@ -55,7 +55,9 @@ async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
 
 async function buildGrounding(): Promise<string> {
   const examples = await getRecentExecutionExamples();
-  return buildNodeGrounding(nodeDefinitions, examples);
+  // Use registry.listDefinitions() to include both built-in and dynamic nodes
+  const allDefinitions = registry.listDefinitions();
+  return buildNodeGrounding(allDefinitions.length > 0 ? allDefinitions : nodeDefinitions, examples);
 }
 
 function createEmptyDraft(): WorkflowDraft {
