@@ -122,7 +122,14 @@
       import('$lib/components/workflows/nodes/StravaNode.svelte'),
       import('$lib/components/workflows/nodes/WhoopNode.svelte'),
       import('$lib/components/workflows/nodes/OpenRouterNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_]) => {
+      import('$lib/components/workflows/nodes/ValidatorNode.svelte'),
+      import('$lib/components/workflows/nodes/ThinkNode.svelte'),
+      import('$lib/components/workflows/nodes/LlmRouterNode.svelte'),
+      import('$lib/components/workflows/nodes/MergeNode.svelte'),
+      import('$lib/components/workflows/nodes/TextParserNode.svelte'),
+      import('$lib/components/workflows/nodes/AccumulatorNode.svelte'),
+      import('$lib/components/workflows/nodes/SubWorkflowNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -138,6 +145,13 @@
         'strava': st.default,
         'whoop': wh.default,
         'openrouter': or_.default,
+        'validator': va.default,
+        'think': th.default,
+        'llm-router': lr.default,
+        'merge': me.default,
+        'text-parser': tp.default,
+        'accumulator': ac.default,
+        'sub-workflow': sw.default,
       };
     });
   }

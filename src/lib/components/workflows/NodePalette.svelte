@@ -19,7 +19,7 @@
     ),
   );
 
-  const categories = ['trigger', 'core', 'control', 'integration', 'custom'] as const;
+  const categories = ['trigger', 'core', 'agentic', 'control', 'integration', 'custom'] as const;
 
   let grouped = $derived(
     categories

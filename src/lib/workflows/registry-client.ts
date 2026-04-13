@@ -9,6 +9,10 @@ import { delayDef } from './nodes/delay';
 import { httpRequestDef } from './nodes/http-request';
 import { conditionalDef } from './nodes/conditional';
 import { textParserDef } from './nodes/text-parser';
+import { validatorDef } from './nodes/validator';
+import { mergeDef } from './nodes/merge';
+import { accumulatorDef } from './nodes/accumulator';
+import { subWorkflowDef } from './nodes/sub-workflow';
 import type { NodeDefinition } from './types';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
@@ -305,6 +309,80 @@ const openrouterDef: NodeDefinition = {
   ],
 };
 
+// Think definition without importing the executor (which pulls in $lib/deepdive/keys — server-only)
+const thinkDef: NodeDefinition = {
+  type: 'think',
+  label: 'Think',
+  category: 'agentic',
+  description: 'Chain-of-thought reasoning. LLM reasons step-by-step, outputs reasoning + conclusion.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'What to reason about. Supports {{input.field}} templates.' },
+      model: { type: 'string', description: 'OpenRouter model ID' },
+      temperature: { type: 'number', description: 'Sampling temperature (default 0.3)' },
+      maxTokens: { type: 'number', description: 'Max tokens (default 2048)' },
+    },
+    required: ['prompt'],
+  },
+  defaultConfig: { prompt: '', model: 'openai/gpt-4o-mini', temperature: 0.3, maxTokens: 2048 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Reasoning' }],
+  basicConfig: [
+    { key: 'prompt', label: 'Reasoning Task', type: 'template-textarea', placeholder: 'Analyze the data and determine the best course of action.' },
+    { key: 'model', label: 'Model', type: 'dropdown', options: [
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o' },
+      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
+    ]},
+    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 1, step: 0.1 },
+    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+  ],
+  llmDescription: 'Use when the workflow needs careful deliberation before a decision. Place before Conditional or Router nodes.',
+  llmExamples: [{ prompt: 'Analyze the health data and determine if the user should be alerted.', model: 'openai/gpt-4o', temperature: 0.2 }],
+};
+
+// LLM Router definition without importing the executor (which pulls in $lib/deepdive/keys — server-only)
+const llmRouterDef: NodeDefinition = {
+  type: 'llm-router',
+  label: 'LLM Router',
+  category: 'agentic',
+  description: 'LLM-powered semantic routing. Defines named output paths; the LLM picks which to follow.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      routes: { type: 'string', description: 'JSON array of { handle, description }' },
+      model: { type: 'string', description: 'OpenRouter model ID' },
+    },
+    required: ['routes'],
+  },
+  defaultConfig: {
+    routes: JSON.stringify([
+      { handle: 'route_a', description: 'First option' },
+      { handle: 'route_b', description: 'Second option' },
+    ], null, 2),
+    model: 'openai/gpt-4o-mini',
+  },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [
+    { name: 'route_a', type: 'any', label: 'Route A' },
+    { name: 'route_b', type: 'any', label: 'Route B' },
+  ],
+  basicConfig: [
+    { key: 'routes', label: 'Routes (JSON)', type: 'textarea', description: 'Array of { "handle": "name", "description": "when to use" }' },
+    { key: 'model', label: 'Model', type: 'dropdown', options: [
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (fast)' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o' },
+      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku (fast)' },
+    ]},
+  ],
+  llmDescription: 'Use for semantic decisions — choosing paths based on meaning rather than booleans.',
+  llmExamples: [{ routes: JSON.stringify([
+    { handle: 'positive', description: 'Positive sentiment' },
+    { handle: 'negative', description: 'Negative sentiment' },
+  ]), model: 'openai/gpt-4o-mini' }],
+};
+
 export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -321,6 +399,12 @@ export const nodeDefinitions: NodeDefinition[] = [
   openrouterDef,
   errorHandlerDef,
   textParserDef,
+  validatorDef,
+  thinkDef,
+  llmRouterDef,
+  mergeDef,
+  accumulatorDef,
+  subWorkflowDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

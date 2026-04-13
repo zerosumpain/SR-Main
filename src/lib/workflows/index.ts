@@ -15,6 +15,12 @@ import { stravaDef, stravaExecutor } from './nodes/strava';
 import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
 import { errorHandlerDef, errorHandlerExecutor } from './nodes/error-handler';
 import { textParserDef, textParserExecutor } from './nodes/text-parser';
+import { validatorDef, validatorExecutor } from './nodes/validator';
+import { thinkDef, thinkExecutor } from './nodes/think';
+import { llmRouterDef, llmRouterExecutor } from './nodes/llm-router';
+import { mergeDef, mergeExecutor } from './nodes/merge';
+import { accumulatorDef, accumulatorExecutor } from './nodes/accumulator';
+import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
 
 export const registry = new NodeRegistry();
 
@@ -33,6 +39,12 @@ registry.register(stravaDef, stravaExecutor);
 registry.register(openrouterDef, openrouterExecutor);
 registry.register(errorHandlerDef, errorHandlerExecutor);
 registry.register(textParserDef, textParserExecutor);
+registry.register(validatorDef, validatorExecutor);
+registry.register(thinkDef, thinkExecutor);
+registry.register(llmRouterDef, llmRouterExecutor);
+registry.register(mergeDef, mergeExecutor);
+registry.register(accumulatorDef, accumulatorExecutor);
+registry.register(subWorkflowDef, subWorkflowExecutor);
 
 export const engine = new WorkflowEngine(registry);
 
