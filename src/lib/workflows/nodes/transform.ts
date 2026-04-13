@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
 
 export const transformExecutor: NodeExecutor = {
   type: 'transform',
@@ -33,6 +33,9 @@ export const transformExecutor: NodeExecutor = {
   },
 
   getOutputSchema(config: Record<string, unknown>) {
+    if (config.outputSchema && typeof config.outputSchema === 'object') {
+      return config.outputSchema as JsonSchema;
+    }
     if (!config.expression) {
       return { type: 'object', description: 'Input passed through unchanged' };
     }
@@ -51,6 +54,10 @@ export const transformDef: NodeDefinition = {
       expression: {
         type: 'string',
         description: 'JS function body. Use `input` to access upstream data. Must return an object.',
+      },
+      outputSchema: {
+        type: 'object',
+        description: 'Optional: declare the output shape so downstream nodes get autocomplete. e.g. { "score": { "type": "number" }, "label": { "type": "string" } }',
       },
     },
   },

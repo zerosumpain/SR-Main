@@ -27,6 +27,10 @@ const codeExecuteDef: NodeDefinition = {
         type: 'string',
         description: 'Code to execute. Input data is available as `input` variable.',
       },
+      outputSchema: {
+        type: 'object',
+        description: 'Optional: declare the output shape so downstream nodes get autocomplete. e.g. { "score": { "type": "number" }, "label": { "type": "string" } }',
+      },
     },
     required: ['code'],
   },

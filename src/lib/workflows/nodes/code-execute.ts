@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { ensureSandboxRunning, execInSandbox, writeFileInSandbox } from '$lib/jkai/sandbox';
 
 export const codeExecuteExecutor: NodeExecutor = {
@@ -92,7 +92,10 @@ export const codeExecuteExecutor: NodeExecutor = {
     return { type: 'object', description: 'Available as `input` variable in code' };
   },
 
-  getOutputSchema() {
+  getOutputSchema(config: Record<string, unknown>) {
+    if (config.outputSchema && typeof config.outputSchema === 'object') {
+      return config.outputSchema as JsonSchema;
+    }
     return { type: 'object', description: 'Last line of stdout parsed as JSON, or { stdout: string }' };
   },
 };
@@ -112,6 +115,10 @@ export const codeExecuteDef: NodeDefinition = {
       code: {
         type: 'string',
         description: 'Code to execute. Input data is available as `input` variable.',
+      },
+      outputSchema: {
+        type: 'object',
+        description: 'Optional: declare the output shape so downstream nodes get autocomplete. e.g. { "score": { "type": "number" }, "label": { "type": "string" } }',
       },
     },
     required: ['code'],
