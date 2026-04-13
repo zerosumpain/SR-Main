@@ -186,23 +186,28 @@
     workflowName = generated.name || workflowName;
   }
 
-  // Listen for node inspect events from BaseNode buttons (via window CustomEvent)
-  function handleInspectEvent(e: Event) {
-    const nodeId = (e as CustomEvent).detail?.nodeId;
-    if (nodeId) {
-      inspectedNodeId = nodeId;
-      rightPanel = 'inspector';
+  // Raw DOM listener for node inspect buttons.
+  // Uses event delegation on document to catch clicks on [data-inspect-node] elements.
+  // This bypasses Svelte 5 event delegation and SvelteFlow's drag system entirely.
+  function handleDocumentClick(e: MouseEvent) {
+    const target = (e.target as HTMLElement)?.closest?.('[data-inspect-node]');
+    if (target) {
+      const nodeId = (target as HTMLElement).dataset.inspectNode;
+      if (nodeId) {
+        inspectedNodeId = nodeId;
+        rightPanel = 'inspector';
+      }
     }
   }
 
   onMount(() => {
-    window.addEventListener('workflow-inspect-node', handleInspectEvent);
+    document.addEventListener('click', handleDocumentClick, true); // capture phase
   });
 
   onDestroy(() => {
     eventSource?.close();
     if (browser) {
-      window.removeEventListener('workflow-inspect-node', handleInspectEvent);
+      document.removeEventListener('click', handleDocumentClick, true);
     }
   });
 </script>
