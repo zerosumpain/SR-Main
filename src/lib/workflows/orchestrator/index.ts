@@ -77,6 +77,18 @@ export async function generateWorkflow(
 
   const workflow = parseWorkflowResponse(finalResponse);
 
+  if (!workflow) {
+    console.error('[orchestrator] Failed to parse LLM response. Raw response (first 1000 chars):', finalResponse.slice(0, 1000));
+  } else {
+    console.log(`[orchestrator] Generated workflow: ${workflow.name} — ${workflow.nodes.length} nodes, ${workflow.edges.length} edges`);
+    // Validate node types — warn about unknown types
+    for (const node of workflow.nodes) {
+      if (!availableNodeTypes.includes(node.type)) {
+        console.warn(`[orchestrator] Unknown node type: ${node.type} — will fall back to default rendering`);
+      }
+    }
+  }
+
   // Store chat messages
   if (workflowId) {
     await db.insert(orchestratorChats).values({
