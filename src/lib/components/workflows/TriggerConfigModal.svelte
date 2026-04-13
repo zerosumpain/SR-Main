@@ -73,8 +73,8 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog">
-  <div class="rounded-xl border p-6 w-[440px] space-y-4" style="background: var(--card-bg); border-color: var(--card-border);">
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70" role="dialog" onclick={onClose}>
+  <div class="rounded-xl border p-6 w-[440px] space-y-4 shadow-2xl" style="background: var(--bg, #ede4d4); border-color: var(--card-border);" onclick={(e) => e.stopPropagation()}>
     <div class="flex items-center justify-between">
       <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Trigger Configuration</h2>
       <button onclick={onClose} class="text-xs" style="color: var(--text-ghost);">✕</button>

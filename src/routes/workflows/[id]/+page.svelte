@@ -262,7 +262,7 @@
       <span class="text-[10px] uppercase tracking-wider shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">Nodes:</span>
       {#each nodes as node (node.id)}
         <button
-          onclick={() => { modalNodeId = node.id; showNodeModal = true; modalNodeData = null; if (currentRunId) { fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${node.id}`).then(r => r.ok ? r.json() : null).then(d => { modalNodeData = d; }).catch(() => {}); } }}
+          ondblclick={() => { modalNodeId = node.id; showNodeModal = true; modalNodeData = null; if (currentRunId) { fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${node.id}`).then(r => r.ok ? r.json() : null).then(d => { modalNodeData = d; }).catch(() => {}); } }}
           class="shrink-0 px-2 py-1 rounded text-[11px] border transition-colors hover:border-[var(--accent)]"
           style="border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
         >
@@ -336,10 +336,10 @@
     role="presentation"
     onclick={() => { showNodeModal = false; }}
   >
-    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="absolute inset-0 bg-black/70"></div>
     <div
-      class="relative rounded-xl border w-full max-w-lg max-h-[80vh] overflow-y-auto"
-      style="background: var(--bg); border-color: var(--card-border);"
+      class="relative rounded-xl border w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl"
+      style="background: var(--bg, #ede4d4); border-color: var(--card-border);"
       onclick={(e) => e.stopPropagation()}
       role="dialog"
     >
