@@ -40,10 +40,9 @@
 </script>
 
 <div
-  class="rounded-lg border-2 min-w-[160px] transition-colors cursor-pointer"
+  class="rounded-lg border-2 min-w-[160px] transition-colors"
   style="background: var(--card-bg); border-color: {borderColor};"
   class:animate-pulse={isRunning}
-  ondblclick={() => { if (id && onInspect) onInspect(id); }}
 >
   {#each inputs as input, i}
     <Handle type="target" position={Position.Left} id={input.name} style="top: {30 + i * 20}px;" />
@@ -60,7 +59,15 @@
       >
         {nodeType}
       </span>
-      {#if status}
+      {#if onInspect && id}
+        <button
+          class="ml-auto w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors nopan nodrag"
+          style="color: var(--text-ghost); font-size: 10px; line-height: 1;"
+          onpointerdown={(e) => { e.stopPropagation(); }}
+          onclick={(e) => { e.stopPropagation(); onInspect(id!); }}
+          title="Inspect node"
+        >⚙</button>
+      {:else if status}
         <span
           class="w-2 h-2 rounded-full ml-auto"
           style="background: {borderColor};"
