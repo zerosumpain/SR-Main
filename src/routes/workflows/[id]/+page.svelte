@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import { workflowNodesToCanvas, workflowEdgesToCanvas, canvasNodesToWorkflow, canvasEdgesToWorkflow } from '$lib/components/workflows/adapter';
   import type { CanvasNode, CanvasEdge } from '$lib/components/workflows/adapter';
@@ -64,9 +64,16 @@
     nodes = [...nodes, newNode];
   }
 
-  function handleNodeDoubleClick(nodeId: string) {
-    inspectedNodeId = nodeId;
-    rightPanel = 'inspector';
+  function handleNodeSelected(nodeId: string) {
+    modalNodeId = nodeId;
+    showNodeModal = true;
+    modalNodeData = null;
+    if (currentRunId) {
+      fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { modalNodeData = d; })
+        .catch(() => {});
+    }
   }
 
   function handleEdgeClick(edgeId: string) {
@@ -186,43 +193,14 @@
     workflowName = generated.name || workflowName;
   }
 
-  // Use pointerdown in capture phase — fires before SvelteFlow's drag system
   let showNodeModal = $state(false);
   let modalNodeId = $state<string | null>(null);
   let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
   let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
   let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
 
-  function handlePointerDown(e: PointerEvent) {
-    const target = (e.target as HTMLElement)?.closest?.('[data-inspect-node]');
-    if (target) {
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      const nodeId = (target as HTMLElement).dataset.inspectNode;
-      if (nodeId) {
-        modalNodeId = nodeId;
-        showNodeModal = true;
-        modalNodeData = null;
-        // Load run data if available
-        if (currentRunId) {
-          fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
-            .then(r => r.ok ? r.json() : null)
-            .then(d => { modalNodeData = d; })
-            .catch(() => {});
-        }
-      }
-    }
-  }
-
-  onMount(() => {
-    document.addEventListener('pointerdown', handlePointerDown, true);
-  });
-
   onDestroy(() => {
     eventSource?.close();
-    if (browser) {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-    }
   });
 </script>
 
@@ -253,7 +231,7 @@
       <Canvas
         bind:nodes
         bind:edges
-        onNodeDoubleClick={handleNodeDoubleClick}
+        onNodeSelected={handleNodeSelected}
         onEdgeClick={handleEdgeClick}
         onDrop={handleDrop}
       />

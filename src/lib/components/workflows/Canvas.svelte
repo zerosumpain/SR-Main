@@ -1,7 +1,6 @@
 <script lang="ts">
   import { SvelteFlow, Controls, MiniMap, Background, BackgroundVariant } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
-  import { setInspectCallback } from './inspect-store';
   import type { CanvasNode, CanvasEdge } from './adapter';
   import ManualTriggerNode from './nodes/ManualTriggerNode.svelte';
   import CodeExecuteNode from './nodes/CodeExecuteNode.svelte';
@@ -22,13 +21,13 @@
   let {
     nodes = $bindable([]),
     edges = $bindable([]),
-    onNodeDoubleClick,
+    onNodeSelected,
     onEdgeClick,
     onDrop,
   }: {
     nodes: CanvasNode[];
     edges: CanvasEdge[];
-    onNodeDoubleClick?: (nodeId: string) => void;
+    onNodeSelected?: (nodeId: string) => void;
     onEdgeClick?: (edgeId: string) => void;
     onDrop?: (type: string, position: { x: number; y: number }) => void;
   } = $props();
@@ -50,15 +49,9 @@
     'openrouter': OpenRouterNode,
   };
 
-  // Max zoom cap — prevents nodes from being too large
   const MAX_ZOOM = 1.5;
   const MIN_ZOOM = 0.1;
   const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1.2, duration: 300 };
-
-  // Set module-level callback so BaseNode can trigger inspection
-  setInspectCallback((nodeId: string) => {
-    onNodeDoubleClick?.(nodeId);
-  });
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -80,10 +73,9 @@
     onDrop(type, position);
   }
 
-  function handleNodeClick(payload: any) {
-    const nodeId = payload?.node?.id;
-    if (nodeId) {
-      onNodeDoubleClick?.(nodeId);
+  function handleSelectionChange({ nodes: selectedNodes }: { nodes: any[]; edges: any[] }) {
+    if (selectedNodes.length === 1) {
+      onNodeSelected?.(selectedNodes[0].id);
     }
   }
 
@@ -109,7 +101,7 @@
     fitViewOptions={FIT_VIEW_OPTIONS}
     minZoom={MIN_ZOOM}
     maxZoom={MAX_ZOOM}
-    onnodeclick={handleNodeClick}
+    onselectionchange={handleSelectionChange}
     onedgeclick={handleEdgeClick}
     defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
   >
