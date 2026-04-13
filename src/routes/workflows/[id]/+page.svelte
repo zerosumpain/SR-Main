@@ -23,6 +23,32 @@
   let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
   let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
   let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
+  let editingConfig = $state<Record<string, string>>({});
+
+  // When modal opens, populate editable config
+  $effect(() => {
+    if (showNodeModal && modalNode) {
+      const cfg: Record<string, string> = {};
+      for (const [k, v] of Object.entries(modalNode.data.config || {})) {
+        cfg[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+      }
+      editingConfig = cfg;
+    }
+  });
+
+  function saveNodeConfig() {
+    if (!modalNodeId) return;
+    const parsed: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(editingConfig)) {
+      try { parsed[k] = JSON.parse(v); } catch { parsed[k] = v; }
+    }
+    nodes = nodes.map(n =>
+      n.id === modalNodeId ? { ...n, data: { ...n.data, config: parsed } } : n
+    );
+    // Auto-save to DB
+    handleSave();
+    showNodeModal = false;
+  }
 
   // Dynamic imports for browser-only components
   let SvelteFlowModule: any = $state(null);
@@ -333,16 +359,39 @@
         <div>
           <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
           <div class="space-y-2">
-            {#each Object.entries(modalNode.data.config || {}) as [key, value]}
-              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
-                <span class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">{key}</span>
-                <pre class="text-xs mt-1 whitespace-pre-wrap break-all" style="color: var(--text-primary); font-family: var(--font-mono);">{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}</pre>
+            {#each Object.entries(editingConfig) as [key, value]}
+              <div>
+                <label class="text-[11px] uppercase tracking-wider mb-1 block" style="color: var(--text-ghost); font-family: var(--font-mono);">{key}</label>
+                {#if value.length > 60 || value.includes('\n')}
+                  <textarea
+                    value={editingConfig[key]}
+                    oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLTextAreaElement).value }; }}
+                    class="w-full px-2 py-1.5 rounded text-xs border resize-vertical"
+                    style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 80px;"
+                    rows="4"
+                  ></textarea>
+                {:else}
+                  <input
+                    type="text"
+                    value={editingConfig[key]}
+                    oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLInputElement).value }; }}
+                    class="w-full px-2 py-1.5 rounded text-xs border"
+                    style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+                  />
+                {/if}
               </div>
             {/each}
-            {#if Object.keys(modalNode.data.config || {}).length === 0}
+            {#if Object.keys(editingConfig).length === 0}
               <p class="text-xs" style="color: var(--text-ghost);">No configuration</p>
             {/if}
           </div>
+          <button
+            onclick={saveNodeConfig}
+            class="mt-3 w-full px-3 py-2 rounded text-sm font-medium transition-colors"
+            style="background: var(--accent); color: white;"
+          >
+            Save Configuration
+          </button>
         </div>
 
         {#if modalNodeDef}

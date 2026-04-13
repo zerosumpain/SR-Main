@@ -56,14 +56,29 @@ export function parseWorkflowResponse(text: string): GeneratedWorkflow | null {
     if (n.id) idMap.set(n.id, normalizedNodes[i].id);
   });
 
-  // Normalize edges
-  const normalizedEdges = edges.map((e: any) => ({
-    id: e.id || `edge-${crypto.randomUUID().slice(0, 8)}`,
-    sourceNodeId: idMap.get(e.sourceNodeId) || e.sourceNodeId,
-    targetNodeId: idMap.get(e.targetNodeId) || e.targetNodeId,
-    sourceHandle: e.sourceHandle || undefined,
-    targetHandle: e.targetHandle || undefined,
-  }));
+  // Normalize edges — handle both sourceNodeId/targetNodeId and source/target field names
+  let normalizedEdges = edges.map((e: any) => {
+    const srcId = e.sourceNodeId || e.source || e.from;
+    const tgtId = e.targetNodeId || e.target || e.to;
+    return {
+      id: e.id || `edge-${crypto.randomUUID().slice(0, 8)}`,
+      sourceNodeId: idMap.get(srcId) || srcId,
+      targetNodeId: idMap.get(tgtId) || tgtId,
+      sourceHandle: e.sourceHandle || undefined,
+      targetHandle: e.targetHandle || undefined,
+    };
+  });
+
+  // If no edges provided, auto-connect nodes in sequence
+  if (normalizedEdges.length === 0 && normalizedNodes.length > 1) {
+    normalizedEdges = normalizedNodes.slice(0, -1).map((node: any, i: number) => ({
+      id: `edge-auto-${i}`,
+      sourceNodeId: node.id,
+      targetNodeId: normalizedNodes[i + 1].id,
+      sourceHandle: undefined,
+      targetHandle: undefined,
+    }));
+  }
 
   return {
     name: (json.name as string) || 'Generated Workflow',
