@@ -159,6 +159,11 @@
     handleDrop(type, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
   }
 
+  function handleNodeClick(payload: any) {
+    const nodeId = payload?.node?.id;
+    if (nodeId) openNodeInspect(nodeId);
+  }
+
   function handleEdgeClick(payload: any) {
     const edgeId = payload?.edge?.id;
     if (edgeId) {
@@ -293,6 +298,7 @@
           fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }}
           minZoom={0.1}
           maxZoom={1.5}
+          onnodeclick={handleNodeClick}
           onedgeclick={handleEdgeClick}
           defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
         >
