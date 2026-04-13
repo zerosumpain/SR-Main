@@ -49,6 +49,18 @@ export const workflowPatterns: WorkflowPattern[] = [
     examples: ['Write then review an important email', 'Generate then fact-check a report', 'Draft then QA marketing copy'],
   },
   {
+    name: 'Agent Loop',
+    description: 'An autonomous agent that reasons about the task and uses tools to accomplish it. The agent decides which tools to call and when to stop.',
+    trigger: 'When the task requires autonomous multi-step reasoning with tool use — the workflow cannot be predetermined.',
+    nodeSequence: ['llm-agent', 'tool-nodes (connected downstream)'],
+    edgePattern: 'llm-agent → multiple tool nodes (http-request, code-execute, etc.). Agent calls tools internally. Output handle → next processing step.',
+    examples: [
+      'Research a topic using web APIs and synthesize a report',
+      'Debug a problem by running code, checking results, and iterating',
+      'Process a complex request that requires multiple API calls in unpredictable order',
+    ],
+  },
+  {
     name: 'Data Pipeline',
     description: 'Fetch data, transform it, validate, and output or store.',
     trigger: 'When the user needs to pull data from APIs, process it, and produce a result.',
