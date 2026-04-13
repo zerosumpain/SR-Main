@@ -14,6 +14,7 @@ import { mergeDef } from './nodes/merge';
 import { accumulatorDef } from './nodes/accumulator';
 import { subWorkflowDef } from './nodes/sub-workflow';
 import type { NodeDefinition } from './types';
+import { loadDynamicNodeDefinitions, DYNAMIC_NODES_DIR } from './orchestrator/dynamic-nodes';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
 const codeExecuteDef: NodeDefinition = {
@@ -439,7 +440,7 @@ const llmAgentDef: NodeDefinition = {
   ],
 };
 
-export const nodeDefinitions: NodeDefinition[] = [
+const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
   codeExecuteDef,
@@ -463,6 +464,19 @@ export const nodeDefinitions: NodeDefinition[] = [
   subWorkflowDef,
   llmAgentDef,
 ];
+
+const builtInTypes = new Set(builtInDefinitions.map((d) => d.type));
+
+let dynamicDefinitions: NodeDefinition[] = [];
+try {
+  dynamicDefinitions = loadDynamicNodeDefinitions(DYNAMIC_NODES_DIR).filter(
+    (d) => !builtInTypes.has(d.type)
+  );
+} catch {
+  // May fail in browser context — dynamic nodes are server-side only
+}
+
+export const nodeDefinitions: NodeDefinition[] = [...builtInDefinitions, ...dynamicDefinitions];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
   return nodeDefinitions.find((d) => d.type === type);

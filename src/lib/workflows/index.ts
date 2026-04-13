@@ -22,6 +22,12 @@ import { mergeDef, mergeExecutor } from './nodes/merge';
 import { accumulatorDef, accumulatorExecutor } from './nodes/accumulator';
 import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
 import { llmAgentDef, llmAgentExecutor } from './nodes/llm-agent';
+import {
+  DYNAMIC_NODES_DIR,
+  loadDynamicNodeDefinitions,
+  loadDynamicNodeExecutor,
+  ensureDynamicNodesDir,
+} from './orchestrator/dynamic-nodes';
 
 export const registry = new NodeRegistry();
 
@@ -47,6 +53,24 @@ registry.register(mergeDef, mergeExecutor);
 registry.register(accumulatorDef, accumulatorExecutor);
 registry.register(subWorkflowDef, subWorkflowExecutor);
 registry.register(llmAgentDef, llmAgentExecutor);
+
+// Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
+ensureDynamicNodesDir();
+const dynamicDefs = loadDynamicNodeDefinitions(DYNAMIC_NODES_DIR);
+for (const def of dynamicDefs) {
+  if (registry.getDefinition(def.type)) {
+    console.warn(`[dynamic-nodes] Skipping ${def.type} — conflicts with built-in node`);
+    continue;
+  }
+  loadDynamicNodeExecutor(DYNAMIC_NODES_DIR, def.type).then((executor) => {
+    if (executor) {
+      registry.register(def, executor);
+      console.log(`[dynamic-nodes] Registered: ${def.type}`);
+    } else {
+      console.warn(`[dynamic-nodes] Failed to load executor for: ${def.type}`);
+    }
+  });
+}
 
 export const engine = new WorkflowEngine(registry);
 
