@@ -5,6 +5,7 @@
  */
 import { manualTriggerDef } from './nodes/manual-trigger';
 import { transformDef } from './nodes/transform';
+import { delayDef } from './nodes/delay';
 import type { NodeDefinition } from './types';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
@@ -36,6 +37,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
   codeExecuteDef,
+  delayDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
