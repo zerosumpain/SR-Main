@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChatMessage from './ChatMessage.svelte';
+  import { goto } from '$app/navigation';
 
   let {
     workflowId,
@@ -82,7 +83,10 @@
       };
       messages = [...messages, assistantMsg];
 
-      if (data.workflow) {
+      if (data.redirectTo) {
+        // New workflow created — redirect to editor page
+        goto(data.redirectTo);
+      } else if (data.workflow) {
         onWorkflowGenerated(data.workflow);
       }
     } catch (err) {
