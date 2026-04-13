@@ -17,81 +17,128 @@
   let inspectedEdgeId = $state<string | null>(null);
   let currentRunId = $state<string | null>(null);
 
+  // Modal state for node inspection
+  let showNodeModal = $state(false);
+  let modalNodeId = $state<string | null>(null);
+  let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
+  let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
+  let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
+
   // Dynamic imports for browser-only components
-  let Canvas: any = $state(null);
+  let SvelteFlowModule: any = $state(null);
   let NodePalette: any = $state(null);
   let WorkflowToolbar: any = $state(null);
   let ChatPanel: any = $state(null);
-  let NodeInspector: any = $state(null);
-  let EdgeInspector: any = $state(null);
   let RunHistoryPanel: any = $state(null);
   let registryModule: any = $state(null);
+  let nodeTypeComponents: Record<string, any> = $state({});
 
   if (browser) {
-    import('$lib/components/workflows/Canvas.svelte').then(m => Canvas = m.default);
+    import('@xyflow/svelte').then(m => { SvelteFlowModule = m; });
     import('$lib/components/workflows/NodePalette.svelte').then(m => NodePalette = m.default);
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
     import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
-    import('$lib/components/workflows/NodeInspector.svelte').then(m => NodeInspector = m.default);
-    import('$lib/components/workflows/EdgeInspector.svelte').then(m => EdgeInspector = m.default);
     import('$lib/components/workflows/RunHistoryPanel.svelte').then(m => RunHistoryPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
+
+    // Load all node type components
+    Promise.all([
+      import('$lib/components/workflows/nodes/ManualTriggerNode.svelte'),
+      import('$lib/components/workflows/nodes/CodeExecuteNode.svelte'),
+      import('$lib/components/workflows/nodes/TransformNode.svelte'),
+      import('$lib/components/workflows/nodes/HttpRequestNode.svelte'),
+      import('$lib/components/workflows/nodes/LlmCallNode.svelte'),
+      import('$lib/components/workflows/nodes/ConditionalNode.svelte'),
+      import('$lib/components/workflows/nodes/LoopNode.svelte'),
+      import('$lib/components/workflows/nodes/DelayNode.svelte'),
+      import('$lib/components/workflows/nodes/ErrorHandlerNode.svelte'),
+      import('$lib/components/workflows/nodes/DataStoreNode.svelte'),
+      import('$lib/components/workflows/nodes/EmailNode.svelte'),
+      import('$lib/components/workflows/nodes/StravaNode.svelte'),
+      import('$lib/components/workflows/nodes/WhoopNode.svelte'),
+      import('$lib/components/workflows/nodes/OpenRouterNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_]) => {
+      nodeTypeComponents = {
+        'manual-trigger': mt.default,
+        'code-execute': ce.default,
+        'transform': tr.default,
+        'http-request': hr.default,
+        'llm-call': lc.default,
+        'conditional': co.default,
+        'loop': lo.default,
+        'delay': de.default,
+        'error-handler': eh.default,
+        'data-store': ds.default,
+        'email': em.default,
+        'strava': st.default,
+        'whoop': wh.default,
+        'openrouter': or_.default,
+      };
+    });
   }
 
   let definitions = $derived(registryModule?.nodeDefinitions ?? []);
-  let inspectedNode = $derived(nodes.find(n => n.id === inspectedNodeId));
-  let inspectedNodeDef = $derived(inspectedNode ? registryModule?.getDefinition(inspectedNode.data.nodeType) : null);
-  let inspectedEdge = $derived(edges.find(e => e.id === inspectedEdgeId));
-  let edgeSourceNode = $derived(inspectedEdge ? nodes.find(n => n.id === inspectedEdge.source) : null);
-  let edgeTargetNode = $derived(inspectedEdge ? nodes.find(n => n.id === inspectedEdge.target) : null);
+  let hasNodeTypes = $derived(Object.keys(nodeTypeComponents).length > 0);
 
   function handleDragStart(_type: string, _event: DragEvent) {}
 
   function handleDrop(type: string, position: { x: number; y: number }) {
     const def = registryModule?.getDefinition(type);
     if (!def) return;
-
     const newNode: CanvasNode = {
       id: crypto.randomUUID(),
       type,
       position,
-      data: {
-        label: def.label,
-        nodeType: type,
-        config: { ...def.defaultConfig },
-      },
+      data: { label: def.label, nodeType: type, config: { ...def.defaultConfig } },
     };
     nodes = [...nodes, newNode];
   }
 
-  function handleNodeSelected(nodeId: string) {
-    modalNodeId = nodeId;
-    showNodeModal = true;
-    modalNodeData = null;
-    if (currentRunId) {
-      fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { modalNodeData = d; })
-        .catch(() => {});
+  function handleCanvasDragOver(event: DragEvent) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleCanvasDrop(event: DragEvent) {
+    event.preventDefault();
+    const type = event.dataTransfer?.getData('application/workflow-node');
+    if (!type) return;
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    handleDrop(type, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+  }
+
+  // Node selection opens modal
+  function handleSelectionChange({ nodes: selectedNodes }: { nodes: any[]; edges: any[] }) {
+    if (selectedNodes.length === 1) {
+      const nodeId = selectedNodes[0].id;
+      modalNodeId = nodeId;
+      showNodeModal = true;
+      modalNodeData = null;
+      if (currentRunId) {
+        fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { modalNodeData = d; })
+          .catch(() => {});
+      }
     }
   }
 
-  function handleEdgeClick(edgeId: string) {
-    inspectedEdgeId = edgeId;
-    rightPanel = 'edge';
+  function handleEdgeClick(payload: any) {
+    const edgeId = payload?.edge?.id;
+    if (edgeId) {
+      inspectedEdgeId = edgeId;
+      rightPanel = 'edge';
+    }
   }
 
   async function handleSave() {
-    const workflowNodes = canvasNodesToWorkflow(nodes);
-    const workflowEdges = canvasEdgesToWorkflow(edges);
-
     await fetch(`/api/workflows/${data.workflow.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: workflowName,
-        nodes: workflowNodes,
-        edges: workflowEdges,
+        nodes: canvasNodesToWorkflow(nodes),
+        edges: canvasEdgesToWorkflow(edges),
       }),
     });
   }
@@ -113,72 +160,38 @@
   function connectSSE(runId: string) {
     eventSource?.close();
     eventSource = new EventSource(`/api/workflows/${data.workflow.id}/runs/${runId}/stream`);
-
     eventSource.onmessage = (e) => {
       const event = JSON.parse(e.data);
-      if (event.type === 'node_started' && event.nodeId) {
-        updateNodeStatus(event.nodeId, 'running');
-      } else if (event.type === 'node_completed' && event.nodeId) {
-        updateNodeStatus(event.nodeId, 'completed');
-      } else if (event.type === 'node_failed' && event.nodeId) {
-        updateNodeStatus(event.nodeId, 'failed');
-      } else if (event.type === 'breakpoint_hit' && event.nodeId) {
+      if (event.type === 'node_started' && event.nodeId) updateNodeStatus(event.nodeId, 'running');
+      else if (event.type === 'node_completed' && event.nodeId) updateNodeStatus(event.nodeId, 'completed');
+      else if (event.type === 'node_failed' && event.nodeId) updateNodeStatus(event.nodeId, 'failed');
+      else if (event.type === 'breakpoint_hit' && event.nodeId) {
         updateNodeStatus(event.nodeId, 'paused_breakpoint');
-        inspectedNodeId = event.nodeId;
-        rightPanel = 'inspector';
-      } else if (event.type === 'run_completed') {
-        runStatus = 'completed';
-        eventSource?.close();
-      } else if (event.type === 'run_failed') {
-        runStatus = 'failed';
-        eventSource?.close();
+        modalNodeId = event.nodeId;
+        showNodeModal = true;
       }
+      else if (event.type === 'run_completed') { runStatus = 'completed'; eventSource?.close(); }
+      else if (event.type === 'run_failed') { runStatus = 'failed'; eventSource?.close(); }
     };
-
-    eventSource.onerror = () => {
-      eventSource?.close();
-    };
+    eventSource.onerror = () => { eventSource?.close(); };
   }
 
   function updateNodeStatus(nodeId: string, status: string) {
-    nodes = nodes.map((n) =>
-      n.id === nodeId ? { ...n, data: { ...n.data, status } } : n,
-    );
-  }
-
-  async function handleContinue(modifiedInput?: Record<string, unknown>) {
-    if (!currentRunId || !inspectedNodeId) return;
-    await fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/continue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nodeId: inspectedNodeId, modifiedInput }),
-    });
-  }
-
-  function handleConfigChange(newConfig: Record<string, unknown>) {
-    if (!inspectedNodeId) return;
-    nodes = nodes.map(n =>
-      n.id === inspectedNodeId
-        ? { ...n, data: { ...n.data, config: newConfig } }
-        : n
-    );
+    nodes = nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status } } : n);
   }
 
   function handleStop() {
     eventSource?.close();
     runStatus = null;
-    nodes = nodes.map((n) => ({ ...n, data: { ...n.data, status: undefined } }));
+    nodes = nodes.map(n => ({ ...n, data: { ...n.data, status: undefined } }));
   }
 
-  function handleNameChange(name: string) {
-    workflowName = name;
-  }
+  function handleNameChange(name: string) { workflowName = name; }
 
   function handleWorkflowGenerated(generated: any) {
     if (!generated?.nodes) return;
     nodes = generated.nodes.map((n: any) => ({
-      id: n.id,
-      type: n.type,
+      id: n.id, type: n.type,
       position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
       data: { label: n.label, nodeType: n.type, config: n.config || {} },
     }));
@@ -193,20 +206,16 @@
     workflowName = generated.name || workflowName;
   }
 
-  let showNodeModal = $state(false);
-  let modalNodeId = $state<string | null>(null);
-  let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
-  let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
-  let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
-
-  onDestroy(() => {
-    eventSource?.close();
-  });
+  onDestroy(() => { eventSource?.close(); });
 </script>
 
 <svelte:head>
   <title>{workflowName} — Workflows</title>
 </svelte:head>
+
+{#if browser}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/svelte@latest/dist/style.css" />
+{/if}
 
 <div class="flex flex-col h-screen">
   {#if WorkflowToolbar}
@@ -227,43 +236,46 @@
       <NodePalette {definitions} onDragStart={handleDragStart} />
     {/if}
 
-    {#if Canvas}
-      <Canvas
-        bind:nodes
-        bind:edges
-        onNodeSelected={handleNodeSelected}
-        onEdgeClick={handleEdgeClick}
-        onDrop={handleDrop}
-      />
-    {/if}
+    <div class="flex-1 h-full" ondragover={handleCanvasDragOver} ondrop={handleCanvasDrop} role="application">
+      {#if SvelteFlowModule && hasNodeTypes}
+        <SvelteFlowModule.SvelteFlow
+          {nodes}
+          {edges}
+          nodeTypes={nodeTypeComponents}
+          fitView
+          fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }}
+          minZoom={0.1}
+          maxZoom={1.5}
+          onselectionchange={handleSelectionChange}
+          onedgeclick={handleEdgeClick}
+          defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
+        >
+          <SvelteFlowModule.Controls />
+          <SvelteFlowModule.MiniMap />
+          <SvelteFlowModule.Background variant="dots" gap={20} size={1} />
+        </SvelteFlowModule.SvelteFlow>
+      {:else}
+        <div class="flex items-center justify-center h-full">
+          <p class="text-sm animate-pulse" style="color: var(--text-ghost);">Loading canvas...</p>
+        </div>
+      {/if}
+    </div>
 
-    {#if rightPanel === 'inspector' && NodeInspector && inspectedNode}
-      <NodeInspector
-        nodeId={inspectedNodeId}
-        nodeLabel={inspectedNode.data.label}
-        nodeType={inspectedNode.data.nodeType}
-        config={inspectedNode.data.config}
-        nodeDef={inspectedNodeDef}
-        workflowId={data.workflow.id}
-        runId={currentRunId}
-        isPaused={inspectedNode.data.status === 'paused_breakpoint'}
-        onClose={() => { rightPanel = 'chat'; inspectedNodeId = null; }}
-        onContinue={handleContinue}
-        onConfigChange={handleConfigChange}
-      />
-    {:else if rightPanel === 'edge' && EdgeInspector && inspectedEdge}
-      <EdgeInspector
-        edgeId={inspectedEdgeId}
-        sourceNode={edgeSourceNode ? { id: edgeSourceNode.id, label: edgeSourceNode.data.label, nodeType: edgeSourceNode.data.nodeType } : null}
-        targetNode={edgeTargetNode ? { id: edgeTargetNode.id, label: edgeTargetNode.data.label, nodeType: edgeTargetNode.data.nodeType } : null}
-        workflowId={data.workflow.id}
-        runId={currentRunId}
-        onClose={() => { rightPanel = 'chat'; inspectedEdgeId = null; }}
-      />
+    {#if rightPanel === 'edge' && inspectedEdgeId}
+      <!-- Edge inspector inline -->
+      <div class="h-full flex flex-col border-l" style="background: var(--bg); border-color: var(--card-border); width: 360px;">
+        <div class="px-4 py-3 border-b flex items-center justify-between" style="border-color: var(--card-border);">
+          <h3 class="text-sm font-medium" style="color: var(--text-primary);">Edge Data</h3>
+          <button onclick={() => { rightPanel = 'chat'; inspectedEdgeId = null; }} class="text-sm px-2 py-1 rounded hover:bg-black/5" style="color: var(--text-ghost);">Back</button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-3">
+          <p class="text-xs" style="color: var(--text-ghost);">Run the workflow then click an edge to see data flow.</p>
+        </div>
+      </div>
     {:else if rightPanel === 'runs' && RunHistoryPanel}
       <RunHistoryPanel
         workflowId={data.workflow.id}
-        onSelectRun={(runId: string) => { currentRunId = runId; rightPanel = 'inspector'; }}
+        onSelectRun={(runId) => { currentRunId = runId; }}
         onClose={() => { rightPanel = 'chat'; }}
       />
     {:else if ChatPanel}
@@ -295,11 +307,7 @@
           <h2 class="text-base font-medium" style="color: var(--text-primary);">{modalNode.data.label}</h2>
           <p class="text-[10px] uppercase tracking-wider mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">{modalNode.data.nodeType}</p>
         </div>
-        <button
-          onclick={() => { showNodeModal = false; }}
-          class="text-lg px-2 py-1 rounded hover:bg-black/10"
-          style="color: var(--text-ghost);"
-        >&times;</button>
+        <button onclick={() => { showNodeModal = false; }} class="text-lg px-2 py-1 rounded hover:bg-black/10" style="color: var(--text-ghost);">&times;</button>
       </div>
 
       <div class="p-5 space-y-5">
@@ -371,3 +379,10 @@
     </div>
   </div>
 {/if}
+
+<style>
+  :global(.svelte-flow) {
+    --xy-background-color: var(--bg, #ede4d4);
+    --xy-node-border-radius: 8px;
+  }
+</style>
