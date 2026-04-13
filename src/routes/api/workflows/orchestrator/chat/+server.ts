@@ -34,7 +34,7 @@ export const POST: RequestHandler = async ({ request }) => {
       });
     }
 
-    const { workflow, followUp } = await generateWorkflow(message, workflowId);
+    const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId);
 
     if (followUp) {
       // If this is a new workflow, create a placeholder so follow-up chat has a home
@@ -76,6 +76,7 @@ export const POST: RequestHandler = async ({ request }) => {
           success: true,
           workflow,
           workflowId,
+          thinking,
           message: workflow.explanation || 'Workflow updated.',
         });
       } else {
@@ -138,6 +139,7 @@ export const POST: RequestHandler = async ({ request }) => {
           workflow,
           workflowId: created.id,
           redirectTo: `/workflows/${created.id}`,
+          thinking,
           message: workflow.explanation || 'Workflow created.',
         });
       }

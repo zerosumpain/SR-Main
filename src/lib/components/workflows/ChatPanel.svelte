@@ -14,16 +14,24 @@
     currentEdges?: any[];
   } = $props();
 
+  interface Thinking {
+    proposal?: string;
+    critique?: string;
+    revision?: string | null;
+  }
+
   interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: { workflowGenerated?: boolean };
+    thinking?: Thinking;
   }
 
   let messages = $state<Message[]>([]);
   let input = $state('');
   let loading = $state(false);
+  let showThinking = $state(false);
   let chatContainer: HTMLDivElement;
 
   // Load chat history when workflowId changes
@@ -80,6 +88,7 @@
         role: 'assistant',
         content: data.message || data.error || 'Something went wrong.',
         metadata: { workflowGenerated: !!data.workflow },
+        thinking: data.thinking || undefined,
       };
       messages = [...messages, assistantMsg];
 
@@ -120,11 +129,21 @@
   class="h-full flex flex-col border-l"
   style="background: var(--bg); border-color: var(--card-border); width: 360px;"
 >
-  <div class="px-4 py-3 border-b" style="border-color: var(--card-border);">
-    <h3 class="text-sm font-medium" style="color: var(--text-primary);">Orchestrator</h3>
-    <p class="text-[11px] mt-0.5" style="color: var(--text-ghost);">
-      Describe what you want to automate
-    </p>
+  <div class="px-4 py-3 border-b flex items-start justify-between" style="border-color: var(--card-border);">
+    <div>
+      <h3 class="text-sm font-medium" style="color: var(--text-primary);">Orchestrator</h3>
+      <p class="text-[11px] mt-0.5" style="color: var(--text-ghost);">
+        Describe what you want to automate
+      </p>
+    </div>
+    <button
+      onclick={() => { showThinking = !showThinking; }}
+      class="text-[10px] px-2 py-1 rounded border transition-colors shrink-0"
+      style="border-color: {showThinking ? 'var(--accent)' : 'var(--card-border)'}; color: {showThinking ? 'var(--accent)' : 'var(--text-ghost)'};"
+      title="Toggle thinking steps"
+    >
+      {showThinking ? 'Hide' : 'Show'} thinking
+    </button>
   </div>
 
   <div
@@ -143,6 +162,8 @@
           role={msg.role}
           content={msg.content}
           metadata={msg.metadata}
+          thinking={msg.thinking}
+          {showThinking}
         />
       {/each}
     {/if}

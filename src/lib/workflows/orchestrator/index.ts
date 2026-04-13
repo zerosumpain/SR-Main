@@ -136,7 +136,15 @@ export async function generateWorkflow(
     });
   }
 
-  return { workflow, messages };
+  return {
+    workflow,
+    messages,
+    thinking: {
+      proposal: proposal.slice(0, 2000),
+      critique: critique.slice(0, 2000),
+      revision: finalResponse !== proposal ? finalResponse.slice(0, 2000) : null,
+    },
+  };
 }
 
 export async function modifyWorkflow(
