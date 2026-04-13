@@ -76,23 +76,35 @@
     workflowName = name;
   }
 
-  function handleWorkflowGenerated(generated: any) {
+  async function handleWorkflowGenerated(generated: any) {
     if (!generated?.nodes) return;
-    nodes = generated.nodes.map((n: any) => ({
+
+    const name = generated.name || workflowName;
+    const workflowNodes = generated.nodes.map((n: any) => ({
       id: n.id,
       type: n.type,
       position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
-      data: { label: n.label, nodeType: n.type, config: n.config || {} },
+      config: n.config || {},
+      label: n.label || n.type,
     }));
-    edges = (generated.edges || []).map((e: any) => ({
+    const workflowEdges = (generated.edges || []).map((e: any) => ({
       id: e.id || `edge-${crypto.randomUUID().slice(0, 8)}`,
-      source: e.sourceNodeId || e.source,
-      target: e.targetNodeId || e.target,
-      sourceHandle: e.sourceHandle ?? undefined,
-      targetHandle: e.targetHandle ?? undefined,
-      type: 'smoothstep',
+      sourceNodeId: e.sourceNodeId || e.source,
+      targetNodeId: e.targetNodeId || e.target,
+      sourceHandle: e.sourceHandle ?? null,
+      targetHandle: e.targetHandle ?? null,
     }));
-    workflowName = generated.name || workflowName;
+
+    // Save to DB and redirect to the editor page
+    const res = await fetch('/api/workflows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, nodes: workflowNodes, edges: workflowEdges }),
+    });
+    const workflow = await res.json();
+    if (res.ok) {
+      goto(`/workflows/${workflow.id}`);
+    }
   }
 </script>
 
