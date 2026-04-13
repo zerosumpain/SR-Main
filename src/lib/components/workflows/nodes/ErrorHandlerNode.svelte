@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)',

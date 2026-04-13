@@ -1,7 +1,7 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
   const operation = data.config?.operation || 'get_cycles';
 
   const OPERATION_LABELS: Record<string, string> = {
@@ -13,6 +13,7 @@
 </script>
 
 <BaseNode
+  id={id}
   label={data.label}
   nodeType="whoop"
   status={data.status}

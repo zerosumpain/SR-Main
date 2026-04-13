@@ -16,6 +16,7 @@
 </script>
 
 <BaseNode
+  id={id}
   label={data.label}
   nodeType="http-request"
   status={data.status}

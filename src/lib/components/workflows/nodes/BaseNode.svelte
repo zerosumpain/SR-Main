@@ -1,9 +1,11 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
+  import { getContext } from 'svelte';
 
   import type { Snippet } from 'svelte';
 
   let {
+    id,
     label,
     nodeType,
     status,
@@ -12,6 +14,7 @@
     icon = '',
     extra,
   }: {
+    id?: string;
     label: string;
     nodeType: string;
     status?: string;
@@ -20,6 +23,8 @@
     icon?: string;
     extra?: Snippet;
   } = $props();
+
+  const onInspect = getContext<((nodeId: string) => void) | undefined>('workflow-inspect-node');
 
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)',
@@ -35,9 +40,10 @@
 </script>
 
 <div
-  class="rounded-lg border-2 min-w-[160px] transition-colors"
+  class="rounded-lg border-2 min-w-[160px] transition-colors cursor-pointer"
   style="background: var(--card-bg); border-color: {borderColor};"
   class:animate-pulse={isRunning}
+  ondblclick={() => { if (id && onInspect) onInspect(id); }}
 >
   {#each inputs as input, i}
     <Handle type="target" position={Position.Left} id={input.name} style="top: {30 + i * 20}px;" />

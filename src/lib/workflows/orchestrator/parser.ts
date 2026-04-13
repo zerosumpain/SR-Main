@@ -37,10 +37,9 @@ export function parseWorkflowResponse(text: string): GeneratedWorkflow | null {
   if (!json) return null;
 
   const nodes = json.nodes;
-  const edges = json.edges;
+  const edges = Array.isArray(json.edges) ? json.edges : [];
 
   if (!Array.isArray(nodes) || nodes.length === 0) return null;
-  if (!Array.isArray(edges)) return null;
 
   // Normalize nodes — ensure IDs and positions
   const normalizedNodes = nodes.map((n: any, i: number) => ({

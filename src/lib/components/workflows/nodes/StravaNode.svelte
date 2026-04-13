@@ -1,7 +1,7 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
   const operation = data.config?.operation || 'list_activities';
 
   const OPERATION_LABELS: Record<string, string> = {
@@ -12,6 +12,7 @@
 </script>
 
 <BaseNode
+  id={id}
   label={data.label}
   nodeType="strava"
   status={data.status}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const operation: string = data.config?.operation ?? 'get';
   const key: string = data.config?.key ?? '';
@@ -14,6 +14,7 @@
 </script>
 
 <BaseNode
+  id={id}
   label={displayLabel}
   nodeType="data-store"
   status={data.status}

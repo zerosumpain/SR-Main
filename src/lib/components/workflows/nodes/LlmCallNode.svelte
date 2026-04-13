@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const model: string = data.config?.model || 'openai/gpt-4o-mini';
   const userPrompt: string = data.config?.userPrompt || '';

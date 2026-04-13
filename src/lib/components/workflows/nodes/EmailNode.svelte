@@ -1,13 +1,14 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const to: string = data.config?.to ?? '';
   const displayLabel: string = data.label ? `${data.label}${to ? ` → ${to}` : ''}` : (to || 'Email');
 </script>
 
 <BaseNode
+  id={id}
   label={displayLabel}
   nodeType="email"
   status={data.status}

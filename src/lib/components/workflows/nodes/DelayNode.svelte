@@ -1,13 +1,14 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const ms: number = data.config?.milliseconds ?? 1000;
   const displayLabel: string = data.label ? `${data.label} (${ms}ms)` : `${ms}ms`;
 </script>
 
 <BaseNode
+  id={id}
   label={displayLabel}
   nodeType="delay"
   status={data.status}

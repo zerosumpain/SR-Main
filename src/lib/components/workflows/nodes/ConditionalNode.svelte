@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
 
   const expression: string = data.config?.expression ?? '';
   const preview = expression.length > 24 ? expression.slice(0, 24) + '…' : expression;

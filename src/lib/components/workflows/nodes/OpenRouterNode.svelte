@@ -1,7 +1,7 @@
 <script lang="ts">
   import BaseNode from './BaseNode.svelte';
 
-  let { data } = $props();
+  let { data, id } = $props();
   const operation: string = data.config?.operation || 'chat_completion';
   const model: string = data.config?.model || '';
 
@@ -13,6 +13,7 @@
 </script>
 
 <BaseNode
+  id={id}
   label={data.label}
   nodeType="openrouter"
   status={data.status}
