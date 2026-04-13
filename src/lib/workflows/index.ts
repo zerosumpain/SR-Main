@@ -21,6 +21,7 @@ import { llmRouterDef, llmRouterExecutor } from './nodes/llm-router';
 import { mergeDef, mergeExecutor } from './nodes/merge';
 import { accumulatorDef, accumulatorExecutor } from './nodes/accumulator';
 import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
+import { llmAgentDef, llmAgentExecutor } from './nodes/llm-agent';
 
 export const registry = new NodeRegistry();
 
@@ -45,6 +46,7 @@ registry.register(llmRouterDef, llmRouterExecutor);
 registry.register(mergeDef, mergeExecutor);
 registry.register(accumulatorDef, accumulatorExecutor);
 registry.register(subWorkflowDef, subWorkflowExecutor);
+registry.register(llmAgentDef, llmAgentExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

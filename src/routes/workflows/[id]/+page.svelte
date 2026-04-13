@@ -129,7 +129,8 @@
       import('$lib/components/workflows/nodes/TextParserNode.svelte'),
       import('$lib/components/workflows/nodes/AccumulatorNode.svelte'),
       import('$lib/components/workflows/nodes/SubWorkflowNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw]) => {
+      import('$lib/components/workflows/nodes/LlmAgentNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -152,6 +153,7 @@
         'text-parser': tp.default,
         'accumulator': ac.default,
         'sub-workflow': sw.default,
+        'llm-agent': la.default,
       };
     });
   }
