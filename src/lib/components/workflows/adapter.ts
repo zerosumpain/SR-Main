@@ -36,6 +36,7 @@ export function workflowEdgesToCanvas(edges: WorkflowEdgeDef[]): CanvasEdge[] {
     target: e.targetNodeId,
     sourceHandle: e.sourceHandle ?? undefined,
     targetHandle: e.targetHandle ?? undefined,
+    type: 'smoothstep',
   }));
 }
 

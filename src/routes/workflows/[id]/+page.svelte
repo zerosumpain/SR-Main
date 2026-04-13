@@ -175,12 +175,13 @@
       position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
       data: { label: n.label, nodeType: n.type, config: n.config || {} },
     }));
-    edges = generated.edges.map((e: any) => ({
-      id: e.id,
-      source: e.sourceNodeId,
-      target: e.targetNodeId,
+    edges = (generated.edges || []).map((e: any) => ({
+      id: e.id || `edge-${crypto.randomUUID().slice(0, 8)}`,
+      source: e.sourceNodeId || e.source,
+      target: e.targetNodeId || e.target,
       sourceHandle: e.sourceHandle ?? undefined,
       targetHandle: e.targetHandle ?? undefined,
+      type: 'smoothstep',
     }));
     workflowName = generated.name || workflowName;
   }

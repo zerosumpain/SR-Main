@@ -48,14 +48,7 @@
     'openrouter': OpenRouterNode,
   };
 
-  // Double-click detection via two rapid clicks on the same node
-  let lastClickNodeId: string | null = null;
-  let lastClickTime = 0;
-  const DOUBLE_CLICK_THRESHOLD_MS = 300;
-
-  // Long-press detection for mobile (fires onNodeDoubleClick after 300ms hold)
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let longPressNodeId: string | null = null;
+  // Single click opens inspector (works on both desktop and mobile)
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -78,41 +71,11 @@
   }
 
   function handleNodeClick({ node }: { node: CanvasNode; event: MouseEvent | TouchEvent }) {
-    const now = Date.now();
-    if (
-      onNodeDoubleClick &&
-      lastClickNodeId === node.id &&
-      now - lastClickTime < DOUBLE_CLICK_THRESHOLD_MS
-    ) {
-      onNodeDoubleClick(node.id);
-      lastClickNodeId = null;
-      lastClickTime = 0;
-    } else {
-      lastClickNodeId = node.id;
-      lastClickTime = now;
-    }
+    onNodeDoubleClick?.(node.id);
   }
 
   function handleEdgeClick({ edge }: { edge: CanvasEdge; event: MouseEvent }) {
     onEdgeClick?.(edge.id);
-  }
-
-  function handleNodePointerDown({ node }: { node: CanvasNode; event: PointerEvent | MouseEvent | TouchEvent }) {
-    longPressNodeId = node.id;
-    longPressTimer = setTimeout(() => {
-      if (longPressNodeId === node.id) {
-        onNodeDoubleClick?.(node.id);
-      }
-      longPressNodeId = null;
-    }, 300);
-  }
-
-  function handleNodePointerUp() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-    longPressNodeId = null;
   }
 </script>
 
@@ -129,8 +92,6 @@
     fitView
     onnodeclick={handleNodeClick}
     onedgeclick={handleEdgeClick}
-    onnodepointerdown={handleNodePointerDown}
-    onnodepointerup={handleNodePointerUp}
     defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
   >
     <Controls />
