@@ -131,6 +131,27 @@ const loopDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'array', label: 'Results' }],
 };
 
+// Whoop definition without importing the executor (which pulls in $lib/health/* — server-only)
+const whoopDef: NodeDefinition = {
+  type: 'whoop',
+  label: 'Whoop',
+  category: 'integration',
+  description: 'Access Whoop health data. Requires Whoop connected in Health settings.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'get_cycles | get_recovery | get_sleep | get_workouts' },
+      limit: { type: 'number', description: 'Max records to return (default 10)' },
+      start: { type: 'string', description: 'ISO 8601 start date filter (optional)' },
+      end: { type: 'string', description: 'ISO 8601 end date filter (optional)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'get_cycles', limit: 10 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
 export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -142,6 +163,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   dataStoreDef,
   loopDef,
   conditionalDef,
+  whoopDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
