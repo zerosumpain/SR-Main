@@ -176,6 +176,62 @@ describe('resolveUpstreamSchema', () => {
     const result = resolveUpstreamSchema('target', nodes, edges, mockGetOutputSchema);
     expect(result).toEqual({ type: 'object', properties: {} });
   });
+
+  it('resolves Think node output schema for downstream nodes', () => {
+    const nodes = [
+      node('trigger', 'manual-trigger'),
+      node('think', 'think'),
+      node('next', 'conditional'),
+    ];
+    const edges = [
+      edge('trigger', 'think'),
+      edge('think', 'next'),
+    ];
+
+    function getOutput(type: string): JsonSchema {
+      if (type === 'think') {
+        return {
+          type: 'object',
+          properties: {
+            reasoning: { type: 'string', description: 'Step-by-step reasoning' },
+            conclusion: { type: 'string', description: 'Final conclusion' },
+            fullResponse: { type: 'string' },
+          },
+        };
+      }
+      return mockGetOutputSchema(type, {});
+    }
+
+    const schema = resolveUpstreamSchema('next', nodes, edges, getOutput);
+    expect(schema.properties).toHaveProperty('reasoning');
+    expect(schema.properties).toHaveProperty('conclusion');
+    expect(schema.properties).toHaveProperty('fullResponse');
+  });
+
+  it('resolves Validator node output for retry loops', () => {
+    const nodes = [
+      node('validator', 'validator'),
+      node('retry', 'llm-call'),
+    ];
+    const edges = [edge('validator', 'retry', 'fail')];
+
+    function getOutput(type: string): JsonSchema {
+      if (type === 'validator') {
+        return {
+          type: 'object',
+          properties: {
+            valid: { type: 'boolean' },
+            errors: { type: 'array', description: 'Validation error messages' },
+          },
+        };
+      }
+      return mockGetOutputSchema(type, {});
+    }
+
+    const schema = resolveUpstreamSchema('retry', nodes, edges, getOutput);
+    expect(schema.properties).toHaveProperty('valid');
+    expect(schema.properties).toHaveProperty('errors');
+  });
 });
 
 describe('schemaToVariablePaths', () => {
