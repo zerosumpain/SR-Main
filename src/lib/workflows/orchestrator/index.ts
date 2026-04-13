@@ -10,6 +10,9 @@ import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 
 const availableNodeTypes = nodeDefinitions.map((d) => d.type);
 
+// Keep availableNodeTypes for runtime validation (checking unknown node types)
+// The planner and modify prompts now receive full nodeDefinitions for rich context.
+
 export async function generateWorkflow(
   userMessage: string,
   workflowId: string | null,
@@ -32,7 +35,7 @@ export async function generateWorkflow(
   // Round 1 — Planner (with conversation history as context)
   onChunk?.('Planning workflow...\n');
 
-  const plannerSystem = buildPlannerPrompt(availableNodeTypes);
+  const plannerSystem = buildPlannerPrompt(nodeDefinitions);
   const plannerMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
     { role: 'system', content: plannerSystem },
     ...conversationHistory,
@@ -168,7 +171,7 @@ export async function modifyWorkflow(
 
   const modifySystem = buildModifyPrompt(
     { nodes: currentNodes, edges: currentEdges },
-    availableNodeTypes,
+    nodeDefinitions,
   );
 
   const response = await client.chat.completions.create({

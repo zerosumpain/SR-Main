@@ -1,11 +1,41 @@
-import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
+import type { WorkflowNodeDef, WorkflowEdgeDef, NodeDefinition } from '../types';
+import { getPatternsForOrchestrator } from './patterns';
 
-export function buildPlannerPrompt(availableNodeTypes: string[]): string {
+function buildNodeReference(nodeDefinitions: NodeDefinition[]): string {
+  return nodeDefinitions.map((def) => {
+    const lines: string[] = [];
+    lines.push(`### ${def.label} (\`${def.type}\`)`);
+    lines.push(def.description);
+
+    if (def.llmDescription) {
+      lines.push(`**Guidance:** ${def.llmDescription}`);
+    }
+
+    if (def.llmExamples && def.llmExamples.length > 0) {
+      lines.push(`**Example config:** \`${JSON.stringify(def.llmExamples[0])}\``);
+    }
+
+    const props = def.configSchema?.properties;
+    if (props && Object.keys(props).length > 0) {
+      const fieldLines = Object.entries(props).map(([key, schema]) => {
+        const type = schema.type ?? 'any';
+        const desc = schema.description ? ` — ${schema.description}` : '';
+        return `  - \`${key}\` (${type})${desc}`;
+      });
+      lines.push(`**Config fields:**\n${fieldLines.join('\n')}`);
+    }
+
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+export function buildPlannerPrompt(nodeDefinitions: NodeDefinition[]): string {
+  const nodeTypes = nodeDefinitions.map((d) => d.type);
   return `You are a workflow automation architect. You design automation workflows that connect functions together as a directed graph of nodes and edges.
 
 ## Available Node Types
 
-${availableNodeTypes.map((t) => `- \`${t}\``).join('\n')}
+${nodeTypes.map((t) => `- \`${t}\``).join('\n')}
 
 ## Your Task
 
@@ -35,22 +65,21 @@ Given a user's request, design a workflow as a JSON object with this exact struc
 }
 \`\`\`
 
-## Node Configuration Reference
+## Node Reference
 
-- **manual-trigger**: No config needed. Entry point of the workflow.
-- **transform**: \`{ "expression": "return { ...input, newField: input.x * 2 }" }\` — JS function body, input available as \`input\`.
-- **code-execute**: \`{ "language": "javascript"|"python"|"bash", "code": "..." }\` — Runs in sandbox. Input available as \`input\` variable. Last line of stdout parsed as JSON output.
-- **http-request**: \`{ "method": "GET"|"POST"|..., "url": "...", "headers": {}, "body": "..." }\`
-- **llm-call**: \`{ "model": "model-name", "systemPrompt": "...", "userPrompt": "...", "temperature": 0.7 }\`
-- **delay**: \`{ "milliseconds": 5000 }\` — Waits the specified duration then passes input through unchanged.
-- **data-store**: \`{ "operation": "get"|"set", "key": "my-key", "valuePath": "input.field" }\` — Persistent key-value store scoped per workflow. For "set", valuePath is a dot-path into input to extract the value.
-- **email**: \`{ "to": "{{input.email}}", "subject": "...", "body": "..." }\` — Sends email via SMTP. To, subject, and body support \`{{input.field}}\` templates.
-- **error-handler**: No config. Two output handles: \`success\` and \`error\`. Routes execution based on whether an upstream node produced an error.
-- **conditional**: \`{ "expression": "input.value > 10" }\` — Evaluates a JS boolean expression. Two output handles: \`true\` and \`false\`.
-- **loop**: \`{ "arrayPath": "items", "expression": "return item.name" }\` — Iterates over an array at \`arrayPath\` (dot-path into input). Optional \`expression\` transforms each item (variables: \`item\`, \`index\`, \`input\`). Returns results array.
-- **strava**: \`{ "operation": "list_activities"|"get_activity"|"get_athlete_stats", "per_page": 30, "activityId": "..." }\` — Strava API integration. Requires Strava connected in Health settings.
-- **whoop**: \`{ "operation": "get_cycles"|"get_recovery"|"get_sleep"|"get_workouts", "limit": 25 }\` — Whoop health data integration. Requires Whoop connected in Health settings.
-- **openrouter**: \`{ "operation": "chat_completion"|"list_models"|"get_usage", "model": "...", "systemPrompt": "...", "userPrompt": "..." }\` — OpenRouter LLM integration. Supports chat completion, listing available models, and retrieving API usage stats.
+${buildNodeReference(nodeDefinitions)}
+
+## Composable Patterns
+
+${getPatternsForOrchestrator()}
+
+## Agentic Workflow Design Tips
+
+- **Iterative refinement:** Think → LLM Call → Validator → Conditional loop-back. Use when quality matters and output may need multiple attempts.
+- **Multi-step reasoning:** Chain Think nodes together to break complex problems into smaller reasoning steps before acting.
+- **Always add Text Parser after LLM Call** if you need structured output — raw LLM text is unpredictable; parsing extracts clean fields.
+- **Use Validator as quality gates** before critical actions (sending emails, storing data, making API calls) to prevent bad data from propagating.
+- **Sub-Workflow lets you compose** from existing saved workflows — prefer this when a reusable sub-process already exists.
 
 ## Layout Guidelines
 
@@ -133,8 +162,9 @@ Respond with ONLY the JSON object.`;
 
 export function buildModifyPrompt(
   currentWorkflow: { nodes: WorkflowNodeDef[]; edges: WorkflowEdgeDef[] },
-  availableNodeTypes: string[],
+  nodeDefinitions: NodeDefinition[],
 ): string {
+  const nodeTypes = nodeDefinitions.map((d) => d.type);
   return `You are modifying an existing workflow. Here is the current workflow:
 
 \`\`\`json
@@ -143,7 +173,7 @@ ${JSON.stringify(currentWorkflow, null, 2)}
 
 ## Available Node Types
 
-${availableNodeTypes.map((t) => `- \`${t}\``).join('\n')}
+${nodeTypes.map((t) => `- \`${t}\``).join('\n')}
 
 ## Your Task
 
