@@ -20,6 +20,12 @@
   let currentRunId = $state<string | null>(null);
 
   // Modal state for node inspection
+  let showEdgeModal = $state(false);
+  let edgeModalData = $state<{ source: any; target: any }>({ source: null, target: null });
+  let inspectedEdgeObj = $derived(inspectedEdgeId ? edges.find(e => e.id === inspectedEdgeId) : null);
+  let edgeSourceLabel = $derived(inspectedEdgeObj ? nodes.find(n => n.id === inspectedEdgeObj.source)?.data.label ?? '?' : '?');
+  let edgeTargetLabel = $derived(inspectedEdgeObj ? nodes.find(n => n.id === inspectedEdgeObj.target)?.data.label ?? '?' : '?');
+
   let lastClickedNodeId = $state<string | null>(null);
   let lastClickTime = $state(0);
 
@@ -164,11 +170,30 @@
     if (nodeId) openNodeInspect(nodeId);
   }
 
+  let lastClickedEdgeId = $state<string | null>(null);
+  let lastEdgeClickTime = $state(0);
+
   function handleEdgeClick(payload: any) {
     const edgeId = payload?.edge?.id;
-    if (edgeId) {
+    if (!edgeId) return;
+    const now = Date.now();
+    if (lastClickedEdgeId === edgeId && now - lastEdgeClickTime < 400) {
+      // Double click — open edge data modal
       inspectedEdgeId = edgeId;
-      rightPanel = 'edge';
+      showEdgeModal = true;
+      edgeModalData = { source: null, target: null };
+      const edge = edges.find(e => e.id === edgeId);
+      if (edge && currentRunId) {
+        Promise.all([
+          fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${edge.source}`).then(r => r.ok ? r.json() : null),
+          fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${edge.target}`).then(r => r.ok ? r.json() : null),
+        ]).then(([src, tgt]) => { edgeModalData = { source: src, target: tgt }; }).catch(() => {});
+      }
+      lastClickedEdgeId = null;
+      lastEdgeClickTime = 0;
+    } else {
+      lastClickedEdgeId = edgeId;
+      lastEdgeClickTime = now;
     }
   }
 
@@ -203,22 +228,52 @@
     eventSource = new EventSource(`/api/workflows/${data.workflow.id}/runs/${runId}/stream`);
     eventSource.onmessage = (e) => {
       const event = JSON.parse(e.data);
-      if (event.type === 'node_started' && event.nodeId) updateNodeStatus(event.nodeId, 'running');
-      else if (event.type === 'node_completed' && event.nodeId) updateNodeStatus(event.nodeId, 'completed');
-      else if (event.type === 'node_failed' && event.nodeId) updateNodeStatus(event.nodeId, 'failed');
+      if (event.type === 'node_started' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'running');
+        // Animate incoming edges to this node
+        animateEdgesToNode(event.nodeId, true);
+      }
+      else if (event.type === 'node_completed' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'completed');
+        // Stop animating incoming edges, animate outgoing edges
+        animateEdgesToNode(event.nodeId, false);
+        animateEdgesFromNode(event.nodeId, true);
+        // Brief delay then stop outgoing animation
+        setTimeout(() => animateEdgesFromNode(event.nodeId, false), 1500);
+      }
+      else if (event.type === 'node_failed' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'failed');
+        animateEdgesToNode(event.nodeId, false);
+      }
       else if (event.type === 'breakpoint_hit' && event.nodeId) {
         updateNodeStatus(event.nodeId, 'paused_breakpoint');
         modalNodeId = event.nodeId;
         showNodeModal = true;
       }
-      else if (event.type === 'run_completed') { runStatus = 'completed'; eventSource?.close(); }
-      else if (event.type === 'run_failed') { runStatus = 'failed'; eventSource?.close(); }
+      else if (event.type === 'run_completed') {
+        runStatus = 'completed';
+        edges = edges.map(e => ({ ...e, animated: false }));
+        eventSource?.close();
+      }
+      else if (event.type === 'run_failed') {
+        runStatus = 'failed';
+        edges = edges.map(e => ({ ...e, animated: false }));
+        eventSource?.close();
+      }
     };
     eventSource.onerror = () => { eventSource?.close(); };
   }
 
   function updateNodeStatus(nodeId: string, status: string) {
     nodes = nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status } } : n);
+  }
+
+  function animateEdgesToNode(nodeId: string, animate: boolean) {
+    edges = edges.map(e => e.target === nodeId ? { ...e, animated: animate } : e);
+  }
+
+  function animateEdgesFromNode(nodeId: string, animate: boolean) {
+    edges = edges.map(e => e.source === nodeId ? { ...e, animated: animate } : e);
   }
 
   function handleStop() {
@@ -313,18 +368,7 @@
       {/if}
     </div>
 
-    {#if rightPanel === 'edge' && inspectedEdgeId}
-      <!-- Edge inspector inline -->
-      <div class="h-full flex flex-col border-l" style="background: var(--bg); border-color: var(--card-border); width: 360px;">
-        <div class="px-4 py-3 border-b flex items-center justify-between" style="border-color: var(--card-border);">
-          <h3 class="text-sm font-medium" style="color: var(--text-primary);">Edge Data</h3>
-          <button onclick={() => { rightPanel = 'chat'; inspectedEdgeId = null; }} class="text-sm px-2 py-1 rounded hover:bg-black/5" style="color: var(--text-ghost);">Back</button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-3">
-          <p class="text-xs" style="color: var(--text-ghost);">Run the workflow then click an edge to see data flow.</p>
-        </div>
-      </div>
-    {:else if rightPanel === 'runs' && RunHistoryPanel}
+    {#if rightPanel === 'runs' && RunHistoryPanel}
       <RunHistoryPanel
         workflowId={data.workflow.id}
         onSelectRun={(runId) => { currentRunId = runId; }}
@@ -450,6 +494,52 @@
         {:else}
           <p class="text-xs" style="color: var(--text-ghost);">Run the workflow to see data flow.</p>
         {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showEdgeModal && inspectedEdgeObj}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    role="presentation"
+    onclick={() => { showEdgeModal = false; }}
+  >
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div
+      class="relative rounded-xl border w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl"
+      style="background: var(--bg, #ede4d4); border-color: var(--card-border);"
+      onclick={(e) => e.stopPropagation()}
+      role="dialog"
+    >
+      <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color: var(--card-border);">
+        <div>
+          <h2 class="text-base font-medium" style="color: var(--text-primary);">Edge Data Flow</h2>
+          <p class="text-[10px] uppercase tracking-wider mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">{edgeSourceLabel} → {edgeTargetLabel}</p>
+        </div>
+        <button onclick={() => { showEdgeModal = false; }} class="text-lg px-2 py-1 rounded hover:bg-black/10" style="color: var(--text-ghost);">&times;</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full" style="background: #2d7d46;"></span>
+            <h3 class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Source Output — {edgeSourceLabel}</h3>
+          </div>
+          <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{edgeModalData.source?.outputData ? JSON.stringify(edgeModalData.source.outputData, null, 2) : 'No data — run the workflow first'}</pre>
+        </div>
+
+        <div class="flex justify-center" style="color: var(--text-ghost);">
+          <span class="text-lg">↓</span>
+        </div>
+
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full" style="background: #569cd6;"></span>
+            <h3 class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Target Input — {edgeTargetLabel}</h3>
+          </div>
+          <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{edgeModalData.target?.inputData ? JSON.stringify(edgeModalData.target.inputData, null, 2) : 'No data — run the workflow first'}</pre>
+        </div>
       </div>
     </div>
   </div>
