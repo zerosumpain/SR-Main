@@ -20,8 +20,13 @@ export interface EngineResult {
 
 export class WorkflowEngine {
   private breakpointResolvers = new Map<string, (modifiedInput?: Record<string, unknown>) => void>();
+  private activeBreakpoints = new Map<string, Set<string>>();
 
   constructor(private registry: NodeRegistry) {}
+
+  setBreakpoints(runId: string, nodes: Set<string>): void {
+    this.activeBreakpoints.set(runId, nodes);
+  }
 
   resumeBreakpoint(runId: string, nodeId: string, modifiedInput?: Record<string, unknown>): void {
     const key = `${runId}:${nodeId}`;
@@ -45,11 +50,19 @@ export class WorkflowEngine {
     runId: string,
     initialInput: Record<string, unknown>,
     breakpoints?: Set<string>,
+    workflowId?: string,
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
     const abortController = new AbortController();
+
+    // Merge breakpoints from setBreakpoints() with those passed directly
+    const storedBreakpoints = this.activeBreakpoints.get(runId);
+    const effectiveBreakpoints: Set<string> | undefined =
+      storedBreakpoints && breakpoints
+        ? new Set([...storedBreakpoints, ...breakpoints])
+        : storedBreakpoints ?? breakpoints;
 
     const emit = (type: WorkflowEventType, nodeId?: string, data?: Record<string, unknown>) => {
       emitWorkflowEvent({
@@ -93,7 +106,7 @@ export class WorkflowEngine {
           }
 
           // Check breakpoint
-          if (breakpoints?.has(nodeId)) {
+          if (effectiveBreakpoints?.has(nodeId)) {
             emit('breakpoint_hit', nodeId, mergedInput);
             emit('node_paused', nodeId);
             mergedInput = await new Promise<Record<string, unknown>>((resolve) => {
@@ -109,6 +122,7 @@ export class WorkflowEngine {
 
           const context: ExecutionContext = {
             runId,
+            workflowId: workflowId ?? workflow.id,
             workspaceDir: `/tmp/workflow-${runId}`,
             emit: (event) => emitWorkflowEvent(event),
             getNodeOutput: (id) => nodeOutputs.get(id),
@@ -133,11 +147,13 @@ export class WorkflowEngine {
 
       emit('run_completed');
       cleanupRunEmitter(runId);
+      this.activeBreakpoints.delete(runId);
       return { status: 'completed', nodeOutputs, nodeInputs, nodeErrors };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
       cleanupRunEmitter(runId);
+      this.activeBreakpoints.delete(runId);
       return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message };
     }
   }

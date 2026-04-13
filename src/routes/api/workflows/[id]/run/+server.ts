@@ -17,6 +17,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const body = await request.json().catch(() => ({}));
   const initialInput = body.input || {};
+  const breakpointNodeIds: string[] = Array.isArray(body.breakpoints) ? body.breakpoints : [];
+  const breakpoints = breakpointNodeIds.length > 0 ? new Set<string>(breakpointNodeIds) : undefined;
 
   const [run] = await db.insert(workflowRuns).values({
     workflowId: params.id,
@@ -54,7 +56,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   };
 
   // Execute in background — don't await
-  engine.execute(definition, run.id, initialInput).then(async (result) => {
+  engine.execute(definition, run.id, initialInput, breakpoints, params.id).then(async (result) => {
     await db.update(workflowRuns).set({
       status: result.status,
       completedAt: new Date(),
