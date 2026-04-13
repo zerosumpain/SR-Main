@@ -1,4 +1,7 @@
 <script lang="ts">
+  import ThinkingTimeline from './ThinkingTimeline.svelte';
+  import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
+
   let {
     role,
     content,
@@ -9,13 +12,13 @@
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: { workflowGenerated?: boolean };
-    thinking?: { proposal?: string; critique?: string; revision?: string | null };
+    thinking?: OrchestratorThinking;
     showThinking?: boolean;
   } = $props();
 
   let isUser = $derived(role === 'user');
   let thinkingOpen = $state(false);
-  let hasThinking = $derived(showThinking && thinking && (thinking.proposal || thinking.critique));
+  let hasThinking = $derived(showThinking && thinking && thinking.steps && thinking.steps.length > 0);
 </script>
 
 <div class="flex {isUser ? 'justify-end' : 'justify-start'} mb-3">
@@ -35,31 +38,12 @@
         class="mt-2 text-[10px] uppercase tracking-wider flex items-center gap-1"
         style="color: var(--text-ghost);"
       >
-        <span>{thinkingOpen ? '▼' : '▶'}</span>
-        <span>Thinking steps</span>
+        <span>{thinkingOpen ? '\u25BC' : '\u25B6'}</span>
+        <span>Thinking ({thinking!.steps.length} steps)</span>
       </button>
 
       {#if thinkingOpen}
-        <div class="mt-2 space-y-2">
-          {#if thinking?.proposal}
-            <div class="rounded p-2 text-[11px]" style="background: rgba(0,0,0,0.05);">
-              <div class="font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">1. PROPOSAL</div>
-              <pre class="whitespace-pre-wrap break-words" style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px; line-height: 1.5;">{thinking.proposal}</pre>
-            </div>
-          {/if}
-          {#if thinking?.critique}
-            <div class="rounded p-2 text-[11px]" style="background: rgba(0,0,0,0.05);">
-              <div class="font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">2. CRITIQUE</div>
-              <pre class="whitespace-pre-wrap break-words" style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px; line-height: 1.5;">{thinking.critique}</pre>
-            </div>
-          {/if}
-          {#if thinking?.revision}
-            <div class="rounded p-2 text-[11px]" style="background: rgba(0,0,0,0.05);">
-              <div class="font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">3. REVISION</div>
-              <pre class="whitespace-pre-wrap break-words" style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px; line-height: 1.5;">{thinking.revision}</pre>
-            </div>
-          {/if}
-        </div>
+        <ThinkingTimeline thinking={thinking!} />
       {/if}
     {/if}
 

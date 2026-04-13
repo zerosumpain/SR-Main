@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChatMessage from './ChatMessage.svelte';
   import { goto } from '$app/navigation';
+  import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
 
   let {
     workflowId,
@@ -14,18 +15,12 @@
     currentEdges?: any[];
   } = $props();
 
-  interface Thinking {
-    proposal?: string;
-    critique?: string;
-    revision?: string | null;
-  }
-
   interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: { workflowGenerated?: boolean };
-    thinking?: Thinking;
+    thinking?: OrchestratorThinking;
   }
 
   let messages = $state<Message[]>([]);
