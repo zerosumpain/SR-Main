@@ -164,7 +164,14 @@ export class WorkflowEngine {
             getNodeOutput: (id) => nodeOutputs.get(id),
             checkBreakpoint: async () => {},
             abortSignal: abortController.signal,
-          };
+            getOutgoingEdges: (id) => graph.edgesBySource.get(id) || [],
+            getNodeConfig: (id) => {
+              const n = graph.nodeMap.get(id);
+              return n ? { type: n.type, config: n.config, label: n.label } : undefined;
+            },
+            _currentNodeId: nodeId,
+            _registry: this.registry,
+          } as ExecutionContext & { _currentNodeId: string; _registry: NodeRegistry };
 
           try {
             const result: NodeResult = await executor.execute(mergedInput, nodeDef.config, context);
