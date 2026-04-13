@@ -210,6 +210,10 @@
   }
 
   async function handleRun() {
+    // Reset all node statuses
+    nodes = nodes.map(n => ({ ...n, data: { ...n.data, status: 'pending' } }));
+    edges = edges.map(e => ({ ...e, animated: false }));
+
     const res = await fetch(`/api/workflows/${data.workflow.id}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -220,6 +224,31 @@
       runStatus = 'running';
       currentRunId = result.runId;
       connectSSE(result.runId);
+      // Also poll for completion in case SSE misses events (fast workflows)
+      pollRunStatus(result.runId);
+    }
+  }
+
+  async function pollRunStatus(runId: string) {
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      if (runStatus !== 'running') return; // SSE already handled it
+      try {
+        const res = await fetch(`/api/workflows/${data.workflow.id}/runs/${runId}`);
+        if (!res.ok) continue;
+        const run = await res.json();
+        if (run.status === 'completed' || run.status === 'failed') {
+          runStatus = run.status;
+          // Update node statuses from execution data
+          for (const exec of run.nodeExecutions || []) {
+            updateNodeStatus(exec.nodeId, exec.status);
+          }
+          // Stop edge animations
+          edges = edges.map(e => ({ ...e, animated: false }));
+          eventSource?.close();
+          return;
+        }
+      } catch { /* ignore */ }
     }
   }
 
@@ -323,6 +352,25 @@
     />
   {/if}
 
+  {#if runStatus}
+    <div
+      class="flex items-center gap-2 px-4 py-1.5 border-b"
+      style="border-color: var(--card-border); background: {runStatus === 'running' ? 'rgba(86,156,214,0.1)' : runStatus === 'completed' ? 'rgba(45,125,70,0.1)' : 'rgba(180,50,50,0.1)'};"
+    >
+      {#if runStatus === 'running'}
+        <span class="w-2 h-2 rounded-full animate-pulse" style="background: #569cd6;"></span>
+        <span class="text-xs" style="color: #569cd6;">Running...</span>
+      {:else if runStatus === 'completed'}
+        <span class="w-2 h-2 rounded-full" style="background: #2d7d46;"></span>
+        <span class="text-xs" style="color: #2d7d46;">Completed</span>
+      {:else if runStatus === 'failed'}
+        <span class="w-2 h-2 rounded-full" style="background: #b43232;"></span>
+        <span class="text-xs" style="color: #b43232;">Failed</span>
+      {/if}
+      <button onclick={() => { runStatus = null; nodes = nodes.map(n => ({ ...n, data: { ...n.data, status: undefined } })); }} class="ml-auto text-[10px] px-1.5 py-0.5 rounded" style="color: var(--text-ghost);">Clear</button>
+    </div>
+  {/if}
+
   {#if nodes.length > 0}
     <div class="flex items-center gap-2 px-4 py-2 border-b overflow-x-auto" style="border-color: var(--card-border); background: var(--card-bg);">
       <span class="text-[10px] uppercase tracking-wider shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">Nodes:</span>
@@ -330,7 +378,7 @@
         <button
           onclick={() => openNodeInspect(node.id)}
           class="shrink-0 px-2 py-1 rounded text-[11px] border transition-colors hover:border-[var(--accent)]"
-          style="border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+          style="border-color: {node.data.status === 'completed' ? '#2d7d46' : node.data.status === 'failed' ? '#b43232' : node.data.status === 'running' ? '#569cd6' : 'var(--card-border)'}; color: var(--text-primary); font-family: var(--font-mono);"
         >
           {node.data.label}
         </button>
