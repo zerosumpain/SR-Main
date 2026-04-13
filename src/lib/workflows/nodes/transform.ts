@@ -64,4 +64,8 @@ export const transformDef: NodeDefinition = {
   defaultConfig: { expression: 'return { ...input }' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  basicConfig: [
+    { key: 'expression', label: 'Transform Expression', type: 'code', placeholder: 'return { ...input, newField: input.value * 2 }' },
+    { key: 'outputSchema', label: 'Output Schema (optional)', type: 'textarea', advancedOnly: true },
+  ],
 };

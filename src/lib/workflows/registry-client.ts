@@ -37,6 +37,13 @@ const codeExecuteDef: NodeDefinition = {
   defaultConfig: { language: 'javascript', code: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  basicConfig: [
+    { key: 'language', label: 'Language', type: 'dropdown', options: [
+      { value: 'javascript', label: 'JavaScript' }, { value: 'python', label: 'Python' }, { value: 'bash', label: 'Bash' },
+    ]},
+    { key: 'code', label: 'Code', type: 'code', placeholder: '// input object is available\nconsole.log(JSON.stringify({ result: input.value * 2 }))' },
+    { key: 'outputSchema', label: 'Output Schema (optional)', type: 'textarea', advancedOnly: true, description: 'Declare output shape as JSON Schema for downstream autocomplete' },
+  ],
 };
 
 // LLM Call definition without importing the executor (which pulls in Node.js-only modules via $lib/deepdive/keys)
@@ -59,6 +66,20 @@ const llmCallDef: NodeDefinition = {
   defaultConfig: { model: 'openai/gpt-4o-mini', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
+  basicConfig: [
+    { key: 'model', label: 'Model', type: 'dropdown', options: [
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o' },
+      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
+      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku' },
+      { value: 'google/gemini-2.5-flash-preview', label: 'Gemini Flash' },
+      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+    ]},
+    { key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea', placeholder: 'You are a helpful assistant...' },
+    { key: 'userPrompt', label: 'User Prompt', type: 'template-textarea', placeholder: 'Use {{input.field}} for variables' },
+    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 2, step: 0.1 },
+    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+  ],
 };
 
 // Data Store definition without importing the executor (which pulls in $lib/db — server-only)
@@ -82,6 +103,13 @@ const dataStoreDef: NodeDefinition = {
   defaultConfig: { operation: 'get', key: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
+      { value: 'get', label: 'Get Value' }, { value: 'set', label: 'Set Value' },
+    ]},
+    { key: 'key', label: 'Key', type: 'template-textarea', placeholder: 'my-key' },
+    { key: 'valuePath', label: 'Value Path (set only)', type: 'template-textarea', placeholder: 'input.value' },
+  ],
 };
 
 // Email definition without importing the executor (which pulls in nodemailer + $env/dynamic/private)
@@ -103,6 +131,12 @@ const emailDef: NodeDefinition = {
   defaultConfig: { to: '', subject: '', body: '', from: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'to', label: 'To', type: 'template-textarea', placeholder: '{{input.email}}' },
+    { key: 'subject', label: 'Subject', type: 'template-textarea' },
+    { key: 'body', label: 'Body', type: 'template-textarea' },
+    { key: 'from', label: 'From (override)', type: 'text', advancedOnly: true },
+  ],
 };
 
 const loopDef: NodeDefinition = {
@@ -133,6 +167,11 @@ const loopDef: NodeDefinition = {
   defaultConfig: { arrayPath: 'items', expression: 'return item', concurrency: 1 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'array', label: 'Results' }],
+  basicConfig: [
+    { key: 'arrayPath', label: 'Array Field', type: 'template-textarea', placeholder: 'items', description: 'Dot-path to the array in input data' },
+    { key: 'expression', label: 'Item Transform', type: 'code', placeholder: 'return item' },
+    { key: 'concurrency', label: 'Concurrency', type: 'number', advancedOnly: true },
+  ],
 };
 
 // Strava definition without importing the executor (which pulls in $lib/health/* — server-only)
@@ -157,6 +196,16 @@ const stravaDef: NodeDefinition = {
   defaultConfig: { operation: 'list_activities', page: 1, perPage: 30 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
+      { value: 'list_activities', label: 'List Activities' },
+      { value: 'get_activity', label: 'Get Activity' },
+      { value: 'get_athlete_stats', label: 'Get Athlete Stats' },
+    ]},
+    { key: 'perPage', label: 'Results per Page', type: 'number' },
+    { key: 'activityId', label: 'Activity ID', type: 'template-textarea', advancedOnly: true },
+    { key: 'page', label: 'Page Number', type: 'number', advancedOnly: true },
+  ],
 };
 
 // Whoop definition without importing the executor (which pulls in $lib/health/* — server-only)
@@ -178,6 +227,15 @@ const whoopDef: NodeDefinition = {
   defaultConfig: { operation: 'get_cycles', limit: 10 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
+      { value: 'get_cycles', label: 'Get Cycles' }, { value: 'get_recovery', label: 'Get Recovery' },
+      { value: 'get_sleep', label: 'Get Sleep' }, { value: 'get_workouts', label: 'Get Workouts' },
+    ]},
+    { key: 'limit', label: 'Max Records', type: 'number' },
+    { key: 'start', label: 'Start Date', type: 'text', advancedOnly: true, placeholder: '2025-01-01T00:00:00Z' },
+    { key: 'end', label: 'End Date', type: 'text', advancedOnly: true, placeholder: '2025-12-31T23:59:59Z' },
+  ],
 };
 
 const errorHandlerDef: NodeDefinition = {
@@ -227,6 +285,23 @@ const openrouterDef: NodeDefinition = {
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
+      { value: 'chat_completion', label: 'Chat Completion' },
+      { value: 'list_models', label: 'List Models' },
+      { value: 'get_usage', label: 'Get Usage' },
+    ]},
+    { key: 'model', label: 'Model', type: 'dropdown', options: [
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o' },
+      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
+      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku' },
+    ]},
+    { key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea' },
+    { key: 'userPrompt', label: 'User Prompt', type: 'template-textarea' },
+    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 2, step: 0.1, advancedOnly: true },
+    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+  ],
 };
 
 export const nodeDefinitions: NodeDefinition[] = [

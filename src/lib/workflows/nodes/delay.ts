@@ -37,4 +37,7 @@ export const delayDef: NodeDefinition = {
   defaultConfig: { milliseconds: 1000 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  basicConfig: [
+    { key: 'milliseconds', label: 'Delay (ms)', type: 'number', placeholder: '1000' },
+  ],
 };

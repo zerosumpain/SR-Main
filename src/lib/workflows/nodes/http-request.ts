@@ -110,4 +110,18 @@ export const httpRequestDef: NodeDefinition = {
   defaultConfig: { method: 'GET', url: '', headers: '{}', body: '', auth: 'none', authToken: '', authHeader: 'X-API-Key' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
+  basicConfig: [
+    { key: 'method', label: 'Method', type: 'dropdown', options: [
+      { value: 'GET', label: 'GET' }, { value: 'POST', label: 'POST' },
+      { value: 'PUT', label: 'PUT' }, { value: 'PATCH', label: 'PATCH' }, { value: 'DELETE', label: 'DELETE' },
+    ]},
+    { key: 'url', label: 'URL', type: 'template-textarea', placeholder: 'https://api.example.com/{{input.path}}' },
+    { key: 'auth', label: 'Authentication', type: 'dropdown', options: [
+      { value: 'none', label: 'None' }, { value: 'bearer', label: 'Bearer Token' }, { value: 'apiKey', label: 'API Key' },
+    ]},
+    { key: 'authToken', label: 'Token', type: 'template-textarea' },
+    { key: 'headers', label: 'Headers (JSON)', type: 'textarea', advancedOnly: true },
+    { key: 'body', label: 'Body', type: 'template-textarea', advancedOnly: true },
+    { key: 'authHeader', label: 'API Key Header Name', type: 'text', advancedOnly: true },
+  ],
 };

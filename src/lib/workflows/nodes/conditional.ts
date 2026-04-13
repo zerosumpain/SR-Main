@@ -59,4 +59,7 @@ export const conditionalDef: NodeDefinition = {
     { name: 'true', type: 'any', label: 'True' },
     { name: 'false', type: 'any', label: 'False' },
   ],
+  basicConfig: [
+    { key: 'expression', label: 'Condition', type: 'template-textarea', placeholder: 'input.value > 10', description: 'JavaScript boolean expression. Use input.field to access data.' },
+  ],
 };
