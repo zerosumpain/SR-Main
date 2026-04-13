@@ -19,16 +19,29 @@ export async function generateWorkflow(
   const model = getModel();
   const messages: ChatMessage[] = [];
 
-  // Round 1 — Planner
+  // Load prior conversation as context
+  let conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+  if (workflowId) {
+    const history = await getChatHistory(workflowId);
+    conversationHistory = history.map(h => ({
+      role: h.role as 'user' | 'assistant',
+      content: h.content,
+    }));
+  }
+
+  // Round 1 — Planner (with conversation history as context)
   onChunk?.('Planning workflow...\n');
 
   const plannerSystem = buildPlannerPrompt(availableNodeTypes);
+  const plannerMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+    { role: 'system', content: plannerSystem },
+    ...conversationHistory,
+    { role: 'user', content: userMessage },
+  ];
+
   const r1 = await client.chat.completions.create({
     model,
-    messages: [
-      { role: 'system', content: plannerSystem },
-      { role: 'user', content: userMessage },
-    ],
+    messages: plannerMessages,
     temperature: 0.7,
     max_tokens: 4096,
   });

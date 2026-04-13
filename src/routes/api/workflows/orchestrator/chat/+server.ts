@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
+import { workflows, workflowNodes, workflowEdges, orchestratorChats } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -37,9 +37,33 @@ export const POST: RequestHandler = async ({ request }) => {
     const { workflow, followUp } = await generateWorkflow(message, workflowId);
 
     if (followUp) {
+      // If this is a new workflow, create a placeholder so follow-up chat has a home
+      let resolvedWorkflowId = workflowId;
+      if (!resolvedWorkflowId) {
+        const [created] = await db.insert(workflows).values({
+          name: 'New Workflow (in progress)',
+          description: null,
+        }).returning();
+        resolvedWorkflowId = created.id;
+      }
+
+      // Save conversation
+      await db.insert(orchestratorChats).values({
+        workflowId: resolvedWorkflowId,
+        role: 'user',
+        content: message,
+      });
+      await db.insert(orchestratorChats).values({
+        workflowId: resolvedWorkflowId,
+        role: 'assistant',
+        content: followUp,
+      });
+
       return json({
         success: true,
         workflow: null,
+        workflowId: resolvedWorkflowId,
+        redirectTo: !workflowId ? `/workflows/${resolvedWorkflowId}` : undefined,
         message: followUp,
       });
     }
@@ -95,6 +119,19 @@ export const POST: RequestHandler = async ({ request }) => {
             message: `Failed to save workflow nodes: ${dbMsg}. Please try again.`,
           });
         }
+
+        // Save the conversation against the new workflow so it persists
+        await db.insert(orchestratorChats).values({
+          workflowId: created.id,
+          role: 'user',
+          content: message,
+        });
+        await db.insert(orchestratorChats).values({
+          workflowId: created.id,
+          role: 'assistant',
+          content: workflow.explanation || 'Workflow created.',
+          metadata: { workflowGenerated: true },
+        });
 
         return json({
           success: true,
