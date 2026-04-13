@@ -18,6 +18,30 @@
   let currentRunId = $state<string | null>(null);
 
   // Modal state for node inspection
+  let lastClickedNodeId = $state<string | null>(null);
+  let lastClickTime = $state(0);
+
+  function openNodeInspect(nodeId: string) {
+    const now = Date.now();
+    if (lastClickedNodeId === nodeId && now - lastClickTime < 400) {
+      // Double click detected
+      modalNodeId = nodeId;
+      showNodeModal = true;
+      modalNodeData = null;
+      if (currentRunId) {
+        fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { modalNodeData = d; })
+          .catch(() => {});
+      }
+      lastClickedNodeId = null;
+      lastClickTime = 0;
+    } else {
+      lastClickedNodeId = nodeId;
+      lastClickTime = now;
+    }
+  }
+
   let showNodeModal = $state(false);
   let modalNodeId = $state<string | null>(null);
   let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
@@ -246,7 +270,7 @@
       <span class="text-[10px] uppercase tracking-wider shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">Nodes:</span>
       {#each nodes as node (node.id)}
         <button
-          ondblclick={() => { modalNodeId = node.id; showNodeModal = true; modalNodeData = null; if (currentRunId) { fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${node.id}`).then(r => r.ok ? r.json() : null).then(d => { modalNodeData = d; }).catch(() => {}); } }}
+          onclick={() => openNodeInspect(node.id)}
           class="shrink-0 px-2 py-1 rounded text-[11px] border transition-colors hover:border-[var(--accent)]"
           style="border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
         >
