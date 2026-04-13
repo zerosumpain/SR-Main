@@ -8,6 +8,7 @@ import { httpRequestDef, httpRequestExecutor } from './nodes/http-request';
 import { llmCallDef, llmCallExecutor } from './nodes/llm-call';
 import { emailDef, emailExecutor } from './nodes/email';
 import { dataStoreDef, dataStoreExecutor } from './nodes/data-store';
+import { loopDef, loopExecutor } from './nodes/loop';
 
 export const registry = new NodeRegistry();
 
@@ -19,6 +20,7 @@ registry.register(httpRequestDef, httpRequestExecutor);
 registry.register(llmCallDef, llmCallExecutor);
 registry.register(emailDef, emailExecutor);
 registry.register(dataStoreDef, dataStoreExecutor);
+registry.register(loopDef, loopExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

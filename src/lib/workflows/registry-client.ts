@@ -100,6 +100,36 @@ const emailDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
 };
 
+const loopDef: NodeDefinition = {
+  type: 'loop',
+  label: 'Loop',
+  category: 'control',
+  description:
+    'Iterate over an array in the input and apply an expression to each item. Returns results array.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      arrayPath: {
+        type: 'string',
+        description: "Dot-path into input to find the array (e.g. 'items' or 'data.values')",
+      },
+      expression: {
+        type: 'string',
+        description:
+          'JS function body applied to each item. Variables: `item`, `index`, `input`. Must return a value.',
+      },
+      concurrency: {
+        type: 'number',
+        description: 'Concurrency limit (default 1; reserved for future use)',
+      },
+    },
+    required: ['arrayPath'],
+  },
+  defaultConfig: { arrayPath: 'items', expression: 'return item', concurrency: 1 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'array', label: 'Results' }],
+};
+
 export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -109,6 +139,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   llmCallDef,
   emailDef,
   dataStoreDef,
+  loopDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
