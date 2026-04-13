@@ -38,6 +38,13 @@
   class="flex items-center gap-3 px-4 py-2 border-b"
   style="background: var(--bg); border-color: var(--card-border);"
 >
+  <a
+    href="/workflows"
+    class="text-sm px-2 py-1 rounded transition-colors hover:bg-black/5"
+    style="color: var(--text-ghost);"
+    title="Back to workflows"
+  >&larr;</a>
+
   {#if editing}
     <input
       type="text"
