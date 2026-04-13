@@ -4,6 +4,8 @@
   import { workflowNodesToCanvas, workflowEdgesToCanvas, canvasNodesToWorkflow, canvasEdgesToWorkflow } from '$lib/components/workflows/adapter';
   import type { CanvasNode, CanvasEdge } from '$lib/components/workflows/adapter';
 
+  import '@xyflow/svelte/dist/style.css';
+
   let { data } = $props();
 
   let nodes = $state<CanvasNode[]>(workflowNodesToCanvas(data.nodes as any));
@@ -246,10 +248,6 @@
 <svelte:head>
   <title>{workflowName} — Workflows</title>
 </svelte:head>
-
-{#if browser}
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/svelte@latest/dist/style.css" />
-{/if}
 
 <div class="flex flex-col h-screen">
   {#if WorkflowToolbar}
