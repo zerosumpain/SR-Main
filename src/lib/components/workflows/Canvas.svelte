@@ -16,6 +16,7 @@
   import StravaNode from './nodes/StravaNode.svelte';
   import WhoopNode from './nodes/WhoopNode.svelte';
   import OpenRouterNode from './nodes/OpenRouterNode.svelte';
+  import FitViewHelper from './FitViewHelper.svelte';
 
   let {
     nodes = $bindable([]),
@@ -48,7 +49,10 @@
     'openrouter': OpenRouterNode,
   };
 
-  // Single click opens inspector (works on both desktop and mobile)
+  // Max zoom cap — prevents nodes from being too large
+  const MAX_ZOOM = 1.5;
+  const MIN_ZOOM = 0.1;
+  const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1.2, duration: 300 };
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -90,10 +94,14 @@
     {edges}
     {nodeTypes}
     fitView
+    fitViewOptions={FIT_VIEW_OPTIONS}
+    minZoom={MIN_ZOOM}
+    maxZoom={MAX_ZOOM}
     onnodeclick={handleNodeClick}
     onedgeclick={handleEdgeClick}
     defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
   >
+    <FitViewHelper nodeCount={nodes.length} options={FIT_VIEW_OPTIONS} />
     <Controls />
     <MiniMap />
     <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
