@@ -153,11 +153,18 @@ export async function modifyWorkflow(
   currentNodes: WorkflowNodeDef[],
   currentEdges: WorkflowEdgeDef[],
   onChunk?: (text: string) => void,
-): Promise<GeneratedWorkflow | null> {
+): Promise<{ workflow: GeneratedWorkflow | null; followUp?: string; thinking?: any }> {
   const client = getOpenAIClient();
   const model = getModel();
 
   onChunk?.('Modifying workflow...\n');
+
+  // Load conversation history for context
+  const history = await getChatHistory(workflowId);
+  const conversationHistory = history.map(h => ({
+    role: h.role as 'user' | 'assistant',
+    content: h.content,
+  }));
 
   const modifySystem = buildModifyPrompt(
     { nodes: currentNodes, edges: currentEdges },
@@ -168,6 +175,7 @@ export async function modifyWorkflow(
     model,
     messages: [
       { role: 'system', content: modifySystem },
+      ...conversationHistory,
       { role: 'user', content: userMessage },
     ],
     temperature: 0.7,
@@ -175,7 +183,25 @@ export async function modifyWorkflow(
   });
 
   const text = response.choices[0]?.message?.content ?? '';
+
+  // Check for follow-up question
+  const rawJson = extractJsonFromResponse(text);
+  if (rawJson && isFollowUpQuestion(rawJson)) {
+    const question = rawJson.question + (rawJson.context ? `\n\n${rawJson.context}` : '');
+    await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: userMessage });
+    await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: question });
+    return { workflow: null, followUp: question };
+  }
+
   const workflow = parseWorkflowResponse(text);
+
+  if (!workflow) {
+    console.error('[orchestrator] modify: Failed to parse LLM response:', text.slice(0, 1000));
+    // The LLM might have responded with plain text (not JSON) — treat it as a conversational reply
+    await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: userMessage });
+    await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: text.slice(0, 1000) });
+    return { workflow: null, followUp: text.slice(0, 1000) };
+  }
 
   // Store chat messages
   await db.insert(orchestratorChats).values({
@@ -187,11 +213,11 @@ export async function modifyWorkflow(
   await db.insert(orchestratorChats).values({
     workflowId,
     role: 'assistant',
-    content: workflow?.explanation || text.slice(0, 500),
-    metadata: { workflowGenerated: !!workflow },
+    content: workflow.explanation || 'Workflow modified.',
+    metadata: { workflowGenerated: true },
   });
 
-  return workflow;
+  return { workflow };
 }
 
 export async function getChatHistory(workflowId: string): Promise<ChatMessage[]> {

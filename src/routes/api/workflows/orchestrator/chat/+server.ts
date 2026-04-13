@@ -15,22 +15,31 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   try {
-    if (mode === 'modify' && currentNodes && currentEdges) {
-      const workflow = await modifyWorkflow(
+    if (mode === 'modify' && currentNodes && currentEdges && workflowId) {
+      const result = await modifyWorkflow(
         message,
         workflowId,
         currentNodes as WorkflowNodeDef[],
         currentEdges as WorkflowEdgeDef[],
       );
 
-      if (workflow && workflowId) {
-        await saveWorkflowFromGenerated(workflowId, workflow);
+      if (result.followUp) {
+        return json({
+          success: true,
+          workflow: null,
+          message: result.followUp,
+        });
+      }
+
+      if (result.workflow && result.workflow.nodes.length > 0) {
+        await saveWorkflowFromGenerated(workflowId, result.workflow);
       }
 
       return json({
         success: true,
-        workflow,
-        message: workflow?.explanation || 'Could not parse the modification.',
+        workflow: result.workflow,
+        message: result.workflow?.explanation || 'Workflow updated.',
+        thinking: result.thinking,
       });
     }
 
