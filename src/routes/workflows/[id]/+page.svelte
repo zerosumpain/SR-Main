@@ -12,8 +12,9 @@
   let runStatus = $state<string | null>(null);
   let eventSource: EventSource | null = null;
 
-  let rightPanel = $state<'chat' | 'inspector' | 'runs'>('chat');
+  let rightPanel = $state<'chat' | 'inspector' | 'runs' | 'edge'>('chat');
   let inspectedNodeId = $state<string | null>(null);
+  let inspectedEdgeId = $state<string | null>(null);
   let currentRunId = $state<string | null>(null);
 
   // Dynamic imports for browser-only components
@@ -22,6 +23,7 @@
   let WorkflowToolbar: any = $state(null);
   let ChatPanel: any = $state(null);
   let NodeInspector: any = $state(null);
+  let EdgeInspector: any = $state(null);
   let RunHistoryPanel: any = $state(null);
   let registryModule: any = $state(null);
 
@@ -31,12 +33,17 @@
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
     import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
     import('$lib/components/workflows/NodeInspector.svelte').then(m => NodeInspector = m.default);
+    import('$lib/components/workflows/EdgeInspector.svelte').then(m => EdgeInspector = m.default);
     import('$lib/components/workflows/RunHistoryPanel.svelte').then(m => RunHistoryPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
   }
 
   let definitions = $derived(registryModule?.nodeDefinitions ?? []);
   let inspectedNode = $derived(nodes.find(n => n.id === inspectedNodeId));
+  let inspectedNodeDef = $derived(inspectedNode ? registryModule?.getDefinition(inspectedNode.data.nodeType) : null);
+  let inspectedEdge = $derived(edges.find(e => e.id === inspectedEdgeId));
+  let edgeSourceNode = $derived(inspectedEdge ? nodes.find(n => n.id === inspectedEdge.source) : null);
+  let edgeTargetNode = $derived(inspectedEdge ? nodes.find(n => n.id === inspectedEdge.target) : null);
 
   function handleDragStart(_type: string, _event: DragEvent) {}
 
@@ -63,7 +70,8 @@
   }
 
   function handleEdgeClick(edgeId: string) {
-    console.log('Click edge:', edgeId);
+    inspectedEdgeId = edgeId;
+    rightPanel = 'edge';
   }
 
   async function handleSave() {
@@ -221,12 +229,22 @@
         nodeLabel={inspectedNode.data.label}
         nodeType={inspectedNode.data.nodeType}
         config={inspectedNode.data.config}
+        nodeDef={inspectedNodeDef}
         workflowId={data.workflow.id}
         runId={currentRunId}
         isPaused={inspectedNode.data.status === 'paused_breakpoint'}
         onClose={() => { rightPanel = 'chat'; inspectedNodeId = null; }}
         onContinue={handleContinue}
         onConfigChange={handleConfigChange}
+      />
+    {:else if rightPanel === 'edge' && EdgeInspector && inspectedEdge}
+      <EdgeInspector
+        edgeId={inspectedEdgeId}
+        sourceNode={edgeSourceNode ? { id: edgeSourceNode.id, label: edgeSourceNode.data.label, nodeType: edgeSourceNode.data.nodeType } : null}
+        targetNode={edgeTargetNode ? { id: edgeTargetNode.id, label: edgeTargetNode.data.label, nodeType: edgeTargetNode.data.nodeType } : null}
+        workflowId={data.workflow.id}
+        runId={currentRunId}
+        onClose={() => { rightPanel = 'chat'; inspectedEdgeId = null; }}
       />
     {:else if rightPanel === 'runs' && RunHistoryPanel}
       <RunHistoryPanel

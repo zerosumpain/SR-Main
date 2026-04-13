@@ -6,6 +6,7 @@
     nodeLabel,
     nodeType,
     config,
+    nodeDef,
     workflowId,
     runId,
     isPaused,
@@ -17,6 +18,7 @@
     nodeLabel: string;
     nodeType: string;
     config: Record<string, unknown>;
+    nodeDef?: { inputs?: { name: string; type: string; label?: string }[]; outputs?: { name: string; type: string; label?: string }[]; configSchema?: Record<string, unknown>; description?: string } | null;
     workflowId: string;
     runId?: string | null;
     isPaused?: boolean;
@@ -123,18 +125,51 @@
 
     {:else if activeTab === 'schema'}
       <div class="space-y-4">
+        {#if nodeDef?.description}
+          <p class="text-xs" style="color: var(--text-secondary);">{nodeDef.description}</p>
+        {/if}
         <div>
-          <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Input Schema</h4>
+          <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Inputs</h4>
           <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
-            <p class="text-xs" style="color: var(--text-secondary);">Any data from upstream nodes</p>
+            {#if nodeDef?.inputs && nodeDef.inputs.length > 0}
+              {#each nodeDef.inputs as port}
+                <div class="flex items-center gap-2 py-1">
+                  <span class="w-2 h-2 rounded-full" style="background: #569cd6;"></span>
+                  <span class="text-xs font-medium" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name}</span>
+                  <span class="text-[10px]" style="color: var(--text-ghost);">({port.type})</span>
+                  {#if port.label}<span class="text-[10px]" style="color: var(--text-ghost);">— {port.label}</span>{/if}
+                </div>
+              {/each}
+            {:else}
+              <p class="text-xs" style="color: var(--text-ghost);">No inputs (trigger node)</p>
+            {/if}
           </div>
         </div>
         <div>
-          <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Output Schema</h4>
+          <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Outputs</h4>
           <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
-            <p class="text-xs" style="color: var(--text-secondary);">Result of node execution</p>
+            {#if nodeDef?.outputs && nodeDef.outputs.length > 0}
+              {#each nodeDef.outputs as port}
+                <div class="flex items-center gap-2 py-1">
+                  <span class="w-2 h-2 rounded-full" style="background: #2d7d46;"></span>
+                  <span class="text-xs font-medium" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name}</span>
+                  <span class="text-[10px]" style="color: var(--text-ghost);">({port.type})</span>
+                  {#if port.label}<span class="text-[10px]" style="color: var(--text-ghost);">— {port.label}</span>{/if}
+                </div>
+              {/each}
+            {:else}
+              <p class="text-xs" style="color: var(--text-ghost);">No outputs</p>
+            {/if}
           </div>
         </div>
+        {#if nodeDef?.configSchema?.properties}
+          <div>
+            <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Config Schema</h4>
+            <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+              <JsonTree data={nodeDef.configSchema.properties} />
+            </div>
+          </div>
+        {/if}
       </div>
 
     {:else if activeTab === 'data'}
