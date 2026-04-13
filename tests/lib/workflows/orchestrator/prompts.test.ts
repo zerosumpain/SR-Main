@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlannerPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifyPrompt } from '$lib/workflows/orchestrator/prompts';
+import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from '$lib/workflows/orchestrator/prompts';
+import { buildNodeGrounding } from '$lib/workflows/orchestrator/grounding';
 import type { NodeDefinition } from '$lib/workflows/types';
 
 function makeNodeDef(overrides: Partial<NodeDefinition> & { type: string }): NodeDefinition {
@@ -52,57 +53,33 @@ const sampleDefs: NodeDefinition[] = [
   }),
 ];
 
-describe('buildPlannerPrompt', () => {
-  it('includes available node types', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
+// Build grounding from sample defs for use in prompt tests
+const sampleGrounding = buildNodeGrounding(sampleDefs, []);
+
+describe('buildToolUseSystemPrompt', () => {
+  it('includes node grounding content', () => {
+    const prompt = buildToolUseSystemPrompt(sampleGrounding);
     expect(prompt).toContain('manual-trigger');
     expect(prompt).toContain('transform');
     expect(prompt).toContain('http-request');
   });
 
-  it('includes JSON output instruction', () => {
-    const prompt = buildPlannerPrompt([sampleDefs[0]]);
-    expect(prompt).toContain('JSON');
-    expect(prompt).toContain('nodes');
-    expect(prompt).toContain('edges');
+  it('includes tool-use instructions', () => {
+    const prompt = buildToolUseSystemPrompt(sampleGrounding);
+    expect(prompt).toContain('search_nodes');
+    expect(prompt).toContain('use_node');
+    expect(prompt).toContain('Finalize');
   });
 
-  it('includes node labels and descriptions', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
+  it('includes node labels and descriptions via grounding', () => {
+    const prompt = buildToolUseSystemPrompt(sampleGrounding);
     expect(prompt).toContain('Manual Trigger');
     expect(prompt).toContain('Transforms input data');
   });
 
-  it('includes llmDescription as Guidance when present', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
-    expect(prompt).toContain('Guidance:');
-    expect(prompt).toContain('Use this to reshape data between nodes.');
-  });
-
-  it('includes first llmExample when present', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
-    expect(prompt).toContain('Example config:');
-    expect(prompt).toContain('expression');
-  });
-
-  it('includes config field details from configSchema', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
-    expect(prompt).toContain('Config fields:');
-    expect(prompt).toContain('expression');
-    expect(prompt).toContain('JS function body returning transformed output');
-  });
-
   it('includes composable patterns section', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
+    const prompt = buildToolUseSystemPrompt(sampleGrounding);
     expect(prompt).toContain('Composable Patterns');
-  });
-
-  it('includes agentic workflow design tips', () => {
-    const prompt = buildPlannerPrompt(sampleDefs);
-    expect(prompt).toContain('Agentic Workflow Design Tips');
-    expect(prompt).toContain('Iterative refinement');
-    expect(prompt).toContain('Text Parser');
-    expect(prompt).toContain('Validator');
   });
 });
 
@@ -122,14 +99,14 @@ describe('buildRevisionPrompt', () => {
   });
 });
 
-describe('buildModifyPrompt', () => {
+describe('buildModifySystemPrompt', () => {
   it('includes current workflow context', () => {
     const currentWorkflow = {
       nodes: [{ id: 'n1', type: 'manual-trigger', position: { x: 0, y: 0 }, config: {}, label: 'Start' }],
       edges: [],
     };
-    const prompt = buildModifyPrompt(currentWorkflow, sampleDefs);
+    const prompt = buildModifySystemPrompt(currentWorkflow, sampleGrounding);
     expect(prompt).toContain('manual-trigger');
-    expect(prompt).toContain('current workflow');
+    expect(prompt).toContain('Current Workflow');
   });
 });
