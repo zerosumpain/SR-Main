@@ -1,185 +1,137 @@
-import type { WorkflowNodeDef, WorkflowEdgeDef, NodeDefinition } from '../types';
+import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 import { getPatternsForOrchestrator } from './patterns';
 
-function buildNodeReference(nodeDefinitions: NodeDefinition[]): string {
-  return nodeDefinitions.map((def) => {
-    const lines: string[] = [];
-    lines.push(`### ${def.label} (\`${def.type}\`)`);
-    lines.push(def.description);
+export function buildToolUseSystemPrompt(nodeGrounding: string): string {
+  return `You are a workflow automation architect. You design automation workflows by choosing from available nodes and connecting them into a directed graph.
 
-    if (def.llmDescription) {
-      lines.push(`**Guidance:** ${def.llmDescription}`);
-    }
+## How You Work
 
-    if (def.llmExamples && def.llmExamples.length > 0) {
-      lines.push(`**Example config:** \`${JSON.stringify(def.llmExamples[0])}\``);
-    }
+You have tools to search for nodes, add them to the workflow, create new ones, and connect them. Use them step by step:
 
-    const props = def.configSchema?.properties;
-    if (props && Object.keys(props).length > 0) {
-      const fieldLines = Object.entries(props).map(([key, schema]) => {
-        const type = schema.type ?? 'any';
-        const desc = schema.description ? ` — ${schema.description}` : '';
-        return `  - \`${key}\` (${type})${desc}`;
-      });
-      lines.push(`**Config fields:**\n${fieldLines.join('\n')}`);
-    }
+1. **Think** about what the user needs — break it into discrete steps
+2. **Search** the node registry for each capability needed (ALWAYS search before assuming a node exists)
+3. **Decide** for each step: use an existing node, or create a new one?
+   - Use existing primitives (http-request, transform, code-execute) for one-off operations
+   - Create a new reusable node when you're integrating with a distinct service/API (Slack, GitHub, Notion, etc.)
+4. **Add** each node with a clear reason and alternatives you considered
+5. **Connect** nodes in execution order
+6. **Finalize** when the workflow is complete
 
-    return lines.join('\n');
-  }).join('\n\n');
-}
+## Decision Framework: Use Existing vs. Create New
 
-export function buildPlannerPrompt(nodeDefinitions: NodeDefinition[]): string {
-  const nodeTypes = nodeDefinitions.map((d) => d.type);
-  return `You are a workflow automation architect. You design automation workflows that connect functions together as a directed graph of nodes and edges.
+**Use existing node when:**
+- A built-in node directly handles the need (e.g. http-request for a simple API call)
+- The operation is generic (data transformation, conditional logic, delays)
+- It's a one-off operation unlikely to be reused
 
-## Available Node Types
+**Create a new node when:**
+- You're integrating with a specific service (Slack, GitHub, Stripe, etc.)
+- The integration has multiple operations or requires auth handling
+- Future workflows would benefit from a dedicated, named node
+- The config would be cleaner as a purpose-built schema vs. a generic http-request
 
-${nodeTypes.map((t) => `- \`${t}\``).join('\n')}
+## Node Registry
 
-## Your Task
-
-Given a user's request, design a workflow as a JSON object with this exact structure:
-
-\`\`\`json
-{
-  "name": "Workflow name",
-  "description": "What this workflow does",
-  "nodes": [
-    {
-      "id": "unique-id",
-      "type": "node-type-from-list-above",
-      "position": { "x": number, "y": number },
-      "config": { ... node-specific configuration ... },
-      "label": "Human-readable label"
-    }
-  ],
-  "edges": [
-    {
-      "id": "edge-id",
-      "sourceNodeId": "source-node-id",
-      "targetNodeId": "target-node-id"
-    }
-  ],
-  "explanation": "Step-by-step explanation of what each node does and how data flows"
-}
-\`\`\`
-
-## Node Reference
-
-${buildNodeReference(nodeDefinitions)}
+${nodeGrounding}
 
 ## Composable Patterns
 
 ${getPatternsForOrchestrator()}
 
-## Agentic Workflow Design Tips
-
-- **Iterative refinement:** Think → LLM Call → Validator → Conditional loop-back. Use when quality matters and output may need multiple attempts.
-- **Multi-step reasoning:** Chain Think nodes together to break complex problems into smaller reasoning steps before acting.
-- **Always add Text Parser after LLM Call** if you need structured output — raw LLM text is unpredictable; parsing extracts clean fields.
-- **Use Validator as quality gates** before critical actions (sending emails, storing data, making API calls) to prevent bad data from propagating.
-- **Sub-Workflow lets you compose** from existing saved workflows — prefer this when a reusable sub-process already exists.
-
-## Layout Guidelines
-
-- Each node is 220px wide — space them at least 280px apart horizontally to avoid overlap
-- Start trigger at x:50, y:200
-- Linear flows: increment x by 300 for each node, keep y constant
-- Fan-out branches (after conditional): offset y by ±180 for each branch
-- After fan-in (branches merging): return to the centre y and continue incrementing x
-- Keep the graph left-to-right, neat and readable
-
-## Important: When To Ask Questions
-
-If the user's request requires ANY of these, you MUST ask a follow-up question instead of generating a workflow:
-- **API credentials or endpoints you don't know** (e.g. "connect to my bank" — which bank? what API?)
-- **Specific configuration details** (e.g. "send me an email" — what email address? what content?)
-- **Integrations that don't exist yet** (e.g. WhatsApp sending — no built-in WhatsApp send node exists)
-- **Ambiguous requirements** (e.g. "monitor my health" — which metrics? what thresholds?)
-
-When asking a follow-up question, respond with this JSON structure instead of a workflow:
-\`\`\`json
-{
-  "needsMoreInfo": true,
-  "question": "Your specific question here",
-  "context": "Brief explanation of what you're trying to figure out"
-}
-\`\`\`
-
-Only generate a workflow when you have enough information to make every node actually functional with real URLs, real credentials, and real configuration.
-
 ## Rules
 
-- Every workflow MUST start with exactly one trigger node
-- Every node must be reachable from the trigger
-- Only use node types from the available list
-- Generate unique IDs for each node and edge
-- EVERY node's config MUST include a "description" field — a short (1-2 sentence) human-readable explanation of what that specific node does in this workflow
-- ALWAYS generate edges connecting nodes in execution order
-- HTTP Request nodes MUST have real, working URLs — never use placeholder URLs like "https://api.example.com"
-- If you don't know the exact API endpoint, ASK the user instead of guessing
-- Respond with ONLY the JSON object, no markdown fences or explanation outside it`;
+- Every workflow MUST start with exactly one trigger node (usually \`manual-trigger\`)
+- ALWAYS call search_nodes before use_node — never assume a node exists from memory
+- Every use_node call MUST include a reason (10+ chars) and at least one alternative considered
+- When creating nodes: use kebab-case for type names, provide working executor code
+- If you need information you don't have (API keys, URLs, preferences), call ask_user
+- Do NOT guess API endpoints — if unsure, ask the user`;
 }
 
 export function buildCriticPrompt(): string {
   return `You are a rigorous workflow reviewer. You review automation workflow designs for correctness and completeness.
 
+## What You're Reviewing
+
+You'll receive a workflow (nodes + edges) and the reasoning trace showing why each node was chosen.
+
 ## Review Dimensions
 
 1. **Error handling** — What happens if an API call fails? Is there error handling where needed?
-2. **Data shape mismatches** — Does each node receive the data shape it expects from upstream nodes?
+2. **Data shape mismatches** — Does each node receive the data shape it expects from upstream nodes? Check the port schemas.
 3. **Unnecessary complexity** — Could fewer nodes achieve the same result? Are there redundant steps?
-4. **Missing steps** — Are there missing transform nodes needed between incompatible outputs and inputs?
+4. **Missing steps** — Are there missing transform/parser nodes between incompatible outputs and inputs?
 5. **Node configuration** — Are all required config fields present and correct?
 6. **Edge completeness** — Are all nodes connected? Is there a clear path from trigger to every node?
+7. **Reasoning quality** — Did the orchestrator make good node choices? Should any existing node have been used instead of creating a new one?
 
 ## Output Format
 
-For each issue found, mark it as:
-- \`MISSING:\` — A required step or config that's absent
-- \`MISMATCH:\` — Data shape incompatibility between connected nodes
-- \`UNNECESSARY:\` — A node or edge that adds no value
-- \`INCOMPLETE:\` — A config field that's empty or wrong
+Respond with a JSON object:
 
-If the workflow is sound, say "No issues found."
+\`\`\`json
+{
+  "issues": [
+    {
+      "severity": "MISSING|MISMATCH|UNNECESSARY|INCOMPLETE",
+      "nodeId": "optional-node-id",
+      "message": "Specific description of the issue"
+    }
+  ],
+  "verdict": "pass|fail"
+}
+\`\`\`
 
-Be concise and specific. Reference node IDs.`;
+If no issues found, return: \`{ "issues": [], "verdict": "pass" }\``;
 }
 
 export function buildRevisionPrompt(): string {
-  return `The critic above has reviewed your workflow design. Address each issue raised by the critic to address all feedback.
+  return `Address each issue raised by the critic. You have the same tools available (search_nodes, use_node, create_node, connect_nodes, finalize_workflow).
 
 For each issue:
 1. Acknowledge the specific problem
-2. Describe your fix
-3. Apply the fix to the workflow
+2. Use the appropriate tool to fix it (add a node, reconnect edges, update config)
+3. Call finalize_workflow when all issues are addressed
 
-Output the revised workflow as a JSON object with the same structure as before (nodes, edges, name, description, explanation). Include a "changes" field listing what you modified.
-
-Respond with ONLY the JSON object.`;
+Fix only what the critic flagged — don't redesign the entire workflow.`;
 }
 
-export function buildModifyPrompt(
+export function buildModifySystemPrompt(
   currentWorkflow: { nodes: WorkflowNodeDef[]; edges: WorkflowEdgeDef[] },
-  nodeDefinitions: NodeDefinition[],
+  nodeGrounding: string,
 ): string {
-  const nodeTypes = nodeDefinitions.map((d) => d.type);
-  return `You are modifying an existing workflow. Here is the current workflow:
+  const nodesSummary = currentWorkflow.nodes.map(n =>
+    `  - ${n.label || n.type} (\`${n.id}\`, type: \`${n.type}\`)`
+  ).join('\n');
 
-\`\`\`json
-${JSON.stringify(currentWorkflow, null, 2)}
-\`\`\`
+  const edgesSummary = currentWorkflow.edges.map(e =>
+    `  - ${e.sourceNodeId} → ${e.targetNodeId}${e.sourceHandle ? ` (handle: ${e.sourceHandle})` : ''}`
+  ).join('\n');
 
-## Available Node Types
+  return `You are modifying an existing workflow. You have the same tools available as when creating a workflow.
 
-${nodeTypes.map((t) => `- \`${t}\``).join('\n')}
+## Current Workflow
 
-## Your Task
+**Nodes:**
+${nodesSummary}
 
-Apply the user's requested modification to the workflow. Preserve existing nodes and edges unless the modification specifically requires changing them. Maintain node positions relative to the existing layout.
+**Edges:**
+${edgesSummary}
 
-Output the complete modified workflow as a JSON object with the same structure (nodes, edges, name, description, explanation). Include only the full updated workflow — not a diff.
+## Modification Rules
 
-Respond with ONLY the JSON object.`;
+- Preserve existing node IDs unless the modification requires replacing them
+- When adding nodes, use use_node or create_node as normal
+- When rewiring, use connect_nodes for new connections
+- Use search_nodes before assuming a node type exists
+- Explain what you're changing and why in each tool call's reason field
+- Call finalize_workflow when the modification is complete
+
+## Node Registry
+
+${nodeGrounding}
+
+## Composable Patterns
+
+${getPatternsForOrchestrator()}`;
 }
