@@ -6,18 +6,20 @@ export interface VariablePath {
   description: string | undefined;
 }
 
+type OutputSchemaGetter = (type: string, config: Record<string, unknown>) => JsonSchema;
+
 /**
- * Walks the graph backwards from a target node, finds all immediate upstream
- * nodes, gets their output schemas via the callback, and merges them into a
- * single schema keyed by upstream node id.
+ * Walk the graph backwards from targetNodeId and compute the merged
+ * output schema of all immediate upstream nodes. This gives the
+ * "available variables" for the target node's config.
  *
- * Returns `{ type: 'object', properties: { [upstreamNodeId]: outputSchema } }`.
+ * Properties are merged flat (matching runtime Object.assign behavior).
  */
 export function resolveUpstreamSchema(
   targetNodeId: string,
   nodes: WorkflowNodeDef[],
   edges: WorkflowEdgeDef[],
-  getOutputSchema: (node: WorkflowNodeDef) => JsonSchema,
+  getOutputSchema: OutputSchemaGetter,
 ): JsonSchema {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
@@ -29,18 +31,19 @@ export function resolveUpstreamSchema(
     return { type: 'object', properties: {} };
   }
 
-  const properties: Record<string, JsonSchema> = {};
+  const mergedProperties: Record<string, JsonSchema> = {};
 
   for (const edge of incomingEdges) {
     const sourceNode = nodeMap.get(edge.sourceNodeId);
     if (!sourceNode) continue;
 
-    const outputSchema = getOutputSchema(sourceNode);
-    // Key by source node id — later edges overwrite earlier (Object.assign semantics)
-    properties[sourceNode.id] = outputSchema;
+    const outputSchema = getOutputSchema(sourceNode.type, sourceNode.config);
+    if (outputSchema.properties) {
+      Object.assign(mergedProperties, outputSchema.properties);
+    }
   }
 
-  return { type: 'object', properties };
+  return { type: 'object', properties: mergedProperties };
 }
 
 /**
