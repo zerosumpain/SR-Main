@@ -4,6 +4,7 @@ import type { ExecutionContext } from '$lib/workflows/types';
 
 const mockContext: ExecutionContext = {
   runId: 'test-run',
+  workflowId: '',
   workspaceDir: '/tmp/test',
   emit: () => {},
   getNodeOutput: () => undefined,

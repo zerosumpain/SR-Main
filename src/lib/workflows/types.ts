@@ -37,6 +37,7 @@ export interface NodeResult {
 
 export interface ExecutionContext {
   runId: string;
+  workflowId: string;
   workspaceDir: string;
   emit: (event: WorkflowEvent) => void;
   getNodeOutput: (nodeId: string) => Record<string, unknown> | undefined;

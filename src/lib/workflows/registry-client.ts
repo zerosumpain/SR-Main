@@ -56,6 +56,29 @@ const llmCallDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
 };
 
+// Data Store definition without importing the executor (which pulls in $lib/db — server-only)
+const dataStoreDef: NodeDefinition = {
+  type: 'data-store',
+  label: 'Data Store',
+  category: 'core',
+  description: 'Read or write a value in the workflow-scoped key-value store. Persists across runs.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: "'get' or 'set'" },
+      key: { type: 'string', description: 'Key name. Supports {{input.field}} templates.' },
+      valuePath: {
+        type: 'string',
+        description: 'Dot-path into input to extract the value to store (set only). Defaults to input.value or whole input.',
+      },
+    },
+    required: ['operation', 'key'],
+  },
+  defaultConfig: { operation: 'get', key: '' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
 // Email definition without importing the executor (which pulls in nodemailer + $env/dynamic/private)
 const emailDef: NodeDefinition = {
   type: 'email',
@@ -85,6 +108,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   httpRequestDef,
   llmCallDef,
   emailDef,
+  dataStoreDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

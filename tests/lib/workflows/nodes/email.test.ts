@@ -12,6 +12,7 @@ vi.mock('nodemailer', () => ({
 
 const mockContext: ExecutionContext = {
   runId: 'test-run',
+  workflowId: '',
   workspaceDir: '/tmp/test',
   emit: () => {},
   getNodeOutput: () => undefined,
