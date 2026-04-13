@@ -63,6 +63,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
       error: result.error || null,
     }).where(eq(workflowRuns.id, run.id));
 
+    // Emit workflow_completed event so event-triggered workflows can chain
+    if (result.status === 'completed') {
+      try {
+        const { emit } = await import('$lib/workflows/event-bus');
+        emit('workflow_completed', { workflowId: params.id, runId: run.id, status: result.status });
+      } catch {
+        // event-bus not critical path
+      }
+    }
+
     // Update node execution records
     for (const [nodeId, output] of result.nodeOutputs) {
       const inputData = result.nodeInputs.get(nodeId);

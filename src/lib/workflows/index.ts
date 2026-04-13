@@ -13,6 +13,7 @@ import { conditionalDef, conditionalExecutor } from './nodes/conditional';
 import { whoopDef, whoopExecutor } from './nodes/whoop';
 import { stravaDef, stravaExecutor } from './nodes/strava';
 import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
+import { errorHandlerDef, errorHandlerExecutor } from './nodes/error-handler';
 
 export const registry = new NodeRegistry();
 
@@ -29,6 +30,7 @@ registry.register(conditionalDef, conditionalExecutor);
 registry.register(whoopDef, whoopExecutor);
 registry.register(stravaDef, stravaExecutor);
 registry.register(openrouterDef, openrouterExecutor);
+registry.register(errorHandlerDef, errorHandlerExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

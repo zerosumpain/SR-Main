@@ -190,6 +190,15 @@ export async function syncStravaActivities(options: SyncOptions = {}): Promise<S
     const success = errors.length === 0;
     await updateSyncState('strava', success ? 'success' : 'error', recordsSynced, errors.join('; '));
 
+    if (success) {
+      try {
+        const { emit } = await import('$lib/workflows/event-bus');
+        emit('strava_activity_synced', { recordsSynced, syncedAt: new Date().toISOString() });
+      } catch {
+        // event-bus not critical path
+      }
+    }
+
     return {
       success,
       recordsSynced,
@@ -600,6 +609,15 @@ export async function syncWhoopAll(options: SyncOptions = {}): Promise<SyncResul
     combined.recordsSynced,
     combined.errors.join('; ') || undefined
   );
+
+  if (combined.success) {
+    try {
+      const { emit } = await import('$lib/workflows/event-bus');
+      emit('whoop_recovery_updated', { recordsSynced: combined.recordsSynced, syncedAt: new Date().toISOString() });
+    } catch {
+      // event-bus not critical path
+    }
+  }
 
   return combined;
 }
