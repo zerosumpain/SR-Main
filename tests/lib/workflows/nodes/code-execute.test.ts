@@ -13,6 +13,7 @@ import { execInSandbox, ensureSandboxRunning, writeFileInSandbox } from '$lib/jk
 
 const mockContext: ExecutionContext = {
   runId: 'test-run',
+  workflowId: '',
   workspaceDir: '/tmp/test',
   emit: () => {},
   getNodeOutput: () => undefined,

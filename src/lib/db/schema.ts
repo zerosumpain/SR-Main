@@ -657,7 +657,7 @@ export type NewIntegration = typeof integrations.$inferInsert;
 export const orchestratorChats = pgTable('orchestrator_chats', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(),
+  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
   content: text('content').notNull(),
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -665,3 +665,24 @@ export const orchestratorChats = pgTable('orchestrator_chats', {
 
 export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
 export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
+
+// ==========================================
+// Workflow Data Store (KV per workflow)
+// ==========================================
+
+export const workflowDataStore = pgTable(
+  'workflow_data_store',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    value: jsonb('value'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueWorkflowKey: uniqueIndex('workflow_data_store_workflow_key_idx').on(table.workflowId, table.key),
+  }),
+);
+
+export type WorkflowDataStore = typeof workflowDataStore.$inferSelect;
+export type NewWorkflowDataStore = typeof workflowDataStore.$inferInsert;

@@ -3,12 +3,26 @@ import { WorkflowEngine } from './engine';
 import { manualTriggerDef, manualTriggerExecutor } from './nodes/manual-trigger';
 import { transformDef, transformExecutor } from './nodes/transform';
 import { codeExecuteDef, codeExecuteExecutor } from './nodes/code-execute';
+import { delayDef, delayExecutor } from './nodes/delay';
+import { httpRequestDef, httpRequestExecutor } from './nodes/http-request';
+import { llmCallDef, llmCallExecutor } from './nodes/llm-call';
+import { emailDef, emailExecutor } from './nodes/email';
+import { dataStoreDef, dataStoreExecutor } from './nodes/data-store';
+import { loopDef, loopExecutor } from './nodes/loop';
+import { conditionalDef, conditionalExecutor } from './nodes/conditional';
 
 export const registry = new NodeRegistry();
 
 registry.register(manualTriggerDef, manualTriggerExecutor);
 registry.register(transformDef, transformExecutor);
 registry.register(codeExecuteDef, codeExecuteExecutor);
+registry.register(delayDef, delayExecutor);
+registry.register(httpRequestDef, httpRequestExecutor);
+registry.register(llmCallDef, llmCallExecutor);
+registry.register(emailDef, emailExecutor);
+registry.register(dataStoreDef, dataStoreExecutor);
+registry.register(loopDef, loopExecutor);
+registry.register(conditionalDef, conditionalExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

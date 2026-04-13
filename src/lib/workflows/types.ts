@@ -37,6 +37,7 @@ export interface NodeResult {
 
 export interface ExecutionContext {
   runId: string;
+  workflowId: string;
   workspaceDir: string;
   emit: (event: WorkflowEvent) => void;
   getNodeOutput: (nodeId: string) => Record<string, unknown> | undefined;
@@ -63,6 +64,7 @@ export type WorkflowEventType =
   | 'node_completed'
   | 'node_failed'
   | 'node_paused'
+  | 'node_skipped'
   | 'breakpoint_hit'
   | 'log';
 
