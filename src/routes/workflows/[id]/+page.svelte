@@ -12,7 +12,7 @@
   let runStatus = $state<string | null>(null);
   let eventSource: EventSource | null = null;
 
-  let rightPanel = $state<'chat' | 'inspector'>('chat');
+  let rightPanel = $state<'chat' | 'inspector' | 'runs'>('chat');
   let inspectedNodeId = $state<string | null>(null);
   let currentRunId = $state<string | null>(null);
 
@@ -22,6 +22,7 @@
   let WorkflowToolbar: any = $state(null);
   let ChatPanel: any = $state(null);
   let NodeInspector: any = $state(null);
+  let RunHistoryPanel: any = $state(null);
   let registryModule: any = $state(null);
 
   if (browser) {
@@ -30,6 +31,7 @@
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
     import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
     import('$lib/components/workflows/NodeInspector.svelte').then(m => NodeInspector = m.default);
+    import('$lib/components/workflows/RunHistoryPanel.svelte').then(m => RunHistoryPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
   }
 
@@ -188,11 +190,13 @@
   {#if WorkflowToolbar}
     <WorkflowToolbar
       {workflowName}
+      workflowId={data.workflow.id}
       {runStatus}
       onSave={handleSave}
       onRun={handleRun}
       onStop={handleStop}
       onNameChange={handleNameChange}
+      onShowRuns={() => { rightPanel = 'runs'; }}
     />
   {/if}
 
@@ -223,6 +227,12 @@
         onClose={() => { rightPanel = 'chat'; inspectedNodeId = null; }}
         onContinue={handleContinue}
         onConfigChange={handleConfigChange}
+      />
+    {:else if rightPanel === 'runs' && RunHistoryPanel}
+      <RunHistoryPanel
+        workflowId={data.workflow.id}
+        onSelectRun={(runId: string) => { currentRunId = runId; rightPanel = 'inspector'; }}
+        onClose={() => { rightPanel = 'chat'; }}
       />
     {:else if ChatPanel}
       <ChatPanel

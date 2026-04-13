@@ -131,6 +131,100 @@ const loopDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'array', label: 'Results' }],
 };
 
+// Strava definition without importing the executor (which pulls in $lib/health/* — server-only)
+const stravaDef: NodeDefinition = {
+  type: 'strava',
+  label: 'Strava',
+  category: 'integration',
+  description: 'Access Strava activity data. Requires Strava connected in Health settings.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: {
+        type: 'string',
+        description: 'list_activities | get_activity | get_athlete_stats',
+      },
+      page: { type: 'number', description: 'Page number for list_activities (default 1)' },
+      perPage: { type: 'number', description: 'Results per page for list_activities (default 30, max 200)' },
+      activityId: { type: 'string', description: 'Activity ID for get_activity' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'list_activities', page: 1, perPage: 30 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
+// Whoop definition without importing the executor (which pulls in $lib/health/* — server-only)
+const whoopDef: NodeDefinition = {
+  type: 'whoop',
+  label: 'Whoop',
+  category: 'integration',
+  description: 'Access Whoop health data. Requires Whoop connected in Health settings.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'get_cycles | get_recovery | get_sleep | get_workouts' },
+      limit: { type: 'number', description: 'Max records to return (default 10)' },
+      start: { type: 'string', description: 'ISO 8601 start date filter (optional)' },
+      end: { type: 'string', description: 'ISO 8601 end date filter (optional)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'get_cycles', limit: 10 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
+const errorHandlerDef: NodeDefinition = {
+  type: 'error-handler',
+  label: 'Error Handler',
+  category: 'control',
+  description:
+    'Routes to success or error output based on whether input contains an error field.',
+  configSchema: {
+    type: 'object',
+    properties: {},
+  },
+  defaultConfig: {},
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [
+    { name: 'success', type: 'any', label: 'Success' },
+    { name: 'error', type: 'any', label: 'Error' },
+  ],
+};
+
+// OpenRouter definition without importing the executor (which pulls in $lib/deepdive/keys — server-only)
+const openrouterDef: NodeDefinition = {
+  type: 'openrouter',
+  label: 'OpenRouter',
+  category: 'integration',
+  description:
+    'OpenRouter integration: chat completion with model picker, list available models, or get API usage stats.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'chat_completion | list_models | get_usage' },
+      model: { type: 'string', description: 'Model ID for chat_completion (e.g. openai/gpt-4o-mini)' },
+      systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
+      userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
+      temperature: { type: 'number', description: 'Temperature 0–2 (default 0.7)' },
+      maxTokens: { type: 'number', description: 'Max tokens to generate (default 1024)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: {
+    operation: 'chat_completion',
+    model: 'openai/gpt-4o-mini',
+    systemPrompt: '',
+    userPrompt: '',
+    temperature: 0.7,
+    maxTokens: 1024,
+  },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
 export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -142,6 +236,10 @@ export const nodeDefinitions: NodeDefinition[] = [
   dataStoreDef,
   loopDef,
   conditionalDef,
+  whoopDef,
+  stravaDef,
+  openrouterDef,
+  errorHandlerDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

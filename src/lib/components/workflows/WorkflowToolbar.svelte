@@ -1,23 +1,30 @@
 <script lang="ts">
+  import TriggerConfigModal from './TriggerConfigModal.svelte';
+
   let {
     workflowName = '',
+    workflowId = null,
     runStatus,
     onSave,
     onRun,
     onStop,
     onNameChange,
+    onShowRuns,
   }: {
     workflowName?: string;
+    workflowId?: string | null;
     runStatus?: string | null;
     onSave: () => void;
     onRun: () => void;
     onStop: () => void;
     onNameChange: (name: string) => void;
+    onShowRuns?: () => void;
   } = $props();
 
   let editing = $state(false);
   let nameInput = $state(workflowName);
   let isRunning = $derived(runStatus === 'running');
+  let showTriggerModal = $state(false);
 
   function commitName() {
     editing = false;
@@ -70,6 +77,26 @@
     Save
   </button>
 
+  {#if workflowId}
+    <button
+      onclick={() => showTriggerModal = true}
+      class="px-3 py-1 rounded text-sm border transition-colors hover:border-[var(--accent)]"
+      style="border-color: var(--card-border); color: var(--text-secondary);"
+    >
+      Trigger
+    </button>
+  {/if}
+
+  {#if onShowRuns}
+    <button
+      onclick={onShowRuns}
+      class="px-3 py-1 rounded text-sm border transition-colors hover:border-[var(--accent)]"
+      style="border-color: var(--card-border); color: var(--text-secondary);"
+    >
+      Runs
+    </button>
+  {/if}
+
   {#if isRunning}
     <button
       onclick={onStop}
@@ -88,3 +115,10 @@
     </button>
   {/if}
 </div>
+
+{#if showTriggerModal && workflowId}
+  <TriggerConfigModal
+    {workflowId}
+    onClose={() => showTriggerModal = false}
+  />
+{/if}

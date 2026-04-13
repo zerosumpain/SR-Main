@@ -1,4 +1,5 @@
 import { startScheduler } from '$lib/health/scheduler';
+import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
 import { orchestrator } from '$lib/jkai/orchestrator';
 import { isPublicPath } from '$lib/auth';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -9,6 +10,11 @@ import { env } from '$env/dynamic/private';
 
 // Start the health data sync scheduler
 startScheduler();
+
+// Start the workflow cron scheduler
+startWorkflowScheduler().catch((err) => {
+  console.error('[hooks.server] Workflow scheduler failed to start:', err);
+});
 
 // Recover any in-progress builds on server startup
 orchestrator.recoverOnStartup().catch((err) => {

@@ -9,6 +9,29 @@
       minute: '2-digit',
     });
   }
+
+  function relativeTime(iso: string | null): string {
+    if (!iso) return '';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 60000) return 'just now';
+    if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
+    if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
+    return `${Math.floor(ms / 86400000)}d ago`;
+  }
+
+  const TRIGGER_COLORS: Record<string, string> = {
+    manual: 'var(--text-ghost)',
+    cron: '#569cd6',
+    event: '#b8860b',
+    webhook: '#2d7d46',
+  };
+
+  const STATUS_COLORS: Record<string, string> = {
+    completed: '#2d7d46',
+    failed: '#b43232',
+    running: '#569cd6',
+    pending: 'var(--text-ghost)',
+  };
 </script>
 
 <svelte:head>
@@ -63,11 +86,40 @@
               {formatDate(workflow.createdAt)}
             </span>
           </div>
+
           {#if workflow.description}
-            <p class="text-sm line-clamp-2" style="color: var(--text-secondary);">
+            <p class="text-sm line-clamp-2 mb-3" style="color: var(--text-secondary);">
               {workflow.description}
             </p>
           {/if}
+
+          <div class="flex items-center gap-3 mt-2 flex-wrap">
+            <!-- Trigger badge -->
+            <span
+              class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
+              style="color: {TRIGGER_COLORS[workflow.triggerType] ?? 'var(--text-ghost)'}; border-color: {TRIGGER_COLORS[workflow.triggerType] ?? 'var(--card-border)'}; font-family: var(--font-mono);"
+            >
+              {workflow.triggerType}
+            </span>
+
+            <!-- Node count -->
+            <span class="text-[11px]" style="color: var(--text-ghost);">
+              {workflow.nodeCount} {workflow.nodeCount === 1 ? 'node' : 'nodes'}
+            </span>
+
+            <!-- Last run -->
+            {#if workflow.lastRun}
+              <span class="flex items-center gap-1.5 text-[11px]" style="color: var(--text-ghost);">
+                <span
+                  class="w-1.5 h-1.5 rounded-full"
+                  style="background: {STATUS_COLORS[workflow.lastRun.status] ?? 'var(--text-ghost)'};"
+                ></span>
+                {workflow.lastRun.status} · {relativeTime(workflow.lastRun.startedAt ? String(workflow.lastRun.startedAt) : null)}
+              </span>
+            {:else}
+              <span class="text-[11px]" style="color: var(--text-ghost);">never run</span>
+            {/if}
+          </div>
         </a>
       {/each}
     </div>

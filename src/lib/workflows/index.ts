@@ -10,6 +10,10 @@ import { emailDef, emailExecutor } from './nodes/email';
 import { dataStoreDef, dataStoreExecutor } from './nodes/data-store';
 import { loopDef, loopExecutor } from './nodes/loop';
 import { conditionalDef, conditionalExecutor } from './nodes/conditional';
+import { whoopDef, whoopExecutor } from './nodes/whoop';
+import { stravaDef, stravaExecutor } from './nodes/strava';
+import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
+import { errorHandlerDef, errorHandlerExecutor } from './nodes/error-handler';
 
 export const registry = new NodeRegistry();
 
@@ -23,6 +27,10 @@ registry.register(emailDef, emailExecutor);
 registry.register(dataStoreDef, dataStoreExecutor);
 registry.register(loopDef, loopExecutor);
 registry.register(conditionalDef, conditionalExecutor);
+registry.register(whoopDef, whoopExecutor);
+registry.register(stravaDef, stravaExecutor);
+registry.register(openrouterDef, openrouterExecutor);
+registry.register(errorHandlerDef, errorHandlerExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

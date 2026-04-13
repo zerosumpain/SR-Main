@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
 
+  import type { Snippet } from 'svelte';
+
   let {
     label,
     nodeType,
@@ -8,6 +10,7 @@
     inputs = [],
     outputs = [],
     icon = '',
+    extra,
   }: {
     label: string;
     nodeType: string;
@@ -15,6 +18,7 @@
     inputs?: { name: string }[];
     outputs?: { name: string }[];
     icon?: string;
+    extra?: Snippet;
   } = $props();
 
   const STATUS_COLORS: Record<string, string> = {
@@ -61,6 +65,10 @@
       {label}
     </div>
   </div>
+
+  {#if extra}
+    {@render extra()}
+  {/if}
 
   {#each outputs as output, i}
     <Handle type="source" position={Position.Right} id={output.name} style="top: {30 + i * 20}px;" />
