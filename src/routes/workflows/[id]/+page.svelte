@@ -133,22 +133,6 @@
     handleDrop(type, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
   }
 
-  // Node selection opens modal
-  function handleSelectionChange({ nodes: selectedNodes }: { nodes: any[]; edges: any[] }) {
-    if (selectedNodes.length === 1) {
-      const nodeId = selectedNodes[0].id;
-      modalNodeId = nodeId;
-      showNodeModal = true;
-      modalNodeData = null;
-      if (currentRunId) {
-        fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(d => { modalNodeData = d; })
-          .catch(() => {});
-      }
-    }
-  }
-
   function handleEdgeClick(payload: any) {
     const edgeId = payload?.edge?.id;
     if (edgeId) {
@@ -287,7 +271,6 @@
           fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }}
           minZoom={0.1}
           maxZoom={1.5}
-          onselectionchange={handleSelectionChange}
           onedgeclick={handleEdgeClick}
           defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
         >
