@@ -231,6 +231,44 @@
         type: 'object',
         properties: { response: { type: 'string' }, usage: { type: 'object' } },
       },
+      'llm-agent': {
+        type: 'object',
+        properties: {
+          response: { type: 'string', description: 'Final LLM response' },
+          toolCallHistory: { type: 'array', description: 'Tool call records' },
+          iterationCount: { type: 'number', description: 'Number of LLM rounds' },
+          stopReason: { type: 'string', description: 'Why the agent stopped' },
+          tokensUsed: {
+            type: 'object',
+            properties: {
+              prompt: { type: 'number' },
+              completion: { type: 'number' },
+              total: { type: 'number' },
+            },
+          },
+        },
+      },
+      'think': {
+        type: 'object',
+        properties: {
+          reasoning: { type: 'string' },
+          conclusion: { type: 'string' },
+          fullResponse: { type: 'string' },
+        },
+      },
+      'validator': {
+        type: 'object',
+        properties: { valid: { type: 'boolean' }, errors: { type: 'array' } },
+      },
+      'text-parser': {
+        type: 'object',
+        properties: { parsed: { type: 'any' }, items: { type: 'array' }, count: { type: 'number' } },
+      },
+      'merge': { type: 'object', description: 'Merged data' },
+      'accumulator': {
+        type: 'object',
+        properties: { items: { type: 'array' }, count: { type: 'number' } },
+      },
     };
     if (type === 'conditional' || type === 'error-handler' || type === 'delay') {
       return { type: 'object', description: 'Input passed through' };
