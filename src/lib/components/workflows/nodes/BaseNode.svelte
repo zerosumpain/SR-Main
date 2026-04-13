@@ -7,6 +7,7 @@
     id,
     label,
     nodeType,
+    description = '',
     status,
     inputs = [],
     outputs = [],
@@ -16,6 +17,7 @@
     id?: string;
     label: string;
     nodeType: string;
+    description?: string;
     status?: string;
     inputs?: { name: string }[];
     outputs?: { name: string }[];
@@ -37,12 +39,12 @@
 </script>
 
 <div
-  class="rounded-lg border-2 min-w-[160px] transition-colors"
-  style="background: var(--card-bg); border-color: {borderColor};"
+  class="rounded-lg border-2 transition-colors"
+  style="background: var(--card-bg); border-color: {borderColor}; width: 220px;"
   class:animate-pulse={isRunning}
 >
   {#each inputs as input, i}
-    <Handle type="target" position={Position.Left} id={input.name} style="top: {30 + i * 20}px;" />
+    <Handle type="target" position={Position.Left} id={input.name} style="top: {40 + i * 20}px;" />
   {/each}
 
   <div class="px-3 py-2">
@@ -74,6 +76,11 @@
     <div class="text-sm font-medium" style="color: var(--text-primary);">
       {label}
     </div>
+    {#if description}
+      <div class="text-[10px] mt-1 leading-tight line-clamp-3" style="color: var(--text-ghost);">
+        {description}
+      </div>
+    {/if}
   </div>
 
   {#if extra}
@@ -81,6 +88,6 @@
   {/if}
 
   {#each outputs as output, i}
-    <Handle type="source" position={Position.Right} id={output.name} style="top: {30 + i * 20}px;" />
+    <Handle type="source" position={Position.Right} id={output.name} style="top: {40 + i * 20}px;" />
   {/each}
 </div>

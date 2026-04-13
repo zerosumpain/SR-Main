@@ -15,6 +15,7 @@
 
 <BaseNode
   id={id}
+  description={data.config?.description || ""}
   label={displayLabel}
   nodeType="data-store"
   status={data.status}

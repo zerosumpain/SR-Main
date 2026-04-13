@@ -13,6 +13,7 @@
 
 <BaseNode
   id={id}
+  description={data.config?.description || ""}
   label={data.label}
   nodeType="strava"
   status={data.status}

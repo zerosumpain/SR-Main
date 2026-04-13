@@ -6,6 +6,7 @@
 
 <BaseNode
   id={id}
+  description={data.config?.description || ""}
   label={data.label}
   nodeType="transform"
   status={data.status}

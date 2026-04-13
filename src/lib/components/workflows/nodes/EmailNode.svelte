@@ -9,6 +9,7 @@
 
 <BaseNode
   id={id}
+  description={data.config?.description || ""}
   label={displayLabel}
   nodeType="email"
   status={data.status}

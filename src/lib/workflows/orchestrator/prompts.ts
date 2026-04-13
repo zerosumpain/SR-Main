@@ -65,6 +65,8 @@ Given a user's request, design a workflow as a JSON object with this exact struc
 - Every node must be reachable from the trigger
 - Only use node types from the available list
 - Generate unique IDs for each node and edge
+- EVERY node's config MUST include a "description" field — a short (1-2 sentence) human-readable explanation of what that specific node does in this workflow
+- ALWAYS generate edges connecting nodes in execution order
 - Respond with ONLY the JSON object, no markdown fences or explanation outside it`;
 }
 
