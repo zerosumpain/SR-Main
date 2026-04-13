@@ -16,6 +16,7 @@
   import StravaNode from './nodes/StravaNode.svelte';
   import WhoopNode from './nodes/WhoopNode.svelte';
   import OpenRouterNode from './nodes/OpenRouterNode.svelte';
+  import TextParserNode from './nodes/TextParserNode.svelte';
   import FitViewHelper from './FitViewHelper.svelte';
 
   let {
@@ -47,6 +48,7 @@
     'strava': StravaNode,
     'whoop': WhoopNode,
     'openrouter': OpenRouterNode,
+    'text-parser': TextParserNode,
   };
 
   const MAX_ZOOM = 1.5;

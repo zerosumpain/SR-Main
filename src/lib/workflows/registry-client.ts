@@ -8,6 +8,7 @@ import { transformDef } from './nodes/transform';
 import { delayDef } from './nodes/delay';
 import { httpRequestDef } from './nodes/http-request';
 import { conditionalDef } from './nodes/conditional';
+import { textParserDef } from './nodes/text-parser';
 import type { NodeDefinition } from './types';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
@@ -319,6 +320,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   stravaDef,
   openrouterDef,
   errorHandlerDef,
+  textParserDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

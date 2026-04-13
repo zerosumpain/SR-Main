@@ -14,6 +14,7 @@ import { whoopDef, whoopExecutor } from './nodes/whoop';
 import { stravaDef, stravaExecutor } from './nodes/strava';
 import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
 import { errorHandlerDef, errorHandlerExecutor } from './nodes/error-handler';
+import { textParserDef, textParserExecutor } from './nodes/text-parser';
 
 export const registry = new NodeRegistry();
 
@@ -31,6 +32,7 @@ registry.register(whoopDef, whoopExecutor);
 registry.register(stravaDef, stravaExecutor);
 registry.register(openrouterDef, openrouterExecutor);
 registry.register(errorHandlerDef, errorHandlerExecutor);
+registry.register(textParserDef, textParserExecutor);
 
 export const engine = new WorkflowEngine(registry);
 
