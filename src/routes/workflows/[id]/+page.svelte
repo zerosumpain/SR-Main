@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { workflowNodesToCanvas, workflowEdgesToCanvas, canvasNodesToWorkflow, canvasEdgesToWorkflow } from '$lib/components/workflows/adapter';
   import type { CanvasNode, CanvasEdge } from '$lib/components/workflows/adapter';
@@ -186,8 +186,24 @@
     workflowName = generated.name || workflowName;
   }
 
+  // Listen for node inspect events from BaseNode buttons (via window CustomEvent)
+  function handleInspectEvent(e: Event) {
+    const nodeId = (e as CustomEvent).detail?.nodeId;
+    if (nodeId) {
+      inspectedNodeId = nodeId;
+      rightPanel = 'inspector';
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('workflow-inspect-node', handleInspectEvent);
+  });
+
   onDestroy(() => {
     eventSource?.close();
+    if (browser) {
+      window.removeEventListener('workflow-inspect-node', handleInspectEvent);
+    }
   });
 </script>
 

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
-  import { inspectNode } from '../inspect-store';
 
   import type { Snippet } from 'svelte';
 
@@ -62,7 +61,7 @@
           class="ml-auto w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors nopan nodrag"
           style="color: var(--text-ghost); font-size: 10px; line-height: 1;"
           onpointerdown={(e) => { e.stopPropagation(); }}
-          onclick={(e) => { e.stopPropagation(); inspectNode(id!); }}
+          onclick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('workflow-inspect-node', { detail: { nodeId: id } })); }}
           title="Inspect node"
         >⚙</button>
       {:else if status}
