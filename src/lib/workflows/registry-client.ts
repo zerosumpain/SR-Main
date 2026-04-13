@@ -176,6 +176,24 @@ const whoopDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
 };
 
+const errorHandlerDef: NodeDefinition = {
+  type: 'error-handler',
+  label: 'Error Handler',
+  category: 'control',
+  description:
+    'Routes to success or error output based on whether input contains an error field.',
+  configSchema: {
+    type: 'object',
+    properties: {},
+  },
+  defaultConfig: {},
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [
+    { name: 'success', type: 'any', label: 'Success' },
+    { name: 'error', type: 'any', label: 'Error' },
+  ],
+};
+
 // OpenRouter definition without importing the executor (which pulls in $lib/deepdive/keys — server-only)
 const openrouterDef: NodeDefinition = {
   type: 'openrouter',
@@ -221,6 +239,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   whoopDef,
   stravaDef,
   openrouterDef,
+  errorHandlerDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

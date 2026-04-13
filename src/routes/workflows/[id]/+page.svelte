@@ -228,6 +228,12 @@
         onContinue={handleContinue}
         onConfigChange={handleConfigChange}
       />
+    {:else if rightPanel === 'runs' && RunHistoryPanel}
+      <RunHistoryPanel
+        workflowId={data.workflow.id}
+        onSelectRun={(runId: string) => { currentRunId = runId; rightPanel = 'inspector'; }}
+        onClose={() => { rightPanel = 'chat'; }}
+      />
     {:else if ChatPanel}
       <ChatPanel
         workflowId={data.workflow.id}
