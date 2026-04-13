@@ -231,6 +231,21 @@
     />
   {/if}
 
+  {#if nodes.length > 0}
+    <div class="flex items-center gap-2 px-4 py-2 border-b overflow-x-auto" style="border-color: var(--card-border); background: var(--card-bg);">
+      <span class="text-[10px] uppercase tracking-wider shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">Nodes:</span>
+      {#each nodes as node (node.id)}
+        <button
+          onclick={() => { modalNodeId = node.id; showNodeModal = true; modalNodeData = null; if (currentRunId) { fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${node.id}`).then(r => r.ok ? r.json() : null).then(d => { modalNodeData = d; }).catch(() => {}); } }}
+          class="shrink-0 px-2 py-1 rounded text-[11px] border transition-colors hover:border-[var(--accent)]"
+          style="border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+        >
+          {node.data.label}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   <div class="flex flex-1 overflow-hidden">
     {#if NodePalette}
       <NodePalette {definitions} onDragStart={handleDragStart} />
