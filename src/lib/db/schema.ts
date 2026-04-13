@@ -649,3 +649,19 @@ export const integrations = pgTable('integrations', {
 
 export type Integration = typeof integrations.$inferSelect;
 export type NewIntegration = typeof integrations.$inferInsert;
+
+// ==========================================
+// Orchestrator Chat Messages
+// ==========================================
+
+export const orchestratorChats = pgTable('orchestrator_chats', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
+export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
