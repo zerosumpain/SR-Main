@@ -7,6 +7,7 @@ import { manualTriggerDef } from './nodes/manual-trigger';
 import { transformDef } from './nodes/transform';
 import { delayDef } from './nodes/delay';
 import { httpRequestDef } from './nodes/http-request';
+import { conditionalDef } from './nodes/conditional';
 import type { NodeDefinition } from './types';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
@@ -140,6 +141,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   emailDef,
   dataStoreDef,
   loopDef,
+  conditionalDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {

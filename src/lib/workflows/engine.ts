@@ -8,6 +8,7 @@ import type {
 } from './types';
 import type { NodeRegistry } from './registry';
 import { buildGraph, topologicalSort } from './graph';
+import type { WorkflowGraph } from './graph';
 import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events';
 
 export interface EngineResult {
@@ -45,6 +46,32 @@ export class WorkflowEngine {
     return onWorkflowEvent(runId, handler);
   }
 
+  private markSkipped(
+    nodeId: string,
+    graph: WorkflowGraph,
+    skippedNodes: Set<string>,
+    blockedEdgeIds: Set<string>,
+  ): void {
+    if (skippedNodes.has(nodeId)) return;
+
+    // A node is skipped only if ALL its incoming edges are blocked or come from skipped nodes
+    const incomingEdges = graph.edgesByTarget.get(nodeId) || [];
+    const hasActiveIncoming = incomingEdges.some(
+      (e) => !blockedEdgeIds.has(e.id) && !skippedNodes.has(e.sourceNodeId),
+    );
+    if (hasActiveIncoming) return;
+
+    skippedNodes.add(nodeId);
+
+    // Recursively skip all downstream nodes (that also have no active incoming)
+    const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+    for (const edge of outgoingEdges) {
+      // All edges from a skipped node are implicitly blocked
+      blockedEdgeIds.add(edge.id);
+      this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+    }
+  }
+
   async execute(
     workflow: WorkflowDefinition,
     runId: string,
@@ -55,6 +82,8 @@ export class WorkflowEngine {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
+    const skippedNodes = new Set<string>();
+    const blockedEdgeIds = new Set<string>();
     const abortController = new AbortController();
 
     // Merge breakpoints from setBreakpoints() with those passed directly
@@ -82,6 +111,12 @@ export class WorkflowEngine {
 
       for (const level of levels) {
         const promises = level.map(async (nodeId) => {
+          // If this node is skipped, emit event and skip execution
+          if (skippedNodes.has(nodeId)) {
+            emit('node_skipped', nodeId);
+            return;
+          }
+
           const nodeDef = graph.nodeMap.get(nodeId)!;
           const executor = this.registry.getExecutor(nodeDef.type);
 
@@ -89,7 +124,7 @@ export class WorkflowEngine {
             throw new Error(`No executor found for node type: ${nodeDef.type}`);
           }
 
-          // Gather input from upstream nodes
+          // Gather input from upstream nodes (only non-skipped sources)
           const incomingEdges = graph.edgesByTarget.get(nodeId) || [];
           let mergedInput: Record<string, unknown>;
 
@@ -98,6 +133,7 @@ export class WorkflowEngine {
           } else {
             mergedInput = {};
             for (const edge of incomingEdges) {
+              if (skippedNodes.has(edge.sourceNodeId)) continue;
               const upstream = nodeOutputs.get(edge.sourceNodeId);
               if (upstream) {
                 Object.assign(mergedInput, upstream);
@@ -134,6 +170,18 @@ export class WorkflowEngine {
             const result: NodeResult = await executor.execute(mergedInput, nodeDef.config, context);
             nodeOutputs.set(nodeId, result.output);
             emit('node_completed', nodeId, result.output);
+
+            // Handle conditional routing: if _selectedHandle is set, skip non-matching branches
+            const selectedHandle = result.metadata?._selectedHandle as string | undefined;
+            if (selectedHandle !== undefined) {
+              const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+              for (const edge of outgoingEdges) {
+                if (edge.sourceHandle !== selectedHandle) {
+                  blockedEdgeIds.add(edge.id);
+                  this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+                }
+              }
+            }
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             nodeErrors.set(nodeId, message);
