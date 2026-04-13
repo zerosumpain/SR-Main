@@ -17,13 +17,25 @@ export interface ToolCallResult {
 }
 
 let nodeCounter = 0;
+let runPrefix = '';
+
+function randomHex(len: number): string {
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
 
 function nextNodeId(type: string): string {
-  return `${type}-${++nodeCounter}`;
+  return `${type}-${runPrefix}-${++nodeCounter}`;
+}
+
+function nextEdgeId(): string {
+  return `edge-${runPrefix}-${++nodeCounter}`;
 }
 
 export function resetNodeCounter(): void {
   nodeCounter = 0;
+  runPrefix = randomHex(4);
 }
 
 export function processToolCall(
@@ -147,7 +159,7 @@ export function processToolCall(
         return { success: false, error: `Target node "${targetId}" does not exist in the workflow. Available nodes: ${Array.from(draft.nodes.keys()).join(', ')}` };
       }
 
-      const edgeId = `edge-${draft.edges.length + 1}`;
+      const edgeId = nextEdgeId();
       draft.edges.push({
         id: edgeId,
         source: sourceId,
