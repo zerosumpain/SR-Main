@@ -6,6 +6,7 @@
 import { manualTriggerDef } from './nodes/manual-trigger';
 import { transformDef } from './nodes/transform';
 import { delayDef } from './nodes/delay';
+import { httpRequestDef } from './nodes/http-request';
 import type { NodeDefinition } from './types';
 
 // Code execute definition without importing the executor (which pulls in sandbox)
@@ -38,6 +39,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   transformDef,
   codeExecuteDef,
   delayDef,
+  httpRequestDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
