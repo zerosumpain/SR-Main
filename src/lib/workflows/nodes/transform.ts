@@ -68,4 +68,6 @@ export const transformDef: NodeDefinition = {
     { key: 'expression', label: 'Transform Expression', type: 'code', placeholder: 'return { ...input, newField: input.value * 2 }' },
     { key: 'outputSchema', label: 'Output Schema (optional)', type: 'textarea', advancedOnly: true },
   ],
+  llmDescription: 'Expression is a JS function body (can use const/let, multi-line, etc.) that MUST return an object. The upstream data is available as "input". When downstream of an http-request node, the API response is at input.body (e.g. "const data = input.body; return { temp: data.current_condition[0].temp_C }"). Always check the actual structure of upstream output.',
+  llmExamples: [{ expression: 'const data = input.body;\nreturn { value: data.results[0].value, timestamp: new Date().toISOString() }' }],
 };

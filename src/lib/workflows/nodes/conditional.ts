@@ -62,4 +62,6 @@ export const conditionalDef: NodeDefinition = {
   basicConfig: [
     { key: 'expression', label: 'Condition', type: 'template-textarea', placeholder: 'input.value > 10', description: 'JavaScript boolean expression. Use input.field to access data.' },
   ],
+  llmDescription: 'Expression must be a SINGLE boolean expression — NOT multi-line code. No const/let/var, no if/else, no blocks. Just one expression that evaluates to true or false. Examples: "input.score > 80", "input.status === 200", "Math.abs(input.current - input.previous) > 2". The expression is evaluated as: new Function("input", "return (" + expression + ")"). Connect the "true" output handle to the success path and "false" to the alternative path using sourceHandle in connect_nodes.',
+  llmExamples: [{ expression: 'input.value > 10' }],
 };

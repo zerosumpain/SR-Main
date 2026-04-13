@@ -124,4 +124,6 @@ export const httpRequestDef: NodeDefinition = {
     { key: 'body', label: 'Body', type: 'template-textarea', advancedOnly: true },
     { key: 'authHeader', label: 'API Key Header Name', type: 'text', advancedOnly: true },
   ],
+  llmDescription: 'IMPORTANT: This node outputs { status: number, headers: object, body: any }. The API response is wrapped in the "body" field. Downstream nodes must access API data via input.body (e.g. input.body.results, input.body.data). Do NOT access API fields directly on input — always go through input.body.',
+  llmExamples: [{ method: 'GET', url: 'https://wttr.in/London?format=j1', headers: '{}', auth: 'none' }],
 };
