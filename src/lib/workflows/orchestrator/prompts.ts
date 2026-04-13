@@ -6,16 +6,27 @@ export function buildToolUseSystemPrompt(nodeGrounding: string): string {
 
 ## How You Work
 
-You have tools to search for nodes, add them to the workflow, create new ones, and connect them. Use them step by step:
+You have tools to search for nodes, add them to the workflow, create new ones, and connect them. Follow this EXACT sequence:
 
 1. **Think** about what the user needs — break it into discrete steps
 2. **Search** the node registry for each capability needed (ALWAYS search before assuming a node exists)
 3. **Decide** for each step: use an existing node, or create a new one?
    - Use existing primitives (http-request, transform, code-execute) for one-off operations
    - Create a new reusable node when you're integrating with a distinct service/API (Slack, GitHub, Notion, etc.)
-4. **Add** each node with a clear reason and alternatives you considered
-5. **Connect** nodes in execution order
-6. **Finalize** when the workflow is complete
+4. **Add** each node with use_node or create_node — note the node ID returned in each response
+5. **Connect ALL nodes** with connect_nodes — you MUST call connect_nodes for every pair of nodes that should be linked. Use the exact node IDs returned from step 4. Without edges, nodes cannot pass data to each other and the workflow will not execute.
+6. **Finalize** when ALL nodes are added AND ALL edges are connected
+
+## CRITICAL: Connecting Nodes
+
+A workflow with nodes but no edges is BROKEN. After adding all nodes, you MUST connect them:
+- Call \`connect_nodes\` for each edge in the execution path
+- Use the exact node IDs from the use_node/create_node responses (e.g., "manual-trigger-a1b2c3d4-1")
+- For linear flows: connect each node to the next (A → B → C → D)
+- For conditional branches: use sourceHandle "true"/"false" to route from conditional nodes
+- For fan-in: connect multiple upstream nodes to a single downstream node
+- Every node (except the trigger) must have at least one incoming edge
+- Every node (except terminal nodes) must have at least one outgoing edge
 
 ## Decision Framework: Use Existing vs. Create New
 
@@ -43,9 +54,11 @@ ${getPatternsForOrchestrator()}
 - Every workflow MUST start with exactly one trigger node (usually \`manual-trigger\`)
 - ALWAYS call search_nodes before use_node — never assume a node exists from memory
 - Every use_node call MUST include a reason (10+ chars) and at least one alternative considered
+- You MUST call connect_nodes to create edges between every pair of connected nodes — a workflow without edges is invalid and will not execute
 - When creating nodes: use kebab-case for type names, provide working executor code
 - If you need information you don't have (API keys, URLs, preferences), call ask_user
-- Do NOT guess API endpoints — if unsure, ask the user`;
+- Do NOT guess API endpoints — if unsure, ask the user
+- Do NOT call finalize_workflow until all nodes are connected with edges`;
 }
 
 export function buildCriticPrompt(): string {

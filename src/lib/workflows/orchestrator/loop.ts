@@ -220,6 +220,24 @@ export function assembleWorkflow(
   description?: string,
 ): GeneratedWorkflow {
   const nodesArray = Array.from(draft.nodes.values());
+
+  // Fallback: if the LLM didn't create any edges, auto-connect nodes sequentially
+  if (draft.edges.length === 0 && nodesArray.length > 1) {
+    console.warn('[orchestrator] No edges created by LLM — auto-connecting nodes in sequence');
+    for (let i = 0; i < nodesArray.length - 1; i++) {
+      draft.edges.push({
+        id: nextEdgeId(),
+        source: nodesArray[i].id,
+        target: nodesArray[i + 1].id,
+      });
+    }
+    draft.decisions.push({
+      type: 'connect',
+      summary: `Auto-connected ${draft.edges.length} edges (LLM did not call connect_nodes)`,
+      timestamp: Date.now(),
+    });
+  }
+
   const layoutEdges = draft.edges.map(e => ({ source: e.source, target: e.target }));
   const positions = autoLayout(
     nodesArray.map(n => ({ id: n.id, type: n.type })),
