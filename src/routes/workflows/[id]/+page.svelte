@@ -12,11 +12,16 @@
   let runStatus = $state<string | null>(null);
   let eventSource: EventSource | null = null;
 
+  let rightPanel = $state<'chat' | 'inspector'>('chat');
+  let inspectedNodeId = $state<string | null>(null);
+  let currentRunId = $state<string | null>(null);
+
   // Dynamic imports for browser-only components
   let Canvas: any = $state(null);
   let NodePalette: any = $state(null);
   let WorkflowToolbar: any = $state(null);
   let ChatPanel: any = $state(null);
+  let NodeInspector: any = $state(null);
   let registryModule: any = $state(null);
 
   if (browser) {
@@ -24,10 +29,12 @@
     import('$lib/components/workflows/NodePalette.svelte').then(m => NodePalette = m.default);
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
     import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
+    import('$lib/components/workflows/NodeInspector.svelte').then(m => NodeInspector = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
   }
 
   let definitions = $derived(registryModule?.nodeDefinitions ?? []);
+  let inspectedNode = $derived(nodes.find(n => n.id === inspectedNodeId));
 
   function handleDragStart(_type: string, _event: DragEvent) {}
 
@@ -49,7 +56,8 @@
   }
 
   function handleNodeDoubleClick(nodeId: string) {
-    console.log('Double-click node:', nodeId);
+    inspectedNodeId = nodeId;
+    rightPanel = 'inspector';
   }
 
   function handleEdgeClick(edgeId: string) {
@@ -80,6 +88,7 @@
     const result = await res.json();
     if (res.ok) {
       runStatus = 'running';
+      currentRunId = result.runId;
       connectSSE(result.runId);
     }
   }
@@ -96,6 +105,10 @@
         updateNodeStatus(event.nodeId, 'completed');
       } else if (event.type === 'node_failed' && event.nodeId) {
         updateNodeStatus(event.nodeId, 'failed');
+      } else if (event.type === 'breakpoint_hit' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'paused_breakpoint');
+        inspectedNodeId = event.nodeId;
+        rightPanel = 'inspector';
       } else if (event.type === 'run_completed') {
         runStatus = 'completed';
         eventSource?.close();
@@ -113,6 +126,24 @@
   function updateNodeStatus(nodeId: string, status: string) {
     nodes = nodes.map((n) =>
       n.id === nodeId ? { ...n, data: { ...n.data, status } } : n,
+    );
+  }
+
+  async function handleContinue(modifiedInput?: Record<string, unknown>) {
+    if (!currentRunId || !inspectedNodeId) return;
+    await fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/continue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodeId: inspectedNodeId, modifiedInput }),
+    });
+  }
+
+  function handleConfigChange(newConfig: Record<string, unknown>) {
+    if (!inspectedNodeId) return;
+    nodes = nodes.map(n =>
+      n.id === inspectedNodeId
+        ? { ...n, data: { ...n.data, config: newConfig } }
+        : n
     );
   }
 
@@ -180,7 +211,20 @@
       />
     {/if}
 
-    {#if ChatPanel}
+    {#if rightPanel === 'inspector' && NodeInspector && inspectedNode}
+      <NodeInspector
+        nodeId={inspectedNodeId}
+        nodeLabel={inspectedNode.data.label}
+        nodeType={inspectedNode.data.nodeType}
+        config={inspectedNode.data.config}
+        workflowId={data.workflow.id}
+        runId={currentRunId}
+        isPaused={inspectedNode.data.status === 'paused_breakpoint'}
+        onClose={() => { rightPanel = 'chat'; inspectedNodeId = null; }}
+        onContinue={handleContinue}
+        onConfigChange={handleConfigChange}
+      />
+    {:else if ChatPanel}
       <ChatPanel
         workflowId={data.workflow.id}
         onWorkflowGenerated={handleWorkflowGenerated}
