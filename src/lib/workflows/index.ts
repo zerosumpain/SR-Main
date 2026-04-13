@@ -12,6 +12,7 @@ import { loopDef, loopExecutor } from './nodes/loop';
 import { conditionalDef, conditionalExecutor } from './nodes/conditional';
 import { whoopDef, whoopExecutor } from './nodes/whoop';
 import { stravaDef, stravaExecutor } from './nodes/strava';
+import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
 
 export const registry = new NodeRegistry();
 
@@ -27,6 +28,7 @@ registry.register(loopDef, loopExecutor);
 registry.register(conditionalDef, conditionalExecutor);
 registry.register(whoopDef, whoopExecutor);
 registry.register(stravaDef, stravaExecutor);
+registry.register(openrouterDef, openrouterExecutor);
 
 export const engine = new WorkflowEngine(registry);
 

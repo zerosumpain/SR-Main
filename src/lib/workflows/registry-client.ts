@@ -176,6 +176,37 @@ const whoopDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
 };
 
+// OpenRouter definition without importing the executor (which pulls in $lib/deepdive/keys — server-only)
+const openrouterDef: NodeDefinition = {
+  type: 'openrouter',
+  label: 'OpenRouter',
+  category: 'integration',
+  description:
+    'OpenRouter integration: chat completion with model picker, list available models, or get API usage stats.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'chat_completion | list_models | get_usage' },
+      model: { type: 'string', description: 'Model ID for chat_completion (e.g. openai/gpt-4o-mini)' },
+      systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
+      userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
+      temperature: { type: 'number', description: 'Temperature 0–2 (default 0.7)' },
+      maxTokens: { type: 'number', description: 'Max tokens to generate (default 1024)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: {
+    operation: 'chat_completion',
+    model: 'openai/gpt-4o-mini',
+    systemPrompt: '',
+    userPrompt: '',
+    temperature: 0.7,
+    maxTokens: 1024,
+  },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
 export const nodeDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -189,6 +220,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   conditionalDef,
   whoopDef,
   stravaDef,
+  openrouterDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
