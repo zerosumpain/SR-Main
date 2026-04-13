@@ -18,15 +18,35 @@ export interface JsonSchema {
   [key: string]: unknown;
 }
 
+export interface BasicConfigField {
+  key: string;
+  label: string;
+  type: 'dropdown' | 'toggle' | 'slider' | 'text' | 'textarea' | 'template-textarea' | 'number' | 'code';
+  options?: { value: string; label: string }[];
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+  description?: string;
+  /** If true, this field is only shown in Advanced mode */
+  advancedOnly?: boolean;
+}
+
 export interface NodeDefinition {
   type: string;
   label: string;
-  category: 'trigger' | 'core' | 'integration' | 'control' | 'custom';
+  category: 'trigger' | 'core' | 'integration' | 'control' | 'custom' | 'agentic';
   description: string;
   configSchema: JsonSchema;
   defaultConfig: Record<string, unknown>;
   inputs: PortDefinition[];
   outputs: PortDefinition[];
+  /** Basic-mode form fields. If absent, node only has Advanced (raw config) mode. */
+  basicConfig?: BasicConfigField[];
+  /** Rich description for the LLM orchestrator — when/why to use this node */
+  llmDescription?: string;
+  /** Example configs for the orchestrator */
+  llmExamples?: Record<string, unknown>[];
 }
 
 export interface NodeResult {
