@@ -16,12 +16,14 @@
   let Canvas: any = $state(null);
   let NodePalette: any = $state(null);
   let WorkflowToolbar: any = $state(null);
+  let ChatPanel: any = $state(null);
   let registryModule: any = $state(null);
 
   if (browser) {
     import('$lib/components/workflows/Canvas.svelte').then(m => Canvas = m.default);
     import('$lib/components/workflows/NodePalette.svelte').then(m => NodePalette = m.default);
     import('$lib/components/workflows/WorkflowToolbar.svelte').then(m => WorkflowToolbar = m.default);
+    import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
   }
 
@@ -124,6 +126,24 @@
     workflowName = name;
   }
 
+  function handleWorkflowGenerated(generated: any) {
+    if (!generated?.nodes) return;
+    nodes = generated.nodes.map((n: any) => ({
+      id: n.id,
+      type: n.type,
+      position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
+      data: { label: n.label, nodeType: n.type, config: n.config || {} },
+    }));
+    edges = generated.edges.map((e: any) => ({
+      id: e.id,
+      source: e.sourceNodeId,
+      target: e.targetNodeId,
+      sourceHandle: e.sourceHandle ?? undefined,
+      targetHandle: e.targetHandle ?? undefined,
+    }));
+    workflowName = generated.name || workflowName;
+  }
+
   onDestroy(() => {
     eventSource?.close();
   });
@@ -157,6 +177,15 @@
         onNodeDoubleClick={handleNodeDoubleClick}
         onEdgeClick={handleEdgeClick}
         onDrop={handleDrop}
+      />
+    {/if}
+
+    {#if ChatPanel}
+      <ChatPanel
+        workflowId={data.workflow.id}
+        onWorkflowGenerated={handleWorkflowGenerated}
+        currentNodes={canvasNodesToWorkflow(nodes)}
+        currentEdges={canvasEdgesToWorkflow(edges)}
       />
     {/if}
   </div>
