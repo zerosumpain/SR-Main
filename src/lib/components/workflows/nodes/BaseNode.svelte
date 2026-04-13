@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
-  import { getContext } from 'svelte';
+  import { inspectNode } from '../inspect-store';
 
   import type { Snippet } from 'svelte';
 
@@ -23,8 +23,6 @@
     icon?: string;
     extra?: Snippet;
   } = $props();
-
-  const onInspect = getContext<((nodeId: string) => void) | undefined>('workflow-inspect-node');
 
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)',
@@ -59,12 +57,12 @@
       >
         {nodeType}
       </span>
-      {#if onInspect && id}
+      {#if id}
         <button
           class="ml-auto w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors nopan nodrag"
           style="color: var(--text-ghost); font-size: 10px; line-height: 1;"
           onpointerdown={(e) => { e.stopPropagation(); }}
-          onclick={(e) => { e.stopPropagation(); onInspect(id!); }}
+          onclick={(e) => { e.stopPropagation(); inspectNode(id!); }}
           title="Inspect node"
         >⚙</button>
       {:else if status}

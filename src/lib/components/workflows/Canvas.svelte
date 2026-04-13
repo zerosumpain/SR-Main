@@ -1,7 +1,7 @@
 <script lang="ts">
   import { SvelteFlow, Controls, MiniMap, Background, BackgroundVariant } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
-  import { setContext } from 'svelte';
+  import { setInspectCallback } from './inspect-store';
   import type { CanvasNode, CanvasEdge } from './adapter';
   import ManualTriggerNode from './nodes/ManualTriggerNode.svelte';
   import CodeExecuteNode from './nodes/CodeExecuteNode.svelte';
@@ -55,8 +55,8 @@
   const MIN_ZOOM = 0.1;
   const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1.2, duration: 300 };
 
-  // Provide inspect callback via context so BaseNode can trigger it on dblclick
-  setContext('workflow-inspect-node', (nodeId: string) => {
+  // Set module-level callback so BaseNode can trigger inspection
+  setInspectCallback((nodeId: string) => {
     onNodeDoubleClick?.(nodeId);
   });
 
