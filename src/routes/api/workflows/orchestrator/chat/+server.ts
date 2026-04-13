@@ -34,7 +34,15 @@ export const POST: RequestHandler = async ({ request }) => {
       });
     }
 
-    const { workflow } = await generateWorkflow(message, workflowId);
+    const { workflow, followUp } = await generateWorkflow(message, workflowId);
+
+    if (followUp) {
+      return json({
+        success: true,
+        workflow: null,
+        message: followUp,
+      });
+    }
 
     if (workflow && workflow.nodes.length > 0) {
       if (workflowId) {

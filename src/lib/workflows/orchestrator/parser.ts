@@ -1,5 +1,15 @@
 import type { GeneratedWorkflow } from './types';
 
+export interface FollowUpQuestion {
+  needsMoreInfo: true;
+  question: string;
+  context?: string;
+}
+
+export function isFollowUpQuestion(json: Record<string, unknown>): json is FollowUpQuestion {
+  return json.needsMoreInfo === true && typeof json.question === 'string';
+}
+
 export function extractJsonFromResponse(text: string): Record<string, unknown> | null {
   // Try parsing the whole string as JSON
   try {

@@ -54,10 +54,31 @@ Given a user's request, design a workflow as a JSON object with this exact struc
 
 ## Layout Guidelines
 
-- Start trigger at x:100, y:200
-- Space nodes ~250px apart horizontally
-- Fan-out branches vertically with ~150px spacing
-- Keep the graph left-to-right
+- Each node is 220px wide — space them at least 280px apart horizontally to avoid overlap
+- Start trigger at x:50, y:200
+- Linear flows: increment x by 300 for each node, keep y constant
+- Fan-out branches (after conditional): offset y by ±180 for each branch
+- After fan-in (branches merging): return to the centre y and continue incrementing x
+- Keep the graph left-to-right, neat and readable
+
+## Important: When To Ask Questions
+
+If the user's request requires ANY of these, you MUST ask a follow-up question instead of generating a workflow:
+- **API credentials or endpoints you don't know** (e.g. "connect to my bank" — which bank? what API?)
+- **Specific configuration details** (e.g. "send me an email" — what email address? what content?)
+- **Integrations that don't exist yet** (e.g. WhatsApp sending — no built-in WhatsApp send node exists)
+- **Ambiguous requirements** (e.g. "monitor my health" — which metrics? what thresholds?)
+
+When asking a follow-up question, respond with this JSON structure instead of a workflow:
+\`\`\`json
+{
+  "needsMoreInfo": true,
+  "question": "Your specific question here",
+  "context": "Brief explanation of what you're trying to figure out"
+}
+\`\`\`
+
+Only generate a workflow when you have enough information to make every node actually functional with real URLs, real credentials, and real configuration.
 
 ## Rules
 
@@ -67,6 +88,8 @@ Given a user's request, design a workflow as a JSON object with this exact struc
 - Generate unique IDs for each node and edge
 - EVERY node's config MUST include a "description" field — a short (1-2 sentence) human-readable explanation of what that specific node does in this workflow
 - ALWAYS generate edges connecting nodes in execution order
+- HTTP Request nodes MUST have real, working URLs — never use placeholder URLs like "https://api.example.com"
+- If you don't know the exact API endpoint, ASK the user instead of guessing
 - Respond with ONLY the JSON object, no markdown fences or explanation outside it`;
 }
 

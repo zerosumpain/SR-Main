@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { buildPlannerPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifyPrompt } from './prompts';
-import { parseWorkflowResponse } from './parser';
+import { parseWorkflowResponse, extractJsonFromResponse, isFollowUpQuestion } from './parser';
 import { nodeDefinitions } from '../registry-client';
 import type { GeneratedWorkflow, PlanningResult, ChatMessage } from './types';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
@@ -14,7 +14,7 @@ export async function generateWorkflow(
   userMessage: string,
   workflowId: string | null,
   onChunk?: (text: string) => void,
-): Promise<{ workflow: GeneratedWorkflow | null; messages: ChatMessage[] }> {
+): Promise<{ workflow: GeneratedWorkflow | null; followUp?: string; messages: ChatMessage[] }> {
   const client = getOpenAIClient();
   const model = getModel();
   const messages: ChatMessage[] = [];
@@ -73,6 +73,20 @@ export async function generateWorkflow(
 
     finalResponse = r3.choices[0]?.message?.content ?? proposal;
     tokensUsed += r3.usage?.total_tokens ?? 0;
+  }
+
+  // Check if the LLM is asking a follow-up question instead of generating a workflow
+  const rawJson = extractJsonFromResponse(finalResponse);
+  if (rawJson && isFollowUpQuestion(rawJson)) {
+    const question = rawJson.question + (rawJson.context ? `\n\n${rawJson.context}` : '');
+    console.log('[orchestrator] LLM asking follow-up question:', question.slice(0, 200));
+
+    if (workflowId) {
+      await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: userMessage });
+      await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: question });
+    }
+
+    return { workflow: null, followUp: question, messages: [] };
   }
 
   const workflow = parseWorkflowResponse(finalResponse);
