@@ -131,6 +131,30 @@ const loopDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'array', label: 'Results' }],
 };
 
+// Strava definition without importing the executor (which pulls in $lib/health/* — server-only)
+const stravaDef: NodeDefinition = {
+  type: 'strava',
+  label: 'Strava',
+  category: 'integration',
+  description: 'Access Strava activity data. Requires Strava connected in Health settings.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: {
+        type: 'string',
+        description: 'list_activities | get_activity | get_athlete_stats',
+      },
+      page: { type: 'number', description: 'Page number for list_activities (default 1)' },
+      perPage: { type: 'number', description: 'Results per page for list_activities (default 30, max 200)' },
+      activityId: { type: 'string', description: 'Activity ID for get_activity' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'list_activities', page: 1, perPage: 30 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+};
+
 // Whoop definition without importing the executor (which pulls in $lib/health/* — server-only)
 const whoopDef: NodeDefinition = {
   type: 'whoop',
@@ -164,6 +188,7 @@ export const nodeDefinitions: NodeDefinition[] = [
   loopDef,
   conditionalDef,
   whoopDef,
+  stravaDef,
 ];
 
 export function getDefinition(type: string): NodeDefinition | undefined {
