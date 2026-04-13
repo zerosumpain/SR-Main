@@ -59,13 +59,22 @@
         {nodeType}
       </span>
       {#if id}
-        <span
-          class="ml-auto w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors nopan nodrag"
-          style="color: var(--text-ghost); font-size: 10px; line-height: 1; cursor: pointer;"
-          data-inspect-node={id}
-          role="button"
-          tabindex="-1"
-        >⚙</span>
+        <span class="ml-auto flex items-center gap-1">
+          <span
+            class="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors nopan nodrag"
+            style="color: var(--text-ghost); font-size: 10px; line-height: 1; cursor: pointer;"
+            data-inspect-node={id}
+            role="button"
+            tabindex="-1"
+          >⚙</span>
+          <span
+            class="w-5 h-5 flex items-center justify-center rounded hover:bg-red-500/20 transition-colors nopan nodrag"
+            style="color: var(--text-ghost); font-size: 10px; line-height: 1; cursor: pointer;"
+            data-delete-node={id}
+            role="button"
+            tabindex="-1"
+          >✕</span>
+        </span>
       {:else if status}
         <span
           class="w-2 h-2 rounded-full ml-auto"

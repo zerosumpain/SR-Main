@@ -138,6 +138,12 @@
   let definitions = $derived(registryModule?.nodeDefinitions ?? []);
   let hasNodeTypes = $derived(Object.keys(nodeTypeComponents).length > 0);
 
+  function deleteNode(nodeId: string) {
+    nodes = nodes.filter(n => n.id !== nodeId);
+    edges = edges.filter(e => e.source !== nodeId && e.target !== nodeId);
+    handleSave();
+  }
+
   function handleDragStart(_type: string, _event: DragEvent) {}
 
   function handleDrop(type: string, position: { x: number; y: number }) {
@@ -331,7 +337,27 @@
     workflowName = generated.name || workflowName;
   }
 
-  onDestroy(() => { eventSource?.close(); });
+  import { onMount } from 'svelte';
+
+  // Capture-phase listener for delete buttons inside Svelte Flow nodes
+  function handleDeletePointerDown(e: PointerEvent) {
+    const target = (e.target as HTMLElement)?.closest?.('[data-delete-node]');
+    if (target) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const nodeId = (target as HTMLElement).dataset.deleteNode;
+      if (nodeId) deleteNode(nodeId);
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener('pointerdown', handleDeletePointerDown, true);
+  });
+
+  onDestroy(() => {
+    eventSource?.close();
+    if (browser) document.removeEventListener('pointerdown', handleDeletePointerDown, true);
+  });
 </script>
 
 <svelte:head>
