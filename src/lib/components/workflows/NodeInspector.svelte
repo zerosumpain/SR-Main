@@ -13,6 +13,7 @@
     onClose,
     onContinue,
     onConfigChange,
+    reasoning,
   }: {
     nodeId: string;
     nodeLabel: string;
@@ -25,9 +26,15 @@
     onClose: () => void;
     onContinue?: (modifiedInput?: Record<string, unknown>) => void;
     onConfigChange?: (config: Record<string, unknown>) => void;
+    reasoning?: {
+      reason: string;
+      alternatives: Array<{ nodeType: string; whyRejected: string }>;
+      searchQuery?: string;
+      isNewNode?: boolean;
+    } | null;
   } = $props();
 
-  let activeTab = $state<'config' | 'schema' | 'data'>('config');
+  let activeTab = $state<'config' | 'schema' | 'data' | 'reasoning'>('config');
   let nodeData = $state<{ inputData: unknown; outputData: unknown; status: string } | null>(null);
   let loading = $state(false);
   let editableInput = $state('');
@@ -77,7 +84,7 @@
   </div>
 
   <div class="flex border-b" style="border-color: var(--card-border);">
-    {#each ['config', 'schema', 'data'] as tab}
+    {#each ['config', 'schema', 'data', ...(reasoning ? ['reasoning'] : [])] as tab}
       <button
         onclick={() => activeTab = tab as any}
         class="flex-1 px-3 py-2 text-xs uppercase tracking-wider transition-colors"
@@ -214,6 +221,40 @@
       {:else}
         <p class="text-sm" style="color: var(--text-ghost);">No run data available. Run the workflow to see data here.</p>
       {/if}
+    {:else if activeTab === 'reasoning' && reasoning}
+      <div class="space-y-4">
+        {#if reasoning.isNewNode}
+          <div class="px-2 py-1 rounded text-[11px] font-medium inline-block" style="background: var(--accent); color: white;">
+            New node — created for this workflow
+          </div>
+        {/if}
+
+        <div>
+          <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Why this node</h4>
+          <p class="text-xs" style="color: var(--text-secondary);">{reasoning.reason}</p>
+        </div>
+
+        {#if reasoning.searchQuery}
+          <div>
+            <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Search query</h4>
+            <p class="text-xs" style="color: var(--text-secondary); font-family: var(--font-mono);">{reasoning.searchQuery}</p>
+          </div>
+        {/if}
+
+        {#if reasoning.alternatives.length > 0}
+          <div>
+            <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Alternatives considered</h4>
+            <div class="space-y-2">
+              {#each reasoning.alternatives as alt}
+                <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                  <span class="text-xs font-medium" style="color: var(--text-primary); font-family: var(--font-mono);">{alt.nodeType}</span>
+                  <p class="text-[10px] mt-1" style="color: var(--text-ghost);">Rejected: {alt.whyRejected}</p>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 </div>
