@@ -186,28 +186,42 @@
     workflowName = generated.name || workflowName;
   }
 
-  // Raw DOM listener for node inspect buttons.
-  // Uses event delegation on document to catch clicks on [data-inspect-node] elements.
-  // This bypasses Svelte 5 event delegation and SvelteFlow's drag system entirely.
-  function handleDocumentClick(e: MouseEvent) {
+  // Use pointerdown in capture phase — fires before SvelteFlow's drag system
+  let showNodeModal = $state(false);
+  let modalNodeId = $state<string | null>(null);
+  let modalNode = $derived(modalNodeId ? nodes.find(n => n.id === modalNodeId) : null);
+  let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
+  let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
+
+  function handlePointerDown(e: PointerEvent) {
     const target = (e.target as HTMLElement)?.closest?.('[data-inspect-node]');
     if (target) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
       const nodeId = (target as HTMLElement).dataset.inspectNode;
       if (nodeId) {
-        inspectedNodeId = nodeId;
-        rightPanel = 'inspector';
+        modalNodeId = nodeId;
+        showNodeModal = true;
+        modalNodeData = null;
+        // Load run data if available
+        if (currentRunId) {
+          fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/nodes/${nodeId}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { modalNodeData = d; })
+            .catch(() => {});
+        }
       }
     }
   }
 
   onMount(() => {
-    document.addEventListener('click', handleDocumentClick, true); // capture phase
+    document.addEventListener('pointerdown', handlePointerDown, true);
   });
 
   onDestroy(() => {
     eventSource?.close();
     if (browser) {
-      document.removeEventListener('click', handleDocumentClick, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
     }
   });
 </script>
@@ -284,3 +298,98 @@
     {/if}
   </div>
 </div>
+
+{#if showNodeModal && modalNode}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    role="presentation"
+    onclick={() => { showNodeModal = false; }}
+  >
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div
+      class="relative rounded-xl border w-full max-w-lg max-h-[80vh] overflow-y-auto"
+      style="background: var(--bg); border-color: var(--card-border);"
+      onclick={(e) => e.stopPropagation()}
+      role="dialog"
+    >
+      <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color: var(--card-border);">
+        <div>
+          <h2 class="text-base font-medium" style="color: var(--text-primary);">{modalNode.data.label}</h2>
+          <p class="text-[10px] uppercase tracking-wider mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">{modalNode.data.nodeType}</p>
+        </div>
+        <button
+          onclick={() => { showNodeModal = false; }}
+          class="text-lg px-2 py-1 rounded hover:bg-black/10"
+          style="color: var(--text-ghost);"
+        >&times;</button>
+      </div>
+
+      <div class="p-5 space-y-5">
+        {#if modalNodeDef?.description}
+          <p class="text-sm" style="color: var(--text-secondary);">{modalNodeDef.description}</p>
+        {/if}
+
+        <div>
+          <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
+          <div class="space-y-2">
+            {#each Object.entries(modalNode.data.config || {}) as [key, value]}
+              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                <span class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">{key}</span>
+                <pre class="text-xs mt-1 whitespace-pre-wrap break-all" style="color: var(--text-primary); font-family: var(--font-mono);">{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}</pre>
+              </div>
+            {/each}
+            {#if Object.keys(modalNode.data.config || {}).length === 0}
+              <p class="text-xs" style="color: var(--text-ghost);">No configuration</p>
+            {/if}
+          </div>
+        </div>
+
+        {#if modalNodeDef}
+          <div>
+            <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Schema</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Inputs</span>
+                {#each modalNodeDef.inputs || [] as port}
+                  <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
+                {:else}
+                  <p class="text-xs mt-1" style="color: var(--text-ghost);">None (trigger)</p>
+                {/each}
+              </div>
+              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Outputs</span>
+                {#each modalNodeDef.outputs || [] as port}
+                  <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
+                {:else}
+                  <p class="text-xs mt-1" style="color: var(--text-ghost);">None</p>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        {#if modalNodeData}
+          <div>
+            <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Run Data</h3>
+            {#if modalNodeData.inputData}
+              <div class="mb-3">
+                <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Input</span>
+                <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.inputData, null, 2)}</pre>
+              </div>
+            {/if}
+            {#if modalNodeData.outputData}
+              <div>
+                <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Output</span>
+                <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.outputData, null, 2)}</pre>
+              </div>
+            {/if}
+          </div>
+        {:else if currentRunId}
+          <p class="text-xs" style="color: var(--text-ghost);">No run data for this node yet.</p>
+        {:else}
+          <p class="text-xs" style="color: var(--text-ghost);">Run the workflow to see data flow.</p>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
