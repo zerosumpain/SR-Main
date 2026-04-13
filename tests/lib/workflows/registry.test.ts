@@ -69,4 +69,28 @@ describe('NodeRegistry', () => {
     expect(cores).toHaveLength(2);
     expect(cores.every((d) => d.category === 'core')).toBe(true);
   });
+
+  it('searches definitions by query', () => {
+    registry.register(makeDummyDef('http-request', 'core'), makeDummyExecutor('http-request'));
+    registry.register(makeDummyDef('slack-send', 'integration'), makeDummyExecutor('slack-send'));
+    registry.register(makeDummyDef('email', 'integration'), makeDummyExecutor('email'));
+
+    const results = registry.search('slack');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].type).toBe('slack-send');
+  });
+
+  it('search returns empty for no match', () => {
+    registry.register(makeDummyDef('http-request', 'core'), makeDummyExecutor('http-request'));
+    const results = registry.search('nonexistent-xyz');
+    expect(results).toHaveLength(0);
+  });
+
+  it('search filters by category', () => {
+    registry.register(makeDummyDef('http-request', 'core'), makeDummyExecutor('http-request'));
+    registry.register(makeDummyDef('slack-send', 'integration'), makeDummyExecutor('slack-send'));
+
+    const results = registry.search('request', 'integration');
+    expect(results.every(d => d.category === 'integration')).toBe(true);
+  });
 });
