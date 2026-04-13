@@ -3,6 +3,8 @@
   import { browser } from '$app/environment';
   import { workflowNodesToCanvas, workflowEdgesToCanvas, canvasNodesToWorkflow, canvasEdgesToWorkflow } from '$lib/components/workflows/adapter';
   import type { CanvasNode, CanvasEdge } from '$lib/components/workflows/adapter';
+  import { resolveUpstreamSchema, schemaToVariablePaths } from '$lib/workflows/schema-propagation';
+  import type { JsonSchema } from '$lib/workflows/types';
 
   import '@xyflow/svelte/dist/style.css';
 
@@ -56,6 +58,7 @@
   let modalNodeDef = $derived(modalNode ? registryModule?.getDefinition(modalNode.data.nodeType) : null);
   let modalNodeData = $state<{ inputData: unknown; outputData: unknown } | null>(null);
   let editingConfig = $state<Record<string, string>>({});
+  let configMode = $state<'basic' | 'advanced'>('basic');
 
   // When modal opens, populate editable config
   $effect(() => {
@@ -90,6 +93,8 @@
   let RunHistoryPanel: any = $state(null);
   let registryModule: any = $state(null);
   let nodeTypeComponents: Record<string, any> = $state({});
+  let BasicConfigRendererComponent: any = $state(null);
+  let UpstreamSchemaPanelComponent: any = $state(null);
 
   if (browser) {
     import('@xyflow/svelte').then(m => { SvelteFlowModule = m; });
@@ -98,6 +103,8 @@
     import('$lib/components/workflows/ChatPanel.svelte').then(m => ChatPanel = m.default);
     import('$lib/components/workflows/RunHistoryPanel.svelte').then(m => RunHistoryPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
+    import('$lib/components/workflows/BasicConfigRenderer.svelte').then(m => BasicConfigRendererComponent = m.default);
+    import('$lib/components/workflows/UpstreamSchemaPanel.svelte').then(m => UpstreamSchemaPanelComponent = m.default);
 
     // Load all node type components
     Promise.all([
@@ -137,6 +144,85 @@
 
   let definitions = $derived(registryModule?.nodeDefinitions ?? []);
   let hasNodeTypes = $derived(Object.keys(nodeTypeComponents).length > 0);
+
+  // Check if modal node is connected (has incoming edges) or is a trigger
+  let modalNodeIsConnected = $derived.by(() => {
+    if (!modalNodeId) return false;
+    const node = nodes.find((n) => n.id === modalNodeId);
+    if (!node) return false;
+    const def = registryModule?.getDefinition(node.data.nodeType);
+    if (def?.category === 'trigger') return true;
+    return edges.some((e) => e.target === modalNodeId);
+  });
+
+  // Compute upstream variables for autocomplete
+  let modalUpstreamVariables = $derived.by(() => {
+    if (!modalNodeId || !registryModule) return [];
+    const workflowNodes = canvasNodesToWorkflow(nodes);
+    const workflowEdges = canvasEdgesToWorkflow(edges);
+    const schema = resolveUpstreamSchema(
+      modalNodeId,
+      workflowNodes,
+      workflowEdges,
+      (type: string, config: Record<string, unknown>) => getStaticOutputSchema(type, config),
+    );
+    return schemaToVariablePaths(schema);
+  });
+
+  function getStaticOutputSchema(type: string, config: Record<string, unknown>): JsonSchema {
+    if (config.outputSchema && typeof config.outputSchema === 'object') {
+      return config.outputSchema as JsonSchema;
+    }
+    const schemas: Record<string, JsonSchema> = {
+      'manual-trigger': { type: 'object', properties: { data: { type: 'object' } } },
+      'http-request': {
+        type: 'object',
+        properties: {
+          status: { type: 'number', description: 'HTTP status code' },
+          headers: { type: 'object', description: 'Response headers' },
+          body: { type: 'any', description: 'Response body' },
+        },
+      },
+      'llm-call': {
+        type: 'object',
+        properties: {
+          response: { type: 'string', description: 'LLM response text' },
+          usage: {
+            type: 'object',
+            properties: {
+              promptTokens: { type: 'number' },
+              completionTokens: { type: 'number' },
+            },
+          },
+        },
+      },
+      'email': {
+        type: 'object',
+        properties: { messageId: { type: 'string' }, accepted: { type: 'array' } },
+      },
+      'data-store': {
+        type: 'object',
+        properties: { value: { type: 'any', description: 'Stored value' }, key: { type: 'string' } },
+      },
+      'loop': {
+        type: 'object',
+        properties: {
+          results: { type: 'array', description: 'Array of transformed items' },
+          count: { type: 'number', description: 'Number of items processed' },
+        },
+      },
+      'strava': { type: 'object', properties: { data: { type: 'any' } } },
+      'whoop': { type: 'object', properties: { data: { type: 'any' } } },
+      'openrouter': {
+        type: 'object',
+        properties: { response: { type: 'string' }, usage: { type: 'object' } },
+      },
+    };
+    if (type === 'conditional' || type === 'error-handler' || type === 'delay') {
+      return { type: 'object', description: 'Input passed through' };
+    }
+    return schemas[type] || { type: 'object' };
+  }
 
   function deleteNode(nodeId: string) {
     nodes = nodes.filter(n => n.id !== nodeId);
@@ -472,101 +558,169 @@
       onclick={(e) => e.stopPropagation()}
       role="dialog"
     >
+      <!-- Header -->
       <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color: var(--card-border);">
         <div>
           <h2 class="text-base font-medium" style="color: var(--text-primary);">{modalNode.data.label}</h2>
           <p class="text-[10px] uppercase tracking-wider mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">{modalNode.data.nodeType}</p>
         </div>
-        <button onclick={() => { showNodeModal = false; }} class="text-lg px-2 py-1 rounded hover:bg-black/10" style="color: var(--text-ghost);">&times;</button>
+        <div class="flex items-center gap-2">
+          {#if modalNodeDef?.basicConfig && modalNodeIsConnected}
+            <div class="flex rounded border text-[10px]" style="border-color: var(--card-border);">
+              <button
+                onclick={() => { configMode = 'basic'; }}
+                class="px-2 py-1 transition-colors"
+                style="background: {configMode === 'basic' ? 'var(--accent)' : 'transparent'}; color: {configMode === 'basic' ? 'white' : 'var(--text-ghost)'};"
+              >Basic</button>
+              <button
+                onclick={() => { configMode = 'advanced'; }}
+                class="px-2 py-1 transition-colors"
+                style="background: {configMode === 'advanced' ? 'var(--accent)' : 'transparent'}; color: {configMode === 'advanced' ? 'white' : 'var(--text-ghost)'};"
+              >Advanced</button>
+            </div>
+          {/if}
+          <button onclick={() => { showNodeModal = false; }} class="text-lg px-2 py-1 rounded hover:bg-black/10" style="color: var(--text-ghost);">&times;</button>
+        </div>
       </div>
 
       <div class="p-5 space-y-5">
-        {#if modalNodeDef?.description}
-          <p class="text-sm" style="color: var(--text-secondary);">{modalNodeDef.description}</p>
-        {/if}
-
-        <div>
-          <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
-          <div class="space-y-2">
-            {#each Object.entries(editingConfig) as [key, value]}
-              <div>
-                <label class="text-[11px] uppercase tracking-wider mb-1 block" style="color: var(--text-ghost); font-family: var(--font-mono);">{key}</label>
-                {#if value.length > 60 || value.includes('\n')}
-                  <textarea
-                    value={editingConfig[key]}
-                    oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLTextAreaElement).value }; }}
-                    class="w-full px-2 py-1.5 rounded text-xs border resize-vertical"
-                    style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 80px;"
-                    rows="4"
-                  ></textarea>
-                {:else}
-                  <input
-                    type="text"
-                    value={editingConfig[key]}
-                    oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLInputElement).value }; }}
-                    class="w-full px-2 py-1.5 rounded text-xs border"
-                    style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-                  />
-                {/if}
-              </div>
-            {/each}
-            {#if Object.keys(editingConfig).length === 0}
-              <p class="text-xs" style="color: var(--text-ghost);">No configuration</p>
-            {/if}
+        {#if !modalNodeIsConnected}
+          <!-- Connection gate -->
+          <div class="text-center py-8">
+            <div class="text-3xl mb-3" style="color: var(--text-ghost);">&#8594;</div>
+            <p class="text-sm font-medium mb-1" style="color: var(--text-primary);">Standalone Node</p>
+            <p class="text-xs" style="color: var(--text-ghost);">
+              Connect this node to an upstream node to configure it. Drag an edge from another node's output to this node's input.
+            </p>
           </div>
           <button
-            onclick={saveNodeConfig}
-            class="mt-3 w-full px-3 py-2 rounded text-sm font-medium transition-colors"
-            style="background: var(--accent); color: white;"
-          >
-            Save Configuration
-          </button>
-        </div>
+            onclick={() => { deleteNode(modalNodeId!); showNodeModal = false; }}
+            class="w-full px-3 py-2 rounded text-sm transition-colors border"
+            style="border-color: #b43232; color: #b43232;"
+          >Delete Node</button>
 
-        {#if modalNodeDef}
+        {:else}
+          {#if modalNodeDef?.description}
+            <p class="text-sm" style="color: var(--text-secondary);">{modalNodeDef.description}</p>
+          {/if}
+
+          <!-- Upstream variables panel -->
+          {#if UpstreamSchemaPanelComponent}
+            <svelte:component this={UpstreamSchemaPanelComponent} variables={modalUpstreamVariables} />
+          {/if}
+
+          <!-- Configuration -->
           <div>
-            <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Schema</h3>
-            <div class="grid grid-cols-2 gap-3">
-              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
-                <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Inputs</span>
-                {#each modalNodeDef.inputs || [] as port}
-                  <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
-                {:else}
-                  <p class="text-xs mt-1" style="color: var(--text-ghost);">None (trigger)</p>
+            <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
+
+            {#if configMode === 'basic' && modalNodeDef?.basicConfig && BasicConfigRendererComponent}
+              <svelte:component
+                this={BasicConfigRendererComponent}
+                fields={modalNodeDef.basicConfig}
+                config={modalNode.data.config || {}}
+                variables={modalUpstreamVariables}
+                showAdvanced={false}
+                onConfigChange={(newConfig) => {
+                  nodes = nodes.map(n =>
+                    n.id === modalNodeId ? { ...n, data: { ...n.data, config: newConfig } } : n
+                  );
+                  editingConfig = {};
+                  for (const [k, v] of Object.entries(newConfig)) {
+                    editingConfig[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+                  }
+                }}
+              />
+            {:else}
+              <!-- Advanced: raw config editing -->
+              <div class="space-y-2">
+                {#each Object.entries(editingConfig) as [key, value]}
+                  <div>
+                    <label class="text-[11px] uppercase tracking-wider mb-1 block" style="color: var(--text-ghost); font-family: var(--font-mono);">{key}</label>
+                    {#if value.length > 60 || value.includes('\n')}
+                      <textarea
+                        value={editingConfig[key]}
+                        oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLTextAreaElement).value }; }}
+                        class="w-full px-2 py-1.5 rounded text-xs border resize-vertical"
+                        style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 80px;"
+                        rows="4"
+                      ></textarea>
+                    {:else}
+                      <input
+                        type="text"
+                        value={editingConfig[key]}
+                        oninput={(e) => { editingConfig = { ...editingConfig, [key]: (e.target as HTMLInputElement).value }; }}
+                        class="w-full px-2 py-1.5 rounded text-xs border"
+                        style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+                      />
+                    {/if}
+                  </div>
                 {/each}
+                {#if Object.keys(editingConfig).length === 0}
+                  <p class="text-xs" style="color: var(--text-ghost);">No configuration</p>
+                {/if}
               </div>
-              <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
-                <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Outputs</span>
-                {#each modalNodeDef.outputs || [] as port}
-                  <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
-                {:else}
-                  <p class="text-xs mt-1" style="color: var(--text-ghost);">None</p>
-                {/each}
+            {/if}
+
+            <button
+              onclick={saveNodeConfig}
+              class="mt-3 w-full px-3 py-2 rounded text-sm font-medium transition-colors"
+              style="background: var(--accent); color: white;"
+            >Save Configuration</button>
+          </div>
+
+          <!-- Schema -->
+          {#if modalNodeDef}
+            <div>
+              <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Schema</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                  <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Inputs</span>
+                  {#each modalNodeDef.inputs || [] as port}
+                    <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
+                  {:else}
+                    <p class="text-xs mt-1" style="color: var(--text-ghost);">None (trigger)</p>
+                  {/each}
+                </div>
+                <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
+                  <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Outputs</span>
+                  {#each modalNodeDef.outputs || [] as port}
+                    <div class="text-xs mt-1" style="color: var(--text-primary); font-family: var(--font-mono);">{port.name} <span style="color: var(--text-ghost);">({port.type})</span></div>
+                  {:else}
+                    <p class="text-xs mt-1" style="color: var(--text-ghost);">None</p>
+                  {/each}
+                </div>
               </div>
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        {#if modalNodeData}
-          <div>
-            <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Run Data</h3>
-            {#if modalNodeData.inputData}
-              <div class="mb-3">
-                <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Input</span>
-                <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.inputData, null, 2)}</pre>
-              </div>
-            {/if}
-            {#if modalNodeData.outputData}
-              <div>
-                <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Output</span>
-                <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.outputData, null, 2)}</pre>
-              </div>
-            {/if}
-          </div>
-        {:else if currentRunId}
-          <p class="text-xs" style="color: var(--text-ghost);">No run data for this node yet.</p>
-        {:else}
-          <p class="text-xs" style="color: var(--text-ghost);">Run the workflow to see data flow.</p>
+          <!-- Run data -->
+          {#if modalNodeData}
+            <div>
+              <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Run Data</h3>
+              {#if modalNodeData.inputData}
+                <div class="mb-3">
+                  <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Input</span>
+                  <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.inputData, null, 2)}</pre>
+                </div>
+              {/if}
+              {#if modalNodeData.outputData}
+                <div>
+                  <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Output</span>
+                  <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.outputData, null, 2)}</pre>
+                </div>
+              {/if}
+            </div>
+          {:else if currentRunId}
+            <p class="text-xs" style="color: var(--text-ghost);">No run data for this node yet.</p>
+          {:else}
+            <p class="text-xs" style="color: var(--text-ghost);">Run the workflow to see data flow.</p>
+          {/if}
+
+          <button
+            onclick={() => { deleteNode(modalNodeId!); showNodeModal = false; }}
+            class="w-full px-3 py-2 rounded text-sm transition-colors border"
+            style="border-color: #b43232; color: #b43232;"
+          >Delete Node</button>
         {/if}
       </div>
     </div>
