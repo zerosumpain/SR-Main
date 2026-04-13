@@ -10,24 +10,25 @@
     options?: { padding?: number; maxZoom?: number; duration?: number };
   } = $props();
 
-  const { fitView } = useSvelteFlow();
+  let flow: ReturnType<typeof useSvelteFlow> | null = null;
+  try {
+    flow = useSvelteFlow();
+  } catch {
+    // May fail if context not ready
+  }
 
   let prevCount = $state(nodeCount);
-  let userInteracted = $state(false);
-  let interactionTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Fit on mount
   onMount(() => {
-    requestAnimationFrame(() => fitView(options));
+    if (flow) {
+      requestAnimationFrame(() => flow!.fitView(options));
+    }
   });
 
-  // Re-fit when node count changes (orchestrator generated a workflow)
   $effect(() => {
-    if (nodeCount !== prevCount) {
+    if (nodeCount !== prevCount && flow) {
       prevCount = nodeCount;
-      // Reset user interaction flag when nodes change — new workflow generated
-      userInteracted = false;
-      requestAnimationFrame(() => fitView(options));
+      requestAnimationFrame(() => flow!.fitView(options));
     }
   });
 </script>

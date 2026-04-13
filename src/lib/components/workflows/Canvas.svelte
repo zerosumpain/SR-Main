@@ -74,12 +74,18 @@
     onDrop(type, position);
   }
 
-  function handleNodeClick({ node }: { node: CanvasNode; event: MouseEvent | TouchEvent }) {
-    onNodeDoubleClick?.(node.id);
+  function handleNodeClick(payload: any) {
+    const nodeId = payload?.node?.id;
+    if (nodeId) {
+      onNodeDoubleClick?.(nodeId);
+    }
   }
 
-  function handleEdgeClick({ edge }: { edge: CanvasEdge; event: MouseEvent }) {
-    onEdgeClick?.(edge.id);
+  function handleEdgeClick(payload: any) {
+    const edgeId = payload?.edge?.id;
+    if (edgeId) {
+      onEdgeClick?.(edgeId);
+    }
   }
 </script>
 
