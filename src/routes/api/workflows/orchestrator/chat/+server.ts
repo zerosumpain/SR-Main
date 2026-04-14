@@ -200,7 +200,7 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({ jobId });
 };
 
-// GET endpoint to poll/stream job status
+// GET endpoint to poll job status
 export const GET: RequestHandler = async ({ url }) => {
   const jobId = url.searchParams.get('jobId');
   if (!jobId) {
@@ -212,59 +212,18 @@ export const GET: RequestHandler = async ({ url }) => {
     return json({ error: 'Job not found' }, { status: 404 });
   }
 
-  // SSE stream that sends progress then result
-  const encoder = new TextEncoder();
-  let progressIndex = 0;
+  // Return current state — client polls every 1.5s
+  const response: Record<string, unknown> = {
+    status: job.status,
+    progress: job.progress,
+  };
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      function send(data: Record<string, unknown>) {
-        try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        } catch { /* stream closed */ }
-      }
+  if (job.status === 'done' || job.status === 'error') {
+    response.result = job.result;
+    response.error = job.error;
+    // Clean up job after delivery
+    setTimeout(() => jobs.delete(jobId), 30000);
+  }
 
-      // Poll until job is done
-      while (job.status === 'running') {
-        // Send any new progress messages
-        while (progressIndex < job.progress.length) {
-          send({ type: 'progress', message: job.progress[progressIndex] });
-          progressIndex++;
-        }
-        // Wait a bit before checking again
-        await new Promise(r => setTimeout(r, 500));
-        // Send keepalive to prevent timeout
-        try {
-          controller.enqueue(encoder.encode(`: keepalive\n\n`));
-        } catch { break; }
-      }
-
-      // Send any remaining progress
-      while (progressIndex < job.progress.length) {
-        send({ type: 'progress', message: job.progress[progressIndex] });
-        progressIndex++;
-      }
-
-      // Send the final result
-      if (job.result) {
-        send({ type: 'done', ...job.result });
-      } else {
-        send({ type: 'done', success: false, error: job.error || 'Job completed with no result' });
-      }
-
-      try { controller.close(); } catch { /* already closed */ }
-
-      // Clean up job after delivery
-      setTimeout(() => jobs.delete(jobId), 30000);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
+  return json(response);
 };

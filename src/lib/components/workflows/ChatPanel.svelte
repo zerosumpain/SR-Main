@@ -89,55 +89,59 @@
       const { jobId } = await postRes.json();
       if (!jobId) throw new Error('No job ID returned');
 
-      messages = messages.map(m =>
-        m.id === progressId ? { ...m, content: 'Thinking...' } : m,
-      );
-      scrollToBottom();
+      // Phase 2: Poll for progress and result
+      let done = false;
+      let lastProgress = 0;
+      const startTime = Date.now();
+      const TIMEOUT = 180000; // 3 min
 
-      // Phase 2: GET SSE stream to receive progress + result
-      const evtSource = new EventSource(`/api/workflows/orchestrator/chat?jobId=${jobId}`);
+      while (!done && Date.now() - startTime < TIMEOUT) {
+        await new Promise(r => setTimeout(r, 1500));
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          evtSource.close();
-          reject(new Error('Orchestrator timed out after 3 minutes'));
-        }, 180000);
+        try {
+          const pollRes = await fetch(`/api/workflows/orchestrator/chat?jobId=${jobId}`);
+          if (!pollRes.ok) continue;
 
-        evtSource.onmessage = (e) => {
-          let event: Record<string, any>;
-          try { event = JSON.parse(e.data); } catch { return; }
+          const data = await pollRes.json();
 
-          if (event.type === 'progress') {
+          // Update progress messages
+          if (data.progress && data.progress.length > lastProgress) {
+            const latestProgress = data.progress[data.progress.length - 1];
             messages = messages.map(m =>
-              m.id === progressId ? { ...m, content: event.message || 'Working...' } : m,
+              m.id === progressId ? { ...m, content: latestProgress.replace(/\n$/, '') || 'Working...' } : m,
             );
+            lastProgress = data.progress.length;
             scrollToBottom();
-          } else if (event.type === 'done') {
-            clearTimeout(timeout);
-            evtSource.close();
+          }
+
+          // Check if job is done
+          if (data.status === 'done' || data.status === 'error') {
+            done = true;
+            const result = data.result || {};
 
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
-              content: event.message || event.error || 'Something went wrong.',
-              metadata: { workflowGenerated: !!event.workflow },
-              thinking: event.thinking || undefined,
+              content: result.message || result.error || data.error || 'Something went wrong.',
+              metadata: { workflowGenerated: !!result.workflow },
+              thinking: result.thinking || undefined,
             };
             messages = messages.map(m => m.id === progressId ? finalMsg : m);
 
-            if (event.redirectTo) goto(event.redirectTo);
-            else if (event.workflow) onWorkflowGenerated(event.workflow);
-
-            resolve();
+            if (result.redirectTo) goto(result.redirectTo);
+            else if (result.workflow) onWorkflowGenerated(result.workflow);
           }
-        };
+        } catch {
+          // Network error on poll — keep trying
+        }
+      }
 
-        evtSource.onerror = () => {
-          clearTimeout(timeout);
-          evtSource.close();
-          reject(new Error('Lost connection to orchestrator — it may still be working. Refresh the page to check.'));
-        };
-      });
+      if (!done) {
+        messages = messages.map(m => m.id === progressId ? {
+          ...m,
+          content: 'The orchestrator is taking too long. It may still be working — refresh the page to check.',
+        } : m);
+      }
     } catch (err) {
       messages = messages.map(m => m.id === progressId ? {
         ...m,
