@@ -6,35 +6,18 @@ import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
 import { SITE_TOOL_DEFINITIONS, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
-
-const SYSTEM_PROMPT = `You are a personal AI assistant available via WhatsApp. You are deeply integrated with your user's personal platform (strangeramblings.com) which includes:
-
-- A workflow automation engine that can create and run automations (data pipelines, scheduled tasks, API integrations, notifications)
-- Health data from Strava (activities, stats) and Apple Watch (heart rate, recovery)
-- A blog/CMS system
-- Weather and location-aware features
-- Smart home control via Home Assistant (if configured)
-
-You can help with anything: answer questions, do research, have a conversation, give advice, brainstorm ideas, help with tasks, or control smart home devices.
-
-Keep responses concise — this is WhatsApp, not an essay. Be direct, useful, and natural.`;
 
 const MAX_HISTORY = 30; // messages to include as context
 
 export class OrchestratorBridge {
 	private sendFn: SendFn;
-	private soulMd: string;
 
-	constructor(sendFn: SendFn, soulMd: string) {
+	constructor(sendFn: SendFn) {
 		this.sendFn = sendFn;
-		this.soulMd = soulMd;
-	}
-
-	setSoulMd(soulMd: string): void {
-		this.soulMd = soulMd;
 	}
 
 	isResetCommand(text: string): boolean {
@@ -77,11 +60,10 @@ export class OrchestratorBridge {
 			} catch {}
 
 			// Build messages for the LLM
+			const basePrompt = await getCompiledPrompt();
 			const haSection = buildHASystemPromptSection(haEntities);
 			const siteSection = buildSiteSystemPromptSection();
-			const systemContent = this.soulMd
-				? `${SYSTEM_PROMPT}${haSection}${siteSection}\n\n--- Personality & Style ---\n${this.soulMd}`
-				: `${SYSTEM_PROMPT}${haSection}${siteSection}`;
+			const systemContent = `${basePrompt}${haSection}${siteSection}`;
 
 			const messages: Array<any> = [
 				{ role: 'system', content: systemContent },

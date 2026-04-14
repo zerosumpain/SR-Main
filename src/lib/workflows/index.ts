@@ -30,6 +30,7 @@ import { jkaiDef, jkaiExecutor } from './nodes/jkai';
 import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
+import { syncPrompts } from './prompts/loader';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -109,7 +110,6 @@ async function bootWhatsApp() {
 
     const bridge = new OrchestratorBridge(
       (to, text) => service.sendMessage(to, text),
-      config.soulMd || '',
     );
 
     service.onMessage((msg) => bridge.handleMessage(msg));
@@ -165,6 +165,11 @@ async function bootHomeAssistant() {
 }
 
 bootHomeAssistant();
+
+syncPrompts().catch((err: unknown) => {
+  const msg = err instanceof Error ? err.message : 'Unknown error';
+  console.error('[prompts] Sync failed:', msg);
+});
 
 export const engine = new WorkflowEngine(registry);
 

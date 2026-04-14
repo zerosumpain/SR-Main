@@ -68,6 +68,10 @@ vi.mock('$lib/workflows/site-tools/executor', () => ({
 	executeSiteTool: vi.fn().mockResolvedValue({ success: true, data: {} }),
 }));
 
+vi.mock('$lib/workflows/prompts/loader', () => ({
+	getCompiledPrompt: vi.fn().mockResolvedValue('You are a helpful assistant.'),
+}));
+
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
 import type { WhatsAppInboundMessage } from '$lib/workflows/whatsapp/types';
 
@@ -78,7 +82,7 @@ describe('OrchestratorBridge', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		sendFn = vi.fn().mockResolvedValue({ sent: true });
-		bridge = new OrchestratorBridge(sendFn, '');
+		bridge = new OrchestratorBridge(sendFn);
 		mockDbSelect.mockResolvedValue([]);
 	});
 

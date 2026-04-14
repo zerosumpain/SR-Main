@@ -1,6 +1,7 @@
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { db } from '$lib/db';
-import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions, whatsappConfig } from '$lib/db/schema';
+import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions } from '$lib/db/schema';
+import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { eq, asc, desc, and, isNotNull } from 'drizzle-orm';
 import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from './prompts';
 import { buildNodeGrounding, type ExecutionExample } from './grounding';
@@ -50,19 +51,6 @@ async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
     return Array.from(byType.values()).flat();
   } catch {
     return [];
-  }
-}
-
-async function loadSoulMd(): Promise<string> {
-  try {
-    const [config] = await db
-      .select()
-      .from(whatsappConfig)
-      .where(eq(whatsappConfig.id, 'default'))
-      .limit(1);
-    return config?.soulMd || '';
-  } catch {
-    return '';
   }
 }
 
@@ -345,10 +333,10 @@ export async function generateWorkflow(
   messages: ChatMessage[];
 }> {
   const grounding = await buildGrounding();
-  const soulMd = await loadSoulMd();
+  const personalityPrompt = await getCompiledPrompt();
   const basePrompt = buildToolUseSystemPrompt(grounding);
-  const systemPrompt = soulMd
-    ? `${basePrompt}\n\n--- Personality & Style ---\n${soulMd}`
+  const systemPrompt = personalityPrompt
+    ? `${basePrompt}\n\n${personalityPrompt}`
     : basePrompt;
 
   let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -443,13 +431,13 @@ export async function modifyWorkflow(
   thinking?: OrchestratorThinking;
 }> {
   const grounding = await buildGrounding();
-  const soulMd = await loadSoulMd();
+  const personalityPrompt = await getCompiledPrompt();
   const baseModifyPrompt = buildModifySystemPrompt(
     { nodes: currentNodes, edges: currentEdges },
     grounding,
   );
-  const systemPrompt = soulMd
-    ? `${baseModifyPrompt}\n\n--- Personality & Style ---\n${soulMd}`
+  const systemPrompt = personalityPrompt
+    ? `${baseModifyPrompt}\n\n${personalityPrompt}`
     : baseModifyPrompt;
 
   const history = await getChatHistory(workflowId);
