@@ -121,11 +121,13 @@ export class WhatsAppService {
 				const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
 				const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
+				// Always mark as disconnected so reconnect guard doesn't block
+				this.status = 'disconnected';
+				this.connectedNumber = null;
+				this.sock = null;
+
 				if (isLoggedOut) {
 					console.log('[whatsapp] Logged out — clearing session');
-					this.status = 'disconnected';
-					this.connectedNumber = null;
-					this.sock = null;
 				} else if (this.reconnectAttempts < this.maxReconnectAttempts) {
 					this.reconnectAttempts++;
 					const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
@@ -135,9 +137,6 @@ export class WhatsAppService {
 					setTimeout(() => this.connect(authDir), delay);
 				} else {
 					console.log('[whatsapp] Max reconnect attempts reached');
-					this.status = 'disconnected';
-					this.connectedNumber = null;
-					this.sock = null;
 				}
 			}
 		});
