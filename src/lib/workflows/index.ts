@@ -23,11 +23,13 @@ import { accumulatorDef, accumulatorExecutor } from './nodes/accumulator';
 import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
 import { llmAgentDef, llmAgentExecutor } from './nodes/llm-agent';
 import { whatsappDef, whatsappExecutor } from './nodes/whatsapp';
+import { homeAssistantDef, homeAssistantExecutor } from './nodes/home-assistant';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { db } from '$lib/db';
-import { whatsappConfig } from '$lib/db/schema';
+import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { initHomeAssistantService } from './homeassistant/service';
 import {
   DYNAMIC_NODES_DIR,
   loadDynamicNodeDefinitions,
@@ -60,6 +62,7 @@ registry.register(accumulatorDef, accumulatorExecutor);
 registry.register(subWorkflowDef, subWorkflowExecutor);
 registry.register(llmAgentDef, llmAgentExecutor);
 registry.register(whatsappDef, whatsappExecutor);
+registry.register(homeAssistantDef, homeAssistantExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();
@@ -112,6 +115,48 @@ async function bootWhatsApp() {
 }
 
 bootWhatsApp();
+
+// Boot Home Assistant service if configured
+async function bootHomeAssistant() {
+  try {
+    const [config] = await db
+      .select()
+      .from(homeAssistantConfig)
+      .where(eq(homeAssistantConfig.id, 'default'))
+      .limit(1);
+
+    if (!config?.token) {
+      console.log('[ha] No token configured — skipping boot');
+      return;
+    }
+
+    const service = initHomeAssistantService(config.url, config.token);
+
+    // Sync registries if stale (older than 1 hour)
+    const oneHourAgo = new Date(Date.now() - 3600000);
+    if (!config.lastSynced || new Date(config.lastSynced) < oneHourAgo) {
+      try {
+        const { entities, entityCount } = await service.syncRegistries();
+        await db.update(homeAssistantConfig).set({
+          entityRegistry: entities,
+          lastSynced: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(homeAssistantConfig.id, 'default'));
+        console.log(`[ha] Synced ${entityCount} entities`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[ha] Registry sync failed:', msg);
+      }
+    }
+
+    console.log('[ha] Service booted');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[ha] Boot failed:', msg);
+  }
+}
+
+bootHomeAssistant();
 
 export const engine = new WorkflowEngine(registry);
 

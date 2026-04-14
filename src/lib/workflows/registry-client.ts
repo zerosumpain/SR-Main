@@ -487,6 +487,55 @@ Requires an active WhatsApp connection (configured via the WhatsApp settings in 
   ],
 };
 
+const homeAssistantClientDef: NodeDefinition = {
+  type: 'home-assistant',
+  label: 'Home Assistant',
+  category: 'integration',
+  description: 'Control Home Assistant: query state, call services, fire events, get history, render templates.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string' },
+      entityId: { type: 'string' },
+      domain: { type: 'string' },
+      service: { type: 'string' },
+      serviceData: { type: 'string' },
+      eventType: { type: 'string' },
+      eventData: { type: 'string' },
+      historyStart: { type: 'string' },
+      historyEnd: { type: 'string' },
+      template: { type: 'string' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'query_state', entityId: '' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
+      { value: 'query_state', label: 'Query State' },
+      { value: 'call_service', label: 'Call Service' },
+      { value: 'fire_event', label: 'Fire Event' },
+      { value: 'get_history', label: 'Get History' },
+      { value: 'render_template', label: 'Render Template' },
+    ]},
+    { key: 'entityId', label: 'Entity ID', type: 'template-textarea', placeholder: 'light.living_room_ceiling' },
+    { key: 'domain', label: 'Domain', type: 'text', placeholder: 'light', advancedOnly: true },
+    { key: 'service', label: 'Service', type: 'text', placeholder: 'turn_on' },
+    { key: 'serviceData', label: 'Service Data (JSON)', type: 'textarea', placeholder: '{"brightness": 128}', advancedOnly: true },
+    { key: 'eventType', label: 'Event Type', type: 'text', placeholder: 'custom_event', advancedOnly: true },
+    { key: 'eventData', label: 'Event Data (JSON)', type: 'textarea', advancedOnly: true },
+    { key: 'historyStart', label: 'History Start', type: 'template-textarea', advancedOnly: true },
+    { key: 'historyEnd', label: 'History End', type: 'template-textarea', advancedOnly: true },
+    { key: 'template', label: 'Template (Jinja2)', type: 'code', placeholder: '{{ states("light.living_room") }}', advancedOnly: true },
+  ],
+  llmDescription: 'Control Home Assistant smart home devices. Query state, call services, fire events, get history, or render templates.',
+  llmExamples: [
+    { operation: 'query_state', entityId: 'sensor.living_room_temperature' },
+    { operation: 'call_service', entityId: 'light.kitchen', domain: 'light', service: 'turn_off' },
+  ],
+};
+
 const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -511,6 +560,7 @@ const builtInDefinitions: NodeDefinition[] = [
   subWorkflowDef,
   llmAgentDef,
   whatsappDef,
+  homeAssistantClientDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;
