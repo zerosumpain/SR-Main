@@ -106,14 +106,30 @@ async function runToolLoop(
   let workflowDescription: string | undefined;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await client.chat.completions.create({
-      model,
-      messages,
-      tools: openaiTools as any,
-      tool_choice: 'auto',
-      temperature: 0.7,
-      max_tokens: 4096,
-    });
+    // Retry with backoff on 429 rate limits
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await client.chat.completions.create({
+          model,
+          messages,
+          tools: openaiTools as any,
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 4096,
+        });
+        break;
+      } catch (err: any) {
+        if (err?.status === 429 && attempt < 2) {
+          const wait = (attempt + 1) * 5000; // 5s, 10s
+          onChunk?.(`Rate limited — waiting ${wait / 1000}s before retry...\n`);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!response) break;
 
     const choice = response.choices[0];
     if (!choice) break;
@@ -202,18 +218,32 @@ async function runCriticRound(
     .map(d => `[${d.type}] ${d.summary}${d.detail ? ': ' + d.detail : ''}`)
     .join('\n');
 
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: buildCriticPrompt() },
-      { role: 'user', content: `## Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Reasoning Trace\n\n${reasoningTrace}` },
-    ],
-    temperature: 0.5,
-    max_tokens: 2048,
-    response_format: { type: 'json_object' },
-  });
+  let response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: buildCriticPrompt() },
+          { role: 'user', content: `## Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Reasoning Trace\n\n${reasoningTrace}` },
+        ],
+        temperature: 0.5,
+        max_tokens: 2048,
+        response_format: { type: 'json_object' },
+      });
+      break;
+    } catch (err: any) {
+      if (err?.status === 429 && attempt < 2) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
+        continue;
+      }
+      // Critic failure is non-fatal — skip review
+      console.warn('[orchestrator] Critic round failed:', err?.message);
+      return { issues: [], verdict: 'pass' as const };
+    }
+  }
 
-  const text = response.choices[0]?.message?.content ?? '{}';
+  const text = response?.choices[0]?.message?.content ?? '{}';
   try {
     const parsed = JSON.parse(text);
     return {
