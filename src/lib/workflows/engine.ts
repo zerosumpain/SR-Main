@@ -10,6 +10,8 @@ import type { NodeRegistry } from './registry';
 import { buildGraph, topologicalSort } from './graph';
 import type { WorkflowGraph } from './graph';
 import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events';
+import { diagnoseAndFix } from './orchestrator/healing';
+import type { HealingContext, UndoEntry, NodeDefinition } from './types';
 
 export interface EngineResult {
   status: RunStatus;
@@ -17,6 +19,7 @@ export interface EngineResult {
   nodeInputs: Map<string, Record<string, unknown>>;
   nodeErrors: Map<string, string>;
   error?: string;
+  healingHistory?: UndoEntry[];
 }
 
 export class WorkflowEngine {
@@ -78,6 +81,7 @@ export class WorkflowEngine {
     initialInput: Record<string, unknown>,
     breakpoints?: Set<string>,
     workflowId?: string,
+    options?: { selfHealing?: boolean },
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
@@ -85,6 +89,7 @@ export class WorkflowEngine {
     const skippedNodes = new Set<string>();
     const blockedEdgeIds = new Set<string>();
     const abortController = new AbortController();
+    const healingHistory: UndoEntry[] = [];
 
     // Merge breakpoints from setBreakpoints() with those passed directly
     const storedBreakpoints = this.activeBreakpoints.get(runId);
@@ -191,25 +196,194 @@ export class WorkflowEngine {
             }
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
-            nodeErrors.set(nodeId, message);
-            emit('node_failed', nodeId, { error: message });
-            throw err;
+            const selfHealing = options?.selfHealing !== false;
+
+            if (!selfHealing) {
+              nodeErrors.set(nodeId, message);
+              emit('node_failed', nodeId, { error: message });
+              throw err;
+            }
+
+            // Self-healing loop
+            const MAX_HEALING_ATTEMPTS = 3;
+            let healed = false;
+            let currentError = message;
+            let currentConfig = { ...nodeDef.config };
+            const attempts: Array<{ diagnosis: string; fixApplied: string; resultError: string }> = [];
+
+            for (let attempt = 1; attempt <= MAX_HEALING_ATTEMPTS; attempt++) {
+              emit('healing_started', nodeId, {
+                attempt,
+                maxAttempts: MAX_HEALING_ATTEMPTS,
+                error: currentError,
+                nodeLabel: nodeDef.label,
+              });
+
+              try {
+                const nodeDef2 = this.registry.getDefinition(nodeDef.type);
+                const healingContext: HealingContext = {
+                  error: currentError,
+                  nodeType: nodeDef.type,
+                  nodeLabel: nodeDef.label,
+                  nodeConfig: currentConfig,
+                  inputData: mergedInput,
+                  nodeDefinition: nodeDef2 || {
+                    type: nodeDef.type,
+                    label: nodeDef.label,
+                    category: 'core' as const,
+                    description: '',
+                    configSchema: { type: 'object' },
+                    defaultConfig: {},
+                    inputs: [{ name: 'input', type: 'any' as const }],
+                    outputs: [{ name: 'output', type: 'any' as const }],
+                  },
+                  previousAttempts: attempts,
+                  workflowContext: {
+                    nodes: workflow.nodes.map(n => ({ id: n.id, type: n.type, label: n.label })),
+                    edges: workflow.edges.map(e => ({ sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId })),
+                    upstreamOutputs: Object.fromEntries(
+                      Array.from(nodeOutputs.entries()).filter(([id]) => {
+                        const incoming = graph.edgesByTarget.get(nodeId) || [];
+                        return incoming.some(e => e.sourceNodeId === id);
+                      }),
+                    ),
+                  },
+                };
+
+                const diagnosis = await diagnoseAndFix(
+                  healingContext,
+                  (text) => emit('healing_progress', nodeId, { text }),
+                );
+
+                if (diagnosis.category === 'environment_issue') {
+                  emit('healing_blocked', nodeId, {
+                    diagnosis: diagnosis.diagnosis,
+                    reasoning: diagnosis.reasoning,
+                    environmentAction: diagnosis.environmentAction,
+                    alternative: diagnosis.alternative,
+                  });
+                  nodeErrors.set(nodeId, `Environment issue: ${diagnosis.diagnosis}`);
+                  const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+                  for (const edge of outgoingEdges) {
+                    blockedEdgeIds.add(edge.id);
+                    this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+                  }
+                  break;
+                }
+
+                if (diagnosis.category === 'unknown' || !diagnosis.fix) {
+                  emit('healing_progress', nodeId, { text: `Could not determine a fix: ${diagnosis.diagnosis}` });
+                  attempts.push({
+                    diagnosis: diagnosis.diagnosis,
+                    fixApplied: 'none',
+                    resultError: currentError,
+                  });
+                  continue;
+                }
+
+                if (diagnosis.fix.type === 'update_config') {
+                  const originalConfig = { ...currentConfig };
+                  const newConfig = { ...currentConfig, ...diagnosis.fix.changes };
+
+                  const undoEntry: UndoEntry = {
+                    id: crypto.randomUUID(),
+                    runId,
+                    nodeId,
+                    attempt,
+                    timestamp: new Date().toISOString(),
+                    originalConfig,
+                    newConfig,
+                    fixDescription: diagnosis.fix.description,
+                  };
+                  healingHistory.push(undoEntry);
+
+                  currentConfig = newConfig;
+                  nodeDef.config = newConfig;
+
+                  emit('healing_fix_applied', nodeId, {
+                    fixType: 'config',
+                    description: diagnosis.fix.description,
+                    undoId: undoEntry.id,
+                    attempt,
+                  });
+                }
+
+                // Retry the node
+                emit('node_started', nodeId);
+                try {
+                  const retryResult: NodeResult = await executor.execute(mergedInput, currentConfig, context);
+                  nodeOutputs.set(nodeId, retryResult.output);
+                  emit('healing_succeeded', nodeId, { attempt });
+                  emit('node_completed', nodeId, retryResult.output);
+
+                  const retryHandle = retryResult.metadata?._selectedHandle as string | undefined;
+                  if (retryHandle !== undefined) {
+                    const outEdges = graph.edgesBySource.get(nodeId) || [];
+                    for (const edge of outEdges) {
+                      if (edge.sourceHandle !== retryHandle) {
+                        blockedEdgeIds.add(edge.id);
+                        this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+                      }
+                    }
+                  }
+
+                  healed = true;
+                  break;
+                } catch (retryErr: unknown) {
+                  currentError = retryErr instanceof Error ? retryErr.message : String(retryErr);
+                  attempts.push({
+                    diagnosis: diagnosis.diagnosis,
+                    fixApplied: diagnosis.fix.description,
+                    resultError: currentError,
+                  });
+                  emit('healing_progress', nodeId, { text: `Fix attempt ${attempt} failed: ${currentError}` });
+                }
+              } catch (healErr: unknown) {
+                const healMsg = healErr instanceof Error ? healErr.message : String(healErr);
+                emit('healing_progress', nodeId, { text: `Healing error: ${healMsg}` });
+                break;
+              }
+            }
+
+            if (!healed) {
+              emit('healing_failed', nodeId, { attempts });
+              nodeErrors.set(nodeId, currentError);
+              const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+              for (const edge of outgoingEdges) {
+                blockedEdgeIds.add(edge.id);
+                this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+              }
+              // Don't throw — let other branches continue
+            }
           }
         });
 
         await Promise.all(promises);
       }
 
-      emit('run_completed');
+      // Determine final status
+      const hasErrors = nodeErrors.size > 0;
+      const hasCompletedNodes = nodeOutputs.size > 0;
+      const finalStatus: RunStatus = hasErrors
+        ? (hasCompletedNodes ? 'completed_with_errors' : 'failed')
+        : 'completed';
+
+      if (finalStatus === 'completed') {
+        emit('run_completed');
+      } else if (finalStatus === 'completed_with_errors') {
+        emit('run_completed_with_errors');
+      } else {
+        emit('run_failed');
+      }
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
-      return { status: 'completed', nodeOutputs, nodeInputs, nodeErrors };
+      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, healingHistory };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
-      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message };
+      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message, healingHistory };
     }
   }
 }
