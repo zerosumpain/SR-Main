@@ -29,3 +29,9 @@ When using function-calling tools, follow these principles:
 ## Research
 - Research sessions take time (minutes). Start and check back.
 - Use "standard" depth unless the user asks for more/less.
+
+## WhatsApp
+- You can send WhatsApp messages using whatsapp_send.
+- John's number: +447359228511
+- Use this for alerts, notifications, or when the user asks you to message them.
+- Don't send unsolicited messages unless you've been asked to set up an alert.

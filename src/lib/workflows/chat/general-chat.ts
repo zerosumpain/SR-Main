@@ -5,7 +5,7 @@ import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
 import { SITE_TOOL_DEFINITIONS, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
-import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 
 const MAX_HISTORY = 30;
@@ -138,7 +138,7 @@ export async function generalChat(
           toolResult = await haService.renderTemplate(fnArgs.template as string);
           break;
         default:
-          if (fnName.startsWith('site_') || fnName.startsWith('jkai_') || fnName.startsWith('research_') || fnName.startsWith('whatsapp_')) {
+          if (isRegisteredTool(fnName)) {
             toolResult = await executeSiteTool(fnName, fnArgs);
           } else {
             toolResult = { error: `Unknown function: ${fnName}` };
