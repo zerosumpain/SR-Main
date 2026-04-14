@@ -22,6 +22,12 @@ import { mergeDef, mergeExecutor } from './nodes/merge';
 import { accumulatorDef, accumulatorExecutor } from './nodes/accumulator';
 import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
 import { llmAgentDef, llmAgentExecutor } from './nodes/llm-agent';
+import { whatsappDef, whatsappExecutor } from './nodes/whatsapp';
+import { getWhatsAppService } from './whatsapp/service';
+import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
+import { db } from '$lib/db';
+import { whatsappConfig } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 import {
   DYNAMIC_NODES_DIR,
   loadDynamicNodeDefinitions,
@@ -53,6 +59,7 @@ registry.register(mergeDef, mergeExecutor);
 registry.register(accumulatorDef, accumulatorExecutor);
 registry.register(subWorkflowDef, subWorkflowExecutor);
 registry.register(llmAgentDef, llmAgentExecutor);
+registry.register(whatsappDef, whatsappExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();
@@ -71,6 +78,40 @@ for (const def of dynamicDefs) {
     }
   });
 }
+
+// Boot WhatsApp service if enabled
+async function bootWhatsApp() {
+  try {
+    const [config] = await db
+      .select()
+      .from(whatsappConfig)
+      .where(eq(whatsappConfig.id, 'default'))
+      .limit(1);
+
+    if (!config?.enabled) {
+      console.log('[whatsapp] Not enabled — skipping boot');
+      return;
+    }
+
+    const service = getWhatsAppService();
+    service.setAllowedNumbers((config.allowedNumbers as string[]) || []);
+
+    const bridge = new OrchestratorBridge(
+      (to, text) => service.sendMessage(to, text),
+      config.soulMd || '',
+    );
+
+    service.onMessage((msg) => bridge.handleMessage(msg));
+    await service.connect(config.authDir || 'data/whatsapp-auth');
+
+    console.log('[whatsapp] Service booted');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[whatsapp] Boot failed:', msg);
+  }
+}
+
+bootWhatsApp();
 
 export const engine = new WorkflowEngine(registry);
 
