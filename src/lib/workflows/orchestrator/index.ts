@@ -1,6 +1,6 @@
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { db } from '$lib/db';
-import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions } from '$lib/db/schema';
+import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions, whatsappConfig } from '$lib/db/schema';
 import { eq, asc, desc, and, isNotNull } from 'drizzle-orm';
 import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from './prompts';
 import { buildNodeGrounding, type ExecutionExample } from './grounding';
@@ -50,6 +50,19 @@ async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
     return Array.from(byType.values()).flat();
   } catch {
     return [];
+  }
+}
+
+async function loadSoulMd(): Promise<string> {
+  try {
+    const [config] = await db
+      .select()
+      .from(whatsappConfig)
+      .where(eq(whatsappConfig.id, 'default'))
+      .limit(1);
+    return config?.soulMd || '';
+  } catch {
+    return '';
   }
 }
 
@@ -332,7 +345,11 @@ export async function generateWorkflow(
   messages: ChatMessage[];
 }> {
   const grounding = await buildGrounding();
-  const systemPrompt = buildToolUseSystemPrompt(grounding);
+  const soulMd = await loadSoulMd();
+  const basePrompt = buildToolUseSystemPrompt(grounding);
+  const systemPrompt = soulMd
+    ? `${basePrompt}\n\n--- Personality & Style ---\n${soulMd}`
+    : basePrompt;
 
   let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   if (workflowId) {
@@ -426,10 +443,14 @@ export async function modifyWorkflow(
   thinking?: OrchestratorThinking;
 }> {
   const grounding = await buildGrounding();
-  const systemPrompt = buildModifySystemPrompt(
+  const soulMd = await loadSoulMd();
+  const baseModifyPrompt = buildModifySystemPrompt(
     { nodes: currentNodes, edges: currentEdges },
     grounding,
   );
+  const systemPrompt = soulMd
+    ? `${baseModifyPrompt}\n\n--- Personality & Style ---\n${soulMd}`
+    : baseModifyPrompt;
 
   const history = await getChatHistory(workflowId);
   const conversationHistory = history.map(h => ({
