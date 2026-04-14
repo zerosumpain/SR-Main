@@ -81,13 +81,14 @@
         }),
       });
 
+      const postData = await postRes.json().catch(() => null);
+
       if (!postRes.ok) {
-        const err = await postRes.json().catch(() => ({ error: `HTTP ${postRes.status}` }));
-        throw new Error(err.error || `Server error (${postRes.status})`);
+        throw new Error(postData?.error || `Server error (${postRes.status})`);
       }
 
-      const { jobId } = await postRes.json();
-      if (!jobId) throw new Error('No job ID returned');
+      const jobId = postData?.jobId;
+      if (!jobId) throw new Error(`No job ID returned. Response: ${JSON.stringify(postData).slice(0, 200)}`);
 
       // Phase 2: Poll for progress and result
       let done = false;
@@ -143,9 +144,11 @@
         } : m);
       }
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[orchestrator-chat]', errMsg);
       messages = messages.map(m => m.id === progressId ? {
         ...m,
-        content: `Orchestrator error: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        content: `Error: ${errMsg}`,
       } : m);
     }
 
