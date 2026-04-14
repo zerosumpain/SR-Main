@@ -197,7 +197,7 @@ export class WorkflowEngine {
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             const selfHealing = options?.selfHealing !== false;
-            console.log(`[engine] Node ${nodeId} (${nodeDef.type}) failed: ${message}. selfHealing=${selfHealing}`);
+            console.log(`[healing] Node ${nodeId} (${nodeDef.type}) failed: ${message.slice(0, 100)}`);
 
             if (!selfHealing) {
               nodeErrors.set(nodeId, message);
@@ -212,9 +212,9 @@ export class WorkflowEngine {
             let currentConfig = { ...nodeDef.config };
             const attempts: Array<{ diagnosis: string; fixApplied: string; resultError: string }> = [];
 
-            console.log(`[engine] Entering healing loop for ${nodeId}, max attempts: ${MAX_HEALING_ATTEMPTS}`);
+            console.log(`[healing] Starting self-healing for ${nodeId} (up to ${MAX_HEALING_ATTEMPTS} attempts)`);
             for (let attempt = 1; attempt <= MAX_HEALING_ATTEMPTS; attempt++) {
-              console.log(`[engine] Healing attempt ${attempt} for ${nodeId}`);
+              console.log(`[healing] Attempt ${attempt}/${MAX_HEALING_ATTEMPTS} for ${nodeId}`);
               emit('healing_started', nodeId, {
                 attempt,
                 maxAttempts: MAX_HEALING_ATTEMPTS,
@@ -253,7 +253,7 @@ export class WorkflowEngine {
                   },
                 };
 
-                console.log(`[engine] Calling diagnoseAndFix for ${nodeId}...`);
+                console.log(`[healing] Calling LLM diagnosis for ${nodeId}...`);
                 // Timeout the diagnosis call after 60s
                 const diagnosisPromise = diagnoseAndFix(
                   healingContext,
@@ -263,7 +263,7 @@ export class WorkflowEngine {
                   setTimeout(() => reject(new Error('Diagnosis timed out after 60s')), 60000),
                 );
                 const diagnosis = await Promise.race([diagnosisPromise, timeoutPromise]);
-                console.log(`[engine] Diagnosis result for ${nodeId}: ${diagnosis.category} — ${diagnosis.diagnosis.slice(0, 100)}`);
+                console.log(`[healing] Diagnosis for ${nodeId}: ${diagnosis.category} — ${diagnosis.diagnosis.slice(0, 100)}`);
 
                 if (diagnosis.category === 'environment_issue') {
                   emit('healing_blocked', nodeId, {
@@ -350,7 +350,7 @@ export class WorkflowEngine {
                 }
               } catch (healErr: unknown) {
                 const healMsg = healErr instanceof Error ? healErr.message : String(healErr);
-                console.error(`[engine] Healing error for ${nodeId}: ${healMsg}`);
+                console.error(`[healing] Error for ${nodeId}: ${healMsg}`);
                 emit('healing_progress', nodeId, { text: `Healing error: ${healMsg}` });
                 break;
               }
