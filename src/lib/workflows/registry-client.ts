@@ -441,6 +441,52 @@ const llmAgentDef: NodeDefinition = {
   ],
 };
 
+// WhatsApp definition without importing the executor (which pulls in baileys — server-only)
+const whatsappDef: NodeDefinition = {
+  type: 'whatsapp',
+  label: 'WhatsApp',
+  category: 'integration',
+  description: 'Send a WhatsApp message. To and message fields support {{input.field}} templates.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      to: { type: 'string', description: 'Recipient phone number (E.164 format). Supports {{input.field}} templates.' },
+      message: { type: 'string', description: 'Message text. Supports {{input.field}} templates.' },
+    },
+    required: ['to', 'message'],
+  },
+  defaultConfig: { to: '', message: '' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    {
+      key: 'to',
+      label: 'To (Phone Number)',
+      type: 'text',
+      placeholder: '+447359228511 or {{input.output.phone}}',
+      description: 'E.164 format. Supports template interpolation.',
+    },
+    {
+      key: 'message',
+      label: 'Message',
+      type: 'template-textarea',
+      placeholder: 'Hi {{input.output.name}}, your report is ready.',
+      description: 'Message text. Supports {{input.field}} templates.',
+    },
+  ],
+  llmDescription: `Send a WhatsApp message to a phone number. Use this node when a workflow needs to notify someone via WhatsApp.
+
+IMPORTANT: The output is wrapped in an \`output\` object. Downstream nodes should access \`input.output.sent\`, \`input.output.messageId\`, or \`input.output.error\`.
+
+The \`to\` field must be an E.164 phone number (e.g., "+447359228511"). Both \`to\` and \`message\` support template interpolation with \`{{input.field}}\` syntax.
+
+Requires an active WhatsApp connection (configured via the WhatsApp settings in the workflows UI).`,
+  llmExamples: [
+    { to: '+447359228511', message: 'Daily report: {{input.output.summary}}' },
+    { to: '{{input.output.phone}}', message: '{{input.output.notification}}' },
+  ],
+};
+
 const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -464,6 +510,7 @@ const builtInDefinitions: NodeDefinition[] = [
   accumulatorDef,
   subWorkflowDef,
   llmAgentDef,
+  whatsappDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;
