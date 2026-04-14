@@ -17,6 +17,19 @@
   import WhoopNode from './nodes/WhoopNode.svelte';
   import OpenRouterNode from './nodes/OpenRouterNode.svelte';
   import TextParserNode from './nodes/TextParserNode.svelte';
+  import ValidatorNode from './nodes/ValidatorNode.svelte';
+  import ThinkNode from './nodes/ThinkNode.svelte';
+  import LlmRouterNode from './nodes/LlmRouterNode.svelte';
+  import MergeNode from './nodes/MergeNode.svelte';
+  import AccumulatorNode from './nodes/AccumulatorNode.svelte';
+  import SubWorkflowNode from './nodes/SubWorkflowNode.svelte';
+  import LlmAgentNode from './nodes/LlmAgentNode.svelte';
+  import WhatsAppNode from './nodes/WhatsAppNode.svelte';
+  import HomeAssistantNode from './nodes/HomeAssistantNode.svelte';
+  import HealthQueryNode from './nodes/HealthQueryNode.svelte';
+  import BlogNode from './nodes/BlogNode.svelte';
+  import JkaiNode from './nodes/JkaiNode.svelte';
+  import DeepDiveNode from './nodes/DeepDiveNode.svelte';
   import FitViewHelper from './FitViewHelper.svelte';
 
   let {
@@ -49,6 +62,19 @@
     'whoop': WhoopNode,
     'openrouter': OpenRouterNode,
     'text-parser': TextParserNode,
+    'validator': ValidatorNode,
+    'think': ThinkNode,
+    'llm-router': LlmRouterNode,
+    'merge': MergeNode,
+    'accumulator': AccumulatorNode,
+    'sub-workflow': SubWorkflowNode,
+    'llm-agent': LlmAgentNode,
+    'whatsapp': WhatsAppNode,
+    'home-assistant': HomeAssistantNode,
+    'health-query': HealthQueryNode,
+    'blog': BlogNode,
+    'jkai': JkaiNode,
+    'deep-dive': DeepDiveNode,
   };
 
   const MAX_ZOOM = 1.5;
