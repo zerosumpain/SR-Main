@@ -596,7 +596,7 @@ export type NewWorkflowEdge = typeof workflowEdges.$inferInsert;
 
 export const workflowRuns = pgTable('workflow_runs', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  workflowId: text('workflow_id').notNull().references(() => workflows.id),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
   status: text('status').notNull().default('pending'),
   trigger: text('trigger').notNull().default('manual'),
   startedAt: timestamp('started_at', { withTimezone: true }),
