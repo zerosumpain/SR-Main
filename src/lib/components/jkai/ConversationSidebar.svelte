@@ -60,7 +60,7 @@
   </button>
 {:else}
   <div
-    class="w-64 flex-shrink-0 border-r flex flex-col h-full"
+    class="w-full sm:w-64 flex-shrink-0 border-r flex flex-col h-full"
     style="border-color: var(--card-border);"
   >
     <!-- Header -->

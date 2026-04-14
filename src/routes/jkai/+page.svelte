@@ -10,10 +10,11 @@
   let whatsappThread = $state(data.whatsappThread);
   let activeConversationId = $state<string | null>(null);
   let activeMessages = $state<any[]>([]);
-  let sidebarCollapsed = $state(false);
+  let sidebarOpen = $state(false);
 
   async function selectConversation(id: string) {
     activeConversationId = id;
+    sidebarOpen = false;
     try {
       const res = await fetch(`/api/jkai/conversations/${id}`);
       if (res.ok) {
@@ -40,6 +41,7 @@
         ];
         activeConversationId = conv.id;
         activeMessages = [];
+        sidebarOpen = false;
       }
     } catch (err) {
       console.error('Failed to create conversation:', err);
@@ -49,7 +51,6 @@
   async function selectWhatsApp() {
     if (!whatsappThread?.phoneNumber) return;
 
-    // Create a whatsapp-continuation conversation
     try {
       const res = await fetch('/api/jkai/conversations', {
         method: 'POST',
@@ -67,7 +68,7 @@
           ...conversationList,
         ];
         activeConversationId = conv.id;
-        // Load merged messages
+        sidebarOpen = false;
         const detailRes = await fetch(`/api/jkai/conversations/${conv.id}`);
         if (detailRes.ok) {
           const detail = await detailRes.json();
@@ -99,35 +100,84 @@
 
 <div class="flex flex-col h-screen" style="background: var(--bg);">
   <!-- Header -->
-  <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0" style="border-color: var(--card-border);">
-    <div class="flex items-center gap-6">
-      <h1 class="display text-[24px]" style="color: var(--text-primary);">JKAI</h1>
-      <nav class="flex items-center gap-4">
-        <a href="/jkai/builds" class="text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
+  <div class="px-3 sm:px-4 py-3 border-b flex items-center justify-between flex-shrink-0" style="border-color: var(--card-border);">
+    <div class="flex items-center gap-3 sm:gap-6">
+      <!-- Mobile sidebar toggle -->
+      <button
+        onclick={() => { sidebarOpen = !sidebarOpen; }}
+        class="sm:hidden px-1.5 py-1 rounded transition-colors"
+        style="color: var(--text-secondary);"
+        title="Conversations"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 5h14M3 10h14M3 15h14" />
+        </svg>
+      </button>
+
+      <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
+
+      <nav class="flex items-center gap-3 sm:gap-4">
+        <a href="/jkai/builds" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
           Builds
         </a>
-        <a href="/jkai/prompts" class="text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
+        <a href="/jkai/prompts" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
           Prompts
         </a>
       </nav>
     </div>
-    <MetricsStrip {metrics} />
+    <!-- Metrics: hidden on mobile -->
+    <div class="hidden sm:block">
+      <MetricsStrip {metrics} />
+    </div>
   </div>
 
-  <!-- Main area: sidebar + chat -->
-  <div class="flex flex-1 min-h-0">
-    <ConversationSidebar
-      conversations={conversationList}
-      {whatsappThread}
-      {activeConversationId}
-      onSelect={selectConversation}
-      onNew={createConversation}
-      onWhatsAppSelect={selectWhatsApp}
-      onDelete={deleteConversation}
-      collapsed={sidebarCollapsed}
-      onToggleCollapse={() => { sidebarCollapsed = !sidebarCollapsed; }}
-    />
+  <!-- Main area -->
+  <div class="flex flex-1 min-h-0 relative">
+    <!-- Desktop sidebar -->
+    <div class="hidden sm:flex">
+      <ConversationSidebar
+        conversations={conversationList}
+        {whatsappThread}
+        {activeConversationId}
+        onSelect={selectConversation}
+        onNew={createConversation}
+        onWhatsAppSelect={selectWhatsApp}
+        onDelete={deleteConversation}
+        collapsed={false}
+        onToggleCollapse={() => {}}
+      />
+    </div>
 
+    <!-- Mobile sidebar overlay -->
+    {#if sidebarOpen}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="sm:hidden fixed inset-0 z-40"
+        onclick={() => { sidebarOpen = false; }}
+      >
+        <div class="absolute inset-0" style="background: rgba(0,0,0,0.4);"></div>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="absolute left-0 top-0 bottom-0 w-72 flex"
+          style="background: var(--bg);"
+          onclick={(e) => e.stopPropagation()}
+        >
+          <ConversationSidebar
+            conversations={conversationList}
+            {whatsappThread}
+            {activeConversationId}
+            onSelect={selectConversation}
+            onNew={createConversation}
+            onWhatsAppSelect={selectWhatsApp}
+            onDelete={deleteConversation}
+            collapsed={false}
+            onToggleCollapse={() => { sidebarOpen = false; }}
+          />
+        </div>
+      </div>
+    {/if}
+
+    <!-- Chat area -->
     <div class="flex-1 min-w-0">
       <ChatArea
         conversationId={activeConversationId}
