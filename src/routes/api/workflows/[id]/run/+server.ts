@@ -19,6 +19,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const initialInput = body.input || {};
   const breakpointNodeIds: string[] = Array.isArray(body.breakpoints) ? body.breakpoints : [];
   const breakpoints = breakpointNodeIds.length > 0 ? new Set<string>(breakpointNodeIds) : undefined;
+  const selfHealing = body.selfHealing !== false;
 
   const [run] = await db.insert(workflowRuns).values({
     workflowId: params.id,
@@ -56,15 +57,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
   };
 
   // Execute in background — don't await
-  engine.execute(definition, run.id, initialInput, breakpoints, params.id).then(async (result) => {
+  engine.execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing }).then(async (result) => {
+    const healingHistory = result.healingHistory || [];
+
     await db.update(workflowRuns).set({
       status: result.status,
       completedAt: new Date(),
       error: result.error || null,
+      healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
     }).where(eq(workflowRuns.id, run.id));
 
     // Emit workflow_completed event so event-triggered workflows can chain
-    if (result.status === 'completed') {
+    if (result.status === 'completed' || result.status === 'completed_with_errors') {
       try {
         const { emit } = await import('$lib/workflows/event-bus');
         emit('workflow_completed', { workflowId: params.id, runId: run.id, status: result.status });
@@ -94,6 +98,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
       }).where(
         eq(nodeExecutions.nodeId, nodeId),
       );
+    }
+
+    // Persist healed node configs to the workflow
+    for (const entry of healingHistory) {
+      await db.update(workflowNodes).set({
+        config: entry.newConfig,
+      }).where(eq(workflowNodes.id, entry.nodeId));
     }
   });
 
