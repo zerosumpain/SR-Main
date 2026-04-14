@@ -4,7 +4,7 @@ import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated, getChatHis
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, orchestratorChats } from '$lib/db/schema';
+import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, whatsappConversations } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 
 // In-memory job store
@@ -52,7 +52,7 @@ function cleanOldJobs() {
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges } = body;
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId } = body;
 
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
@@ -173,10 +173,42 @@ export const POST: RequestHandler = async ({ request }) => {
           job.result = { success: true, workflow: null, message: 'Could not generate a valid workflow. Try being more specific.' };
         }
       } else {
-        // Default: general-purpose chat (same as WhatsApp)
-        // Load conversation history from orchestratorChats if we have a workflowId
+        // Default: general-purpose chat
         let conversationHistory: Array<{ role: string; content: string }> = [];
-        if (workflowId) {
+
+        if (conversationId) {
+          // Load web messages for this conversation
+          const convMessages = await db
+            .select({ role: orchestratorChats.role, content: orchestratorChats.content, createdAt: orchestratorChats.createdAt })
+            .from(orchestratorChats)
+            .where(eq(orchestratorChats.conversationId, conversationId))
+            .orderBy(asc(orchestratorChats.createdAt));
+
+          // Check if this conversation has a WhatsApp phone number
+          const [conv] = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+
+          if (conv?.whatsappPhoneNumber) {
+            // Merge WhatsApp + web messages chronologically, take last 30
+            const waMessages = await db
+              .select({ role: whatsappConversations.role, content: whatsappConversations.content, createdAt: whatsappConversations.createdAt })
+              .from(whatsappConversations)
+              .where(eq(whatsappConversations.phoneNumber, conv.whatsappPhoneNumber))
+              .orderBy(asc(whatsappConversations.createdAt));
+
+            const merged = [
+              ...waMessages.map(m => ({ role: m.role, content: m.content, ts: m.createdAt.getTime() })),
+              ...convMessages.map(m => ({ role: m.role, content: m.content, ts: m.createdAt.getTime() })),
+            ].sort((a, b) => a.ts - b.ts);
+
+            conversationHistory = merged.slice(-30).map(m => ({ role: m.role, content: m.content }));
+          } else {
+            conversationHistory = convMessages.slice(-30).map(m => ({ role: m.role, content: m.content }));
+          }
+        } else if (workflowId) {
           const history = await getChatHistory(workflowId);
           conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
         }
@@ -189,7 +221,21 @@ export const POST: RequestHandler = async ({ request }) => {
         if (abortController.signal.aborted) throw new Error('Job cancelled');
 
         // Save chat history
-        if (workflowId) {
+        if (conversationId) {
+          await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message });
+          await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText });
+          // Update conversation title if first message, always update updatedAt
+          const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+          if (conv && !conv.title) {
+            await db.update(conversations)
+              .set({ title: message.slice(0, 50), updatedAt: new Date() })
+              .where(eq(conversations.id, conversationId));
+          } else if (conv) {
+            await db.update(conversations)
+              .set({ updatedAt: new Date() })
+              .where(eq(conversations.id, conversationId));
+          }
+        } else if (workflowId) {
           await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
           await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText });
         }
