@@ -6,6 +6,7 @@
     workflowId = null,
     runStatus,
     onSave,
+    saveStatus = 'idle',
     onRun,
     onStop,
     onNameChange,
@@ -15,6 +16,7 @@
     workflowId?: string | null;
     runStatus?: string | null;
     onSave: () => void;
+    saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
     onRun: () => void;
     onStop: () => void;
     onNameChange: (name: string) => void;
@@ -78,10 +80,11 @@
 
   <button
     onclick={onSave}
+    disabled={saveStatus === 'saving'}
     class="px-3 py-1 rounded text-sm border transition-colors hover:border-[var(--accent)]"
-    style="border-color: var(--card-border); color: var(--text-secondary);"
+    style="border-color: {saveStatus === 'saved' ? '#2d7d46' : saveStatus === 'error' ? '#b43232' : 'var(--card-border)'}; color: {saveStatus === 'saved' ? '#2d7d46' : saveStatus === 'error' ? '#b43232' : 'var(--text-secondary)'}; opacity: {saveStatus === 'saving' ? 0.6 : 1};"
   >
-    Save
+    {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Failed' : 'Save'}
   </button>
 
   {#if workflowId}

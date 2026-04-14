@@ -381,16 +381,25 @@
     }
   }
 
+  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   async function handleSave() {
-    await fetch(`/api/workflows/${data.workflow.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: workflowName,
-        nodes: canvasNodesToWorkflow(nodes),
-        edges: canvasEdgesToWorkflow(edges),
-      }),
-    });
+    saveStatus = 'saving';
+    try {
+      const res = await fetch(`/api/workflows/${data.workflow.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: workflowName,
+          nodes: canvasNodesToWorkflow(nodes),
+          edges: canvasEdgesToWorkflow(edges),
+        }),
+      });
+      saveStatus = res.ok ? 'saved' : 'error';
+    } catch {
+      saveStatus = 'error';
+    }
+    setTimeout(() => { saveStatus = 'idle'; }, 2000);
   }
 
   async function handleRun() {
@@ -662,6 +671,7 @@
       workflowId={data.workflow.id}
       {runStatus}
       onSave={handleSave}
+      {saveStatus}
       onRun={handleRun}
       onStop={handleStop}
       onNameChange={handleNameChange}
