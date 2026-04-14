@@ -733,3 +733,16 @@ export const homeAssistantConfig = pgTable('home_assistant_config', {
 
 export type HomeAssistantConfig = typeof homeAssistantConfig.$inferSelect;
 export type NewHomeAssistantConfig = typeof homeAssistantConfig.$inferInsert;
+
+// ==========================================
+// Prompt Cache
+// ==========================================
+
+export const promptCache = pgTable('prompt_cache', {
+  id: text('id').primaryKey().default('default'),
+  compiledPrompt: text('compiled_prompt').notNull().default(''),
+  fileManifest: jsonb('file_manifest').notNull().default(sql`'[]'::jsonb`),
+  lastSynced: timestamp('last_synced', { withTimezone: true }),
+});
+
+export type PromptCache = typeof promptCache.$inferSelect;

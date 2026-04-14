@@ -31,3 +31,4 @@ keys.json
 
 # Published jkai projects (runtime data)
 data/
+!data/prompts/
