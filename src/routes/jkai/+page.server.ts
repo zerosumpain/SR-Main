@@ -15,11 +15,11 @@ export const load: PageServerLoad = async () => {
       updatedAt: conversations.updatedAt,
       messageCount: sql<number>`(
         select count(*) from orchestrator_chats
-        where orchestrator_chats.conversation_id = ${conversations.id}
+        where orchestrator_chats.conversation_id = "conversations"."id"
       )`.as('message_count'),
       lastMessage: sql<string>`(
         select content from orchestrator_chats
-        where orchestrator_chats.conversation_id = ${conversations.id}
+        where orchestrator_chats.conversation_id = "conversations"."id"
         order by created_at desc limit 1
       )`.as('last_message'),
     })
