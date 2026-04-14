@@ -56,6 +56,12 @@ export async function executeSiteTool(
           .limit(50);
         return { success: true, data: rows };
       }
+      case 'whatsapp_send': {
+        const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
+        const wa = getWhatsAppService();
+        const result = await wa.sendMessage(args.to as string, args.message as string);
+        return { success: result.sent, data: result };
+      }
       default:
         return { success: false, error: `Unknown tool: ${fnName}` };
     }

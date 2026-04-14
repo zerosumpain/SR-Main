@@ -17,6 +17,7 @@ export const SITE_TOOL_DEFINITIONS = [
   { type: 'function' as const, function: { name: 'research_list', description: 'List recent research sessions with topic, status, and stats', parameters: { type: 'object', properties: {}, required: [] } } },
   { type: 'function' as const, function: { name: 'research_get_report', description: 'Get the narrative report/findings from a completed research session', parameters: { type: 'object', properties: { id: { type: 'string', description: 'Research session ID' } }, required: ['id'] } } },
   { type: 'function' as const, function: { name: 'research_control', description: 'Control a research session: stop it or skip the current phase', parameters: { type: 'object', properties: { id: { type: 'string', description: 'Research session ID' }, action: { type: 'string', description: '"stop" or "skip"' } }, required: ['id', 'action'] } } },
+  { type: 'function' as const, function: { name: 'whatsapp_send', description: 'Send a WhatsApp message to a phone number. Use this to proactively message the user or send alerts/notifications.', parameters: { type: 'object', properties: { to: { type: 'string', description: 'Phone number with country code (e.g. "+447359228511")' }, message: { type: 'string', description: 'Message text to send' } }, required: ['to', 'message'] } } },
 ];
 
 export function buildSiteSystemPromptSection(): string {
@@ -37,5 +38,10 @@ You have access to the user's personal platform (strangeramblings.com):
 
 **Deep Dive Research** (research_* functions):
 - Start multi-phase research on any topic
-- Check progress, get narrative reports when complete`;
+- Check progress, get narrative reports when complete
+
+**WhatsApp** (whatsapp_send):
+- Send messages to any phone number via WhatsApp
+- Use for alerts, notifications, or proactive updates
+- John's number: +447359228511`;
 }

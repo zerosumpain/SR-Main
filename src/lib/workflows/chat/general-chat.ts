@@ -138,7 +138,7 @@ export async function generalChat(
           toolResult = await haService.renderTemplate(fnArgs.template as string);
           break;
         default:
-          if (fnName.startsWith('site_') || fnName.startsWith('jkai_') || fnName.startsWith('research_')) {
+          if (fnName.startsWith('site_') || fnName.startsWith('jkai_') || fnName.startsWith('research_') || fnName.startsWith('whatsapp_')) {
             toolResult = await executeSiteTool(fnName, fnArgs);
           } else {
             toolResult = { error: `Unknown function: ${fnName}` };
