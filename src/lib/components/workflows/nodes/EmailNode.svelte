@@ -13,6 +13,7 @@
   label={displayLabel}
   nodeType="email"
   status={data.status}
+  error={data.error}
   icon="✉"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

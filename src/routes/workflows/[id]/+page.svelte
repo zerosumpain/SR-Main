@@ -386,8 +386,16 @@
         if (run.status === 'completed' || run.status === 'failed') {
           runStatus = run.status;
           // Update node statuses from execution data
+          const executedNodes = new Set<string>();
           for (const exec of run.nodeExecutions || []) {
-            updateNodeStatus(exec.nodeId, exec.status);
+            executedNodes.add(exec.nodeId);
+            updateNodeStatus(exec.nodeId, exec.status, exec.error);
+          }
+          // Mark any remaining pending nodes as skipped
+          for (const n of nodes) {
+            if (!executedNodes.has(n.id) && n.data.status === 'pending') {
+              updateNodeStatus(n.id, 'skipped');
+            }
           }
           // Stop edge animations
           edges = edges.map(e => ({ ...e, animated: false }));
@@ -417,7 +425,11 @@
         setTimeout(() => animateEdgesFromNode(event.nodeId, false), 1500);
       }
       else if (event.type === 'node_failed' && event.nodeId) {
-        updateNodeStatus(event.nodeId, 'failed');
+        updateNodeStatus(event.nodeId, 'failed', event.data?.error);
+        animateEdgesToNode(event.nodeId, false);
+      }
+      else if (event.type === 'node_skipped' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'skipped');
         animateEdgesToNode(event.nodeId, false);
       }
       else if (event.type === 'breakpoint_hit' && event.nodeId) {
@@ -439,8 +451,8 @@
     eventSource.onerror = () => { eventSource?.close(); };
   }
 
-  function updateNodeStatus(nodeId: string, status: string) {
-    nodes = nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status } } : n);
+  function updateNodeStatus(nodeId: string, status: string, error?: string) {
+    nodes = nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, status, ...(error !== undefined ? { error } : {}) } } : n);
   }
 
   function animateEdgesToNode(nodeId: string, animate: boolean) {

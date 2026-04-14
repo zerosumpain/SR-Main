@@ -18,6 +18,7 @@
   label={data.label}
   nodeType="openrouter"
   status={data.status}
+  error={data.error}
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}
   icon="🔀"

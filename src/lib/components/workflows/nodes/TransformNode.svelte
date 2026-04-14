@@ -10,6 +10,7 @@
   label={data.label}
   nodeType="transform"
   status={data.status}
+  error={data.error}
   icon="⇄"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

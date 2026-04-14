@@ -19,6 +19,7 @@
   label={displayLabel}
   nodeType="data-store"
   status={data.status}
+  error={data.error}
   icon="🗄"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

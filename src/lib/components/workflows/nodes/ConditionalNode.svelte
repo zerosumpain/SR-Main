@@ -8,10 +8,10 @@
 
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)',
-    running: '#569cd6',
-    completed: '#2d7d46',
-    failed: '#b43232',
-    paused_breakpoint: '#b8860b',
+    running: '#e67e22',
+    completed: '#27ae60',
+    failed: '#e74c3c',
+    paused_breakpoint: '#f39c12',
     skipped: 'var(--text-ghost)',
   };
 
@@ -19,11 +19,13 @@
     data.status ? STATUS_COLORS[data.status] || 'var(--card-border)' : 'var(--card-border)',
   );
   let isRunning = $derived(data.status === 'running');
+  let isSkipped = $derived(data.status === 'skipped');
+  let isFailed = $derived(data.status === 'failed');
 </script>
 
 <div
-  class="rounded-lg border-2 min-w-[180px] transition-colors"
-  style="background: var(--card-bg); border-color: {borderColor};"
+  class="rounded-lg min-w-[180px] transition-colors"
+  style="background: var(--card-bg); border: {data.status && data.status !== 'pending' ? '3px' : '1px'} solid {borderColor}; opacity: {isSkipped ? 0.4 : 1};"
   class:animate-pulse={isRunning}
 >
   <!-- Input handle (left) -->
@@ -81,4 +83,18 @@
     id="false"
     style="top: 80px; background: #b43232; border-color: #b43232;"
   />
+
+  {#if isFailed && data.error}
+    <div class="px-3 pb-2">
+      <div class="text-[10px] leading-tight px-2 py-1.5 rounded" style="background: rgba(231, 76, 60, 0.1); color: #e74c3c; font-family: var(--font-mono); word-break: break-word;">
+        {data.error}
+      </div>
+    </div>
+  {/if}
+  {#if isSkipped}
+    <div class="px-3 pb-2">
+      <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost);">Skipped</span>
+    </div>
+  {/if}
+
 </div>

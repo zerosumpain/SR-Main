@@ -21,6 +21,7 @@
   label={data.label}
   nodeType="http-request"
   status={data.status}
+  error={data.error}
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}
   icon="🌐"

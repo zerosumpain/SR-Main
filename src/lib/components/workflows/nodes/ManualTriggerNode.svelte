@@ -10,6 +10,7 @@
   label={data.label}
   nodeType="trigger"
   status={data.status}
+  error={data.error}
   icon="▶"
   outputs={[{ name: 'output' }]}
 />

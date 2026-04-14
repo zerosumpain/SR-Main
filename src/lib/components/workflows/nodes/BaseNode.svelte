@@ -9,6 +9,7 @@
     nodeType,
     description = '',
     status,
+    error,
     inputs = [],
     outputs = [],
     icon = '',
@@ -19,6 +20,7 @@
     nodeType: string;
     description?: string;
     status?: string;
+    error?: string;
     inputs?: { name: string }[];
     outputs?: { name: string }[];
     icon?: string;
@@ -27,20 +29,23 @@
 
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)',
-    running: '#569cd6',
-    completed: '#2d7d46',
-    failed: '#b43232',
-    paused_breakpoint: '#b8860b',
+    running: '#e67e22',
+    completed: '#27ae60',
+    failed: '#e74c3c',
+    paused_breakpoint: '#f39c12',
     skipped: 'var(--text-ghost)',
   };
 
   let borderColor = $derived(status ? STATUS_COLORS[status] || 'var(--card-border)' : 'var(--card-border)');
+  let borderWidth = $derived(status && status !== 'pending' ? '3px' : '1px');
   let isRunning = $derived(status === 'running');
+  let isFailed = $derived(status === 'failed');
+  let isSkipped = $derived(status === 'skipped');
 </script>
 
 <div
-  class="rounded-lg border-2 transition-colors"
-  style="background: var(--card-bg); border-color: {borderColor}; width: 220px;"
+  class="rounded-lg transition-all duration-300"
+  style="background: var(--card-bg); border: {borderWidth} solid {borderColor}; width: 220px; opacity: {isSkipped ? 0.4 : 1};"
   class:animate-pulse={isRunning}
 >
   {#each inputs as input, i}
@@ -91,6 +96,23 @@
       </div>
     {/if}
   </div>
+
+  {#if isFailed && error}
+    <div class="px-3 pb-2">
+      <div
+        class="text-[10px] leading-tight px-2 py-1.5 rounded"
+        style="background: rgba(231, 76, 60, 0.1); color: #e74c3c; font-family: var(--font-mono); word-break: break-word;"
+      >
+        {error}
+      </div>
+    </div>
+  {/if}
+
+  {#if isSkipped}
+    <div class="px-3 pb-2">
+      <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost);">Skipped</span>
+    </div>
+  {/if}
 
   {#if extra}
     {@render extra()}

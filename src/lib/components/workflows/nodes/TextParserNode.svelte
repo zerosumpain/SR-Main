@@ -18,6 +18,7 @@
   label={data.label}
   nodeType="text-parser"
   status={data.status}
+  error={data.error}
   icon="⟨/⟩"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

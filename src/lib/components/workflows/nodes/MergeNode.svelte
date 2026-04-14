@@ -12,6 +12,7 @@
   label={data.label}
   nodeType="merge"
   status={data.status}
+  error={data.error}
   icon="⇌"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

@@ -17,6 +17,7 @@
   label={data.label}
   nodeType="code · {langLabel}"
   status={data.status}
+  error={data.error}
   icon="⟩_"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

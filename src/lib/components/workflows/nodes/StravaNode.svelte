@@ -17,6 +17,7 @@
   label={data.label}
   nodeType="strava"
   status={data.status}
+  error={data.error}
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}
   icon="🚴"

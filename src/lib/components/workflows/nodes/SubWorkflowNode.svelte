@@ -14,6 +14,7 @@
   label={data.label}
   nodeType="sub-workflow"
   status={data.status}
+  error={data.error}
   icon="⤵"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}

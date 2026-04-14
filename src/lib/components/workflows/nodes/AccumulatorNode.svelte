@@ -17,6 +17,7 @@
   label={displayLabel}
   nodeType="accumulator"
   status={data.status}
+  error={data.error}
   icon="⊕"
   inputs={[{ name: 'input' }]}
   outputs={[{ name: 'output' }]}
