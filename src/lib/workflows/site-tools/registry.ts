@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { blogPosts, jkaiBuilds, researchSessions } from '$lib/db/schema';
+import { blogPosts, jkaiBuilds, researchSessions, workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 
 // ==========================================
@@ -297,6 +297,75 @@ register({
     const wa = getWhatsAppService();
     const result = await wa.sendMessage(args.to as string, args.message as string);
     return { success: result.sent, data: result };
+  },
+});
+
+// ==========================================
+// Workflow Tools
+// ==========================================
+
+register({
+  name: 'workflow_create',
+  description: 'Create an automated workflow from a natural language description. Use this when the user needs something that runs automatically, on a schedule, or in response to events — things like "notify me when X happens", "every morning do Y", "when Z changes, send a message". The workflow engine supports triggers (cron, webhook, manual), integrations (WhatsApp, Home Assistant, Strava, blog, email), LLM calls, code execution, loops, data stores, and more. Describe what the workflow should do and it will be built, saved, and ready to activate.',
+  parameters: { type: 'object', properties: { description: { type: 'string', description: 'Natural language description of what the workflow should do. Be specific about triggers, conditions, and actions.' } }, required: ['description'] },
+  category: 'Workflows',
+  handler: async (args) => {
+    const { generateWorkflow } = await import('$lib/workflows/orchestrator');
+
+    const description = args.description as string;
+    const { workflow, followUp } = await generateWorkflow(description, null);
+
+    if (followUp) {
+      return { success: true, data: { needsMoreInfo: true, question: followUp } };
+    }
+
+    if (!workflow || workflow.nodes.length === 0) {
+      return { success: false, error: 'Could not generate a valid workflow. Try being more specific about what triggers it and what it should do.' };
+    }
+
+    // Save the workflow
+    const [created] = await db.insert(workflows).values({
+      name: workflow.name || 'Generated Workflow',
+      description: workflow.description || null,
+    }).returning();
+
+    try {
+      await db.insert(workflowNodes).values(
+        workflow.nodes.map((n) => ({ id: n.id, workflowId: created.id, type: n.type, position: n.position, config: n.config, label: n.label })),
+      );
+      if (workflow.edges.length > 0) {
+        await db.insert(workflowEdges).values(
+          workflow.edges.map((e) => ({ id: e.id, workflowId: created.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
+        );
+      }
+    } catch (dbErr: unknown) {
+      await db.delete(workflows).where(eq(workflows.id, created.id));
+      const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
+      return { success: false, error: `Failed to save workflow: ${dbMsg}` };
+    }
+
+    return {
+      success: true,
+      data: {
+        workflowId: created.id,
+        name: workflow.name,
+        description: workflow.description,
+        explanation: workflow.explanation,
+        nodeCount: workflow.nodes.length,
+        url: `/workflows/${created.id}`,
+      },
+    };
+  },
+});
+
+register({
+  name: 'workflow_list',
+  description: 'List existing workflows with their names, descriptions, and schedule status',
+  parameters: { type: 'object', properties: {}, required: [] },
+  category: 'Workflows',
+  handler: async () => {
+    const rows = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(50);
+    return { success: true, data: rows };
   },
 });
 
