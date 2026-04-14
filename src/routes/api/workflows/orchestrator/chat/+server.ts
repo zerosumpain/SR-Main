@@ -43,7 +43,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Run the orchestrator in the background
   (async () => {
+    console.log(`[orchestrator] Job ${jobId} started — message: "${message.slice(0, 100)}"`);
     function onProgress(text: string) {
+      console.log(`[orchestrator] Job ${jobId} progress: ${text.trim()}`);
       job.progress.push(text);
     }
 
@@ -185,9 +187,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
       job.status = 'done';
     } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[orchestrator] Job failed:', errorMessage);
+      if (err instanceof Error && err.stack) console.error(err.stack);
       job.status = 'error';
-      job.error = err instanceof Error ? err.message : 'Unknown error';
-      job.result = { success: false, error: job.error };
+      job.error = errorMessage;
+      job.result = { success: false, error: errorMessage };
     }
   })();
 
@@ -241,7 +246,11 @@ export const GET: RequestHandler = async ({ url }) => {
       }
 
       // Send the final result
-      send({ type: 'done', ...job.result });
+      if (job.result) {
+        send({ type: 'done', ...job.result });
+      } else {
+        send({ type: 'done', success: false, error: job.error || 'Job completed with no result' });
+      }
 
       try { controller.close(); } catch { /* already closed */ }
 
