@@ -253,10 +253,17 @@ export class WorkflowEngine {
                   },
                 };
 
-                const diagnosis = await diagnoseAndFix(
+                console.log(`[engine] Calling diagnoseAndFix for ${nodeId}...`);
+                // Timeout the diagnosis call after 60s
+                const diagnosisPromise = diagnoseAndFix(
                   healingContext,
                   (text) => emit('healing_progress', nodeId, { text }),
                 );
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('Diagnosis timed out after 60s')), 60000),
+                );
+                const diagnosis = await Promise.race([diagnosisPromise, timeoutPromise]);
+                console.log(`[engine] Diagnosis result for ${nodeId}: ${diagnosis.category} — ${diagnosis.diagnosis.slice(0, 100)}`);
 
                 if (diagnosis.category === 'environment_issue') {
                   emit('healing_blocked', nodeId, {
@@ -343,6 +350,7 @@ export class WorkflowEngine {
                 }
               } catch (healErr: unknown) {
                 const healMsg = healErr instanceof Error ? healErr.message : String(healErr);
+                console.error(`[engine] Healing error for ${nodeId}: ${healMsg}`);
                 emit('healing_progress', nodeId, { text: `Healing error: ${healMsg}` });
                 break;
               }
