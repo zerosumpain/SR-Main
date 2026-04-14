@@ -306,7 +306,7 @@ register({
 
 register({
   name: 'workflow_create',
-  description: 'Create an automated workflow from a natural language description. Use this when the user needs something that runs automatically, on a schedule, or in response to events — things like "notify me when X happens", "every morning do Y", "when Z changes, send a message". The workflow engine supports triggers (cron, webhook, manual), integrations (WhatsApp, Home Assistant, Strava, blog, email), LLM calls, code execution, loops, data stores, and more. Describe what the workflow should do and it will be built, saved, and ready to activate.',
+  description: 'Create an automated workflow from a natural language description. Use this when the user needs something that runs automatically or on a schedule — things like "every morning send me a health summary", "check X every hour and notify me". The workflow engine supports: manual-trigger (with cron scheduling), WhatsApp messaging, Home Assistant queries/control, LLM calls, code execution, Strava, blog, email, loops, data stores, conditionals, and more. The trigger node is always manual-trigger (supports cron schedules). For event-driven HA automations, create a scheduled workflow that polls state. After creating, share the returned URL as a clickable markdown link: [Review workflow](url).',
   parameters: { type: 'object', properties: { description: { type: 'string', description: 'Natural language description of what the workflow should do. Be specific about triggers, conditions, and actions.' } }, required: ['description'] },
   category: 'Workflows',
   handler: async (args) => {
@@ -352,7 +352,7 @@ register({
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `/workflows/${created.id}`,
+        url: `https://strangeramblings.com/workflows/${created.id}`,
       },
     };
   },

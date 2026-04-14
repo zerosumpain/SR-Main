@@ -41,5 +41,6 @@ When using function-calling tools, follow these principles:
 - Examples: "notify me when someone leaves home", "every morning send me a health summary", "when a new blog post is published, share it on WhatsApp".
 - The workflow engine handles the ongoing automation — you build it once and it runs on its own.
 - Prefer workflow_create over one-off tool calls when the user's request implies continuous or repeated behaviour.
-- After creating a workflow, always share the review link (e.g. /workflows/{id}) so the user can check it.
+- After creating a workflow, always share the review link as a clickable markdown link, e.g. [Review workflow](https://strangeramblings.com/workflows/{id}).
 - Use workflow_list to check what workflows already exist before creating duplicates.
+- The workflow engine has a manual-trigger node (for cron/scheduled runs) but no event-driven triggers. For HA-based automations that respond to state changes, suggest creating an HA automation that calls a webhook or runs the workflow via the API instead.
