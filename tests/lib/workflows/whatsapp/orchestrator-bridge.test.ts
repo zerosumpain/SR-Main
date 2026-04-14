@@ -39,37 +39,10 @@ vi.mock('drizzle-orm', () => ({
 	and: vi.fn(),
 }));
 
-// Mock LLM client
-const mockCreate = vi.fn();
-vi.mock('$lib/deepdive/keys', () => ({
-	getOpenAIClient: () => ({
-		chat: {
-			completions: {
-				create: mockCreate,
-			},
-		},
-	}),
-	getModel: () => 'test-model',
-}));
-
-// Mock HA service and tools
-vi.mock('$lib/workflows/homeassistant/service', () => ({
-	getHomeAssistantService: () => ({}),
-}));
-vi.mock('$lib/workflows/homeassistant/llm-tools', () => ({
-	HA_TOOL_DEFINITIONS: [],
-	buildHASystemPromptSection: () => '',
-}));
-vi.mock('$lib/workflows/site-tools/llm-tools', () => ({
-	SITE_TOOL_DEFINITIONS: [],
-	buildSiteSystemPromptSection: () => '',
-}));
-vi.mock('$lib/workflows/site-tools/executor', () => ({
-	executeSiteTool: vi.fn().mockResolvedValue({ success: true, data: {} }),
-}));
-
-vi.mock('$lib/workflows/prompts/loader', () => ({
-	getCompiledPrompt: vi.fn().mockResolvedValue('You are a helpful assistant.'),
+// Mock general chat
+const mockGeneralChat = vi.fn();
+vi.mock('$lib/workflows/chat/general-chat', () => ({
+	generalChat: (...args: unknown[]) => mockGeneralChat(...args),
 }));
 
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
@@ -93,7 +66,7 @@ describe('OrchestratorBridge', () => {
 		expect(bridge.isResetCommand('hello')).toBe(false);
 	});
 
-	it('detects /clear as a reset and does not forward to LLM', async () => {
+	it('detects /clear as a reset and does not forward to chat', async () => {
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
 			text: '/clear',
@@ -105,13 +78,11 @@ describe('OrchestratorBridge', () => {
 		await bridge.handleMessage(msg);
 
 		expect(sendFn).toHaveBeenCalledWith('447359228511', expect.stringContaining('cleared'));
-		expect(mockCreate).not.toHaveBeenCalled();
+		expect(mockGeneralChat).not.toHaveBeenCalled();
 	});
 
-	it('sends regular messages to LLM and replies', async () => {
-		mockCreate.mockResolvedValue({
-			choices: [{ message: { content: 'The weather looks great today!' } }],
-		});
+	it('sends regular messages to generalChat and replies', async () => {
+		mockGeneralChat.mockResolvedValue({ response: 'The weather looks great today!' });
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
@@ -123,27 +94,19 @@ describe('OrchestratorBridge', () => {
 
 		await bridge.handleMessage(msg);
 
-		expect(mockCreate).toHaveBeenCalledWith(
-			expect.objectContaining({
-				model: 'test-model',
-				messages: expect.arrayContaining([
-					expect.objectContaining({ role: 'system' }),
-					expect.objectContaining({ role: 'user', content: "What's the weather like?" }),
-				]),
-			}),
+		expect(mockGeneralChat).toHaveBeenCalledWith(
+			"What's the weather like?",
+			expect.any(Array),
 		);
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
-		expect(mockCreate).toHaveBeenCalledTimes(1);
 	});
 
-	it('returns fallback when LLM gives empty response', async () => {
-		mockCreate.mockResolvedValue({
-			choices: [{ message: { content: '' } }],
-		});
+	it('handles generalChat errors gracefully', async () => {
+		mockGeneralChat.mockRejectedValue(new Error('LLM failed'));
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
-			text: 'Set up a daily weather notification',
+			text: 'test',
 			timestamp: Date.now(),
 			messageId: 'msg-3',
 			isGroup: false,
@@ -153,14 +116,12 @@ describe('OrchestratorBridge', () => {
 
 		expect(sendFn).toHaveBeenCalledWith(
 			'447359228511',
-			"Sorry, I couldn't generate a response.",
+			'Something went wrong. Try again in a moment.',
 		);
 	});
 
 	it('uses replyJid for LID messages', async () => {
-		mockCreate.mockResolvedValue({
-			choices: [{ message: { content: 'Hello!' } }],
-		});
+		mockGeneralChat.mockResolvedValue({ response: 'Hello!' });
 
 		const msg: WhatsAppInboundMessage = {
 			from: '179598537011308',

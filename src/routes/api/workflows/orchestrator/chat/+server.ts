@@ -1,10 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
+import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated, getChatHistory } from '$lib/workflows/orchestrator';
+import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 
 // In-memory job store
 interface OrchestratorJob {
@@ -83,10 +84,10 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     try {
-      // Check abort before each major step
       if (abortController.signal.aborted) throw new Error('Job cancelled');
 
       if (mode === 'modify' && currentNodes && currentEdges && workflowId) {
+        // Explicit workflow modification
         const result = await modifyWorkflow(
           message,
           workflowId,
@@ -110,7 +111,8 @@ export const POST: RequestHandler = async ({ request }) => {
         } else {
           job.result = { success: true, workflow: null, message: 'No changes made.' };
         }
-      } else {
+      } else if (mode === 'generate') {
+        // Explicit workflow generation
         const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId, onProgress);
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
@@ -125,16 +127,8 @@ export const POST: RequestHandler = async ({ request }) => {
             resolvedWorkflowId = created.id;
           }
 
-          await db.insert(orchestratorChats).values({
-            workflowId: resolvedWorkflowId,
-            role: 'user',
-            content: message,
-          });
-          await db.insert(orchestratorChats).values({
-            workflowId: resolvedWorkflowId,
-            role: 'assistant',
-            content: followUp,
-          });
+          await db.insert(orchestratorChats).values({ workflowId: resolvedWorkflowId, role: 'user', content: message });
+          await db.insert(orchestratorChats).values({ workflowId: resolvedWorkflowId, role: 'assistant', content: followUp });
 
           job.result = {
             success: true,
@@ -146,13 +140,7 @@ export const POST: RequestHandler = async ({ request }) => {
         } else if (workflow && workflow.nodes.length > 0) {
           if (workflowId) {
             await saveWorkflowFromGenerated(workflowId, workflow);
-            job.result = {
-              success: true,
-              workflow,
-              workflowId,
-              thinking,
-              message: workflow.explanation || 'Workflow updated.',
-            };
+            job.result = { success: true, workflow, workflowId, thinking, message: workflow.explanation || 'Workflow updated.' };
           } else {
             const [created] = await db.insert(workflows).values({
               name: workflow.name || 'Generated Workflow',
@@ -161,68 +149,52 @@ export const POST: RequestHandler = async ({ request }) => {
 
             try {
               await db.insert(workflowNodes).values(
-                workflow.nodes.map((n) => ({
-                  id: n.id,
-                  workflowId: created.id,
-                  type: n.type,
-                  position: n.position,
-                  config: n.config,
-                  label: n.label,
-                })),
+                workflow.nodes.map((n) => ({ id: n.id, workflowId: created.id, type: n.type, position: n.position, config: n.config, label: n.label })),
               );
-
               if (workflow.edges.length > 0) {
                 await db.insert(workflowEdges).values(
-                  workflow.edges.map((e) => ({
-                    id: e.id,
-                    workflowId: created.id,
-                    sourceNodeId: e.sourceNodeId,
-                    targetNodeId: e.targetNodeId,
-                    sourceHandle: e.sourceHandle || null,
-                    targetHandle: e.targetHandle || null,
-                  })),
+                  workflow.edges.map((e) => ({ id: e.id, workflowId: created.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
                 );
               }
             } catch (dbErr: unknown) {
               await db.delete(workflows).where(eq(workflows.id, created.id));
               const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
-              job.result = {
-                success: false,
-                workflow: null,
-                message: `Failed to save workflow nodes: ${dbMsg}. Please try again.`,
-              };
+              job.result = { success: false, workflow: null, message: `Failed to save workflow nodes: ${dbMsg}` };
               job.status = 'done';
               return;
             }
 
-            await db.insert(orchestratorChats).values({
-              workflowId: created.id,
-              role: 'user',
-              content: message,
-            });
-            await db.insert(orchestratorChats).values({
-              workflowId: created.id,
-              role: 'assistant',
-              content: workflow.explanation || 'Workflow created.',
-              metadata: { workflowGenerated: true },
-            });
+            await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'user', content: message });
+            await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'assistant', content: workflow.explanation || 'Workflow created.', metadata: { workflowGenerated: true } });
 
-            job.result = {
-              success: true,
-              workflow,
-              workflowId: created.id,
-              redirectTo: `/workflows/${created.id}`,
-              thinking,
-              message: workflow.explanation || 'Workflow created.',
-            };
+            job.result = { success: true, workflow, workflowId: created.id, redirectTo: `/workflows/${created.id}`, thinking, message: workflow.explanation || 'Workflow created.' };
           }
         } else {
-          job.result = {
-            success: true,
-            workflow: null,
-            message: 'Could not generate a valid workflow from that request. Try being more specific about what you want to automate.',
-          };
+          job.result = { success: true, workflow: null, message: 'Could not generate a valid workflow. Try being more specific.' };
         }
+      } else {
+        // Default: general-purpose chat (same as WhatsApp)
+        // Load conversation history from orchestratorChats if we have a workflowId
+        let conversationHistory: Array<{ role: string; content: string }> = [];
+        if (workflowId) {
+          const history = await getChatHistory(workflowId);
+          conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
+        }
+
+        const { response: responseText } = await generalChat(message, conversationHistory, {
+          workflowId,
+          onProgress,
+        });
+
+        if (abortController.signal.aborted) throw new Error('Job cancelled');
+
+        // Save chat history
+        if (workflowId) {
+          await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
+          await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText });
+        }
+
+        job.result = { success: true, workflow: null, message: responseText };
       }
 
       job.status = 'done';
