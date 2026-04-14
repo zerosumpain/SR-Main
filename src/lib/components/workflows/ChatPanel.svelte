@@ -62,48 +62,85 @@
     messages = [...messages, userMsg];
     scrollToBottom();
 
-    try {
-      const hasExistingNodes = currentNodes.length > 0;
-      const res = await fetch('/api/workflows/orchestrator/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          workflowId,
-          mode: hasExistingNodes ? 'modify' : 'generate',
-          currentNodes: hasExistingNodes ? currentNodes : undefined,
-          currentEdges: hasExistingNodes ? currentEdges : undefined,
-        }),
-      });
+    const MAX_RETRIES = 2;
+    let attempt = 0;
 
-      const data = await res.json();
+    while (attempt <= MAX_RETRIES) {
+      try {
+        if (attempt > 0) {
+          // Show retry message
+          const retryMsg: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `Connection issue — retrying (attempt ${attempt + 1}/${MAX_RETRIES + 1})...`,
+          };
+          messages = [...messages, retryMsg];
+          scrollToBottom();
+        }
 
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.message || data.error || 'Something went wrong.',
-        metadata: { workflowGenerated: !!data.workflow },
-        thinking: data.thinking || undefined,
-      };
-      messages = [...messages, assistantMsg];
+        const hasExistingNodes = currentNodes.length > 0;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
 
-      if (data.redirectTo) {
-        // New workflow created — redirect to editor page
-        goto(data.redirectTo);
-      } else if (data.workflow) {
-        onWorkflowGenerated(data.workflow);
+        const res = await fetch('/api/workflows/orchestrator/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            workflowId,
+            mode: hasExistingNodes ? 'modify' : 'generate',
+            currentNodes: hasExistingNodes ? currentNodes : undefined,
+            currentEdges: hasExistingNodes ? currentEdges : undefined,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || `Server error (${res.status})`);
+        }
+
+        const assistantMsg: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data.message || data.error || 'Something went wrong.',
+          metadata: { workflowGenerated: !!data.workflow },
+          thinking: data.thinking || undefined,
+        };
+        messages = [...messages, assistantMsg];
+
+        if (data.redirectTo) {
+          goto(data.redirectTo);
+        } else if (data.workflow) {
+          onWorkflowGenerated(data.workflow);
+        }
+        break; // Success — exit retry loop
+
+      } catch (err) {
+        attempt++;
+        if (attempt > MAX_RETRIES) {
+          const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+          const errorMsg: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: isTimeout
+              ? 'The orchestrator timed out — the AI is taking too long to respond. Try a simpler request or try again later.'
+              : `Failed to connect to the orchestrator after ${MAX_RETRIES + 1} attempts. Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          };
+          messages = [...messages, errorMsg];
+        }
+        // Brief pause before retry
+        if (attempt <= MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
       }
-    } catch (err) {
-      const errorMsg: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'Failed to connect to the orchestrator. Please try again.',
-      };
-      messages = [...messages, errorMsg];
-    } finally {
-      loading = false;
-      scrollToBottom();
     }
+
+    loading = false;
+    scrollToBottom();
   }
 
   function scrollToBottom() {
