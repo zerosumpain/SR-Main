@@ -723,6 +723,17 @@
           maxZoom={1.5}
           onnodeclick={handleNodeClick}
           onedgeclick={handleEdgeClick}
+          onconnect={(connection) => {
+            const newEdge = {
+              id: `edge-${crypto.randomUUID().slice(0, 8)}`,
+              source: connection.source,
+              target: connection.target,
+              sourceHandle: connection.sourceHandle ?? undefined,
+              targetHandle: connection.targetHandle ?? undefined,
+              type: 'smoothstep',
+            };
+            edges = [...edges, newEdge];
+          }}
           defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
         >
           <SvelteFlowModule.Controls />
