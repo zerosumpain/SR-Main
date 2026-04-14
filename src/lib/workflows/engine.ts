@@ -197,6 +197,7 @@ export class WorkflowEngine {
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             const selfHealing = options?.selfHealing !== false;
+            console.log(`[engine] Node ${nodeId} (${nodeDef.type}) failed: ${message}. selfHealing=${selfHealing}`);
 
             if (!selfHealing) {
               nodeErrors.set(nodeId, message);
@@ -211,7 +212,9 @@ export class WorkflowEngine {
             let currentConfig = { ...nodeDef.config };
             const attempts: Array<{ diagnosis: string; fixApplied: string; resultError: string }> = [];
 
+            console.log(`[engine] Entering healing loop for ${nodeId}, max attempts: ${MAX_HEALING_ATTEMPTS}`);
             for (let attempt = 1; attempt <= MAX_HEALING_ATTEMPTS; attempt++) {
+              console.log(`[engine] Healing attempt ${attempt} for ${nodeId}`);
               emit('healing_started', nodeId, {
                 attempt,
                 maxAttempts: MAX_HEALING_ATTEMPTS,
