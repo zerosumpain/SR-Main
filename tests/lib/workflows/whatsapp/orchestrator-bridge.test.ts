@@ -11,6 +11,7 @@ vi.mock('$lib/db', () => ({
 			from: () => ({
 				where: () => ({
 					orderBy: () => mockDbSelect(),
+					limit: () => Promise.resolve([]),
 				}),
 			}),
 		}),
@@ -29,6 +30,7 @@ vi.mock('$lib/db', () => ({
 vi.mock('$lib/db/schema', () => ({
 	whatsappConversations: {},
 	whatsappConfig: {},
+	homeAssistantConfig: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -50,10 +52,13 @@ vi.mock('$lib/deepdive/keys', () => ({
 	getModel: () => 'test-model',
 }));
 
-// Mock orchestrator (for workflow routing)
-const mockGenerateWorkflow = vi.fn();
-vi.mock('$lib/workflows/orchestrator', () => ({
-	generateWorkflow: (...args: unknown[]) => mockGenerateWorkflow(...args),
+// Mock HA service and tools
+vi.mock('$lib/workflows/homeassistant/service', () => ({
+	getHomeAssistantService: () => ({}),
+}));
+vi.mock('$lib/workflows/homeassistant/llm-tools', () => ({
+	HA_TOOL_DEFINITIONS: [],
+	buildHASystemPromptSection: () => '',
 }));
 
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
@@ -117,15 +122,12 @@ describe('OrchestratorBridge', () => {
 			}),
 		);
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
-		expect(mockGenerateWorkflow).not.toHaveBeenCalled();
+		expect(mockCreate).toHaveBeenCalledTimes(1);
 	});
 
-	it('routes to workflow orchestrator when LLM flags [WORKFLOW_NEEDED]', async () => {
+	it('returns fallback when LLM gives empty response', async () => {
 		mockCreate.mockResolvedValue({
-			choices: [{ message: { content: "I'll set up a daily weather alert for you. [WORKFLOW_NEEDED]" } }],
-		});
-		mockGenerateWorkflow.mockResolvedValue({
-			workflow: { name: 'Daily Weather Alert', explanation: 'Sends weather at 8am' },
+			choices: [{ message: { content: '' } }],
 		});
 
 		const msg: WhatsAppInboundMessage = {
@@ -138,10 +140,9 @@ describe('OrchestratorBridge', () => {
 
 		await bridge.handleMessage(msg);
 
-		// First response should not contain the marker
 		expect(sendFn).toHaveBeenCalledWith(
 			'447359228511',
-			"I'll set up a daily weather alert for you.",
+			"Sorry, I couldn't generate a response.",
 		);
 	});
 
