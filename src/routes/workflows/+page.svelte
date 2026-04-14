@@ -133,4 +133,75 @@
       {/each}
     </div>
   {/if}
+
+  <!-- Chat Sessions -->
+  {#if data.chatSessions.web.length > 0 || data.chatSessions.whatsapp.length > 0}
+    <div class="mt-12">
+      <h2 class="display text-[24px] sm:text-[28px] mb-4" style="color: var(--text-primary);">
+        CHAT SESSIONS
+      </h2>
+
+      <div class="rounded-xl border overflow-hidden" style="background: var(--card-bg); border-color: var(--card-border);">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b" style="border-color: var(--card-border);">
+              <th class="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Channel</th>
+              <th class="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Session</th>
+              <th class="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Last Message</th>
+              <th class="text-right px-4 py-2.5 text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Messages</th>
+              <th class="text-right px-4 py-2.5 text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Last Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each data.chatSessions.web as session}
+              <tr class="border-b transition-colors hover:bg-black/5" style="border-color: var(--card-border);">
+                <td class="px-4 py-2.5">
+                  <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border" style="color: #569cd6; border-color: #569cd6; font-family: var(--font-mono);">web</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <a href="/workflows/{session.workflow_id}" class="text-sm font-medium hover:underline" style="color: var(--text-primary);">
+                    {session.workflow_name || 'Untitled'}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="text-xs line-clamp-1" style="color: var(--text-secondary); max-width: 300px; display: block;">
+                    {session.last_message?.slice(0, 80) || '—'}{session.last_message?.length > 80 ? '...' : ''}
+                  </span>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <span class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">{session.message_count}</span>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <span class="text-xs" style="color: var(--text-ghost);">{relativeTime(session.last_message_at)}</span>
+                </td>
+              </tr>
+            {/each}
+            {#each data.chatSessions.whatsapp as session}
+              <tr class="border-b transition-colors hover:bg-black/5" style="border-color: var(--card-border);">
+                <td class="px-4 py-2.5">
+                  <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border" style="color: #22c55e; border-color: #22c55e; font-family: var(--font-mono);">whatsapp</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="text-sm font-medium" style="color: var(--text-primary);">
+                    +{session.phone_number}
+                  </span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="text-xs line-clamp-1" style="color: var(--text-secondary); max-width: 300px; display: block;">
+                    <span style="color: var(--text-ghost);">{session.last_role === 'assistant' ? 'AI: ' : ''}</span>{session.last_message?.slice(0, 80) || '—'}{session.last_message?.length > 80 ? '...' : ''}
+                  </span>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <span class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">{session.message_count}</span>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <span class="text-xs" style="color: var(--text-ghost);">{relativeTime(session.last_message_at)}</span>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {/if}
 </div>
