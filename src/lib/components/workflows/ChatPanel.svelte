@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChatMessage from './ChatMessage.svelte';
+  import HealingCard from './HealingCard.svelte';
   import { goto } from '$app/navigation';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
 
@@ -8,11 +9,24 @@
     onWorkflowGenerated,
     currentNodes = [],
     currentEdges = [],
+    healingStates = [],
+    onHealingUndo = (_undoId: string) => {},
   }: {
     workflowId: string | null;
     onWorkflowGenerated: (workflow: any) => void;
     currentNodes?: any[];
     currentEdges?: any[];
+    healingStates?: Array<{
+      nodeId: string;
+      nodeLabel: string;
+      error: string;
+      attempts: Array<any>;
+      status: string;
+      environmentAction?: string;
+      alternative?: string;
+      undoIds: string[];
+    }>;
+    onHealingUndo?: (undoId: string) => void;
   } = $props();
 
   interface Message {
@@ -330,6 +344,19 @@
         {/if}
       {/each}
     {/if}
+
+      {#each healingStates as hs (hs.nodeId)}
+        <HealingCard
+          nodeLabel={hs.nodeLabel}
+          error={hs.error}
+          attempts={hs.attempts}
+          status={hs.status}
+          environmentAction={hs.environmentAction}
+          alternative={hs.alternative}
+          undoIds={hs.undoIds}
+          onUndo={onHealingUndo}
+        />
+      {/each}
   </div>
 
   <div class="p-3 border-t" style="border-color: var(--card-border);">

@@ -21,6 +21,26 @@
   let inspectedEdgeId = $state<string | null>(null);
   let currentRunId = $state<string | null>(null);
 
+  interface HealingState {
+    nodeId: string;
+    nodeLabel: string;
+    error: string;
+    attempts: Array<{
+      diagnosis: string;
+      reasoning: string;
+      fixDescription?: string;
+      fixApplied: boolean;
+      retrySucceeded?: boolean;
+      resultError?: string;
+    }>;
+    status: 'diagnosing' | 'retrying' | 'succeeded' | 'failed' | 'blocked';
+    environmentAction?: string;
+    alternative?: string;
+    undoIds: string[];
+  }
+
+  let healingStates = $state<HealingState[]>([]);
+
   // Modal state for node inspection
   let showEdgeModal = $state(false);
   let edgeModalData = $state<{ source: any; target: any }>({ source: null, target: null });
@@ -356,6 +376,7 @@
   }
 
   async function handleRun() {
+    healingStates = [];
     // Reset all node statuses
     nodes = nodes.map(n => ({ ...n, data: { ...n.data, status: 'pending' } }));
     edges = edges.map(e => ({ ...e, animated: false }));
@@ -432,6 +453,92 @@
         updateNodeStatus(event.nodeId, 'skipped');
         animateEdgesToNode(event.nodeId, false);
       }
+      else if (event.type === 'healing_started' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'healing');
+        const existing = healingStates.find(h => h.nodeId === event.nodeId);
+        if (!existing) {
+          healingStates = [...healingStates, {
+            nodeId: event.nodeId,
+            nodeLabel: event.data?.nodeLabel || event.nodeId,
+            error: event.data?.error || 'Unknown error',
+            attempts: [],
+            status: 'diagnosing',
+            undoIds: [],
+          }];
+        } else {
+          healingStates = healingStates.map(h => h.nodeId === event.nodeId ? { ...h, status: 'diagnosing' } : h);
+        }
+      }
+      else if (event.type === 'healing_progress' && event.nodeId) {
+        healingStates = healingStates.map(h => {
+          if (h.nodeId !== event.nodeId) return h;
+          const text = event.data?.text || '';
+          const lastAttempt = h.attempts[h.attempts.length - 1];
+          if (lastAttempt && !lastAttempt.fixApplied) {
+            return { ...h, attempts: [...h.attempts.slice(0, -1), { ...lastAttempt, diagnosis: text }] };
+          }
+          return { ...h, attempts: [...h.attempts, { diagnosis: text, reasoning: '', fixApplied: false }] };
+        });
+      }
+      else if (event.type === 'healing_fix_applied' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'running');
+        healingStates = healingStates.map(h => {
+          if (h.nodeId !== event.nodeId) return h;
+          const undoId = event.data?.undoId as string;
+          const newUndoIds = undoId ? [...h.undoIds, undoId] : h.undoIds;
+          const lastAttempt = h.attempts[h.attempts.length - 1];
+          if (lastAttempt) {
+            return {
+              ...h,
+              status: 'retrying' as const,
+              undoIds: newUndoIds,
+              attempts: [...h.attempts.slice(0, -1), {
+                ...lastAttempt,
+                fixDescription: (event.data?.description as string) || 'Fix applied',
+                fixApplied: true,
+              }],
+            };
+          }
+          return { ...h, status: 'retrying' as const, undoIds: newUndoIds };
+        });
+      }
+      else if (event.type === 'healing_succeeded' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'completed');
+        healingStates = healingStates.map(h => {
+          if (h.nodeId !== event.nodeId) return h;
+          const lastAttempt = h.attempts[h.attempts.length - 1];
+          if (lastAttempt) {
+            return {
+              ...h,
+              status: 'succeeded' as const,
+              attempts: [...h.attempts.slice(0, -1), { ...lastAttempt, retrySucceeded: true }],
+            };
+          }
+          return { ...h, status: 'succeeded' as const };
+        });
+      }
+      else if (event.type === 'healing_failed' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'failed');
+        healingStates = healingStates.map(h =>
+          h.nodeId === event.nodeId ? { ...h, status: 'failed' as const } : h,
+        );
+      }
+      else if (event.type === 'healing_blocked' && event.nodeId) {
+        updateNodeStatus(event.nodeId, 'blocked');
+        healingStates = healingStates.map(h =>
+          h.nodeId === event.nodeId ? {
+            ...h,
+            status: 'blocked' as const,
+            environmentAction: event.data?.environmentAction as string,
+            alternative: event.data?.alternative as string,
+          } : h,
+        );
+      }
+      else if (event.type === 'run_completed_with_errors') {
+        runStatus = 'completed_with_errors';
+        edges = edges.map(e => ({ ...e, animated: false }));
+        eventSource?.close();
+      }
       else if (event.type === 'breakpoint_hit' && event.nodeId) {
         updateNodeStatus(event.nodeId, 'paused_breakpoint');
         modalNodeId = event.nodeId;
@@ -461,6 +568,20 @@
 
   function animateEdgesFromNode(nodeId: string, animate: boolean) {
     edges = edges.map(e => e.source === nodeId ? { ...e, animated: animate } : e);
+  }
+
+  async function handleHealingUndo(undoId: string) {
+    if (!currentRunId) return;
+    try {
+      const res = await fetch(`/api/workflows/${data.workflow.id}/runs/${currentRunId}/undo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ undoId }),
+      });
+      if (res.ok) {
+        location.reload();
+      }
+    } catch { /* ignore */ }
   }
 
   function handleStop() {
@@ -533,7 +654,7 @@
   {#if runStatus}
     <div
       class="flex items-center gap-2 px-4 py-1.5 border-b"
-      style="border-color: var(--card-border); background: {runStatus === 'running' ? 'rgba(86,156,214,0.1)' : runStatus === 'completed' ? 'rgba(45,125,70,0.1)' : 'rgba(180,50,50,0.1)'};"
+      style="border-color: var(--card-border); background: {runStatus === 'running' ? 'rgba(86,156,214,0.1)' : runStatus === 'completed' ? 'rgba(45,125,70,0.1)' : runStatus === 'completed_with_errors' ? 'rgba(243,156,18,0.1)' : 'rgba(180,50,50,0.1)'};"
     >
       {#if runStatus === 'running'}
         <span class="w-2 h-2 rounded-full animate-pulse" style="background: #569cd6;"></span>
@@ -541,6 +662,9 @@
       {:else if runStatus === 'completed'}
         <span class="w-2 h-2 rounded-full" style="background: #2d7d46;"></span>
         <span class="text-xs" style="color: #2d7d46;">Completed</span>
+      {:else if runStatus === 'completed_with_errors'}
+        <span class="w-2 h-2 rounded-full" style="background: #f39c12;"></span>
+        <span class="text-xs" style="color: #f39c12;">Completed with errors</span>
       {:else if runStatus === 'failed'}
         <span class="w-2 h-2 rounded-full" style="background: #b43232;"></span>
         <span class="text-xs" style="color: #b43232;">Failed</span>
@@ -606,6 +730,8 @@
         onWorkflowGenerated={handleWorkflowGenerated}
         currentNodes={canvasNodesToWorkflow(nodes)}
         currentEdges={canvasEdgesToWorkflow(edges)}
+        {healingStates}
+        onHealingUndo={handleHealingUndo}
       />
     {/if}
   </div>
