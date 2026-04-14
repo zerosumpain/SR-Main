@@ -114,6 +114,7 @@
   let registryModule: any = $state(null);
   let nodeTypeComponents: Record<string, any> = $state({});
   let BasicConfigRendererComponent: any = $state(null);
+  let WhatsAppConfigPanelComponent: any = $state(null);
   let UpstreamSchemaPanelComponent: any = $state(null);
 
   if (browser) {
@@ -124,6 +125,7 @@
     import('$lib/components/workflows/RunHistoryPanel.svelte').then(m => RunHistoryPanel = m.default);
     import('$lib/workflows/registry-client').then(m => registryModule = m);
     import('$lib/components/workflows/BasicConfigRenderer.svelte').then(m => BasicConfigRendererComponent = m.default);
+    import('$lib/components/workflows/WhatsAppConfigPanel.svelte').then(m => WhatsAppConfigPanelComponent = m.default);
     import('$lib/components/workflows/UpstreamSchemaPanel.svelte').then(m => UpstreamSchemaPanelComponent = m.default);
 
     // Load all node type components
@@ -805,7 +807,24 @@
           <div>
             <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
 
-            {#if configMode === 'basic' && modalNodeDef?.basicConfig && BasicConfigRendererComponent}
+            {#if modalNode.data.nodeType === 'whatsapp' && WhatsAppConfigPanelComponent}
+              <svelte:component
+                this={WhatsAppConfigPanelComponent}
+                fields={modalNodeDef?.basicConfig || []}
+                config={modalNode.data.config || {}}
+                variables={modalUpstreamVariables}
+                showAdvanced={false}
+                onConfigChange={(newConfig) => {
+                  nodes = nodes.map(n =>
+                    n.id === modalNodeId ? { ...n, data: { ...n.data, config: newConfig } } : n
+                  );
+                  editingConfig = {};
+                  for (const [k, v] of Object.entries(newConfig)) {
+                    editingConfig[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+                  }
+                }}
+              />
+            {:else if configMode === 'basic' && modalNodeDef?.basicConfig && BasicConfigRendererComponent}
               <svelte:component
                 this={BasicConfigRendererComponent}
                 fields={modalNodeDef.basicConfig}
