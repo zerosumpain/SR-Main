@@ -1,8 +1,34 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
+  import { onMount } from 'svelte';
   import { canvasNodesToWorkflow, canvasEdgesToWorkflow } from '$lib/components/workflows/adapter';
   import type { CanvasNode, CanvasEdge } from '$lib/components/workflows/adapter';
+
+  // Auto-create workflow and redirect to full editor immediately
+  onMount(async () => {
+    const triggerId = crypto.randomUUID();
+    const res = await fetch('/api/workflows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Untitled Workflow',
+        nodes: [{
+          id: triggerId,
+          type: 'manual-trigger',
+          position: { x: 100, y: 200 },
+          config: {},
+          label: 'Start',
+        }],
+        edges: [],
+      }),
+    });
+    if (res.ok) {
+      const workflow = await res.json();
+      goto(`/workflows/${workflow.id}`, { replaceState: true });
+      return;
+    }
+  });
 
   let nodes = $state<CanvasNode[]>([
     {
