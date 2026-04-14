@@ -352,7 +352,7 @@ register({
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `https://dev.strangeramblings.com/workflows/${created.id}`,
+        url: `https://strangeramblings.com/workflows/${created.id}`,
       },
     };
   },
