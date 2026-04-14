@@ -62,81 +62,91 @@
     messages = [...messages, userMsg];
     scrollToBottom();
 
-    const MAX_RETRIES = 2;
-    let attempt = 0;
+    // Use SSE streaming to avoid Cloudflare timeout
+    const progressId = crypto.randomUUID();
+    let progressMsg: Message = {
+      id: progressId,
+      role: 'assistant',
+      content: 'Thinking...',
+    };
+    messages = [...messages, progressMsg];
+    scrollToBottom();
 
-    while (attempt <= MAX_RETRIES) {
-      try {
-        if (attempt > 0) {
-          // Show retry message
-          const retryMsg: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: `Connection issue — retrying (attempt ${attempt + 1}/${MAX_RETRIES + 1})...`,
-          };
-          messages = [...messages, retryMsg];
-          scrollToBottom();
-        }
+    try {
+      const hasExistingNodes = currentNodes.length > 0;
+      const res = await fetch('/api/workflows/orchestrator/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          workflowId,
+          mode: hasExistingNodes ? 'modify' : 'generate',
+          currentNodes: hasExistingNodes ? currentNodes : undefined,
+          currentEdges: hasExistingNodes ? currentEdges : undefined,
+        }),
+      });
 
-        const hasExistingNodes = currentNodes.length > 0;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+      if (!res.ok || !res.body) {
+        const errData = await res.text();
+        throw new Error(errData || `Server error (${res.status})`);
+      }
 
-        const res = await fetch('/api/workflows/orchestrator/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: text,
-            workflowId,
-            mode: hasExistingNodes ? 'modify' : 'generate',
-            currentNodes: hasExistingNodes ? currentNodes : undefined,
-            currentEdges: hasExistingNodes ? currentEdges : undefined,
-          }),
-          signal: controller.signal,
-        });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        clearTimeout(timeout);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        const data = await res.json();
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-        if (!res.ok) {
-          throw new Error(data.error || `Server error (${res.status})`);
-        }
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
 
-        const assistantMsg: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.message || data.error || 'Something went wrong.',
-          metadata: { workflowGenerated: !!data.workflow },
-          thinking: data.thinking || undefined,
-        };
-        messages = [...messages, assistantMsg];
+          let event: Record<string, any>;
+          try {
+            event = JSON.parse(raw);
+          } catch {
+            continue;
+          }
 
-        if (data.redirectTo) {
-          goto(data.redirectTo);
-        } else if (data.workflow) {
-          onWorkflowGenerated(data.workflow);
-        }
-        break; // Success — exit retry loop
+          if (event.type === 'progress') {
+            // Update the progress message in-place
+            messages = messages.map(m =>
+              m.id === progressId ? { ...m, content: event.message || 'Working...' } : m,
+            );
+            scrollToBottom();
+          } else if (event.type === 'done') {
+            // Replace the progress message with the final result
+            const finalMsg: Message = {
+              id: progressId,
+              role: 'assistant',
+              content: event.message || event.error || 'Something went wrong.',
+              metadata: { workflowGenerated: !!event.workflow },
+              thinking: event.thinking || undefined,
+            };
+            messages = messages.map(m => m.id === progressId ? finalMsg : m);
 
-      } catch (err) {
-        attempt++;
-        if (attempt > MAX_RETRIES) {
-          const isTimeout = err instanceof DOMException && err.name === 'AbortError';
-          const errorMsg: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: isTimeout
-              ? 'The orchestrator timed out — the AI is taking too long to respond. Try a simpler request or try again later.'
-              : `Failed to connect to the orchestrator after ${MAX_RETRIES + 1} attempts. Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          };
-          messages = [...messages, errorMsg];
-        }
-        // Brief pause before retry
-        if (attempt <= MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 2000));
+            if (event.redirectTo) {
+              goto(event.redirectTo);
+            } else if (event.workflow) {
+              onWorkflowGenerated(event.workflow);
+            }
+          }
         }
       }
+    } catch (err) {
+      const errorMsg: Message = {
+        id: progressId,
+        role: 'assistant',
+        content: `Orchestrator error: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      };
+      messages = messages.map(m => m.id === progressId ? errorMsg : m);
     }
 
     loading = false;
