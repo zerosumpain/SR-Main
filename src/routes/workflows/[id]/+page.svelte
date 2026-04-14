@@ -152,7 +152,8 @@
       import('$lib/components/workflows/nodes/AccumulatorNode.svelte'),
       import('$lib/components/workflows/nodes/SubWorkflowNode.svelte'),
       import('$lib/components/workflows/nodes/LlmAgentNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la]) => {
+      import('$lib/components/workflows/nodes/WhatsAppNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -176,6 +177,7 @@
         'accumulator': ac.default,
         'sub-workflow': sw.default,
         'llm-agent': la.default,
+        'whatsapp': wa.default,
       };
     });
   }
