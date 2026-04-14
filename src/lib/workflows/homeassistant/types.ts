@@ -1,0 +1,39 @@
+export interface HAEntity {
+  entity_id: string;
+  domain: string;
+  friendly_name: string;
+  area_id: string | null;
+  area_name: string | null;
+  device_id: string | null;
+  state: string;
+}
+
+export interface HADevice {
+  id: string;
+  name: string;
+  manufacturer: string | null;
+  model: string | null;
+  area_id: string | null;
+  area_name: string | null;
+}
+
+export interface HAArea {
+  id: string;
+  name: string;
+}
+
+export interface HAStateResponse {
+  entity_id: string;
+  state: string;
+  attributes: Record<string, unknown>;
+  last_changed: string;
+  last_updated: string;
+}
+
+export interface HAOperationResult {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+export type HAOperation = 'query_state' | 'call_service' | 'fire_event' | 'get_history' | 'render_template';

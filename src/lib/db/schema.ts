@@ -715,3 +715,21 @@ export const whatsappConversations = pgTable('whatsapp_conversations', {
 
 export type WhatsAppConversation = typeof whatsappConversations.$inferSelect;
 export type NewWhatsAppConversation = typeof whatsappConversations.$inferInsert;
+
+// ==========================================
+// Home Assistant Integration
+// ==========================================
+
+export const homeAssistantConfig = pgTable('home_assistant_config', {
+  id: text('id').primaryKey().default('default'),
+  url: text('url').notNull().default('http://localhost:8123'),
+  token: text('token').notNull().default(''),
+  entityRegistry: jsonb('entity_registry').notNull().default(sql`'[]'::jsonb`),
+  deviceRegistry: jsonb('device_registry').notNull().default(sql`'[]'::jsonb`),
+  areaRegistry: jsonb('area_registry').notNull().default(sql`'[]'::jsonb`),
+  lastSynced: timestamp('last_synced', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type HomeAssistantConfig = typeof homeAssistantConfig.$inferSelect;
+export type NewHomeAssistantConfig = typeof homeAssistantConfig.$inferInsert;
