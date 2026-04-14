@@ -687,3 +687,31 @@ export const workflowDataStore = pgTable(
 
 export type WorkflowDataStore = typeof workflowDataStore.$inferSelect;
 export type NewWorkflowDataStore = typeof workflowDataStore.$inferInsert;
+
+// ==========================================
+// WhatsApp Integration
+// ==========================================
+
+export const whatsappConfig = pgTable('whatsapp_config', {
+  id: text('id').primaryKey().default('default'),
+  enabled: boolean('enabled').notNull().default(false),
+  allowedNumbers: jsonb('allowed_numbers').notNull().default(sql`'[]'::jsonb`),
+  soulMd: text('soul_md').notNull().default(''),
+  authDir: text('auth_dir').notNull().default('data/whatsapp-auth'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type WhatsAppConfig = typeof whatsappConfig.$inferSelect;
+export type NewWhatsAppConfig = typeof whatsappConfig.$inferInsert;
+
+export const whatsappConversations = pgTable('whatsapp_conversations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  phoneNumber: text('phone_number').notNull(),
+  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
+  content: text('content').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type WhatsAppConversation = typeof whatsappConversations.$inferSelect;
+export type NewWhatsAppConversation = typeof whatsappConversations.$inferInsert;
