@@ -127,7 +127,7 @@
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
-      content: 'Starting',
+      content: 'Thinking...',
       isProgress: true,
       progressSteps: [],
     }];
@@ -137,14 +137,15 @@
 
     try {
       // Phase 1: POST to start the job
-      const hasExistingNodes = currentNodes.length > 0;
+      // Default: general chat. Only use workflow modes when explicitly requested.
+      const hasExistingNodes = currentNodes.length > 1; // >1 because trigger node is always present
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
           workflowId,
-          mode: hasExistingNodes ? 'modify' : 'generate',
+          // No mode = general chat. Server handles workflow building only with explicit mode.
           currentNodes: hasExistingNodes ? currentNodes : undefined,
           currentEdges: hasExistingNodes ? currentEdges : undefined,
         }),
@@ -270,7 +271,7 @@
     <div>
       <h3 class="text-sm font-medium" style="color: var(--text-primary);">Orchestrator</h3>
       <p class="text-[11px] mt-0.5" style="color: var(--text-ghost);">
-        Describe what you want to automate
+        Chat, ask questions, or build workflows
       </p>
     </div>
     <button
@@ -290,7 +291,7 @@
     {#if messages.length === 0}
       <div class="text-center py-8">
         <p class="text-sm" style="color: var(--text-ghost);">
-          Tell me what you'd like to automate and I'll design a workflow for you.
+          Ask me anything — control your smart home, check your health data, manage blog posts, or build workflows.
         </p>
       </div>
     {:else}
@@ -300,7 +301,9 @@
           <div class="mb-3 rounded-lg border overflow-hidden" style="border-color: var(--accent); background: var(--card-bg);">
             <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
               <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
-              <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">Building workflow</span>
+              <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">
+                {msg.progressSteps && msg.progressSteps.length > 0 ? 'Working' : 'Thinking'}
+              </span>
               <button
                 onclick={cancelJob}
                 class="ml-auto text-[10px] px-2 py-0.5 rounded border transition-colors nopan nodrag"
@@ -364,7 +367,7 @@
       <textarea
         bind:value={input}
         onkeydown={handleKeydown}
-        placeholder="Describe your workflow..."
+        placeholder="Ask anything..."
         disabled={loading}
         class="flex-1 px-3 py-2 rounded-lg text-sm border resize-none"
         style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); min-height: 40px; max-height: 120px;"
