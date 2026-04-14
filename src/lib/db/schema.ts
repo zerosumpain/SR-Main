@@ -655,7 +655,7 @@ export type NewIntegration = typeof integrations.$inferInsert;
 // Conversations (JKAI Chat Hub)
 // ==========================================
 
-export const conversations = pgTable('conversations', {
+export const conversations = pgTable('jkai_conversations', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   title: text('title'),
   source: text('source').notNull().default('web'), // 'web' | 'whatsapp-continuation'
