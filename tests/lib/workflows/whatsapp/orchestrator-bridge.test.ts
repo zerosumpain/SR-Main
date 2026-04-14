@@ -10,37 +10,50 @@ vi.mock('$lib/db', () => ({
 		select: () => ({
 			from: () => ({
 				where: () => ({
-					orderBy: () => mockDbSelect()
-				})
-			})
+					orderBy: () => mockDbSelect(),
+				}),
+			}),
 		}),
 		insert: () => ({
 			values: (v: unknown) => {
 				mockDbInsert(v);
 				return { returning: vi.fn().mockResolvedValue([]) };
-			}
+			},
 		}),
 		delete: () => ({
-			where: () => mockDbDelete()
-		})
-	}
+			where: () => mockDbDelete(),
+		}),
+	},
 }));
 
 vi.mock('$lib/db/schema', () => ({
 	whatsappConversations: {},
-	whatsappConfig: {}
+	whatsappConfig: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
 	eq: vi.fn(),
 	asc: vi.fn(),
-	and: vi.fn()
+	and: vi.fn(),
 }));
 
-// Mock orchestrator
+// Mock LLM client
+const mockCreate = vi.fn();
+vi.mock('$lib/deepdive/keys', () => ({
+	getOpenAIClient: () => ({
+		chat: {
+			completions: {
+				create: mockCreate,
+			},
+		},
+	}),
+	getModel: () => 'test-model',
+}));
+
+// Mock orchestrator (for workflow routing)
 const mockGenerateWorkflow = vi.fn();
 vi.mock('$lib/workflows/orchestrator', () => ({
-	generateWorkflow: (...args: unknown[]) => mockGenerateWorkflow(...args)
+	generateWorkflow: (...args: unknown[]) => mockGenerateWorkflow(...args),
 }));
 
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
@@ -64,39 +77,90 @@ describe('OrchestratorBridge', () => {
 		expect(bridge.isResetCommand('hello')).toBe(false);
 	});
 
-	it('detects /clear as a reset and does not forward to orchestrator', async () => {
+	it('detects /clear as a reset and does not forward to LLM', async () => {
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
 			text: '/clear',
 			timestamp: Date.now(),
 			messageId: 'msg-1',
-			isGroup: false
+			isGroup: false,
 		};
 
 		await bridge.handleMessage(msg);
 
 		expect(sendFn).toHaveBeenCalledWith('447359228511', expect.stringContaining('cleared'));
-		expect(mockGenerateWorkflow).not.toHaveBeenCalled();
+		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
-	it('forwards regular messages to orchestrator', async () => {
-		mockGenerateWorkflow.mockResolvedValue({
-			workflow: null,
-			followUp: 'Here is my response',
-			messages: []
+	it('sends regular messages to LLM and replies', async () => {
+		mockCreate.mockResolvedValue({
+			choices: [{ message: { content: 'The weather looks great today!' } }],
 		});
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
-			text: 'What workflows do I have?',
+			text: "What's the weather like?",
 			timestamp: Date.now(),
 			messageId: 'msg-2',
-			isGroup: false
+			isGroup: false,
 		};
 
 		await bridge.handleMessage(msg);
 
-		expect(mockGenerateWorkflow).toHaveBeenCalled();
-		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Here is my response');
+		expect(mockCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				model: 'test-model',
+				messages: expect.arrayContaining([
+					expect.objectContaining({ role: 'system' }),
+					expect.objectContaining({ role: 'user', content: "What's the weather like?" }),
+				]),
+			}),
+		);
+		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
+		expect(mockGenerateWorkflow).not.toHaveBeenCalled();
+	});
+
+	it('routes to workflow orchestrator when LLM flags [WORKFLOW_NEEDED]', async () => {
+		mockCreate.mockResolvedValue({
+			choices: [{ message: { content: "I'll set up a daily weather alert for you. [WORKFLOW_NEEDED]" } }],
+		});
+		mockGenerateWorkflow.mockResolvedValue({
+			workflow: { name: 'Daily Weather Alert', explanation: 'Sends weather at 8am' },
+		});
+
+		const msg: WhatsAppInboundMessage = {
+			from: '447359228511',
+			text: 'Set up a daily weather notification',
+			timestamp: Date.now(),
+			messageId: 'msg-3',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		// First response should not contain the marker
+		expect(sendFn).toHaveBeenCalledWith(
+			'447359228511',
+			"I'll set up a daily weather alert for you.",
+		);
+	});
+
+	it('uses replyJid for LID messages', async () => {
+		mockCreate.mockResolvedValue({
+			choices: [{ message: { content: 'Hello!' } }],
+		});
+
+		const msg: WhatsAppInboundMessage = {
+			from: '179598537011308',
+			replyJid: '179598537011308@lid',
+			text: 'Hi there',
+			timestamp: Date.now(),
+			messageId: 'msg-4',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		expect(sendFn).toHaveBeenCalledWith('179598537011308@lid', 'Hello!');
 	});
 });
