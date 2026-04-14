@@ -15,6 +15,7 @@
       <a href="/" class="nav-link">Home</a>
       <a href="/blog" class="nav-link">Writing</a>
       <a href="/health" class="nav-link">Health</a>
+      <a href="/jkai" class="nav-link">jkai</a>
     </nav>
   </div>
 
