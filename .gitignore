@@ -30,5 +30,5 @@ vite.config.ts.timestamp-*
 keys.json
 
 # Published jkai projects (runtime data)
-data/
-!data/prompts/
+data/jkai-projects/
+data/whatsapp-auth/
