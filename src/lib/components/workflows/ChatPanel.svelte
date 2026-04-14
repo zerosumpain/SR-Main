@@ -62,19 +62,14 @@
     messages = [...messages, userMsg];
     scrollToBottom();
 
-    // Use SSE streaming to avoid Cloudflare timeout
     const progressId = crypto.randomUUID();
-    let progressMsg: Message = {
-      id: progressId,
-      role: 'assistant',
-      content: 'Thinking...',
-    };
-    messages = [...messages, progressMsg];
+    messages = [...messages, { id: progressId, role: 'assistant' as const, content: 'Starting...' }];
     scrollToBottom();
 
     try {
+      // Phase 1: POST to start the job (returns immediately with jobId)
       const hasExistingNodes = currentNodes.length > 0;
-      const res = await fetch('/api/workflows/orchestrator/chat', {
+      const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -86,43 +81,41 @@
         }),
       });
 
-      if (!res.ok || !res.body) {
-        const errData = await res.text();
-        throw new Error(errData || `Server error (${res.status})`);
+      if (!postRes.ok) {
+        const err = await postRes.json().catch(() => ({ error: `HTTP ${postRes.status}` }));
+        throw new Error(err.error || `Server error (${postRes.status})`);
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      const { jobId } = await postRes.json();
+      if (!jobId) throw new Error('No job ID returned');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      messages = messages.map(m =>
+        m.id === progressId ? { ...m, content: 'Thinking...' } : m,
+      );
+      scrollToBottom();
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      // Phase 2: GET SSE stream to receive progress + result
+      const evtSource = new EventSource(`/api/workflows/orchestrator/chat?jobId=${jobId}`);
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          evtSource.close();
+          reject(new Error('Orchestrator timed out after 3 minutes'));
+        }, 180000);
 
+        evtSource.onmessage = (e) => {
           let event: Record<string, any>;
-          try {
-            event = JSON.parse(raw);
-          } catch {
-            continue;
-          }
+          try { event = JSON.parse(e.data); } catch { return; }
 
           if (event.type === 'progress') {
-            // Update the progress message in-place
             messages = messages.map(m =>
               m.id === progressId ? { ...m, content: event.message || 'Working...' } : m,
             );
             scrollToBottom();
           } else if (event.type === 'done') {
-            // Replace the progress message with the final result
+            clearTimeout(timeout);
+            evtSource.close();
+
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
@@ -132,21 +125,24 @@
             };
             messages = messages.map(m => m.id === progressId ? finalMsg : m);
 
-            if (event.redirectTo) {
-              goto(event.redirectTo);
-            } else if (event.workflow) {
-              onWorkflowGenerated(event.workflow);
-            }
+            if (event.redirectTo) goto(event.redirectTo);
+            else if (event.workflow) onWorkflowGenerated(event.workflow);
+
+            resolve();
           }
-        }
-      }
+        };
+
+        evtSource.onerror = () => {
+          clearTimeout(timeout);
+          evtSource.close();
+          reject(new Error('Lost connection to orchestrator — it may still be working. Refresh the page to check.'));
+        };
+      });
     } catch (err) {
-      const errorMsg: Message = {
-        id: progressId,
-        role: 'assistant',
+      messages = messages.map(m => m.id === progressId ? {
+        ...m,
         content: `Orchestrator error: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      };
-      messages = messages.map(m => m.id === progressId ? errorMsg : m);
+      } : m);
     }
 
     loading = false;
