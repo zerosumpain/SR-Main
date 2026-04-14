@@ -22,6 +22,12 @@ rsync -avz \
   package.json package-lock.json \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/"
 
+echo "==> Syncing data files..."
+rsync -avz \
+  -e "ssh -i $VPS_KEY" \
+  data/ \
+  "$VPS_USER@$VPS_HOST:$VPS_DIR/data/"
+
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "cd $VPS_DIR && npm install --omit=dev --silent"
