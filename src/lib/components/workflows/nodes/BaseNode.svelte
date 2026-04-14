@@ -99,9 +99,10 @@
 
   {#if isFailed && error}
     <div class="px-3 pb-2">
+      <div class="text-[10px] font-medium mb-1 uppercase tracking-wider" style="color: #e74c3c;">Error</div>
       <div
-        class="text-[10px] leading-tight px-2 py-1.5 rounded"
-        style="background: rgba(231, 76, 60, 0.1); color: #e74c3c; font-family: var(--font-mono); word-break: break-word;"
+        class="text-[11px] leading-snug px-2 py-1.5 rounded"
+        style="background: rgba(231, 76, 60, 0.12); color: #e74c3c; font-family: var(--font-mono); word-break: break-word; max-height: 60px; overflow-y: auto;"
       >
         {error}
       </div>

@@ -35,7 +35,7 @@
   } = $props();
 
   let activeTab = $state<'config' | 'schema' | 'data' | 'reasoning'>('config');
-  let nodeData = $state<{ inputData: unknown; outputData: unknown; status: string } | null>(null);
+  let nodeData = $state<{ inputData: unknown; outputData: unknown; status: string; error?: string } | null>(null);
   let loading = $state(false);
   let editableInput = $state('');
 
@@ -205,6 +205,25 @@
               <div class="p-2 rounded border" style="background: var(--card-bg); border-color: var(--card-border);">
                 <JsonTree data={nodeData.outputData} />
               </div>
+            </div>
+          {/if}
+          {#if nodeData.error}
+            <div>
+              <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: #e74c3c; font-family: var(--font-mono);">Error</h4>
+              <div class="p-2 rounded border" style="background: rgba(231, 76, 60, 0.08); border-color: #e74c3c;">
+                <p class="text-xs break-words" style="color: #e74c3c; font-family: var(--font-mono);">{nodeData.error}</p>
+              </div>
+            </div>
+          {/if}
+          {#if nodeData.status}
+            <div>
+              <h4 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Status</h4>
+              <span
+                class="text-xs px-2 py-0.5 rounded font-medium"
+                style="background: {nodeData.status === 'completed' ? 'rgba(39,174,96,0.1)' : nodeData.status === 'failed' ? 'rgba(231,76,60,0.1)' : 'rgba(0,0,0,0.05)'}; color: {nodeData.status === 'completed' ? '#27ae60' : nodeData.status === 'failed' ? '#e74c3c' : 'var(--text-ghost)'};"
+              >
+                {nodeData.status}
+              </span>
             </div>
           {/if}
         </div>
