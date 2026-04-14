@@ -22,6 +22,8 @@ export const POST: RequestHandler = async () => {
 
   const bridge = new OrchestratorBridge(
     (to, text) => service.sendMessage(to, text),
+    (to) => service.sendTyping(to),
+    (to) => service.sendTypingDone(to),
   );
 
   service.onMessage((msg) => bridge.handleMessage(msg));

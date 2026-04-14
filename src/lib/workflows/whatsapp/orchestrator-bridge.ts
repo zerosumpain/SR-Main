@@ -5,12 +5,17 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
+type TypingFn = (to: string) => Promise<void>;
 
 export class OrchestratorBridge {
 	private sendFn: SendFn;
+	private typingFn: TypingFn | null;
+	private typingDoneFn: TypingFn | null;
 
-	constructor(sendFn: SendFn) {
+	constructor(sendFn: SendFn, typingFn?: TypingFn, typingDoneFn?: TypingFn) {
 		this.sendFn = sendFn;
+		this.typingFn = typingFn || null;
+		this.typingDoneFn = typingDoneFn || null;
 	}
 
 	isResetCommand(text: string): boolean {
@@ -29,6 +34,9 @@ export class OrchestratorBridge {
 		}
 
 		try {
+			// Show typing indicator
+			await this.typingFn?.(replyTo);
+
 			// Save user message
 			await db.insert(whatsappConversations).values({
 				phoneNumber: from,
@@ -38,13 +46,14 @@ export class OrchestratorBridge {
 
 			// Load conversation history
 			const history = await this.getConversationHistory(from);
-			// Exclude the message we just saved
 			const priorHistory = history.slice(0, -1);
 
 			// Call general chat
 			const { response: responseText } = await generalChat(text, priorHistory);
 
-			// Save assistant response
+			// Stop typing, save and send
+			await this.typingDoneFn?.(replyTo);
+
 			await db.insert(whatsappConversations).values({
 				phoneNumber: from,
 				role: 'assistant',
@@ -53,6 +62,7 @@ export class OrchestratorBridge {
 
 			await this.sendFn(replyTo, responseText);
 		} catch (err: unknown) {
+			await this.typingDoneFn?.(replyTo);
 			const errMsg = err instanceof Error ? err.message : 'Unknown error';
 			console.error(`[whatsapp-bridge] Error handling message from ${from}:`, errMsg);
 			await this.sendFn(replyTo, 'Something went wrong. Try again in a moment.');

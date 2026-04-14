@@ -80,7 +80,7 @@ export class WhatsAppService {
 			printQRInTerminal: false,
 			browser: ['strange-rambling', 'workflows', '1.0'],
 			syncFullHistory: false,
-			markOnlineOnConnect: false
+			markOnlineOnConnect: true
 		});
 
 		this.sock.ev.on('creds.update', () => {
@@ -115,6 +115,8 @@ export class WhatsAppService {
 				const rawId = this.sock?.user?.id;
 				this.connectedNumber = rawId ? this.fromJid(rawId) : null;
 				console.log(`[whatsapp] Connected as ${this.connectedNumber}`);
+				// Show as online
+				this.sock?.sendPresenceUpdate('available').catch(() => {});
 			}
 
 			if (connection === 'close') {
@@ -203,6 +205,22 @@ export class WhatsAppService {
 		this.qrCode = null;
 		this.connectedNumber = null;
 		this.reconnectAttempts = 0;
+	}
+
+	async sendTyping(to: string): Promise<void> {
+		if (!this.sock || this.status !== 'connected') return;
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			await this.sock.sendPresenceUpdate('composing', jid);
+		} catch {}
+	}
+
+	async sendTypingDone(to: string): Promise<void> {
+		if (!this.sock || this.status !== 'connected') return;
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			await this.sock.sendPresenceUpdate('paused', jid);
+		} catch {}
 	}
 
 	async sendMessage(to: string, text: string): Promise<WhatsAppSendResult> {
