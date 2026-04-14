@@ -1,5 +1,20 @@
 <script lang="ts">
   let { data } = $props();
+  let workflowList = $state(data.workflows);
+
+  async function deleteWorkflow(id: string, e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Delete this workflow?')) return;
+    try {
+      const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        workflowList = workflowList.filter((w) => w.id !== id);
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  }
 
   function formatDate(d: string | Date) {
     return new Date(d).toLocaleDateString('en-GB', {
@@ -66,7 +81,7 @@
     </div>
   </div>
 
-  {#if data.workflows.length === 0}
+  {#if workflowList.length === 0}
     <div
       class="text-center py-16 rounded-xl border"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -78,12 +93,12 @@
     </div>
   {:else}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {#each data.workflows as workflow}
-        <a
-          href="/workflows/{workflow.id}"
-          class="group p-5 rounded-xl border transition-colors hover:border-[var(--accent)]"
+      {#each workflowList as workflow}
+        <div
+          class="group relative p-5 rounded-xl border transition-colors hover:border-[var(--accent)]"
           style="background: var(--card-bg); border-color: var(--card-border);"
         >
+          <a href="/workflows/{workflow.id}" class="absolute inset-0 z-0" aria-label="View workflow"></a>
           <div class="flex items-start justify-between mb-2">
             <h2
               class="text-base font-medium group-hover:text-[var(--accent)] transition-colors"
@@ -91,9 +106,19 @@
             >
               {workflow.name}
             </h2>
-            <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {formatDate(workflow.createdAt)}
-            </span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                {formatDate(workflow.createdAt)}
+              </span>
+              <button
+                onclick={(e) => deleteWorkflow(workflow.id, e)}
+                class="relative z-10 text-[11px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                style="color: #b43232;"
+                title="Delete workflow"
+              >
+                &times;
+              </button>
+            </div>
           </div>
 
           {#if workflow.description}
@@ -129,7 +154,7 @@
               <span class="text-[11px]" style="color: var(--text-ghost);">never run</span>
             {/if}
           </div>
-        </a>
+        </div>
       {/each}
     </div>
   {/if}

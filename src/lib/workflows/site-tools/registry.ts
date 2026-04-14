@@ -352,9 +352,22 @@ register({
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `https://strangeramblings.com/workflows/${created.id}`,
+        url: `https://dev.strangeramblings.com/workflows/${created.id}`,
       },
     };
+  },
+});
+
+register({
+  name: 'workflow_delete',
+  description: 'Delete a workflow by ID. Use when the user asks to remove or clean up a workflow.',
+  parameters: { type: 'object', properties: { id: { type: 'string', description: 'Workflow ID to delete' } }, required: ['id'] },
+  category: 'Workflows',
+  handler: async (args) => {
+    const [existing] = await db.select().from(workflows).where(eq(workflows.id, args.id as string)).limit(1);
+    if (!existing) return { success: false, error: 'Workflow not found' };
+    await db.delete(workflows).where(eq(workflows.id, args.id as string));
+    return { success: true, data: { deleted: true, name: existing.name } };
   },
 });
 
