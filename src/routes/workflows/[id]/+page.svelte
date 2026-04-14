@@ -192,6 +192,8 @@
     if (!node) return false;
     const def = registryModule?.getDefinition(node.data.nodeType);
     if (def?.category === 'trigger') return true;
+    // WhatsApp node config must be accessible without upstream connection (for connection management)
+    if (node.data.nodeType === 'whatsapp') return true;
     return edges.some((e) => e.target === modalNodeId);
   });
 
