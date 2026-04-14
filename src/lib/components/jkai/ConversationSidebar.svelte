@@ -3,7 +3,7 @@
     id: string;
     title: string | null;
     source: string;
-    updatedAt: string;
+    updatedAt: string | Date;
     lastMessage: string | null;
     messageCount: number;
   }
@@ -35,7 +35,7 @@
     onToggleCollapse: () => void;
   } = $props();
 
-  function relativeTime(iso: string): string {
+  function relativeTime(iso: string | Date): string {
     const ms = Date.now() - new Date(iso).getTime();
     if (ms < 60000) return 'now';
     if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
@@ -103,9 +103,13 @@
 
       <!-- Web conversations -->
       {#each conversations as conv (conv.id)}
-        <button
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
           onclick={() => onSelect(conv.id)}
-          class="w-full text-left px-3 py-2.5 border-b transition-colors group"
+          onkeydown={(e) => { if (e.key === 'Enter') onSelect(conv.id); }}
+          role="button"
+          tabindex="0"
+          class="w-full text-left px-3 py-2.5 border-b transition-colors group cursor-pointer"
           style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
         >
           <div class="flex items-center justify-between mb-0.5">
@@ -132,7 +136,7 @@
               &times;
             </button>
           </div>
-        </button>
+        </div>
       {/each}
     </div>
 

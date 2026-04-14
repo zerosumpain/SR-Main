@@ -42,7 +42,7 @@ export const load: PageServerLoad = async () => {
     .from(workflowSchedules)
     .where(eq(workflowSchedules.enabled, true));
 
-  const metrics: Record<string, number> = {
+  const metrics = {
     scheduled: scheduleCount?.count ?? 0,
     running: 0,
     completed: 0,
@@ -50,7 +50,7 @@ export const load: PageServerLoad = async () => {
   };
   for (const row of runCounts) {
     if (row.status in metrics) {
-      metrics[row.status] = row.count;
+      metrics[row.status as keyof typeof metrics] = row.count;
     }
   }
 
