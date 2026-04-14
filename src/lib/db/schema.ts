@@ -652,12 +652,29 @@ export type Integration = typeof integrations.$inferSelect;
 export type NewIntegration = typeof integrations.$inferInsert;
 
 // ==========================================
+// Conversations (JKAI Chat Hub)
+// ==========================================
+
+export const conversations = pgTable('conversations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  title: text('title'),
+  source: text('source').notNull().default('web'), // 'web' | 'whatsapp-continuation'
+  whatsappPhoneNumber: text('whatsapp_phone_number'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
+
+// ==========================================
 // Orchestrator Chat Messages
 // ==========================================
 
 export const orchestratorChats = pgTable('orchestrator_chats', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'cascade' }),
+  conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
   role: text('role').notNull(), // 'user' | 'assistant' | 'system'
   content: text('content').notNull(),
   metadata: jsonb('metadata'),
