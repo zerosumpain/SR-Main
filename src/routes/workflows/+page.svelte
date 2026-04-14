@@ -48,13 +48,22 @@
         Visual automation pipelines
       </p>
     </div>
-    <a
-      href="/workflows/new"
-      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-      style="background: var(--accent); color: white;"
-    >
-      New Workflow
-    </a>
+    <div class="flex items-center gap-3">
+      <a
+        href="/workflows/prompts"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors border"
+        style="border-color: var(--card-border); color: var(--text-secondary);"
+      >
+        System Prompts
+      </a>
+      <a
+        href="/workflows/new"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        style="background: var(--accent); color: white;"
+      >
+        New Workflow
+      </a>
+    </div>
   </div>
 
   {#if data.workflows.length === 0}

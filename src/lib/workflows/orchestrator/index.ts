@@ -336,7 +336,7 @@ export async function generateWorkflow(
   const personalityPrompt = await getCompiledPrompt();
   const basePrompt = buildToolUseSystemPrompt(grounding);
   const systemPrompt = personalityPrompt
-    ? `${basePrompt}\n\n${personalityPrompt}`
+    ? `${personalityPrompt}\n\n---\n\n${basePrompt}`
     : basePrompt;
 
   let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -437,7 +437,7 @@ export async function modifyWorkflow(
     grounding,
   );
   const systemPrompt = personalityPrompt
-    ? `${baseModifyPrompt}\n\n${personalityPrompt}`
+    ? `${personalityPrompt}\n\n---\n\n${baseModifyPrompt}`
     : baseModifyPrompt;
 
   const history = await getChatHistory(workflowId);
