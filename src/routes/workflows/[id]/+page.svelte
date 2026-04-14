@@ -156,7 +156,11 @@
       import('$lib/components/workflows/nodes/LlmAgentNode.svelte'),
       import('$lib/components/workflows/nodes/WhatsAppNode.svelte'),
       import('$lib/components/workflows/nodes/HomeAssistantNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa, ha]) => {
+      import('$lib/components/workflows/nodes/HealthQueryNode.svelte'),
+      import('$lib/components/workflows/nodes/BlogNode.svelte'),
+      import('$lib/components/workflows/nodes/JkaiNode.svelte'),
+      import('$lib/components/workflows/nodes/DeepDiveNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa, ha, hq, bl, jk, dd]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -182,6 +186,10 @@
         'llm-agent': la.default,
         'whatsapp': wa.default,
         'home-assistant': ha.default,
+        'health-query': hq.default,
+        'blog': bl.default,
+        'jkai': jk.default,
+        'deep-dive': dd.default,
       };
     });
   }

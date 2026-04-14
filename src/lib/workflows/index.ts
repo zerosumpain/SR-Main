@@ -24,6 +24,10 @@ import { subWorkflowDef, subWorkflowExecutor } from './nodes/sub-workflow';
 import { llmAgentDef, llmAgentExecutor } from './nodes/llm-agent';
 import { whatsappDef, whatsappExecutor } from './nodes/whatsapp';
 import { homeAssistantDef, homeAssistantExecutor } from './nodes/home-assistant';
+import { healthQueryDef, healthQueryExecutor } from './nodes/health-query';
+import { blogDef, blogExecutor } from './nodes/blog';
+import { jkaiDef, jkaiExecutor } from './nodes/jkai';
+import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { db } from '$lib/db';
@@ -63,6 +67,10 @@ registry.register(subWorkflowDef, subWorkflowExecutor);
 registry.register(llmAgentDef, llmAgentExecutor);
 registry.register(whatsappDef, whatsappExecutor);
 registry.register(homeAssistantDef, homeAssistantExecutor);
+registry.register(healthQueryDef, healthQueryExecutor);
+registry.register(blogDef, blogExecutor);
+registry.register(jkaiDef, jkaiExecutor);
+registry.register(deepDiveDef, deepDiveExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();

@@ -536,6 +536,235 @@ const homeAssistantClientDef: NodeDefinition = {
   ],
 };
 
+const healthQueryClientDef: NodeDefinition = {
+  type: 'health-query',
+  label: 'Health Query',
+  category: 'integration',
+  description: 'Query health data from Strava, Apple Watch, and other fitness sources.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'stats | readiness | sleep | training_load | timeline' },
+      page: { type: 'string', description: 'Page number for timeline (default 1). Supports templates.' },
+      limit: { type: 'string', description: 'Items per page for timeline (default 20). Supports templates.' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'stats' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    {
+      key: 'operation', label: 'Operation', type: 'dropdown',
+      options: [
+        { value: 'stats', label: 'Stats' },
+        { value: 'readiness', label: 'Readiness' },
+        { value: 'sleep', label: 'Sleep' },
+        { value: 'training_load', label: 'Training Load' },
+        { value: 'timeline', label: 'Timeline' },
+      ],
+    },
+    { key: 'page', label: 'Page', type: 'text', placeholder: '1' },
+    { key: 'limit', label: 'Limit', type: 'text', placeholder: '20' },
+  ],
+  llmDescription: `Query health data from Strava and Apple Watch including fitness stats, readiness scores, sleep analysis, training load, and activity timeline.
+
+1. **stats** — Get current fitness stats summary (HR, steps, active calories, etc.)
+2. **readiness** — Get readiness/recovery score based on HRV, sleep, and training load
+3. **sleep** — Get sleep analysis data (duration, stages, quality)
+4. **training_load** — Get training load and fitness/fatigue metrics
+5. **timeline** — Get paginated activity timeline. Supports page/limit params.
+
+IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.`,
+  llmExamples: [
+    { operation: 'readiness' },
+    { operation: 'stats' },
+    { operation: 'timeline', page: '1', limit: '10' },
+  ],
+};
+
+const blogClientDef: NodeDefinition = {
+  type: 'blog',
+  label: 'Blog',
+  category: 'integration',
+  description: 'Manage blog posts: list, get, create, and update.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'list | get | create | update' },
+      postId: { type: 'string', description: 'Post ID for get/update. Supports templates.' },
+      title: { type: 'string', description: 'Post title. Supports templates.' },
+      content: { type: 'string', description: 'Post content (HTML). Supports templates.' },
+      status: { type: 'string', description: 'Post status (draft | published)' },
+      tags: { type: 'string', description: 'Comma-separated tags' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'list' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    {
+      key: 'operation', label: 'Operation', type: 'dropdown',
+      options: [
+        { value: 'list', label: 'List Posts' },
+        { value: 'get', label: 'Get Post' },
+        { value: 'create', label: 'Create Post' },
+        { value: 'update', label: 'Update Post' },
+      ],
+    },
+    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.output.id}}' },
+    { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'My Blog Post' },
+    { key: 'content', label: 'Content', type: 'template-textarea', placeholder: '<p>Post content here...</p>' },
+    { key: 'status', label: 'Status', type: 'dropdown', options: [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }] },
+    { key: 'tags', label: 'Tags', type: 'text', placeholder: 'tech, ai, personal' },
+  ],
+  llmDescription: `Manage blog posts on the site. Supports four operations:
+
+1. **list** — List all blog posts (most recent first, up to 50)
+2. **get** — Get a single post by ID
+3. **create** — Create a new blog post. Requires title; content, status, and tags are optional.
+4. **update** — Update an existing post by ID. Pass only the fields to change.
+
+IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+
+All text fields support \`{{input.field}}\` template interpolation.`,
+  llmExamples: [
+    { operation: 'list' },
+    { operation: 'create', title: 'Weekly Update', content: '<p>This week...</p>', status: 'draft', tags: 'weekly, update' },
+    { operation: 'update', postId: '{{input.output.id}}', status: 'published' },
+  ],
+};
+
+const jkaiClientDef: NodeDefinition = {
+  type: 'jkai',
+  label: 'JKAI',
+  category: 'integration',
+  description: 'Manage JKAI autonomous builds: start, check status, list, and control.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'start | status | list | control' },
+      prompt: { type: 'string', description: 'Build prompt for start. Supports templates.' },
+      title: { type: 'string', description: 'Optional build title. Supports templates.' },
+      buildId: { type: 'string', description: 'Build ID for status/control. Supports templates.' },
+      action: { type: 'string', description: 'Control action (pause | resume | cancel)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'list' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    {
+      key: 'operation', label: 'Operation', type: 'dropdown',
+      options: [
+        { value: 'start', label: 'Start Build' },
+        { value: 'status', label: 'Check Status' },
+        { value: 'list', label: 'List Builds' },
+        { value: 'control', label: 'Control Build' },
+      ],
+    },
+    { key: 'prompt', label: 'Prompt', type: 'template-textarea', placeholder: 'Build a landing page with...' },
+    { key: 'title', label: 'Title', type: 'text', placeholder: 'My Build' },
+    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.output.buildId}}' },
+    {
+      key: 'action', label: 'Action', type: 'dropdown',
+      options: [
+        { value: 'pause', label: 'Pause' },
+        { value: 'resume', label: 'Resume' },
+        { value: 'cancel', label: 'Cancel' },
+      ],
+    },
+  ],
+  llmDescription: `Manage JKAI autonomous code builds in a Docker sandbox. Supports four operations:
+
+1. **start** — Start a new build with a prompt (and optional title)
+2. **status** — Check the status of a build by ID
+3. **list** — List all builds (most recent first, up to 50)
+4. **control** — Control a running build (pause, resume, cancel)
+
+IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+
+All text fields support \`{{input.field}}\` template interpolation.`,
+  llmExamples: [
+    { operation: 'list' },
+    { operation: 'start', prompt: 'Build a React dashboard with charts', title: 'Dashboard Build' },
+    { operation: 'status', buildId: '{{input.output.data.id}}' },
+    { operation: 'control', buildId: '{{input.output.data.id}}', action: 'cancel' },
+  ],
+};
+
+const deepDiveClientDef: NodeDefinition = {
+  type: 'deep-dive',
+  label: 'Deep Dive',
+  category: 'integration',
+  description: 'Run deep research sessions: start, check status, list, get reports, and control.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', description: 'start | status | list | report | control' },
+      topic: { type: 'string', description: 'Research topic. Supports templates.' },
+      goals: { type: 'string', description: 'Research goals/objectives. Supports templates.' },
+      depth: { type: 'string', description: 'Research depth (shallow | medium | deep)' },
+      sessionId: { type: 'string', description: 'Session ID for status/report/control. Supports templates.' },
+      action: { type: 'string', description: 'Control action (pause | resume | cancel)' },
+    },
+    required: ['operation'],
+  },
+  defaultConfig: { operation: 'list' },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  basicConfig: [
+    {
+      key: 'operation', label: 'Operation', type: 'dropdown',
+      options: [
+        { value: 'start', label: 'Start Research' },
+        { value: 'status', label: 'Check Status' },
+        { value: 'list', label: 'List Sessions' },
+        { value: 'report', label: 'Get Report' },
+        { value: 'control', label: 'Control Session' },
+      ],
+    },
+    { key: 'topic', label: 'Topic', type: 'template-textarea', placeholder: 'Impact of AI on software engineering' },
+    { key: 'goals', label: 'Goals', type: 'textarea', placeholder: 'Understand trends, key players, future outlook' },
+    {
+      key: 'depth', label: 'Depth', type: 'dropdown',
+      options: [
+        { value: 'shallow', label: 'Shallow' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'deep', label: 'Deep' },
+      ],
+    },
+    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.output.data.id}}' },
+    {
+      key: 'action', label: 'Action', type: 'dropdown',
+      options: [
+        { value: 'pause', label: 'Pause' },
+        { value: 'resume', label: 'Resume' },
+        { value: 'cancel', label: 'Cancel' },
+      ],
+    },
+  ],
+  llmDescription: `Run deep research sessions on any topic using web search, analysis, and synthesis. Supports five operations:
+
+1. **start** — Start a new research session with a topic, optional goals, and depth level
+2. **status** — Check the progress of a research session by ID
+3. **list** — List all research sessions (most recent first, up to 50)
+4. **report** — Get the full research report for a completed session
+5. **control** — Control a running session (pause, resume, cancel)
+
+IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+
+All text fields support \`{{input.field}}\` template interpolation.`,
+  llmExamples: [
+    { operation: 'list' },
+    { operation: 'start', topic: 'Quantum computing breakthroughs 2026', goals: 'Key advances, practical applications', depth: 'deep' },
+    { operation: 'status', sessionId: '{{input.output.data.id}}' },
+    { operation: 'report', sessionId: '{{input.output.data.id}}' },
+  ],
+};
+
 const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -561,6 +790,10 @@ const builtInDefinitions: NodeDefinition[] = [
   llmAgentDef,
   whatsappDef,
   homeAssistantClientDef,
+  healthQueryClientDef,
+  blogClientDef,
+  jkaiClientDef,
+  deepDiveClientDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;
