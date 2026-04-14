@@ -4,6 +4,8 @@ import { eq, asc } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
+import { SITE_TOOL_DEFINITIONS, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
+import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
@@ -76,9 +78,10 @@ export class OrchestratorBridge {
 
 			// Build messages for the LLM
 			const haSection = buildHASystemPromptSection(haEntities);
+			const siteSection = buildSiteSystemPromptSection();
 			const systemContent = this.soulMd
-				? `${SYSTEM_PROMPT}${haSection}\n\n--- Personality & Style ---\n${this.soulMd}`
-				: `${SYSTEM_PROMPT}${haSection}`;
+				? `${SYSTEM_PROMPT}${haSection}${siteSection}\n\n--- Personality & Style ---\n${this.soulMd}`
+				: `${SYSTEM_PROMPT}${haSection}${siteSection}`;
 
 			const messages: Array<any> = [
 				{ role: 'system', content: systemContent },
@@ -93,7 +96,8 @@ export class OrchestratorBridge {
 			// Call LLM with HA tools
 			const client = getOpenAIClient();
 			const model = getModel();
-			const tools = haEntities.length > 0 ? HA_TOOL_DEFINITIONS : undefined;
+			const allTools = [...(haEntities.length > 0 ? HA_TOOL_DEFINITIONS : []), ...SITE_TOOL_DEFINITIONS];
+			const tools = allTools.length > 0 ? allTools : undefined;
 
 			let responseText = '';
 			const MAX_TOOL_ROUNDS = 5;
@@ -174,7 +178,11 @@ export class OrchestratorBridge {
 							toolResult = await haService.renderTemplate(fnArgs.template as string);
 							break;
 						default:
-							toolResult = { error: `Unknown function: ${fnName}` };
+							if (fnName.startsWith('site_') || fnName.startsWith('jkai_') || fnName.startsWith('research_')) {
+								toolResult = await executeSiteTool(fnName, fnArgs);
+							} else {
+								toolResult = { error: `Unknown function: ${fnName}` };
+							}
 					}
 
 					messages.push({

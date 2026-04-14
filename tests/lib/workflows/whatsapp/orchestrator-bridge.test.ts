@@ -60,6 +60,13 @@ vi.mock('$lib/workflows/homeassistant/llm-tools', () => ({
 	HA_TOOL_DEFINITIONS: [],
 	buildHASystemPromptSection: () => '',
 }));
+vi.mock('$lib/workflows/site-tools/llm-tools', () => ({
+	SITE_TOOL_DEFINITIONS: [],
+	buildSiteSystemPromptSection: () => '',
+}));
+vi.mock('$lib/workflows/site-tools/executor', () => ({
+	executeSiteTool: vi.fn().mockResolvedValue({ success: true, data: {} }),
+}));
 
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
 import type { WhatsAppInboundMessage } from '$lib/workflows/whatsapp/types';
