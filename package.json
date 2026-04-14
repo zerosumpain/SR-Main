@@ -43,6 +43,7 @@
 		"@sveltejs/adapter-node": "^5.5.4",
 		"@threlte/core": "^8.5.0",
 		"@threlte/extras": "^9.9.0",
+		"@types/qrcode": "^1.5.6",
 		"@whiskeysockets/baileys": "^7.0.0-rc.9",
 		"@xyflow/svelte": "^1.5.2",
 		"croner": "^10.0.1",
@@ -60,6 +61,7 @@
 		"openai": "^6.32.0",
 		"pg": "^8.20.0",
 		"prismjs": "^1.30.0",
+		"qrcode": "^1.5.4",
 		"three": "^0.183.2",
 		"topojson-client": "^3.1.0",
 		"zod": "^4.3.6"
