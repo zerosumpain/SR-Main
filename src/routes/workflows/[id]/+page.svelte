@@ -115,6 +115,7 @@
   let nodeTypeComponents: Record<string, any> = $state({});
   let BasicConfigRendererComponent: any = $state(null);
   let WhatsAppConfigPanelComponent: any = $state(null);
+  let HomeAssistantConfigPanelComponent: any = $state(null);
   let UpstreamSchemaPanelComponent: any = $state(null);
 
   if (browser) {
@@ -126,6 +127,7 @@
     import('$lib/workflows/registry-client').then(m => registryModule = m);
     import('$lib/components/workflows/BasicConfigRenderer.svelte').then(m => BasicConfigRendererComponent = m.default);
     import('$lib/components/workflows/WhatsAppConfigPanel.svelte').then(m => WhatsAppConfigPanelComponent = m.default);
+    import('$lib/components/workflows/HomeAssistantConfigPanel.svelte').then(m => HomeAssistantConfigPanelComponent = m.default);
     import('$lib/components/workflows/UpstreamSchemaPanel.svelte').then(m => UpstreamSchemaPanelComponent = m.default);
 
     // Load all node type components
@@ -153,7 +155,8 @@
       import('$lib/components/workflows/nodes/SubWorkflowNode.svelte'),
       import('$lib/components/workflows/nodes/LlmAgentNode.svelte'),
       import('$lib/components/workflows/nodes/WhatsAppNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa]) => {
+      import('$lib/components/workflows/nodes/HomeAssistantNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa, ha]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -178,6 +181,7 @@
         'sub-workflow': sw.default,
         'llm-agent': la.default,
         'whatsapp': wa.default,
+        'home-assistant': ha.default,
       };
     });
   }
@@ -194,6 +198,7 @@
     if (def?.category === 'trigger') return true;
     // WhatsApp node config must be accessible without upstream connection (for connection management)
     if (node.data.nodeType === 'whatsapp') return true;
+    if (node.data.nodeType === 'home-assistant') return true;
     return edges.some((e) => e.target === modalNodeId);
   });
 
@@ -811,7 +816,24 @@
           <div>
             <h3 class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Configuration</h3>
 
-            {#if modalNode.data.nodeType === 'whatsapp' && WhatsAppConfigPanelComponent}
+            {#if modalNode.data.nodeType === 'home-assistant' && HomeAssistantConfigPanelComponent}
+              <svelte:component
+                this={HomeAssistantConfigPanelComponent}
+                fields={modalNodeDef?.basicConfig || []}
+                config={modalNode.data.config || {}}
+                variables={modalUpstreamVariables}
+                showAdvanced={false}
+                onConfigChange={(newConfig) => {
+                  nodes = nodes.map(n =>
+                    n.id === modalNodeId ? { ...n, data: { ...n.data, config: newConfig } } : n
+                  );
+                  editingConfig = {};
+                  for (const [k, v] of Object.entries(newConfig)) {
+                    editingConfig[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+                  }
+                }}
+              />
+            {:else if modalNode.data.nodeType === 'whatsapp' && WhatsAppConfigPanelComponent}
               <svelte:component
                 this={WhatsAppConfigPanelComponent}
                 fields={modalNodeDef?.basicConfig || []}
