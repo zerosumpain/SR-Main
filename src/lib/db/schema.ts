@@ -602,6 +602,7 @@ export const workflowRuns = pgTable('workflow_runs', {
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
+  healingHistory: jsonb('healing_history').default(sql`'[]'::jsonb`),
 });
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
