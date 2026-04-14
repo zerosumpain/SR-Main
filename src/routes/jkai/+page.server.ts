@@ -1,13 +1,81 @@
 import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { conversations, orchestratorChats, workflowRuns, workflowSchedules, whatsappConversations } from '$lib/db/schema';
+import { desc, eq, sql, gte, asc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  const builds = await db
-    .select()
-    .from(jkaiBuilds)
-    .orderBy(desc(jkaiBuilds.createdAt));
+  // Load conversations with preview
+  const convList = await db
+    .select({
+      id: conversations.id,
+      title: conversations.title,
+      source: conversations.source,
+      whatsappPhoneNumber: conversations.whatsappPhoneNumber,
+      createdAt: conversations.createdAt,
+      updatedAt: conversations.updatedAt,
+      messageCount: sql<number>`(
+        select count(*) from orchestrator_chats
+        where orchestrator_chats.conversation_id = ${conversations.id}
+      )`.as('message_count'),
+      lastMessage: sql<string>`(
+        select content from orchestrator_chats
+        where orchestrator_chats.conversation_id = ${conversations.id}
+        order by created_at desc limit 1
+      )`.as('last_message'),
+    })
+    .from(conversations)
+    .orderBy(desc(conversations.updatedAt));
 
-  return { builds };
+  // Load metrics (last 24h)
+  const since = new Date(Date.now() - 86400000);
+  const runCounts = await db
+    .select({
+      status: workflowRuns.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(workflowRuns)
+    .where(gte(workflowRuns.startedAt, since))
+    .groupBy(workflowRuns.status);
+
+  const [scheduleCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(workflowSchedules)
+    .where(eq(workflowSchedules.enabled, true));
+
+  const metrics: Record<string, number> = {
+    scheduled: scheduleCount?.count ?? 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+  };
+  for (const row of runCounts) {
+    if (row.status in metrics) {
+      metrics[row.status] = row.count;
+    }
+  }
+
+  // Check for WhatsApp thread
+  const [latestWa] = await db
+    .select({ phoneNumber: whatsappConversations.phoneNumber })
+    .from(whatsappConversations)
+    .orderBy(desc(whatsappConversations.createdAt))
+    .limit(1);
+
+  let whatsappThread: { phoneNumber: string; messages: any[] } | null = null;
+  if (latestWa) {
+    const waMessages = await db
+      .select({
+        id: whatsappConversations.id,
+        role: whatsappConversations.role,
+        content: whatsappConversations.content,
+        createdAt: whatsappConversations.createdAt,
+      })
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.phoneNumber, latestWa.phoneNumber))
+      .orderBy(asc(whatsappConversations.createdAt));
+
+    whatsappThread = { phoneNumber: latestWa.phoneNumber, messages: waMessages };
+  }
+
+  return { conversations: convList, metrics, whatsappThread };
 };
