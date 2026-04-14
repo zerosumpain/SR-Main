@@ -6,23 +6,45 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-// In-memory job store for async orchestrator jobs
+// In-memory job store
 interface OrchestratorJob {
-  status: 'running' | 'done' | 'error';
+  status: 'running' | 'done' | 'error' | 'cancelled';
   progress: string[];
   result?: Record<string, unknown>;
   error?: string;
+  abortController: AbortController;
+  startedAt: number;
+  message: string;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
 
-// Clean up old jobs after 5 minutes
+function cancelAllRunning(reason: string) {
+  for (const [id, job] of jobs) {
+    if (job.status === 'running') {
+      console.log(`[orchestrator] Cancelling job ${id}: ${reason}`);
+      job.abortController.abort();
+      job.status = 'cancelled';
+      job.error = reason;
+      job.result = { success: false, error: reason };
+    }
+  }
+}
+
 function cleanOldJobs() {
-  // Keep at most 50 jobs
-  if (jobs.size > 50) {
-    const keys = Array.from(jobs.keys());
-    for (let i = 0; i < keys.length - 50; i++) {
-      jobs.delete(keys[i]);
+  const now = Date.now();
+  for (const [id, job] of jobs) {
+    // Remove completed/cancelled jobs older than 5 min
+    if (job.status !== 'running' && now - job.startedAt > 300000) {
+      jobs.delete(id);
+    }
+    // Force-cancel running jobs older than 10 min (zombie protection)
+    if (job.status === 'running' && now - job.startedAt > 600000) {
+      job.abortController.abort();
+      job.status = 'error';
+      job.error = 'Job timed out (10 min limit)';
+      job.result = { success: false, error: job.error };
+      jobs.delete(id);
     }
   }
 }
@@ -35,21 +57,35 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'message is required' }, { status: 400 });
   }
 
-  // Create a job ID and return it immediately
-  const jobId = crypto.randomUUID();
-  const job: OrchestratorJob = { status: 'running', progress: [] };
-  jobs.set(jobId, job);
+  // Cancel any stale running jobs before starting a new one
+  cancelAllRunning('Superseded by new request');
   cleanOldJobs();
+
+  const jobId = crypto.randomUUID();
+  const abortController = new AbortController();
+  const job: OrchestratorJob = {
+    status: 'running',
+    progress: [],
+    abortController,
+    startedAt: Date.now(),
+    message: message.slice(0, 100),
+  };
+  jobs.set(jobId, job);
 
   // Run the orchestrator in the background
   (async () => {
     console.log(`[orchestrator] Job ${jobId} started — message: "${message.slice(0, 100)}"`);
+
     function onProgress(text: string) {
+      if (abortController.signal.aborted) return;
       console.log(`[orchestrator] Job ${jobId} progress: ${text.trim()}`);
       job.progress.push(text);
     }
 
     try {
+      // Check abort before each major step
+      if (abortController.signal.aborted) throw new Error('Job cancelled');
+
       if (mode === 'modify' && currentNodes && currentEdges && workflowId) {
         const result = await modifyWorkflow(
           message,
@@ -58,6 +94,8 @@ export const POST: RequestHandler = async ({ request }) => {
           currentEdges as WorkflowEdgeDef[],
           onProgress,
         );
+
+        if (abortController.signal.aborted) throw new Error('Job cancelled');
 
         if (result.followUp) {
           job.result = { success: true, workflow: null, message: result.followUp };
@@ -74,6 +112,8 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       } else {
         const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId, onProgress);
+
+        if (abortController.signal.aborted) throw new Error('Job cancelled');
 
         if (followUp) {
           let resolvedWorkflowId = workflowId;
@@ -187,6 +227,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       job.status = 'done';
     } catch (err: unknown) {
+      if (job.status === 'cancelled') return; // Already handled
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('[orchestrator] Job failed:', errorMessage);
       if (err instanceof Error && err.stack) console.error(err.stack);
@@ -196,15 +237,24 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   })();
 
-  // Return immediately with job ID
   return json({ jobId });
 };
 
-// GET endpoint to poll job status
+// GET: poll job status OR list active jobs
 export const GET: RequestHandler = async ({ url }) => {
   const jobId = url.searchParams.get('jobId');
+
+  // If no jobId, return list of all active/recent jobs
   if (!jobId) {
-    return json({ error: 'jobId is required' }, { status: 400 });
+    const jobList = Array.from(jobs.entries()).map(([id, job]) => ({
+      id,
+      status: job.status,
+      message: job.message,
+      startedAt: job.startedAt,
+      progressCount: job.progress.length,
+      elapsed: Date.now() - job.startedAt,
+    }));
+    return json({ jobs: jobList });
   }
 
   const job = jobs.get(jobId);
@@ -212,18 +262,42 @@ export const GET: RequestHandler = async ({ url }) => {
     return json({ error: 'Job not found' }, { status: 404 });
   }
 
-  // Return current state — client polls every 1.5s
   const response: Record<string, unknown> = {
     status: job.status,
     progress: job.progress,
   };
 
-  if (job.status === 'done' || job.status === 'error') {
+  if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
     response.result = job.result;
     response.error = job.error;
-    // Clean up job after delivery
     setTimeout(() => jobs.delete(jobId), 30000);
   }
 
   return json(response);
+};
+
+// DELETE: cancel a running job
+export const DELETE: RequestHandler = async ({ url }) => {
+  const jobId = url.searchParams.get('jobId');
+
+  if (!jobId) {
+    // Cancel all running jobs
+    cancelAllRunning('Cancelled by user');
+    return json({ cancelled: true });
+  }
+
+  const job = jobs.get(jobId);
+  if (!job) {
+    return json({ error: 'Job not found' }, { status: 404 });
+  }
+
+  if (job.status === 'running') {
+    job.abortController.abort();
+    job.status = 'cancelled';
+    job.error = 'Cancelled by user';
+    job.result = { success: false, error: 'Cancelled by user' };
+    console.log(`[orchestrator] Job ${jobId} cancelled by user`);
+  }
+
+  return json({ cancelled: true, status: job.status });
 };

@@ -29,7 +29,15 @@
   let input = $state('');
   let loading = $state(false);
   let showThinking = $state(false);
+  let currentJobId = $state<string | null>(null);
   let chatContainer: HTMLDivElement;
+
+  async function cancelJob() {
+    if (!currentJobId) return;
+    try {
+      await fetch(`/api/workflows/orchestrator/chat?jobId=${currentJobId}`, { method: 'DELETE' });
+    } catch { /* ignore */ }
+  }
 
   // Load chat history when workflowId changes
   $effect(() => {
@@ -136,6 +144,7 @@
 
       const jobId = postData?.jobId;
       if (!jobId) throw new Error(`No job ID returned`);
+      currentJobId = jobId;
 
       // Phase 2: Poll for progress and result
       let done = false;
@@ -164,7 +173,12 @@
           }
 
           // Check if done
-          if (data.status === 'done' || data.status === 'error') {
+          if (data.status === 'cancelled') {
+            done = true;
+            messages = messages.map(m => m.id === progressId ? {
+              ...m, isProgress: false, content: 'Job cancelled.',
+            } : m);
+          } else if (data.status === 'done' || data.status === 'error') {
             done = true;
             const result = data.result || {};
             resultWorkflowId = result.workflowId || null;
@@ -216,6 +230,7 @@
     }
 
     loading = false;
+    currentJobId = null;
     scrollToBottom();
   }
 
@@ -272,6 +287,13 @@
             <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
               <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
               <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">Building workflow</span>
+              <button
+                onclick={cancelJob}
+                class="ml-auto text-[10px] px-2 py-0.5 rounded border transition-colors nopan nodrag"
+                style="border-color: var(--card-border); color: var(--text-ghost);"
+              >
+                Cancel
+              </button>
             </div>
             {#if msg.progressSteps && msg.progressSteps.length > 0}
               <div class="px-3 py-2 space-y-1">
