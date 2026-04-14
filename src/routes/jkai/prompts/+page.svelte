@@ -99,7 +99,7 @@
   <div class="flex justify-between items-center mb-6">
     <div>
       <div class="flex items-center gap-3">
-        <a href="/workflows" class="text-sm" style="color: var(--text-ghost);">&larr; Workflows</a>
+        <a href="/jkai" class="text-sm" style="color: var(--text-ghost);">&larr; Chat</a>
       </div>
       <h1 class="display text-[28px] sm:text-[36px] mt-1" style="color: var(--text-primary);">
         SYSTEM PROMPTS
