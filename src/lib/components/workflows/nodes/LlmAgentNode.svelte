@@ -8,6 +8,8 @@
   const STATUS_COLORS: Record<string, string> = {
     pending: 'var(--card-border)', running: '#e67e22', completed: '#27ae60',
     failed: '#e74c3c', paused_breakpoint: '#f39c12', skipped: 'var(--text-ghost)',
+    healing: '#e67e22',
+    blocked: '#f39c12',
   };
   let borderColor = $derived(data.status ? STATUS_COLORS[data.status] || 'var(--card-border)' : 'var(--card-border)');
   let isRunning = $derived(data.status === 'running');

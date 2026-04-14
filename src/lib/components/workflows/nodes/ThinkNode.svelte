@@ -15,6 +15,8 @@
     failed: '#e74c3c',
     paused_breakpoint: '#f39c12',
     skipped: 'var(--text-ghost)',
+    healing: '#e67e22',
+    blocked: '#f39c12',
   };
 
   let borderColor = $derived(

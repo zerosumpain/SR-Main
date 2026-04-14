@@ -34,11 +34,13 @@
     failed: '#e74c3c',
     paused_breakpoint: '#f39c12',
     skipped: 'var(--text-ghost)',
+    healing: '#e67e22',
+    blocked: '#f39c12',
   };
 
   let borderColor = $derived(status ? STATUS_COLORS[status] || 'var(--card-border)' : 'var(--card-border)');
   let borderWidth = $derived(status && status !== 'pending' ? '3px' : '1px');
-  let isRunning = $derived(status === 'running');
+  let isRunning = $derived(status === 'running' || status === 'healing');
   let isFailed = $derived(status === 'failed');
   let isSkipped = $derived(status === 'skipped');
 </script>
@@ -112,6 +114,18 @@
   {#if isSkipped}
     <div class="px-3 pb-2">
       <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost);">Skipped</span>
+    </div>
+  {/if}
+
+  {#if status === 'healing'}
+    <div class="px-3 pb-2">
+      <span class="text-[10px] uppercase tracking-wider animate-pulse" style="color: #e67e22;">Healing...</span>
+    </div>
+  {/if}
+
+  {#if status === 'blocked'}
+    <div class="px-3 pb-2">
+      <span class="text-[10px] uppercase tracking-wider" style="color: #f39c12;">Blocked — needs setup</span>
     </div>
   {/if}
 
