@@ -21,6 +21,8 @@
     content: string;
     metadata?: { workflowGenerated?: boolean };
     thinking?: OrchestratorThinking;
+    isProgress?: boolean;
+    progressSteps?: string[];
   }
 
   let messages = $state<Message[]>([]);
@@ -47,6 +49,43 @@
     }
   }
 
+  function formatProgress(raw: string): string {
+    const trimmed = raw.replace(/\n$/, '').trim();
+    // Tool call format: "tool_name: {json}..."
+    const toolMatch = trimmed.match(/^(\w+):\s*(.+)/);
+    if (toolMatch) {
+      const [, tool, args] = toolMatch;
+      const labels: Record<string, string> = {
+        search_nodes: 'Searching',
+        use_node: 'Adding node',
+        create_node: 'Creating node',
+        connect_nodes: 'Connecting',
+        ask_user: 'Asking',
+        finalize_workflow: 'Finalizing',
+      };
+      const label = labels[tool] || tool;
+      // Try to extract a meaningful summary from the JSON args
+      try {
+        const parsed = JSON.parse(args.replace(/\.{3}$/, ''));
+        if (parsed.query) return `${label}: "${parsed.query}"`;
+        if (parsed.label) return `${label}: ${parsed.label}`;
+        if (parsed.name) return `${label}: ${parsed.name}`;
+        if (parsed.sourceId) return `${label}: ${parsed.sourceId} → ${parsed.targetId}`;
+      } catch {
+        // Truncated JSON — extract what we can
+        const queryMatch = args.match(/"query"\s*:\s*"([^"]+)"/);
+        if (queryMatch) return `${label}: "${queryMatch[1]}"`;
+        const labelMatch = args.match(/"label"\s*:\s*"([^"]+)"/);
+        if (labelMatch) return `${label}: ${labelMatch[1]}`;
+        const nameMatch = args.match(/"name"\s*:\s*"([^"]+)"/);
+        if (nameMatch) return `${label}: ${nameMatch[1]}`;
+      }
+      return label;
+    }
+    // Plain progress text
+    return trimmed.replace(/\.\.\.\n?$/, '');
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
@@ -63,11 +102,19 @@
     scrollToBottom();
 
     const progressId = crypto.randomUUID();
-    messages = [...messages, { id: progressId, role: 'assistant' as const, content: 'Starting...' }];
+    messages = [...messages, {
+      id: progressId,
+      role: 'assistant',
+      content: 'Starting',
+      isProgress: true,
+      progressSteps: [],
+    }];
     scrollToBottom();
 
+    let resultWorkflowId: string | null = null;
+
     try {
-      // Phase 1: POST to start the job (returns immediately with jobId)
+      // Phase 1: POST to start the job
       const hasExistingNodes = currentNodes.length > 0;
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -88,13 +135,13 @@
       }
 
       const jobId = postData?.jobId;
-      if (!jobId) throw new Error(`No job ID returned. Response: ${JSON.stringify(postData).slice(0, 200)}`);
+      if (!jobId) throw new Error(`No job ID returned`);
 
       // Phase 2: Poll for progress and result
       let done = false;
       let lastProgress = 0;
       const startTime = Date.now();
-      const TIMEOUT = 180000; // 3 min
+      const TIMEOUT = 300000; // 5 min
 
       while (!done && Date.now() - startTime < TIMEOUT) {
         await new Promise(r => setTimeout(r, 1500));
@@ -105,27 +152,30 @@
 
           const data = await pollRes.json();
 
-          // Update progress messages
+          // Update progress
           if (data.progress && data.progress.length > lastProgress) {
-            const latestProgress = data.progress[data.progress.length - 1];
+            const steps = data.progress.map(formatProgress);
+            const latestStep = steps[steps.length - 1];
             messages = messages.map(m =>
-              m.id === progressId ? { ...m, content: latestProgress.replace(/\n$/, '') || 'Working...' } : m,
+              m.id === progressId ? { ...m, content: latestStep, progressSteps: steps } : m,
             );
             lastProgress = data.progress.length;
             scrollToBottom();
           }
 
-          // Check if job is done
+          // Check if done
           if (data.status === 'done' || data.status === 'error') {
             done = true;
             const result = data.result || {};
+            resultWorkflowId = result.workflowId || null;
 
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
-              content: result.message || result.error || data.error || 'Something went wrong.',
+              content: result.message || result.error || data.error || 'The orchestrator completed but returned no result.',
               metadata: { workflowGenerated: !!result.workflow },
               thinking: result.thinking || undefined,
+              isProgress: false,
             };
             messages = messages.map(m => m.id === progressId ? finalMsg : m);
 
@@ -138,16 +188,29 @@
       }
 
       if (!done) {
-        messages = messages.map(m => m.id === progressId ? {
-          ...m,
-          content: 'The orchestrator is taking too long. It may still be working — refresh the page to check.',
-        } : m);
+        // Timeout — but the job may still be running server-side
+        if (resultWorkflowId || workflowId) {
+          const wfId = resultWorkflowId || workflowId;
+          messages = messages.map(m => m.id === progressId ? {
+            ...m,
+            isProgress: false,
+            content: `Still working... redirecting to the workflow page.`,
+          } : m);
+          goto(`/workflows/${wfId}`);
+        } else {
+          messages = messages.map(m => m.id === progressId ? {
+            ...m,
+            isProgress: false,
+            content: 'The orchestrator is still working. Check the workflows list in a moment.',
+          } : m);
+        }
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error('[orchestrator-chat]', errMsg);
       messages = messages.map(m => m.id === progressId ? {
         ...m,
+        isProgress: false,
         content: `Error: ${errMsg}`,
       } : m);
     }
@@ -203,25 +266,47 @@
       </div>
     {:else}
       {#each messages as msg (msg.id)}
-        <ChatMessage
-          role={msg.role}
-          content={msg.content}
-          metadata={msg.metadata}
-          thinking={msg.thinking}
-          {showThinking}
-        />
+        {#if msg.isProgress}
+          <!-- Progress indicator (not a chat bubble) -->
+          <div class="mb-3 rounded-lg border overflow-hidden" style="border-color: var(--accent); background: var(--card-bg);">
+            <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
+              <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
+              <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">Building workflow</span>
+            </div>
+            {#if msg.progressSteps && msg.progressSteps.length > 0}
+              <div class="px-3 py-2 space-y-1">
+                {#each msg.progressSteps as step, i}
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] shrink-0" style="color: {i === msg.progressSteps.length - 1 ? 'var(--accent)' : 'var(--text-ghost)'};">
+                      {i === msg.progressSteps.length - 1 ? '>' : '\u2713'}
+                    </span>
+                    <span
+                      class="text-[11px]"
+                      style="color: {i === msg.progressSteps.length - 1 ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
+                    >
+                      {step}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="px-3 py-2">
+                <span class="text-[11px] animate-pulse" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                  {msg.content}
+                </span>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <ChatMessage
+            role={msg.role}
+            content={msg.content}
+            metadata={msg.metadata}
+            thinking={msg.thinking}
+            {showThinking}
+          />
+        {/if}
       {/each}
-    {/if}
-
-    {#if loading}
-      <div class="flex justify-start mb-3">
-        <div
-          class="rounded-lg px-3 py-2 text-sm border"
-          style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-ghost);"
-        >
-          <span class="animate-pulse">Thinking...</span>
-        </div>
-      </div>
     {/if}
   </div>
 
