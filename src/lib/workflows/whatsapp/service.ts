@@ -153,23 +153,42 @@ export class WhatsAppService {
 
 				if (!text) continue;
 
-				const from = this.fromJid(msg.key.remoteJid || '');
-				const isGroup = msg.key.remoteJid?.endsWith('@g.us') || false;
+				const remoteJid = msg.key.remoteJid || '';
+				const isGroup = remoteJid.endsWith('@g.us');
+				const isLid = remoteJid.endsWith('@lid');
 
 				if (isGroup) continue; // Skip group messages for now
 
-				if (!this.isAllowed(from)) {
+				// For LID JIDs (newer WhatsApp format), try to get phone from participant or notify
+				let from: string;
+				if (isLid) {
+					// LID JIDs don't contain the phone number directly.
+					// Use participant if available, otherwise use pushName/notify for logging
+					const participant = msg.key.participant;
+					if (participant && participant.includes('@s.whatsapp.net')) {
+						from = this.fromJid(participant);
+					} else {
+						// Accept LID messages — we can't resolve to phone but they're direct messages
+						from = this.fromJid(remoteJid);
+						console.log(`[whatsapp] LID message from ${from} (pushName: ${msg.pushName || 'unknown'})`);
+					}
+				} else {
+					from = this.fromJid(remoteJid);
+				}
+
+				if (!isLid && !this.isAllowed(from)) {
 					console.log(`[whatsapp] Blocked message from unapproved number: ${from}`);
 					continue;
 				}
 
 				this.messageHandler({
 					from,
+					replyJid: isLid ? remoteJid : undefined,
 					text,
 					timestamp: msg.messageTimestamp as number,
 					messageId: msg.key.id || '',
 					isGroup,
-					groupId: isGroup ? msg.key.remoteJid || undefined : undefined
+					groupId: isGroup ? remoteJid : undefined,
 				});
 			}
 		});
@@ -192,7 +211,8 @@ export class WhatsAppService {
 		}
 
 		try {
-			const jid = this.toJid(to);
+			// If 'to' already contains @ it's a full JID (e.g. LID), use as-is
+			const jid = to.includes('@') ? to : this.toJid(to);
 			const result = await this.sock.sendMessage(jid, { text });
 			return { sent: true, messageId: result?.key?.id || undefined };
 		} catch (err: unknown) {

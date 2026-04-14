@@ -7,7 +7,8 @@ export interface WhatsAppServiceState {
 }
 
 export interface WhatsAppInboundMessage {
-  from: string; // E.164 phone number
+  from: string; // E.164 phone number or LID
+  replyJid?: string; // Full JID to reply to (used for LID messages)
   text: string;
   timestamp: number;
   messageId: string;

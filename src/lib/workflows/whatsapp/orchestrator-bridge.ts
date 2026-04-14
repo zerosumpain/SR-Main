@@ -25,11 +25,13 @@ export class OrchestratorBridge {
 	}
 
 	async handleMessage(msg: WhatsAppInboundMessage): Promise<void> {
-		const { from, text } = msg;
+		const { from, text, replyJid } = msg;
+		// Use replyJid (full LID JID) if available, otherwise use phone number
+		const replyTo = replyJid || from;
 
 		if (this.isResetCommand(text)) {
 			await this.clearConversation(from);
-			await this.sendFn(from, 'Conversation cleared. What can I help with?');
+			await this.sendFn(replyTo, 'Conversation cleared. What can I help with?');
 			return;
 		}
 
@@ -78,11 +80,11 @@ export class OrchestratorBridge {
 				content: responseText
 			});
 
-			await this.sendFn(from, responseText);
+			await this.sendFn(replyTo, responseText);
 		} catch (err: unknown) {
 			const errMsg = err instanceof Error ? err.message : 'Unknown error';
 			console.error(`[whatsapp-bridge] Error handling message from ${from}:`, errMsg);
-			await this.sendFn(from, 'Something went wrong. Try again in a moment.');
+			await this.sendFn(replyTo, 'Something went wrong. Try again in a moment.');
 		}
 	}
 
