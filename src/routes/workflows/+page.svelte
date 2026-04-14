@@ -112,11 +112,11 @@
               </span>
               <button
                 onclick={(e) => deleteWorkflow(workflow.id, e)}
-                class="relative z-10 text-[11px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                style="color: #b43232;"
+                class="relative z-10 px-2.5 py-1 rounded-lg border opacity-0 group-hover:opacity-100 transition-all text-xs font-medium"
+                style="color: #b43232; border-color: #b43232; background: rgba(180, 50, 50, 0.08);"
                 title="Delete workflow"
               >
-                &times;
+                Delete
               </button>
             </div>
           </div>
