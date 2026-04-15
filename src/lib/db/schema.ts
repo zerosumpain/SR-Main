@@ -763,3 +763,20 @@ export const promptCache = pgTable('prompt_cache', {
 });
 
 export type PromptCache = typeof promptCache.$inferSelect;
+
+// ==========================================
+// Custom Tools (JKAI self-expanding)
+// ==========================================
+
+export const customTools = pgTable('custom_tools', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull().unique(),
+  description: text('description').notNull(),
+  toolset: text('toolset').notNull(),
+  parameters: jsonb('parameters').notNull().default(sql`'{"type":"object","properties":{}}'::jsonb`),
+  handlerCode: text('handler_code').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+export type CustomTool = typeof customTools.$inferSelect;
