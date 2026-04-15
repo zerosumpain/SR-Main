@@ -1,8 +1,8 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
 import { db } from '$lib/db';
-import { homeAssistantConfig } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { homeAssistantConfig, jkaiMemories } from '$lib/db/schema';
+import { eq, isNull, desc } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
@@ -18,6 +18,40 @@ const MAX_TOOL_ROUNDS = 5;
 interface ChatOptions {
   workflowId?: string | null;
   onProgress?: (text: string) => void;
+}
+
+const MEMORY_BUDGET = 4000; // max chars for memory section
+
+async function buildMemorySection(): Promise<string> {
+  let rows;
+  try {
+    rows = await db.select()
+      .from(jkaiMemories)
+      .where(isNull(jkaiMemories.supersededBy))
+      .orderBy(desc(jkaiMemories.updatedAt));
+  } catch {
+    return '';
+  }
+
+  if (rows.length === 0) return '';
+
+  // Group by category
+  const grouped: Record<string, string[]> = {};
+  let totalChars = 0;
+
+  for (const row of rows) {
+    if (totalChars + row.content.length > MEMORY_BUDGET) break;
+    if (!grouped[row.category]) grouped[row.category] = [];
+    grouped[row.category].push(row.content);
+    totalChars += row.content.length;
+  }
+
+  const sections = Object.entries(grouped).map(([cat, items]) => {
+    const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+    return `**${label}:**\n${items.map(i => `- ${i}`).join('\n')}`;
+  });
+
+  return `\n\n--- Memory ---\n${sections.join('\n\n')}`;
 }
 
 export async function generalChat(
@@ -43,7 +77,8 @@ export async function generalChat(
   // Build system prompt — no longer includes HA entity registry or full tool list
   const basePrompt = await getCompiledPrompt();
   const siteSection = buildSiteSystemPromptSection();
-  const systemContent = `${basePrompt}${siteSection}`;
+  const memorySection = await buildMemorySection();
+  const systemContent = `${basePrompt}${siteSection}${memorySection}`;
 
   // Build messages
   const messages: Array<any> = [
