@@ -69,7 +69,7 @@ export async function generalChat(
           model,
           messages,
           temperature: 0.7,
-          max_tokens: 1024,
+          max_tokens: 2048,
           ...(tools ? { tools } : {}),
         });
         break;
@@ -83,7 +83,10 @@ export async function generalChat(
     }
 
     const choice = response?.choices[0];
-    if (!choice) break;
+    if (!choice) {
+      console.warn('[general-chat] No choice in LLM response');
+      break;
+    }
 
     const msg = choice.message;
 
@@ -146,10 +149,15 @@ export async function generalChat(
       }
 
       onProgress?.(`${fnName}: done\n`);
+      // Truncate large tool results to avoid overwhelming the LLM context
+      let resultStr = JSON.stringify(toolResult);
+      if (resultStr.length > 8000) {
+        resultStr = resultStr.slice(0, 8000) + '... [truncated — result too large for chat context]';
+      }
       messages.push({
         role: 'tool',
         tool_call_id: toolCall.id,
-        content: JSON.stringify(toolResult),
+        content: resultStr,
       });
     }
   }
