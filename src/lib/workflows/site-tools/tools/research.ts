@@ -19,6 +19,7 @@ register({
     required: ['topic'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const { startResearch } = await import('$lib/deepdive/worker');
     const [session] = await db.insert(researchSessions).values({
@@ -39,6 +40,7 @@ register({
     required: ['id'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const [session] = await db.select().from(researchSessions).where(eq(researchSessions.id, args.id as string)).limit(1);
     return session ? { success: true, data: session } : { success: false, error: 'Session not found' };
@@ -50,6 +52,7 @@ register({
   description: 'List recent research sessions with topic, status, and stats',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async () => {
     const rows = await db.select().from(researchSessions).orderBy(desc(researchSessions.createdAt)).limit(50);
     return { success: true, data: rows };
@@ -65,6 +68,7 @@ register({
     required: ['id'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const [session] = await db.select().from(researchSessions).where(eq(researchSessions.id, args.id as string)).limit(1);
     if (!session) return { success: false, error: 'Session not found' };
@@ -84,6 +88,7 @@ register({
     required: ['id', 'action'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const action = args.action as string;
     if (action === 'stop') {
@@ -106,6 +111,7 @@ register({
     required: ['id'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const [session] = await db.select().from(researchSessions).where(eq(researchSessions.id, args.id as string)).limit(1);
     if (!session) return { success: false, error: 'Session not found' };
@@ -154,6 +160,7 @@ register({
     required: ['id', 'question'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const [session] = await db.select().from(researchSessions).where(eq(researchSessions.id, args.id as string)).limit(1);
     if (!session) return { success: false, error: 'Session not found' };
@@ -233,6 +240,7 @@ register({
     required: ['parentId', 'subtopic'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const parentId = args.parentId as string;
     const [parent] = await db.select().from(researchSessions).where(eq(researchSessions.id, parentId)).limit(1);
@@ -275,6 +283,7 @@ register({
     required: ['id', 'format'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const [session] = await db.select().from(researchSessions).where(eq(researchSessions.id, args.id as string)).limit(1);
     if (!session) return { success: false, error: 'Session not found' };
@@ -330,6 +339,7 @@ register({
     required: ['query'],
   },
   category: 'Deep Dive Research',
+  toolset: 'research',
   handler: async (args) => {
     const { search } = await import('$lib/deepdive/tavily');
     const results = await search(args.query as string, { maxResults: 5, searchDepth: 'basic' });

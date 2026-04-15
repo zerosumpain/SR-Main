@@ -13,6 +13,7 @@ register({
   description: 'Get the status of all workflow schedules — compares DB state with in-memory cron jobs. Shows which schedules are registered, their cron expressions, last run, and next fire time. Use this to diagnose why a scheduled workflow has stopped running.',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'System Diagnostics',
+  toolset: 'diagnostics',
   handler: async () => {
     const { getActiveJobs } = await import('$lib/workflows/scheduler');
     const activeJobs = getActiveJobs();
@@ -75,6 +76,7 @@ register({
     },
   },
   category: 'System Diagnostics',
+  toolset: 'diagnostics',
   handler: async (args) => {
     const limit = (args.limit as number) || 20;
     const workflowId = args.workflowId as string | undefined;
@@ -127,6 +129,7 @@ register({
     },
   },
   category: 'System Diagnostics',
+  toolset: 'diagnostics',
   handler: async (args) => {
     const { exec } = await import('child_process');
     const { promisify } = await import('util');

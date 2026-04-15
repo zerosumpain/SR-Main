@@ -12,6 +12,7 @@ register({
     required: ['to', 'message'],
   },
   category: 'WhatsApp',
+  toolset: 'whatsapp',
   handler: async (args) => {
     const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
     const wa = getWhatsAppService();

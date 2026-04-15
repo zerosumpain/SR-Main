@@ -19,6 +19,7 @@ register({
     required: ['prompt'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const [build] = await db.insert(jkaiBuilds).values({
@@ -36,6 +37,7 @@ register({
   description: 'List recent JKAI builds with status (pending/running/completed/failed)',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async () => {
     const rows = await db.select().from(jkaiBuilds).orderBy(desc(jkaiBuilds.createdAt)).limit(50);
     return { success: true, data: rows };
@@ -54,6 +56,7 @@ register({
     required: ['id', 'action'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const action = args.action as string;
@@ -89,6 +92,7 @@ register({
     required: ['id'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, args.id as string)).limit(1);
     if (!build) return { success: false, error: 'Build not found' };
@@ -132,6 +136,7 @@ register({
     required: ['buildId', 'number'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const [iteration] = await db
       .select()
@@ -157,6 +162,7 @@ register({
     required: ['buildId'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const [iteration] = await db
       .select()
@@ -196,6 +202,7 @@ register({
     required: ['buildId'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const buildId = args.buildId as string;
     const maxLogs = (args.limit as number) || 50;
@@ -228,6 +235,7 @@ register({
     required: ['buildId'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { execInSandboxChecked } = await import('$lib/jkai/sandbox');
     const buildId = args.buildId as string;
@@ -255,6 +263,7 @@ register({
     required: ['buildId', 'path'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { execInSandboxChecked } = await import('$lib/jkai/sandbox');
     const buildId = args.buildId as string;
@@ -282,6 +291,7 @@ register({
     required: ['id', 'instruction'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     await orchestrator.continueBuild(args.id as string, args.instruction as string);
@@ -303,6 +313,7 @@ register({
     required: ['buildId', 'path', 'content'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const { writeFileInSandbox, ensureWorkspace, execInSandboxChecked } = await import('$lib/jkai/sandbox');
     const buildId = args.buildId as string;
@@ -326,6 +337,7 @@ register({
     required: ['id'],
   },
   category: 'JKAI Builder',
+  toolset: 'builds',
   handler: async (args) => {
     const id = args.id as string;
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id)).limit(1);

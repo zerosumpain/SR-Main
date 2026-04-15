@@ -27,6 +27,7 @@ register({
     required: ['description'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const { generateWorkflow } = await import('$lib/workflows/orchestrator');
 
@@ -80,6 +81,7 @@ register({
   description: 'List existing workflows with their names, descriptions, and schedule status',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async () => {
     const rows = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(50);
     return { success: true, data: rows };
@@ -95,6 +97,7 @@ register({
     required: ['id'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const [existing] = await db.select().from(workflows).where(eq(workflows.id, args.id as string)).limit(1);
     if (!existing) return { success: false, error: 'Workflow not found' };
@@ -116,6 +119,7 @@ register({
     required: ['id'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const id = args.id as string;
     const [wf] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
@@ -169,6 +173,7 @@ register({
     required: ['runId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const runId = args.runId as string;
     const [run] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).limit(1);
@@ -213,6 +218,7 @@ register({
     required: ['workflowId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const rows = await db
       .select()
@@ -243,6 +249,7 @@ register({
     required: ['id'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (args.name) updates.name = args.name;
@@ -271,6 +278,7 @@ register({
     required: ['nodeId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const nodeId = args.nodeId as string;
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
@@ -303,6 +311,7 @@ register({
     required: ['workflowId', 'type', 'label'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const [node] = await db.insert(workflowNodes).values({
       workflowId: args.workflowId as string,
@@ -324,6 +333,7 @@ register({
     required: ['nodeId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const nodeId = args.nodeId as string;
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
@@ -358,6 +368,7 @@ register({
     required: ['workflowId', 'sourceNodeId', 'targetNodeId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const [edge] = await db.insert(workflowEdges).values({
       workflowId: args.workflowId as string,
@@ -379,6 +390,7 @@ register({
     required: ['edgeId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string)).limit(1);
     if (!existing) return { success: false, error: 'Edge not found' };
@@ -402,6 +414,7 @@ register({
     required: ['edgeId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const edgeId = args.edgeId as string;
     const updates: Record<string, unknown> = {};
@@ -431,6 +444,7 @@ register({
     required: ['workflowId', 'type', 'config'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const [schedule] = await db.insert(workflowSchedules).values({
       workflowId: args.workflowId as string,
@@ -456,6 +470,7 @@ register({
     required: ['scheduleId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const updates: Record<string, unknown> = {};
     if (args.enabled !== undefined) updates.enabled = args.enabled;
@@ -482,6 +497,7 @@ register({
     required: ['scheduleId'],
   },
   category: 'Workflows',
+  toolset: 'workflows',
   handler: async (args) => {
     const scheduleId = args.scheduleId as string;
     const [existing] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, scheduleId)).limit(1);

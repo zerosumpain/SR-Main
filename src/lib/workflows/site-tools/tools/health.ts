@@ -5,6 +5,7 @@ register({
   description: 'Get weekly health metrics (activity count, distance, duration, elevation, recovery score, sleep average) and all-time personal records',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
+  toolset: 'health',
   handler: async () => {
     const { getStats } = await import('$lib/health/stats-service');
     return { success: true, data: await getStats() };
@@ -16,6 +17,7 @@ register({
   description: 'Get composite readiness score with recovery, HRV trend, sleep quality, load balance factors, zone classification, and recommendation',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
+  toolset: 'health',
   handler: async () => {
     const { getReadiness } = await import('$lib/health/readiness-service');
     return { success: true, data: await getReadiness() };
@@ -27,6 +29,7 @@ register({
   description: 'Get latest sleep analysis (duration, light/deep/REM percentages, performance score) and 14-day trend',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
+  toolset: 'health',
   handler: async () => {
     const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
     return { success: true, data: await getSleepAnalysis() };
@@ -38,6 +41,7 @@ register({
   description: 'Get training load analysis: acute/chronic load ratio, zone (optimal/caution/danger), 30-day history',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
+  toolset: 'health',
   handler: async () => {
     const { getTrainingLoad } = await import('$lib/health/training-load-service');
     return { success: true, data: await getTrainingLoad() };
@@ -55,6 +59,7 @@ register({
     },
   },
   category: 'Health Data',
+  toolset: 'health',
   handler: async (args) => {
     const { getTimeline } = await import('$lib/health/timeline-service');
     const page = (args.page as number) || 1;

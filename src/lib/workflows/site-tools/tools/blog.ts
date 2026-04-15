@@ -13,6 +13,7 @@ register({
     },
   },
   category: 'Blog',
+  toolset: 'blog',
   handler: async () => {
     const rows = await db.select().from(blogPosts).orderBy(desc(blogPosts.createdAt)).limit(50);
     return { success: true, data: rows };
@@ -28,6 +29,7 @@ register({
     required: ['id'],
   },
   category: 'Blog',
+  toolset: 'blog',
   handler: async (args) => {
     const id = Number(args.id);
     if (isNaN(id)) return { success: false, error: 'Invalid ID — must be a number' };
@@ -52,6 +54,7 @@ register({
     required: ['title', 'content'],
   },
   category: 'Blog',
+  toolset: 'blog',
   handler: async (args) => {
     const title = args.title as string;
     const slug = (args.slug as string) || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -82,6 +85,7 @@ register({
     required: ['id'],
   },
   category: 'Blog',
+  toolset: 'blog',
   handler: async (args) => {
     const updates: Record<string, unknown> = {};
     if (args.title) updates.title = args.title;
@@ -103,6 +107,7 @@ register({
     required: ['id'],
   },
   category: 'Blog',
+  toolset: 'blog',
   handler: async (args) => {
     const [post] = await db
       .update(blogPosts)
