@@ -24,12 +24,14 @@ register({
   description: 'Get full blog post content, tags, and metadata by ID',
   parameters: {
     type: 'object',
-    properties: { id: { type: 'string', description: 'Blog post ID' } },
+    properties: { id: { type: 'number', description: 'Blog post ID' } },
     required: ['id'],
   },
   category: 'Blog',
   handler: async (args) => {
-    const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, args.id as string)).limit(1);
+    const id = Number(args.id);
+    if (isNaN(id)) return { success: false, error: 'Invalid ID — must be a number' };
+    const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, id)).limit(1);
     return post ? { success: true, data: post } : { success: false, error: 'Post not found' };
   },
 });
@@ -41,6 +43,8 @@ register({
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Post title' },
+      slug: { type: 'string', description: 'URL slug (auto-generated from title if omitted)' },
+      excerpt: { type: 'string', description: 'Short excerpt/summary' },
       content: { type: 'string', description: 'Post content (markdown or HTML)' },
       status: { type: 'string', description: '"draft" (default) or "published"' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
@@ -49,8 +53,13 @@ register({
   },
   category: 'Blog',
   handler: async (args) => {
+    const title = args.title as string;
+    const slug = (args.slug as string) || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const excerpt = (args.excerpt as string) || (args.content as string).slice(0, 200);
     const [post] = await db.insert(blogPosts).values({
-      title: args.title as string,
+      title,
+      slug,
+      excerpt,
       content: args.content as string,
       status: (args.status as string) || 'draft',
     }).returning();
@@ -64,7 +73,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      id: { type: 'string', description: 'Blog post ID' },
+      id: { type: 'number', description: 'Blog post ID' },
       title: { type: 'string', description: 'New title' },
       content: { type: 'string', description: 'New content' },
       status: { type: 'string', description: '"draft" or "published"' },
@@ -78,7 +87,9 @@ register({
     if (args.title) updates.title = args.title;
     if (args.content) updates.content = args.content;
     if (args.status) updates.status = args.status;
-    const [post] = await db.update(blogPosts).set(updates).where(eq(blogPosts.id, args.id as string)).returning();
+    const id = Number(args.id);
+    if (isNaN(id)) return { success: false, error: 'Invalid ID — must be a number' };
+    const [post] = await db.update(blogPosts).set(updates).where(eq(blogPosts.id, id)).returning();
     return post ? { success: true, data: post } : { success: false, error: 'Post not found' };
   },
 });
@@ -88,7 +99,7 @@ register({
   description: 'Unpublish a blog post — sets its status back to draft',
   parameters: {
     type: 'object',
-    properties: { id: { type: 'string', description: 'Blog post ID' } },
+    properties: { id: { type: 'number', description: 'Blog post ID' } },
     required: ['id'],
   },
   category: 'Blog',
@@ -96,7 +107,7 @@ register({
     const [post] = await db
       .update(blogPosts)
       .set({ status: 'draft' })
-      .where(eq(blogPosts.id, args.id as string))
+      .where(eq(blogPosts.id, Number(args.id)))
       .returning();
     return post ? { success: true, data: post } : { success: false, error: 'Post not found' };
   },
