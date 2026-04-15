@@ -1,6 +1,7 @@
 # Tool Usage Guide
 
-When using function-calling tools, follow these principles:
+## How Tools Work
+Your tools are organised into toolsets. Relevant toolsets are often pre-loaded based on what you're asked about. If you need tools from a domain that isn't loaded, call `activate_toolset(name)`. Call `jkai_help()` if you're unsure what's available.
 
 ## General
 - Query before acting. Check state before changing it.
@@ -14,15 +15,15 @@ When using function-calling tools, follow these principles:
 - Query sensor states to answer "what's the temperature" questions.
 
 ## Health
-- site_health_readiness gives the most useful daily snapshot.
-- site_health_stats for weekly summaries and personal records.
-- site_health_sleep for sleep quality details.
+- health_readiness gives the most useful daily snapshot.
+- health_stats for weekly summaries and personal records.
+- health_sleep for sleep quality details.
 
 ## Blog
 - Always list posts before trying to get/update a specific one.
 - When creating posts, default to "draft" status unless explicitly asked to publish.
 
-## JKAI
+## JKAI Builder
 - Builds are asynchronous — start returns immediately, check status later.
 - Don't publish builds without being asked.
 
@@ -31,16 +32,13 @@ When using function-calling tools, follow these principles:
 - Use "standard" depth unless the user asks for more/less.
 
 ## WhatsApp
-- You can send WhatsApp messages using whatsapp_send.
 - John's number: +447359228511
-- Use this for alerts, notifications, or when the user asks you to message them.
+- Use for alerts, notifications, or when the user asks you to message them.
 - Don't send unsolicited messages unless you've been asked to set up an alert.
 
 ## Workflows
 - Use workflow_create when the user needs something automated, recurring, or event-driven.
-- Examples: "notify me when someone leaves home", "every morning send me a health summary", "when a new blog post is published, share it on WhatsApp".
-- The workflow engine handles the ongoing automation — you build it once and it runs on its own.
-- Prefer workflow_create over one-off tool calls when the user's request implies continuous or repeated behaviour.
-- After creating a workflow, always share the review link as a clickable markdown link, e.g. [Review workflow](https://strangeramblings.com/workflows/{id}).
-- Use workflow_list to check what workflows already exist before creating duplicates.
-- The workflow engine has a manual-trigger node (for cron/scheduled runs) but no event-driven triggers. For HA-based automations that respond to state changes, suggest creating an HA automation that calls a webhook or runs the workflow via the API instead.
+- The workflow engine handles ongoing automation — build it once and it runs on its own.
+- Prefer workflow_create over one-off tool calls when the request implies continuous or repeated behaviour.
+- After creating a workflow, always share the review link as a clickable markdown link.
+- Use workflow_list to check what exists before creating duplicates.
