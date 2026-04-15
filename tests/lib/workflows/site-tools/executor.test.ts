@@ -68,60 +68,60 @@ beforeEach(() => {
 });
 
 describe('executeSiteTool', () => {
-  describe('site_health_stats', () => {
+  describe('health_stats', () => {
     it('calls getStats and returns data', async () => {
       const statsData = { weeklyDistance: 42, activities: 5 };
       mockedGetStats.mockResolvedValue(statsData as any);
 
-      const result = await executeSiteTool('site_health_stats', {});
+      const result = await executeSiteTool('health_stats', {});
 
       expect(mockedGetStats).toHaveBeenCalledOnce();
       expect(result).toEqual({ success: true, data: statsData });
     });
   });
 
-  describe('site_health_readiness', () => {
+  describe('health_readiness', () => {
     it('calls getReadiness and returns data', async () => {
       const readinessData = { score: 85, label: 'Good' };
       mockedGetReadiness.mockResolvedValue(readinessData as any);
 
-      const result = await executeSiteTool('site_health_readiness', {});
+      const result = await executeSiteTool('health_readiness', {});
 
       expect(mockedGetReadiness).toHaveBeenCalledOnce();
       expect(result).toEqual({ success: true, data: readinessData });
     });
   });
 
-  describe('site_health_sleep', () => {
+  describe('health_sleep', () => {
     it('calls getSleepAnalysis and returns data', async () => {
       const sleepData = { duration: 7.5, score: 88 };
       mockedGetSleepAnalysis.mockResolvedValue(sleepData as any);
 
-      const result = await executeSiteTool('site_health_sleep', {});
+      const result = await executeSiteTool('health_sleep', {});
 
       expect(mockedGetSleepAnalysis).toHaveBeenCalledOnce();
       expect(result).toEqual({ success: true, data: sleepData });
     });
   });
 
-  describe('site_health_training_load', () => {
+  describe('health_training_load', () => {
     it('calls getTrainingLoad and returns data', async () => {
       const loadData = { acwr: 1.1, zone: 'optimal' };
       mockedGetTrainingLoad.mockResolvedValue(loadData as any);
 
-      const result = await executeSiteTool('site_health_training_load', {});
+      const result = await executeSiteTool('health_training_load', {});
 
       expect(mockedGetTrainingLoad).toHaveBeenCalledOnce();
       expect(result).toEqual({ success: true, data: loadData });
     });
   });
 
-  describe('site_health_timeline', () => {
+  describe('health_timeline', () => {
     it('calls getTimeline with page and limit args', async () => {
       const timelineData = { events: [], hasMore: false };
       mockedGetTimeline.mockResolvedValue(timelineData as any);
 
-      const result = await executeSiteTool('site_health_timeline', { page: 2, limit: 10 });
+      const result = await executeSiteTool('health_timeline', { page: 2, limit: 10 });
 
       expect(mockedGetTimeline).toHaveBeenCalledWith(2, 10);
       expect(result).toEqual({ success: true, data: timelineData });
@@ -131,31 +131,31 @@ describe('executeSiteTool', () => {
       const timelineData = { events: [], hasMore: true };
       mockedGetTimeline.mockResolvedValue(timelineData as any);
 
-      const result = await executeSiteTool('site_health_timeline', {});
+      const result = await executeSiteTool('health_timeline', {});
 
       expect(mockedGetTimeline).toHaveBeenCalledWith(1, 20);
       expect(result).toEqual({ success: true, data: timelineData });
     });
   });
 
-  describe('site_blog_list', () => {
+  describe('blog_list', () => {
     it('queries blogPosts from DB', async () => {
       const posts = [{ id: '1', title: 'Test Post', status: 'published' }];
       mockDbChain(posts);
 
-      const result = await executeSiteTool('site_blog_list', {});
+      const result = await executeSiteTool('blog_list', {});
 
       expect(mockedDb.select).toHaveBeenCalled();
       expect(result).toEqual({ success: true, data: posts });
     });
   });
 
-  describe('jkai_list_builds', () => {
+  describe('build_list', () => {
     it('queries jkaiBuilds from DB', async () => {
       const builds = [{ id: '1', status: 'completed', title: 'Timer App' }];
       mockDbChain(builds);
 
-      const result = await executeSiteTool('jkai_list_builds', {});
+      const result = await executeSiteTool('build_list', {});
 
       expect(mockedDb.select).toHaveBeenCalled();
       expect(result).toEqual({ success: true, data: builds });
@@ -189,7 +189,7 @@ describe('executeSiteTool', () => {
     it('catches and returns service errors gracefully', async () => {
       mockedGetStats.mockRejectedValue(new Error('DB connection failed'));
 
-      const result = await executeSiteTool('site_health_stats', {});
+      const result = await executeSiteTool('health_stats', {});
 
       expect(result).toEqual({
         success: false,
@@ -200,7 +200,7 @@ describe('executeSiteTool', () => {
     it('handles non-Error thrown values', async () => {
       mockedGetReadiness.mockRejectedValue('unexpected string error');
 
-      const result = await executeSiteTool('site_health_readiness', {});
+      const result = await executeSiteTool('health_readiness', {});
 
       expect(result).toEqual({
         success: false,
