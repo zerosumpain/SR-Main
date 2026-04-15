@@ -8,7 +8,7 @@ import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
-import { handleJkaiHelp } from '$lib/workflows/site-tools/meta-tools';
+import { handleJkaiHelp, handleCreateTool, handleListCustomTools } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 
@@ -173,6 +173,18 @@ export async function generalChat(
         }
       } else if (fnName === 'jkai_help') {
         toolResult = handleJkaiHelp(fnArgs);
+      } else if (fnName === 'create_tool') {
+        toolResult = await handleCreateTool(fnArgs);
+        // Inject the new tool into activeTools so it's callable this conversation
+        if (toolResult.success) {
+          const newToolName = fnArgs.name as string;
+          const newToolset = fnArgs.toolset as string;
+          const newDefs = getToolsetDefinitions(newToolset).filter(d => d.function.name === newToolName);
+          activeTools.push(...newDefs);
+          activatedToolsets.add(newToolset);
+        }
+      } else if (fnName === 'list_custom_tools') {
+        toolResult = await handleListCustomTools();
       } else {
         // Handle HA tools
         const haService = getHomeAssistantService();
