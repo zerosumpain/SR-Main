@@ -3,7 +3,7 @@
 
 export { register } from './registry-internal';
 export type { ToolDefinition, ToolResult } from './registry-internal';
-import { tools, getToolsByToolset, getAvailableToolsets } from './registry-internal';
+import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 
 // --- Load all domain modules (each calls register() on import) ---
@@ -102,10 +102,6 @@ export async function executeTool(
   }
 }
 
-export function isRegisteredTool(name: string): boolean {
-  return tools.some((t) => t.name === name);
-}
-
 /** Compact system prompt section — lists toolsets, not individual tools */
 export function buildSystemPromptSection(): string {
   const toolsets = getAvailableToolsets();
@@ -113,4 +109,4 @@ export function buildSystemPromptSection(): string {
 }
 
 // Re-export toolset helpers for use by meta-tools and general-chat
-export { getToolsByToolset, getAvailableToolsets };
+export { getToolsByToolset, getAvailableToolsets, isRegisteredTool };

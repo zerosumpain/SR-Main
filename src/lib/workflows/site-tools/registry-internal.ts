@@ -29,3 +29,7 @@ export function getToolsByToolset(toolset: string): ToolDefinition[] {
 export function getAvailableToolsets(): string[] {
   return [...new Set(tools.map((t) => t.toolset))];
 }
+
+export function isRegisteredTool(name: string): boolean {
+  return tools.some((t) => t.name === name);
+}
