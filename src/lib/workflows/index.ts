@@ -31,6 +31,7 @@ import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
+import { loadCustomTools } from './site-tools/custom-tool-loader';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -171,6 +172,11 @@ bootHomeAssistant();
 syncPrompts().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : 'Unknown error';
   console.error('[prompts] Sync failed:', msg);
+});
+
+loadCustomTools().catch((err: unknown) => {
+  const msg = err instanceof Error ? err.message : 'Unknown error';
+  console.error('[custom-tools] Load failed:', msg);
 });
 
 export const engine = new WorkflowEngine(registry);
