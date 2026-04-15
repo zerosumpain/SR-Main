@@ -8,7 +8,7 @@ import { buildHandler } from './custom-tool-loader';
 
 const TOOLSET_NAMES = [
   'health', 'blog', 'builds', 'research',
-  'workflows', 'home', 'whatsapp', 'diagnostics',
+  'workflows', 'home', 'whatsapp', 'diagnostics', 'memory',
 ] as const;
 
 export const META_TOOL_DEFINITIONS = [

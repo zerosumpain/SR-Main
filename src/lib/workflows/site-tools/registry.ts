@@ -14,6 +14,7 @@ import './tools/research';
 import './tools/whatsapp';
 import './tools/workflows';
 import './tools/diagnostics';
+import './tools/memory';
 
 // --- Public API ---
 
@@ -60,6 +61,7 @@ export function getToolsetManifest(): Array<{
     home: 'Home Assistant smart home — query state, control devices, history, templates',
     whatsapp: 'WhatsApp messaging — send messages and notifications',
     diagnostics: 'System diagnostics — scheduler status, run history, service logs',
+    memory: 'Persistent memory — save, recall, and forget facts about the user',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({
