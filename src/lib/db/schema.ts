@@ -662,6 +662,7 @@ export const conversations = pgTable('jkai_conversations', {
   whatsappPhoneNumber: text('whatsapp_phone_number'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  lastMemoryReview: timestamp('last_memory_review', { withTimezone: true }),
 });
 
 export type Conversation = typeof conversations.$inferSelect;
@@ -780,3 +781,20 @@ export const customTools = pgTable('custom_tools', {
 });
 
 export type CustomTool = typeof customTools.$inferSelect;
+
+// ==========================================
+// JKAI Memories
+// ==========================================
+
+export const jkaiMemories = pgTable('jkai_memories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  category: text('category').notNull(), // people, preferences, places, health, devices, situations
+  content: text('content').notNull(),
+  sourceConversationId: text('source_conversation_id'),
+  confidence: text('confidence').notNull().default('high'), // high, medium
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  supersededBy: text('superseded_by'),
+});
+
+export type JkaiMemory = typeof jkaiMemories.$inferSelect;
