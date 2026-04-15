@@ -25,7 +25,7 @@
     });
     if (res.ok) {
       const workflow = await res.json();
-      goto(`/workflows/${workflow.id}`, { replaceState: true });
+      goto(`/jkai/workflows/${workflow.id}`, { replaceState: true });
       return;
     }
   });
@@ -88,7 +88,7 @@
     });
     const workflow = await res.json();
     if (res.ok) {
-      goto(`/workflows/${workflow.id}`);
+      goto(`/jkai/workflows/${workflow.id}`);
     }
   }
 
@@ -129,7 +129,7 @@
     });
     const workflow = await res.json();
     if (res.ok) {
-      goto(`/workflows/${workflow.id}`);
+      goto(`/jkai/workflows/${workflow.id}`);
     }
   }
 </script>

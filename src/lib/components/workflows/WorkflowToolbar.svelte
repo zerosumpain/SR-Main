@@ -41,7 +41,7 @@
   style="background: var(--bg); border-color: var(--card-border);"
 >
   <a
-    href="/workflows"
+    href="/jkai/workflows"
     class="text-sm px-2 py-1 rounded transition-colors hover:bg-black/5"
     style="color: var(--text-ghost);"
     title="Back to workflows"
