@@ -10,6 +10,7 @@ import {
   orchestratorChats,
 } from '$lib/db/schema';
 import { desc, eq, asc, and, or } from 'drizzle-orm';
+import { formatTimestamp } from '../format-time';
 
 // ==========================================
 // Existing Tools (moved)
@@ -143,8 +144,16 @@ register({
         ...wf,
         nodes,
         edges,
-        schedules,
-        recentRuns,
+        schedules: schedules.map((s) => ({
+          ...s,
+          lastRunAtFormatted: formatTimestamp(s.lastRunAt),
+          nextRunAtFormatted: formatTimestamp(s.nextRunAt),
+        })),
+        recentRuns: recentRuns.map((r) => ({
+          ...r,
+          startedAtFormatted: formatTimestamp(r.startedAt),
+          completedAtFormatted: formatTimestamp(r.completedAt),
+        })),
         url: `https://strangeramblings.com/workflows/${id}`,
       },
     };
@@ -428,6 +437,8 @@ register({
       type: args.type as string,
       config: args.config as Record<string, unknown>,
     }).returning();
+    const { reloadSchedule } = await import('$lib/workflows/scheduler');
+    await reloadSchedule(schedule.id);
     return { success: true, data: schedule };
   },
 });
@@ -449,12 +460,16 @@ register({
     const updates: Record<string, unknown> = {};
     if (args.enabled !== undefined) updates.enabled = args.enabled;
     if (args.config) updates.config = args.config;
+    const scheduleId = args.scheduleId as string;
     const [schedule] = await db
       .update(workflowSchedules)
       .set(updates)
-      .where(eq(workflowSchedules.id, args.scheduleId as string))
+      .where(eq(workflowSchedules.id, scheduleId))
       .returning();
-    return schedule ? { success: true, data: schedule } : { success: false, error: 'Schedule not found' };
+    if (!schedule) return { success: false, error: 'Schedule not found' };
+    const { reloadSchedule } = await import('$lib/workflows/scheduler');
+    await reloadSchedule(scheduleId);
+    return { success: true, data: schedule };
   },
 });
 
@@ -468,9 +483,12 @@ register({
   },
   category: 'Workflows',
   handler: async (args) => {
-    const [existing] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, args.scheduleId as string)).limit(1);
+    const scheduleId = args.scheduleId as string;
+    const [existing] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, scheduleId)).limit(1);
     if (!existing) return { success: false, error: 'Schedule not found' };
-    await db.delete(workflowSchedules).where(eq(workflowSchedules.id, args.scheduleId as string));
+    const { unregisterCronJob } = await import('$lib/workflows/scheduler');
+    unregisterCronJob(scheduleId);
+    await db.delete(workflowSchedules).where(eq(workflowSchedules.id, scheduleId));
     return { success: true, data: { deleted: true } };
   },
 });

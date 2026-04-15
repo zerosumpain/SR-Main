@@ -8,6 +8,11 @@ import type { WorkflowDefinition } from '$lib/workflows';
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
 
+/** Read-only access to active in-memory cron jobs for diagnostics */
+export function getActiveJobs(): ReadonlyMap<string, Cron> {
+  return activeJobs;
+}
+
 export async function startScheduler(): Promise<void> {
   console.log('[scheduler] Starting cron scheduler...');
   const schedules = await db

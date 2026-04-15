@@ -101,4 +101,16 @@ describe('tool registry', () => {
       expect(isRegisteredTool(name)).toBe(true);
     }
   });
+
+  it('has diagnostic tools', () => {
+    expect(isRegisteredTool('scheduler_status')).toBe(true);
+    expect(isRegisteredTool('scheduler_run_history')).toBe(true);
+    expect(isRegisteredTool('system_logs')).toBe(true);
+  });
+
+  it('has System Diagnostics category', () => {
+    const tools = getTools();
+    const categories = new Set(tools.map((t) => t.category));
+    expect(categories.has('System Diagnostics')).toBe(true);
+  });
 });

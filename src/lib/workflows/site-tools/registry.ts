@@ -13,6 +13,7 @@ import './tools/builds';
 import './tools/research';
 import './tools/whatsapp';
 import './tools/workflows';
+import './tools/diagnostics';
 
 // --- Public API ---
 
