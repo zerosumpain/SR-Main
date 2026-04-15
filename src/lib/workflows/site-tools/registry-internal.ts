@@ -12,6 +12,7 @@ export interface ToolDefinition {
     required?: string[];
   };
   category: string;
+  toolset: string;
   handler: (args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
@@ -19,4 +20,12 @@ export const tools: ToolDefinition[] = [];
 
 export function register(tool: ToolDefinition) {
   tools.push(tool);
+}
+
+export function getToolsByToolset(toolset: string): ToolDefinition[] {
+  return tools.filter((t) => t.toolset === toolset);
+}
+
+export function getAvailableToolsets(): string[] {
+  return [...new Set(tools.map((t) => t.toolset))];
 }
