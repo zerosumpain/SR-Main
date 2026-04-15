@@ -1,4 +1,4 @@
-import { register } from '../registry';
+import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import {
   workflows,

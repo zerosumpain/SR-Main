@@ -1,4 +1,4 @@
-import { register } from '../registry';
+import { register } from '../registry-internal';
 
 register({
   name: 'health_stats',

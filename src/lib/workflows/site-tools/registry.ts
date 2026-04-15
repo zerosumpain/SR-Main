@@ -1,28 +1,10 @@
-// src/lib/workflows/site-tools/registry.ts
-
-// ==========================================
 // Tool Registry — Slim Coordinator
-// ==========================================
+// Types and register() live in registry-internal.ts to avoid circular init with domain modules.
 
-export type ToolResult = { success: boolean; data?: unknown; error?: string };
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
-  category: string;
-  handler: (args: Record<string, unknown>) => Promise<ToolResult>;
-}
-
-const tools: ToolDefinition[] = [];
-
-export function register(tool: ToolDefinition) {
-  tools.push(tool);
-}
+export { register } from './registry-internal';
+export type { ToolDefinition, ToolResult } from './registry-internal';
+import { tools } from './registry-internal';
+import type { ToolResult } from './registry-internal';
 
 // --- Load all domain modules (each calls register() on import) ---
 import './tools/health';
@@ -34,8 +16,8 @@ import './tools/workflows';
 
 // --- Public API ---
 
-export function getTools(): readonly ToolDefinition[] {
-  return tools;
+export function getTools() {
+  return tools as readonly (typeof tools)[number][];
 }
 
 export function getToolDefinitions() {

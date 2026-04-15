@@ -1,4 +1,4 @@
-import { register } from '../registry';
+import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
