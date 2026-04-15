@@ -114,6 +114,12 @@
         </svg>
       </button>
 
+      <a href="/" class="flex items-center gap-1 transition-colors" style="color: var(--text-secondary);" title="Back to home">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 12L6 8l4-4" />
+        </svg>
+      </a>
+
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
 
       <nav class="flex items-center gap-3 sm:gap-4">
@@ -122,6 +128,9 @@
         </a>
         <a href="/jkai/prompts" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
           Prompts
+        </a>
+        <a href="/jkai/workflows" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
+          Workflows
         </a>
       </nav>
     </div>
