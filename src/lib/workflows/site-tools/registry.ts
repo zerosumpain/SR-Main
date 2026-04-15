@@ -62,7 +62,7 @@ export function getToolsetManifest(): Array<{
     diagnostics: 'System diagnostics — scheduler status, run history, service logs',
   };
 
-  return getAvailableToolsets().map((ts) => ({
+  const manifest = getAvailableToolsets().map((ts) => ({
     toolset: ts,
     description: toolsetDescriptions[ts] || ts,
     tools: getToolsByToolset(ts).map((t) => ({
@@ -70,6 +70,23 @@ export function getToolsetManifest(): Array<{
       description: t.description,
     })),
   }));
+
+  // HA tools live outside the domain module system — add a synthetic entry
+  if (!manifest.some((m) => m.toolset === 'home')) {
+    manifest.push({
+      toolset: 'home',
+      description: toolsetDescriptions.home,
+      tools: [
+        { name: 'ha_query_state', description: 'Get the current state and attributes of a Home Assistant entity' },
+        { name: 'ha_call_service', description: 'Call a Home Assistant service to control a device' },
+        { name: 'ha_fire_event', description: 'Fire a Home Assistant event to trigger automations' },
+        { name: 'ha_get_history', description: 'Get historical state data for an entity over a time period' },
+        { name: 'ha_render_template', description: 'Evaluate a Home Assistant Jinja2 template server-side' },
+      ],
+    });
+  }
+
+  return manifest;
 }
 
 export async function executeTool(

@@ -6,12 +6,11 @@ import { eq } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
-import { META_TOOL_DEFINITIONS, getToolsetDefinitions } from '$lib/workflows/site-tools/llm-tools';
+import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { handleJkaiHelp } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
-import { buildSystemPromptSection } from '$lib/workflows/site-tools/registry';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 5;
@@ -43,7 +42,7 @@ export async function generalChat(
 
   // Build system prompt — no longer includes HA entity registry or full tool list
   const basePrompt = await getCompiledPrompt();
-  const siteSection = buildSystemPromptSection();
+  const siteSection = buildSiteSystemPromptSection();
   const systemContent = `${basePrompt}${siteSection}`;
 
   // Build messages
