@@ -35,6 +35,48 @@
     onToggleCollapse: () => void;
   } = $props();
 
+  type Bucket = 'today' | 'yesterday' | 'last_week' | 'older';
+
+  const BUCKET_LABELS: Record<Bucket, string> = {
+    today: 'Today',
+    yesterday: 'Yesterday',
+    last_week: 'Last 7 days',
+    older: 'Older',
+  };
+
+  const BUCKET_ORDER: Bucket[] = ['today', 'yesterday', 'last_week', 'older'];
+
+  function getBucket(date: string | Date): Bucket {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 86400000;
+    const sevenDaysAgo = startOfToday - 7 * 86400000;
+    const ts = new Date(date).getTime();
+    if (ts >= startOfToday) return 'today';
+    if (ts >= startOfYesterday) return 'yesterday';
+    if (ts >= sevenDaysAgo) return 'last_week';
+    return 'older';
+  }
+
+  // Group conversations into buckets (order preserved from the incoming list,
+  // which is already updatedAt desc).
+  let grouped = $derived.by(() => {
+    const g: Record<Bucket, ConversationItem[]> = {
+      today: [], yesterday: [], last_week: [], older: [],
+    };
+    for (const c of conversations) g[getBucket(c.updatedAt)].push(c);
+    return g;
+  });
+
+  // Only today is expanded by default
+  let expanded = $state<Record<Bucket, boolean>>({
+    today: true, yesterday: false, last_week: false, older: false,
+  });
+
+  function toggleBucket(b: Bucket) {
+    expanded = { ...expanded, [b]: !expanded[b] };
+  }
+
   function relativeTime(iso: string | Date): string {
     const ms = Date.now() - new Date(iso).getTime();
     if (ms < 60000) return 'now';
@@ -46,6 +88,14 @@
   function truncate(text: string | null, len: number): string {
     if (!text) return '';
     return text.length > len ? text.slice(0, len) + '...' : text;
+  }
+
+  function confirmAndDelete(e: MouseEvent | KeyboardEvent, conv: ConversationItem) {
+    e.stopPropagation();
+    const label = conv.title || truncate(conv.lastMessage, 40) || 'this conversation';
+    if (confirm(`Delete "${label}"? This cannot be undone.`)) {
+      onDelete(conv.id);
+    }
   }
 </script>
 
@@ -101,42 +151,68 @@
         </button>
       {/if}
 
-      <!-- Web conversations -->
-      {#each conversations as conv (conv.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          onclick={() => onSelect(conv.id)}
-          onkeydown={(e) => { if (e.key === 'Enter') onSelect(conv.id); }}
-          role="button"
-          tabindex="0"
-          class="w-full text-left px-3 py-2.5 border-b transition-colors group cursor-pointer"
-          style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
-        >
-          <div class="flex items-center justify-between mb-0.5">
-            <span
-              class="text-xs font-medium line-clamp-1 flex-1"
-              style="color: {activeConversationId === conv.id ? 'var(--accent)' : 'var(--text-primary)'};"
-            >
-              {conv.title || 'New conversation'}
-            </span>
-            <span class="text-[10px] shrink-0 ml-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {relativeTime(conv.updatedAt)}
-            </span>
-          </div>
-          <div class="flex items-center justify-between">
-            <p class="text-[11px] line-clamp-1 flex-1" style="color: var(--text-ghost);">
-              {truncate(conv.lastMessage, 35)}
-            </p>
+      <!-- Bucketed conversations -->
+      {#each BUCKET_ORDER as bucket}
+        {#if grouped[bucket].length > 0}
+          <div>
             <button
-              onclick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-              class="text-[10px] px-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              style="color: var(--text-ghost);"
-              title="Delete conversation"
+              onclick={() => toggleBucket(bucket)}
+              class="w-full flex items-center justify-between px-3 py-2 transition-colors hover:opacity-80"
+              style="background: color-mix(in srgb, var(--card-border) 25%, transparent);"
             >
-              &times;
+              <span class="flex items-center gap-1.5">
+                <span class="text-[9px] w-2 inline-block" style="color: var(--text-ghost);">
+                  {expanded[bucket] ? '▾' : '▸'}
+                </span>
+                <span class="text-[10px] uppercase tracking-wider font-medium" style="color: var(--text-secondary);">
+                  {BUCKET_LABELS[bucket]}
+                </span>
+              </span>
+              <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                {grouped[bucket].length}
+              </span>
             </button>
+
+            {#if expanded[bucket]}
+              {#each grouped[bucket] as conv (conv.id)}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  onclick={() => onSelect(conv.id)}
+                  onkeydown={(e) => { if (e.key === 'Enter') onSelect(conv.id); }}
+                  role="button"
+                  tabindex="0"
+                  class="w-full text-left px-3 py-2.5 border-b transition-colors group cursor-pointer"
+                  style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
+                >
+                  <div class="flex items-center justify-between mb-0.5 gap-2">
+                    <span
+                      class="text-xs font-medium line-clamp-1 flex-1"
+                      style="color: {activeConversationId === conv.id ? 'var(--accent)' : 'var(--text-primary)'};"
+                    >
+                      {conv.title || 'New conversation'}
+                    </span>
+                    <span class="text-[10px] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                      {relativeTime(conv.updatedAt)}
+                    </span>
+                    <button
+                      onclick={(e) => confirmAndDelete(e, conv)}
+                      onkeydown={(e) => { if (e.key === 'Enter') confirmAndDelete(e, conv); }}
+                      class="text-[12px] leading-none w-4 h-4 rounded shrink-0 transition-opacity hover:opacity-100"
+                      style="color: var(--text-ghost); opacity: 0.45;"
+                      title="Delete conversation"
+                      aria-label="Delete conversation"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  <p class="text-[11px] line-clamp-1" style="color: var(--text-ghost);">
+                    {truncate(conv.lastMessage, 40)}
+                  </p>
+                </div>
+              {/each}
+            {/if}
           </div>
-        </div>
+        {/if}
       {/each}
     </div>
 
