@@ -156,7 +156,6 @@ async function runQuickAnswer(id: string): Promise<void> {
       synthesisSystemPrompt(),
       synthesisUserPrompt(topic, goals, sources),
       {
-        model: 'anthropic/claude-haiku-4-5',
         maxTokens: 2000,
         signal: ac.signal,
         onToken: (token) => emit(id, { type: 'token', data: { token } }),
