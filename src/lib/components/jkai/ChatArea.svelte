@@ -17,6 +17,14 @@
     }>;
   } = $props();
 
+  interface ToolStep {
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+    status: 'running' | 'done' | 'error';
+    expanded?: boolean;
+  }
+
   interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -25,6 +33,7 @@
     thinking?: OrchestratorThinking;
     isProgress?: boolean;
     progressSteps?: string[];
+    toolSteps?: ToolStep[];
     source?: string;
   }
 
@@ -34,6 +43,7 @@
   let showThinking = $state(false);
   let currentJobId = $state<string | null>(null);
   let chatContainer: HTMLDivElement;
+  let eventSource: EventSource | null = null;
 
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
@@ -47,6 +57,48 @@
     scrollToBottom();
   });
 
+  // SSE connection for real-time follow-up messages
+  $effect(() => {
+    // Clean up previous connection
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+
+    if (!conversationId) return;
+
+    const es = new EventSource(`/api/jkai/events?conversationId=${conversationId}`);
+    eventSource = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'connected') return; // ignore connection ack
+
+        // Append follow-up message to the conversation
+        const newMsg: Message = {
+          id: crypto.randomUUID(),
+          role: data.role || 'assistant',
+          content: data.content,
+          source: data.source || 'followup',
+        };
+        messages = [...messages, newMsg];
+        scrollToBottom();
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      // EventSource auto-reconnects, no action needed
+    };
+
+    return () => {
+      es.close();
+      eventSource = null;
+    };
+  });
+
   async function cancelJob() {
     if (!currentJobId) return;
     try {
@@ -54,37 +106,38 @@
     } catch { /* ignore */ }
   }
 
-  function formatProgress(raw: string): string {
-    const trimmed = raw.replace(/\n$/, '').trim();
-    const toolMatch = trimmed.match(/^(\w+):\s*(.+)/);
-    if (toolMatch) {
-      const [, tool, args] = toolMatch;
-      const labels: Record<string, string> = {
-        search_nodes: 'Searching',
-        use_node: 'Adding node',
-        create_node: 'Creating node',
-        connect_nodes: 'Connecting',
-        ask_user: 'Asking',
-        finalize_workflow: 'Finalizing',
-      };
-      const label = labels[tool] || tool;
-      try {
-        const parsed = JSON.parse(args.replace(/\.{3}$/, ''));
-        if (parsed.query) return `${label}: "${parsed.query}"`;
-        if (parsed.label) return `${label}: ${parsed.label}`;
-        if (parsed.name) return `${label}: ${parsed.name}`;
-        if (parsed.sourceId) return `${label}: ${parsed.sourceId} → ${parsed.targetId}`;
-      } catch {
-        const queryMatch = args.match(/"query"\s*:\s*"([^"]+)"/);
-        if (queryMatch) return `${label}: "${queryMatch[1]}"`;
-        const labelMatch = args.match(/"label"\s*:\s*"([^"]+)"/);
-        if (labelMatch) return `${label}: ${labelMatch[1]}`;
-        const nameMatch = args.match(/"name"\s*:\s*"([^"]+)"/);
-        if (nameMatch) return `${label}: ${nameMatch[1]}`;
-      }
-      return label;
-    }
-    return trimmed.replace(/\.\.\.\n?$/, '');
+  function formatToolArgs(args: Record<string, unknown>): string {
+    const parts = Object.entries(args).map(([k, v]) => {
+      const val = typeof v === 'string' ? v : JSON.stringify(v);
+      return `${k}=${val}`;
+    });
+    return parts.join(', ');
+  }
+
+  function friendlyToolName(name: string): string {
+    const labels: Record<string, string> = {
+      activate_toolset: 'Loading toolset',
+      ha_query_state: 'Querying device',
+      ha_call_service: 'Controlling device',
+      ha_fire_event: 'Firing event',
+      ha_get_history: 'Getting history',
+      ha_render_template: 'Running template',
+      reverse_geocode: 'Geocoding',
+      jkai_help: 'Checking capabilities',
+      list_custom_tools: 'Listing tools',
+      create_tool: 'Creating tool',
+    };
+    return labels[name] || name.replace(/_/g, ' ');
+  }
+
+  function toggleStepExpanded(stepIndex: number) {
+    messages = messages.map((m) => {
+      if (!m.isProgress || !m.toolSteps) return m;
+      const steps = m.toolSteps.map((s, i) =>
+        i === stepIndex ? { ...s, expanded: !s.expanded } : s,
+      );
+      return { ...m, toolSteps: steps };
+    });
   }
 
   async function send() {
@@ -104,12 +157,14 @@
     scrollToBottom();
 
     const progressId = crypto.randomUUID();
+    // Start with a subtle typing indicator — no progress box yet
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
-      content: 'Thinking...',
+      content: '',
       isProgress: true,
       progressSteps: [],
+      toolSteps: [],
     }];
     scrollToBottom();
 
@@ -137,9 +192,12 @@
       let lastProgress = 0;
       const startTime = Date.now();
       const TIMEOUT = 300000;
+      let pollInterval = 500;
+      const MAX_POLL_INTERVAL = 3000;
 
       while (!done && Date.now() - startTime < TIMEOUT) {
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, pollInterval));
+        pollInterval = Math.min(pollInterval * 1.3, MAX_POLL_INTERVAL);
 
         try {
           const pollRes = await fetch(`/api/workflows/orchestrator/chat?jobId=${jobId}`);
@@ -147,11 +205,18 @@
 
           const data = await pollRes.json();
 
-          if (data.progress && data.progress.length > lastProgress) {
-            const steps = data.progress.map(formatProgress);
-            const latestStep = steps[steps.length - 1];
+          // Update tool steps from server
+          if (data.toolSteps && data.toolSteps.length > 0) {
             messages = messages.map((m) =>
-              m.id === progressId ? { ...m, content: latestStep, progressSteps: steps } : m,
+              m.id === progressId ? { ...m, toolSteps: data.toolSteps } : m,
+            );
+            scrollToBottom();
+          }
+
+          if (data.progress && data.progress.length > lastProgress) {
+            const steps = data.progress as string[];
+            messages = messages.map((m) =>
+              m.id === progressId ? { ...m, progressSteps: steps } : m,
             );
             lastProgress = data.progress.length;
             scrollToBottom();
@@ -254,49 +319,80 @@
       </div>
     {:else}
       <div class="max-w-3xl mx-auto">
-        {#each messages as msg (msg.id)}
+        {#each messages as msg, msgIndex (msg.id)}
           {#if msg.isProgress}
-            <div class="mb-3 rounded-lg border overflow-hidden" style="border-color: var(--accent); background: var(--card-bg);">
-              <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
-                <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
-                <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">
-                  {msg.progressSteps && msg.progressSteps.length > 0 ? 'Working' : 'Thinking'}
-                </span>
-                <button
-                  onclick={cancelJob}
-                  class="ml-auto text-[10px] px-2 py-0.5 rounded border transition-colors"
-                  style="border-color: var(--card-border); color: var(--text-ghost);"
-                >
-                  Cancel
-                </button>
-              </div>
-              {#if msg.progressSteps && msg.progressSteps.length > 0}
+            {#if msg.toolSteps && msg.toolSteps.length > 0}
+              <!-- Tool progress box — only shown when tools are actually being used -->
+              <div class="mb-3 rounded-lg border overflow-hidden" style="border-color: var(--accent); background: var(--card-bg);">
+                <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
+                  <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
+                  <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">
+                    Working
+                  </span>
+                  <button
+                    onclick={cancelJob}
+                    class="ml-auto text-[10px] px-2 py-0.5 rounded border transition-colors"
+                    style="border-color: var(--card-border); color: var(--text-ghost);"
+                  >
+                    Cancel
+                  </button>
+                </div>
                 <div class="px-3 py-2 space-y-1">
-                  {#each msg.progressSteps as step, i}
-                    <div class="flex items-center gap-2">
-                      <span class="text-[10px] shrink-0" style="color: {i === msg.progressSteps.length - 1 ? 'var(--accent)' : 'var(--text-ghost)'};">
-                        {i === msg.progressSteps.length - 1 ? '>' : '\u2713'}
-                      </span>
-                      <span
-                        class="text-[11px]"
-                        style="color: {i === msg.progressSteps.length - 1 ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
+                  {#each msg.toolSteps as step, stepIndex}
+                    <div>
+                      <button
+                        class="flex items-center gap-2 w-full text-left group"
+                        onclick={() => toggleStepExpanded(stepIndex)}
                       >
-                        {step}
-                      </span>
+                        <span class="text-[10px] shrink-0 w-3 text-center" style="color: {step.status === 'running' ? 'var(--accent)' : step.status === 'error' ? '#ef4444' : 'var(--text-ghost)'};">
+                          {#if step.status === 'running'}
+                            <span class="inline-block animate-pulse">&#9679;</span>
+                          {:else if step.status === 'error'}
+                            &#10007;
+                          {:else}
+                            &#10003;
+                          {/if}
+                        </span>
+                        <span
+                          class="text-[11px] flex-1"
+                          style="color: {step.status === 'running' ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
+                        >
+                          {friendlyToolName(step.tool)}{#if Object.keys(step.args).length > 0}: {formatToolArgs(step.args)}{/if}
+                        </span>
+                        {#if step.result !== undefined}
+                          <span class="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity" style="color: var(--text-ghost);">
+                            {step.expanded ? 'collapse' : 'expand'}
+                          </span>
+                        {/if}
+                      </button>
+                      {#if step.expanded && step.result !== undefined}
+                        <div class="ml-5 mt-1 mb-2 px-2 py-1.5 rounded text-[10px] overflow-x-auto" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-ghost);">
+                          <pre class="whitespace-pre-wrap break-words">{JSON.stringify(step.result, null, 2)}</pre>
+                        </div>
+                      {/if}
                     </div>
                   {/each}
                 </div>
-              {:else}
-                <div class="px-3 py-2">
-                  <span class="text-[11px] animate-pulse" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                    {msg.content}
-                  </span>
-                </div>
-              {/if}
-            </div>
+              </div>
+            {:else}
+              <!-- Subtle typing indicator — no tools yet -->
+              <div class="mb-3 flex items-center gap-1 px-1 py-2">
+                <span class="typing-dot" style="background: var(--text-ghost);"></span>
+                <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.15s;"></span>
+                <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.3s;"></span>
+              </div>
+            {/if}
           {:else}
             <div class="relative">
-              {#if msg.source === 'whatsapp'}
+              {#if msg.source === 'followup'}
+                <span
+                  class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
+                  style="background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);"
+                  title="Async follow-up"
+                >
+                  FU
+                </span>
+              {:else if msg.source === 'whatsapp'}
                 <span
                   class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
                   style="background: rgba(37, 211, 102, 0.15); color: #25d366;"
@@ -344,3 +440,19 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    animation: typing-bounce 1.2s ease-in-out infinite;
+    opacity: 0.5;
+  }
+
+  @keyframes typing-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+    30% { transform: translateY(-4px); opacity: 0.7; }
+  }
+</style>
