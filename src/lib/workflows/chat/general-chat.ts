@@ -183,7 +183,7 @@ export async function generalChat(
           model,
           messages,
           temperature: 0.2,
-          max_tokens: 2048,
+          max_tokens: 4096,
           ...(tools ? { tools } : {}),
         });
         break;
@@ -207,7 +207,20 @@ export async function generalChat(
     const msg = choice.message;
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      responseText = msg.content?.trim() || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
+      const trimmed = msg.content?.trim();
+      if (!trimmed) {
+        // Diagnostic: log why we got an empty response. Common culprits are
+        // max_tokens truncation mid-tool-call, safety filters, or the model
+        // just giving up on a complex task.
+        const promptChars = messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
+        console.warn(
+          `[general-chat] Empty response from ${model}. ` +
+          `round=${round} finish_reason=${choice.finish_reason} ` +
+          `messages=${messages.length} prompt_chars=${promptChars} ` +
+          `usage=${JSON.stringify(response?.usage)}`,
+        );
+      }
+      responseText = trimmed || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
       break;
     }
 
