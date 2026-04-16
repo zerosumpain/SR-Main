@@ -139,7 +139,7 @@ export async function generalChat(
               content: 'Pause briefly. Write a 2-3 sentence plain-English status update: what have you found so far, and what do you plan to check next? No tool calls — just the update.',
             },
           ],
-          temperature: 0.7,
+          temperature: 0.3,
           max_tokens: 300,
         });
         const statusText = statusResp.choices[0]?.message?.content?.trim();
@@ -182,7 +182,7 @@ export async function generalChat(
         response = await client.chat.completions.create({
           model,
           messages,
-          temperature: 0.7,
+          temperature: 0.2,
           max_tokens: 2048,
           ...(tools ? { tools } : {}),
         });

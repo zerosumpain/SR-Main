@@ -535,7 +535,7 @@
     <!-- Drawer -->
     <aside
       class="absolute top-0 right-0 h-full z-30 flex flex-col border-l shadow-xl"
-      style="width: min(420px, 90vw); background: var(--card-bg); border-color: var(--card-border);"
+      style="width: min(420px, 90vw); background: var(--bg); border-color: var(--card-border);"
     >
       <div class="px-4 py-3 border-b flex items-center justify-between" style="border-color: var(--card-border);">
         <div>

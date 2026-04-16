@@ -5,7 +5,7 @@ import { db } from '$lib/db';
 import { jkaiMemories } from '$lib/db/schema';
 import { eq, and, isNull, ilike, desc } from 'drizzle-orm';
 
-const CATEGORIES = ['people', 'preferences', 'places', 'health', 'devices', 'situations'] as const;
+const CATEGORIES = ['people', 'preferences', 'places', 'health', 'devices', 'situations', 'patterns'] as const;
 
 register({
   name: 'save_memory',
