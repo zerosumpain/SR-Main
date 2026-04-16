@@ -75,3 +75,87 @@ register({
     return ok(artifact, summary);
   },
 });
+
+// -------- render_chart --------
+
+function summariseChart(spec: Record<string, unknown>, data: unknown[]): string {
+  const mark =
+    typeof spec.mark === 'string'
+      ? spec.mark
+      : typeof (spec.mark as { type?: unknown } | undefined)?.type === 'string'
+        ? (spec.mark as { type: string }).type
+        : 'chart';
+
+  const enc = (spec.encoding ?? {}) as Record<string, { field?: string; title?: string; type?: string }>;
+  const yInfo = enc.y;
+  const yField = yInfo?.field;
+  const yTitle = yInfo?.title ?? yField;
+
+  const effective = data.length > 0
+    ? data
+    : Array.isArray((spec.data as { values?: unknown[] } | undefined)?.values)
+      ? ((spec.data as { values: unknown[] }).values)
+      : [];
+
+  let rangePart = '';
+  if (yField && effective.length > 0) {
+    const nums: number[] = [];
+    for (const row of effective) {
+      if (row && typeof row === 'object') {
+        const v = (row as Record<string, unknown>)[yField];
+        if (typeof v === 'number' && Number.isFinite(v)) nums.push(v);
+      }
+    }
+    if (nums.length > 0) {
+      const min = Math.min(...nums);
+      const max = Math.max(...nums);
+      rangePart = ` (${yTitle ?? 'y'}: ${min}–${max})`;
+    }
+  }
+
+  return `${mark} chart: ${effective.length} data points${rangePart}`;
+}
+
+register({
+  name: 'render_chart',
+  description:
+    'Render a chart inline in the chat using a Vega-Lite spec. Prefer this over describing data in prose when the user asks to visualise, plot, or chart. Supply the data either as the `data` argument or inside `spec.data.values`.',
+  toolset: 'visualise',
+  category: 'Visualise',
+  parameters: {
+    type: 'object',
+    properties: {
+      spec: {
+        type: 'object',
+        description: 'Vega-Lite spec. Omit the outer $schema; it is added client-side.',
+      },
+      data: {
+        type: 'array',
+        description: 'Inline data rows. Merged into spec.data.values at render time if present.',
+      },
+      caption: { type: 'string', description: 'Optional caption shown below the chart.' },
+    },
+    required: ['spec'],
+  },
+  handler: async (args): Promise<ToolResult> => {
+    const spec = args.spec as Record<string, unknown> | undefined;
+    const data = (args.data as unknown[] | undefined) ?? [];
+    const caption = args.caption as string | undefined;
+
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+      return fail('spec must be a Vega-Lite spec object');
+    }
+    if (!Array.isArray(data)) {
+      return fail('data must be an array if provided');
+    }
+
+    const artifact: Artifact = {
+      type: 'chart',
+      spec,
+      data,
+      caption,
+    };
+    const summary = summariseChart(spec, data);
+    return ok(artifact, summary);
+  },
+});
