@@ -8,6 +8,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   cookies.set('whoop_oauth_state', state, {
     path: '/',
     httpOnly: true,
+    secure: true,
     maxAge: 600,
     sameSite: 'lax',
   });

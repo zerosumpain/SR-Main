@@ -40,12 +40,21 @@ export const GET: RequestHandler = async () => {
   return json(sessionsWithCounts);
 };
 
+const MAX_TOPIC_LEN = 2000;
+const MAX_SEED_CONTEXT_LEN = 50_000;
+
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const { topic, goals, timeLimitMinutes, config, parentSessionId, seedContext } = body;
 
   if (!topic || typeof topic !== 'string') {
     return json({ error: 'Topic is required' }, { status: 400 });
+  }
+  if (topic.length > MAX_TOPIC_LEN) {
+    return json({ error: `Topic too long (max ${MAX_TOPIC_LEN} chars)` }, { status: 400 });
+  }
+  if (typeof seedContext === 'string' && seedContext.length > MAX_SEED_CONTEXT_LEN) {
+    return json({ error: `seedContext too long (max ${MAX_SEED_CONTEXT_LEN} chars)` }, { status: 400 });
   }
 
   const sessionConfig = { ...DEFAULT_CONFIG, ...(config ?? {}) };

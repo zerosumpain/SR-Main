@@ -2,11 +2,24 @@ import { startScheduler } from '$lib/health/scheduler';
 import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
 import { orchestrator } from '$lib/jkai/orchestrator';
 import { isPublicPath } from '$lib/auth';
+import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
+
+// Expensive endpoints — apply per-user rate limits.
+// Pattern → { capacity (burst), refillPerSecond (steady-state) }.
+const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: number }> = [
+  { pattern: /^\/api\/deepdive(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 }, // 5/min
+  { pattern: /^\/api\/quickanswer(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 }, // 10/min
+  { pattern: /^\/api\/cdo-plan(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 },
+  { pattern: /^\/api\/workflows\/orchestrator(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 },
+  { pattern: /^\/api\/workflows\/webhook(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
+  { pattern: /^\/api\/jkai\/builds(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 },
+  { pattern: /^\/api\/jkai\/(conversations|chat)(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 },
+];
 
 // Start the health data sync scheduler
 startScheduler();
@@ -54,10 +67,10 @@ const { handle: authHandle } = SvelteKitAuth({
   callbacks: {
     async signIn({ user, profile }) {
       const allowed = getAllowedEmails();
-      if (allowed.length === 0) return true;
-      const email = user?.email || (profile as any)?.email || '';
-      console.log(`[auth] Sign-in attempt: ${email} (allowed: ${allowed.join(',')})`);
-      return allowed.includes(email);
+      if (allowed.length === 0) return false;
+      const email = (user?.email || (profile as any)?.email || '').toLowerCase();
+      console.log(`[auth] Sign-in attempt: ${email}`);
+      return allowed.some((a) => a.toLowerCase() === email);
     },
     async session({ session }) {
       return session;
@@ -86,6 +99,29 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    // Rate-limit expensive endpoints per authenticated user.
+    const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
+    if (limit && event.request.method !== 'GET') {
+      const userKey = (session.user as any).email || (session.user as any).id || 'anon';
+      const result = rateLimit(`${userKey}:${pathname}`, {
+        capacity: limit.capacity,
+        refillPerSecond: limit.refillPerSecond,
+      });
+      if (!result.allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded', retryAfterMs: result.retryAfterMs }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': String(Math.ceil(result.retryAfterMs / 1000)),
+            },
+          },
+        );
+      }
+    }
+
     return resolve(event);
   }
 

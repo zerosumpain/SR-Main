@@ -10,6 +10,7 @@ import {
 import type { ResearchSession } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { chatCompletion, jsonCompletion } from './ai';
+import { toVectorLiteral } from './vector';
 import { emitLog } from './worker';
 import { computeSourceAgreement } from './credibility';
 import type { ResearchReport, IdentityCluster, KnowledgeGap, Hypothesis, Contradiction, FollowUpSuggestion, SourceDiversity } from './types';
@@ -397,7 +398,7 @@ Respond with JSON: { "followups": [...] }`,
     if (factsWithEmbeddings.length > 1) {
       for (const fact of factsWithEmbeddings) {
         if (!fact.embedding) continue;
-        const vectorStr = `[${fact.embedding.join(',')}]`;
+        const vectorStr = toVectorLiteral(fact.embedding);
 
         // Average cosine distance to all other facts
         const distResult = await db.execute(

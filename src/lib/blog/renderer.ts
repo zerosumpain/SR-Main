@@ -1,5 +1,6 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
+import sanitize from 'sanitize-html';
 
 const marked = new Marked({
   gfm: true,
@@ -22,7 +23,33 @@ const marked = new Marked({
   },
 });
 
+const SANITIZE_OPTIONS: sanitize.IOptions = {
+  allowedTags: sanitize.defaults.allowedTags.concat([
+    'img', 'figure', 'figcaption', 'video', 'source', 'iframe',
+    'details', 'summary', 'mark', 'del', 'ins', 'sup', 'sub',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  ]),
+  allowedAttributes: {
+    ...sanitize.defaults.allowedAttributes,
+    img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
+    iframe: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'title'],
+    a: ['href', 'name', 'target', 'rel'],
+    code: ['class'],
+    pre: ['class'],
+    span: ['class', 'style'],
+    div: ['class', 'style'],
+  },
+  allowedIframeHostnames: ['www.youtube.com', 'www.youtube-nocookie.com', 'player.vimeo.com'],
+  allowedStyles: {
+    '*': {
+      'color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+      'text-align': [/^(left|right|center|justify)$/],
+      'font-size': [/^\d+(\.\d+)?(px|em|rem|%)$/],
+    },
+  },
+};
+
 export function renderContent(content: string, format: 'html' | 'markdown'): string {
-  if (format === 'html') return content;
-  return marked.parse(content) as string;
+  const raw = format === 'html' ? content : (marked.parse(content) as string);
+  return sanitize(raw, SANITIZE_OPTIONS);
 }

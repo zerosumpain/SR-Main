@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
+import { safeFunction, UnsafeExpressionError } from './safe-eval';
 
 function checkType(value: unknown, expectedType: string): boolean {
   if (expectedType === 'any') return true;
@@ -70,7 +71,7 @@ function validateExpression(
   const errors: string[] = [];
 
   try {
-    const fn = new Function('input', `return !!(${expression})`);
+    const fn = safeFunction(['input'], `return !!(${expression})`);
     valid = fn(input);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
