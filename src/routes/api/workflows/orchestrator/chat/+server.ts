@@ -1,54 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated, getChatHistory } from '$lib/workflows/orchestrator';
+import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, whatsappConversations } from '$lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
-
-// In-memory job store
-interface OrchestratorJob {
-  status: 'running' | 'done' | 'error' | 'cancelled';
-  progress: string[];
-  result?: Record<string, unknown>;
-  error?: string;
-  abortController: AbortController;
-  startedAt: number;
-  message: string;
-}
-
-const jobs = new Map<string, OrchestratorJob>();
-
-function cancelAllRunning(reason: string) {
-  for (const [id, job] of jobs) {
-    if (job.status === 'running') {
-      console.log(`[orchestrator] Cancelling job ${id}: ${reason}`);
-      job.abortController.abort();
-      job.status = 'cancelled';
-      job.error = reason;
-      job.result = { success: false, error: reason };
-    }
-  }
-}
-
-function cleanOldJobs() {
-  const now = Date.now();
-  for (const [id, job] of jobs) {
-    // Remove completed/cancelled jobs older than 5 min
-    if (job.status !== 'running' && now - job.startedAt > 300000) {
-      jobs.delete(id);
-    }
-    // Force-cancel running jobs older than 10 min (zombie protection)
-    if (job.status === 'running' && now - job.startedAt > 600000) {
-      job.abortController.abort();
-      job.status = 'error';
-      job.error = 'Job timed out (10 min limit)';
-      job.result = { success: false, error: job.error };
-      jobs.delete(id);
-    }
-  }
-}
+import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs } from '$lib/workflows/chat/job-store';
+import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
+import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
@@ -62,16 +22,8 @@ export const POST: RequestHandler = async ({ request }) => {
   cancelAllRunning('Superseded by new request');
   cleanOldJobs();
 
-  const jobId = crypto.randomUUID();
-  const abortController = new AbortController();
-  const job: OrchestratorJob = {
-    status: 'running',
-    progress: [],
-    abortController,
-    startedAt: Date.now(),
-    message: message.slice(0, 100),
-  };
-  jobs.set(jobId, job);
+  const { jobId, job } = createJob(message);
+  const { abortController } = job;
 
   // Run the orchestrator in the background
   (async () => {
@@ -174,48 +126,22 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       } else {
         // Default: general-purpose chat
-        let conversationHistory: Array<{ role: string; content: string }> = [];
-
-        if (conversationId) {
-          // Load web messages for this conversation
-          const convMessages = await db
-            .select({ role: orchestratorChats.role, content: orchestratorChats.content, createdAt: orchestratorChats.createdAt })
-            .from(orchestratorChats)
-            .where(eq(orchestratorChats.conversationId, conversationId))
-            .orderBy(asc(orchestratorChats.createdAt));
-
-          // Check if this conversation has a WhatsApp phone number
-          const [conv] = await db
-            .select()
-            .from(conversations)
-            .where(eq(conversations.id, conversationId))
-            .limit(1);
-
-          if (conv?.whatsappPhoneNumber) {
-            // Merge WhatsApp + web messages chronologically, take last 30
-            const waMessages = await db
-              .select({ role: whatsappConversations.role, content: whatsappConversations.content, createdAt: whatsappConversations.createdAt })
-              .from(whatsappConversations)
-              .where(eq(whatsappConversations.phoneNumber, conv.whatsappPhoneNumber))
-              .orderBy(asc(whatsappConversations.createdAt));
-
-            const merged = [
-              ...waMessages.map(m => ({ role: m.role, content: m.content, ts: m.createdAt.getTime() })),
-              ...convMessages.map(m => ({ role: m.role, content: m.content, ts: m.createdAt.getTime() })),
-            ].sort((a, b) => a.ts - b.ts);
-
-            conversationHistory = merged.slice(-30).map(m => ({ role: m.role, content: m.content }));
-          } else {
-            conversationHistory = convMessages.slice(-30).map(m => ({ role: m.role, content: m.content }));
-          }
-        } else if (workflowId) {
-          const history = await getChatHistory(workflowId);
-          conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
-        }
+        const conversationHistory = await loadConversationHistory(conversationId, workflowId);
 
         const { response: responseText } = await generalChat(message, conversationHistory, {
           workflowId,
+          conversationId,
           onProgress,
+          onToolProgress: (step) => {
+            if (abortController.signal.aborted) return;
+            // Update or append tool step
+            const existing = job.toolSteps.findIndex(s => s.tool === step.tool && s.status === 'running');
+            if (existing >= 0 && step.status !== 'running') {
+              job.toolSteps[existing] = step;
+            } else {
+              job.toolSteps.push(step);
+            }
+          },
         });
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
@@ -262,20 +188,11 @@ export const POST: RequestHandler = async ({ request }) => {
 export const GET: RequestHandler = async ({ url }) => {
   const jobId = url.searchParams.get('jobId');
 
-  // If no jobId, return list of all active/recent jobs
   if (!jobId) {
-    const jobList = Array.from(jobs.entries()).map(([id, job]) => ({
-      id,
-      status: job.status,
-      message: job.message,
-      startedAt: job.startedAt,
-      progressCount: job.progress.length,
-      elapsed: Date.now() - job.startedAt,
-    }));
-    return json({ jobs: jobList });
+    return json({ jobs: listJobs() });
   }
 
-  const job = jobs.get(jobId);
+  const job = getJob(jobId);
   if (!job) {
     return json({ error: 'Job not found' }, { status: 404 });
   }
@@ -283,12 +200,13 @@ export const GET: RequestHandler = async ({ url }) => {
   const response: Record<string, unknown> = {
     status: job.status,
     progress: job.progress,
+    toolSteps: job.toolSteps,
   };
 
   if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
     response.result = job.result;
     response.error = job.error;
-    setTimeout(() => jobs.delete(jobId), 30000);
+    deleteJob(jobId);
   }
 
   return json(response);
@@ -299,23 +217,14 @@ export const DELETE: RequestHandler = async ({ url }) => {
   const jobId = url.searchParams.get('jobId');
 
   if (!jobId) {
-    // Cancel all running jobs
     cancelAllRunning('Cancelled by user');
     return json({ cancelled: true });
   }
 
-  const job = jobs.get(jobId);
-  if (!job) {
-    return json({ error: 'Job not found' }, { status: 404 });
+  if (cancelJob(jobId)) {
+    return json({ cancelled: true });
   }
 
-  if (job.status === 'running') {
-    job.abortController.abort();
-    job.status = 'cancelled';
-    job.error = 'Cancelled by user';
-    job.result = { success: false, error: 'Cancelled by user' };
-    console.log(`[orchestrator] Job ${jobId} cancelled by user`);
-  }
-
-  return json({ cancelled: true, status: job.status });
+  const job = getJob(jobId);
+  return json({ error: job ? 'Job not running' : 'Job not found' }, { status: job ? 400 : 404 });
 };
