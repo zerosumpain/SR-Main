@@ -159,3 +159,105 @@ register({
     return ok(artifact, summary);
   },
 });
+
+// -------- render_map --------
+
+type MapLayerArg = {
+  kind: 'points' | 'track' | 'heatmap';
+  points: Array<{ lat: number; lng: number; label?: string; weight?: number }>;
+};
+
+function summariseMap(layers: MapLayerArg[]): string {
+  const counts = { points: 0, track: 0, heatmap: 0 };
+  let total = 0;
+  for (const l of layers) {
+    counts[l.kind]++;
+    total += l.points.length;
+  }
+  const parts: string[] = [];
+  if (counts.track) parts.push(`${counts.track} track${counts.track > 1 ? 's' : ''}`);
+  if (counts.points) parts.push(`${counts.points} points layer${counts.points > 1 ? 's' : ''}`);
+  if (counts.heatmap) parts.push(`${counts.heatmap} heatmap layer${counts.heatmap > 1 ? 's' : ''}`);
+  return `Map: ${parts.join(', ')} — ${total} point${total === 1 ? '' : 's'} total`;
+}
+
+register({
+  name: 'render_map',
+  description:
+    'Render an interactive map inline in the chat. Use for GPS data: locations, routes, heatmaps. Center/zoom auto-fit from point bounds if omitted.',
+  toolset: 'visualise',
+  category: 'Visualise',
+  parameters: {
+    type: 'object',
+    properties: {
+      layers: {
+        type: 'array',
+        description: 'One or more layers. Each layer has a kind and a points array.',
+        items: {
+          type: 'object',
+          properties: {
+            kind: { type: 'string', enum: ['points', 'track', 'heatmap'] },
+            points: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  lat: { type: 'number' },
+                  lng: { type: 'number' },
+                  label: { type: 'string' },
+                  weight: { type: 'number', description: 'Only used for heatmap layers.' },
+                },
+                required: ['lat', 'lng'],
+              },
+            },
+          },
+          required: ['kind', 'points'],
+        },
+      },
+      center: {
+        type: 'array',
+        description: 'Optional [lat, lng] center. Auto-fit bounds if omitted.',
+        items: { type: 'number' },
+      },
+      zoom: { type: 'number', description: 'Optional zoom level (1–18).' },
+      caption: { type: 'string' },
+    },
+    required: ['layers'],
+  },
+  handler: async (args): Promise<ToolResult> => {
+    const layers = args.layers as MapLayerArg[] | undefined;
+    const center = args.center as [number, number] | undefined;
+    const zoom = args.zoom as number | undefined;
+    const caption = args.caption as string | undefined;
+
+    if (!Array.isArray(layers) || layers.length === 0) {
+      return fail('layers must be a non-empty array');
+    }
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      if (!l || typeof l !== 'object') return fail(`layers[${i}] must be an object`);
+      if (!['points', 'track', 'heatmap'].includes(l.kind)) {
+        return fail(`layers[${i}].kind must be 'points' | 'track' | 'heatmap'`);
+      }
+      if (!Array.isArray(l.points) || l.points.length === 0) {
+        return fail(`layers[${i}].points must be a non-empty array`);
+      }
+      for (let j = 0; j < l.points.length; j++) {
+        const p = l.points[j];
+        if (!p || typeof p.lat !== 'number' || typeof p.lng !== 'number') {
+          return fail(`layers[${i}].points[${j}] must have numeric lat and lng`);
+        }
+      }
+    }
+
+    const artifact: Artifact = {
+      type: 'map',
+      center,
+      zoom,
+      layers: layers as Artifact extends { type: 'map'; layers: infer L } ? L : never,
+      caption,
+    };
+    const summary = summariseMap(layers);
+    return ok(artifact, summary);
+  },
+});
