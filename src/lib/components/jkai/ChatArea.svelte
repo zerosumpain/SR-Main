@@ -126,6 +126,7 @@
       jkai_help: 'Checking capabilities',
       list_custom_tools: 'Listing tools',
       create_tool: 'Creating tool',
+      status_update: 'Status update',
     };
     return labels[name] || name.replace(/_/g, ' ');
   }
@@ -339,38 +340,46 @@
                 </div>
                 <div class="px-3 py-2 space-y-1">
                   {#each msg.toolSteps as step, stepIndex}
-                    <div>
-                      <button
-                        class="flex items-center gap-2 w-full text-left group"
-                        onclick={() => toggleStepExpanded(stepIndex)}
-                      >
-                        <span class="text-[10px] shrink-0 w-3 text-center" style="color: {step.status === 'running' ? 'var(--accent)' : step.status === 'error' ? '#ef4444' : 'var(--text-ghost)'};">
-                          {#if step.status === 'running'}
-                            <span class="inline-block animate-pulse">&#9679;</span>
-                          {:else if step.status === 'error'}
-                            &#10007;
-                          {:else}
-                            &#10003;
-                          {/if}
-                        </span>
-                        <span
-                          class="text-[11px] flex-1"
-                          style="color: {step.status === 'running' ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
+                    {#if step.tool === 'status_update'}
+                      <!-- Status updates render inline as plain prose -->
+                      <div class="ml-0 px-2 py-2 rounded text-[12px] leading-relaxed" style="background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-primary); border-left: 2px solid var(--accent);">
+                        <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--accent);">Status update</div>
+                        {(step.result as { message?: string })?.message ?? ''}
+                      </div>
+                    {:else}
+                      <div>
+                        <button
+                          class="flex items-center gap-2 w-full text-left group"
+                          onclick={() => toggleStepExpanded(stepIndex)}
                         >
-                          {friendlyToolName(step.tool)}{#if Object.keys(step.args).length > 0}: {formatToolArgs(step.args)}{/if}
-                        </span>
-                        {#if step.result !== undefined}
-                          <span class="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity" style="color: var(--text-ghost);">
-                            {step.expanded ? 'collapse' : 'expand'}
+                          <span class="text-[10px] shrink-0 w-3 text-center" style="color: {step.status === 'running' ? 'var(--accent)' : step.status === 'error' ? '#ef4444' : 'var(--text-ghost)'};">
+                            {#if step.status === 'running'}
+                              <span class="inline-block animate-pulse">&#9679;</span>
+                            {:else if step.status === 'error'}
+                              &#10007;
+                            {:else}
+                              &#10003;
+                            {/if}
                           </span>
+                          <span
+                            class="text-[11px] flex-1"
+                            style="color: {step.status === 'running' ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
+                          >
+                            {friendlyToolName(step.tool)}{#if Object.keys(step.args).length > 0}: {formatToolArgs(step.args)}{/if}
+                          </span>
+                          {#if step.result !== undefined}
+                            <span class="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity" style="color: var(--text-ghost);">
+                              {step.expanded ? 'collapse' : 'expand'}
+                            </span>
+                          {/if}
+                        </button>
+                        {#if step.expanded && step.result !== undefined}
+                          <div class="ml-5 mt-1 mb-2 px-2 py-1.5 rounded text-[10px] overflow-x-auto" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-ghost);">
+                            <pre class="whitespace-pre-wrap break-words">{JSON.stringify(step.result, null, 2)}</pre>
+                          </div>
                         {/if}
-                      </button>
-                      {#if step.expanded && step.result !== undefined}
-                        <div class="ml-5 mt-1 mb-2 px-2 py-1.5 rounded text-[10px] overflow-x-auto" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-ghost);">
-                          <pre class="whitespace-pre-wrap break-words">{JSON.stringify(step.result, null, 2)}</pre>
-                        </div>
-                      {/if}
-                    </div>
+                      </div>
+                    {/if}
                   {/each}
                 </div>
               </div>

@@ -122,6 +122,39 @@ export async function generalChat(
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+
+    // Halfway through available rounds: get a plain-English status update so
+    // the user can see progress. Separate call with no tools, doesn't count
+    // against MAX_TOOL_ROUNDS. Also helps the model pause and reorient.
+    if (round === 5) {
+      try {
+        const statusResp = await client.chat.completions.create({
+          model,
+          messages: [
+            ...messages,
+            {
+              role: 'user',
+              content: 'Pause briefly. Write a 2-3 sentence plain-English status update: what have you found so far, and what do you plan to check next? No tool calls — just the update.',
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 300,
+        });
+        const statusText = statusResp.choices[0]?.message?.content?.trim();
+        if (statusText) {
+          onToolProgress?.({
+            tool: 'status_update',
+            args: {},
+            result: { message: statusText },
+            status: 'done',
+          });
+          onProgress?.(`[status] ${statusText}\n`);
+        }
+      } catch (err) {
+        console.warn('[general-chat] Status update failed:', err instanceof Error ? err.message : err);
+      }
+    }
+
     // On the final round, drop tools to force a text response instead of
     // another tool call. Also inject a directive so the model summarises
     // using what it already gathered.
