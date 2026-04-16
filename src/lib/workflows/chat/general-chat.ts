@@ -13,7 +13,7 @@ import { enqueueFollowUp } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 
 const MAX_HISTORY = 30;
-const MAX_TOOL_ROUNDS = 5;
+const MAX_TOOL_ROUNDS = 10;
 
 interface ToolProgress {
   tool: string;
@@ -121,7 +121,17 @@ export async function generalChat(
   let responseText = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const tools = activeTools.length > 0 ? activeTools : undefined;
+    const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+    // On the final round, drop tools to force a text response instead of
+    // another tool call. Also inject a directive so the model summarises
+    // using what it already gathered.
+    const tools = isFinalRound ? undefined : (activeTools.length > 0 ? activeTools : undefined);
+    if (isFinalRound) {
+      messages.push({
+        role: 'user',
+        content: 'You have reached the final step. Write your complete answer now based on the information you have already gathered. Do not request more tool calls.',
+      });
+    }
 
     let response;
     for (let attempt = 0; attempt < 3; attempt++) {
