@@ -1,5 +1,35 @@
 import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel } from './keys';
 
+/** Attempt to close truncated JSON by balancing brackets/braces and removing trailing partial tokens */
+function repairJson(text: string): string {
+  // Strip trailing incomplete string (e.g. `"some trunca`)
+  let s = text.replace(/,\s*"[^"]*$/, '').replace(/,\s*$/, '');
+
+  // Count unmatched openers
+  const stack: string[] = [];
+  let inString = false;
+  let escape = false;
+  for (const ch of s) {
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{' || ch === '[') stack.push(ch);
+    if (ch === '}' || ch === ']') stack.pop();
+  }
+
+  // Close any unclosed string
+  if (inString) s += '"';
+
+  // Close unmatched brackets/braces
+  while (stack.length) {
+    const opener = stack.pop();
+    s += opener === '{' ? '}' : ']';
+  }
+
+  return s;
+}
+
 async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3): Promise<T> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -77,7 +107,13 @@ export async function jsonCompletion<T>(
   );
 
   const text = response.choices[0]?.message?.content ?? '{}';
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Attempt to repair truncated JSON (e.g. from max_tokens cutoff)
+    const repaired = repairJson(text);
+    return JSON.parse(repaired) as T;
+  }
 }
 
 export async function streamCompletion(
