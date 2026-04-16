@@ -197,8 +197,8 @@
                     <button
                       onclick={(e) => confirmAndDelete(e, conv)}
                       onkeydown={(e) => { if (e.key === 'Enter') confirmAndDelete(e, conv); }}
-                      class="text-[12px] leading-none w-4 h-4 rounded shrink-0 transition-opacity hover:opacity-100"
-                      style="color: var(--text-ghost); opacity: 0.45;"
+                      class="text-[18px] leading-none w-7 h-7 flex items-center justify-center rounded shrink-0 transition-opacity hover:opacity-100 hover:bg-black/10"
+                      style="color: var(--text-ghost); opacity: 0.6;"
                       title="Delete conversation"
                       aria-label="Delete conversation"
                     >
