@@ -6,7 +6,7 @@ import { customTools } from '$lib/db/schema';
 import { register, isRegisteredTool } from './registry-internal';
 import { buildHandler } from './custom-tool-loader';
 
-const TOOLSET_NAMES = [
+const BUILTIN_TOOLSET_NAMES = [
   'health', 'blog', 'builds', 'research',
   'workflows', 'home', 'whatsapp', 'diagnostics', 'memory',
 ] as const;
@@ -17,14 +17,13 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'activate_toolset',
       description:
-        'Load a category of tools into the current conversation. Call this before using domain-specific tools. You can activate multiple toolsets by calling this multiple times in the same turn.',
+        'Load a category of tools into the current conversation. Call this before using domain-specific tools. You can activate multiple toolsets by calling this multiple times in the same turn. Built-in toolsets: health, blog, builds, research, workflows, home, whatsapp, diagnostics, memory. Custom toolsets (from create_tool) are also supported — use list_custom_tools to discover them.',
       parameters: {
         type: 'object',
         properties: {
           toolset: {
             type: 'string',
-            enum: TOOLSET_NAMES,
-            description: 'The toolset to activate',
+            description: 'The toolset to activate (e.g. "home", "geo", "health")',
           },
         },
         required: ['toolset'],
@@ -36,13 +35,12 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'jkai_help',
       description:
-        'See what capabilities and tools are available. Returns all toolsets with their tool names and descriptions. Use this when unsure which toolset to activate.',
+        'See what capabilities and tools are available. Returns all toolsets with their tool names and descriptions, including custom tools. Use this when unsure which toolset to activate.',
       parameters: {
         type: 'object',
         properties: {
           toolset: {
             type: 'string',
-            enum: TOOLSET_NAMES,
             description: 'Optional: filter to a specific toolset for detailed info',
           },
         },

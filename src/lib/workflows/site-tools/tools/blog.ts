@@ -64,6 +64,7 @@ register({
       slug,
       excerpt,
       content: args.content as string,
+      contentFormat: 'markdown',
       status: (args.status as string) || 'draft',
     }).returning();
     return { success: true, data: post };

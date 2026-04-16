@@ -4,20 +4,29 @@ import { db } from '$lib/db';
 import { homeAssistantConfig, jkaiMemories } from '$lib/db/schema';
 import { eq, isNull, desc } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
-import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
-import { HA_TOOL_DEFINITIONS, buildHASystemPromptSection } from '$lib/workflows/homeassistant/llm-tools';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
+import { enqueueFollowUp } from '$lib/workflows/chat/followup-queue';
+import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 5;
 
+interface ToolProgress {
+  tool: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  status: 'running' | 'done' | 'error';
+}
+
 interface ChatOptions {
   workflowId?: string | null;
+  conversationId?: string | null;
   onProgress?: (text: string) => void;
+  onToolProgress?: (step: ToolProgress) => void;
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -29,7 +38,8 @@ async function buildMemorySection(): Promise<string> {
       .from(jkaiMemories)
       .where(isNull(jkaiMemories.supersededBy))
       .orderBy(desc(jkaiMemories.updatedAt));
-  } catch {
+  } catch (err) {
+    console.warn('[general-chat] Failed to load memories:', err instanceof Error ? err.message : err);
     return '';
   }
 
@@ -59,7 +69,7 @@ export async function generalChat(
   conversationHistory: Array<{ role: string; content: string }>,
   options: ChatOptions = {},
 ): Promise<{ response: string }> {
-  const { onProgress } = options;
+  const { onProgress, onToolProgress } = options;
 
   // Load HA entity context (needed to know if HA is available)
   let haEntities: any[] = [];
@@ -72,7 +82,9 @@ export async function generalChat(
     if (haConfig?.token && Array.isArray(haConfig.entityRegistry)) {
       haEntities = haConfig.entityRegistry as any[];
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[general-chat] Failed to load HA config:', err instanceof Error ? err.message : err);
+  }
 
   // Build system prompt — no longer includes HA entity registry or full tool list
   const basePrompt = await getCompiledPrompt();
@@ -99,16 +111,9 @@ export async function generalChat(
   // Keyword pre-classification: auto-activate likely toolsets
   const inferred = inferToolsets(userMessage);
   for (const ts of inferred) {
-    if (ts === 'home') {
-      // For home toolset, also add HA tools if entities are available
-      if (haEntities.length > 0) {
-        activeTools.push(...HA_TOOL_DEFINITIONS);
-        activatedToolsets.add('home');
-      }
-    } else {
-      activeTools.push(...getToolsetDefinitions(ts));
-      activatedToolsets.add(ts);
-    }
+    if (ts === 'home' && haEntities.length === 0) continue;
+    activeTools.push(...getToolsetDefinitions(ts));
+    activatedToolsets.add(ts);
   }
 
   const client = getOpenAIClient();
@@ -134,7 +139,9 @@ export async function generalChat(
           await new Promise((r) => setTimeout(r, (attempt + 1) * 3000));
           continue;
         }
-        throw err;
+        const status = err?.status || err?.code || 'unknown';
+        const detail = err?.error?.message || err?.message || String(err);
+        throw new Error(`LLM error (${status}): ${detail}`);
       }
     }
 
@@ -147,13 +154,12 @@ export async function generalChat(
     const msg = choice.message;
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      responseText = msg.content?.trim() || "Sorry, I couldn't generate a response.";
+      responseText = msg.content?.trim() || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
       break;
     }
 
     // Process tool calls
     messages.push(msg);
-    onProgress?.(`Using tools...\n`);
 
     for (const toolCall of msg.tool_calls) {
       const fnName = toolCall.function.name;
@@ -165,6 +171,9 @@ export async function generalChat(
         continue;
       }
 
+      onToolProgress?.({ tool: fnName, args: fnArgs, status: 'running' });
+      onProgress?.(`${fnName}: running\n`);
+
       let toolResult: any;
 
       // Handle meta-tools
@@ -174,15 +183,17 @@ export async function generalChat(
           toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
         } else if (toolset === 'home') {
           if (haEntities.length > 0) {
-            activeTools.push(...HA_TOOL_DEFINITIONS);
+            const defs = getToolsetDefinitions('home');
+            activeTools.push(...defs);
             activatedToolsets.add('home');
+            const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
             const entitySummary = buildHASystemPromptSection(haEntities);
             toolResult = {
               success: true,
               data: {
                 toolset: 'home',
                 status: 'activated',
-                tools: HA_TOOL_DEFINITIONS.map((t) => t.function.name),
+                tools: defs.map((d) => d.function.name),
                 entityContext: entitySummary,
               },
             };
@@ -220,46 +231,43 @@ export async function generalChat(
         }
       } else if (fnName === 'list_custom_tools') {
         toolResult = await handleListCustomTools();
+      } else if (isRegisteredTool(fnName)) {
+        toolResult = await executeSiteTool(fnName, fnArgs);
       } else {
-        // Handle HA tools
-        const haService = getHomeAssistantService();
-        switch (fnName) {
-          case 'ha_query_state':
-            toolResult = await haService.queryState(fnArgs.entity_id as string);
-            break;
-          case 'ha_call_service':
-            toolResult = await haService.callService(
-              fnArgs.domain as string,
-              fnArgs.service as string,
-              fnArgs.entity_id as string | undefined,
-              fnArgs.data as Record<string, unknown> | undefined,
-            );
-            break;
-          case 'ha_fire_event':
-            toolResult = await haService.fireEvent(
-              fnArgs.event_type as string,
-              fnArgs.data as Record<string, unknown> | undefined,
-            );
-            break;
-          case 'ha_get_history':
-            toolResult = await haService.getHistory(
-              fnArgs.entity_id as string,
-              fnArgs.start as string | undefined,
-              fnArgs.end as string | undefined,
-            );
-            break;
-          case 'ha_render_template':
-            toolResult = await haService.renderTemplate(fnArgs.template as string);
-            break;
-          default:
-            if (isRegisteredTool(fnName)) {
-              toolResult = await executeSiteTool(fnName, fnArgs);
-            } else {
-              toolResult = { error: `Unknown function: ${fnName}` };
-            }
+        toolResult = { error: `Unknown function: ${fnName}` };
+      }
+
+      // Auto-register follow-ups for known async tools
+      const autoFollowUpTools: Record<string, { type: string; prompt: string }> = {
+        research_start: { type: 'research', prompt: 'The research is complete. Summarise the key findings for the user. If they asked for a blog post or other output, produce it now.' },
+        build_create: { type: 'build', prompt: 'The build is complete. Tell the user the result and provide the URL if it was published.' },
+      };
+      if (fnName in autoFollowUpTools) {
+        const resultData = toolResult?.data as Record<string, unknown> | undefined;
+        const taskId = resultData?.id as string | undefined;
+        console.log(`[followup-auto] Tool=${fnName} convId=${options.conversationId} success=${toolResult?.success} taskId=${taskId}`);
+        if (options.conversationId && toolResult?.success && taskId) {
+          const autoConfig = autoFollowUpTools[fnName];
+          const checkFn = buildCheckFn(autoConfig.type, taskId);
+          if (checkFn) {
+            enqueueFollowUp({
+              conversationId: options.conversationId,
+              taskType: autoConfig.type,
+              taskId,
+              checkFn,
+              completionPrompt: autoConfig.prompt,
+              delayMs: 30_000,
+            });
+          }
         }
       }
 
+      // Truncate result for progress display (keep full for LLM context)
+      const progressResultStr = JSON.stringify(toolResult);
+      const progressResult = progressResultStr.length > 2000
+        ? { _truncated: true, preview: progressResultStr.slice(0, 2000) + '...' }
+        : toolResult;
+      onToolProgress?.({ tool: fnName, args: fnArgs, result: progressResult, status: toolResult?.error ? 'error' : 'done' });
       onProgress?.(`${fnName}: done\n`);
       // Truncate large tool results to avoid overwhelming the LLM context
       let resultStr = JSON.stringify(toolResult);
@@ -275,7 +283,7 @@ export async function generalChat(
   }
 
   if (!responseText) {
-    responseText = "Sorry, I couldn't generate a response.";
+    responseText = `Sorry, the model (${model}) did not produce a final response after ${MAX_TOOL_ROUNDS} tool rounds.`;
   }
 
   return { response: responseText };
