@@ -49,7 +49,7 @@ STATUS=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "systemctl is-active $SERVICE")
 
 if [ "$STATUS" = "active" ]; then
-  echo "==> Deployed successfully to https://dev.strangeramblings.com"
+  echo "==> Deployed successfully to https://strangeramblings.com"
 else
   echo "==> ERROR: Service is $STATUS"
   ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \

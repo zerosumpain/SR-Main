@@ -3,6 +3,7 @@ import { sources, facts, entities, entityMentions, relationships } from '$lib/db
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
+import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
 import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
@@ -34,7 +35,7 @@ async function isDuplicate(sessionId: string, content: string): Promise<{ duplic
   if (embeddingsAvailable()) {
     try {
       const embedding = await generateEmbedding(content);
-      const vectorStr = `[${embedding.join(',')}]`;
+      const vectorStr = toVectorLiteral(embedding);
 
       const result = await db.execute(
         sql`SELECT id FROM fact

@@ -1,8 +1,10 @@
 import type { RequestHandler } from './$types';
 import { onActivity } from '$lib/agent/events';
 import type { ActivityEvent } from '$lib/agent/events';
+import { validateAgentKey, unauthorized } from '$lib/agent/auth';
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async ({ request }) => {
+  if (!validateAgentKey(request)) return unauthorized();
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();

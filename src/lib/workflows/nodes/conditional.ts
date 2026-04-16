@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import { safeFunction, UnsafeExpressionError } from './safe-eval';
 
 export const conditionalExecutor: NodeExecutor = {
   type: 'conditional',
@@ -12,7 +13,7 @@ export const conditionalExecutor: NodeExecutor = {
     let selected: 'true' | 'false' = 'false';
 
     try {
-      const fn = new Function('input', `return !!(${expression})`);
+      const fn = safeFunction(['input'], `return !!(${expression})`);
       const result = fn(input);
       selected = result ? 'true' : 'false';
     } catch (err: unknown) {

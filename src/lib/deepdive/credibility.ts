@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { sources, facts } from '$lib/db/schema';
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { jsonCompletion } from './ai';
+import { toVectorLiteral } from './vector';
 import { loadKeys } from './keys';
 
 // Static domain classification maps
@@ -129,7 +130,7 @@ export async function computeSourceAgreement(sessionId: string): Promise<void> {
 
     for (const fact of factsWithEmbeddings) {
       if (!fact.embedding) continue;
-      const vectorStr = `[${fact.embedding.join(',')}]`;
+      const vectorStr = toVectorLiteral(fact.embedding);
 
       const similar = await db.execute(
         sql`SELECT DISTINCT f.source_id FROM fact f

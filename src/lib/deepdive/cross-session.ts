@@ -8,6 +8,7 @@ import {
 } from '$lib/db/schema';
 import { eq, and, sql, ne, ilike } from 'drizzle-orm';
 import { generateEmbedding } from './ai';
+import { toVectorLiteral } from './vector';
 import { loadKeys } from './keys';
 import { emitLog } from './worker';
 
@@ -64,7 +65,7 @@ export async function linkSessionEntitiesToGlobal(sessionId: string): Promise<vo
       try {
         const entityText = `${entity.name}: ${entity.description ?? entity.type}`;
         const embedding = await generateEmbedding(entityText);
-        const vectorStr = `[${embedding.join(',')}]`;
+        const vectorStr = toVectorLiteral(embedding);
 
         const similar = await db.execute(
           sql`SELECT id, canonical_name, 1 - (embedding <=> ${vectorStr}::vector) as similarity

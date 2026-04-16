@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
+import { safeFunction, UnsafeExpressionError } from './safe-eval';
 
 export const transformExecutor: NodeExecutor = {
   type: 'transform',
@@ -15,7 +16,7 @@ export const transformExecutor: NodeExecutor = {
     }
 
     try {
-      const fn = new Function('input', expression);
+      const fn = safeFunction(['input'], expression);
       const result = fn(input);
       const output = result && typeof result === 'object' ? result : { result };
       return { output };

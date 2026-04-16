@@ -10,12 +10,17 @@ import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 
+const MAX_MESSAGE_LEN = 20_000;
+
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const { message, workflowId, mode, currentNodes, currentEdges, conversationId } = body;
 
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
+  }
+  if (message.length > MAX_MESSAGE_LEN) {
+    return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
   }
 
   // Cancel any stale running jobs before starting a new one

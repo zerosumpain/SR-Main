@@ -8,6 +8,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   cookies.set('strava_oauth_state', state, {
     path: '/',
     httpOnly: true,
+    secure: true,
     maxAge: 600,
     sameSite: 'lax',
   });

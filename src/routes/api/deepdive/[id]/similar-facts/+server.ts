@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { facts } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { toVectorLiteral } from '$lib/deepdive/vector';
 
 export const GET: RequestHandler = async ({ params, url }) => {
   const factId = url.searchParams.get('factId');
@@ -18,7 +19,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 
   if (!fact?.embedding) return json([]);
 
-  const vectorStr = `[${fact.embedding.join(',')}]`;
+  const vectorStr = toVectorLiteral(fact.embedding);
 
   const similar = await db.execute(
     sql`SELECT id, content, confidence, tags, source_id,

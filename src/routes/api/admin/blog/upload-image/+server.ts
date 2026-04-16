@@ -6,6 +6,12 @@ import { randomUUID } from 'node:crypto';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
 const UPLOAD_DIR = '/opt/strange-rambling/static/images/blog';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -28,7 +34,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const dir = join(UPLOAD_DIR, String(postId ?? 'uncategorized'));
   await mkdir(dir, { recursive: true });
 
-  const ext = file.name.split('.').pop() ?? 'jpg';
+  const ext = MIME_TO_EXT[file.type] || 'jpg';
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
   const filepath = join(dir, filename);
 

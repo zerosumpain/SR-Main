@@ -16,11 +16,22 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!prompt || typeof prompt !== 'string') {
     return json({ error: 'prompt is required' }, { status: 400 });
   }
+  const MAX_PROMPT_LEN = 20_000;
+  if (prompt.length > MAX_PROMPT_LEN) {
+    return json({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, { status: 400 });
+  }
+
+  const DEFAULT_BUDGET = {
+    maxIterations: 20,
+    maxTotalMinutes: 60,
+    maxTokensPerHour: 200_000,
+    activeMinutesPerHour: 30,
+  };
 
   const [build] = await db.insert(jkaiBuilds).values({
     title: title || null,
     prompt,
-    budgetConfig: budgetConfig || {},
+    budgetConfig: { ...DEFAULT_BUDGET, ...(budgetConfig || {}) },
   }).returning();
 
   try {

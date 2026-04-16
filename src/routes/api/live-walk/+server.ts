@@ -3,9 +3,14 @@ import type { RequestHandler } from './$types';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
+import { env } from '$env/dynamic/private';
+
 const LIVE_STATE_PATH = '/tmp/live-walk-state.json';
-const BROADCAST_SECRET = 'offline-maps-live';
 const EXPIRE_MS = 4 * 60 * 60 * 1000;
+
+function getBroadcastSecret(): string {
+  return env.LIVE_WALK_BROADCAST_SECRET || '';
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -24,8 +29,9 @@ export const OPTIONS: RequestHandler = async () => {
  * POST — receive live walk state from the maps PWA
  */
 export const POST: RequestHandler = async ({ request }) => {
+  const secret = getBroadcastSecret();
   const key = request.headers.get('X-Broadcast-Key');
-  if (key !== BROADCAST_SECRET) {
+  if (!secret || key !== secret) {
     return json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
   }
 
@@ -87,7 +93,12 @@ export const GET: RequestHandler = async () => {
 /**
  * DELETE — clear live walk state
  */
-export const DELETE: RequestHandler = async () => {
+export const DELETE: RequestHandler = async ({ request }) => {
+  const secret = getBroadcastSecret();
+  const key = request.headers.get('X-Broadcast-Key');
+  if (!secret || key !== secret) {
+    return json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
+  }
   try { await unlink(LIVE_STATE_PATH); } catch {}
   return json({ ok: true }, { headers: CORS_HEADERS });
 };

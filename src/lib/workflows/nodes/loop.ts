@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import { safeFunction, UnsafeExpressionError } from './safe-eval';
 
 function resolvePath(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((acc: unknown, key) => {
@@ -25,7 +26,7 @@ export const loopExecutor: NodeExecutor = {
     const results: unknown[] = [];
     for (let i = 0; i < array.length; i++) {
       if (config.expression) {
-        const fn = new Function('item', 'index', 'input', config.expression as string);
+        const fn = safeFunction(['item', 'index', 'input'], config.expression as string);
         results.push(fn(array[i], i, input));
       } else {
         results.push(array[i]);
