@@ -121,7 +121,7 @@ async function runQuickAnswer(id: string): Promise<void> {
     const queryResult = await jsonCompletion<{ queries: string[] }>(
       sys,
       QUERY_GEN_PROMPT,
-      { maxTokens: 1024, signal: ac.signal },
+      { maxTokens: 5012, signal: ac.signal },
     );
 
     const queries = queryResult.queries ?? [];
