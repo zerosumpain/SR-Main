@@ -146,10 +146,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
 
-        // Save chat history
+        // Save chat history. Persist tool steps in the assistant message's
+        // metadata so the tool-call drawer survives page reloads.
+        const assistantMetadata = job.toolSteps.length > 0 ? { toolSteps: job.toolSteps } : undefined;
         if (conversationId) {
           await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message });
-          await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText });
+          await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata });
           // Update conversation title if first message, always update updatedAt
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
           if (conv && !conv.title) {
@@ -163,7 +165,7 @@ export const POST: RequestHandler = async ({ request }) => {
           }
         } else if (workflowId) {
           await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
-          await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText });
+          await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText, metadata: assistantMetadata });
         }
 
         job.result = { success: true, workflow: null, message: responseText };

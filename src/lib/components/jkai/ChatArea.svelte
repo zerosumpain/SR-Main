@@ -76,6 +76,8 @@
       content: m.content,
       metadata: m.metadata,
       source: m.source,
+      // Hydrate tool steps from stored metadata so the drawer persists across reloads
+      toolSteps: (m.metadata as { toolSteps?: ToolStep[] } | undefined)?.toolSteps,
     }));
     scrollToBottom();
   });
@@ -255,6 +257,9 @@
             done = true;
             const result = data.result || {};
 
+            // Preserve toolSteps from the progress bubble so the drawer stays
+            // populated after completion.
+            const prior = messages.find((m) => m.id === progressId);
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
@@ -263,6 +268,7 @@
               thinking: result.thinking || undefined,
               isProgress: false,
               source: 'web',
+              toolSteps: prior?.toolSteps,
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
           }
