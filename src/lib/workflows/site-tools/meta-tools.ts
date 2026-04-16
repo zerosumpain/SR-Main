@@ -3,7 +3,8 @@
 import { getToolsetManifest, getAvailableToolsets } from './registry';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
-import { register, isRegisteredTool } from './registry-internal';
+import { eq } from 'drizzle-orm';
+import { register, unregister, isRegisteredTool } from './registry-internal';
 import { buildHandler } from './custom-tool-loader';
 
 const BUILTIN_TOOLSET_NAMES = [
@@ -86,10 +87,28 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'list_custom_tools',
       description:
-        'List all custom tools that have been created. Shows name, description, toolset, and creation date. Use this to check if a tool already exists before proposing a new one.',
+        'List all custom tools that have been created. Shows name, description, toolset, creation date, run count, error count, and last-run time. Use this to check if a tool already exists before proposing a new one.',
       parameters: {
         type: 'object',
         properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'delete_tool',
+      description:
+        'Permanently delete a custom tool by name. Only works on tools that exist in the custom_tools table — built-in tools cannot be deleted. Removes the row from the DB AND unregisters the tool from the in-memory registry so it disappears from this conversation immediately. Use when cleaning up broken/superseded/debug tools. Confirm with the user before deleting anything non-trivial.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Exact tool name to delete, e.g. "family_trips_v1"',
+          },
+        },
+        required: ['name'],
       },
     },
   },
@@ -181,6 +200,9 @@ export async function handleListCustomTools(): Promise<{
       description: customTools.description,
       toolset: customTools.toolset,
       enabled: customTools.enabled,
+      runCount: customTools.runCount,
+      errorCount: customTools.errorCount,
+      lastRunAt: customTools.lastRunAt,
       createdAt: customTools.createdAt,
     }).from(customTools);
 
@@ -188,4 +210,51 @@ export async function handleListCustomTools(): Promise<{
   } catch {
     return { success: true, data: { tools: [], count: 0 } };
   }
+}
+
+export async function handleDeleteTool(args: Record<string, unknown>): Promise<{
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}> {
+  const name = args.name as string;
+  if (!name || typeof name !== 'string') {
+    return { success: false, error: 'name is required' };
+  }
+
+  // Only allow deletion of tools that exist in the custom_tools table.
+  // Built-in tools (from code) do not have a row here and cannot be deleted.
+  let row;
+  try {
+    [row] = await db.select().from(customTools).where(eq(customTools.name, name)).limit(1);
+  } catch (err) {
+    return { success: false, error: `DB lookup failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  if (!row) {
+    return {
+      success: false,
+      error: `No custom tool named "${name}" exists. Built-in tools cannot be deleted — only tools created via create_tool can be removed.`,
+    };
+  }
+
+  try {
+    await db.delete(customTools).where(eq(customTools.name, name));
+  } catch (err) {
+    return { success: false, error: `DB delete failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  // Also pull it out of the in-memory registry so this conversation can't
+  // still call it after deletion.
+  const wasLive = unregister(name);
+
+  return {
+    success: true,
+    data: {
+      name,
+      toolset: row.toolset,
+      removedFromRegistry: wasLive,
+      message: `Custom tool "${name}" deleted. ${wasLive ? 'Removed from active registry — calls to it will now fail.' : 'Was not in active registry (already restarted or never loaded).'}`,
+    },
+  };
 }

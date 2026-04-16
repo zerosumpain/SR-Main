@@ -22,6 +22,18 @@ export function register(tool: ToolDefinition) {
   tools.push(tool);
 }
 
+/**
+ * Remove a tool from the in-memory registry by name. Returns true if a tool
+ * was removed. Used when deleting custom tools so they disappear from the
+ * active session without needing a process restart.
+ */
+export function unregister(name: string): boolean {
+  const idx = tools.findIndex((t) => t.name === name);
+  if (idx < 0) return false;
+  tools.splice(idx, 1);
+  return true;
+}
+
 export function getToolsByToolset(toolset: string): ToolDefinition[] {
   return tools.filter((t) => t.toolset === toolset);
 }

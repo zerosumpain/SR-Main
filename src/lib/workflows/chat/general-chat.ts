@@ -6,7 +6,7 @@ import { eq, isNull, desc } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
-import { handleJkaiHelp, handleCreateTool, handleListCustomTools } from '$lib/workflows/site-tools/meta-tools';
+import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
@@ -304,6 +304,15 @@ export async function generalChat(
         }
       } else if (fnName === 'list_custom_tools') {
         toolResult = await handleListCustomTools();
+      } else if (fnName === 'delete_tool') {
+        toolResult = await handleDeleteTool(fnArgs);
+        // If the deleted tool was in activeTools, drop it so the model can't
+        // try to call it later in this conversation.
+        if (toolResult.success) {
+          const deletedName = fnArgs.name as string;
+          const idx = activeTools.findIndex((t: any) => t?.function?.name === deletedName);
+          if (idx >= 0) activeTools.splice(idx, 1);
+        }
       } else if (isRegisteredTool(fnName)) {
         toolResult = await executeSiteTool(fnName, fnArgs);
       } else {

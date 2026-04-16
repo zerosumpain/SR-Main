@@ -2,7 +2,7 @@
 
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { register } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 
@@ -69,11 +69,27 @@ function buildHandler(name: string, code: string): (args: Record<string, unknown
   const platform = buildPlatform(name);
 
   return async (args: Record<string, unknown>) => {
+    let result: ToolResult;
     try {
-      return await fn(args, globalThis.fetch, platform);
+      result = await fn(args, globalThis.fetch, platform);
     } catch (err) {
-      return { success: false, error: `Custom tool "${name}" failed: ${err instanceof Error ? err.message : String(err)}` };
+      result = { success: false, error: `Custom tool "${name}" failed: ${err instanceof Error ? err.message : String(err)}` };
     }
+
+    // Fire-and-forget run tracking — don't let DB issues break the tool call
+    const isError = !result.success;
+    db.update(customTools)
+      .set({
+        runCount: sql`${customTools.runCount} + 1`,
+        errorCount: isError ? sql`${customTools.errorCount} + 1` : customTools.errorCount,
+        lastRunAt: new Date(),
+      })
+      .where(eq(customTools.name, name))
+      .catch((err: unknown) => {
+        console.warn(`[custom-tools] Run-count update failed for "${name}":`, err instanceof Error ? err.message : err);
+      });
+
+    return result;
   };
 }
 

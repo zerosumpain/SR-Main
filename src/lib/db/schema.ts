@@ -777,6 +777,9 @@ export const customTools = pgTable('custom_tools', {
   parameters: jsonb('parameters').notNull().default(sql`'{"type":"object","properties":{}}'::jsonb`),
   handlerCode: text('handler_code').notNull(),
   enabled: boolean('enabled').notNull().default(true),
+  runCount: integer('run_count').notNull().default(0),
+  errorCount: integer('error_count').notNull().default(0),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
