@@ -140,7 +140,9 @@ export async function generalChat(
             },
           ],
           temperature: 0.3,
-          max_tokens: 300,
+          // Reasoning model needs ~4000 tokens just to think before producing
+          // any output — 300 would guarantee empty content.
+          max_tokens: 6000,
         });
         const statusText = statusResp.choices[0]?.message?.content?.trim();
         if (statusText && options.conversationId) {
@@ -183,7 +185,12 @@ export async function generalChat(
           model,
           messages,
           temperature: 0.4,
-          max_tokens: 4096,
+          // glm-5-turbo is a reasoning model — it spends ~4000 tokens on
+          // chain-of-thought reasoning BEFORE emitting any output. max_tokens
+          // must cover both the thinking and the visible output, so we set
+          // it generously. With finish_reason=length and reasoning_tokens
+          // hitting the cap, the model returns empty content.
+          max_tokens: 16384,
           ...(tools ? { tools } : {}),
         });
         break;
