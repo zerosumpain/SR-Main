@@ -41,9 +41,32 @@
   let input = $state('');
   let loading = $state(false);
   let showThinking = $state(false);
+  let showToolDrawer = $state(false);
+  let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
+
+  // Aggregate all tool calls across every assistant message in the conversation.
+  // Each entry keeps a reference to which message it belongs to.
+  let allToolCalls = $derived.by(() => {
+    const out: Array<{ messageId: string; messageIndex: number; step: ToolStep }> = [];
+    messages.forEach((m, idx) => {
+      if (m.toolSteps && m.toolSteps.length > 0) {
+        for (const step of m.toolSteps) {
+          out.push({ messageId: m.id, messageIndex: idx, step });
+        }
+      }
+    });
+    return out;
+  });
+
+  function toggleDrawerItem(i: number) {
+    const next = new Set(expandedTools);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
+    expandedTools = next;
+  }
 
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
@@ -281,7 +304,7 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex flex-col h-full relative">
   <!-- Chat header -->
   <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between" style="border-color: var(--card-border);">
     <p class="text-[11px] hidden sm:block" style="color: var(--text-ghost);">
@@ -292,13 +315,25 @@
       {/if}
     </p>
     {#if conversationId}
-      <button
-        onclick={() => { showThinking = !showThinking; }}
-        class="text-[10px] px-2 py-1 rounded border transition-colors shrink-0"
-        style="border-color: {showThinking ? 'var(--accent)' : 'var(--card-border)'}; color: {showThinking ? 'var(--accent)' : 'var(--text-ghost)'};"
-      >
-        {showThinking ? 'Hide' : 'Show'} thinking
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if allToolCalls.length > 0}
+          <button
+            onclick={() => { showToolDrawer = !showToolDrawer; }}
+            class="text-[10px] px-2 py-1 rounded border transition-colors"
+            style="border-color: {showToolDrawer ? 'var(--accent)' : 'var(--card-border)'}; color: {showToolDrawer ? 'var(--accent)' : 'var(--text-ghost)'};"
+            title="View all tool calls in this conversation"
+          >
+            Tool calls ({allToolCalls.length})
+          </button>
+        {/if}
+        <button
+          onclick={() => { showThinking = !showThinking; }}
+          class="text-[10px] px-2 py-1 rounded border transition-colors"
+          style="border-color: {showThinking ? 'var(--accent)' : 'var(--card-border)'}; color: {showThinking ? 'var(--accent)' : 'var(--text-ghost)'};"
+        >
+          {showThinking ? 'Hide' : 'Show'} thinking
+        </button>
+      </div>
     {/if}
   </div>
 
@@ -447,6 +482,80 @@
         </button>
       </div>
     </div>
+  {/if}
+
+  <!-- Tool call drawer -->
+  {#if showToolDrawer && conversationId}
+    <!-- Backdrop (click to close) -->
+    <button
+      class="absolute inset-0 z-20 cursor-default"
+      style="background: rgba(0, 0, 0, 0.3);"
+      onclick={() => { showToolDrawer = false; }}
+      aria-label="Close tool call drawer"
+    ></button>
+    <!-- Drawer -->
+    <aside
+      class="absolute top-0 right-0 h-full z-30 flex flex-col border-l shadow-xl"
+      style="width: min(420px, 90vw); background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div class="px-4 py-3 border-b flex items-center justify-between" style="border-color: var(--card-border);">
+        <div>
+          <div class="text-[11px] uppercase tracking-wider" style="color: var(--accent);">Tool calls</div>
+          <div class="text-[10px]" style="color: var(--text-ghost);">{allToolCalls.length} total in this conversation</div>
+        </div>
+        <button
+          onclick={() => { showToolDrawer = false; }}
+          class="text-[14px] w-6 h-6 rounded hover:opacity-80"
+          style="color: var(--text-ghost);"
+          aria-label="Close"
+        >&times;</button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+        {#each allToolCalls as entry, i (i)}
+          <div class="rounded border" style="border-color: var(--card-border);">
+            <button
+              class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:opacity-80"
+              onclick={() => toggleDrawerItem(i)}
+            >
+              <span class="text-[9px] font-mono shrink-0 w-5 text-right" style="color: var(--text-ghost);">#{i + 1}</span>
+              <span class="text-[10px] shrink-0" style="color: {entry.step.status === 'error' ? '#ef4444' : entry.step.status === 'running' ? 'var(--accent)' : 'var(--text-ghost)'};">
+                {#if entry.step.status === 'running'}&#9679;
+                {:else if entry.step.status === 'error'}&#10007;
+                {:else}&#10003;
+                {/if}
+              </span>
+              <span class="text-[11px] flex-1 truncate" style="color: var(--text-primary); font-family: var(--font-mono);">
+                {friendlyToolName(entry.step.tool)}
+              </span>
+              <span class="text-[9px] shrink-0" style="color: var(--text-ghost);">
+                {expandedTools.has(i) ? '-' : '+'}
+              </span>
+            </button>
+            {#if expandedTools.has(i)}
+              <div class="px-2 pb-2 space-y-2">
+                {#if Object.keys(entry.step.args).length > 0}
+                  <div>
+                    <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Args</div>
+                    <pre class="text-[10px] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-words" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-primary);">{JSON.stringify(entry.step.args, null, 2)}</pre>
+                  </div>
+                {/if}
+                {#if entry.step.result !== undefined}
+                  <div>
+                    <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Result</div>
+                    <pre class="text-[10px] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-words" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-primary);">{JSON.stringify(entry.step.result, null, 2)}</pre>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/each}
+        {#if allToolCalls.length === 0}
+          <div class="text-[11px] text-center py-8" style="color: var(--text-ghost);">
+            No tool calls yet.
+          </div>
+        {/if}
+      </div>
+    </aside>
   {/if}
 </div>
 
