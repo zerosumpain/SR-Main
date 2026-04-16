@@ -21,6 +21,7 @@ import type { ActionRecord } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { EventEmitter } from 'events';
 import { getLLMClient } from './llm-client';
+import { failOrphanedIterations } from './orchestrator-helpers';
 
 // --- Event Emitter for SSE ---
 
@@ -153,15 +154,7 @@ class Orchestrator {
     this.activeBuildId = null;
 
     // Mark any running iterations as failed (they were interrupted)
-    await db
-      .update(jkaiIterations)
-      .set({ status: 'failed' })
-      .where(
-        and(
-          eq(jkaiIterations.buildId, buildId),
-          eq(jkaiIterations.status, 'running'),
-        ),
-      );
+    await failOrphanedIterations(buildId);
 
     await db
       .update(jkaiBuilds)
@@ -177,15 +170,7 @@ class Orchestrator {
     }
 
     // Clean up any orphaned running iterations before resuming
-    await db
-      .update(jkaiIterations)
-      .set({ status: 'failed' })
-      .where(
-        and(
-          eq(jkaiIterations.buildId, buildId),
-          eq(jkaiIterations.status, 'running'),
-        ),
-      );
+    await failOrphanedIterations(buildId);
 
     this.activeBuildId = buildId;
     this.stopped = false;
@@ -206,15 +191,7 @@ class Orchestrator {
     this.activeBuildId = null;
 
     // Mark any running iterations as failed
-    await db
-      .update(jkaiIterations)
-      .set({ status: 'failed' })
-      .where(
-        and(
-          eq(jkaiIterations.buildId, buildId),
-          eq(jkaiIterations.status, 'running'),
-        ),
-      );
+    await failOrphanedIterations(buildId);
 
     await db
       .update(jkaiBuilds)
@@ -233,15 +210,7 @@ class Orchestrator {
     if (!build) throw new Error('Build not found');
 
     // Clean up any orphaned running iterations
-    await db
-      .update(jkaiIterations)
-      .set({ status: 'failed' })
-      .where(
-        and(
-          eq(jkaiIterations.buildId, buildId),
-          eq(jkaiIterations.status, 'running'),
-        ),
-      );
+    await failOrphanedIterations(buildId);
 
     this.activeBuildId = buildId;
     this.stopped = false;
@@ -323,15 +292,7 @@ class Orchestrator {
 
     if (!runningBuild) return;
 
-    await db
-      .update(jkaiIterations)
-      .set({ status: 'failed' })
-      .where(
-        and(
-          eq(jkaiIterations.buildId, runningBuild.id),
-          eq(jkaiIterations.status, 'running'),
-        ),
-      );
+    await failOrphanedIterations(runningBuild.id);
 
     await emitLog(runningBuild.id, 'system', 'Recovered after restart — resuming build');
     this.activeBuildId = runningBuild.id;
