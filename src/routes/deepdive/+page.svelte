@@ -142,6 +142,13 @@
     >
       Research Agent
     </p>
+    <a
+      href="/quickanswer"
+      class="inline-block mt-3 text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg"
+      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--accent); font-family: var(--font-mono);"
+    >
+      Quick Answer &rarr;
+    </a>
   </div>
 
   <!-- Error banner -->

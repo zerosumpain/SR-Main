@@ -80,6 +80,50 @@ export async function jsonCompletion<T>(
   return JSON.parse(text) as T;
 }
 
+export async function streamCompletion(
+  systemPrompt: string,
+  userPrompt: string,
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    signal?: AbortSignal;
+    model?: string;
+    onToken?: (token: string) => void;
+  },
+): Promise<{ text: string; tokensUsed: number }> {
+  const useOpenRouter = !!options?.model;
+  const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
+  const model = options?.model ?? getModel();
+
+  const stream = await client.chat.completions.create(
+    {
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: options?.temperature ?? 0.5,
+      max_tokens: options?.maxTokens ?? 2000,
+      stream: true,
+    },
+    { signal: options?.signal as any },
+  );
+
+  let text = '';
+  let tokensUsed = 0;
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      text += delta;
+      options?.onToken?.(delta);
+    }
+    if (chunk.usage?.total_tokens) {
+      tokensUsed = chunk.usage.total_tokens;
+    }
+  }
+  return { text, tokensUsed };
+}
+
 export async function generateEmbedding(text: string): Promise<number[]> {
   const client = getOpenRouterClient();
   const model = getEmbeddingModel();

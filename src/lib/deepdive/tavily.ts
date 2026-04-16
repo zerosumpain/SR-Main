@@ -22,11 +22,12 @@ export interface TavilySearchResult {
 
 export interface TavilySearchResponse {
   results: TavilySearchResult[];
+  answer?: string;
 }
 
 export async function search(
   query: string,
-  options?: { maxResults?: number; searchDepth?: 'basic' | 'advanced'; signal?: AbortSignal },
+  options?: { maxResults?: number; searchDepth?: 'basic' | 'advanced'; includeAnswer?: boolean; signal?: AbortSignal },
 ): Promise<TavilySearchResponse> {
   const apiKey = getTavilyKey();
 
@@ -40,6 +41,7 @@ export async function search(
         max_results: options?.maxResults ?? 10,
         search_depth: options?.searchDepth ?? 'basic',
         include_raw_content: false,
+        ...(options?.includeAnswer ? { include_answer: true } : {}),
       }),
       signal: options?.signal,
     });

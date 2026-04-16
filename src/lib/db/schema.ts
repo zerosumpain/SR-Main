@@ -801,3 +801,30 @@ export const jkaiMemories = pgTable('jkai_memories', {
 });
 
 export type JkaiMemory = typeof jkaiMemories.$inferSelect;
+
+export const quickAnswers = pgTable('quick_answer', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  topic: text('topic').notNull(),
+  goals: jsonb('goals').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  status: text('status').notNull().default('pending'),
+  answer: text('answer'),
+  sources: jsonb('sources').$type<QuickAnswerSource[]>().notNull().default(sql`'[]'::jsonb`),
+  queries: jsonb('queries').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  errorMessage: text('error_message'),
+  tokensUsed: integer('tokens_used'),
+  durationMs: integer('duration_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export interface QuickAnswerSource {
+  url: string;
+  title: string;
+  domain: string;
+  credibilityScore: number;
+  credibilityType: string;
+  snippet: string;
+  citationIndex: number;
+}
+
+export type QuickAnswer = typeof quickAnswers.$inferSelect;
