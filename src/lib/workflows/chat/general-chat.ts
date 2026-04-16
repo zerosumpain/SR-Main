@@ -182,7 +182,7 @@ export async function generalChat(
         response = await client.chat.completions.create({
           model,
           messages,
-          temperature: 0.2,
+          temperature: 0.4,
           max_tokens: 4096,
           ...(tools ? { tools } : {}),
         });
