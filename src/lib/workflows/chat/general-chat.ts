@@ -38,7 +38,8 @@ async function buildMemorySection(): Promise<string> {
       .from(jkaiMemories)
       .where(isNull(jkaiMemories.supersededBy))
       .orderBy(desc(jkaiMemories.updatedAt));
-  } catch {
+  } catch (err) {
+    console.warn('[general-chat] Failed to load memories:', err instanceof Error ? err.message : err);
     return '';
   }
 
@@ -81,7 +82,9 @@ export async function generalChat(
     if (haConfig?.token && Array.isArray(haConfig.entityRegistry)) {
       haEntities = haConfig.entityRegistry as any[];
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[general-chat] Failed to load HA config:', err instanceof Error ? err.message : err);
+  }
 
   // Build system prompt — no longer includes HA entity registry or full tool list
   const basePrompt = await getCompiledPrompt();
