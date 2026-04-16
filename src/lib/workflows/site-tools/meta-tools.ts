@@ -52,7 +52,7 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'create_tool',
       description:
-        'Create and register a new tool at runtime. The tool becomes immediately available in this conversation and persists across restarts. The handler_code is an async JavaScript function body with `args` and `fetch` in scope. It must return { success: boolean, data?: any, error?: string }. Use this for thin API wrappers (geocoding, weather, conversions, etc.).',
+        'Create and register a new tool at runtime. The tool becomes immediately available in this conversation and persists across restarts. The handler_code is an async JavaScript function body with `args`, `fetch`, AND `platform` in scope. It must return { success: boolean, data?: any, error?: string }. Two common patterns: (1) thin API wrappers via `fetch` — for public APIs that need no auth (geocoding, weather, conversions); (2) composed tools via `platform.call(toolName, args)` — for anything that needs authentication (Home Assistant, Whoop, Strava, etc.). platform.call reuses the platform\'s existing auth, so you never need URLs, tokens, or env vars in your handler. Example composed tool: `const hist = await platform.call("ha_get_history", { entity_id: "device_tracker.katie" }); if (!hist.success) return hist; return { success: true, data: hist.data.filter(s => s.state !== "home") };`',
       parameters: {
         type: 'object',
         properties: {

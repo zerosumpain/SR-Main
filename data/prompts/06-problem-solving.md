@@ -25,7 +25,33 @@ The tool persists across conversations — once created, it's always available. 
 - **Simple computations** — unit conversions, date calculations, formatting
 - **Data lookups** — geocoding, weather, currency rates, timezone info
 
-The handler code is an async JavaScript function body with `args` (tool arguments) and `fetch` (HTTP client) available. It must return `{ success: true, data: ... }` or `{ success: false, error: "..." }`.
+The handler code is an async JavaScript function body with three things in scope:
+
+- `args` — the tool arguments passed by the caller
+- `fetch` — global fetch for HTTP calls to public APIs that need no auth (geocoding, weather, etc.)
+- `platform.call(toolName, args)` — invoke any already-registered tool, built-in or custom. **Use this whenever you need to reach a service that requires authentication** (Home Assistant, Whoop, Strava, memory, blog, etc.) — the platform already handles URLs, tokens, and credentials, so your tool doesn't have to. Returns the same `{ success, data?, error? }` shape.
+
+It must return `{ success: true, data: ... }` or `{ success: false, error: "..." }`.
+
+**Never write a custom tool that asks the user for API tokens or URLs for services the platform already integrates with.** If the built-in tool list includes something that talks to the service (e.g. `ha_query_state`, `ha_get_history`), compose it via `platform.call` instead.
+
+Example — a tool that summarises family away-trips by composing HA + reverse_geocode:
+
+```javascript
+const { entity_id } = args;
+const hist = await platform.call('ha_get_history', { entity_id });
+if (!hist.success) return hist;
+
+const nonHome = hist.data.filter(s => s.state !== 'home');
+const trips = [];
+for (const state of nonHome) {
+  const lat = state.attributes.latitude;
+  const lon = state.attributes.longitude;
+  const geo = await platform.call('reverse_geocode', { lat, lon });
+  trips.push({ time: state.last_changed, place: geo.data?.display_name ?? 'unknown' });
+}
+return { success: true, data: { trips } };
+```
 
 ## Example Flow
 
