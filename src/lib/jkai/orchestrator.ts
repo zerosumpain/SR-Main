@@ -20,8 +20,7 @@ import { validateServeConfig } from './serve';
 import type { ActionRecord } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { EventEmitter } from 'events';
-import OpenAI from 'openai';
-import { loadKeys } from '$lib/deepdive/keys';
+import { getLLMClient } from './llm-client';
 
 // --- Event Emitter for SSE ---
 
@@ -60,19 +59,6 @@ async function emitLog(
     content: log.content,
     iterationId: log.iterationId,
   });
-}
-
-// --- LLM Client ---
-
-function getLLMClient(): { client: OpenAI; model: string } {
-  const keys = loadKeys();
-  if (!keys.zaiApiKey) throw new Error('Z.AI API key not configured');
-  const client = new OpenAI({
-    apiKey: keys.zaiApiKey,
-    baseURL: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-  });
-  const model = keys.zaiModel || 'glm-4-plus';
-  return { client, model };
 }
 
 // --- Code Block Extraction ---
