@@ -136,7 +136,7 @@ export async function generalChat(
             ...messages,
             {
               role: 'user',
-              content: 'Pause briefly. Write a 2-3 sentence plain-English status update: what have you found so far, and what do you plan to check next? No tool calls — just the update.',
+              content: 'Pause briefly. Write a short, casual update (1-2 sentences max) — what have you found so far and what are you about to try? Conversational tone, like you\'re quickly checking in mid-task. No tool calls, no bullet points, no "I have queried" robotic phrasing. Just a quick note.',
             },
           ],
           temperature: 0.3,

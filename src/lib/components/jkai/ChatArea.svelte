@@ -457,6 +457,19 @@
                 <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.3s;"></span>
               </div>
             {/if}
+          {:else if msg.source === 'status_update'}
+            <!-- Mid-task working note — stylistically distinct from a real reply -->
+            <div class="flex justify-start mb-3">
+              <div
+                class="max-w-[85%] pl-3 py-1 text-[12px] italic leading-relaxed"
+                style="color: var(--text-secondary); border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);"
+              >
+                <div class="text-[9px] not-italic uppercase tracking-wider mb-0.5" style="color: var(--accent); opacity: 0.85;">
+                  Working...
+                </div>
+                {msg.content}
+              </div>
+            </div>
           {:else}
             <div class="relative">
               {#if msg.source === 'followup'}
@@ -474,14 +487,6 @@
                   title="From WhatsApp"
                 >
                   WA
-                </span>
-              {:else if msg.source === 'status_update'}
-                <span
-                  class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
-                  style="background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);"
-                  title="Mid-task status update"
-                >
-                  UP
                 </span>
               {/if}
               <ChatMessage
