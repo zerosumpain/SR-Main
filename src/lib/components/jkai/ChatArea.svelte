@@ -70,15 +70,19 @@
 
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
-    messages = initialMessages.map((m) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-      metadata: m.metadata,
-      source: m.source,
-      // Hydrate tool steps from stored metadata so the drawer persists across reloads
-      toolSteps: (m.metadata as { toolSteps?: ToolStep[] } | undefined)?.toolSteps,
-    }));
+    messages = initialMessages.map((m) => {
+      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string } | undefined;
+      return {
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        metadata: m.metadata,
+        // Prefer metadata.source (e.g. 'status_update') over the wrapper source
+        source: meta?.source ?? m.source,
+        // Hydrate tool steps from stored metadata so the drawer persists across reloads
+        toolSteps: meta?.toolSteps,
+      };
+    });
     scrollToBottom();
   });
 
@@ -100,14 +104,30 @@
         const data = JSON.parse(event.data);
         if (data.type === 'connected') return; // ignore connection ack
 
-        // Append follow-up message to the conversation
         const newMsg: Message = {
           id: crypto.randomUUID(),
           role: data.role || 'assistant',
           content: data.content,
           source: data.source || 'followup',
         };
-        messages = [...messages, newMsg];
+
+        // Status updates are mid-conversation — insert just before the active
+        // progress bubble so the user sees them in the right chronological
+        // position (before the final answer). Everything else appends.
+        if (data.source === 'status_update') {
+          const progressIdx = messages.findIndex((m) => m.isProgress);
+          if (progressIdx >= 0) {
+            messages = [
+              ...messages.slice(0, progressIdx),
+              newMsg,
+              ...messages.slice(progressIdx),
+            ];
+          } else {
+            messages = [...messages, newMsg];
+          }
+        } else {
+          messages = [...messages, newMsg];
+        }
         scrollToBottom();
       } catch {
         // ignore parse errors
@@ -257,9 +277,14 @@
             done = true;
             const result = data.result || {};
 
-            // Preserve toolSteps from the progress bubble so the drawer stays
-            // populated after completion.
+            // Preserve toolSteps so the drawer stays populated after
+            // completion. Prefer the latest poll data; fall back to whatever
+            // the progress bubble already had.
             const prior = messages.find((m) => m.id === progressId);
+            const preservedSteps: ToolStep[] | undefined =
+              (Array.isArray(data.toolSteps) && data.toolSteps.length > 0)
+                ? (data.toolSteps as ToolStep[])
+                : prior?.toolSteps;
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
@@ -268,7 +293,7 @@
               thinking: result.thinking || undefined,
               isProgress: false,
               source: 'web',
-              toolSteps: prior?.toolSteps,
+              toolSteps: preservedSteps,
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
           }
@@ -449,6 +474,14 @@
                   title="From WhatsApp"
                 >
                   WA
+                </span>
+              {:else if msg.source === 'status_update'}
+                <span
+                  class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
+                  style="background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);"
+                  title="Mid-task status update"
+                >
+                  UP
                 </span>
               {/if}
               <ChatMessage

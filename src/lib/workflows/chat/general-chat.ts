@@ -1,7 +1,7 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
 import { db } from '$lib/db';
-import { homeAssistantConfig, jkaiMemories } from '$lib/db/schema';
+import { homeAssistantConfig, jkaiMemories, orchestratorChats, conversations } from '$lib/db/schema';
 import { eq, isNull, desc } from 'drizzle-orm';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
@@ -9,7 +9,7 @@ import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/exe
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
-import { enqueueFollowUp } from '$lib/workflows/chat/followup-queue';
+import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 
 const MAX_HISTORY = 30;
@@ -125,7 +125,9 @@ export async function generalChat(
 
     // Halfway through available rounds: get a plain-English status update so
     // the user can see progress. Separate call with no tools, doesn't count
-    // against MAX_TOOL_ROUNDS. Also helps the model pause and reorient.
+    // against MAX_TOOL_ROUNDS. Persisted as a proper assistant message with
+    // source=status_update so it shows up in the chat stream (not just the
+    // working panel) and survives page reloads.
     if (round === 5) {
       try {
         const statusResp = await client.chat.completions.create({
@@ -141,14 +143,22 @@ export async function generalChat(
           max_tokens: 300,
         });
         const statusText = statusResp.choices[0]?.message?.content?.trim();
-        if (statusText) {
-          onToolProgress?.({
-            tool: 'status_update',
-            args: {},
-            result: { message: statusText },
-            status: 'done',
+        if (statusText && options.conversationId) {
+          // Persist as a proper assistant message with source marker in metadata
+          await db.insert(orchestratorChats).values({
+            conversationId: options.conversationId,
+            role: 'assistant',
+            content: statusText,
+            metadata: { source: 'status_update' },
           });
-          onProgress?.(`[status] ${statusText}\n`);
+          // Push via SSE so the live chat UI receives it before the final response
+          notifySubscribers(options.conversationId, {
+            role: 'assistant',
+            content: statusText,
+            source: 'status_update',
+          });
+          // Hint to onProgress stream too for debug visibility
+          onProgress?.(`[status] ${statusText.slice(0, 80)}\n`);
         }
       } catch (err) {
         console.warn('[general-chat] Status update failed:', err instanceof Error ? err.message : err);

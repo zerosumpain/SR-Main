@@ -46,7 +46,7 @@ export function subscribeToConversation(conversationId: string, cb: SSECallback)
   };
 }
 
-function notifySubscribers(conversationId: string, message: { role: string; content: string; source: string }) {
+export function notifySubscribers(conversationId: string, message: { role: string; content: string; source: string }) {
   const subs = sseSubscribers.get(conversationId);
   if (subs) {
     for (const cb of subs) {

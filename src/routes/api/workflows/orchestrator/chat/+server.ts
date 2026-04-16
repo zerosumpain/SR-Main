@@ -128,6 +128,14 @@ export const POST: RequestHandler = async ({ request }) => {
         // Default: general-purpose chat
         const conversationHistory = await loadConversationHistory(conversationId, workflowId);
 
+        // Persist the user message FIRST so any mid-flight status updates
+        // inserted by generalChat land after it in chronological order.
+        if (conversationId) {
+          await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message });
+        } else if (workflowId) {
+          await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
+        }
+
         const { response: responseText } = await generalChat(message, conversationHistory, {
           workflowId,
           conversationId,
@@ -146,11 +154,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
 
-        // Save chat history. Persist tool steps in the assistant message's
-        // metadata so the tool-call drawer survives page reloads.
+        // Save the assistant response. Persist tool steps in metadata so the
+        // tool-call drawer survives page reloads. User message was already
+        // saved above.
         const assistantMetadata = job.toolSteps.length > 0 ? { toolSteps: job.toolSteps } : undefined;
         if (conversationId) {
-          await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message });
           await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata });
           // Update conversation title if first message, always update updatedAt
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
@@ -164,7 +172,6 @@ export const POST: RequestHandler = async ({ request }) => {
               .where(eq(conversations.id, conversationId));
           }
         } else if (workflowId) {
-          await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
           await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText, metadata: assistantMetadata });
         }
 
