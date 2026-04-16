@@ -24,6 +24,11 @@ export function getTools() {
   return tools as readonly (typeof tools)[number][];
 }
 
+/** Look up a single registered tool by name. */
+export function getTool(name: string) {
+  return tools.find((t) => t.name === name);
+}
+
 /** Get OpenAI-format tool definitions for ALL registered tools (used by workflow engine, not general chat) */
 export function getToolDefinitions() {
   return tools.map((t) => ({
