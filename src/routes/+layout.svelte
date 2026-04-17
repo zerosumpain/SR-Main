@@ -37,6 +37,7 @@
   ];
   const HIDE_NAV_PATTERNS = [
     /^\/jkai\/workflows\/[^/]+$/,  // workflow detail editor
+    /^\/jkai\/?$/,                  // /jkai renders its own merged header row
   ];
 
   let showNav = $derived.by(() => {
@@ -102,7 +103,7 @@
     }
   }
 
-  .site-nav-bar {
+  :global(.site-nav-bar) {
     position: sticky;
     top: 0;
     z-index: 30;
@@ -117,7 +118,7 @@
   }
 
   @media (max-width: 640px) {
-    .site-nav-bar {
+    :global(.site-nav-bar) {
       padding: 10px 16px;
     }
   }

@@ -2,13 +2,17 @@
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
   import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
-  import { page } from '$app/state';
+  import SiteNav from '$lib/components/SiteNav.svelte';
 
   let { data } = $props();
 
-  function isActive(href: string): boolean {
-    return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
-  }
+  const JKAI_NAV = [
+    { href: '/', label: 'Home' },
+    { href: '/jkai/builds', label: 'Builds' },
+    { href: '/jkai/prompts', label: 'Prompts' },
+    { href: '/jkai/workflows', label: 'Workflows' },
+    { href: '/jkai/channels', label: 'Channels' },
+  ];
 
   let conversationList = $state(data.conversations);
   let metrics = $state(data.metrics);
@@ -103,9 +107,9 @@
   <title>JKAI — Chat</title>
 </svelte:head>
 
-<div class="flex flex-col" style="background: var(--bg); height: calc(100vh - var(--site-nav-height, 0px));">
-  <!-- Header -->
-  <div class="px-3 sm:px-4 py-3 border-b flex items-center justify-between flex-shrink-0 gap-4" style="border-color: var(--card-border);">
+<div class="flex flex-col h-screen" style="background: var(--bg);">
+  <!-- Single top row: title + metrics on the left, nav on the right -->
+  <header class="site-nav-bar flex items-center justify-between gap-4 flex-shrink-0">
     <div class="flex items-center gap-3 sm:gap-5 min-w-0">
       <!-- Mobile sidebar toggle -->
       <button
@@ -120,13 +124,15 @@
       </button>
 
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
+
+      <!-- Metrics: hidden on mobile -->
+      <div class="hidden md:block">
+        <MetricsStrip {metrics} />
+      </div>
     </div>
 
-    <!-- Metrics: hidden on mobile -->
-    <div class="hidden md:block shrink-0">
-      <MetricsStrip {metrics} />
-    </div>
-  </div>
+    <SiteNav variant="compact" showBrand={false} items={JKAI_NAV} />
+  </header>
 
   <!-- Main area -->
   <div class="flex flex-1 min-h-0 relative">
