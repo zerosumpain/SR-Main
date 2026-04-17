@@ -168,6 +168,52 @@ a {
   transform: scaleX(0);
 }
 
+/* Section tab — secondary in-page nav (e.g. /jkai sections). Distinct
+   from primary .nav-link: thin underline tabs, no numeric prefix, no
+   filled active block — so it doesn't visually compete with site nav. */
+.section-tab {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  position: relative;
+  transition: color 0.2s ease-out;
+  white-space: nowrap;
+}
+
+.section-tab:hover {
+  color: var(--text-primary);
+}
+
+.section-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s ease-out;
+}
+
+.section-tab:hover::after {
+  transform: scaleX(1);
+}
+
+.section-tab[aria-current="page"] {
+  color: var(--text-primary);
+}
+
+.section-tab[aria-current="page"]::after {
+  transform: scaleX(1);
+  height: 2px;
+}
+
 /* Back link — brutalist mono breadcrumb with arrow + accent strip */
 .back-link {
   display: inline-flex;

@@ -119,27 +119,21 @@
         </svg>
       </button>
 
-      <a href="/" class="flex items-center gap-1 transition-colors" style="color: var(--text-secondary);" title="Back to home">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 12L6 8l4-4" />
-        </svg>
-      </a>
-
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
 
-      <!-- Metrics: hidden on mobile -->
-      <div class="hidden md:block">
-        <MetricsStrip {metrics} />
-      </div>
+      <!-- Section tabs — visually distinct from the site-wide primary nav above -->
+      <nav class="flex items-center gap-0 overflow-x-auto" aria-label="JKAI sections">
+        <a href="/jkai/builds" class="section-tab" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
+        <a href="/jkai/prompts" class="section-tab" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
+        <a href="/jkai/workflows" class="section-tab" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
+        <a href="/jkai/channels" class="section-tab" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
+      </nav>
     </div>
 
-    <!-- Primary sub-nav — top-right, matches site nav placement -->
-    <nav class="flex items-center gap-1 sm:gap-2 flex-wrap justify-end" aria-label="JKAI sections">
-      <a href="/jkai/builds" class="nav-link" data-index="01" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
-      <a href="/jkai/prompts" class="nav-link" data-index="02" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
-      <a href="/jkai/workflows" class="nav-link" data-index="03" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
-      <a href="/jkai/channels" class="nav-link" data-index="04" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
-    </nav>
+    <!-- Metrics: hidden on mobile -->
+    <div class="hidden md:block shrink-0">
+      <MetricsStrip {metrics} />
+    </div>
   </div>
 
   <!-- Main area -->
