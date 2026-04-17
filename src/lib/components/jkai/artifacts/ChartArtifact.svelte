@@ -36,10 +36,16 @@
       try {
         const { default: embed } = await import('vega-embed');
         if (cancelled || !container) return;
-        await embed(container, buildFullSpec() as never, {
-          actions: { export: true, source: false, compiled: false, editor: false },
-          renderer: 'canvas',
-        });
+        const spec = buildFullSpec();
+        try {
+          await embed(container, spec as never, {
+            actions: { export: true, source: false, compiled: false, editor: false },
+            renderer: 'canvas',
+          });
+        } catch (embedErr) {
+          console.error('[ChartArtifact] vega-embed failed', { spec, error: embedErr });
+          throw embedErr;
+        }
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
       }
