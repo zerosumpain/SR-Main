@@ -3,6 +3,8 @@
   import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import NewConversationDialog from '$lib/components/jkai/NewConversationDialog.svelte';
+  import type { ModelContext } from '$lib/server/models/types';
 
   let { data } = $props();
 
@@ -12,6 +14,7 @@
   let activeConversationId = $state<string | null>(null);
   let activeMessages = $state<any[]>([]);
   let sidebarOpen = $state(false);
+  let newConvOpen = $state(false);
 
   async function selectConversation(id: string) {
     activeConversationId = id;
@@ -27,12 +30,20 @@
     }
   }
 
-  async function createConversation() {
+  function openNewConversation() {
+    newConvOpen = true;
+  }
+
+  async function handleCreate(ctx: ModelContext) {
     try {
       const res = await fetch('/api/jkai/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'web' }),
+        body: JSON.stringify({
+          source: 'web',
+          modelProvider: ctx.provider,
+          modelId: ctx.modelId,
+        }),
       });
       if (res.ok) {
         const conv = await res.json();
@@ -128,7 +139,7 @@
         {whatsappThread}
         {activeConversationId}
         onSelect={selectConversation}
-        onNew={createConversation}
+        onNew={openNewConversation}
         onWhatsAppSelect={selectWhatsApp}
         onDelete={deleteConversation}
         collapsed={false}
@@ -155,7 +166,7 @@
             {whatsappThread}
             {activeConversationId}
             onSelect={selectConversation}
-            onNew={createConversation}
+            onNew={openNewConversation}
             onWhatsAppSelect={selectWhatsApp}
             onDelete={deleteConversation}
             collapsed={false}
@@ -173,4 +184,10 @@
       />
     </div>
   </div>
+
+  <NewConversationDialog
+    bind:open={newConvOpen}
+    defaultModel={data.defaultChatModel}
+    oncreate={handleCreate}
+  />
 </div>

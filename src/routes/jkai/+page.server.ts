@@ -3,6 +3,7 @@ import { conversations, workflowRuns, workflowSchedules, whatsappConversations }
 import { desc, eq, sql, gte, asc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 
 export const load: PageServerLoad = async () => {
   // Load conversations with preview
@@ -59,5 +60,10 @@ export const load: PageServerLoad = async () => {
     whatsappThread = { phoneNumber: latestWa.phoneNumber, messages: waMessages };
   }
 
-  return { conversations: convList, metrics, whatsappThread };
+  return {
+    conversations: convList,
+    metrics,
+    whatsappThread,
+    defaultChatModel: await resolveDefaultModel('chat'),
+  };
 };
