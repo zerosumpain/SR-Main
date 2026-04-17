@@ -40,7 +40,7 @@
         try {
           await embed(container, spec as never, {
             actions: { export: true, source: false, compiled: false, editor: false },
-            renderer: 'canvas',
+            renderer: 'svg',
           });
         } catch (embedErr) {
           console.error('[ChartArtifact] vega-embed failed', { spec, error: embedErr });
