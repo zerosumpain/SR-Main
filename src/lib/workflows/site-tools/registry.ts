@@ -17,6 +17,7 @@ import './tools/diagnostics';
 import './tools/memory';
 import './tools/followup';
 import './tools/home-assistant';
+import './tools/visualise';
 
 // --- Public API ---
 
@@ -70,6 +71,7 @@ export function getToolsetManifest(): Array<{
     diagnostics: 'System diagnostics — scheduler status, run history, service logs',
     system: 'Follow-up scheduling — track background tasks, get notified when they complete',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
+    visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Leaflet), and tables directly in the chat',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({

@@ -116,6 +116,14 @@ export async function generalChat(
     activatedToolsets.add(ts);
   }
 
+  // Visualise tools are always available — the LLM should be able to reach
+  // for render_chart/render_map/render_table whenever it wants to answer
+  // with a multimedia response.
+  if (!activatedToolsets.has('visualise')) {
+    activeTools.push(...getToolsetDefinitions('visualise'));
+    activatedToolsets.add('visualise');
+  }
+
   const client = getOpenAIClient();
   const model = getModel();
   let responseText = '';
