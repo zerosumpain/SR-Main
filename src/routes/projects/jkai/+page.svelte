@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
+  import SiteNav from '$lib/components/SiteNav.svelte';
 
   let { data } = $props();
   let projects = $state(data.projects);
@@ -35,14 +36,9 @@
 </svelte:head>
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <div class="flex justify-between items-start mb-12">
-    <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
-    <nav class="flex gap-6 pt-1">
-      <a href="/" class="nav-link">Home</a>
-      <a href="/projects" class="nav-link">Projects</a>
-      <a href="/blog" class="nav-link">Writing</a>
-      <a href="/jkai" class="nav-link">jkai</a>
-    </nav>
+  <div class="mb-12">
+    <SiteNav variant="compact" />
+    <a href="/projects" class="back-link mt-6">Projects</a>
   </div>
 
   <div class="max-w-4xl mb-12">

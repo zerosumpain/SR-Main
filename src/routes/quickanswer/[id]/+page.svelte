@@ -109,13 +109,7 @@
 <div class="max-w-2xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
-    <a
-      href="/quickanswer"
-      class="text-[13px] uppercase tracking-[0.3em]"
-      style="color: var(--text-muted); font-family: var(--font-mono);"
-    >
-      &larr; Quick Answer
-    </a>
+    <a href="/quickanswer" class="back-link">Quick Answer</a>
     {#if status === 'complete' && durationMs}
       <span
         class="text-[13px] uppercase tracking-[0.2em]"

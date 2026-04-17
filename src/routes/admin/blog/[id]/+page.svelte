@@ -199,13 +199,7 @@
 <div class="max-w-3xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="flex items-center justify-between mb-8">
-    <a
-      href="/admin/blog?token={adminToken}"
-      class="text-[10px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
-    >
-      &larr; All Posts
-    </a>
+    <a href="/admin/blog?token={adminToken}" class="back-link back-link--xs">All Posts</a>
     <div class="flex items-center gap-3">
       <span
         class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"

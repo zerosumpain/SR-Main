@@ -108,6 +108,7 @@ a {
   color: var(--text-muted);
   position: relative;
   transition: color 0.2s;
+  padding-bottom: 3px;
 }
 
 .nav-link:hover {
@@ -117,16 +118,70 @@ a {
 .nav-link::after {
   content: '';
   position: absolute;
-  bottom: -3px;
+  bottom: -1px;
   left: 0;
   width: 0;
   height: 2px;
   background: var(--accent);
-  transition: width 0.2s;
+  transition: width 0.2s ease-out;
 }
 
 .nav-link:hover::after {
   width: 100%;
+}
+
+/* Active page — persistent underline + full contrast text */
+.nav-link[aria-current="page"] {
+  color: var(--text-primary);
+}
+
+.nav-link[aria-current="page"]::after {
+  width: 100%;
+}
+
+/* Back link — brutalist mono breadcrumb with arrow slide */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  transition: color 0.2s;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.back-link::before {
+  content: '←';
+  display: inline-block;
+  transition: transform 0.2s ease-out;
+  font-size: 12px;
+}
+
+.back-link:hover {
+  color: var(--accent);
+}
+
+.back-link:hover::before {
+  transform: translateX(-3px);
+}
+
+/* Compact size — for tight headers inside builder views */
+.back-link--xs {
+  font-size: 10px;
+  letter-spacing: 0.25em;
+}
+
+/* Subtle top chrome — used in sticky nav bars */
+.site-chrome {
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(8px) saturate(1.1);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  border-bottom: 1px solid var(--divider);
 }
 
 /* Card — solid, bordered, no glass */

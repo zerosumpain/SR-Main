@@ -618,13 +618,7 @@
 <div class="max-w-4xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="flex items-center justify-between mb-2">
-    <a
-      href="/deepdive"
-      class="text-[13px] uppercase tracking-[0.3em]"
-      style="color: var(--text-muted); font-family: var(--font-mono);"
-    >
-      &larr; Deep Dive
-    </a>
+    <a href="/deepdive" class="back-link">Deep Dive</a>
     {#if !readonly}
       <div class="flex gap-2">
         <button

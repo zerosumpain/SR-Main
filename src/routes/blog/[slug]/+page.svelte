@@ -15,6 +15,7 @@
 
 <script lang="ts">
   import ProseContent from '$lib/components/ProseContent.svelte';
+  import SiteNav from '$lib/components/SiteNav.svelte';
   import { renderContent } from '$lib/blog/renderer';
 
   let { data } = $props();
@@ -30,14 +31,9 @@
 
 <article class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Header -->
-  <div class="flex justify-between items-start mb-12">
-    <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
-    <nav class="flex gap-6 pt-1">
-      <a href="/blog" class="nav-link">All writing</a>
-      <a href="/projects" class="nav-link">Projects</a>
-      <a href="/" class="nav-link">Home</a>
-      <a href="/jkai" class="nav-link">jkai</a>
-    </nav>
+  <div class="mb-8">
+    <SiteNav variant="compact" />
+    <a href="/blog" class="back-link mt-6 inline-flex">All writing</a>
   </div>
 
   <!-- Post -->

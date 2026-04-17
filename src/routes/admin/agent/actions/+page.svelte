@@ -42,9 +42,7 @@
 
 <div class="max-w-5xl mx-auto px-6 py-12">
   <div class="flex items-center justify-between mb-10">
-    <a href="/admin/agent" class="text-[10px] uppercase tracking-[0.3em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      &larr; Dashboard
-    </a>
+    <a href="/admin/agent" class="back-link back-link--xs">Dashboard</a>
     <h1 class="text-lg font-light tracking-wide" style="color: var(--text-primary);">Action Log</h1>
     <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
       {filtered.length} actions

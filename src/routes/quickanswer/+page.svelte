@@ -39,13 +39,7 @@
 
 <div class="max-w-2xl mx-auto px-6 py-12">
   <div class="mb-10">
-    <a
-      href="/deepdive"
-      class="text-[13px] uppercase tracking-[0.3em] mb-4 block"
-      style="color: var(--text-muted); font-family: var(--font-mono);"
-    >
-      &larr; Deep Dive
-    </a>
+    <a href="/deepdive" class="back-link mb-4">Deep Dive</a>
     <h1
       class="text-3xl font-bold mb-2"
       style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"

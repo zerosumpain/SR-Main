@@ -216,7 +216,7 @@
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <div class="mb-6">
-    <a href="/jkai/builds" class="text-sm mb-3 inline-block" style="color: var(--text-ghost);">&larr; Builds</a>
+    <a href="/jkai/builds" class="back-link mb-3">Builds</a>
     <div class="flex items-start justify-between">
       <div>
         <h1 class="display text-[24px] sm:text-[32px]" style="color: var(--text-primary);">

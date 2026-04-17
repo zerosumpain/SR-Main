@@ -48,9 +48,7 @@
 </svelte:head>
 
 <div class="p-6 sm:p-10 max-w-2xl mx-auto">
-  <a href="/jkai/builds" class="text-sm mb-6 inline-block" style="color: var(--text-ghost);">
-    &larr; Back to builds
-  </a>
+  <a href="/jkai/builds" class="back-link mb-6">Builds</a>
 
   <h1 class="display text-[28px] sm:text-[36px] mb-6" style="color: var(--text-primary);">
     NEW BUILD

@@ -122,13 +122,7 @@
 <div class="max-w-2xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
-    <a
-      href="/deepdive"
-      class="text-[13px] uppercase tracking-[0.3em]"
-      style="color: var(--text-muted); font-family: var(--font-mono);"
-    >
-      &larr; Deep Dive
-    </a>
+    <a href="/deepdive" class="back-link">Deep Dive</a>
     <span
       class="text-[13px] uppercase tracking-[0.3em]"
       style="color: var(--text-muted); font-family: var(--font-mono);"

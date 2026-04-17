@@ -178,7 +178,7 @@
 		<div class="max-w-[1800px] mx-auto px-6 py-4">
 			<div class="flex items-center justify-between">
 				<div>
-					<a href="/projects" class="text-[11px] uppercase tracking-[0.3em] block mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">&larr; Projects</a>
+					<a href="/projects" class="back-link mb-1">Projects</a>
 					<h1 class="text-xl font-bold" style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;">
 						First 100 Days
 					</h1>

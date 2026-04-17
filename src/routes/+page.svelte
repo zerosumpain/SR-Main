@@ -16,6 +16,7 @@
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BiomeToggle from '$lib/components/BiomeToggle.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
+  import SiteNav from '$lib/components/SiteNav.svelte';
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
@@ -55,19 +56,7 @@
     <BiomeBackground {store} position="absolute" transparent />
   {/if}
   <!-- Top bar -->
-  <div class="relative z-10 flex justify-between items-start">
-    <a href="/" class="display text-[28px] sm:text-[32px] leading-none no-underline" style="color: var(--text-primary);">
-      STRANGE<br>RAMBLINGS
-    </a>
-
-    <nav class="flex gap-6 pt-1">
-      <a href="/projects" class="nav-link">Projects</a>
-      <a href="/blog" class="nav-link">Writing</a>
-      <a href="/health" class="nav-link">Health</a>
-      <a href="/live" class="nav-link">Live</a>
-      <a href="/jkai" class="nav-link">jkai</a>
-    </nav>
-  </div>
+  <SiteNav variant="hero" />
 
   <!-- Center — stats + explainer side by side -->
   <div class="relative z-10 flex-1 flex items-center">

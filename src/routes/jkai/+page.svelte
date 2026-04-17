@@ -2,8 +2,13 @@
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
   import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
+  import { page } from '$app/state';
 
   let { data } = $props();
+
+  function isActive(href: string): boolean {
+    return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
+  }
 
   let conversationList = $state(data.conversations);
   let metrics = $state(data.metrics);
@@ -122,19 +127,11 @@
 
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
 
-      <nav class="flex items-center gap-3 sm:gap-4">
-        <a href="/jkai/builds" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
-          Builds
-        </a>
-        <a href="/jkai/prompts" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
-          Prompts
-        </a>
-        <a href="/jkai/workflows" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
-          Workflows
-        </a>
-        <a href="/jkai/channels" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
-          Channels
-        </a>
+      <nav class="flex items-center gap-4 sm:gap-5">
+        <a href="/jkai/builds" class="nav-link" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
+        <a href="/jkai/prompts" class="nav-link" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
+        <a href="/jkai/workflows" class="nav-link" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
+        <a href="/jkai/channels" class="nav-link" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
       </nav>
     </div>
     <!-- Metrics: hidden on mobile -->

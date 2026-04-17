@@ -80,7 +80,7 @@
   <div class="flex justify-between items-center mb-8">
     <div>
       <div class="flex items-center gap-3">
-        <a href="/jkai" class="text-sm" style="color: var(--text-ghost);">&larr; Chat</a>
+        <a href="/jkai" class="back-link">Chat</a>
       </div>
       <h1 class="display text-[32px] sm:text-[40px]" style="color: var(--text-primary);">
         BUILDS

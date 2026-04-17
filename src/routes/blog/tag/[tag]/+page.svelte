@@ -8,24 +8,19 @@
 </svelte:head>
 
 <script lang="ts">
+  import SiteNav from '$lib/components/SiteNav.svelte';
   let { data } = $props();
 </script>
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Header -->
-  <div class="flex justify-between items-start mb-12">
-    <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
-    <nav class="flex gap-6 pt-1">
-      <a href="/" class="nav-link">Home</a>
-      <a href="/projects" class="nav-link">Projects</a>
-      <a href="/health" class="nav-link">Health</a>
-      <a href="/jkai" class="nav-link">jkai</a>
-    </nav>
+  <div class="mb-12">
+    <SiteNav variant="compact" />
   </div>
 
   <!-- Title -->
   <div class="max-w-4xl mb-8">
-    <a href="/blog" class="nav-link text-sm mb-2 block">← All writing</a>
+    <a href="/blog" class="back-link mb-2">All writing</a>
     <h1 class="display text-[36px] sm:text-[48px] mb-2" style="color: var(--text-primary);">
       #{data.tag.toUpperCase()}
     </h1>

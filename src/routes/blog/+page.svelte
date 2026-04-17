@@ -8,19 +8,14 @@
 </svelte:head>
 
 <script lang="ts">
+  import SiteNav from '$lib/components/SiteNav.svelte';
   let { data } = $props();
 </script>
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Header -->
-  <div class="flex justify-between items-start mb-12">
-    <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
-    <nav class="flex gap-6 pt-1">
-      <a href="/" class="nav-link">Home</a>
-      <a href="/projects" class="nav-link">Projects</a>
-      <a href="/health" class="nav-link">Health</a>
-      <a href="/jkai" class="nav-link">jkai</a>
-    </nav>
+  <div class="mb-12">
+    <SiteNav variant="compact" />
   </div>
 
   <!-- Title -->

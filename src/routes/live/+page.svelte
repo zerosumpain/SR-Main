@@ -129,7 +129,7 @@
       <p class="text-sm mt-2" style="color: var(--text-secondary);">
         When a walk is in progress, it will appear here in realtime.
       </p>
-      <a href="/" class="nav-link mt-4" style="display: inline-block;">&larr; Back to home</a>
+      <a href="/" class="back-link mt-4">Home</a>
     </div>
   {:else}
     <div class="live-header">

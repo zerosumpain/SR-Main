@@ -152,13 +152,7 @@
 <div class="max-w-2xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="flex items-center justify-between mb-4">
-    <a
-      href="/admin?token={adminToken}"
-      class="text-[10px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
-    >
-      &larr; Admin
-    </a>
+    <a href="/admin?token={adminToken}" class="back-link back-link--xs">Admin</a>
     <h1
       class="text-[10px] uppercase tracking-[0.3em]"
       style="color: var(--text-ghost); font-family: var(--font-mono);"

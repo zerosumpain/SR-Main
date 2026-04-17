@@ -13,6 +13,7 @@
   import ReadinessHero from '$lib/components/health/ReadinessHero.svelte';
   import SparklineStrip from '$lib/components/health/SparklineStrip.svelte';
   import ActivityTimeline from '$lib/components/health/ActivityTimeline.svelte';
+  import SiteNav from '$lib/components/SiteNav.svelte';
   import SleepBreakdown from '$lib/components/health/SleepBreakdown.svelte';
   import BodySignals from '$lib/components/health/BodySignals.svelte';
   import WeeklyStats from '$lib/components/health/WeeklyStats.svelte';
@@ -66,15 +67,8 @@
 </script>
 
 <!-- Nav -->
-<div class="fixed top-0 left-0 right-0 z-20 px-6 sm:px-10 md:px-16 py-6 flex justify-between items-start" style="background: linear-gradient(to bottom, var(--bg) 60%, transparent);">
-  <a href="/" class="display text-[20px] sm:text-[24px] leading-none">SR</a>
-  <nav class="flex gap-6 pt-1">
-    <a href="/" class="nav-link">Home</a>
-    <a href="/projects" class="nav-link">Projects</a>
-    <a href="/blog" class="nav-link">Writing</a>
-    <a href="/live" class="nav-link">Live</a>
-    <a href="/jkai" class="nav-link">jkai</a>
-  </nav>
+<div class="fixed top-0 left-0 right-0 z-20 site-chrome px-6 sm:px-10 md:px-16 py-5">
+  <SiteNav variant="compact" />
 </div>
 
 <!-- Readiness Hero (full viewport) — clickable for detail -->
