@@ -51,6 +51,7 @@ export const codeExecuteExecutor: NodeExecutor = {
 
     const workDir = `/home/jkai/workspace/workflow-runs/${context.runId}`;
     const fullPath = `${workDir}/${filename}`;
+    await execInSandbox(`mkdir -p ${workDir}`);
     await writeFileInSandbox(fullPath, wrappedCode);
 
     let execCmd: string;
