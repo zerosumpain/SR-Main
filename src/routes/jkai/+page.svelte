@@ -103,7 +103,7 @@
   <title>JKAI — Chat</title>
 </svelte:head>
 
-<div class="flex flex-col h-screen" style="background: var(--bg);">
+<div class="flex flex-col" style="background: var(--bg); height: calc(100vh - var(--site-nav-height, 0px));">
   <!-- Header -->
   <div class="px-3 sm:px-4 py-3 border-b flex items-center justify-between flex-shrink-0 gap-4" style="border-color: var(--card-border);">
     <div class="flex items-center gap-3 sm:gap-5 min-w-0">

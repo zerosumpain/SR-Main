@@ -12,7 +12,6 @@
 
 <script lang="ts">
   import ProseContent from '$lib/components/ProseContent.svelte';
-  import SiteNav from '$lib/components/SiteNav.svelte';
   import { renderContent } from '$lib/blog/renderer';
 
   let { data } = $props();
@@ -27,10 +26,8 @@
 </script>
 
 <article class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <!-- Header -->
   <div class="mb-8">
-    <SiteNav variant="compact" />
-    <a href="/blog" class="back-link mt-6">All writing</a>
+    <a href="/blog" class="back-link">All writing</a>
   </div>
 
   <!-- Draft banner -->

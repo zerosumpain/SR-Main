@@ -8,16 +8,10 @@
 </svelte:head>
 
 <script lang="ts">
-  import SiteNav from '$lib/components/SiteNav.svelte';
   let { data } = $props();
 </script>
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <!-- Header -->
-  <div class="mb-12">
-    <SiteNav variant="compact" />
-  </div>
-
   <!-- Title -->
   <div class="max-w-4xl mb-8">
     <a href="/blog" class="back-link mb-2">All writing</a>
