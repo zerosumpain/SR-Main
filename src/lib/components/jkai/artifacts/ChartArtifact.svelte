@@ -8,17 +8,23 @@
   let error = $state<string | null>(null);
 
   function buildFullSpec() {
+    // Deep-clone spec + data out of Svelte's reactive Proxies — vega-embed
+    // calls structuredClone internally and will otherwise throw
+    // "The object can not be cloned" on our $state-wrapped props.
+    const specPlain = JSON.parse(JSON.stringify(artifact.spec ?? {})) as Record<string, unknown>;
+    const dataPlain = JSON.parse(JSON.stringify(artifact.data ?? [])) as unknown[];
+
     const base: Record<string, unknown> = {
       $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
       width: 'container',
       autosize: { type: 'fit', contains: 'padding' },
-      ...artifact.spec,
+      ...specPlain,
     };
     // If caller passed data separately and spec doesn't already have data, merge.
-    if (artifact.data && artifact.data.length > 0) {
+    if (dataPlain.length > 0) {
       const specData = (base.data as { values?: unknown[] } | undefined);
       if (!specData || !specData.values || specData.values.length === 0) {
-        base.data = { values: artifact.data };
+        base.data = { values: dataPlain };
       }
     }
     return base;
