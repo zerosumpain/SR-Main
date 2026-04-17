@@ -132,6 +132,9 @@
         <a href="/jkai/workflows" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
           Workflows
         </a>
+        <a href="/jkai/channels" class="text-[10px] sm:text-xs uppercase tracking-wider transition-colors" style="color: var(--text-secondary);">
+          Channels
+        </a>
       </nav>
     </div>
     <!-- Metrics: hidden on mobile -->

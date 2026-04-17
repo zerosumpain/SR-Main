@@ -87,6 +87,7 @@
 </svelte:head>
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
+  <a href="/jkai" class="text-sm mb-3 inline-block" style="color: var(--text-ghost);">&larr; Chat</a>
   <div class="flex justify-between items-center mb-8">
     <div>
       <h1 class="display text-[32px] sm:text-[40px]" style="color: var(--text-primary);">
