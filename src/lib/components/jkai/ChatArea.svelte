@@ -1,5 +1,8 @@
 <script lang="ts">
   import ChatMessage from '$lib/components/workflows/ChatMessage.svelte';
+  import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
+  import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
+  import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
 
   let {
@@ -18,11 +21,18 @@
   } = $props();
 
   interface ToolStep {
+    id?: string;
     tool: string;
     args: Record<string, unknown>;
     result?: unknown;
     status: 'running' | 'done' | 'error';
     expanded?: boolean;
+    ephemeral?: {
+      handlerCode: string;
+      parameters: unknown;
+      proposedName?: string;
+      proposedDescription?: string;
+    };
   }
 
   interface Message {
@@ -35,6 +45,18 @@
     progressSteps?: string[];
     toolSteps?: ToolStep[];
     source?: string;
+  }
+
+  function artifactsForMessage(m: Message): ArtifactT[] {
+    if (!m.toolSteps) return [];
+    const out: ArtifactT[] = [];
+    for (const step of m.toolSteps) {
+      const r = step.result as { data?: { artifact?: unknown } } | undefined;
+      if (r?.data?.artifact && isArtifact(r.data.artifact)) {
+        out.push(r.data.artifact);
+      }
+    }
+    return out;
   }
 
   let messages = $state<Message[]>([]);
@@ -471,6 +493,11 @@
               </div>
             </div>
           {:else}
+            {#if msg.role === 'assistant'}
+              {#each artifactsForMessage(msg) as artifact, i (i)}
+                <Artifact {artifact} />
+              {/each}
+            {/if}
             <div class="relative">
               {#if msg.source === 'followup'}
                 <span
