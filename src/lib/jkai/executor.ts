@@ -50,7 +50,10 @@ export async function executeIteration(
   iterationNumber: number,
   isStopped: () => boolean,
 ): Promise<IterationResult> {
-  const { client, model } = getLLMClient();
+  const { client, model } = await getLLMClient({
+    provider: (build.modelProvider ?? 'zai') as 'zai' | 'openrouter',
+    modelId: build.modelId ?? 'glm-5.1',
+  });
   const systemPrompt = buildSystemPrompt(build.id);
   const fileList = await listWorkspaceFiles(build.id);
   const contextMessages = buildIterationContext(build.prompt, prevIteration, fileList, projectPlan, iterationNumber);

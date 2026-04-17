@@ -74,7 +74,11 @@ export async function planBuild(
   prompt: string,
   timeLimitMs: number = 4 * 60 * 1000,
 ): Promise<void> {
-  const { client, model } = getLLMClient();
+  const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+  const { client, model } = await getLLMClient({
+    provider: (build?.modelProvider ?? 'zai') as 'zai' | 'openrouter',
+    modelId: build?.modelId ?? 'glm-5.1',
+  });
   const deadline = Date.now() + timeLimitMs;
 
   const [planIteration] = await db
@@ -237,10 +241,13 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
 // --- Re-planning Phase (triggered on completion detection) ---
 
 export async function replanBuild(buildId: string): Promise<boolean> {
-  const { client, model } = getLLMClient();
-
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) return false;
+
+  const { client, model } = await getLLMClient({
+    provider: (build.modelProvider ?? 'zai') as 'zai' | 'openrouter',
+    modelId: build.modelId ?? 'glm-5.1',
+  });
 
   // Gather all completed iteration evaluations
   const completedIterations = await db
