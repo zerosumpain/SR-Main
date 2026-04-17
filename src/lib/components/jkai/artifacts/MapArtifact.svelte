@@ -3,8 +3,15 @@
   import type { MapArtifact } from '$lib/workflows/site-tools/artifact-types';
 
   // Loose global typing — Leaflet loaded via static script tag, not npm.
+  type LeafletMap = {
+    setView: (c: [number, number], z: number) => unknown;
+    fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
+    invalidateSize: () => unknown;
+    scrollWheelZoom: { enable: () => unknown; disable: () => unknown };
+    on: (ev: string, fn: () => void) => unknown;
+  };
   type LeafletGlobal = {
-    map: (el: HTMLElement, opts?: Record<string, unknown>) => unknown;
+    map: (el: HTMLElement, opts?: Record<string, unknown>) => LeafletMap;
     tileLayer: (url: string, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown };
     marker: (latlng: [number, number], opts?: Record<string, unknown>) => { addTo: (m: unknown) => { bindTooltip: (t: string) => unknown } };
     polyline: (coords: Array<[number, number]>, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown; getBounds: () => unknown };
@@ -16,6 +23,29 @@
 
   let container: HTMLDivElement | undefined = $state();
   let error = $state<string | null>(null);
+  let fullscreen = $state(false);
+  let scrollZoomActive = $state(false);
+  let mapRef: LeafletMap | null = $state(null);
+
+  function toggleFullscreen() {
+    fullscreen = !fullscreen;
+    // Leaflet needs to recalculate tile layout after the container resizes
+    requestAnimationFrame(() => {
+      mapRef?.invalidateSize();
+    });
+  }
+
+  function activateScrollZoom() {
+    if (scrollZoomActive) return;
+    scrollZoomActive = true;
+    mapRef?.scrollWheelZoom.enable();
+  }
+
+  function deactivateScrollZoom() {
+    if (!scrollZoomActive) return;
+    scrollZoomActive = false;
+    mapRef?.scrollWheelZoom.disable();
+  }
 
   function ensureLeafletLoaded(): Promise<LeafletGlobal> {
     const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
@@ -56,10 +86,22 @@
       try {
         const L = await ensureLeafletLoaded();
         if (cancelled || !container) return;
-        const map = L.map(container, { scrollWheelZoom: false }) as unknown as {
-          setView: (c: [number, number], z: number) => unknown;
-          fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
-        };
+        // scrollWheelZoom starts disabled so page scroll works; user
+        // activates it by clicking the map (and deactivates by clicking off).
+        // touchZoom / pinch / +- controls / double-click / drag are all
+        // default-enabled.
+        const map = L.map(container, {
+          scrollWheelZoom: false,
+          zoomControl: true,
+          touchZoom: true,
+          doubleClickZoom: true,
+          dragging: true,
+        });
+        mapRef = map;
+
+        map.on('focus', activateScrollZoom);
+        map.on('blur', deactivateScrollZoom);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap',
           maxZoom: 19,
@@ -101,7 +143,7 @@
           for (const p of rest) bounds.extend(p);
           map.fitBounds(bounds, { padding: [20, 20] });
         } else {
-          (map as unknown as { setView: (c: [number, number], z: number) => unknown }).setView([51.5, -0.1], 12);
+          map.setView([51.5, -0.1], 12);
         }
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
@@ -109,12 +151,34 @@
     })();
     return () => {
       cancelled = true;
+      mapRef = null;
     };
   });
 </script>
 
-<figure class="map-artifact">
+<figure class="map-artifact" class:fullscreen>
   <div class="map-container" bind:this={container}></div>
+
+  <button
+    class="fs-toggle"
+    type="button"
+    onclick={toggleFullscreen}
+    aria-label={fullscreen ? 'Exit fullscreen' : 'Expand map'}
+    title={fullscreen ? 'Exit fullscreen' : 'Expand map'}
+  >
+    {#if fullscreen}
+      <!-- collapse icon -->
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>
+      </svg>
+    {:else}
+      <!-- expand icon -->
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+      </svg>
+    {/if}
+  </button>
+
   {#if error}
     <p class="error">Map failed to render: {error}</p>
   {/if}
@@ -125,6 +189,7 @@
 
 <style>
   .map-artifact {
+    position: relative;
     margin: 0.5rem 0;
     border: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
     border-radius: 6px;
@@ -135,10 +200,49 @@
     width: 100%;
     height: 360px;
   }
+  .map-artifact.fullscreen {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    z-index: 9999;
+    background: #fff;
+  }
+  .map-artifact.fullscreen .map-container {
+    height: 100vh;
+  }
+  .fs-toggle {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 1000; /* above Leaflet layers */
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  }
+  .fs-toggle:hover { background: #f5f5f5; }
   figcaption {
     padding: 0.4rem 0.75rem;
     font-size: 0.8rem;
     color: rgb(var(--muted-fg-rgb, 100 100 100));
+    border-top: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
+  }
+  .map-artifact.fullscreen figcaption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255,255,255,0.95);
     border-top: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
   }
   .error {
