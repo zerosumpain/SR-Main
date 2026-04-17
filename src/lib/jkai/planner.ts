@@ -4,6 +4,8 @@ import { eq, and } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
 import { listWorkspaceFiles } from './sandbox';
 import { emitLog } from './log-emitter';
+import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
+import type { PriceSnapshot } from '$lib/server/models/types';
 
 // --- System Prompts ---
 
@@ -79,6 +81,7 @@ export async function planBuild(
     provider: (build?.modelProvider ?? 'zai') as 'zai' | 'openrouter',
     modelId: build?.modelId ?? 'glm-5.1',
   });
+  const priceSnapshot = (build?.priceSnapshot ?? null) as PriceSnapshot | null;
   const deadline = Date.now() + timeLimitMs;
 
   const [planIteration] = await db
@@ -117,6 +120,8 @@ export async function planBuild(
       max_tokens: 3000,
     });
 
+    await recordBuildUsage(buildId, parseUsage(r1.usage), priceSnapshot);
+
     const proposal = r1.choices[0]?.message?.content || '';
     totalTokens += r1.usage?.total_tokens || 0;
     debateMessages.push({ role: 'user', content: userPromptMsg });
@@ -143,6 +148,8 @@ export async function planBuild(
       temperature: 0.6,
       max_tokens: 2500,
     });
+
+    await recordBuildUsage(buildId, parseUsage(r2.usage), priceSnapshot);
 
     const critique = r2.choices[0]?.message?.content || '';
     totalTokens += r2.usage?.total_tokens || 0;
@@ -189,6 +196,8 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
       temperature: 0.7,
       max_tokens: 3000,
     });
+
+    await recordBuildUsage(buildId, parseUsage(r3.usage), priceSnapshot);
 
     const finalPlan = r3.choices[0]?.message?.content || '';
     totalTokens += r3.usage?.total_tokens || 0;
@@ -248,6 +257,7 @@ export async function replanBuild(buildId: string): Promise<boolean> {
     provider: (build.modelProvider ?? 'zai') as 'zai' | 'openrouter',
     modelId: build.modelId ?? 'glm-5.1',
   });
+  const priceSnapshot = (build.priceSnapshot ?? null) as PriceSnapshot | null;
 
   // Gather all completed iteration evaluations
   const completedIterations = await db
@@ -321,6 +331,8 @@ No further iterations are needed. The project meets the stated objectives.`;
       temperature: 0.7,
       max_tokens: 4096,
     });
+
+    await recordBuildUsage(buildId, parseUsage(response.usage), priceSnapshot);
 
     const content = response.choices[0]?.message?.content || '';
     await emitLog(buildId, 'text', content);

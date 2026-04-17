@@ -1,6 +1,10 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import ModelPicker from '$lib/components/jkai/ModelPicker.svelte';
+  import type { ModelContext } from '$lib/server/models/types';
+
+  let { data } = $props();
 
   let prompt = $state('');
   let activeMinutesPerHour = $state(15);
@@ -9,6 +13,7 @@
   let maxTotalMinutes = $state<number | null>(null);
   let submitting = $state(false);
   let error = $state('');
+  let builderModel = $state<ModelContext>({ ...data.defaultBuilderModel });
 
   async function submit() {
     if (!prompt.trim()) return;
@@ -25,7 +30,12 @@
       const res = await fetch('/api/jkai/builds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), budgetConfig }),
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          budgetConfig,
+          modelProvider: builderModel.provider,
+          modelId: builderModel.modelId,
+        }),
       });
 
       if (!res.ok) {
@@ -99,6 +109,10 @@
             style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
         </div>
       </div>
+    </div>
+
+    <div class="mb-6">
+      <ModelPicker bind:value={builderModel} label="Model" />
     </div>
 
     {#if error}

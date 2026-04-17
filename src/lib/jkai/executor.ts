@@ -5,6 +5,8 @@ import { getLLMClient } from './llm-client';
 import { buildSystemPrompt, buildIterationContext } from './prompt';
 import { execInSandboxChecked, listWorkspaceFiles } from './sandbox';
 import { emitLog } from './log-emitter';
+import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
+import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ActionRecord } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 
@@ -95,6 +97,12 @@ export async function executeIteration(
       max_tokens: 4096,
     });
 
+    await recordBuildUsage(
+      build.id,
+      parseUsage(response.usage),
+      build.priceSnapshot as PriceSnapshot | null,
+    );
+
     const assistantContent = response.choices[0]?.message?.content || '';
     totalTokens += response.usage?.total_tokens || 0;
 
@@ -112,6 +120,11 @@ export async function executeIteration(
         temperature: 0.7,
         max_tokens: 2048,
       });
+      await recordBuildUsage(
+        build.id,
+        parseUsage(evalResponse.usage),
+        build.priceSnapshot as PriceSnapshot | null,
+      );
       const evalContent = evalResponse.choices[0]?.message?.content || '';
       totalTokens += evalResponse.usage?.total_tokens || 0;
       evaluation = extractSection(evalContent, 'Evaluation') || `Iteration stopped at token cap (${totalTokens} tokens). ${actions.length} actions executed.`;
