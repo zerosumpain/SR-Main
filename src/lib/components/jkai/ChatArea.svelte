@@ -4,6 +4,8 @@
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
+  import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
+  import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
 
   let {
     conversationId,
@@ -57,6 +59,11 @@
       }
     }
     return out;
+  }
+
+  function promoteMarkersForMessage(m: Message) {
+    if (m.role !== 'assistant') return [];
+    return parsePromoteMarkers(m.content);
   }
 
   let messages = $state<Message[]>([]);
@@ -497,6 +504,9 @@
               {#each artifactsForMessage(msg) as artifact, i (i)}
                 <Artifact {artifact} />
               {/each}
+              {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
+                <PromoteToolBanner messageId={msg.id} {marker} />
+              {/each}
             {/if}
             <div class="relative">
               {#if msg.source === 'followup'}
@@ -518,7 +528,7 @@
               {/if}
               <ChatMessage
                 role={msg.role}
-                content={msg.content}
+                content={msg.role === 'assistant' ? stripPromoteMarkers(msg.content) : msg.content}
                 metadata={msg.metadata}
                 thinking={msg.thinking}
                 {showThinking}
