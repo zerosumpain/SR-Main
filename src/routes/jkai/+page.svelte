@@ -2,17 +2,9 @@
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
   import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
-  import SiteNav from '$lib/components/SiteNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
-
-  const JKAI_NAV = [
-    { href: '/', label: 'Home' },
-    { href: '/jkai/builds', label: 'Builds' },
-    { href: '/jkai/prompts', label: 'Prompts' },
-    { href: '/jkai/workflows', label: 'Workflows' },
-    { href: '/jkai/channels', label: 'Channels' },
-  ];
 
   let conversationList = $state(data.conversations);
   let metrics = $state(data.metrics);
@@ -108,31 +100,24 @@
 </svelte:head>
 
 <div class="flex flex-col h-screen" style="background: var(--bg);">
-  <!-- Single top row: title + metrics on the left, nav on the right -->
-  <header class="site-nav-bar flex items-center justify-between gap-4 flex-shrink-0">
-    <div class="flex items-center gap-3 sm:gap-5 min-w-0">
-      <!-- Mobile sidebar toggle -->
+  <PageHeader title="JKAI">
+    {#snippet before()}
       <button
         onclick={() => { sidebarOpen = !sidebarOpen; }}
         class="sm:hidden px-1.5 py-1 rounded transition-colors"
         style="color: var(--text-secondary);"
         title="Conversations"
+        aria-label="Toggle conversations"
       >
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 5h14M3 10h14M3 15h14" />
         </svg>
       </button>
-
-      <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
-
-      <!-- Metrics: hidden on mobile -->
-      <div class="hidden md:block">
-        <MetricsStrip {metrics} />
-      </div>
-    </div>
-
-    <SiteNav variant="compact" showBrand={false} items={JKAI_NAV} />
-  </header>
+    {/snippet}
+    {#snippet meta()}
+      <MetricsStrip {metrics} />
+    {/snippet}
+  </PageHeader>
 
   <!-- Main area -->
   <div class="flex flex-1 min-h-0 relative">

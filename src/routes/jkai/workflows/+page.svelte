@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   let { data } = $props();
   let workflowList = $state(data.workflows);
 
@@ -53,16 +54,12 @@
   <title>Workflows</title>
 </svelte:head>
 
+<PageHeader title="WORKFLOWS" />
+
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <div class="flex justify-between items-center mb-8">
     <div>
-      <div class="flex items-center gap-3">
-        <a href="/jkai" class="back-link">Chat</a>
-      </div>
-      <h1 class="display text-[32px] sm:text-[40px]" style="color: var(--text-primary);">
-        WORKFLOWS
-      </h1>
-      <p class="text-sm mt-1" style="color: var(--text-secondary);">
+      <p class="text-sm" style="color: var(--text-secondary);">
         Visual automation pipelines
       </p>
     </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let prompt = $state('');
   let activeMinutesPerHour = $state(15);
@@ -47,13 +48,9 @@
   <title>New Build — JKAI</title>
 </svelte:head>
 
+<PageHeader title="NEW BUILD" titleHref="/jkai/builds" />
+
 <div class="p-6 sm:p-10 max-w-2xl mx-auto">
-  <a href="/jkai/builds" class="back-link mb-6">Builds</a>
-
-  <h1 class="display text-[28px] sm:text-[36px] mb-6" style="color: var(--text-primary);">
-    NEW BUILD
-  </h1>
-
   <form onsubmit={(e) => { e.preventDefault(); submit(); }}>
     <div class="mb-6">
       <label for="prompt" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">

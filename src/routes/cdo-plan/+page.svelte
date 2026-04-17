@@ -6,6 +6,7 @@
 	import type { PageData } from './$types';
 	import type { KanbanPlan, KanbanCard, ThemeKey } from '$lib/cdo/types';
 	import { THEME_COLORS } from '$lib/cdo/types';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StakeholderMap from '$lib/cdo/components/StakeholderMap.svelte';
 	import PriorityMatrix from '$lib/cdo/components/PriorityMatrix.svelte';
 	import RiskMatrix from '$lib/cdo/components/RiskMatrix.svelte';
@@ -172,16 +173,14 @@
 	let totalEntities = $derived(data.activity?.totalEntities ?? 0);
 </script>
 
+<PageHeader title="FIRST 100 DAYS" titleHref="/projects" />
+
 <div class="min-h-screen" style="background: var(--bg);">
 	<!-- Header -->
 	<header class="border-b" style="border-color: var(--card-border); background: var(--card-bg);">
 		<div class="max-w-[1800px] mx-auto px-6 py-4">
 			<div class="flex items-center justify-between">
 				<div>
-					<a href="/projects" class="back-link mb-1">Projects</a>
-					<h1 class="text-xl font-bold" style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;">
-						First 100 Days
-					</h1>
 					<p class="text-[11px]" style="color: var(--text-muted); font-family: var(--font-mono);">
 						CDO Plan &mdash; Department for Education
 						{#if data.plan?.status === 'complete'}

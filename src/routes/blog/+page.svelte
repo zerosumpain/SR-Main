@@ -8,14 +8,16 @@
 </svelte:head>
 
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   let { data } = $props();
 </script>
+
+<PageHeader title="WRITING" />
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
 
   <!-- Title -->
   <div class="max-w-4xl mb-8">
-    <h1 class="display text-[36px] sm:text-[48px] mb-2" style="color: var(--text-primary);">WRITING</h1>
     <p class="label">All posts</p>
   </div>
 

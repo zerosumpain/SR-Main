@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
   let projects = $state(data.projects);
@@ -34,15 +35,10 @@
   <meta name="description" content="Projects built autonomously by AI — experiments from the JKAI builder." />
 </svelte:head>
 
-<section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <div class="mb-8">
-    <a href="/projects" class="back-link">Projects</a>
-  </div>
+<PageHeader title="AI EXPERIMENTS" titleHref="/projects" />
 
+<section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <div class="max-w-4xl mb-12">
-    <h1 class="display text-[40px] sm:text-[56px] mb-4" style="color: var(--text-primary);">
-      AI EXPERIMENTS
-    </h1>
     <p class="text-base leading-relaxed max-w-lg" style="color: var(--text-secondary);">
       Projects built autonomously by AI. Each one started as a prompt and was developed iteratively
       by an LLM working in a sandboxed environment.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   interface PromptFile {
     name: string;
@@ -95,16 +96,12 @@
   <title>System Prompts</title>
 </svelte:head>
 
+<PageHeader title="SYSTEM PROMPTS" />
+
 <div class="p-6 sm:p-10 max-w-6xl mx-auto">
   <div class="flex justify-between items-center mb-6">
     <div>
-      <div class="flex items-center gap-3">
-        <a href="/jkai" class="back-link">Chat</a>
-      </div>
-      <h1 class="display text-[28px] sm:text-[36px] mt-1" style="color: var(--text-primary);">
-        SYSTEM PROMPTS
-      </h1>
-      <p class="text-sm mt-1" style="color: var(--text-secondary);">
+      <p class="text-sm" style="color: var(--text-secondary);">
         Prompt files that shape the AI's personality and behaviour across WhatsApp and the website.
       </p>
     </div>

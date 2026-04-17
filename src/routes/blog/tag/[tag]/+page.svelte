@@ -8,16 +8,15 @@
 </svelte:head>
 
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   let { data } = $props();
 </script>
+
+<PageHeader title={`#${data.tag.toUpperCase()}`} titleHref="/blog" />
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Title -->
   <div class="max-w-4xl mb-8">
-    <a href="/blog" class="back-link mb-2">All writing</a>
-    <h1 class="display text-[36px] sm:text-[48px] mb-2" style="color: var(--text-primary);">
-      #{data.tag.toUpperCase()}
-    </h1>
     <p class="label">Posts tagged '{data.tag}'</p>
   </div>
 

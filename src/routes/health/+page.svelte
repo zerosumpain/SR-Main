@@ -8,6 +8,7 @@
 </svelte:head>
 
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import ScrollReveal from '$lib/components/ScrollReveal.svelte';
   import SlidePanel from '$lib/components/SlidePanel.svelte';
   import ReadinessHero from '$lib/components/health/ReadinessHero.svelte';
@@ -65,6 +66,8 @@
   }
 </script>
 
+
+<PageHeader title="HEALTH" />
 
 <!-- Readiness Hero (full viewport) — clickable for detail -->
 <button class="w-full text-left cursor-pointer" onclick={() => openPanel('readiness', 'Readiness', data.readiness)}>

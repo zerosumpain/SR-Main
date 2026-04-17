@@ -1,3 +1,7 @@
+<script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
+</script>
+
 <svelte:head>
   <title>Projects — Strange Ramblings</title>
   <meta name="description" content="Things I'm building — research tools, experiments, and side projects." />
@@ -7,13 +11,12 @@
   <meta property="og:url" content="https://strangeramblings.com/projects" />
 </svelte:head>
 
+<PageHeader title="PROJECTS" />
+
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
 
   <!-- Title -->
   <div class="max-w-4xl mb-12">
-    <h1 class="display text-[40px] sm:text-[56px] mb-4" style="color: var(--text-primary);">
-      PROJECTS
-    </h1>
     <p class="text-base leading-relaxed max-w-lg" style="color: var(--text-secondary);">
       Tools and experiments. Most of these started as a weekend idea and got out of hand.
     </p>

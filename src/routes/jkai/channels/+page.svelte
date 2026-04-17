@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
   let channelList = $state(data.channels);
@@ -86,14 +87,12 @@
   <title>Channels</title>
 </svelte:head>
 
+<PageHeader title="CHANNELS" />
+
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
-  <a href="/jkai" class="back-link mb-3">Chat</a>
   <div class="flex justify-between items-center mb-8">
     <div>
-      <h1 class="display text-[32px] sm:text-[40px]" style="color: var(--text-primary);">
-        CHANNELS
-      </h1>
-      <p class="text-sm mt-1" style="color: var(--text-secondary);">
+      <p class="text-sm" style="color: var(--text-secondary);">
         Site-level messaging channels — WhatsApp, Email, and more.
       </p>
     </div>

@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { PageData, ActionData } from './$types';
   import { enhance } from '$app/forms';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -37,15 +38,10 @@
   }
 </script>
 
+<PageHeader title="QUICK ANSWER" />
+
 <div class="max-w-2xl mx-auto px-6 py-12">
   <div class="mb-10">
-    <a href="/deepdive" class="back-link mb-4">Deep Dive</a>
-    <h1
-      class="text-3xl font-bold mb-2"
-      style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"
-    >
-      Quick Answer
-    </h1>
     <p
       class="text-sm"
       style="color: var(--text-muted); font-family: var(--font-mono);"

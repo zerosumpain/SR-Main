@@ -6,6 +6,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   interface LiveState {
     active: boolean;
@@ -122,6 +123,8 @@
   }
 </script>
 
+<PageHeader title="LIVE" />
+
 <div class="live-page">
   {#if !isLive}
     <div class="live-empty">
@@ -129,12 +132,10 @@
       <p class="text-sm mt-2" style="color: var(--text-secondary);">
         When a walk is in progress, it will appear here in realtime.
       </p>
-      <a href="/" class="back-link mt-4">Home</a>
     </div>
   {:else}
     <div class="live-header">
       <div class="live-header-left">
-        <a href="/" class="nav-link">&larr;</a>
         <div>
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="live-dot-sm"></span>
@@ -142,7 +143,7 @@
               {liveState.status === 'paused' ? 'PAUSED' : 'LIVE'}
             </span>
           </div>
-          <h1 class="display text-[18px] mt-1" style="color: var(--text-primary);">{liveState.routeName}</h1>
+          <h2 class="display text-[18px] mt-1" style="color: var(--text-primary);">{liveState.routeName}</h2>
         </div>
       </div>
     </div>

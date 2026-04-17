@@ -3,6 +3,7 @@
   import { onMount, onDestroy } from 'svelte';
   import type { PageData } from './$types';
   import type { QuickAnswerSource } from '$lib/db/schema';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -106,10 +107,11 @@
   }
 </script>
 
+<PageHeader title={(data.answer.topic || 'QUICK ANSWER').slice(0, 60).toUpperCase()} titleHref="/quickanswer" />
+
 <div class="max-w-2xl mx-auto px-6 py-12">
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-6">
-    <a href="/quickanswer" class="back-link">Quick Answer</a>
+  <!-- Status/elapsed time -->
+  <div class="flex items-center justify-end mb-6">
     {#if status === 'complete' && durationMs}
       <span
         class="text-[13px] uppercase tracking-[0.2em]"
@@ -126,14 +128,6 @@
       </span>
     {/if}
   </div>
-
-  <!-- Topic -->
-  <h1
-    class="text-2xl font-bold mb-6"
-    style="font-family: var(--font-display); letter-spacing: -0.02em;"
-  >
-    {data.answer.topic}
-  </h1>
 
   <!-- Status bar (while live) -->
   {#if status !== 'complete' && status !== 'failed'}

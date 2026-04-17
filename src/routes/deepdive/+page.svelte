@@ -2,6 +2,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -120,16 +121,11 @@
   }
 </script>
 
+<PageHeader title="DEEP DIVE" />
+
 <div class="max-w-2xl mx-auto px-6 py-12">
   <!-- Header -->
   <div class="mb-10">
-    <a href="/projects" class="back-link mb-4">Projects</a>
-    <h1
-      class="text-3xl font-bold mb-2"
-      style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"
-    >
-      Deep Dive
-    </h1>
     <p
       class="text-sm"
       style="color: var(--text-muted); font-family: var(--font-mono);"

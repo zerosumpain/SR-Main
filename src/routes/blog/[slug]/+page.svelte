@@ -15,6 +15,7 @@
 
 <script lang="ts">
   import ProseContent from '$lib/components/ProseContent.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { renderContent } from '$lib/blog/renderer';
 
   let { data } = $props();
@@ -28,20 +29,14 @@
     : null;
 </script>
 
-<article class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <div class="mb-8">
-    <a href="/blog" class="back-link">All writing</a>
-  </div>
+<PageHeader title={data.post.title.toUpperCase()} titleHref="/blog" />
 
+<article class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Post -->
   <div class="max-w-3xl">
     {#if formattedDate}
       <p class="label mb-4">{formattedDate.toUpperCase()}</p>
     {/if}
-
-    <h1 class="display text-[28px] sm:text-[36px] md:text-[42px] mb-4" style="color: var(--text-primary);">
-      {data.post.title.toUpperCase()}
-    </h1>
 
     {#if data.post.tags && data.post.tags.length > 0}
       <div class="flex flex-wrap gap-1.5 mb-6">

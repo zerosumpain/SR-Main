@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -615,10 +616,11 @@
 
 <svelte:window on:keydown={handleModalKeydown} />
 
+<PageHeader title={data.session.topic.toUpperCase()} titleHref="/deepdive" />
+
 <div class="max-w-4xl mx-auto px-6 py-12">
   <!-- Header -->
-  <div class="flex items-center justify-between mb-2">
-    <a href="/deepdive" class="back-link">Deep Dive</a>
+  <div class="flex items-center justify-end mb-2">
     {#if !readonly}
       <div class="flex gap-2">
         <button
@@ -680,13 +682,6 @@
       </a>
     </div>
   {/if}
-
-  <h1
-    class="text-2xl font-bold mb-1"
-    style="font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.02em;"
-  >
-    {data.session.topic}
-  </h1>
 
   <p class="text-xs mb-8" style="color: var(--text-muted); font-family: var(--font-mono);">
     {(data.session.goals as string[]).join(' / ')}

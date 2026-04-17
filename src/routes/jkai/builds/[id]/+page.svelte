@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import type { PageData } from './$types';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
   let activeTab = $state<'activity' | 'iterations' | 'preview' | 'controls'>('activity');
@@ -214,15 +215,25 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
 </svelte:head>
 
+<PageHeader title={(build.title ?? 'BUILD').toString().toUpperCase()} titleHref="/jkai/builds">
+  {#snippet meta()}
+    <span
+      class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+      style="font-family: var(--font-mono); background: rgba(100,100,100,0.1); color: var(--text-ghost);"
+    >
+      {build.status}
+      {#if build.status === 'running'}
+        <span class="inline-block w-1.5 h-1.5 rounded-full ml-1 animate-pulse" style="background: #2d7d46;"></span>
+      {/if}
+    </span>
+  {/snippet}
+</PageHeader>
+
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <div class="mb-6">
-    <a href="/jkai/builds" class="back-link mb-3">Builds</a>
     <div class="flex items-start justify-between">
       <div>
-        <h1 class="display text-[24px] sm:text-[32px]" style="color: var(--text-primary);">
-          {build.title || build.prompt.slice(0, 60)}
-        </h1>
-        <p class="text-sm mt-1 max-w-xl" style="color: var(--text-secondary);">{build.prompt}</p>
+        <p class="text-sm max-w-xl" style="color: var(--text-secondary);">{build.prompt}</p>
         {#if publishedUrl}
           <a href={publishedUrl} target="_blank" class="text-xs mt-1 inline-block underline" style="color: var(--accent);">
             Published at {publishedUrl}
@@ -240,15 +251,6 @@
             {publishing ? 'Publishing...' : publishedUrl ? 'Re-publish' : 'Publish'}
           </button>
         {/if}
-        <span
-          class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded"
-          style="font-family: var(--font-mono); background: rgba(100,100,100,0.1); color: var(--text-ghost);"
-        >
-          {build.status}
-          {#if build.status === 'running'}
-            <span class="inline-block w-1.5 h-1.5 rounded-full ml-1 animate-pulse" style="background: #2d7d46;"></span>
-          {/if}
-        </span>
       </div>
     </div>
   </div>
