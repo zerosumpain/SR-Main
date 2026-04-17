@@ -72,6 +72,7 @@
     <a href="/" class="nav-link">Home</a>
     <a href="/projects" class="nav-link">Projects</a>
     <a href="/blog" class="nav-link">Writing</a>
+    <a href="/live" class="nav-link">Live</a>
     <a href="/jkai" class="nav-link">jkai</a>
   </nav>
 </div>

@@ -56,6 +56,9 @@
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <div class="flex justify-between items-center mb-8">
     <div>
+      <div class="flex items-center gap-3">
+        <a href="/jkai" class="text-sm" style="color: var(--text-ghost);">&larr; Chat</a>
+      </div>
       <h1 class="display text-[32px] sm:text-[40px]" style="color: var(--text-primary);">
         WORKFLOWS
       </h1>

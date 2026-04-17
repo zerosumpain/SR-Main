@@ -1,7 +1,9 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
+  import { getContext } from 'svelte';
 
   let { data } = $props();
+  const adminToken = getContext<string>('adminToken');
 
   let expanded = $state<Set<string>>(new Set());
   let deleting = $state<string | null>(null);
@@ -64,6 +66,13 @@
 </svelte:head>
 
 <div class="max-w-4xl mx-auto px-4 py-8">
+  <a
+    href="/admin?token={adminToken}"
+    class="inline-block text-[10px] uppercase tracking-[0.3em] mb-4"
+    style="color: var(--text-ghost); font-family: var(--font-mono);"
+  >
+    &larr; Admin
+  </a>
   <header class="mb-6">
     <h1 class="text-2xl font-semibold mb-1" style="color: var(--text-primary);">Custom Tools</h1>
     <p class="text-sm" style="color: var(--text-ghost);">

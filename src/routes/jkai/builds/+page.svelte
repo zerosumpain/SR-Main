@@ -4,6 +4,7 @@
   let { data } = $props();
   let builds = $state(data.builds);
   let publishing = $state<string | null>(null);
+  let deleting = $state<string | null>(null);
 
   const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
     running: { bg: 'rgba(45, 125, 70, 0.12)', text: '#2d7d46' },
@@ -28,6 +29,27 @@
     if (config?.maxIterations) parts.push(`${config.maxIterations} iters`);
     if (config?.maxTotalMinutes) parts.push(`${config.maxTotalMinutes}m total`);
     return parts.join(' · ') || 'No limits';
+  }
+
+  async function deleteBuild(buildId: string, label: string, e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Delete this build?\n\n"${label}"\n\nAll iterations and logs will be permanently removed.`)) return;
+    deleting = buildId;
+    try {
+      const res = await fetch(`/api/jkai/builds/${buildId}`, { method: 'DELETE' });
+      if (res.ok) {
+        builds = builds.filter((b) => b.id !== buildId);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(`Delete failed: ${body.error ?? res.statusText}`);
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Delete failed. See console for details.');
+    } finally {
+      deleting = null;
+    }
   }
 
   async function publishBuild(buildId: string, e: Event) {
@@ -106,9 +128,20 @@
                 <span class="inline-block w-1.5 h-1.5 rounded-full ml-1 animate-pulse" style="background: {colors.text};"></span>
               {/if}
             </span>
-            <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {formatDate(build.createdAt)}
-            </span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                {formatDate(build.createdAt)}
+              </span>
+              <button
+                onclick={(e) => deleteBuild(build.id, build.title || build.prompt.slice(0, 60), e)}
+                disabled={deleting === build.id}
+                class="relative z-10 px-2 py-0.5 rounded border transition-all text-[10px] uppercase tracking-wider {deleting === build.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}"
+                style="color: #b43232; border-color: #b43232; background: rgba(180, 50, 50, 0.08);"
+                title="Delete build"
+              >
+                {deleting === build.id ? '...' : 'Delete'}
+              </button>
+            </div>
           </div>
 
           <h2
