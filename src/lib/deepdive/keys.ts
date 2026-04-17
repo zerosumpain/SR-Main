@@ -37,7 +37,7 @@ export function getOpenAIClient(): OpenAI {
 
 export function getModel(): string {
   const keys = loadKeys();
-  return keys.zaiModel || 'glm-4-plus';
+  return keys.zaiModel || 'glm-5.1';
 }
 
 export function getTavilyKey(): string {
@@ -74,7 +74,7 @@ export function getKeysStatus(): {
     tavilyConfigured: !!keys.tavilyApiKey,
     openrouterConfigured: !!keys.openrouterApiKey,
     zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-    zaiModel: keys.zaiModel || 'glm-4-plus',
+    zaiModel: keys.zaiModel || 'glm-5.1',
     embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-small',
   };
 }
