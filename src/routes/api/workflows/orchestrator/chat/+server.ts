@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
+import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -162,7 +163,8 @@ export const POST: RequestHandler = async ({ request }) => {
         // Save the assistant response. Persist tool steps in metadata so the
         // tool-call drawer survives page reloads. User message was already
         // saved above.
-        const assistantMetadata = job.toolSteps.length > 0 ? { toolSteps: job.toolSteps } : undefined;
+        const cleanedToolSteps = job.toolSteps.map((s) => extractEphemeralSidecar(s));
+        const assistantMetadata = cleanedToolSteps.length > 0 ? { toolSteps: cleanedToolSteps } : undefined;
         if (conversationId) {
           await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata });
           // Update conversation title if first message, always update updatedAt
