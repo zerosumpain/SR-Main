@@ -18,6 +18,7 @@ import './tools/memory';
 import './tools/followup';
 import './tools/home-assistant';
 import './tools/visualise';
+import './tools/ephemeral-tools';
 
 // --- Public API ---
 
