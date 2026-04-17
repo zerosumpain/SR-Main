@@ -24,9 +24,22 @@
 </script>
 
 {#if open}
-  <div class="backdrop" onclick={cancel} role="presentation">
-    <div class="dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-      <h3>New conversation</h3>
+  <div
+    class="backdrop"
+    onclick={cancel}
+    onkeydown={(e) => { if (e.key === 'Escape') cancel(); }}
+    role="presentation"
+  >
+    <div
+      class="dialog"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-conv-title"
+      tabindex="-1"
+    >
+      <h3 id="new-conv-title">New conversation</h3>
       <ModelPicker bind:value={model} label="Model" />
       <p class="hint">Once the conversation is started, the model is locked.</p>
       <div class="row">
