@@ -53,7 +53,7 @@
 <div class="relative z-10 min-h-screen">
   {#if showNav && !isHome}
     <header class="site-nav-bar">
-      <SiteNav variant="compact" />
+      <SiteNav variant="compact" showBrand={false} />
     </header>
   {/if}
   {@render children()}

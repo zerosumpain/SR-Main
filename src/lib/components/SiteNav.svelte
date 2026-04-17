@@ -15,44 +15,52 @@
   let {
     variant = 'hero',
     items = DEFAULT_ITEMS,
+    showBrand = true,
   }: {
     variant?: 'hero' | 'compact';
     items?: NavItem[];
+    showBrand?: boolean;
   } = $props();
 
-  // Treat the logo-linked item as "Home" and exclude it from the list if present
-  const displayItems = $derived(items.filter((i) => i.href !== '/'));
+  // When brand is shown it links home, so omit Home from the nav list.
+  // When brand is hidden, we need Home in the list to remain reachable.
+  const displayItems = $derived(showBrand ? items.filter((i) => i.href !== '/') : items);
 
   function isActive(href: string): boolean {
     const path = page.url.pathname;
     if (href === '/') return path === '/';
-    // Match exact or nested (e.g. /blog matches /blog/foo)
     return path === href || path.startsWith(`${href}/`);
   }
 </script>
 
 <div
-  class="relative z-10 flex justify-between items-center"
-  class:site-nav-hero={variant === 'hero'}
+  class="relative z-10 flex items-center gap-6"
+  class:justify-between={showBrand}
+  class:justify-end={!showBrand}
 >
-  <a
-    href="/"
-    class="display leading-none no-underline site-brand"
-    class:text-[28px]={variant === 'hero'}
-    class:sm:text-[32px]={variant === 'hero'}
-    class:text-[20px]={variant === 'compact'}
-    class:sm:text-[24px]={variant === 'compact'}
-    style="color: var(--text-primary);"
-    aria-label="Strange Ramblings — Home"
-  >
-    {#if variant === 'hero'}
-      STRANGE<br />RAMBLINGS
-    {:else}
-      SR
-    {/if}
-  </a>
+  {#if showBrand}
+    <a
+      href="/"
+      class="display leading-none no-underline site-brand"
+      class:text-[28px]={variant === 'hero'}
+      class:sm:text-[32px]={variant === 'hero'}
+      class:text-[20px]={variant === 'compact'}
+      class:sm:text-[24px]={variant === 'compact'}
+      style="color: var(--text-primary);"
+      aria-label="Strange Ramblings — Home"
+    >
+      {#if variant === 'hero'}
+        STRANGE<br />RAMBLINGS
+      {:else}
+        SR
+      {/if}
+    </a>
+  {/if}
 
-  <nav class="flex items-center gap-1 sm:gap-2 pt-1 flex-wrap justify-end" aria-label="Primary">
+  <nav
+    class="flex items-center gap-1 sm:gap-2 flex-wrap justify-end"
+    aria-label="Primary"
+  >
     {#each displayItems as item, i (item.href)}
       <a
         href={item.href}
@@ -69,6 +77,7 @@
 <style>
   .site-brand {
     transition: color 0.2s;
+    flex-shrink: 0;
   }
   .site-brand:hover {
     color: var(--accent);
