@@ -6,6 +6,8 @@ import { db } from '$lib/db';
 import { orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { generalChat } from './general-chat';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 
 export interface FollowUpCheck {
   done: boolean;
@@ -201,7 +203,27 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     const resultContext = check.summary || JSON.stringify(check.result ?? {});
     const followUpMessage = `[SYSTEM FOLLOW-UP] A background task has completed.\n\nTask: ${item.taskType} (ID: ${item.taskId})\nResult:\n${resultContext}\n\n${item.completionPrompt}`;
 
-    const { response } = await generalChat(followUpMessage, recentHistory, {});
+    // Resolve pinned model for this conversation (falls back to admin default).
+    let modelContext: ModelContext = await resolveDefaultModel('chat');
+    let priceSnapshot: PriceSnapshot | null = null;
+    const [conv] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, item.conversationId))
+      .limit(1);
+    if (conv) {
+      modelContext = {
+        provider: conv.modelProvider as 'zai' | 'openrouter',
+        modelId: conv.modelId,
+      };
+      priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
+    }
+
+    const { response } = await generalChat(followUpMessage, recentHistory, {
+      conversationId: item.conversationId,
+      modelContext,
+      priceSnapshot,
+    });
 
     // Save to DB
     await db.insert(orchestratorChats).values({ conversationId: item.conversationId, role: 'assistant', content: response });

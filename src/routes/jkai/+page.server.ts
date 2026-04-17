@@ -1,8 +1,9 @@
 import { db } from '$lib/db';
-import { conversations, workflowRuns, workflowSchedules, whatsappConversations } from '$lib/db/schema';
+import { conversations, jkaiBuilds, workflowRuns, workflowSchedules, whatsappConversations } from '$lib/db/schema';
 import { desc, eq, sql, gte, asc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 
 export const load: PageServerLoad = async () => {
   // Load conversations with preview
@@ -59,5 +60,20 @@ export const load: PageServerLoad = async () => {
     whatsappThread = { phoneNumber: latestWa.phoneNumber, messages: waMessages };
   }
 
-  return { conversations: convList, metrics, whatsappThread };
+  // Total spend across conversations + builds
+  const [convCostRow] = await db
+    .select({ convCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
+    .from(conversations);
+  const [buildCostRow] = await db
+    .select({ buildCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
+    .from(jkaiBuilds);
+  const totalSpendUsd = Number(convCostRow?.convCost ?? 0) + Number(buildCostRow?.buildCost ?? 0);
+
+  return {
+    conversations: convList,
+    metrics,
+    whatsappThread,
+    defaultChatModel: await resolveDefaultModel('chat'),
+    totalSpendUsd,
+  };
 };

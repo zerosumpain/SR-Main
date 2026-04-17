@@ -10,6 +10,8 @@ import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -142,6 +144,24 @@ export const POST: RequestHandler = async ({ request }) => {
           await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
         }
 
+        // Resolve the model pinned at conversation creation (or admin default).
+        let modelContext: ModelContext = await resolveDefaultModel('chat');
+        let priceSnapshot: PriceSnapshot | null = null;
+        if (conversationId) {
+          const [conv] = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+          if (conv) {
+            modelContext = {
+              provider: conv.modelProvider as 'zai' | 'openrouter',
+              modelId: conv.modelId,
+            };
+            priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
+          }
+        }
+
         const { response: responseText } = await generalChat(message, conversationHistory, {
           workflowId,
           conversationId,
@@ -156,6 +176,8 @@ export const POST: RequestHandler = async ({ request }) => {
               job.toolSteps.push(step);
             }
           },
+          modelContext,
+          priceSnapshot,
         });
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');

@@ -11,6 +11,9 @@ export async function getConversationList() {
       whatsappPhoneNumber: conversations.whatsappPhoneNumber,
       createdAt: conversations.createdAt,
       updatedAt: conversations.updatedAt,
+      costUsd: conversations.costUsd,
+      modelProvider: conversations.modelProvider,
+      modelId: conversations.modelId,
       messageCount: sql<number>`(
         select count(*) from orchestrator_chats
         where orchestrator_chats.conversation_id = "jkai_conversations"."id"

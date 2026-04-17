@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { whatsappConversations } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { generalChat } from '$lib/workflows/chat/general-chat';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
@@ -48,8 +49,12 @@ export class OrchestratorBridge {
 			const history = await this.getConversationHistory(from);
 			const priorHistory = history.slice(0, -1);
 
-			// Call general chat
-			const { response: responseText } = await generalChat(text, priorHistory);
+			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
+			const modelContext = await resolveDefaultModel('chat');
+			const { response: responseText } = await generalChat(text, priorHistory, {
+				modelContext,
+				priceSnapshot: null,
+			});
 
 			// Stop typing, save and send
 			await this.typingDoneFn?.(replyTo);

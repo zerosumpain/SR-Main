@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
@@ -9,5 +10,7 @@ export const load: PageServerLoad = async () => {
     .from(jkaiBuilds)
     .orderBy(desc(jkaiBuilds.createdAt));
 
-  return { builds };
+  const defaultBuilderModel = await resolveDefaultModel('builder');
+
+  return { builds, defaultBuilderModel };
 };

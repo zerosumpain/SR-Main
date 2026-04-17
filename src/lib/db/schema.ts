@@ -9,6 +9,7 @@ import {
   boolean,
   uniqueIndex,
   jsonb,
+  numeric,
   customType,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -499,6 +500,10 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   publishedSlug: text('published_slug'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  modelProvider: text('model_provider').notNull().default('zai'),
+  modelId: text('model_id').notNull().default('glm-5.1'),
+  costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+  priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
 });
 
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
@@ -663,6 +668,12 @@ export const conversations = pgTable('jkai_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   lastMemoryReview: timestamp('last_memory_review', { withTimezone: true }),
+  modelProvider: text('model_provider').notNull().default('zai'),
+  modelId: text('model_id').notNull().default('glm-5.1'),
+  promptTokens: bigint('prompt_tokens', { mode: 'number' }).notNull().default(0),
+  completionTokens: bigint('completion_tokens', { mode: 'number' }).notNull().default(0),
+  costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+  priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
 });
 
 export type Conversation = typeof conversations.$inferSelect;
@@ -848,3 +859,27 @@ export interface QuickAnswerSource {
 }
 
 export type QuickAnswer = typeof quickAnswers.$inferSelect;
+
+// ==========================================
+// App Settings (generic key/value) + OpenRouter models cache
+// ==========================================
+
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const openrouterModels = pgTable('openrouter_models', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  contextLength: integer('context_length'),
+  promptPrice: numeric('prompt_price', { precision: 20, scale: 12 }),
+  completionPrice: numeric('completion_price', { precision: 20, scale: 12 }),
+  imagePrice: numeric('image_price', { precision: 20, scale: 12 }),
+  modality: text('modality'),
+  provider: text('provider'),
+  raw: jsonb('raw').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
