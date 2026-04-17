@@ -127,11 +127,11 @@
 
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
 
-      <nav class="flex items-center gap-4 sm:gap-5">
-        <a href="/jkai/builds" class="nav-link" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
-        <a href="/jkai/prompts" class="nav-link" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
-        <a href="/jkai/workflows" class="nav-link" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
-        <a href="/jkai/channels" class="nav-link" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
+      <nav class="flex items-center gap-1 sm:gap-2">
+        <a href="/jkai/builds" class="nav-link" data-index="01" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
+        <a href="/jkai/prompts" class="nav-link" data-index="02" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
+        <a href="/jkai/workflows" class="nav-link" data-index="03" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
+        <a href="/jkai/channels" class="nav-link" data-index="04" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
       </nav>
     </div>
     <!-- Metrics: hidden on mobile -->

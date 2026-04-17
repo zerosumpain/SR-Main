@@ -52,11 +52,12 @@
     {/if}
   </a>
 
-  <nav class="flex items-center gap-5 sm:gap-6 pt-1 flex-wrap justify-end" aria-label="Primary">
-    {#each displayItems as item (item.href)}
+  <nav class="flex items-center gap-1 sm:gap-2 pt-1 flex-wrap justify-end" aria-label="Primary">
+    {#each displayItems as item, i (item.href)}
       <a
         href={item.href}
         class="nav-link"
+        data-index={String(i + 1).padStart(2, '0')}
         aria-current={isActive(item.href) ? 'page' : undefined}
       >
         {item.label}
