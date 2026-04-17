@@ -99,7 +99,7 @@ export const jkaiDef: NodeDefinition = {
     },
     { key: 'prompt', label: 'Prompt', type: 'template-textarea', placeholder: 'Build a landing page with...' },
     { key: 'title', label: 'Title', type: 'text', placeholder: 'My Build' },
-    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.output.buildId}}' },
+    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.buildId}}' },
     {
       key: 'action', label: 'Action', type: 'dropdown',
       options: [
@@ -116,13 +116,13 @@ export const jkaiDef: NodeDefinition = {
 3. **list** — List all builds (most recent first, up to 50)
 4. **control** — Control a running build (pause, resume, cancel)
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'start', prompt: 'Build a React dashboard with charts', title: 'Dashboard Build' },
-    { operation: 'status', buildId: '{{input.output.data.id}}' },
-    { operation: 'control', buildId: '{{input.output.data.id}}', action: 'cancel' },
+    { operation: 'status', buildId: '{{input.data.id}}' },
+    { operation: 'control', buildId: '{{input.data.id}}', action: 'cancel' },
   ],
 };

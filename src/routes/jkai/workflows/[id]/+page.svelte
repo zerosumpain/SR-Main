@@ -878,6 +878,9 @@
                   }
                 }}
               />
+              <p class="mt-3 text-[11px]" style="color: var(--text-ghost);">
+                Configure channels in <a href="/jkai/channels" class="underline" style="color: var(--accent);">Settings → Channels</a>.
+              </p>
             {:else if configMode === 'basic' && modalNodeDef?.basicConfig && BasicConfigRendererComponent}
               <svelte:component
                 this={BasicConfigRendererComponent}

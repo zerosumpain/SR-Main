@@ -117,7 +117,7 @@ export const deepDiveDef: NodeDefinition = {
         { value: 'deep', label: 'Deep' },
       ],
     },
-    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.output.data.id}}' },
+    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.data.id}}' },
     {
       key: 'action', label: 'Action', type: 'dropdown',
       options: [
@@ -135,13 +135,13 @@ export const deepDiveDef: NodeDefinition = {
 4. **report** — Get the full research report for a completed session
 5. **control** — Control a running session (pause, resume, cancel)
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'start', topic: 'Quantum computing breakthroughs 2026', goals: 'Key advances, practical applications', depth: 'deep' },
-    { operation: 'status', sessionId: '{{input.output.data.id}}' },
-    { operation: 'report', sessionId: '{{input.output.data.id}}' },
+    { operation: 'status', sessionId: '{{input.data.id}}' },
+    { operation: 'report', sessionId: '{{input.data.id}}' },
   ],
 };

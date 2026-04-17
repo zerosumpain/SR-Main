@@ -93,7 +93,7 @@ export const healthQueryDef: NodeDefinition = {
 4. **training_load** — Get training load and fitness/fatigue metrics
 5. **timeline** — Get paginated activity timeline. Supports page/limit params.
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.`,
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).`,
   llmExamples: [
     { operation: 'readiness' },
     { operation: 'stats' },

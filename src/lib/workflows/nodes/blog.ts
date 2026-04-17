@@ -102,7 +102,7 @@ export const blogDef: NodeDefinition = {
         { value: 'update', label: 'Update Post' },
       ],
     },
-    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.output.id}}' },
+    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.id}}' },
     { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'My Blog Post' },
     { key: 'content', label: 'Content', type: 'template-textarea', placeholder: '<p>Post content here...</p>' },
     { key: 'status', label: 'Status', type: 'dropdown', options: [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }] },
@@ -115,12 +115,12 @@ export const blogDef: NodeDefinition = {
 3. **create** — Create a new blog post. Requires title; content, status, and tags are optional.
 4. **update** — Update an existing post by ID. Pass only the fields to change.
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'create', title: 'Weekly Update', content: '<p>This week...</p>', status: 'draft', tags: 'weekly, update' },
-    { operation: 'update', postId: '{{input.output.id}}', status: 'published' },
+    { operation: 'update', postId: '{{input.id}}', status: 'published' },
   ],
 };

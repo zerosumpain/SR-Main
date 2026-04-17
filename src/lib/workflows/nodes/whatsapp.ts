@@ -70,26 +70,26 @@ export const whatsappDef: NodeDefinition = {
       key: 'to',
       label: 'To (Phone Number)',
       type: 'text',
-      placeholder: '+447359228511 or {{input.output.phone}}',
+      placeholder: '+447359228511 or {{input.phone}}',
       description: 'E.164 format. Supports template interpolation.',
     },
     {
       key: 'message',
       label: 'Message',
       type: 'template-textarea',
-      placeholder: 'Hi {{input.output.name}}, your report is ready.',
+      placeholder: 'Hi {{input.name}}, your report is ready.',
       description: 'Message text. Supports {{input.field}} templates.',
     },
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use this node when a workflow needs to notify someone via WhatsApp.
 
-IMPORTANT: The output is wrapped in an \`output\` object. Downstream nodes should access \`input.output.sent\`, \`input.output.messageId\`, or \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.sent\`, \`input.messageId\`, or \`input.error\` (the upstream output is merged directly into the downstream input).
 
 The \`to\` field must be an E.164 phone number (e.g., "+447359228511"). Both \`to\` and \`message\` support template interpolation with \`{{input.field}}\` syntax.
 
 Requires an active WhatsApp connection (configured via the WhatsApp settings in the workflows UI).`,
   llmExamples: [
-    { to: '+447359228511', message: 'Daily report: {{input.output.summary}}' },
-    { to: '{{input.output.phone}}', message: '{{input.output.notification}}' },
+    { to: '+447359228511', message: 'Daily report: {{input.summary}}' },
+    { to: '{{input.phone}}', message: '{{input.notification}}' },
   ],
 };

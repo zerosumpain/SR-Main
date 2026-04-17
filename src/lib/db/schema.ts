@@ -735,6 +735,26 @@ export type WhatsAppConversation = typeof whatsappConversations.$inferSelect;
 export type NewWhatsAppConversation = typeof whatsappConversations.$inferInsert;
 
 // ==========================================
+// Channels (site-level messaging channels: WhatsApp, Email, ...)
+// ==========================================
+
+export const channels = pgTable('channels', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  kind: text('kind').notNull(), // 'whatsapp' | 'email'
+  name: text('name').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  // config shape per kind:
+  //   whatsapp: { allowedNumbers: string[], defaultRecipient?: string, authDir?: string }
+  //   email:    { provider: 'smtp'|'resend'|'postmark', from: string, providerConfig: {...}, allowedRecipients?: string[] }
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Channel = typeof channels.$inferSelect;
+export type NewChannel = typeof channels.$inferInsert;
+
+// ==========================================
 // Home Assistant Integration
 // ==========================================
 

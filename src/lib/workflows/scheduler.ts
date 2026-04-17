@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { db } from '$lib/db';
-import { workflowSchedules, workflows, workflowNodes, workflowEdges, workflowRuns } from '$lib/db/schema';
+import { workflowSchedules, workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
@@ -117,12 +117,47 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
       })),
     };
 
+    // Create pending node execution records so scheduled runs have the same
+    // diagnostic trail as manual runs (see routes/api/workflows/[id]/run/+server.ts).
+    for (const node of nodes) {
+      await db.insert(nodeExecutions).values({
+        runId,
+        nodeId: node.id,
+        status: 'pending',
+      });
+    }
+
     const result = await engine.execute(definition, runId, {}, undefined, workflowId);
 
     await db
       .update(workflowRuns)
       .set({ status: result.status, completedAt: new Date(), error: result.error ?? null })
       .where(eq(workflowRuns.id, runId));
+
+    // Update node execution records with inputs/outputs/status
+    for (const [nodeId, output] of result.nodeOutputs) {
+      const inputData = result.nodeInputs.get(nodeId);
+      await db
+        .update(nodeExecutions)
+        .set({
+          status: 'completed',
+          inputData: inputData ?? null,
+          outputData: output,
+          completedAt: new Date(),
+        })
+        .where(eq(nodeExecutions.nodeId, nodeId));
+    }
+
+    for (const [nodeId, error] of result.nodeErrors) {
+      await db
+        .update(nodeExecutions)
+        .set({
+          status: 'failed',
+          error,
+          completedAt: new Date(),
+        })
+        .where(eq(nodeExecutions.nodeId, nodeId));
+    }
 
     // Update lastRunAt/nextRunAt on the schedule
     const job = activeJobs.get(scheduleId);

@@ -463,27 +463,27 @@ const whatsappDef: NodeDefinition = {
       key: 'to',
       label: 'To (Phone Number)',
       type: 'text',
-      placeholder: '+447359228511 or {{input.output.phone}}',
+      placeholder: '+447359228511 or {{input.phone}}',
       description: 'E.164 format. Supports template interpolation.',
     },
     {
       key: 'message',
       label: 'Message',
       type: 'template-textarea',
-      placeholder: 'Hi {{input.output.name}}, your report is ready.',
+      placeholder: 'Hi {{input.name}}, your report is ready.',
       description: 'Message text. Supports {{input.field}} templates.',
     },
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use this node when a workflow needs to notify someone via WhatsApp.
 
-IMPORTANT: The output is wrapped in an \`output\` object. Downstream nodes should access \`input.output.sent\`, \`input.output.messageId\`, or \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.sent\`, \`input.messageId\`, or \`input.error\` (the upstream output is merged directly into the downstream input).
 
 The \`to\` field must be an E.164 phone number (e.g., "+447359228511"). Both \`to\` and \`message\` support template interpolation with \`{{input.field}}\` syntax.
 
 Requires an active WhatsApp connection (configured via the WhatsApp settings in the workflows UI).`,
   llmExamples: [
-    { to: '+447359228511', message: 'Daily report: {{input.output.summary}}' },
-    { to: '{{input.output.phone}}', message: '{{input.output.notification}}' },
+    { to: '+447359228511', message: 'Daily report: {{input.summary}}' },
+    { to: '{{input.phone}}', message: '{{input.notification}}' },
   ],
 };
 
@@ -575,7 +575,7 @@ const healthQueryClientDef: NodeDefinition = {
 4. **training_load** — Get training load and fitness/fatigue metrics
 5. **timeline** — Get paginated activity timeline. Supports page/limit params.
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.`,
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).`,
   llmExamples: [
     { operation: 'readiness' },
     { operation: 'stats' },
@@ -613,7 +613,7 @@ const blogClientDef: NodeDefinition = {
         { value: 'update', label: 'Update Post' },
       ],
     },
-    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.output.id}}' },
+    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.id}}' },
     { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'My Blog Post' },
     { key: 'content', label: 'Content', type: 'template-textarea', placeholder: '<p>Post content here...</p>' },
     { key: 'status', label: 'Status', type: 'dropdown', options: [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }] },
@@ -626,13 +626,13 @@ const blogClientDef: NodeDefinition = {
 3. **create** — Create a new blog post. Requires title; content, status, and tags are optional.
 4. **update** — Update an existing post by ID. Pass only the fields to change.
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'create', title: 'Weekly Update', content: '<p>This week...</p>', status: 'draft', tags: 'weekly, update' },
-    { operation: 'update', postId: '{{input.output.id}}', status: 'published' },
+    { operation: 'update', postId: '{{input.id}}', status: 'published' },
   ],
 };
 
@@ -667,7 +667,7 @@ const jkaiClientDef: NodeDefinition = {
     },
     { key: 'prompt', label: 'Prompt', type: 'template-textarea', placeholder: 'Build a landing page with...' },
     { key: 'title', label: 'Title', type: 'text', placeholder: 'My Build' },
-    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.output.buildId}}' },
+    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.buildId}}' },
     {
       key: 'action', label: 'Action', type: 'dropdown',
       options: [
@@ -684,14 +684,14 @@ const jkaiClientDef: NodeDefinition = {
 3. **list** — List all builds (most recent first, up to 50)
 4. **control** — Control a running build (pause, resume, cancel)
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'start', prompt: 'Build a React dashboard with charts', title: 'Dashboard Build' },
-    { operation: 'status', buildId: '{{input.output.data.id}}' },
-    { operation: 'control', buildId: '{{input.output.data.id}}', action: 'cancel' },
+    { operation: 'status', buildId: '{{input.data.id}}' },
+    { operation: 'control', buildId: '{{input.data.id}}', action: 'cancel' },
   ],
 };
 
@@ -736,7 +736,7 @@ const deepDiveClientDef: NodeDefinition = {
         { value: 'deep', label: 'Deep' },
       ],
     },
-    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.output.data.id}}' },
+    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.data.id}}' },
     {
       key: 'action', label: 'Action', type: 'dropdown',
       options: [
@@ -754,14 +754,14 @@ const deepDiveClientDef: NodeDefinition = {
 4. **report** — Get the full research report for a completed session
 5. **control** — Control a running session (pause, resume, cancel)
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'list' },
     { operation: 'start', topic: 'Quantum computing breakthroughs 2026', goals: 'Key advances, practical applications', depth: 'deep' },
-    { operation: 'status', sessionId: '{{input.output.data.id}}' },
-    { operation: 'report', sessionId: '{{input.output.data.id}}' },
+    { operation: 'status', sessionId: '{{input.data.id}}' },
+    { operation: 'report', sessionId: '{{input.data.id}}' },
   ],
 };
 

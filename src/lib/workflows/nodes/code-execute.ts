@@ -40,7 +40,12 @@ export const codeExecuteExecutor: NodeExecutor = {
       filename = `workflow_${context.runId}.mjs`;
       wrappedCode = [
         `const input = ${inputJson};`,
+        `(async () => {`,
+        `  const __r = await (async () => {`,
         code,
+        `  })();`,
+        `  if (__r !== undefined) console.log(JSON.stringify(__r));`,
+        `})().catch(e => { console.error(e && e.stack || String(e)); process.exit(1); });`,
       ].join('\n');
     }
 

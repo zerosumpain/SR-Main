@@ -140,13 +140,13 @@ export const homeAssistantDef: NodeDefinition = {
 4. **get_history** — Get historical state data for an entity over a time period.
 5. **render_template** — Evaluate a Jinja2 template server-side.
 
-IMPORTANT: Output is wrapped in \`output\`. Downstream nodes access \`input.output.success\`, \`input.output.data\`, \`input.output.error\`.
+IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
 All text fields support \`{{input.field}}\` template interpolation.`,
   llmExamples: [
     { operation: 'query_state', entityId: 'sensor.living_room_temperature' },
     { operation: 'call_service', entityId: 'light.kitchen', domain: 'light', service: 'turn_off' },
     { operation: 'call_service', entityId: 'climate.living_room', domain: 'climate', service: 'set_temperature', serviceData: '{"temperature": 20}' },
-    { operation: 'get_history', entityId: 'sensor.temperature', historyStart: '{{input.output.start_time}}' },
+    { operation: 'get_history', entityId: 'sensor.temperature', historyStart: '{{input.start_time}}' },
   ],
 };
