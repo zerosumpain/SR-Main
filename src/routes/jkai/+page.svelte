@@ -120,14 +120,6 @@
       </button>
 
       <h1 class="display text-[20px] sm:text-[24px]" style="color: var(--text-primary);">JKAI</h1>
-
-      <!-- Section tabs — visually distinct from the site-wide primary nav above -->
-      <nav class="flex items-center gap-0 overflow-x-auto" aria-label="JKAI sections">
-        <a href="/jkai/builds" class="section-tab" aria-current={isActive('/jkai/builds') ? 'page' : undefined}>Builds</a>
-        <a href="/jkai/prompts" class="section-tab" aria-current={isActive('/jkai/prompts') ? 'page' : undefined}>Prompts</a>
-        <a href="/jkai/workflows" class="section-tab" aria-current={isActive('/jkai/workflows') ? 'page' : undefined}>Workflows</a>
-        <a href="/jkai/channels" class="section-tab" aria-current={isActive('/jkai/channels') ? 'page' : undefined}>Channels</a>
-      </nav>
     </div>
 
     <!-- Metrics: hidden on mobile -->

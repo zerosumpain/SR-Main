@@ -48,12 +48,44 @@
 
   // On the home page, the page itself renders the hero SiteNav — don't double up.
   let isHome = $derived(page.url.pathname === '/');
+
+  // Context-aware nav items — pick based on which section the user is in.
+  // One nav row; its contents adapt to the page hierarchy.
+  const SITE_ITEMS = [
+    { href: '/', label: 'Home' },
+    { href: '/projects', label: 'Projects' },
+    { href: '/blog', label: 'Writing' },
+    { href: '/health', label: 'Health' },
+    { href: '/live', label: 'Live' },
+    { href: '/jkai', label: 'jkai' },
+  ];
+  const JKAI_ITEMS = [
+    { href: '/', label: 'Home' },
+    { href: '/jkai', label: 'Chat' },
+    { href: '/jkai/builds', label: 'Builds' },
+    { href: '/jkai/prompts', label: 'Prompts' },
+    { href: '/jkai/workflows', label: 'Workflows' },
+    { href: '/jkai/channels', label: 'Channels' },
+  ];
+  const DEEPDIVE_ITEMS = [
+    { href: '/', label: 'Home' },
+    { href: '/projects', label: 'Projects' },
+    { href: '/deepdive', label: 'Deep Dive' },
+    { href: '/quickanswer', label: 'Quick' },
+  ];
+
+  let navItems = $derived.by(() => {
+    const path = page.url.pathname;
+    if (path.startsWith('/jkai')) return JKAI_ITEMS;
+    if (path.startsWith('/deepdive') || path.startsWith('/quickanswer')) return DEEPDIVE_ITEMS;
+    return SITE_ITEMS;
+  });
 </script>
 
 <div class="relative z-10 min-h-screen">
   {#if showNav && !isHome}
     <header class="site-nav-bar">
-      <SiteNav variant="compact" showBrand={false} />
+      <SiteNav variant="compact" showBrand={false} items={navItems} />
     </header>
   {/if}
   {@render children()}
