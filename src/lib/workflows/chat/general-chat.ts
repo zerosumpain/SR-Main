@@ -1,9 +1,11 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
 import { db } from '$lib/db';
-import { homeAssistantConfig, jkaiMemories, orchestratorChats, conversations } from '$lib/db/schema';
+import { homeAssistantConfig, jkaiMemories, orchestratorChats } from '$lib/db/schema';
 import { eq, isNull, desc } from 'drizzle-orm';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
+import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
@@ -27,6 +29,8 @@ interface ChatOptions {
   conversationId?: string | null;
   onProgress?: (text: string) => void;
   onToolProgress?: (step: ToolProgress) => void;
+  modelContext: ModelContext;
+  priceSnapshot: PriceSnapshot | null;
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -67,7 +71,7 @@ async function buildMemorySection(): Promise<string> {
 export async function generalChat(
   userMessage: string,
   conversationHistory: Array<{ role: string; content: string }>,
-  options: ChatOptions = {},
+  options: ChatOptions,
 ): Promise<{ response: string }> {
   const { onProgress, onToolProgress } = options;
 
@@ -124,8 +128,7 @@ export async function generalChat(
     activatedToolsets.add('visualise');
   }
 
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getLLMClient(options.modelContext);
   let responseText = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -152,6 +155,13 @@ export async function generalChat(
           // any output — 300 would guarantee empty content.
           max_tokens: 6000,
         });
+        if (options.conversationId) {
+          await recordConversationUsage(
+            options.conversationId,
+            parseUsage(statusResp.usage),
+            options.priceSnapshot,
+          );
+        }
         const statusText = statusResp.choices[0]?.message?.content?.trim();
         if (statusText && options.conversationId) {
           // Persist as a proper assistant message with source marker in metadata
@@ -201,6 +211,13 @@ export async function generalChat(
           max_tokens: 16384,
           ...(tools ? { tools } : {}),
         });
+        if (options.conversationId) {
+          await recordConversationUsage(
+            options.conversationId,
+            parseUsage(response.usage),
+            options.priceSnapshot,
+          );
+        }
         break;
       } catch (err: any) {
         if (err?.status === 429 && attempt < 2) {
