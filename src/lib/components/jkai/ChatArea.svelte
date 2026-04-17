@@ -10,6 +10,7 @@
   let {
     conversationId,
     initialMessages = [],
+    conversation = null,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -20,6 +21,7 @@
       source?: string;
       createdAt?: string;
     }>;
+    conversation?: { modelProvider?: string; modelId?: string } | null;
   } = $props();
 
   interface ToolStep {
@@ -366,14 +368,25 @@
 
 <div class="flex flex-col h-full relative">
   <!-- Chat header -->
-  <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between" style="border-color: var(--card-border);">
-    <p class="text-[11px] hidden sm:block" style="color: var(--text-ghost);">
-      {#if !conversationId}
-        Select or start a conversation
-      {:else}
-        Chat with the orchestrator — ask anything, build workflows, control your home
+  <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2" style="border-color: var(--card-border);">
+    <div class="flex items-center gap-2 min-w-0">
+      <p class="text-[11px] hidden sm:block" style="color: var(--text-ghost);">
+        {#if !conversationId}
+          Select or start a conversation
+        {:else}
+          Chat with the orchestrator — ask anything, build workflows, control your home
+        {/if}
+      </p>
+      {#if conversationId && conversation?.modelId}
+        <span
+          class="model-badge text-[10px] px-1.5 py-0.5 rounded shrink-0"
+          style="background: color-mix(in srgb, var(--card-border) 40%, transparent); color: var(--text-secondary); font-family: var(--font-mono);"
+          title="Pinned model for this conversation"
+        >
+          {conversation.modelProvider === 'zai' ? 'GLM' : 'OR'} · {conversation.modelId}
+        </span>
       {/if}
-    </p>
+    </div>
     {#if conversationId}
       <div class="flex items-center gap-2 shrink-0">
         {#if allToolCalls.length > 0}

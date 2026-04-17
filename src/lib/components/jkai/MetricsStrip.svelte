@@ -1,8 +1,10 @@
 <script lang="ts">
   let {
     metrics,
+    totalSpendUsd = 0,
   }: {
     metrics: { scheduled: number; running: number; completed: number; failed: number };
+    totalSpendUsd?: number;
   } = $props();
 </script>
 
@@ -22,4 +24,8 @@
   {:else}
     <span>{metrics.failed} failed</span>
   {/if}
+  <span style="color: var(--text-ghost);">|</span>
+  <span title="Total LLM spend across conversations and builds">
+    ${totalSpendUsd.toFixed(2)} spend
+  </span>
 </div>

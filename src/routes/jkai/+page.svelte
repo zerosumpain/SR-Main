@@ -13,6 +13,7 @@
   let whatsappThread = $state(data.whatsappThread);
   let activeConversationId = $state<string | null>(null);
   let activeMessages = $state<any[]>([]);
+  let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
   let sidebarOpen = $state(false);
   let newConvOpen = $state(false);
 
@@ -24,9 +25,11 @@
       if (res.ok) {
         const data = await res.json();
         activeMessages = data.messages || [];
+        activeConversation = data.conversation || null;
       }
     } catch {
       activeMessages = [];
+      activeConversation = null;
     }
   }
 
@@ -53,6 +56,7 @@
         ];
         activeConversationId = conv.id;
         activeMessages = [];
+        activeConversation = conv;
         sidebarOpen = false;
       }
     } catch (err) {
@@ -126,7 +130,7 @@
       </button>
     {/snippet}
     {#snippet meta()}
-      <MetricsStrip {metrics} />
+      <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
     {/snippet}
   </PageHeader>
 
@@ -181,6 +185,7 @@
       <ChatArea
         conversationId={activeConversationId}
         initialMessages={activeMessages}
+        conversation={activeConversation}
       />
     </div>
   </div>
