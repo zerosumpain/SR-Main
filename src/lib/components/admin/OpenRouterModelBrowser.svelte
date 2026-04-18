@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
+  import { untrack } from 'svelte';
 
   interface ModelRow {
     id: string;
@@ -11,6 +12,15 @@
     completionPrice: string | null;
   }
 
+  type SortKey =
+    | 'id'
+    | 'name'
+    | 'provider'
+    | 'modality'
+    | 'contextLength'
+    | 'promptPrice'
+    | 'completionPrice';
+
   let {
     chatAltOpenRouterModelId = null,
     builderModelId = null,
@@ -20,15 +30,19 @@
   } = $props();
 
   let q = $state('');
-  let provider = $state('');
-  let modality = $state('');
+  let selectedProviders = $state<Set<string>>(new Set());
+  let selectedModalities = $state<Set<string>>(new Set());
   let minContext = $state<number | null>(null);
   let maxCostPerM = $state<number | null>(null);
+  let sortBy = $state<SortKey>('id');
+  let sortDir = $state<'asc' | 'desc'>('asc');
   let page = $state(1);
   const pageSize = 50;
 
   let rows = $state<ModelRow[]>([]);
   let total = $state(0);
+  let facetProviders = $state<string[]>([]);
+  let facetModalities = $state<string[]>([]);
   let loading = $state(false);
   let actionBusy = $state<string | null>(null);
   let flash = $state<{ text: string; tone: 'ok' | 'err' } | null>(null);
@@ -38,10 +52,12 @@
     try {
       const params = new URLSearchParams();
       if (q) params.set('q', q);
-      if (provider) params.set('provider', provider);
-      if (modality) params.set('modality', modality);
+      for (const p of selectedProviders) params.append('provider', p);
+      for (const m of selectedModalities) params.append('modality', m);
       if (minContext != null) params.set('minContext', String(minContext));
       if (maxCostPerM != null) params.set('maxCostPerM', String(maxCostPerM));
+      params.set('sortBy', sortBy);
+      params.set('sortDir', sortDir);
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
       const res = await fetch(`/api/admin/models/openrouter?${params}`);
@@ -49,13 +65,74 @@
         const data = await res.json();
         rows = data.rows;
         total = data.total;
+        if (data.facets) {
+          facetProviders = data.facets.providers;
+          facetModalities = data.facets.modalities;
+        }
       }
     } finally {
       loading = false;
     }
   }
 
-  $effect(() => { load(); });
+  // Reload whenever any dependency changes. Explicit list so dataset reads
+  // don't create phantom dependencies.
+  $effect(() => {
+    // referenced state
+    q;
+    selectedProviders;
+    selectedModalities;
+    minContext;
+    maxCostPerM;
+    sortBy;
+    sortDir;
+    page;
+    untrack(() => load());
+  });
+
+  function toggleSet(set: Set<string>, value: string): Set<string> {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  }
+
+  function toggleProvider(p: string) {
+    selectedProviders = toggleSet(selectedProviders, p);
+    page = 1;
+  }
+  function toggleModality(m: string) {
+    selectedModalities = toggleSet(selectedModalities, m);
+    page = 1;
+  }
+  function clearProviders() {
+    selectedProviders = new Set();
+    page = 1;
+  }
+  function clearModalities() {
+    selectedModalities = new Set();
+    page = 1;
+  }
+
+  function sortByColumn(col: SortKey) {
+    if (sortBy === col) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortBy = col;
+      sortDir = 'asc';
+    }
+    page = 1;
+  }
+
+  function sortIndicator(col: SortKey): string {
+    if (sortBy !== col) return '';
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
+  }
+
+  function ariaDir(col: SortKey): 'ascending' | 'descending' | 'none' {
+    if (sortBy !== col) return 'none';
+    return sortDir === 'asc' ? 'ascending' : 'descending';
+  }
 
   function perMillion(pricePerToken: string | null): string {
     if (!pricePerToken) return '—';
@@ -111,34 +188,18 @@
     Browse OpenRouter models
   </h2>
 
-  <!-- Filters -->
+  <!-- Top-row filters: search + numeric ranges -->
   <div class="flex flex-wrap gap-2 mb-3">
     <input
-      class="rounded px-3 py-2 text-sm flex-1 min-w-[160px]"
+      class="rounded px-3 py-2 text-sm flex-1 min-w-[200px]"
       style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
-      placeholder="Search…"
+      placeholder="Search name or id…"
       aria-label="Search models"
       bind:value={q}
       oninput={() => { page = 1; }}
     />
     <input
-      class="rounded px-3 py-2 text-sm min-w-[160px]"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
-      placeholder="Provider (e.g. anthropic)"
-      aria-label="Provider filter"
-      bind:value={provider}
-      oninput={() => { page = 1; }}
-    />
-    <input
-      class="rounded px-3 py-2 text-sm min-w-[160px]"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
-      placeholder="Modality (e.g. text->text)"
-      aria-label="Modality filter"
-      bind:value={modality}
-      oninput={() => { page = 1; }}
-    />
-    <input
-      class="rounded px-3 py-2 text-sm w-[140px]"
+      class="rounded px-3 py-2 text-sm w-[150px]"
       style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
       type="number"
       placeholder="Min context"
@@ -147,7 +208,7 @@
       oninput={() => { page = 1; }}
     />
     <input
-      class="rounded px-3 py-2 text-sm w-[180px]"
+      class="rounded px-3 py-2 text-sm w-[190px]"
       style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
       type="number"
       step="0.01"
@@ -156,6 +217,75 @@
       bind:value={maxCostPerM}
       oninput={() => { page = 1; }}
     />
+  </div>
+
+  <!-- Multi-select pill rows -->
+  <div class="flex flex-col gap-2 mb-3">
+    {#if facetProviders.length > 0}
+      <div class="flex items-start gap-2 flex-wrap">
+        <div class="flex items-center gap-1 shrink-0" style="min-width: 84px;">
+          <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Provider</span>
+          {#if selectedProviders.size > 0}
+            <button
+              type="button"
+              class="text-[10px] underline"
+              style="color: var(--text-ghost);"
+              onclick={clearProviders}
+              title="Clear provider filters"
+            >clear</button>
+          {/if}
+        </div>
+        <div class="flex flex-wrap gap-1">
+          {#each facetProviders as p}
+            {@const active = selectedProviders.has(p)}
+            <button
+              type="button"
+              class="rounded-full px-2.5 py-0.5 text-[11px] transition-colors"
+              style={active
+                ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
+                : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+              aria-pressed={active}
+              onclick={() => toggleProvider(p)}
+            >
+              {p}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    {#if facetModalities.length > 0}
+      <div class="flex items-start gap-2 flex-wrap">
+        <div class="flex items-center gap-1 shrink-0" style="min-width: 84px;">
+          <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Modality</span>
+          {#if selectedModalities.size > 0}
+            <button
+              type="button"
+              class="text-[10px] underline"
+              style="color: var(--text-ghost);"
+              onclick={clearModalities}
+              title="Clear modality filters"
+            >clear</button>
+          {/if}
+        </div>
+        <div class="flex flex-wrap gap-1">
+          {#each facetModalities as m}
+            {@const active = selectedModalities.has(m)}
+            <button
+              type="button"
+              class="rounded-full px-2.5 py-0.5 text-[11px] transition-colors"
+              style={active
+                ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
+                : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+              aria-pressed={active}
+              onclick={() => toggleModality(m)}
+            >
+              {m}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="flex items-center justify-between text-xs mb-2" style="color: var(--text-ghost);">
@@ -175,13 +305,41 @@
         <tr
           style="background: var(--bg-section); color: var(--text-ghost); font-family: var(--font-mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;"
         >
-          <th class="text-left px-2 py-2">ID</th>
-          <th class="text-left px-2 py-2">Name</th>
-          <th class="text-left px-2 py-2">Provider</th>
-          <th class="text-left px-2 py-2">Modality</th>
-          <th class="text-right px-2 py-2">Context</th>
-          <th class="text-right px-2 py-2">Prompt $/1M</th>
-          <th class="text-right px-2 py-2">Completion $/1M</th>
+          <th class="text-left px-2 py-2" aria-sort={ariaDir('id')}>
+            <button class="sort-btn" onclick={() => sortByColumn('id')}>
+              ID{sortIndicator('id')}
+            </button>
+          </th>
+          <th class="text-left px-2 py-2" aria-sort={ariaDir('name')}>
+            <button class="sort-btn" onclick={() => sortByColumn('name')}>
+              Name{sortIndicator('name')}
+            </button>
+          </th>
+          <th class="text-left px-2 py-2" aria-sort={ariaDir('provider')}>
+            <button class="sort-btn" onclick={() => sortByColumn('provider')}>
+              Provider{sortIndicator('provider')}
+            </button>
+          </th>
+          <th class="text-left px-2 py-2" aria-sort={ariaDir('modality')}>
+            <button class="sort-btn" onclick={() => sortByColumn('modality')}>
+              Modality{sortIndicator('modality')}
+            </button>
+          </th>
+          <th class="text-right px-2 py-2" aria-sort={ariaDir('contextLength')}>
+            <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('contextLength')}>
+              Context{sortIndicator('contextLength')}
+            </button>
+          </th>
+          <th class="text-right px-2 py-2" aria-sort={ariaDir('promptPrice')}>
+            <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('promptPrice')}>
+              Prompt $/1M{sortIndicator('promptPrice')}
+            </button>
+          </th>
+          <th class="text-right px-2 py-2" aria-sort={ariaDir('completionPrice')}>
+            <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('completionPrice')}>
+              Completion $/1M{sortIndicator('completionPrice')}
+            </button>
+          </th>
           <th class="text-right px-2 py-2">Actions</th>
         </tr>
       </thead>
@@ -273,5 +431,23 @@
 <style>
   .model-row:hover {
     background: var(--surface-overlay) !important;
+  }
+  .sort-btn {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+  }
+  .sort-btn--right {
+    text-align: right;
+  }
+  .sort-btn:hover {
+    color: var(--text-secondary);
   }
 </style>
