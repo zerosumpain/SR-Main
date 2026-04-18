@@ -1,4 +1,6 @@
-import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+
+export { errorHandlerDef } from './error-handler.def';
 
 export const errorHandlerExecutor: NodeExecutor = {
   type: 'error-handler',
@@ -24,22 +26,3 @@ export const errorHandlerExecutor: NodeExecutor = {
   },
 };
 
-export const errorHandlerDef: NodeDefinition = {
-  type: 'error-handler',
-  label: 'Error Handler',
-  category: 'control',
-  description:
-    'Routes to success or error output based on whether input contains an error field.',
-  configSchema: {
-    type: 'object',
-    properties: {},
-  },
-  defaultConfig: {},
-  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
-  outputs: [
-    { name: 'success', type: 'any', label: 'Success' },
-    { name: 'error', type: 'any', label: 'Error' },
-  ],
-  // No configuration — routes automatically based on whether input contains an `error` field.
-  basicConfig: [],
-};
