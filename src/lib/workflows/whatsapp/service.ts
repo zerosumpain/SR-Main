@@ -8,6 +8,8 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import { mkdirSync, readdirSync, chmodSync } from 'fs';
 import { join } from 'path';
+import { readBuffer } from '$lib/jkai/media/storage';
+import type { JkaiAttachment } from '$lib/db/schema';
 import type {
 	WhatsAppServiceStatus,
 	WhatsAppServiceState,
@@ -292,6 +294,67 @@ export class WhatsAppService {
 			console.error('[whatsapp] Send failed:', message);
 			return { sent: false, error: message };
 		}
+	}
+
+	async sendImage(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				image: buf, mimetype: att.mimeType, caption: caption ?? undefined,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendAudio(to: string, att: JkaiAttachment): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				audio: buf, mimetype: att.mimeType, ptt: true,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendDocument(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				document: buf, mimetype: att.mimeType,
+				fileName: att.originalName ?? 'document',
+				caption: caption ?? undefined,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendAttachment(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		if (att.kind === 'image') return this.sendImage(to, att, caption);
+		if (att.kind === 'audio') return this.sendAudio(to, att);
+		if (att.kind === 'video') {
+			if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+			try {
+				const jid = to.includes('@') ? to : this.toJid(to);
+				const buf = await readBuffer(att.diskPath);
+				const result = await this.sock.sendMessage(jid, { video: buf, mimetype: att.mimeType, caption });
+				return { sent: true, messageId: result?.key?.id };
+			} catch (err: unknown) {
+				return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+			}
+		}
+		return this.sendDocument(to, att, caption);
 	}
 }
 
