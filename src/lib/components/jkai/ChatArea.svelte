@@ -8,6 +8,7 @@
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
+  import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
@@ -19,6 +20,7 @@
     altOpenRouterModel = null,
     messageCount = 0,
     onmodelchange,
+    modelCapabilities = null,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -34,6 +36,7 @@
     altOpenRouterModel?: ModelContext | null;
     messageCount?: number;
     onmodelchange?: (ctx: ModelContext) => void;
+    modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
   } = $props();
 
   interface ToolStep {
@@ -98,6 +101,93 @@
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
   let jobEventSource: EventSource | null = null;
+
+  // Attachment composer state
+  interface PendingAttachment {
+    id: string;
+    kind: string;
+    mimeType: string;
+    originalName: string | null;
+    sizeBytes: number;
+    uploading?: boolean;
+    error?: string;
+    incompatible?: boolean;
+  }
+  let pendingAttachments = $state<PendingAttachment[]>([]);
+  let dragOver = $state(false);
+  let fileInputEl: HTMLInputElement | undefined = $state();
+
+  function acceptAttrForCaps(): string {
+    const caps = modelCapabilities;
+    if (!caps) return '*/*';
+    const parts: string[] = [];
+    if (caps.image) parts.push('image/*');
+    if (caps.audio) parts.push('audio/*');
+    if (caps.video) parts.push('video/*');
+    if (caps.pdf) parts.push('application/pdf');
+    if (caps.documentText) parts.push('text/*', 'application/json');
+    return parts.join(',') || '*/*';
+  }
+
+  async function uploadFile(file: File): Promise<void> {
+    const tempId = `tmp-${Math.random().toString(36).slice(2)}`;
+    pendingAttachments = [...pendingAttachments, {
+      id: tempId, kind: 'unknown', mimeType: file.type, originalName: file.name,
+      sizeBytes: file.size, uploading: true,
+    }];
+    const fd = new FormData();
+    fd.append('file', file);
+    if (conversationId) fd.append('conversationId', conversationId);
+    try {
+      const res = await fetch('/api/jkai/attachments', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        pendingAttachments = pendingAttachments.map(a =>
+          a.id === tempId ? { ...a, uploading: false, error: err.error ?? `upload ${res.status}` } : a
+        );
+        return;
+      }
+      const row = await res.json();
+      pendingAttachments = pendingAttachments.map(a =>
+        a.id === tempId ? { ...row, uploading: false } : a
+      );
+    } catch (e: any) {
+      pendingAttachments = pendingAttachments.map(a =>
+        a.id === tempId ? { ...a, uploading: false, error: e?.message ?? 'upload failed' } : a
+      );
+    }
+  }
+
+  async function removeAttachment(id: string): Promise<void> {
+    if (!id.startsWith('tmp-')) {
+      await fetch(`/api/jkai/attachments/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
+    pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+  }
+
+  function onFilePick(e: Event): void {
+    const input = e.currentTarget as HTMLInputElement;
+    if (!input.files) return;
+    for (const f of Array.from(input.files)) void uploadFile(f);
+    input.value = '';
+  }
+
+  function onDrop(e: DragEvent): void {
+    e.preventDefault();
+    dragOver = false;
+    if (!e.dataTransfer?.files) return;
+    for (const f of Array.from(e.dataTransfer.files)) void uploadFile(f);
+  }
+
+  function onPaste(e: ClipboardEvent): void {
+    if (!e.clipboardData) return;
+    for (const item of Array.from(e.clipboardData.items)) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) void uploadFile(f);
+      }
+    }
+  }
 
   // Aggregate all tool calls across every assistant message in the conversation.
   // Each entry keeps a reference to which message it belongs to.
@@ -251,11 +341,20 @@
     input = '';
     loading = true;
 
+    const attachmentIds = pendingAttachments
+      .filter(a => !a.uploading && !a.error && !a.incompatible)
+      .map(a => a.id);
+    const userAttachments = pendingAttachments
+      .filter(a => !a.uploading && !a.error && !a.incompatible)
+      .map(a => ({ id: a.id, kind: a.kind as any, mimeType: a.mimeType, originalName: a.originalName, sizeBytes: a.sizeBytes, source: 'web' as const }));
+    pendingAttachments = [];
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
       content: text,
       source: 'web',
+      attachments: userAttachments.length > 0 ? userAttachments : undefined,
     };
     messages = [...messages, userMsg];
     scrollToBottom();
@@ -279,6 +378,7 @@
         body: JSON.stringify({
           message: text,
           conversationId,
+          attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
         }),
       });
 
@@ -662,25 +762,54 @@
 
   <!-- Input -->
   {#if conversationId}
-    <div class="p-3 sm:p-4 border-t" style="border-color: var(--card-border);">
-      <div class="max-w-3xl mx-auto flex gap-2">
-        <textarea
-          bind:value={input}
-          onkeydown={handleKeydown}
-          placeholder="Ask anything..."
-          disabled={loading}
-          class="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm border resize-none"
-          style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); min-height: 44px; max-height: 160px;"
-          rows="1"
-        ></textarea>
-        <button
-          onclick={send}
-          disabled={loading || !input.trim()}
-          class="px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium transition-colors self-end"
-          style="background: var(--accent); color: white; opacity: {loading || !input.trim() ? 0.5 : 1};"
-        >
-          Send
-        </button>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="p-3 sm:p-4 border-t relative"
+      style="border-color: var(--card-border);"
+      ondragenter={(e) => { e.preventDefault(); dragOver = true; }}
+      ondragover={(e) => e.preventDefault()}
+      ondragleave={() => { dragOver = false; }}
+      ondrop={onDrop}
+    >
+      {#if dragOver}
+        <div class="absolute inset-0 z-10 border-2 border-dashed rounded flex items-center justify-center pointer-events-none" style="border-color: var(--accent, #3498db); background: rgba(0,0,0,0.3); color: white;">
+          Drop files to attach
+        </div>
+      {/if}
+      <div class="max-w-3xl mx-auto">
+        <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
+        <div class="flex gap-2 items-end">
+          <button
+            type="button"
+            onclick={() => fileInputEl?.click()}
+            aria-label="Attach file"
+            class="p-2 opacity-60 hover:opacity-100 shrink-0 self-end"
+            title="Attach file"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+          <input bind:this={fileInputEl} type="file" class="hidden" multiple accept={acceptAttrForCaps()} onchange={onFilePick} />
+          <textarea
+            bind:value={input}
+            onkeydown={handleKeydown}
+            onpaste={onPaste}
+            placeholder="Ask anything..."
+            disabled={loading}
+            class="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm border resize-none"
+            style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); min-height: 44px; max-height: 160px;"
+            rows="1"
+          ></textarea>
+          <button
+            onclick={send}
+            disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
+            class="px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium transition-colors self-end"
+            style="background: var(--accent); color: white; opacity: {loading || !input.trim() ? 0.5 : 1};"
+          >
+            Send
+          </button>
+        </div>
       </div>
     </div>
   {/if}

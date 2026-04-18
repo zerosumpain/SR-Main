@@ -13,6 +13,7 @@
   let activeConversationId = $state<string | null>(null);
   let activeMessages = $state<any[]>([]);
   let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
+  let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
   let sidebarOpen = $state(false);
 
   async function selectConversation(id: string) {
@@ -24,10 +25,12 @@
         const data = await res.json();
         activeMessages = data.messages || [];
         activeConversation = data.conversation || null;
+        activeModelCaps = data.modelCapabilities || null;
       }
     } catch {
       activeMessages = [];
       activeConversation = null;
+      activeModelCaps = null;
     }
   }
 
@@ -176,6 +179,7 @@
         conversationId={activeConversationId}
         initialMessages={activeMessages}
         conversation={activeConversation}
+        modelCapabilities={activeModelCaps}
         defaultGlmModelId={data.defaultChatModel.modelId}
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
