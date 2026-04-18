@@ -324,6 +324,38 @@
     </a>
   </div>
 
+  <!-- LLM Models link -->
+  <div class="mt-4">
+    <a
+      href="/admin/models?token={adminToken}"
+      class="block p-5 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div class="flex items-center justify-between">
+        <div>
+          <p
+            class="text-[10px] uppercase tracking-[0.25em] mb-1"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            LLM Models
+          </p>
+          <p
+            class="text-xs"
+            style="color: var(--text-ghost); font-family: var(--font-mono);"
+          >
+            Pick default GLM + alt OpenRouter model, browse catalogue, refresh
+          </p>
+        </div>
+        <span
+          class="text-[10px] uppercase tracking-[0.2em]"
+          style="color: var(--text-ghost); font-family: var(--font-mono);"
+        >
+          &rarr;
+        </span>
+      </div>
+    </a>
+  </div>
+
   <!-- Custom Tools link -->
   <div class="mt-4">
     <a

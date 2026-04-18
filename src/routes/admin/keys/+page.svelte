@@ -197,7 +197,8 @@
             style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
           />
           <p class="text-[9px] mt-1 opacity-60" style="color: var(--text-ghost); font-family: var(--font-mono);">
-            Saves to app_settings table (primary). Takes effect immediately. Also used by /admin/models.
+            Saves to app_settings table (primary). Takes effect immediately.
+            Pick models + browse catalogue at <a href="/admin/models?token={adminToken}" class="underline">/admin/models</a>.
           </p>
         </div>
 
