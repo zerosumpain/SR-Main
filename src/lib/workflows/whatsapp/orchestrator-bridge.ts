@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { whatsappConversations } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { generalChat } from '$lib/workflows/chat/general-chat';
+import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
@@ -51,7 +52,7 @@ export class OrchestratorBridge {
 
 			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
 			const modelContext = await resolveDefaultModel('chat');
-			const { response: responseText } = await generalChat(text, priorHistory, {
+			const { response: responseText } = await generalChat({ text }, priorHistory, {
 				modelContext,
 				priceSnapshot: null,
 			});
@@ -76,7 +77,7 @@ export class OrchestratorBridge {
 
 	private async getConversationHistory(
 		phoneNumber: string,
-	): Promise<Array<{ role: string; content: string }>> {
+	): Promise<HistoryMessage[]> {
 		const rows = await db
 			.select()
 			.from(whatsappConversations)
@@ -86,6 +87,8 @@ export class OrchestratorBridge {
 		return rows.map((r) => ({
 			role: r.role,
 			content: r.content,
+			attachments: [],
+			createdAt: r.createdAt,
 		}));
 	}
 

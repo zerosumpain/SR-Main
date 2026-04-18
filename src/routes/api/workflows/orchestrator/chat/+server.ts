@@ -162,7 +162,7 @@ export const POST: RequestHandler = async ({ request }) => {
           }
         }
 
-        const { response: responseText } = await generalChat(message, conversationHistory, {
+        const { response: responseText } = await generalChat({ text: message }, conversationHistory, {
           workflowId,
           conversationId,
           onProgress,

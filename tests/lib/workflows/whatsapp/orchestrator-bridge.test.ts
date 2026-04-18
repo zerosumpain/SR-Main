@@ -95,8 +95,9 @@ describe('OrchestratorBridge', () => {
 		await bridge.handleMessage(msg);
 
 		expect(mockGeneralChat).toHaveBeenCalledWith(
-			"What's the weather like?",
+			{ text: "What's the weather like?" },
 			expect.any(Array),
+			expect.any(Object),
 		);
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
 	});
