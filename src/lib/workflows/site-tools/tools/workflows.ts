@@ -264,16 +264,26 @@ register({
 // Update Tools — Nodes
 // ==========================================
 
+// Validate a node type string against the registry. Returns null if valid, or
+// an error message listing the valid types if not. Lazy-imports to avoid any
+// circular init between site-tools and the workflow registry.
+async function validateNodeType(type: string): Promise<string | null> {
+  const { registry } = await import('$lib/workflows');
+  if (registry.getDefinition(type)) return null;
+  const valid = registry.listDefinitions().map((d) => d.type).sort();
+  return `Unknown node type "${type}". Valid types: ${valid.join(', ')}. If you need a new integration, use create_node via workflow_create instead of inventing a type name.`;
+}
+
 register({
   name: 'workflow_update_node',
-  description: "Update a workflow node's config, label, or type",
+  description: "Update a workflow node's config, label, or type. When changing type, the new type must exist in the node registry.",
   parameters: {
     type: 'object',
     properties: {
       nodeId: { type: 'string', description: 'Node ID' },
       config: { type: 'object', description: 'New config (merged with existing)' },
       label: { type: 'string', description: 'New label' },
-      type: { type: 'string', description: 'New node type' },
+      type: { type: 'string', description: 'New node type — must match a registered type (e.g. "whatsapp", "llm-call", "code-execute"). Use workflow_list_node_types to see all valid types.' },
     },
     required: ['nodeId'],
   },
@@ -283,6 +293,11 @@ register({
     const nodeId = args.nodeId as string;
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
     if (!existing) return { success: false, error: 'Node not found' };
+
+    if (args.type) {
+      const err = await validateNodeType(args.type as string);
+      if (err) return { success: false, error: err };
+    }
 
     const updates: Record<string, unknown> = {};
     if (args.label) updates.label = args.label;
@@ -298,14 +313,14 @@ register({
 
 register({
   name: 'workflow_add_node',
-  description: 'Add a new node to a workflow',
+  description: 'Add a new node to a workflow. The type must match a registered node type exactly — typos (e.g. "code-exec" instead of "code-execute", or "whatsapp-message" instead of "whatsapp") will be rejected because the canvas cannot render them. Call workflow_list_node_types first if you are unsure which type to use.',
   parameters: {
     type: 'object',
     properties: {
       workflowId: { type: 'string', description: 'Workflow ID' },
-      type: { type: 'string', description: 'Node type (e.g. "whatsapp-message", "llm-call", "code-exec")' },
+      type: { type: 'string', description: 'Node type — must match a registered type exactly. Examples: "manual-trigger", "whatsapp", "llm-call", "code-execute", "http-request", "conditional", "data-store". Call workflow_list_node_types to see the full list.' },
       label: { type: 'string', description: 'Display label for the node' },
-      config: { type: 'object', description: 'Node configuration' },
+      config: { type: 'object', description: 'Node configuration (see node definition for its configSchema)' },
       position: { type: 'object', description: '{ x, y } canvas position', properties: { x: { type: 'number' }, y: { type: 'number' } } },
     },
     required: ['workflowId', 'type', 'label'],
@@ -313,14 +328,36 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
+    const type = args.type as string;
+    const err = await validateNodeType(type);
+    if (err) return { success: false, error: err };
+
     const [node] = await db.insert(workflowNodes).values({
       workflowId: args.workflowId as string,
-      type: args.type as string,
+      type,
       label: args.label as string,
       config: (args.config as Record<string, unknown>) || {},
       position: (args.position as { x: number; y: number }) || { x: 0, y: 0 },
     }).returning();
     return { success: true, data: node };
+  },
+});
+
+register({
+  name: 'workflow_list_node_types',
+  description: 'List all registered workflow node types with their labels, categories, and descriptions. Use this before workflow_add_node or workflow_update_node to discover the exact type string to use — this is the authoritative list, and anything not in it will be rejected.',
+  parameters: { type: 'object', properties: {}, required: [] },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async () => {
+    const { registry } = await import('$lib/workflows');
+    const defs = registry.listDefinitions().map((d) => ({
+      type: d.type,
+      label: d.label,
+      category: d.category,
+      description: d.description,
+    })).sort((a, b) => a.type.localeCompare(b.type));
+    return { success: true, data: defs };
   },
 });
 
