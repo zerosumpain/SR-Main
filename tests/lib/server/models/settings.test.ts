@@ -56,6 +56,7 @@ import {
   getSetting,
   setSetting,
   resolveDefaultModel,
+  resolveChatAltOpenRouterModel,
   getOpenRouterApiKey,
   clearSettingsCache,
 } from '$lib/server/models/settings';
@@ -65,34 +66,48 @@ describe('app_settings helpers', () => {
   beforeEach(() => {
     clearSettingsCache();
     store.clear();
-    store.set('jkai.chat.default_model', { provider: 'zai', modelId: 'glm-5.1' });
+    store.set('jkai.chat.default_glm_model', { modelId: 'glm-5-turbo' });
     vi.mocked(loadKeys).mockReturnValue({ openrouterApiKey: 'sk-or-from-keys-json' });
   });
 
   it('getSetting returns typed value', async () => {
-    const v = await getSetting<{ provider: string; modelId: string }>('jkai.chat.default_model');
-    expect(v).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
+    const v = await getSetting<{ modelId: string }>('jkai.chat.default_glm_model');
+    expect(v).toEqual({ modelId: 'glm-5-turbo' });
   });
 
   it('setSetting upserts and invalidates cache', async () => {
-    await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: 'anthropic/claude-opus-4' });
+    await setSetting('jkai.chat.default_glm_model', { modelId: 'glm-5.1' });
     clearSettingsCache();
-    const v = await getSetting<{ provider: string; modelId: string }>('jkai.chat.default_model');
-    expect(v).toEqual({ provider: 'openrouter', modelId: 'anthropic/claude-opus-4' });
+    const v = await getSetting<{ modelId: string }>('jkai.chat.default_glm_model');
+    expect(v).toEqual({ modelId: 'glm-5.1' });
   });
 
-  it('resolveDefaultModel returns the configured chat model', async () => {
-    await setSetting('jkai.chat.default_model', { provider: 'zai', modelId: 'glm-5-turbo' });
+  it("resolveDefaultModel('chat') returns the configured GLM model", async () => {
+    await setSetting('jkai.chat.default_glm_model', { modelId: 'glm-5.1' });
+    clearSettingsCache();
+    const ctx = await resolveDefaultModel('chat');
+    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
+  });
+
+  it("resolveDefaultModel('chat') falls back to glm-5-turbo when unset", async () => {
+    store.delete('jkai.chat.default_glm_model');
     clearSettingsCache();
     const ctx = await resolveDefaultModel('chat');
     expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5-turbo' });
   });
 
-  it('resolveDefaultModel falls back to zai glm-5.1 when setting missing', async () => {
-    store.delete('jkai.chat.default_model');
+  it('resolveChatAltOpenRouterModel returns null when unset', async () => {
+    store.set('jkai.chat.alt_openrouter_model', null);
     clearSettingsCache();
-    const ctx = await resolveDefaultModel('chat');
-    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
+    const ctx = await resolveChatAltOpenRouterModel();
+    expect(ctx).toBeNull();
+  });
+
+  it('resolveChatAltOpenRouterModel returns an openrouter ctx when set', async () => {
+    await setSetting('jkai.chat.alt_openrouter_model', { modelId: 'anthropic/claude-opus-4' });
+    clearSettingsCache();
+    const ctx = await resolveChatAltOpenRouterModel();
+    expect(ctx).toEqual({ provider: 'openrouter', modelId: 'anthropic/claude-opus-4' });
   });
 
   it('getOpenRouterApiKey prefers DB over keys.json when DB value is set', async () => {
