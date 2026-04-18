@@ -255,6 +255,29 @@ export const POST: RequestHandler = async ({ request }) => {
             workflowId, role: 'assistant', content: responseText, metadata: assistantMetadata,
           }).returning({ id: orchestratorChats.id });
           assistantMsgId = ins.id;
+        } else {
+          // No conversation or workflow pinned on entry. Check if a workflow_create
+          // tool succeeded mid-turn (typical on /jkai/workflows/new). If so, back-fill
+          // both the user message AND the assistant reply against that new workflow id
+          // so the conversation survives the redirect.
+          let backfillWorkflowId: string | null = null;
+          for (const step of job.toolSteps) {
+            if (step.tool !== 'workflow_create' || step.status !== 'done') continue;
+            const r = step.result as { success?: boolean; data?: { workflowId?: string } } | undefined;
+            if (r?.success && r.data?.workflowId) {
+              backfillWorkflowId = r.data.workflowId;
+              break;
+            }
+          }
+          if (backfillWorkflowId) {
+            await db.insert(orchestratorChats).values({
+              workflowId: backfillWorkflowId, role: 'user', content: message,
+            });
+            const [ins] = await db.insert(orchestratorChats).values({
+              workflowId: backfillWorkflowId, role: 'assistant', content: responseText, metadata: assistantMetadata,
+            }).returning({ id: orchestratorChats.id });
+            assistantMsgId = ins.id;
+          }
         }
 
         const assistantAttachments = assistantMsgId
