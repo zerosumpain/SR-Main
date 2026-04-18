@@ -89,7 +89,8 @@ export const jkaiDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with JKAI autonomous builds',
       options: [
         { value: 'start', label: 'Start Build' },
         { value: 'status', label: 'Check Status' },
@@ -97,16 +98,33 @@ export const jkaiDef: NodeDefinition = {
         { value: 'control', label: 'Control Build' },
       ],
     },
-    { key: 'prompt', label: 'Prompt', type: 'template-textarea', placeholder: 'Build a landing page with...' },
-    { key: 'title', label: 'Title', type: 'text', placeholder: 'My Build' },
-    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.buildId}}' },
     {
-      key: 'action', label: 'Action', type: 'dropdown',
+      key: 'prompt', label: 'Prompt', type: 'template-textarea',
+      placeholder: 'Build a landing page with...',
+      description: 'Description of what you want JKAI to build.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'title', label: 'Title', type: 'template-textarea',
+      placeholder: 'My Build',
+      description: 'Optional friendly name for this build.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'buildId', label: 'Build ID', type: 'template-textarea',
+      placeholder: '{{input.buildId}}',
+      description: 'ID of the build to check or control.',
+      visibleWhen: { key: 'operation', in: ['status', 'control'] },
+    },
+    {
+      key: 'action', label: 'Control Action', type: 'dropdown',
+      description: 'What to do with the running build',
       options: [
         { value: 'pause', label: 'Pause' },
         { value: 'resume', label: 'Resume' },
         { value: 'cancel', label: 'Cancel' },
       ],
+      visibleWhen: { key: 'operation', equals: 'control' },
     },
   ],
   llmDescription: `Manage JKAI autonomous code builds in a Docker sandbox. Supports four operations:

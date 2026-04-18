@@ -30,6 +30,15 @@ export interface BasicConfigField {
   description?: string;
   /** If true, this field is only shown in Advanced mode */
   advancedOnly?: boolean;
+  /** Render a section heading above this field (first occurrence of a label wins) */
+  section?: string;
+  /** Show this field only when another field's value matches. */
+  visibleWhen?: {
+    key: string;
+    equals?: unknown;
+    in?: unknown[];
+    not?: unknown;
+  };
 }
 
 export interface NodeDefinition {

@@ -27,10 +27,24 @@ export const mergeDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Merged' }],
   basicConfig: [
-    { key: 'strategy', label: 'Merge Strategy', type: 'dropdown', options: [
-      { value: 'deep-merge', label: 'Deep Merge (combine all)' }, { value: 'pick', label: 'Pick Fields' },
-    ]},
-    { key: 'fields', label: 'Fields to Pick', type: 'template-textarea', placeholder: 'response, status', description: 'Comma-separated (for pick strategy)' },
+    {
+      key: 'strategy',
+      label: 'Strategy',
+      type: 'dropdown',
+      description: 'How to combine data from upstream nodes',
+      options: [
+        { value: 'deep-merge', label: 'Deep merge (combine all fields)' },
+        { value: 'pick', label: 'Pick (select specific fields)' },
+      ],
+    },
+    {
+      key: 'fields',
+      label: 'Fields',
+      type: 'template-textarea',
+      placeholder: 'response, status',
+      description: 'Comma-separated field names',
+      visibleWhen: { key: 'strategy', equals: 'pick' },
+    },
   ],
   llmDescription: 'Use after parallel branches converge to control how upstream data is combined.',
 };

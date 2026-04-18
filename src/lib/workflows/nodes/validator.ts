@@ -143,10 +143,11 @@ export const validatorDef: NodeDefinition = {
   basicConfig: [
     {
       key: 'mode',
-      label: 'Validation Mode',
+      label: 'Mode',
       type: 'dropdown',
+      description: 'How to validate the incoming data',
       options: [
-        { value: 'expression', label: 'JS Expression' },
+        { value: 'expression', label: 'Expression (JS boolean)' },
         { value: 'schema', label: 'JSON Schema' },
       ],
     },
@@ -155,12 +156,16 @@ export const validatorDef: NodeDefinition = {
       label: 'Expression',
       type: 'template-textarea',
       placeholder: 'input.score >= 80',
+      description: 'JavaScript boolean expression. Use `input.field` to reference data.',
+      visibleWhen: { key: 'mode', equals: 'expression' },
     },
     {
       key: 'schema',
-      label: 'JSON Schema',
+      label: 'Schema',
       type: 'textarea',
-      advancedOnly: true,
+      placeholder: '{"type":"object","required":["title"]}',
+      description: 'JSON Schema string.',
+      visibleWhen: { key: 'mode', equals: 'schema' },
     },
   ],
   llmDescription:

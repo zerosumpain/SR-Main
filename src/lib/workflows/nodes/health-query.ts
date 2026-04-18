@@ -73,17 +73,26 @@ export const healthQueryDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'Which health data summary to fetch',
       options: [
-        { value: 'stats', label: 'Stats' },
-        { value: 'readiness', label: 'Readiness' },
-        { value: 'sleep', label: 'Sleep' },
+        { value: 'stats', label: 'Fitness Stats' },
+        { value: 'readiness', label: 'Readiness Score' },
+        { value: 'sleep', label: 'Sleep Analysis' },
         { value: 'training_load', label: 'Training Load' },
-        { value: 'timeline', label: 'Timeline' },
+        { value: 'timeline', label: 'Activity Timeline' },
       ],
     },
-    { key: 'page', label: 'Page', type: 'text', placeholder: '1' },
-    { key: 'limit', label: 'Limit', type: 'text', placeholder: '20' },
+    {
+      key: 'page', label: 'Page', type: 'number', min: 1,
+      description: 'Page number for paginated timeline results.',
+      visibleWhen: { key: 'operation', equals: 'timeline' },
+    },
+    {
+      key: 'limit', label: 'Items Per Page', type: 'number', min: 1,
+      description: 'How many activities to return per page.',
+      visibleWhen: { key: 'operation', equals: 'timeline' },
+    },
   ],
   llmDescription: `Query health data from Strava and Apple Watch including fitness stats, readiness scores, sleep analysis, training load, and activity timeline.
 

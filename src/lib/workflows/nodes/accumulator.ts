@@ -60,7 +60,8 @@ export const accumulatorDef: NodeDefinition = {
       label: 'Field to Collect',
       type: 'template-textarea',
       placeholder: 'results',
-      description: 'Leave empty to collect entire input',
+      description:
+        'Dot-path into input to collect. Leave empty to collect the entire input object.',
     },
   ],
   llmDescription:

@@ -77,12 +77,28 @@ export const tavilySearchDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Search results' }],
   basicConfig: [
-    { key: 'query', label: 'Query', type: 'template-textarea', placeholder: 'svelte 5 runes best practices' },
-    { key: 'searchDepth', label: 'Depth', type: 'dropdown', options: [
-      { value: 'basic', label: 'Basic (fast)' }, { value: 'advanced', label: 'Advanced (deeper)' },
-    ]},
-    { key: 'maxResults', label: 'Max results', type: 'number' },
-    { key: 'includeAnswer', label: 'Include AI answer', type: 'toggle', advancedOnly: true },
+    {
+      key: 'query', label: 'Search Query', type: 'template-textarea',
+      placeholder: 'svelte 5 runes best practices',
+      description: 'What to search for. Supports {{input.field}} templates.',
+    },
+    {
+      key: 'searchDepth', label: 'Search Depth', type: 'dropdown',
+      description: 'Trade-off between speed/cost and result quality',
+      options: [
+        { value: 'basic', label: 'Basic (fast, cheap)' },
+        { value: 'advanced', label: 'Advanced (deeper, slower)' },
+      ],
+    },
+    {
+      key: 'maxResults', label: 'Max Results', type: 'slider',
+      min: 1, max: 20, step: 1,
+      description: 'Number of results to return (1–20).',
+    },
+    {
+      key: 'includeAnswer', label: 'Include AI Summary Answer', type: 'toggle',
+      description: 'Return a Tavily-generated summary alongside the results.',
+    },
   ],
   llmDescription: 'Searches the web via Tavily. Returns { query, answer?, results: [{ title, url, content, score }], count }. Use this to find relevant URLs and snippets for a topic. Pair with web-scrape to read the full text of promising results. Each result has a short `content` snippet — for full article text, follow up with web-scrape on the URL. Set includeAnswer=true to also get a Tavily-generated summary answer.',
   llmExamples: [

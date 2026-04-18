@@ -38,7 +38,14 @@ export const subWorkflowDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   basicConfig: [
-    { key: 'workflowId', label: 'Workflow ID', type: 'text', placeholder: 'Paste workflow ID here' },
+    {
+      key: 'workflowId',
+      label: 'Workflow ID',
+      type: 'text',
+      placeholder: 'Paste workflow ID here',
+      description:
+        'The ID of the workflow to run. Find it in the URL of the workflow edit page.',
+    },
   ],
   llmDescription: 'Use to compose workflows — call a pre-built workflow as a reusable step. Essential for building complex agentic systems from smaller building blocks.',
 };

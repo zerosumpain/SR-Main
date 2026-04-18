@@ -83,18 +83,22 @@ export const llmRouterDef: NodeDefinition = {
   basicConfig: [
     {
       key: 'routes',
-      label: 'Routes (JSON)',
+      label: 'Routes',
       type: 'textarea',
-      description: 'Array of { "handle": "name", "description": "when to use" }',
+      description:
+        'List of possible routes as JSON. Each entry needs `handle` (matches source handle on this node) and `description` (when to pick it).',
     },
     {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
+      description: 'Which LLM runs this step',
       options: [
-        { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (fast)' },
-        { value: 'openai/gpt-4o', label: 'GPT-4o' },
-        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku (fast)' },
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
+        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
+        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       ],
     },
   ],

@@ -40,4 +40,6 @@ export const errorHandlerDef: NodeDefinition = {
     { name: 'success', type: 'any', label: 'Success' },
     { name: 'error', type: 'any', label: 'Error' },
   ],
+  // No configuration — routes automatically based on whether input contains an `error` field.
+  basicConfig: [],
 };

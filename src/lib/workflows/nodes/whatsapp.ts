@@ -68,17 +68,17 @@ export const whatsappDef: NodeDefinition = {
   basicConfig: [
     {
       key: 'to',
-      label: 'To (Phone Number)',
-      type: 'text',
+      label: 'Recipient Phone Number',
+      type: 'template-textarea',
       placeholder: '+447359228511 or {{input.phone}}',
-      description: 'E.164 format. Supports template interpolation.',
+      description: 'Phone number in E.164 format (include country code). Supports {{input.field}} templates.',
     },
     {
       key: 'message',
       label: 'Message',
       type: 'template-textarea',
       placeholder: 'Hi {{input.name}}, your report is ready.',
-      description: 'Message text. Supports {{input.field}} templates.',
+      description: 'Text to send. Supports {{input.field}} templates.',
     },
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use this node when a workflow needs to notify someone via WhatsApp.

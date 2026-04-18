@@ -94,7 +94,8 @@ export const blogDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with blog posts',
       options: [
         { value: 'list', label: 'List Posts' },
         { value: 'get', label: 'Get Post' },
@@ -102,11 +103,39 @@ export const blogDef: NodeDefinition = {
         { value: 'update', label: 'Update Post' },
       ],
     },
-    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.id}}' },
-    { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'My Blog Post' },
-    { key: 'content', label: 'Content', type: 'template-textarea', placeholder: '<p>Post content here...</p>' },
-    { key: 'status', label: 'Status', type: 'dropdown', options: [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }] },
-    { key: 'tags', label: 'Tags', type: 'text', placeholder: 'tech, ai, personal' },
+    {
+      key: 'postId', label: 'Post ID', type: 'template-textarea',
+      placeholder: '{{input.id}}',
+      description: 'ID of the post to fetch or update.',
+      visibleWhen: { key: 'operation', in: ['get', 'update'] },
+    },
+    {
+      key: 'title', label: 'Title', type: 'template-textarea',
+      placeholder: 'My Blog Post',
+      description: 'Post title. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'content', label: 'Content', type: 'template-textarea',
+      placeholder: '<p>Post content here...</p>',
+      description: 'Post body as HTML. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'status', label: 'Status', type: 'dropdown',
+      description: 'Publish state of the post',
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'published', label: 'Published' },
+      ],
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'tags', label: 'Tags', type: 'text',
+      placeholder: 'tech, ai, personal',
+      description: 'Comma-separated list of tags.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
   ],
   llmDescription: `Manage blog posts on the site. Supports four operations:
 

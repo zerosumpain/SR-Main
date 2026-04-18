@@ -98,7 +98,8 @@ export const deepDiveDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with research sessions',
       options: [
         { value: 'start', label: 'Start Research' },
         { value: 'status', label: 'Check Status' },
@@ -107,24 +108,43 @@ export const deepDiveDef: NodeDefinition = {
         { value: 'control', label: 'Control Session' },
       ],
     },
-    { key: 'topic', label: 'Topic', type: 'template-textarea', placeholder: 'Impact of AI on software engineering' },
-    { key: 'goals', label: 'Goals', type: 'textarea', placeholder: 'Understand trends, key players, future outlook' },
+    {
+      key: 'topic', label: 'Topic', type: 'template-textarea',
+      placeholder: 'Impact of AI on software engineering',
+      description: 'The subject to research.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'goals', label: 'Goals', type: 'template-textarea',
+      placeholder: 'Understand trends, key players, future outlook',
+      description: 'Objectives and questions to address in the research.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
     {
       key: 'depth', label: 'Depth', type: 'dropdown',
+      description: 'How thorough the research should be',
       options: [
-        { value: 'shallow', label: 'Shallow' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'deep', label: 'Deep' },
+        { value: 'shallow', label: 'Shallow (quick skim)' },
+        { value: 'medium', label: 'Medium (balanced)' },
+        { value: 'deep', label: 'Deep (thorough)' },
       ],
+      visibleWhen: { key: 'operation', equals: 'start' },
     },
-    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.data.id}}' },
     {
-      key: 'action', label: 'Action', type: 'dropdown',
+      key: 'sessionId', label: 'Session ID', type: 'template-textarea',
+      placeholder: '{{input.data.id}}',
+      description: 'ID of the research session to check or control.',
+      visibleWhen: { key: 'operation', in: ['status', 'report', 'control'] },
+    },
+    {
+      key: 'action', label: 'Control Action', type: 'dropdown',
+      description: 'What to do with the running session',
       options: [
         { value: 'pause', label: 'Pause' },
         { value: 'resume', label: 'Resume' },
         { value: 'cancel', label: 'Cancel' },
       ],
+      visibleWhen: { key: 'operation', equals: 'control' },
     },
   ],
   llmDescription: `Run deep research sessions on any topic using web search, analysis, and synthesis. Supports five operations:

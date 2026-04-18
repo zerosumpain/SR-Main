@@ -32,4 +32,6 @@ export const manualTriggerDef: NodeDefinition = {
   defaultConfig: {},
   inputs: [],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  // Trigger-only node — no configuration needed.
+  basicConfig: [],
 };

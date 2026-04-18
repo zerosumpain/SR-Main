@@ -132,4 +132,30 @@ export const codeExecuteDef: NodeDefinition = {
   defaultConfig: { language: 'javascript', code: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  basicConfig: [
+    {
+      key: 'language',
+      label: 'Language',
+      type: 'dropdown',
+      description: 'Which interpreter runs your code',
+      options: [
+        { value: 'javascript', label: 'JavaScript (Node.js)' },
+        { value: 'python', label: 'Python 3' },
+        { value: 'bash', label: 'Bash' },
+      ],
+    },
+    {
+      key: 'code',
+      label: 'Code',
+      type: 'code',
+      description: 'Input from the previous node is available as `input`. Print or return JSON to pass data downstream.',
+    },
+    {
+      key: 'outputSchema',
+      label: 'Output shape (optional)',
+      type: 'textarea',
+      description: 'JSON schema describing what your code returns — enables autocomplete on downstream nodes.',
+      advancedOnly: true,
+    },
+  ],
 };

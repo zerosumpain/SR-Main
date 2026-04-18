@@ -38,6 +38,13 @@ export const delayDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   basicConfig: [
-    { key: 'milliseconds', label: 'Delay (ms)', type: 'number', placeholder: '1000' },
+    {
+      key: 'milliseconds',
+      label: 'Delay',
+      type: 'number',
+      description: 'Pause time in milliseconds (1000 = 1 second).',
+      placeholder: '1000',
+      min: 0,
+    },
   ],
 };
