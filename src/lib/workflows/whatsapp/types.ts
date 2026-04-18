@@ -14,6 +14,12 @@ export interface WhatsAppInboundMessage {
   messageId: string;
   isGroup: boolean;
   groupId?: string;
+  // Media fields (populated when the WhatsApp message is a media message)
+  mediaKind?: 'image' | 'audio' | 'video' | 'document';
+  mediaMimeType?: string;
+  mediaFilename?: string;
+  mediaBuffer?: Buffer;
+  mediaDuration?: number;
 }
 
 export interface WhatsAppSendResult {
