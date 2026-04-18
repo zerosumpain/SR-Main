@@ -7,6 +7,7 @@
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
+  import MessageAttachments from './MessageAttachments.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
@@ -60,6 +61,14 @@
     progressSteps?: string[];
     toolSteps?: ToolStep[];
     source?: string;
+    attachments?: Array<{
+      id: string;
+      kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
+      mimeType: string;
+      originalName: string | null;
+      sizeBytes: number;
+      source: 'web' | 'whatsapp' | 'generated';
+    }>;
   }
 
   function artifactsForMessage(m: Message): ArtifactT[] {
@@ -115,6 +124,7 @@
   $effect(() => {
     messages = initialMessages.map((m) => {
       const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string } | undefined;
+      const raw = m as Record<string, unknown>;
       return {
         id: m.id,
         role: m.role as 'user' | 'assistant',
@@ -124,6 +134,7 @@
         source: meta?.source ?? m.source,
         // Hydrate tool steps from stored metadata so the drawer persists across reloads
         toolSteps: meta?.toolSteps,
+        attachments: (raw.attachments as Message['attachments']) ?? undefined,
       };
     });
     scrollToBottom();
@@ -391,6 +402,7 @@
               error?: string;
               workflow?: unknown;
               thinking?: OrchestratorThinking;
+              attachments?: Message['attachments'];
             };
             const prior = messages.find((m) => m.id === progressId);
             // Authoritative final content from persisted responseText. Fall
@@ -405,6 +417,7 @@
               isProgress: false,
               source: 'web',
               toolSteps: prior?.toolSteps,
+              attachments: result.attachments ?? undefined,
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
             scrollToBottom();
@@ -637,6 +650,9 @@
                 thinking={msg.thinking}
                 {showThinking}
               />
+              {#if msg.attachments && msg.attachments.length > 0}
+                <MessageAttachments attachments={msg.attachments} />
+              {/if}
             </div>
           {/if}
         {/each}
