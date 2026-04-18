@@ -4,26 +4,58 @@ import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$li
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs, publishJobEvent } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 
 const MAX_MESSAGE_LEN = 20_000;
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId } = body;
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId, attachmentIds } = body as {
+    message: string;
+    workflowId?: string;
+    mode?: string;
+    currentNodes?: any;
+    currentEdges?: any;
+    conversationId?: string;
+    attachmentIds?: string[];
+  };
 
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
   }
   if (message.length > MAX_MESSAGE_LEN) {
     return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
+  }
+
+  let attachmentRows: Array<typeof jkaiAttachments.$inferSelect> = [];
+  if (attachmentIds && attachmentIds.length > 0) {
+    if (attachmentIds.length > 10) {
+      return json({ error: 'too many attachments (max 10 per turn)' }, { status: 400 });
+    }
+    attachmentRows = await db.select().from(jkaiAttachments).where(inArray(jkaiAttachments.id, attachmentIds));
+    if (attachmentRows.length !== attachmentIds.length) {
+      return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
+    }
+
+    let ctx: ModelContext = await resolveDefaultModel('chat');
+    if (conversationId) {
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+      if (conv) ctx = { provider: conv.modelProvider as 'zai' | 'openrouter', modelId: conv.modelId };
+    }
+    const caps = getModelCapabilities(ctx);
+    for (const a of attachmentRows) {
+      if (!canAcceptKind(caps, a.kind)) {
+        return json({ error: `model ${ctx.modelId} cannot accept ${a.kind}` }, { status: 400 });
+      }
+    }
   }
 
   // Cancel any stale running jobs before starting a new one
@@ -73,7 +105,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       } else if (mode === 'generate') {
         // Explicit workflow generation
-        const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId, onProgress);
+        const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId ?? null, onProgress);
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
 
@@ -138,10 +170,19 @@ export const POST: RequestHandler = async ({ request }) => {
 
         // Persist the user message FIRST so any mid-flight status updates
         // inserted by generalChat land after it in chronological order.
+        let insertedUserMsg: { id: string } | null = null;
         if (conversationId) {
-          await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message });
+          const [m] = await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message }).returning({ id: orchestratorChats.id });
+          insertedUserMsg = m;
         } else if (workflowId) {
-          await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message });
+          const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message }).returning({ id: orchestratorChats.id });
+          insertedUserMsg = m;
+        }
+
+        if (insertedUserMsg && attachmentRows.length > 0) {
+          await db.update(jkaiAttachments)
+            .set({ messageId: insertedUserMsg.id })
+            .where(inArray(jkaiAttachments.id, attachmentRows.map((a) => a.id)));
         }
 
         // Resolve the model pinned at conversation creation (or admin default).
@@ -162,7 +203,7 @@ export const POST: RequestHandler = async ({ request }) => {
           }
         }
 
-        const { response: responseText } = await generalChat({ text: message }, conversationHistory, {
+        const { response: responseText } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
           workflowId,
           conversationId,
           onProgress,
@@ -191,8 +232,13 @@ export const POST: RequestHandler = async ({ request }) => {
         // saved above.
         const cleanedToolSteps = job.toolSteps.map((s) => extractEphemeralSidecar(s));
         const assistantMetadata = cleanedToolSteps.length > 0 ? { toolSteps: cleanedToolSteps } : undefined;
+        let assistantMsgId: string | null = null;
         if (conversationId) {
-          await db.insert(orchestratorChats).values({ conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata });
+          const [ins] = await db.insert(orchestratorChats).values({
+            conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata,
+          }).returning({ id: orchestratorChats.id });
+          assistantMsgId = ins.id;
+
           // Update conversation title if first message, always update updatedAt
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
           if (conv && !conv.title) {
@@ -205,10 +251,17 @@ export const POST: RequestHandler = async ({ request }) => {
               .where(eq(conversations.id, conversationId));
           }
         } else if (workflowId) {
-          await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: responseText, metadata: assistantMetadata });
+          const [ins] = await db.insert(orchestratorChats).values({
+            workflowId, role: 'assistant', content: responseText, metadata: assistantMetadata,
+          }).returning({ id: orchestratorChats.id });
+          assistantMsgId = ins.id;
         }
 
-        job.result = { success: true, workflow: null, message: responseText };
+        const assistantAttachments = assistantMsgId
+          ? await db.select().from(jkaiAttachments).where(eq(jkaiAttachments.messageId, assistantMsgId))
+          : [];
+
+        job.result = { success: true, workflow: null, message: responseText, attachments: assistantAttachments };
       }
 
       job.status = 'done';
