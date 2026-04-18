@@ -1,8 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, openrouterModels } from '$lib/db/schema';
-import { eq, asc, sql } from 'drizzle-orm';
+import { conversations, orchestratorChats, openrouterModels, jkaiAttachments } from '$lib/db/schema';
+import { eq, asc, sql, inArray } from 'drizzle-orm';
+import { getModelCapabilities } from '$lib/server/models/capabilities';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -34,7 +35,34 @@ export const GET: RequestHandler = async ({ params }) => {
 		source: conv.source === 'whatsapp' ? ('whatsapp' as const) : ('web' as const),
 	}));
 
-	return json({ conversation: conv, messages: allMessages });
+	// Fetch attachments for all messages
+	const messageIds = allMessages.map((m: any) => m.id).filter(Boolean);
+	const attachmentsData = messageIds.length > 0
+		? await db.select().from(jkaiAttachments).where(inArray(jkaiAttachments.messageId, messageIds))
+		: [];
+	const attachmentsByMsg = new Map<string, typeof attachmentsData>();
+	for (const a of attachmentsData) {
+		if (!a.messageId) continue;
+		const arr = attachmentsByMsg.get(a.messageId) ?? [];
+		arr.push(a);
+		attachmentsByMsg.set(a.messageId, arr);
+	}
+	const messagesWithAttachments = allMessages.map((m: any) => ({
+		...m,
+		attachments: attachmentsByMsg.get(m.id) ?? [],
+	}));
+
+	// Get model capabilities from conversation's pinned model
+	const modelCaps = getModelCapabilities({
+		provider: conv.modelProvider as 'zai' | 'openrouter',
+		modelId: conv.modelId,
+	});
+
+	return json({
+		conversation: conv,
+		messages: messagesWithAttachments,
+		modelCapabilities: modelCaps,
+	});
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {
