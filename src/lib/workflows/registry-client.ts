@@ -45,11 +45,30 @@ const codeExecuteDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   basicConfig: [
-    { key: 'language', label: 'Language', type: 'dropdown', options: [
-      { value: 'javascript', label: 'JavaScript' }, { value: 'python', label: 'Python' }, { value: 'bash', label: 'Bash' },
-    ]},
-    { key: 'code', label: 'Code', type: 'code', placeholder: '// input object is available\nconsole.log(JSON.stringify({ result: input.value * 2 }))' },
-    { key: 'outputSchema', label: 'Output Schema (optional)', type: 'textarea', advancedOnly: true, description: 'Declare output shape as JSON Schema for downstream autocomplete' },
+    {
+      key: 'language',
+      label: 'Language',
+      type: 'dropdown',
+      description: 'Which interpreter runs your code',
+      options: [
+        { value: 'javascript', label: 'JavaScript (Node.js)' },
+        { value: 'python', label: 'Python 3' },
+        { value: 'bash', label: 'Bash' },
+      ],
+    },
+    {
+      key: 'code',
+      label: 'Code',
+      type: 'code',
+      description: 'Input from the previous node is available as `input`. Print or return JSON to pass data downstream.',
+    },
+    {
+      key: 'outputSchema',
+      label: 'Output shape (optional)',
+      type: 'textarea',
+      description: 'JSON schema describing what your code returns — enables autocomplete on downstream nodes.',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -74,18 +93,55 @@ const llmCallDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
   basicConfig: [
-    { key: 'model', label: 'Model', type: 'dropdown', options: [
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
-      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku' },
-      { value: 'google/gemini-2.5-flash-preview', label: 'Gemini Flash' },
-      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
-    ]},
-    { key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea', placeholder: 'You are a helpful assistant...' },
-    { key: 'userPrompt', label: 'User Prompt', type: 'template-textarea', placeholder: 'Use {{input.field}} for variables' },
-    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 2, step: 0.1 },
-    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+    {
+      key: 'userPrompt',
+      label: 'User Prompt',
+      type: 'template-textarea',
+      description: 'What you want the AI to do. Use {{input.field}} to insert upstream data.',
+      placeholder: 'Summarise this text: {{input.text}}',
+      section: 'PROMPT',
+    },
+    {
+      key: 'systemPrompt',
+      label: 'System Prompt',
+      type: 'template-textarea',
+      description: 'Optional instructions that set the AI\'s role or style.',
+      placeholder: 'You are a helpful assistant that writes concise summaries.',
+      section: 'PROMPT',
+    },
+    {
+      key: 'model',
+      label: 'Model',
+      type: 'dropdown',
+      description: 'Which LLM answers this step. Leave as default unless you need a specific one.',
+      options: [
+        { value: '', label: 'Default (use jkai default model)' },
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+        { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku (fast)' },
+        { value: 'google/gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash' },
+        { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+      ],
+    },
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      type: 'slider',
+      description: 'How creative the answers are. 0 is focused and deterministic, 2 is wild.',
+      min: 0,
+      max: 2,
+      step: 0.1,
+    },
+    {
+      key: 'maxTokens',
+      label: 'Max Tokens',
+      type: 'number',
+      description: 'Maximum length of the AI response (roughly 4 characters per token).',
+      min: 1,
+      section: 'ADVANCED',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -111,11 +167,31 @@ const dataStoreDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
-      { value: 'get', label: 'Get Value' }, { value: 'set', label: 'Set Value' },
-    ]},
-    { key: 'key', label: 'Key', type: 'template-textarea', placeholder: 'my-key' },
-    { key: 'valuePath', label: 'Value Path (set only)', type: 'template-textarea', placeholder: 'input.value' },
+    {
+      key: 'operation',
+      label: 'Action',
+      type: 'dropdown',
+      description: 'Whether to read a saved value or write one.',
+      options: [
+        { value: 'get', label: 'Get (read value)' },
+        { value: 'set', label: 'Set (write value)' },
+      ],
+    },
+    {
+      key: 'key',
+      label: 'Key',
+      type: 'template-textarea',
+      description: 'Name of the stored item. Supports {{input.field}} templates so keys can be dynamic.',
+      placeholder: 'last_run_timestamp',
+    },
+    {
+      key: 'valuePath',
+      label: 'Value Path',
+      type: 'text',
+      description: 'Dot-path into the input to pick the value to store (e.g. data.count). Leave empty to store input.value or the whole input.',
+      placeholder: 'data.count',
+      visibleWhen: { key: 'operation', equals: 'set' },
+    },
   ],
 };
 
@@ -139,10 +215,36 @@ const emailDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'to', label: 'To', type: 'template-textarea', placeholder: '{{input.email}}' },
-    { key: 'subject', label: 'Subject', type: 'template-textarea' },
-    { key: 'body', label: 'Body', type: 'template-textarea' },
-    { key: 'from', label: 'From (override)', type: 'text', advancedOnly: true },
+    {
+      key: 'to',
+      label: 'Recipient',
+      type: 'template-textarea',
+      description: 'Who the email goes to. Supports {{input.field}} templates.',
+      placeholder: 'alice@example.com',
+    },
+    {
+      key: 'subject',
+      label: 'Subject',
+      type: 'template-textarea',
+      description: 'Subject line. Supports templates.',
+      placeholder: 'Daily report for {{input.date}}',
+    },
+    {
+      key: 'body',
+      label: 'Body',
+      type: 'template-textarea',
+      description: 'Email body. If it starts with an HTML tag it is sent as HTML, otherwise as plain text.',
+      placeholder: 'Hi,\n\nHere is the update: {{input.summary}}',
+    },
+    {
+      key: 'from',
+      label: 'From Address',
+      type: 'text',
+      description: 'Override the sender address. Leave blank to use the server default (SMTP_FROM).',
+      placeholder: 'noreply@example.com',
+      section: 'ADVANCED',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -175,9 +277,29 @@ const loopDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'array', label: 'Results' }],
   basicConfig: [
-    { key: 'arrayPath', label: 'Array Field', type: 'template-textarea', placeholder: 'items', description: 'Dot-path to the array in input data' },
-    { key: 'expression', label: 'Item Transform', type: 'code', placeholder: 'return item' },
-    { key: 'concurrency', label: 'Concurrency', type: 'number', advancedOnly: true },
+    {
+      key: 'arrayPath',
+      label: 'Array Path',
+      type: 'text',
+      description: 'Which field on the input holds the list. Use a dot-path like items or data.values.',
+      placeholder: 'items',
+    },
+    {
+      key: 'expression',
+      label: 'Per-Item Expression',
+      type: 'code',
+      description: 'Runs once for each item. Variables: item, index, input. Return the transformed value.',
+      placeholder: 'return { id: item.id, doubled: item.value * 2 }',
+    },
+    {
+      key: 'concurrency',
+      label: 'Concurrency',
+      type: 'number',
+      description: 'How many items to process in parallel (default 1).',
+      min: 1,
+      section: 'ADVANCED',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -204,14 +326,31 @@ const stravaDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
-      { value: 'list_activities', label: 'List Activities' },
-      { value: 'get_activity', label: 'Get Activity' },
-      { value: 'get_athlete_stats', label: 'Get Athlete Stats' },
-    ]},
-    { key: 'perPage', label: 'Results per Page', type: 'number' },
-    { key: 'activityId', label: 'Activity ID', type: 'template-textarea', advancedOnly: true },
-    { key: 'page', label: 'Page Number', type: 'number', advancedOnly: true },
+    {
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to fetch from Strava',
+      options: [
+        { value: 'list_activities', label: 'List Activities' },
+        { value: 'get_activity', label: 'Get Single Activity' },
+        { value: 'get_athlete_stats', label: 'Get Athlete Stats' },
+      ],
+    },
+    {
+      key: 'activityId', label: 'Activity ID', type: 'text',
+      placeholder: '1234567890',
+      description: 'ID of the Strava activity to fetch.',
+      visibleWhen: { key: 'operation', equals: 'get_activity' },
+    },
+    {
+      key: 'page', label: 'Page', type: 'number', min: 1,
+      description: 'Page number of results (1 = first page).',
+      visibleWhen: { key: 'operation', equals: 'list_activities' },
+    },
+    {
+      key: 'perPage', label: 'Results Per Page', type: 'number', min: 1, max: 200,
+      description: 'How many activities to return per page (max 200).',
+      visibleWhen: { key: 'operation', equals: 'list_activities' },
+    },
   ],
 };
 
@@ -235,13 +374,33 @@ const whoopDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
-      { value: 'get_cycles', label: 'Get Cycles' }, { value: 'get_recovery', label: 'Get Recovery' },
-      { value: 'get_sleep', label: 'Get Sleep' }, { value: 'get_workouts', label: 'Get Workouts' },
-    ]},
-    { key: 'limit', label: 'Max Records', type: 'number' },
-    { key: 'start', label: 'Start Date', type: 'text', advancedOnly: true, placeholder: '2025-01-01T00:00:00Z' },
-    { key: 'end', label: 'End Date', type: 'text', advancedOnly: true, placeholder: '2025-12-31T23:59:59Z' },
+    {
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What type of Whoop data to fetch',
+      options: [
+        { value: 'get_cycles', label: 'Cycles (daily strain)' },
+        { value: 'get_recovery', label: 'Recovery Scores' },
+        { value: 'get_sleep', label: 'Sleep Records' },
+        { value: 'get_workouts', label: 'Workouts' },
+      ],
+    },
+    {
+      key: 'limit', label: 'Limit', type: 'number', min: 1,
+      description: 'Maximum number of records to return.',
+    },
+    {
+      key: 'start', label: 'Start Date', type: 'template-textarea',
+      section: 'FILTERS',
+      placeholder: '2026-01-01T00:00:00Z',
+      description: 'ISO 8601 start date filter (optional).',
+      advancedOnly: true,
+    },
+    {
+      key: 'end', label: 'End Date', type: 'template-textarea',
+      placeholder: '2026-04-18T00:00:00Z',
+      description: 'ISO 8601 end date filter (optional).',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -293,21 +452,52 @@ const openrouterDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
-      { value: 'chat_completion', label: 'Chat Completion' },
-      { value: 'list_models', label: 'List Models' },
-      { value: 'get_usage', label: 'Get Usage' },
-    ]},
-    { key: 'model', label: 'Model', type: 'dropdown', options: [
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
-      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku' },
-    ]},
-    { key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea' },
-    { key: 'userPrompt', label: 'User Prompt', type: 'template-textarea' },
-    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 2, step: 0.1, advancedOnly: true },
-    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+    {
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with OpenRouter',
+      options: [
+        { value: 'chat_completion', label: 'Chat Completion' },
+        { value: 'list_models', label: 'List Models' },
+        { value: 'get_usage', label: 'Get API Usage' },
+      ],
+    },
+    {
+      key: 'model', label: 'Model', type: 'dropdown',
+      description: 'Which LLM runs this step',
+      options: [
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
+        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
+        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      ],
+      visibleWhen: { key: 'operation', equals: 'chat_completion' },
+    },
+    {
+      key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea',
+      section: 'PROMPT',
+      placeholder: 'You are a helpful assistant...',
+      description: 'Instructions that set behaviour/persona. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', equals: 'chat_completion' },
+    },
+    {
+      key: 'userPrompt', label: 'User Prompt', type: 'template-textarea',
+      placeholder: 'Summarise {{input.text}} in 3 bullets.',
+      description: 'The user message. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', equals: 'chat_completion' },
+    },
+    {
+      key: 'temperature', label: 'Creativity (temperature)', type: 'slider',
+      min: 0, max: 2, step: 0.1,
+      description: '0 = deterministic, 1 = balanced, 2 = very creative',
+      visibleWhen: { key: 'operation', equals: 'chat_completion' },
+    },
+    {
+      key: 'maxTokens', label: 'Max Tokens', type: 'number', min: 1,
+      description: 'Upper limit on response length',
+      advancedOnly: true,
+      visibleWhen: { key: 'operation', equals: 'chat_completion' },
+    },
   ],
 };
 
@@ -331,14 +521,42 @@ const thinkDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Reasoning' }],
   basicConfig: [
-    { key: 'prompt', label: 'Reasoning Task', type: 'template-textarea', placeholder: 'Analyze the data and determine the best course of action.' },
-    { key: 'model', label: 'Model', type: 'dropdown', options: [
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
-    ]},
-    { key: 'temperature', label: 'Temperature', type: 'slider', min: 0, max: 1, step: 0.1 },
-    { key: 'maxTokens', label: 'Max Tokens', type: 'number', advancedOnly: true },
+    {
+      key: 'prompt',
+      label: 'Reasoning Task',
+      type: 'template-textarea',
+      placeholder: 'Analyze the data and determine the best course of action.',
+      description: 'What you want the LLM to think about. Use {{input.field}} to reference incoming data.',
+    },
+    {
+      key: 'model',
+      label: 'Model',
+      type: 'dropdown',
+      description: 'Which LLM runs this step',
+      options: [
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
+        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
+        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      ],
+    },
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      type: 'slider',
+      min: 0,
+      max: 2,
+      step: 0.1,
+      description: 'Lower = more focused, higher = more creative',
+    },
+    {
+      key: 'maxTokens',
+      label: 'Max Tokens',
+      type: 'number',
+      advancedOnly: true,
+      description: 'Maximum length of the LLM response',
+    },
   ],
   llmDescription: 'Use when the workflow needs careful deliberation before a decision. Place before Conditional or Router nodes.',
   llmExamples: [{ prompt: 'Analyze the health data and determine if the user should be alerted.', model: 'openai/gpt-4o', temperature: 0.2 }],
@@ -371,12 +589,26 @@ const llmRouterDef: NodeDefinition = {
     { name: 'route_b', type: 'any', label: 'Route B' },
   ],
   basicConfig: [
-    { key: 'routes', label: 'Routes (JSON)', type: 'textarea', description: 'Array of { "handle": "name", "description": "when to use" }' },
-    { key: 'model', label: 'Model', type: 'dropdown', options: [
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (fast)' },
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku (fast)' },
-    ]},
+    {
+      key: 'routes',
+      label: 'Routes',
+      type: 'textarea',
+      description:
+        'List of possible routes as JSON. Each entry needs `handle` (matches source handle on this node) and `description` (when to pick it).',
+    },
+    {
+      key: 'model',
+      label: 'Model',
+      type: 'dropdown',
+      description: 'Which LLM runs this step',
+      options: [
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
+        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
+        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      ],
+    },
   ],
   llmDescription: 'Use for semantic decisions — choosing paths based on meaning rather than booleans.',
   llmExamples: [{ routes: JSON.stringify([
@@ -421,18 +653,83 @@ const llmAgentDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Agent Result' }],
   basicConfig: [
-    { key: 'model', label: 'Model', type: 'dropdown', options: [
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (fast)' },
-      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
-      { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku (fast)' },
-    ]},
-    { key: 'systemPrompt', label: 'System Prompt', type: 'template-textarea', placeholder: 'You are a helpful assistant...', description: 'Supports {{input.field}} templates' },
-    { key: 'userPrompt', label: 'User Prompt', type: 'template-textarea', placeholder: '{{input.query}}', description: 'Supports {{input.field}} templates' },
-    { key: 'maxIterations', label: 'Max Iterations', type: 'number', description: 'Maximum tool-use loop iterations', advancedOnly: true },
-    { key: 'maxTotalTokens', label: 'Max Total Tokens', type: 'number', description: 'Total token budget (0 = unlimited)', advancedOnly: true },
-    { key: 'timeoutMs', label: 'Timeout (ms)', type: 'number', description: 'Max execution time in ms (0 = disabled)', advancedOnly: true },
-    { key: 'toolOverrides', label: 'Tool Overrides (JSON)', type: 'code', description: 'Override tool names/descriptions: { "nodeId": { "name": "...", "description": "..." } }', advancedOnly: true },
+    {
+      key: 'userPrompt',
+      label: 'User Prompt',
+      type: 'template-textarea',
+      placeholder: '{{input.query}}',
+      description: 'The main instruction for the agent. Use {{input.field}} to reference incoming data.',
+    },
+    {
+      key: 'systemPrompt',
+      label: 'System Prompt',
+      type: 'template-textarea',
+      placeholder: 'You are a helpful assistant...',
+      description: 'Sets the agent\'s role and behaviour. Supports {{input.field}} templates.',
+    },
+    {
+      key: 'model',
+      label: 'Model',
+      type: 'dropdown',
+      description: 'Which LLM runs this step',
+      options: [
+        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
+        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
+        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      ],
+    },
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      type: 'slider',
+      min: 0,
+      max: 2,
+      step: 0.1,
+      description: 'Lower = more focused, higher = more creative',
+    },
+    {
+      key: 'maxTokens',
+      label: 'Max Tokens',
+      type: 'number',
+      advancedOnly: true,
+      section: 'ADVANCED',
+      description: 'Maximum length of each LLM response',
+    },
+    {
+      key: 'maxIterations',
+      label: 'Max Iterations',
+      type: 'number',
+      advancedOnly: true,
+      section: 'ADVANCED',
+      description: 'Max tool-use loop iterations',
+    },
+    {
+      key: 'maxTotalTokens',
+      label: 'Max Total Tokens',
+      type: 'number',
+      advancedOnly: true,
+      section: 'ADVANCED',
+      description: 'Total token budget across all iterations (0 = unlimited)',
+    },
+    {
+      key: 'timeoutMs',
+      label: 'Timeout (ms)',
+      type: 'number',
+      advancedOnly: true,
+      section: 'ADVANCED',
+      description: 'Max execution time in milliseconds (0 = disabled)',
+    },
+    {
+      key: 'toolOverrides',
+      label: 'Tool Overrides',
+      type: 'textarea',
+      advancedOnly: true,
+      section: 'ADVANCED',
+      description:
+        'JSON object mapping node IDs to { name?, description? } to override tool definitions.',
+    },
   ],
   llmDescription:
     'Use when the task requires multi-step reasoning with tool use. The agent can call connected nodes as tools in a loop until it has the answer. Best for complex tasks that need planning, research, or iterative refinement.',
@@ -461,17 +758,17 @@ const whatsappDef: NodeDefinition = {
   basicConfig: [
     {
       key: 'to',
-      label: 'To (Phone Number)',
-      type: 'text',
+      label: 'Recipient Phone Number',
+      type: 'template-textarea',
       placeholder: '+447359228511 or {{input.phone}}',
-      description: 'E.164 format. Supports template interpolation.',
+      description: 'Phone number in E.164 format (include country code). Supports {{input.field}} templates.',
     },
     {
       key: 'message',
       label: 'Message',
       type: 'template-textarea',
       placeholder: 'Hi {{input.name}}, your report is ready.',
-      description: 'Message text. Supports {{input.field}} templates.',
+      description: 'Text to send. Supports {{input.field}} templates.',
     },
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use this node when a workflow needs to notify someone via WhatsApp.
@@ -512,20 +809,23 @@ const homeAssistantClientDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
-    { key: 'operation', label: 'Operation', type: 'dropdown', options: [
-      { value: 'query_state', label: 'Query State' },
-      { value: 'call_service', label: 'Call Service' },
-      { value: 'fire_event', label: 'Fire Event' },
-      { value: 'get_history', label: 'Get History' },
-      { value: 'render_template', label: 'Render Template' },
-    ]},
+    {
+      key: 'operation', label: 'Operation', type: 'dropdown',
+      options: [
+        { value: 'query_state', label: 'Query State' },
+        { value: 'call_service', label: 'Call Service' },
+        { value: 'fire_event', label: 'Fire Event' },
+        { value: 'get_history', label: 'Get History' },
+        { value: 'render_template', label: 'Render Template' },
+      ],
+    },
     { key: 'entityId', label: 'Entity ID', type: 'template-textarea', placeholder: 'light.living_room_ceiling' },
     { key: 'domain', label: 'Domain', type: 'text', placeholder: 'light', advancedOnly: true },
     { key: 'service', label: 'Service', type: 'text', placeholder: 'turn_on' },
     { key: 'serviceData', label: 'Service Data (JSON)', type: 'textarea', placeholder: '{"brightness": 128}', advancedOnly: true },
     { key: 'eventType', label: 'Event Type', type: 'text', placeholder: 'custom_event', advancedOnly: true },
     { key: 'eventData', label: 'Event Data (JSON)', type: 'textarea', advancedOnly: true },
-    { key: 'historyStart', label: 'History Start', type: 'template-textarea', advancedOnly: true },
+    { key: 'historyStart', label: 'History Start', type: 'template-textarea', placeholder: '2026-04-14T00:00:00Z', advancedOnly: true },
     { key: 'historyEnd', label: 'History End', type: 'template-textarea', advancedOnly: true },
     { key: 'template', label: 'Template (Jinja2)', type: 'code', placeholder: '{{ states("light.living_room") }}', advancedOnly: true },
   ],
@@ -555,17 +855,26 @@ const healthQueryClientDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'Which health data summary to fetch',
       options: [
-        { value: 'stats', label: 'Stats' },
-        { value: 'readiness', label: 'Readiness' },
-        { value: 'sleep', label: 'Sleep' },
+        { value: 'stats', label: 'Fitness Stats' },
+        { value: 'readiness', label: 'Readiness Score' },
+        { value: 'sleep', label: 'Sleep Analysis' },
         { value: 'training_load', label: 'Training Load' },
-        { value: 'timeline', label: 'Timeline' },
+        { value: 'timeline', label: 'Activity Timeline' },
       ],
     },
-    { key: 'page', label: 'Page', type: 'text', placeholder: '1' },
-    { key: 'limit', label: 'Limit', type: 'text', placeholder: '20' },
+    {
+      key: 'page', label: 'Page', type: 'number', min: 1,
+      description: 'Page number for paginated timeline results.',
+      visibleWhen: { key: 'operation', equals: 'timeline' },
+    },
+    {
+      key: 'limit', label: 'Items Per Page', type: 'number', min: 1,
+      description: 'How many activities to return per page.',
+      visibleWhen: { key: 'operation', equals: 'timeline' },
+    },
   ],
   llmDescription: `Query health data from Strava and Apple Watch including fitness stats, readiness scores, sleep analysis, training load, and activity timeline.
 
@@ -605,7 +914,8 @@ const blogClientDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with blog posts',
       options: [
         { value: 'list', label: 'List Posts' },
         { value: 'get', label: 'Get Post' },
@@ -613,11 +923,39 @@ const blogClientDef: NodeDefinition = {
         { value: 'update', label: 'Update Post' },
       ],
     },
-    { key: 'postId', label: 'Post ID', type: 'template-textarea', placeholder: '{{input.id}}' },
-    { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'My Blog Post' },
-    { key: 'content', label: 'Content', type: 'template-textarea', placeholder: '<p>Post content here...</p>' },
-    { key: 'status', label: 'Status', type: 'dropdown', options: [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }] },
-    { key: 'tags', label: 'Tags', type: 'text', placeholder: 'tech, ai, personal' },
+    {
+      key: 'postId', label: 'Post ID', type: 'template-textarea',
+      placeholder: '{{input.id}}',
+      description: 'ID of the post to fetch or update.',
+      visibleWhen: { key: 'operation', in: ['get', 'update'] },
+    },
+    {
+      key: 'title', label: 'Title', type: 'template-textarea',
+      placeholder: 'My Blog Post',
+      description: 'Post title. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'content', label: 'Content', type: 'template-textarea',
+      placeholder: '<p>Post content here...</p>',
+      description: 'Post body as HTML. Supports {{input.field}} templates.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'status', label: 'Status', type: 'dropdown',
+      description: 'Publish state of the post',
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'published', label: 'Published' },
+      ],
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
+    {
+      key: 'tags', label: 'Tags', type: 'text',
+      placeholder: 'tech, ai, personal',
+      description: 'Comma-separated list of tags.',
+      visibleWhen: { key: 'operation', in: ['create', 'update'] },
+    },
   ],
   llmDescription: `Manage blog posts on the site. Supports four operations:
 
@@ -657,7 +995,8 @@ const jkaiClientDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with JKAI autonomous builds',
       options: [
         { value: 'start', label: 'Start Build' },
         { value: 'status', label: 'Check Status' },
@@ -665,16 +1004,33 @@ const jkaiClientDef: NodeDefinition = {
         { value: 'control', label: 'Control Build' },
       ],
     },
-    { key: 'prompt', label: 'Prompt', type: 'template-textarea', placeholder: 'Build a landing page with...' },
-    { key: 'title', label: 'Title', type: 'text', placeholder: 'My Build' },
-    { key: 'buildId', label: 'Build ID', type: 'template-textarea', placeholder: '{{input.buildId}}' },
     {
-      key: 'action', label: 'Action', type: 'dropdown',
+      key: 'prompt', label: 'Prompt', type: 'template-textarea',
+      placeholder: 'Build a landing page with...',
+      description: 'Description of what you want JKAI to build.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'title', label: 'Title', type: 'template-textarea',
+      placeholder: 'My Build',
+      description: 'Optional friendly name for this build.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'buildId', label: 'Build ID', type: 'template-textarea',
+      placeholder: '{{input.buildId}}',
+      description: 'ID of the build to check or control.',
+      visibleWhen: { key: 'operation', in: ['status', 'control'] },
+    },
+    {
+      key: 'action', label: 'Control Action', type: 'dropdown',
+      description: 'What to do with the running build',
       options: [
         { value: 'pause', label: 'Pause' },
         { value: 'resume', label: 'Resume' },
         { value: 'cancel', label: 'Cancel' },
       ],
+      visibleWhen: { key: 'operation', equals: 'control' },
     },
   ],
   llmDescription: `Manage JKAI autonomous code builds in a Docker sandbox. Supports four operations:
@@ -717,7 +1073,8 @@ const deepDiveClientDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
   basicConfig: [
     {
-      key: 'operation', label: 'Operation', type: 'dropdown',
+      key: 'operation', label: 'Action', type: 'dropdown',
+      description: 'What to do with research sessions',
       options: [
         { value: 'start', label: 'Start Research' },
         { value: 'status', label: 'Check Status' },
@@ -726,24 +1083,43 @@ const deepDiveClientDef: NodeDefinition = {
         { value: 'control', label: 'Control Session' },
       ],
     },
-    { key: 'topic', label: 'Topic', type: 'template-textarea', placeholder: 'Impact of AI on software engineering' },
-    { key: 'goals', label: 'Goals', type: 'textarea', placeholder: 'Understand trends, key players, future outlook' },
+    {
+      key: 'topic', label: 'Topic', type: 'template-textarea',
+      placeholder: 'Impact of AI on software engineering',
+      description: 'The subject to research.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
+    {
+      key: 'goals', label: 'Goals', type: 'template-textarea',
+      placeholder: 'Understand trends, key players, future outlook',
+      description: 'Objectives and questions to address in the research.',
+      visibleWhen: { key: 'operation', equals: 'start' },
+    },
     {
       key: 'depth', label: 'Depth', type: 'dropdown',
+      description: 'How thorough the research should be',
       options: [
-        { value: 'shallow', label: 'Shallow' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'deep', label: 'Deep' },
+        { value: 'shallow', label: 'Shallow (quick skim)' },
+        { value: 'medium', label: 'Medium (balanced)' },
+        { value: 'deep', label: 'Deep (thorough)' },
       ],
+      visibleWhen: { key: 'operation', equals: 'start' },
     },
-    { key: 'sessionId', label: 'Session ID', type: 'template-textarea', placeholder: '{{input.data.id}}' },
     {
-      key: 'action', label: 'Action', type: 'dropdown',
+      key: 'sessionId', label: 'Session ID', type: 'template-textarea',
+      placeholder: '{{input.data.id}}',
+      description: 'ID of the research session to check or control.',
+      visibleWhen: { key: 'operation', in: ['status', 'report', 'control'] },
+    },
+    {
+      key: 'action', label: 'Control Action', type: 'dropdown',
+      description: 'What to do with the running session',
       options: [
         { value: 'pause', label: 'Pause' },
         { value: 'resume', label: 'Resume' },
         { value: 'cancel', label: 'Cancel' },
       ],
+      visibleWhen: { key: 'operation', equals: 'control' },
     },
   ],
   llmDescription: `Run deep research sessions on any topic using web search, analysis, and synthesis. Supports five operations:
@@ -782,8 +1158,17 @@ const webScrapeClientDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Scraped content' }],
   basicConfig: [
-    { key: 'url', label: 'URL', type: 'template-textarea', placeholder: 'https://example.com/article' },
-    { key: 'maxChars', label: 'Max characters (0 = unlimited)', type: 'number', advancedOnly: true },
+    {
+      key: 'url', label: 'URL', type: 'template-textarea',
+      placeholder: 'https://example.com/article',
+      description: 'Web page to fetch. Must start with http:// or https://. Supports {{input.field}} templates.',
+    },
+    {
+      key: 'maxChars', label: 'Max Characters', type: 'number', min: 0,
+      section: 'ADVANCED',
+      description: 'Truncate extracted text to this many characters. 0 = no limit.',
+      advancedOnly: true,
+    },
   ],
 };
 
@@ -806,12 +1191,28 @@ const tavilySearchClientDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Search results' }],
   basicConfig: [
-    { key: 'query', label: 'Query', type: 'template-textarea', placeholder: 'svelte 5 runes best practices' },
-    { key: 'searchDepth', label: 'Depth', type: 'dropdown', options: [
-      { value: 'basic', label: 'Basic (fast)' }, { value: 'advanced', label: 'Advanced (deeper)' },
-    ]},
-    { key: 'maxResults', label: 'Max results', type: 'number' },
-    { key: 'includeAnswer', label: 'Include AI answer', type: 'toggle', advancedOnly: true },
+    {
+      key: 'query', label: 'Search Query', type: 'template-textarea',
+      placeholder: 'svelte 5 runes best practices',
+      description: 'What to search for. Supports {{input.field}} templates.',
+    },
+    {
+      key: 'searchDepth', label: 'Search Depth', type: 'dropdown',
+      description: 'Trade-off between speed/cost and result quality',
+      options: [
+        { value: 'basic', label: 'Basic (fast, cheap)' },
+        { value: 'advanced', label: 'Advanced (deeper, slower)' },
+      ],
+    },
+    {
+      key: 'maxResults', label: 'Max Results', type: 'slider',
+      min: 1, max: 20, step: 1,
+      description: 'Number of results to return (1–20).',
+    },
+    {
+      key: 'includeAnswer', label: 'Include AI Summary Answer', type: 'toggle',
+      description: 'Return a Tavily-generated summary alongside the results.',
+    },
   ],
 };
 
