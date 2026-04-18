@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { whatsappConversations } from '$lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { orchestratorChats, conversations } from '$lib/db/schema';
+import { eq, asc, desc } from 'drizzle-orm';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -9,6 +9,11 @@ import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 type TypingFn = (to: string) => Promise<void>;
 
+/**
+ * WhatsApp orchestrator bridge — now reads/writes via the unified
+ * jkai_conversations + orchestrator_chats tables (source='whatsapp').
+ * Task 13 will rewrite this file more thoroughly.
+ */
 export class OrchestratorBridge {
 	private sendFn: SendFn;
 	private typingFn: TypingFn | null;
@@ -25,6 +30,30 @@ export class OrchestratorBridge {
 		return cmd === '/clear' || cmd === '/new';
 	}
 
+	/** Get or create a jkai_conversations row for this phone number. */
+	private async ensureConversation(phoneNumber: string): Promise<string> {
+		const [existing] = await db
+			.select({ id: conversations.id })
+			.from(conversations)
+			.where(eq(conversations.whatsappPhoneNumber, phoneNumber))
+			.limit(1);
+
+		if (existing) return existing.id;
+
+		const modelContext = await resolveDefaultModel('chat');
+		const [created] = await db
+			.insert(conversations)
+			.values({
+				source: 'whatsapp',
+				whatsappPhoneNumber: phoneNumber,
+				modelProvider: modelContext.provider,
+				modelId: modelContext.modelId,
+			})
+			.returning({ id: conversations.id });
+
+		return created.id;
+	}
+
 	async handleMessage(msg: WhatsAppInboundMessage): Promise<void> {
 		const { from, text, replyJid } = msg;
 		const replyTo = replyJid || from;
@@ -39,15 +68,17 @@ export class OrchestratorBridge {
 			// Show typing indicator
 			await this.typingFn?.(replyTo);
 
+			const convId = await this.ensureConversation(from);
+
 			// Save user message
-			await db.insert(whatsappConversations).values({
-				phoneNumber: from,
+			await db.insert(orchestratorChats).values({
+				conversationId: convId,
 				role: 'user',
 				content: text,
 			});
 
 			// Load conversation history
-			const history = await this.getConversationHistory(from);
+			const history = await this.getConversationHistory(convId);
 			const priorHistory = history.slice(0, -1);
 
 			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
@@ -60,8 +91,8 @@ export class OrchestratorBridge {
 			// Stop typing, save and send
 			await this.typingDoneFn?.(replyTo);
 
-			await db.insert(whatsappConversations).values({
-				phoneNumber: from,
+			await db.insert(orchestratorChats).values({
+				conversationId: convId,
 				role: 'assistant',
 				content: responseText,
 			});
@@ -76,13 +107,13 @@ export class OrchestratorBridge {
 	}
 
 	private async getConversationHistory(
-		phoneNumber: string,
+		conversationId: string,
 	): Promise<HistoryMessage[]> {
 		const rows = await db
 			.select()
-			.from(whatsappConversations)
-			.where(eq(whatsappConversations.phoneNumber, phoneNumber))
-			.orderBy(asc(whatsappConversations.createdAt));
+			.from(orchestratorChats)
+			.where(eq(orchestratorChats.conversationId, conversationId))
+			.orderBy(asc(orchestratorChats.createdAt));
 
 		return rows.map((r) => ({
 			role: r.role,
@@ -93,8 +124,17 @@ export class OrchestratorBridge {
 	}
 
 	private async clearConversation(phoneNumber: string): Promise<void> {
-		await db
-			.delete(whatsappConversations)
-			.where(eq(whatsappConversations.phoneNumber, phoneNumber));
+		// Find the conversation for this phone number
+		const [conv] = await db
+			.select({ id: conversations.id })
+			.from(conversations)
+			.where(eq(conversations.whatsappPhoneNumber, phoneNumber))
+			.limit(1);
+
+		if (conv) {
+			await db
+				.delete(orchestratorChats)
+				.where(eq(orchestratorChats.conversationId, conv.id));
+		}
 	}
 }

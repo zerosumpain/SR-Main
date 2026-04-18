@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, openrouterModels, whatsappConversations } from '$lib/db/schema';
+import { conversations, orchestratorChats, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -28,38 +28,11 @@ export const GET: RequestHandler = async ({ params }) => {
 		.where(eq(orchestratorChats.conversationId, params.id))
 		.orderBy(asc(orchestratorChats.createdAt));
 
-	// If WhatsApp continuation, also load WhatsApp messages
-	let whatsappMessages: Array<{
-		id: string;
-		role: string;
-		content: string;
-		metadata: unknown;
-		createdAt: Date;
-		source: 'whatsapp';
-	}> = [];
-
-	if (conv.whatsappPhoneNumber) {
-		const waRows = await db
-			.select()
-			.from(whatsappConversations)
-			.where(eq(whatsappConversations.phoneNumber, conv.whatsappPhoneNumber))
-			.orderBy(asc(whatsappConversations.createdAt));
-
-		whatsappMessages = waRows.map((r) => ({
-			id: r.id,
-			role: r.role,
-			content: r.content,
-			metadata: r.metadata,
-			createdAt: r.createdAt,
-			source: 'whatsapp' as const,
-		}));
-	}
-
-	// Merge chronologically
-	const allMessages = [
-		...whatsappMessages,
-		...webMessages.map((m) => ({ ...m, source: 'web' as const })),
-	].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	// All messages (including migrated WhatsApp) are now in orchestrator_chats
+	const allMessages = webMessages.map((m) => ({
+		...m,
+		source: conv.source === 'whatsapp' ? ('whatsapp' as const) : ('web' as const),
+	}));
 
 	return json({ conversation: conv, messages: allMessages });
 };

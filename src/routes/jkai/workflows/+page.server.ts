@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowRuns, orchestratorChats, whatsappConversations } from '$lib/db/schema';
+import { workflows, workflowNodes, workflowRuns, orchestratorChats, conversations } from '$lib/db/schema';
 import { desc, eq, count, sql } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 
@@ -44,17 +44,19 @@ export const load: PageServerLoad = async () => {
     LIMIT 20
   `);
 
-  // WhatsApp chat sessions (grouped by phone number)
+  // WhatsApp chat sessions (now unified in jkai_conversations + orchestrator_chats)
   const whatsappChats = await db.execute(sql`
     SELECT
-      phone_number,
-      COUNT(*) as message_count,
-      MAX(created_at) as last_message_at,
-      (SELECT content FROM whatsapp_conversations wc2 WHERE wc2.phone_number = wc.phone_number ORDER BY created_at DESC LIMIT 1) as last_message,
-      (SELECT role FROM whatsapp_conversations wc3 WHERE wc3.phone_number = wc.phone_number ORDER BY created_at DESC LIMIT 1) as last_role
-    FROM whatsapp_conversations wc
-    GROUP BY phone_number
-    ORDER BY MAX(created_at) DESC
+      c.whatsapp_phone_number AS phone_number,
+      COUNT(oc.id) AS message_count,
+      MAX(oc.created_at) AS last_message_at,
+      (SELECT content FROM orchestrator_chats oc2 WHERE oc2.conversation_id = c.id ORDER BY oc2.created_at DESC LIMIT 1) AS last_message,
+      (SELECT role FROM orchestrator_chats oc3 WHERE oc3.conversation_id = c.id ORDER BY oc3.created_at DESC LIMIT 1) AS last_role
+    FROM jkai_conversations c
+    LEFT JOIN orchestrator_chats oc ON oc.conversation_id = c.id
+    WHERE c.source = 'whatsapp'
+    GROUP BY c.id, c.whatsapp_phone_number
+    ORDER BY MAX(oc.created_at) DESC
     LIMIT 20
   `);
 

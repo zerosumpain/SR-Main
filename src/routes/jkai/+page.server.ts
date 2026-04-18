@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { conversations, jkaiBuilds, workflowRuns, workflowSchedules, whatsappConversations } from '$lib/db/schema';
+import { conversations, jkaiBuilds, workflowRuns, workflowSchedules, orchestratorChats } from '$lib/db/schema';
 import { desc, eq, sql, gte, asc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
@@ -37,27 +37,28 @@ export const load: PageServerLoad = async () => {
     }
   }
 
-  // Check for WhatsApp thread
-  const [latestWa] = await db
-    .select({ phoneNumber: whatsappConversations.phoneNumber })
-    .from(whatsappConversations)
-    .orderBy(desc(whatsappConversations.createdAt))
+  // Check for WhatsApp thread (now unified in jkai_conversations + orchestrator_chats)
+  const [latestWaConv] = await db
+    .select({ id: conversations.id, phoneNumber: conversations.whatsappPhoneNumber })
+    .from(conversations)
+    .where(eq(conversations.source, 'whatsapp'))
+    .orderBy(desc(conversations.updatedAt))
     .limit(1);
 
   let whatsappThread: { phoneNumber: string; messages: any[] } | null = null;
-  if (latestWa) {
+  if (latestWaConv?.phoneNumber) {
     const waMessages = await db
       .select({
-        id: whatsappConversations.id,
-        role: whatsappConversations.role,
-        content: whatsappConversations.content,
-        createdAt: whatsappConversations.createdAt,
+        id: orchestratorChats.id,
+        role: orchestratorChats.role,
+        content: orchestratorChats.content,
+        createdAt: orchestratorChats.createdAt,
       })
-      .from(whatsappConversations)
-      .where(eq(whatsappConversations.phoneNumber, latestWa.phoneNumber))
-      .orderBy(asc(whatsappConversations.createdAt));
+      .from(orchestratorChats)
+      .where(eq(orchestratorChats.conversationId, latestWaConv.id))
+      .orderBy(asc(orchestratorChats.createdAt));
 
-    whatsappThread = { phoneNumber: latestWa.phoneNumber, messages: waMessages };
+    whatsappThread = { phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
   }
 
   // Total spend across conversations + builds

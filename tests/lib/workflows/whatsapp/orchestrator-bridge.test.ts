@@ -1,42 +1,61 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock DB
-const mockDbSelect = vi.fn();
-const mockDbInsert = vi.fn();
-const mockDbDelete = vi.fn();
+// Mock DB — the bridge now does:
+//   db.select().from(conversations).where(...).limit(1)  → ensureConversation lookup
+//   db.insert(conversations).values(...).returning(...)   → ensureConversation create
+//   db.insert(orchestratorChats).values(...)              → save message
+//   db.select().from(orchestratorChats).where(...).orderBy(...) → getConversationHistory
+//   db.select().from(conversations).where(...).limit(1)   → clearConversation lookup
+//   db.delete(orchestratorChats).where(...)               → clearConversation delete
+
+const mockConvId = 'conv-test-123';
+
+const mockDbChain = {
+	from: vi.fn().mockReturnThis(),
+	where: vi.fn().mockReturnThis(),
+	orderBy: vi.fn().mockResolvedValue([]),
+	limit: vi.fn().mockResolvedValue([{ id: mockConvId }]),
+};
 
 vi.mock('$lib/db', () => ({
 	db: {
 		select: () => ({
 			from: () => ({
 				where: () => ({
-					orderBy: () => mockDbSelect(),
-					limit: () => Promise.resolve([]),
+					orderBy: () => mockDbChain.orderBy(),
+					limit: () => mockDbChain.limit(),
 				}),
 			}),
 		}),
 		insert: () => ({
-			values: (v: unknown) => {
-				mockDbInsert(v);
-				return { returning: vi.fn().mockResolvedValue([]) };
-			},
+			values: () => ({
+				returning: () => Promise.resolve([{ id: mockConvId }]),
+			}),
 		}),
 		delete: () => ({
-			where: () => mockDbDelete(),
+			where: () => Promise.resolve(),
 		}),
 	},
 }));
 
 vi.mock('$lib/db/schema', () => ({
-	whatsappConversations: {},
-	whatsappConfig: {},
-	homeAssistantConfig: {},
+	conversations: {},
+	orchestratorChats: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
 	eq: vi.fn(),
 	asc: vi.fn(),
-	and: vi.fn(),
+	desc: vi.fn(),
+}));
+
+// Mock resolveDefaultModel
+vi.mock('$lib/server/models/settings', () => ({
+	resolveDefaultModel: vi.fn().mockResolvedValue({
+		provider: 'zai',
+		modelId: 'glm-5',
+		displayName: 'GLM 5',
+	}),
 }));
 
 // Mock general chat
@@ -56,7 +75,8 @@ describe('OrchestratorBridge', () => {
 		vi.clearAllMocks();
 		sendFn = vi.fn().mockResolvedValue({ sent: true });
 		bridge = new OrchestratorBridge(sendFn);
-		mockDbSelect.mockResolvedValue([]);
+		mockDbChain.orderBy.mockResolvedValue([]);
+		mockDbChain.limit.mockResolvedValue([{ id: mockConvId }]);
 	});
 
 	it('detects /clear command', () => {
