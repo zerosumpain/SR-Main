@@ -82,23 +82,9 @@
     }
   }
 
-  function currentLabel(): string {
-    if (modelProvider === 'zai') return `GLM · ${modelId}`;
-    return `OR · ${modelId}`;
-  }
 </script>
 
-{#if locked}
-  <div class="flex items-center gap-2">
-    <span
-      class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]"
-      style="background: var(--surface-overlay); color: var(--text-secondary); font-family: var(--font-mono);"
-    >
-      {currentLabel()}
-    </span>
-    <span class="text-[10px]" style="color: var(--text-ghost);">locked</span>
-  </div>
-{:else}
+{#if !locked}
   <div class="flex items-center gap-1 flex-wrap">
     <span
       class="text-[10px] uppercase tracking-wider mr-1"
