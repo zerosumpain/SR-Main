@@ -118,6 +118,39 @@
   let dragOver = $state(false);
   let fileInputEl: HTMLInputElement | undefined = $state();
 
+  // Toast for rejected file drops/pastes
+  let toast = $state<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  function showToast(msg: string) {
+    toast = msg;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast = null; }, 4000);
+  }
+
+  function kindAllowedByCaps(kind: string): boolean {
+    const caps = modelCapabilities;
+    if (!caps) return true;
+    switch (kind) {
+      case 'image': return caps.image;
+      case 'audio': return caps.audio;
+      case 'video': return caps.video;
+      case 'pdf':   return caps.pdf;
+      case 'document':
+      case 'text':  return caps.documentText;
+      default: return false;
+    }
+  }
+
+  $effect(() => {
+    // Re-check compatibility when model capabilities change
+    if (modelCapabilities && pendingAttachments.length > 0) {
+      pendingAttachments = pendingAttachments.map(a => ({
+        ...a,
+        incompatible: !kindAllowedByCaps(a.kind),
+      }));
+    }
+  });
+
   function acceptAttrForCaps(): string {
     const caps = modelCapabilities;
     if (!caps) return '*/*';
@@ -131,6 +164,16 @@
   }
 
   async function uploadFile(file: File): Promise<void> {
+    const mimePrefix = file.type.split('/')[0];
+    const probableKind = mimePrefix === 'image' ? 'image'
+      : mimePrefix === 'audio' ? 'audio'
+      : mimePrefix === 'video' ? 'video'
+      : file.type === 'application/pdf' ? 'pdf'
+      : 'text';
+    if (!kindAllowedByCaps(probableKind)) {
+      showToast(`This model can't process ${probableKind} files. Switch to a different model.`);
+      return;
+    }
     const tempId = `tmp-${Math.random().toString(36).slice(2)}`;
     pendingAttachments = [...pendingAttachments, {
       id: tempId, kind: 'unknown', mimeType: file.type, originalName: file.name,
@@ -893,6 +936,12 @@
         {/if}
       </div>
     </aside>
+  {/if}
+
+  {#if toast}
+    <div class="fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded text-sm z-50" style="background: #c0392b; color: white;">
+      {toast}
+    </div>
   {/if}
 </div>
 
