@@ -1,6 +1,7 @@
 import { startScheduler } from '$lib/health/scheduler';
 import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
 import { orchestrator } from '$lib/jkai/orchestrator';
+import { startOrphanSweep } from '$lib/jkai/media/sweep';
 import { isPublicPath } from '$lib/auth';
 import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -28,6 +29,9 @@ startScheduler();
 startWorkflowScheduler().catch((err) => {
   console.error('[hooks.server] Workflow scheduler failed to start:', err);
 });
+
+// Start the JKAI orphan attachment sweep (runs immediately + hourly)
+startOrphanSweep();
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
