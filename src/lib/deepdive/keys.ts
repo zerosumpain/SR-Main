@@ -65,6 +65,7 @@ export function getKeysStatus(): {
   zaiConfigured: boolean;
   tavilyConfigured: boolean;
   openrouterConfigured: boolean;
+  elevenlabsConfigured: boolean;
   zaiBaseUrl: string;
   zaiModel: string;
   embeddingModel: string;
@@ -74,6 +75,7 @@ export function getKeysStatus(): {
     zaiConfigured: !!keys.zaiApiKey,
     tavilyConfigured: !!keys.tavilyApiKey,
     openrouterConfigured: !!keys.openrouterApiKey,
+    elevenlabsConfigured: !!keys.elevenlabsApiKey,
     zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
     zaiModel: keys.zaiModel || 'glm-5.1',
     embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-small',
