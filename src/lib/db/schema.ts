@@ -697,6 +697,28 @@ export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
 export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
 
 // ==========================================
+// JKAI Attachments (multimedia I/O)
+// ==========================================
+
+export const jkaiAttachments = pgTable('jkai_attachments', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+  messageId: text('message_id').references(() => orchestratorChats.id, { onDelete: 'set null' }),
+  source: text('source').notNull(), // 'web' | 'whatsapp' | 'generated'
+  kind: text('kind').notNull(), // 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text'
+  mimeType: text('mime_type').notNull(),
+  originalName: text('original_name'),
+  sizeBytes: integer('size_bytes').notNull(),
+  diskPath: text('disk_path').notNull(),
+  duration: doublePrecision('duration'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiAttachment = typeof jkaiAttachments.$inferSelect;
+export type NewJkaiAttachment = typeof jkaiAttachments.$inferInsert;
+
+// ==========================================
 // Workflow Data Store (KV per workflow)
 // ==========================================
 
@@ -733,17 +755,6 @@ export const whatsappConfig = pgTable('whatsapp_config', {
 export type WhatsAppConfig = typeof whatsappConfig.$inferSelect;
 export type NewWhatsAppConfig = typeof whatsappConfig.$inferInsert;
 
-export const whatsappConversations = pgTable('whatsapp_conversations', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  phoneNumber: text('phone_number').notNull(),
-  role: text('role').notNull(), // 'user' | 'assistant' | 'system'
-  content: text('content').notNull(),
-  metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type WhatsAppConversation = typeof whatsappConversations.$inferSelect;
-export type NewWhatsAppConversation = typeof whatsappConversations.$inferInsert;
 
 // ==========================================
 // Channels (site-level messaging channels: WhatsApp, Email, ...)

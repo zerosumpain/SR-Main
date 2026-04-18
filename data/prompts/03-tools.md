@@ -79,3 +79,11 @@ User: *"Every morning summarise yesterday's training and show it as a chart + ta
 
 User: *"Build me a calorie tracker app"*
 → `builds_start(...)` — Layer 3, not Layer 1/2.
+
+## Media toolset
+
+Activate with `activate_toolset("media")`. Tools:
+
+- `write_document(filename, content, format?)` — save a text/code/data file.
+- `generate_image(prompt, aspect_ratio?, count?)` — make an image.
+- `generate_audio_tts(text, voice?, model?)` — synthesise speech.

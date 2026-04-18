@@ -14,6 +14,9 @@ import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
+import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
+import type { JkaiAttachment } from '$lib/db/schema';
+import type { HistoryMessage } from './conversation-history';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -221,11 +224,12 @@ async function runSingleToolCall(
 }
 
 export async function generalChat(
-  userMessage: string,
-  conversationHistory: Array<{ role: string; content: string }>,
+  input: { text: string; attachments?: JkaiAttachment[] },
+  conversationHistory: HistoryMessage[],
   options: ChatOptions,
 ): Promise<{ response: string }> {
   const { onProgress, onToolProgress } = options;
+  const userMessage = input.text;
 
   // Load HA entity context (needed to know if HA is available)
   let haEntities: any[] = [];
@@ -255,9 +259,25 @@ export async function generalChat(
 
   const recentHistory = conversationHistory.slice(-MAX_HISTORY);
   for (const h of recentHistory) {
-    messages.push({ role: h.role, content: h.content });
+    if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
+      const parts = await buildMultimodalContent(h.content, h.attachments);
+      messages.push({ role: 'user', content: parts as any });
+    } else {
+      messages.push({ role: h.role, content: h.content } as any);
+    }
   }
-  messages.push({ role: 'user', content: userMessage });
+
+  const userParts = await buildMultimodalContent(userMessage, input.attachments ?? []);
+  const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
+  if (encodedSizeBytes(userParts) > maxTurnBytes) {
+    throw new Error(`Encoded turn payload exceeds JKAI_MAX_TURN_BYTES (${maxTurnBytes})`);
+  }
+  // Collapse to plain string when there are no non-text parts, to keep backward compat with
+  // models that reject content arrays.
+  const userContent = userParts.length === 1 && userParts[0].type === 'text'
+    ? userParts[0].text
+    : userParts;
+  messages.push({ role: 'user', content: userContent as any });
 
   // --- Tiered tool assembly ---
   // Always include meta-tools

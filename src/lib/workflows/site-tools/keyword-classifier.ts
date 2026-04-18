@@ -11,6 +11,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'whatsapp', pattern: /whatsapp|message|text\s+me|send\s*(me\s+)?a?\s*msg|notify\s+me/i },
   { toolset: 'diagnostics', pattern: /\blog\b|logs|scheduler|system\s+(status|health|check)|debug|diagnos|service|journal/i },
   { toolset: 'memory', pattern: /remember|forget|do you know|what do you know|recall|you told me|i told you|last time/i },
+  { toolset: 'media', pattern: /image|photo|picture|draw|render|illustrate|sketch|audio|voice|speak|say\s+out\s+loud|read\s+(?:this|aloud)|document|report|csv|save\s+as|export|write\s+(?:a\s+)?file|write\s+to\s+file|generate\s+(?:an\s+)?image|make\s+(?:an\s+)?image|generate\s+audio|make\s+(?:a\s+)?voice/i },
 ];
 
 export function inferToolsets(message: string): string[] {

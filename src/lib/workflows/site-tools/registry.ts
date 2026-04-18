@@ -19,6 +19,9 @@ import './tools/followup';
 import './tools/home-assistant';
 import './tools/visualise';
 import './tools/ephemeral-tools';
+import './tools/media-write-document';
+import './tools/media-generate-image';
+import './tools/media-generate-audio-tts';
 
 // --- Public API ---
 
@@ -73,6 +76,7 @@ export function getToolsetManifest(): Array<{
     system: 'Follow-up scheduling — track background tasks, get notified when they complete',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
     visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Leaflet), and tables directly in the chat',
+    media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({
