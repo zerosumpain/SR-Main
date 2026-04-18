@@ -6,7 +6,7 @@ import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs } from '$lib/workflows/chat/job-store';
+import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs, publishJobEvent } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
@@ -176,6 +176,10 @@ export const POST: RequestHandler = async ({ request }) => {
               job.toolSteps.push(step);
             }
           },
+          onStreamEvent: (event) => {
+            if (abortController.signal.aborted) return;
+            publishJobEvent(jobId, event);
+          },
           modelContext,
           priceSnapshot,
         });
@@ -208,14 +212,22 @@ export const POST: RequestHandler = async ({ request }) => {
       }
 
       job.status = 'done';
+      // Notify SSE subscribers that the job is finished. job.result is the
+      // authoritative final payload (includes the persisted assistant message
+      // text under `message`).
+      publishJobEvent(jobId, { type: 'done', result: (job.result ?? {}) as Record<string, unknown> });
     } catch (err: unknown) {
-      if (job.status === 'cancelled') return; // Already handled
+      if (job.status === 'cancelled') {
+        publishJobEvent(jobId, { type: 'error', message: job.error ?? 'Cancelled' });
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('[orchestrator] Job failed:', errorMessage);
       if (err instanceof Error && err.stack) console.error(err.stack);
       job.status = 'error';
       job.error = errorMessage;
       job.result = { success: false, error: errorMessage };
+      publishJobEvent(jobId, { type: 'error', message: errorMessage });
     }
   })();
 
