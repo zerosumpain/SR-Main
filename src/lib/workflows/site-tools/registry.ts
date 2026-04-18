@@ -20,6 +20,7 @@ import './tools/home-assistant';
 import './tools/visualise';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
+import './tools/media-generate-image';
 
 // --- Public API ---
 

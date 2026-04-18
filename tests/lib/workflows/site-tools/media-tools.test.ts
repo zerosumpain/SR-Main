@@ -16,6 +16,9 @@ vi.mock('$lib/db', () => ({
   },
 }));
 vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
+vi.mock('$lib/server/models/settings', () => ({
+  getOpenRouterApiKey: async () => 'fake-or-key-for-test',
+}));
 
 beforeEach(async () => {
   tmpRoot = await mkdtemp(join(tmpdir(), 'jkai-tool-test-'));
@@ -58,5 +61,30 @@ describe('write_document', () => {
     );
     expect(out.success).toBe(true);
     expect(out.attachments![0].mimeType).toBe('text/csv');
+  });
+});
+
+describe('generate_image', () => {
+  it('calls OpenRouter, saves the image, returns attachment', async () => {
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        return new Response(JSON.stringify({
+          data: [{ url: 'https://fake.example/x.png' }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      // Image download
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/workflows/site-tools/tools/media-generate-image');
+    const out = await handleGenerateImage(
+      { prompt: 'a cat', aspect_ratio: '1:1', count: 1 },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments?.[0].kind).toBe('image');
+    expect(inserted.length).toBeGreaterThanOrEqual(1);
   });
 });
