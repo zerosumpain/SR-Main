@@ -39,9 +39,25 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 }
 
 export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<ModelContext> {
-  const key = kind === 'chat' ? 'jkai.chat.default_model' : 'jkai.builder.default_model';
-  const v = await getSetting<ModelContext>(key);
+  if (kind === 'chat') {
+    // Chat default is always the configured GLM model.
+    const v = await getSetting<{ modelId?: string }>('jkai.chat.default_glm_model');
+    return { provider: 'zai', modelId: v?.modelId ?? 'glm-5-turbo' };
+  }
+  const v = await getSetting<ModelContext>('jkai.builder.default_model');
   return v ?? { provider: 'zai', modelId: 'glm-5.1' };
+}
+
+/** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */
+export async function resolveChatAltOpenRouterModel(): Promise<ModelContext | null> {
+  const v = await getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model');
+  if (!v?.modelId) return null;
+  return { provider: 'openrouter', modelId: v.modelId };
+}
+
+/** Chat-only: the configured GLM default as a ModelContext. */
+export async function resolveChatGlmModel(): Promise<ModelContext> {
+  return resolveDefaultModel('chat');
 }
 
 export async function getOpenRouterApiKey(): Promise<string | undefined> {

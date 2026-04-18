@@ -11,6 +11,7 @@
   --accent: #c4570a;        /* Burnt orange — punchy, not regal */
   --accent-hover: #a84808;
   --bg: #ede4d4;            /* Warm cream, slightly darker */
+  --bg-base: #ede4d4;       /* Alias of --bg for admin layout background */
   --bg-section: rgba(26, 16, 8, 0.04);  /* Subtle tinted sections */
   --card-bg: rgba(26, 16, 8, 0.07);
   --card-border: rgba(26, 16, 8, 0.18);

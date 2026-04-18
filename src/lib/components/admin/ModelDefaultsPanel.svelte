@@ -1,93 +1,196 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { GLM_MODELS } from '$lib/constants/glm-models';
   import type { ModelContext } from '$lib/server/models/types';
 
-  let { chat, builder }: { chat: ModelContext; builder: ModelContext } = $props();
+  let { chat, builder }: {
+    chat: { glmModelId: string; altOpenRouterModelId: string | null };
+    builder: { provider: 'zai' | 'openrouter'; modelId: string };
+  } = $props();
 
-  let chatVal = $state<ModelContext>({ ...chat });
-  let builderVal = $state<ModelContext>({ ...builder });
+  let chatGlm = $state<string>(untrack(() => chat.glmModelId));
+  let chatAlt = $state<string | null>(untrack(() => chat.altOpenRouterModelId));
+  let builderCtx = $state<ModelContext>(untrack(() => ({ ...builder })));
+
   let openrouterOptions = $state<{ id: string; name: string }[]>([]);
+  let loadingOr = $state(true);
   let saving = $state(false);
-  let error = $state<string | null>(null);
+  let errorMsg = $state<string | null>(null);
   let saved = $state(false);
 
   async function loadOpenRouter() {
-    const res = await fetch('/api/admin/models/openrouter?pageSize=500');
-    if (res.ok) {
-      const data = await res.json();
-      openrouterOptions = data.rows.map((r: any) => ({ id: r.id, name: r.name }));
+    try {
+      const res = await fetch('/api/admin/models/openrouter?pageSize=500');
+      if (res.ok) {
+        const data = await res.json();
+        openrouterOptions = data.rows.map((r: any) => ({ id: r.id, name: r.name }));
+      }
+    } finally {
+      loadingOr = false;
     }
   }
 
   $effect(() => { loadOpenRouter(); });
 
-  function parseOption(v: string): ModelContext {
+  function parseBuilderOption(v: string): ModelContext {
     if (v.startsWith('zai:')) return { provider: 'zai', modelId: v.slice(4) };
     return { provider: 'openrouter', modelId: v.slice('or:'.length) };
   }
-  function serialise(ctx: ModelContext): string {
+  function serialiseBuilder(ctx: ModelContext): string {
     return ctx.provider === 'zai' ? `zai:${ctx.modelId}` : `or:${ctx.modelId}`;
   }
 
+  function ctxChanged(a: ModelContext, b: ModelContext): boolean {
+    return a.provider !== b.provider || a.modelId !== b.modelId;
+  }
+
   async function save() {
-    saving = true; error = null; saved = false;
+    saving = true; errorMsg = null; saved = false;
     try {
+      const body: Record<string, unknown> = {};
+      if (chatGlm !== chat.glmModelId) body.chatGlmModelId = chatGlm;
+      if (chatAlt !== chat.altOpenRouterModelId) body.chatAltOpenRouterModelId = chatAlt;
+      if (ctxChanged(builderCtx, builder)) body.builder = builderCtx;
+
+      if (Object.keys(body).length === 0) {
+        saved = true;
+        setTimeout(() => (saved = false), 1500);
+        return;
+      }
+
       const res = await fetch('/api/admin/models/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat: chatVal, builder: builderVal }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       saved = true;
-    } catch (e: any) { error = e.message; }
-    finally { saving = false; }
+      setTimeout(() => (saved = false), 2500);
+    } catch (e: any) {
+      errorMsg = e.message ?? String(e);
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
-<section>
-  <h2>Default models</h2>
+<section
+  class="rounded-lg p-5"
+  style="background: var(--card-bg); border: 1px solid var(--card-border);"
+>
+  <h2
+    class="text-sm uppercase tracking-wider mb-4"
+    style="color: var(--text-ghost); font-family: var(--font-mono);"
+  >
+    Default models
+  </h2>
 
-  <label>
-    Default chat model
-    <select value={serialise(chatVal)} onchange={(e) => chatVal = parseOption(e.currentTarget.value)}>
-      <optgroup label="Z.AI">
-        {#each GLM_MODELS as m}
-          <option value={`zai:${m.id}`}>{m.label}</option>
-        {/each}
-      </optgroup>
-      <optgroup label="OpenRouter">
-        {#each openrouterOptions as m}
-          <option value={`or:${m.id}`}>{m.name} ({m.id})</option>
-        {/each}
-      </optgroup>
-    </select>
-  </label>
+  <div class="flex flex-col gap-5">
+    <!-- Chat — GLM default -->
+    <div>
+      <div
+        class="text-[10px] uppercase tracking-wider mb-2"
+        style="color: var(--text-ghost); font-family: var(--font-mono);"
+      >
+        Chat — GLM default
+      </div>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs" style="color: var(--text-secondary);">
+          GLM model the chat uses by default
+        </span>
+        <select
+          class="rounded px-3 py-2 text-sm"
+          style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+          bind:value={chatGlm}
+        >
+          {#each GLM_MODELS as m}
+            <option value={m.id}>{m.label} — {m.description}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
 
-  <label>
-    Default builder model
-    <select value={serialise(builderVal)} onchange={(e) => builderVal = parseOption(e.currentTarget.value)}>
-      <optgroup label="Z.AI">
-        {#each GLM_MODELS as m}
-          <option value={`zai:${m.id}`}>{m.label}</option>
-        {/each}
-      </optgroup>
-      <optgroup label="OpenRouter">
-        {#each openrouterOptions as m}
-          <option value={`or:${m.id}`}>{m.name} ({m.id})</option>
-        {/each}
-      </optgroup>
-    </select>
-  </label>
+    <!-- Chat — OpenRouter alternate -->
+    <div>
+      <div
+        class="text-[10px] uppercase tracking-wider mb-2"
+        style="color: var(--text-ghost); font-family: var(--font-mono);"
+      >
+        Chat — OpenRouter alternate
+      </div>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs" style="color: var(--text-secondary);">
+          Optional alternate the in-chat toggle flips to — choose "(none)" to disable
+        </span>
+        <select
+          class="rounded px-3 py-2 text-sm"
+          style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+          value={chatAlt ?? '__none__'}
+          onchange={(e) => {
+            const v = e.currentTarget.value;
+            chatAlt = v === '__none__' ? null : v;
+          }}
+          disabled={loadingOr}
+        >
+          <option value="__none__">(none)</option>
+          {#each openrouterOptions as m}
+            <option value={m.id}>{m.name} ({m.id})</option>
+          {/each}
+        </select>
+      </label>
+      {#if loadingOr}
+        <p class="text-[10px] mt-1" style="color: var(--text-ghost);">Loading OpenRouter models…</p>
+      {/if}
+    </div>
 
-  <button onclick={save} disabled={saving}>{saving ? 'Saving…' : 'Save defaults'}</button>
-  {#if saved}<span class="ok">Saved.</span>{/if}
-  {#if error}<span class="err">{error}</span>{/if}
+    <!-- Builder default -->
+    <div>
+      <div
+        class="text-[10px] uppercase tracking-wider mb-2"
+        style="color: var(--text-ghost); font-family: var(--font-mono);"
+      >
+        Builder default
+      </div>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs" style="color: var(--text-secondary);">
+          Combined dropdown — Z.AI or OpenRouter
+        </span>
+        <select
+          class="rounded px-3 py-2 text-sm"
+          style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+          value={serialiseBuilder(builderCtx)}
+          onchange={(e) => (builderCtx = parseBuilderOption(e.currentTarget.value))}
+        >
+          <optgroup label="Z.AI">
+            {#each GLM_MODELS as m}
+              <option value={`zai:${m.id}`}>{m.label}</option>
+            {/each}
+          </optgroup>
+          <optgroup label="OpenRouter">
+            {#each openrouterOptions as m}
+              <option value={`or:${m.id}`}>{m.name} ({m.id})</option>
+            {/each}
+          </optgroup>
+        </select>
+      </label>
+    </div>
+
+    <!-- Save row -->
+    <div class="flex items-center gap-3 pt-1">
+      <button
+        class="rounded px-4 py-2 text-sm font-medium"
+        style="background: var(--accent); color: white; {saving ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+        onclick={save}
+        disabled={saving}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      {#if saved}
+        <span class="text-xs" style="color: var(--accent);">Saved.</span>
+      {/if}
+      {#if errorMsg}
+        <span class="text-xs" style="color: #ef4444;">{errorMsg}</span>
+      {/if}
+    </div>
+  </div>
 </section>
-
-<style>
-  section { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  h2 { margin: 0; font-size: 1.1rem; }
-  label { display: flex; flex-direction: column; gap: 0.25rem; }
-  .ok { color: green; margin-left: 0.5rem; }
-  .err { color: crimson; margin-left: 0.5rem; }
-</style>

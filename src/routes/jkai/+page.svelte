@@ -3,7 +3,6 @@
   import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import NewConversationDialog from '$lib/components/jkai/NewConversationDialog.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
   let { data } = $props();
@@ -15,7 +14,6 @@
   let activeMessages = $state<any[]>([]);
   let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
   let sidebarOpen = $state(false);
-  let newConvOpen = $state(false);
 
   async function selectConversation(id: string) {
     activeConversationId = id;
@@ -33,20 +31,12 @@
     }
   }
 
-  function openNewConversation() {
-    newConvOpen = true;
-  }
-
-  async function handleCreate(ctx: ModelContext) {
+  async function createConversation() {
     try {
       const res = await fetch('/api/jkai/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'web',
-          modelProvider: ctx.provider,
-          modelId: ctx.modelId,
-        }),
+        body: JSON.stringify({ source: 'web' }),
       });
       if (res.ok) {
         const conv = await res.json();
@@ -55,8 +45,8 @@
           ...conversationList,
         ];
         activeConversationId = conv.id;
-        activeMessages = [];
         activeConversation = conv;
+        activeMessages = [];
         sidebarOpen = false;
       }
     } catch (err) {
@@ -143,7 +133,7 @@
         {whatsappThread}
         {activeConversationId}
         onSelect={selectConversation}
-        onNew={openNewConversation}
+        onNew={createConversation}
         onWhatsAppSelect={selectWhatsApp}
         onDelete={deleteConversation}
         collapsed={false}
@@ -170,7 +160,7 @@
             {whatsappThread}
             {activeConversationId}
             onSelect={selectConversation}
-            onNew={openNewConversation}
+            onNew={createConversation}
             onWhatsAppSelect={selectWhatsApp}
             onDelete={deleteConversation}
             collapsed={false}
@@ -186,13 +176,19 @@
         conversationId={activeConversationId}
         initialMessages={activeMessages}
         conversation={activeConversation}
+        defaultGlmModelId={data.defaultChatModel.modelId}
+        altOpenRouterModel={data.chatAltOpenRouterModel}
+        messageCount={activeMessages.length}
+        onmodelchange={(ctx: ModelContext) => {
+          if (activeConversation) {
+            activeConversation = {
+              ...activeConversation,
+              modelProvider: ctx.provider,
+              modelId: ctx.modelId,
+            };
+          }
+        }}
       />
     </div>
   </div>
-
-  <NewConversationDialog
-    bind:open={newConvOpen}
-    defaultModel={data.defaultChatModel}
-    oncreate={handleCreate}
-  />
 </div>

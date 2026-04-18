@@ -6,11 +6,17 @@
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
+  import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
+  import type { ModelContext } from '$lib/server/models/types';
 
   let {
     conversationId,
     initialMessages = [],
     conversation = null,
+    defaultGlmModelId,
+    altOpenRouterModel = null,
+    messageCount = 0,
+    onmodelchange,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -22,6 +28,10 @@
       createdAt?: string;
     }>;
     conversation?: { modelProvider?: string; modelId?: string } | null;
+    defaultGlmModelId: string;
+    altOpenRouterModel?: ModelContext | null;
+    messageCount?: number;
+    onmodelchange?: (ctx: ModelContext) => void;
   } = $props();
 
   interface ToolStep {
@@ -378,13 +388,15 @@
         {/if}
       </p>
       {#if conversationId && conversation?.modelId}
-        <span
-          class="model-badge text-[10px] px-1.5 py-0.5 rounded shrink-0"
-          style="background: color-mix(in srgb, var(--card-border) 40%, transparent); color: var(--text-secondary); font-family: var(--font-mono);"
-          title="Pinned model for this conversation"
-        >
-          {conversation.modelProvider === 'zai' ? 'GLM' : 'OR'} · {conversation.modelId}
-        </span>
+        <ChatModelToggle
+          {conversationId}
+          modelProvider={(conversation.modelProvider ?? 'zai') as 'zai' | 'openrouter'}
+          modelId={conversation.modelId}
+          {messageCount}
+          {altOpenRouterModel}
+          {defaultGlmModelId}
+          onChanged={(ctx) => onmodelchange?.(ctx)}
+        />
       {/if}
     </div>
     {#if conversationId}
