@@ -7,6 +7,7 @@
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
+  import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
   let {
@@ -572,8 +573,8 @@
                           {/if}
                         </button>
                         {#if step.expanded && step.result !== undefined}
-                          <div class="ml-5 mt-1 mb-2 px-2 py-1.5 rounded text-[10px] overflow-x-auto" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-ghost);">
-                            <pre class="whitespace-pre-wrap break-words">{JSON.stringify(step.result, null, 2)}</pre>
+                          <div class="ml-5 mt-1 mb-2 overflow-x-auto">
+                            <JsonBlock data={step.result} />
                           </div>
                         {/if}
                       </div>
@@ -720,13 +721,13 @@
                 {#if Object.keys(entry.step.args).length > 0}
                   <div>
                     <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Args</div>
-                    <pre class="text-[10px] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-words" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-primary);">{JSON.stringify(entry.step.args, null, 2)}</pre>
+                    <JsonBlock data={entry.step.args} />
                   </div>
                 {/if}
                 {#if entry.step.result !== undefined}
                   <div>
                     <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Result</div>
-                    <pre class="text-[10px] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-words" style="background: color-mix(in srgb, var(--card-border) 30%, transparent); font-family: var(--font-mono); color: var(--text-primary);">{JSON.stringify(entry.step.result, null, 2)}</pre>
+                    <JsonBlock data={entry.step.result} />
                   </div>
                 {/if}
               </div>

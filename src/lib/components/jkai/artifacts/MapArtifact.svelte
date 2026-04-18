@@ -190,6 +190,11 @@
 <style>
   .map-artifact {
     position: relative;
+    /* Establish a new stacking context so Leaflet's internal tile/pane z-indexes
+       (which reach ~600–700) stay contained. Without this, map tiles bleed
+       above fixed/absolute overlays like the tool-call drawer. */
+    z-index: 0;
+    isolation: isolate;
     margin: 0.5rem 0;
     border: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
     border-radius: 6px;
