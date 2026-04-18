@@ -1,6 +1,9 @@
+import type OpenAI from 'openai';
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { getOpenRouterClient } from '$lib/deepdive/keys';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import { getLLMClient } from '$lib/jkai/llm-client';
 
 export const llmCallExecutor: NodeExecutor = {
   type: 'llm-call',
@@ -10,13 +13,27 @@ export const llmCallExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    const model = (config.model as string) || 'openai/gpt-4o-mini';
+    const configuredModel = (config.model as string)?.trim();
     const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
     const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
     const temperature = (config.temperature as number) ?? 0.7;
     const maxTokens = (config.maxTokens as number) ?? 1024;
 
-    const client = getOpenRouterClient();
+    // When no model is configured, fall back to the same default jkai uses
+    // (chat default — routed via the correct provider client). When a model
+    // string is configured, it's treated as an OpenRouter modelId to preserve
+    // backwards compatibility with existing nodes.
+    let client: OpenAI;
+    let model: string;
+    if (configuredModel) {
+      client = getOpenRouterClient();
+      model = configuredModel;
+    } else {
+      const ctx = await resolveDefaultModel('chat');
+      const resolved = await getLLMClient(ctx);
+      client = resolved.client;
+      model = resolved.model;
+    }
 
     const response = await client.chat.completions.create({
       model,
@@ -72,11 +89,11 @@ export const llmCallDef: NodeDefinition = {
   type: 'llm-call',
   label: 'LLM Call',
   category: 'core',
-  description: 'Call an LLM via OpenRouter. System and user prompts support {{input.field}} templates.',
+  description: 'Call an LLM. Leave the model empty to use the same default as jkai (configured in admin → model defaults). Set an OpenRouter model ID to override. System and user prompts support {{input.field}} templates.',
   configSchema: {
     type: 'object',
     properties: {
-      model: { type: 'string', description: 'OpenRouter model ID, e.g. openai/gpt-4o-mini' },
+      model: { type: 'string', description: 'Optional OpenRouter model ID (e.g. openai/gpt-4o-mini). Leave empty to use the jkai chat default, configured in admin.' },
       systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
       userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
       temperature: { type: 'number', description: 'Sampling temperature 0–2 (default 0.7)' },
@@ -84,7 +101,7 @@ export const llmCallDef: NodeDefinition = {
     },
     required: ['userPrompt'],
   },
-  defaultConfig: { model: 'openai/gpt-4o-mini', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
+  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
 };
