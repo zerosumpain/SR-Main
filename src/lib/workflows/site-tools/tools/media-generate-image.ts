@@ -6,6 +6,7 @@ import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
+import { checkImageQuota } from '$lib/jkai/media/rate-limits';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 const DEFAULT_MODEL = process.env.JKAI_IMAGE_MODEL ?? 'black-forest-labs/flux-1.1-pro';
@@ -46,6 +47,11 @@ export async function handleGenerateImage(
   if (!args.prompt || args.prompt.length < 2) return { success: false, error: 'prompt required' };
   const count = Math.min(Math.max(args.count ?? 1, 1), 4);
   const aspect = args.aspect_ratio ?? '1:1';
+
+  if (ctx.conversationId) {
+    const q = await checkImageQuota(ctx.conversationId, count);
+    if (!q.allowed) return { success: false, error: q.reason };
+  }
 
   const attachments: JkaiAttachment[] = [];
 

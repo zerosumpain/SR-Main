@@ -7,6 +7,7 @@ import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { loadKeys } from '$lib/deepdive/keys';
+import { checkTtsQuota } from '$lib/jkai/media/rate-limits';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 const DEFAULT_MODEL = process.env.JKAI_TTS_MODEL ?? 'eleven_turbo_v2_5';
@@ -39,6 +40,11 @@ export async function handleGenerateAudioTts(
   if (!apiKey) return { success: false, error: 'ElevenLabs API key not configured' };
   if (!args.text || args.text.length < 1) return { success: false, error: 'text required' };
   if (args.text.length > MAX_CHARS) return { success: false, error: `text exceeds ${MAX_CHARS} chars` };
+
+  if (ctx.conversationId) {
+    const q = await checkTtsQuota(ctx.conversationId, args.text.length);
+    if (!q.allowed) return { success: false, error: q.reason };
+  }
 
   const voice = args.voice ?? DEFAULT_VOICE;
   const model = args.model ?? DEFAULT_MODEL;
