@@ -8,6 +8,8 @@ export interface ModelContext {
 export interface PriceSnapshot {
   promptPrice: number; // USD per token
   completionPrice: number;
+  imagePerImageUsd?: number;
+  ttsPerCharUsd?: number;
 }
 
 export interface Usage {
