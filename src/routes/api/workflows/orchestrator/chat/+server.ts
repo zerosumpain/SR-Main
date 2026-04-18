@@ -35,6 +35,11 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
   }
 
+  // Workflow-context chats (workflowId present, or explicit generate/modify mode)
+  // use the builder model set in /admin/models. General /jkai chats use the chat model.
+  const isWorkflowContext = !!workflowId || mode === 'generate' || mode === 'modify';
+  const defaultKind: 'chat' | 'builder' = isWorkflowContext ? 'builder' : 'chat';
+
   let attachmentRows: Array<typeof jkaiAttachments.$inferSelect> = [];
   if (attachmentIds && attachmentIds.length > 0) {
     if (attachmentIds.length > 10) {
@@ -45,7 +50,7 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
     }
 
-    let ctx: ModelContext = await resolveDefaultModel('chat');
+    let ctx: ModelContext = await resolveDefaultModel(defaultKind);
     if (conversationId) {
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = { provider: conv.modelProvider as 'zai' | 'openrouter', modelId: conv.modelId };
@@ -67,7 +72,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Run the orchestrator in the background
   (async () => {
-    console.log(`[orchestrator] Job ${jobId} started — message: "${message.slice(0, 100)}"`);
+    console.log(`[orchestrator] Job ${jobId} started — kind=${defaultKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
 
     function onProgress(text: string) {
       if (abortController.signal.aborted) return;
@@ -186,8 +191,15 @@ export const POST: RequestHandler = async ({ request }) => {
         }
 
         // Resolve the model pinned at conversation creation (or admin default).
-        let modelContext: ModelContext = await resolveDefaultModel('chat');
+        // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
+        let modelContext: ModelContext = await resolveDefaultModel(defaultKind);
         let priceSnapshot: PriceSnapshot | null = null;
+        console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${defaultKind})`);
+        // Emit the resolved model to the stream so the client can display it.
+        publishJobEvent(jobId, {
+          type: 'status',
+          text: `Using ${modelContext.provider}:${modelContext.modelId} (${defaultKind})`,
+        });
         if (conversationId) {
           const [conv] = await db
             .select()
