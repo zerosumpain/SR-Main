@@ -87,6 +87,7 @@
   let currentJobId = $state<string | null>(null);
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
+  let jobEventSource: EventSource | null = null;
 
   // Aggregate all tool calls across every assistant message in the conversation.
   // Each entry keeps a reference to which message it belongs to.
@@ -190,6 +191,10 @@
     try {
       await fetch(`/api/workflows/orchestrator/chat?jobId=${currentJobId}`, { method: 'DELETE' });
     } catch { /* ignore */ }
+    if (jobEventSource) {
+      jobEventSource.close();
+      jobEventSource = null;
+    }
   }
 
   function formatToolArgs(args: Record<string, unknown>): string {
@@ -275,81 +280,154 @@
       if (!jobId) throw new Error('No job ID returned');
       currentJobId = jobId;
 
-      let done = false;
-      let lastProgress = 0;
-      const startTime = Date.now();
-      const TIMEOUT = 300000;
-      let pollInterval = 500;
-      const MAX_POLL_INTERVAL = 3000;
+      // Subscribe to live token + tool events via SSE.
+      await new Promise<void>((resolve) => {
+        let accumulatedContent = '';
+        let finished = false;
+        const TIMEOUT = 300000;
 
-      while (!done && Date.now() - startTime < TIMEOUT) {
-        await new Promise((r) => setTimeout(r, pollInterval));
-        pollInterval = Math.min(pollInterval * 1.3, MAX_POLL_INTERVAL);
+        const cleanup = () => {
+          if (jobEventSource) {
+            jobEventSource.close();
+            jobEventSource = null;
+          }
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+        };
 
-        try {
-          const pollRes = await fetch(`/api/workflows/orchestrator/chat?jobId=${jobId}`);
-          if (!pollRes.ok) continue;
+        const finalize = () => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          resolve();
+        };
 
-          const data = await pollRes.json();
+        const timeoutHandle = setTimeout(() => {
+          if (finished) return;
+          messages = messages.map((m) =>
+            m.id === progressId
+              ? { ...m, isProgress: false, content: 'Still working... check back shortly.' }
+              : m,
+          );
+          finalize();
+        }, TIMEOUT);
 
-          // Update tool steps from server
-          if (data.toolSteps && data.toolSteps.length > 0) {
+        const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
+        jobEventSource = es;
+
+        es.onmessage = (event) => {
+          let data: any;
+          try { data = JSON.parse(event.data); } catch { return; }
+
+          if (data.type === 'connected') return;
+
+          if (data.type === 'token') {
+            accumulatedContent += data.delta;
             messages = messages.map((m) =>
-              m.id === progressId ? { ...m, toolSteps: data.toolSteps } : m,
+              m.id === progressId ? { ...m, content: accumulatedContent } : m,
             );
             scrollToBottom();
+            return;
           }
 
-          if (data.progress && data.progress.length > lastProgress) {
-            const steps = data.progress as string[];
-            messages = messages.map((m) =>
-              m.id === progressId ? { ...m, progressSteps: steps } : m,
-            );
-            lastProgress = data.progress.length;
+          if (data.type === 'tool_start') {
+            const newStep: ToolStep = {
+              tool: data.tool,
+              args: data.args || {},
+              status: 'running',
+            };
+            messages = messages.map((m) => {
+              if (m.id !== progressId) return m;
+              return { ...m, toolSteps: [...(m.toolSteps ?? []), newStep] };
+            });
             scrollToBottom();
+            return;
           }
 
-          if (data.status === 'cancelled') {
-            done = true;
-            messages = messages.map((m) =>
-              m.id === progressId ? { ...m, isProgress: false, content: 'Job cancelled.' } : m,
-            );
-          } else if (data.status === 'done' || data.status === 'error') {
-            done = true;
-            const result = data.result || {};
+          if (data.type === 'tool_result') {
+            messages = messages.map((m) => {
+              if (m.id !== progressId || !m.toolSteps) return m;
+              // Find the most recent running step for this tool name and finalise it
+              const idx = (() => {
+                for (let i = m.toolSteps.length - 1; i >= 0; i--) {
+                  if (m.toolSteps[i].tool === data.tool && m.toolSteps[i].status === 'running') return i;
+                }
+                return -1;
+              })();
+              if (idx < 0) return m;
+              const next = m.toolSteps.slice();
+              next[idx] = { ...next[idx], result: data.result, status: data.status };
+              return { ...m, toolSteps: next };
+            });
+            scrollToBottom();
+            return;
+          }
 
-            // Preserve toolSteps so the drawer stays populated after
-            // completion. Prefer the latest poll data; fall back to whatever
-            // the progress bubble already had.
+          if (data.type === 'status') {
+            // Mid-task working note — same UX as `/api/jkai/events` status_update
+            const newMsg: Message = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: data.text,
+              source: 'status_update',
+            };
+            const progressIdx = messages.findIndex((m) => m.isProgress);
+            if (progressIdx >= 0) {
+              messages = [
+                ...messages.slice(0, progressIdx),
+                newMsg,
+                ...messages.slice(progressIdx),
+              ];
+            } else {
+              messages = [...messages, newMsg];
+            }
+            scrollToBottom();
+            return;
+          }
+
+          if (data.type === 'done') {
+            const result = (data.result || {}) as {
+              message?: string;
+              error?: string;
+              workflow?: unknown;
+              thinking?: OrchestratorThinking;
+            };
             const prior = messages.find((m) => m.id === progressId);
-            const preservedSteps: ToolStep[] | undefined =
-              (Array.isArray(data.toolSteps) && data.toolSteps.length > 0)
-                ? (data.toolSteps as ToolStep[])
-                : prior?.toolSteps;
+            // Authoritative final content from persisted responseText. Fall
+            // back to streamed tokens if absent (shouldn't happen).
+            const finalContent = result.message || result.error || accumulatedContent || 'No response.';
             const finalMsg: Message = {
               id: progressId,
               role: 'assistant',
-              content: result.message || result.error || data.error || 'No response.',
+              content: finalContent,
               metadata: { workflowGenerated: !!result.workflow },
               thinking: result.thinking || undefined,
               isProgress: false,
               source: 'web',
-              toolSteps: preservedSteps,
+              toolSteps: prior?.toolSteps,
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
+            scrollToBottom();
+            finalize();
+            return;
           }
-        } catch {
-          // Network error — keep polling
-        }
-      }
 
-      if (!done) {
-        messages = messages.map((m) =>
-          m.id === progressId
-            ? { ...m, isProgress: false, content: 'Still working... check back shortly.' }
-            : m,
-        );
-      }
+          if (data.type === 'error') {
+            messages = messages.map((m) =>
+              m.id === progressId
+                ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
+                : m,
+            );
+            scrollToBottom();
+            finalize();
+            return;
+          }
+        };
+
+        es.onerror = () => {
+          // Browser may auto-reconnect; if the stream really died, the
+          // server-side timeout will fire and we'll show the fallback message.
+        };
+      });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       messages = messages.map((m) =>

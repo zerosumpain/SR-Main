@@ -5,6 +5,54 @@ export interface ToolProgressStep {
   status: 'running' | 'done' | 'error';
 }
 
+export type JobEvent =
+  | { type: 'token'; delta: string }
+  | { type: 'tool_start'; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error' }
+  | { type: 'status'; text: string }
+  | { type: 'done'; result: Record<string, unknown> }
+  | { type: 'error'; message: string };
+
+interface JobStream {
+  buffer: JobEvent[];
+  subscribers: Set<(event: JobEvent) => void>;
+  closed: boolean;
+}
+
+const streams = new Map<string, JobStream>();
+
+export function publishJobEvent(jobId: string, event: JobEvent): void {
+  let stream = streams.get(jobId);
+  if (!stream) {
+    stream = { buffer: [], subscribers: new Set(), closed: false };
+    streams.set(jobId, stream);
+  }
+  if (stream.closed) return;
+  stream.buffer.push(event);
+  for (const sub of stream.subscribers) {
+    try { sub(event); } catch { /* ignore broken subscriber */ }
+  }
+  if (event.type === 'done' || event.type === 'error') {
+    stream.closed = true;
+    // Give late subscribers a moment to attach, then clean up
+    setTimeout(() => streams.delete(jobId), 60_000);
+  }
+}
+
+export function subscribeJob(jobId: string, handler: (event: JobEvent) => void): () => void {
+  let stream = streams.get(jobId);
+  if (!stream) {
+    stream = { buffer: [], subscribers: new Set(), closed: false };
+    streams.set(jobId, stream);
+  }
+  // Replay buffered events to new subscriber
+  for (const ev of stream.buffer) handler(ev);
+  stream.subscribers.add(handler);
+  return () => {
+    stream?.subscribers.delete(handler);
+  };
+}
+
 export interface OrchestratorJob {
   status: 'running' | 'done' | 'error' | 'cancelled';
   progress: string[];

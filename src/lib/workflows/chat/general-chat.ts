@@ -13,6 +13,7 @@ import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
+import type { JobEvent } from '$lib/workflows/chat/job-store';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -29,6 +30,7 @@ interface ChatOptions {
   conversationId?: string | null;
   onProgress?: (text: string) => void;
   onToolProgress?: (step: ToolProgress) => void;
+  onStreamEvent?: (event: JobEvent) => void;
   modelContext: ModelContext;
   priceSnapshot: PriceSnapshot | null;
 }
@@ -66,6 +68,156 @@ async function buildMemorySection(): Promise<string> {
   });
 
   return `\n\n--- Memory ---\n${sections.join('\n\n')}`;
+}
+
+interface RunToolContext {
+  activeTools: Array<any>;
+  activatedToolsets: Set<string>;
+  haEntities: any[];
+  onToolProgress?: (step: ToolProgress) => void;
+  onProgress?: (text: string) => void;
+  onStreamEvent?: (event: JobEvent) => void;
+  conversationId?: string | null;
+}
+
+async function runSingleToolCall(
+  toolCall: any,
+  ctx: RunToolContext,
+): Promise<{ toolMessage: { role: 'tool'; tool_call_id: string; content: string } }> {
+  const { activeTools, activatedToolsets, haEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
+  const fnName: string = toolCall.function.name;
+  let fnArgs: Record<string, unknown>;
+  try {
+    fnArgs = JSON.parse(toolCall.function.arguments);
+  } catch {
+    return {
+      toolMessage: {
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify({ error: 'Invalid JSON arguments' }),
+      },
+    };
+  }
+
+  onToolProgress?.({ tool: fnName, args: fnArgs, status: 'running' });
+  onProgress?.(`${fnName}: running\n`);
+  onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs });
+
+  let toolResult: any;
+
+  if (fnName === 'activate_toolset') {
+    const toolset = fnArgs.toolset as string;
+    if (activatedToolsets.has(toolset)) {
+      toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
+    } else if (toolset === 'home') {
+      if (haEntities.length > 0) {
+        const defs = getToolsetDefinitions('home');
+        activeTools.push(...defs);
+        activatedToolsets.add('home');
+        const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
+        const entitySummary = buildHASystemPromptSection(haEntities);
+        toolResult = {
+          success: true,
+          data: {
+            toolset: 'home',
+            status: 'activated',
+            tools: defs.map((d) => d.function.name),
+            entityContext: entitySummary,
+          },
+        };
+      } else {
+        toolResult = { success: false, error: 'Home Assistant is not configured — no entities available.' };
+      }
+    } else {
+      const defs = getToolsetDefinitions(toolset);
+      if (defs.length === 0) {
+        toolResult = { success: false, error: `Unknown toolset: ${toolset}` };
+      } else {
+        activeTools.push(...defs);
+        activatedToolsets.add(toolset);
+        toolResult = {
+          success: true,
+          data: {
+            toolset,
+            status: 'activated',
+            tools: defs.map((d) => d.function.name),
+          },
+        };
+      }
+    }
+  } else if (fnName === 'jkai_help') {
+    toolResult = handleJkaiHelp(fnArgs);
+  } else if (fnName === 'create_tool') {
+    toolResult = await handleCreateTool(fnArgs);
+    if (toolResult.success) {
+      const newToolName = fnArgs.name as string;
+      const newToolset = fnArgs.toolset as string;
+      const newDefs = getToolsetDefinitions(newToolset).filter((d) => d.function.name === newToolName);
+      activeTools.push(...newDefs);
+      activatedToolsets.add(newToolset);
+    }
+  } else if (fnName === 'list_custom_tools') {
+    toolResult = await handleListCustomTools();
+  } else if (fnName === 'delete_tool') {
+    toolResult = await handleDeleteTool(fnArgs);
+    if (toolResult.success) {
+      const deletedName = fnArgs.name as string;
+      const idx = activeTools.findIndex((t: any) => t?.function?.name === deletedName);
+      if (idx >= 0) activeTools.splice(idx, 1);
+    }
+  } else if (isRegisteredTool(fnName)) {
+    toolResult = await executeSiteTool(fnName, fnArgs);
+  } else {
+    toolResult = { error: `Unknown function: ${fnName}` };
+  }
+
+  // Auto-register follow-ups for known async tools
+  const autoFollowUpTools: Record<string, { type: string; prompt: string }> = {
+    research_start: { type: 'research', prompt: 'The research is complete. Summarise the key findings for the user. If they asked for a blog post or other output, produce it now.' },
+    build_create: { type: 'build', prompt: 'The build is complete. Tell the user the result and provide the URL if it was published.' },
+  };
+  if (fnName in autoFollowUpTools) {
+    const resultData = toolResult?.data as Record<string, unknown> | undefined;
+    const taskId = resultData?.id as string | undefined;
+    console.log(`[followup-auto] Tool=${fnName} convId=${conversationId} success=${toolResult?.success} taskId=${taskId}`);
+    if (conversationId && toolResult?.success && taskId) {
+      const autoConfig = autoFollowUpTools[fnName];
+      const checkFn = buildCheckFn(autoConfig.type, taskId);
+      if (checkFn) {
+        enqueueFollowUp({
+          conversationId,
+          taskType: autoConfig.type,
+          taskId,
+          checkFn,
+          completionPrompt: autoConfig.prompt,
+          delayMs: 30_000,
+        });
+      }
+    }
+  }
+
+  // Truncate result for progress display (keep full for LLM context)
+  const progressResultStr = JSON.stringify(toolResult);
+  const progressResult = progressResultStr.length > 2000
+    ? { _truncated: true, preview: progressResultStr.slice(0, 2000) + '...' }
+    : toolResult;
+  const status: 'done' | 'error' = toolResult?.error ? 'error' : 'done';
+  onToolProgress?.({ tool: fnName, args: fnArgs, result: progressResult, status });
+  onProgress?.(`${fnName}: done\n`);
+  onStreamEvent?.({ type: 'tool_result', tool: fnName, result: progressResult, status });
+
+  // Truncate large tool results to avoid overwhelming the LLM context
+  let resultStr = JSON.stringify(toolResult);
+  if (resultStr.length > 8000) {
+    resultStr = resultStr.slice(0, 8000) + '... [truncated — result too large for chat context]';
+  }
+  return {
+    toolMessage: {
+      role: 'tool',
+      tool_call_id: toolCall.id,
+      content: resultStr,
+    },
+  };
 }
 
 export async function generalChat(
@@ -156,11 +308,12 @@ export async function generalChat(
           max_tokens: 6000,
         });
         if (options.conversationId) {
-          await recordConversationUsage(
+          // Fire-and-forget: ~30ms per call we don't need to block on
+          recordConversationUsage(
             options.conversationId,
             parseUsage(statusResp.usage),
             options.priceSnapshot,
-          );
+          ).catch((e) => console.warn('[general-chat] usage record failed:', e));
         }
         const statusText = statusResp.choices[0]?.message?.content?.trim();
         if (statusText && options.conversationId) {
@@ -179,6 +332,8 @@ export async function generalChat(
           });
           // Hint to onProgress stream too for debug visibility
           onProgress?.(`[status] ${statusText.slice(0, 80)}\n`);
+          // Also emit a stream event so the per-job SSE clients can render it
+          options.onStreamEvent?.({ type: 'status', text: statusText });
         }
       } catch (err) {
         console.warn('[general-chat] Status update failed:', err instanceof Error ? err.message : err);
@@ -196,196 +351,151 @@ export async function generalChat(
       });
     }
 
-    let response;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        response = await client.chat.completions.create({
-          model,
-          messages,
-          temperature: 0.4,
-          // glm-5-turbo is a reasoning model — it spends ~4000 tokens on
-          // chain-of-thought reasoning BEFORE emitting any output. max_tokens
-          // must cover both the thinking and the visible output, so we set
-          // it generously. With finish_reason=length and reasoning_tokens
-          // hitting the cap, the model returns empty content.
-          max_tokens: 16384,
-          ...(tools ? { tools } : {}),
-        });
-        if (options.conversationId) {
-          await recordConversationUsage(
-            options.conversationId,
-            parseUsage(response.usage),
-            options.priceSnapshot,
-          );
-        }
-        break;
-      } catch (err: any) {
-        if (err?.status === 429 && attempt < 2) {
-          await new Promise((r) => setTimeout(r, (attempt + 1) * 3000));
+    // --- Streaming main completion ---
+    // Stream tokens as they arrive so the client can render incrementally.
+    // We accumulate content + tool_calls (per-index assembly) and synthesise
+    // a `msg` object compatible with the rest of the loop afterwards.
+    let fullContent = '';
+    const fullToolCalls: Array<{ index: number; id: string; name: string; args: string }> = [];
+    let lastUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+    let finishReason: string | null = null;
+
+    try {
+      const stream = await client.chat.completions.create({
+        model,
+        messages,
+        temperature: 0.4,
+        max_tokens: 16384,
+        ...(tools ? { tools } : {}),
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+
+      for await (const chunk of stream) {
+        const choice = chunk.choices?.[0];
+        if (!choice) {
+          if (chunk.usage) lastUsage = chunk.usage;
           continue;
         }
-        const status = err?.status || err?.code || 'unknown';
+        const delta = choice.delta ?? {};
+        if (typeof delta.content === 'string' && delta.content.length > 0) {
+          fullContent += delta.content;
+          options.onStreamEvent?.({ type: 'token', delta: delta.content });
+        }
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls as any[]) {
+            const idx = tc.index ?? 0;
+            let acc = fullToolCalls.find((t) => t.index === idx);
+            if (!acc) {
+              acc = { index: idx, id: tc.id ?? '', name: '', args: '' };
+              fullToolCalls.push(acc);
+            }
+            if (tc.id) acc.id = tc.id;
+            if (tc.function?.name) acc.name += tc.function.name;
+            if (tc.function?.arguments) acc.args += tc.function.arguments;
+          }
+        }
+        if (choice.finish_reason) finishReason = choice.finish_reason;
+        if (chunk.usage) lastUsage = chunk.usage;
+      }
+    } catch (err: any) {
+      // Do not retry mid-stream. If the initial create() throws (or stream
+      // errored before any iteration), do a single non-streaming retry on
+      // 429 only — same shape as before but simpler.
+      const status = err?.status;
+      if (status === 429) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const retry = await client.chat.completions.create({
+            model,
+            messages,
+            temperature: 0.4,
+            max_tokens: 16384,
+            ...(tools ? { tools } : {}),
+          });
+          const rchoice = retry.choices[0];
+          fullContent = rchoice?.message?.content ?? '';
+          fullToolCalls.length = 0;
+          (rchoice?.message?.tool_calls ?? []).forEach((tc: any, i: number) => {
+            fullToolCalls.push({
+              index: i,
+              id: tc.id,
+              name: tc.function.name,
+              args: tc.function.arguments,
+            });
+          });
+          lastUsage = retry.usage;
+          finishReason = rchoice?.finish_reason ?? null;
+        } catch (retryErr: any) {
+          const rstatus = retryErr?.status || retryErr?.code || 'unknown';
+          const detail = retryErr?.error?.message || retryErr?.message || String(retryErr);
+          throw new Error(`LLM error (${rstatus}): ${detail}`);
+        }
+      } else {
         const detail = err?.error?.message || err?.message || String(err);
-        throw new Error(`LLM error (${status}): ${detail}`);
+        throw new Error(`LLM error (${status ?? 'unknown'}): ${detail}`);
       }
     }
 
-    const choice = response?.choices[0];
-    if (!choice) {
-      console.warn('[general-chat] No choice in LLM response');
-      break;
+    // Fire-and-forget cost recording (~30ms, no need to block)
+    if (options.conversationId) {
+      recordConversationUsage(
+        options.conversationId,
+        parseUsage(lastUsage as any),
+        options.priceSnapshot,
+      ).catch((e) => console.warn('[general-chat] usage record failed:', e));
     }
 
-    const msg = choice.message;
+    // Reconstruct an assistant message object compatible with the rest of
+    // the loop and the OpenAI tool-calling protocol.
+    const msg: any = {
+      role: 'assistant',
+      content: fullContent,
+      tool_calls: fullToolCalls.length > 0
+        ? fullToolCalls.map((t) => ({
+            id: t.id || `call_${t.index}`,
+            type: 'function',
+            function: { name: t.name, arguments: t.args },
+          }))
+        : undefined,
+    };
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      const trimmed = msg.content?.trim();
+      const trimmed = (msg.content as string | undefined)?.trim();
       if (!trimmed) {
-        // Diagnostic: log why we got an empty response. Common culprits are
-        // max_tokens truncation mid-tool-call, safety filters, or the model
-        // just giving up on a complex task.
         const promptChars = messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
         console.warn(
           `[general-chat] Empty response from ${model}. ` +
-          `round=${round} finish_reason=${choice.finish_reason} ` +
+          `round=${round} finish_reason=${finishReason} ` +
           `messages=${messages.length} prompt_chars=${promptChars} ` +
-          `usage=${JSON.stringify(response?.usage)}`,
+          `usage=${JSON.stringify(lastUsage)}`,
         );
       }
       responseText = trimmed || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
       break;
     }
 
-    // Process tool calls
+    // Process tool calls — push assistant message, then run all tools in parallel.
     messages.push(msg);
 
-    for (const toolCall of msg.tool_calls) {
-      const fnName = toolCall.function.name;
-      let fnArgs: Record<string, unknown>;
-      try {
-        fnArgs = JSON.parse(toolCall.function.arguments);
-      } catch {
-        messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: 'Invalid JSON arguments' }) });
-        continue;
-      }
-
-      onToolProgress?.({ tool: fnName, args: fnArgs, status: 'running' });
-      onProgress?.(`${fnName}: running\n`);
-
-      let toolResult: any;
-
-      // Handle meta-tools
-      if (fnName === 'activate_toolset') {
-        const toolset = fnArgs.toolset as string;
-        if (activatedToolsets.has(toolset)) {
-          toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
-        } else if (toolset === 'home') {
-          if (haEntities.length > 0) {
-            const defs = getToolsetDefinitions('home');
-            activeTools.push(...defs);
-            activatedToolsets.add('home');
-            const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
-            const entitySummary = buildHASystemPromptSection(haEntities);
-            toolResult = {
-              success: true,
-              data: {
-                toolset: 'home',
-                status: 'activated',
-                tools: defs.map((d) => d.function.name),
-                entityContext: entitySummary,
-              },
-            };
-          } else {
-            toolResult = { success: false, error: 'Home Assistant is not configured — no entities available.' };
-          }
-        } else {
-          const defs = getToolsetDefinitions(toolset);
-          if (defs.length === 0) {
-            toolResult = { success: false, error: `Unknown toolset: ${toolset}` };
-          } else {
-            activeTools.push(...defs);
-            activatedToolsets.add(toolset);
-            toolResult = {
-              success: true,
-              data: {
-                toolset,
-                status: 'activated',
-                tools: defs.map((d) => d.function.name),
-              },
-            };
-          }
-        }
-      } else if (fnName === 'jkai_help') {
-        toolResult = handleJkaiHelp(fnArgs);
-      } else if (fnName === 'create_tool') {
-        toolResult = await handleCreateTool(fnArgs);
-        // Inject the new tool into activeTools so it's callable this conversation
-        if (toolResult.success) {
-          const newToolName = fnArgs.name as string;
-          const newToolset = fnArgs.toolset as string;
-          const newDefs = getToolsetDefinitions(newToolset).filter(d => d.function.name === newToolName);
-          activeTools.push(...newDefs);
-          activatedToolsets.add(newToolset);
-        }
-      } else if (fnName === 'list_custom_tools') {
-        toolResult = await handleListCustomTools();
-      } else if (fnName === 'delete_tool') {
-        toolResult = await handleDeleteTool(fnArgs);
-        // If the deleted tool was in activeTools, drop it so the model can't
-        // try to call it later in this conversation.
-        if (toolResult.success) {
-          const deletedName = fnArgs.name as string;
-          const idx = activeTools.findIndex((t: any) => t?.function?.name === deletedName);
-          if (idx >= 0) activeTools.splice(idx, 1);
-        }
-      } else if (isRegisteredTool(fnName)) {
-        toolResult = await executeSiteTool(fnName, fnArgs);
-      } else {
-        toolResult = { error: `Unknown function: ${fnName}` };
-      }
-
-      // Auto-register follow-ups for known async tools
-      const autoFollowUpTools: Record<string, { type: string; prompt: string }> = {
-        research_start: { type: 'research', prompt: 'The research is complete. Summarise the key findings for the user. If they asked for a blog post or other output, produce it now.' },
-        build_create: { type: 'build', prompt: 'The build is complete. Tell the user the result and provide the URL if it was published.' },
-      };
-      if (fnName in autoFollowUpTools) {
-        const resultData = toolResult?.data as Record<string, unknown> | undefined;
-        const taskId = resultData?.id as string | undefined;
-        console.log(`[followup-auto] Tool=${fnName} convId=${options.conversationId} success=${toolResult?.success} taskId=${taskId}`);
-        if (options.conversationId && toolResult?.success && taskId) {
-          const autoConfig = autoFollowUpTools[fnName];
-          const checkFn = buildCheckFn(autoConfig.type, taskId);
-          if (checkFn) {
-            enqueueFollowUp({
-              conversationId: options.conversationId,
-              taskType: autoConfig.type,
-              taskId,
-              checkFn,
-              completionPrompt: autoConfig.prompt,
-              delayMs: 30_000,
-            });
-          }
-        }
-      }
-
-      // Truncate result for progress display (keep full for LLM context)
-      const progressResultStr = JSON.stringify(toolResult);
-      const progressResult = progressResultStr.length > 2000
-        ? { _truncated: true, preview: progressResultStr.slice(0, 2000) + '...' }
-        : toolResult;
-      onToolProgress?.({ tool: fnName, args: fnArgs, result: progressResult, status: toolResult?.error ? 'error' : 'done' });
-      onProgress?.(`${fnName}: done\n`);
-      // Truncate large tool results to avoid overwhelming the LLM context
-      let resultStr = JSON.stringify(toolResult);
-      if (resultStr.length > 8000) {
-        resultStr = resultStr.slice(0, 8000) + '... [truncated — result too large for chat context]';
-      }
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: resultStr,
-      });
+    // Note: some tools mutate `activeTools` / `activatedToolsets` (activate_toolset,
+    // create_tool, delete_tool). Under Promise.all these mutations are not
+    // strictly ordered relative to siblings, but that's OK in practice — the
+    // LLM very rarely calls activate + execute in the same round, and the
+    // mutations only affect *future* rounds.
+    const toolOutcomes = await Promise.all(
+      msg.tool_calls.map((toolCall: any) => runSingleToolCall(toolCall, {
+        activeTools,
+        activatedToolsets,
+        haEntities,
+        onToolProgress,
+        onProgress,
+        onStreamEvent: options.onStreamEvent,
+        conversationId: options.conversationId,
+      })),
+    );
+    for (const { toolMessage } of toolOutcomes) {
+      messages.push(toolMessage);
     }
   }
 
