@@ -72,7 +72,8 @@
   });
 </script>
 
-<div class="space-y-3">
+<div class="space-y-3" data-basic-config-renderer="v2">
+  <div class="text-[10px] px-2 py-1 rounded" style="background: #d97706; color: white;">[Basic Renderer v2 — {visibleFields.length} fields]</div>
   {#each visibleFields as field, idx (field.key)}
     {#if sectionsToShow[idx]}
       <div class="pt-2 pb-1">

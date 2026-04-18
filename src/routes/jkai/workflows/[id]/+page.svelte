@@ -882,6 +882,9 @@
                 Configure channels in <a href="/jkai/channels" class="underline" style="color: var(--accent);">Settings → Channels</a>.
               </p>
             {:else if configMode === 'basic' && modalNodeDef?.basicConfig && BasicConfigRendererComponent}
+              <div class="text-[10px] mb-2 px-2 py-1 rounded" style="background: #059669; color: white;">
+                [Modal path: Basic / basicConfig len={modalNodeDef.basicConfig.length}]
+              </div>
               <svelte:component
                 this={BasicConfigRendererComponent}
                 fields={modalNodeDef.basicConfig}
@@ -899,6 +902,9 @@
                 }}
               />
             {:else}
+              <div class="text-[10px] mb-2 px-2 py-1 rounded" style="background: #dc2626; color: white;">
+                [Modal path: Advanced / configMode={configMode} hasBasic={!!modalNodeDef?.basicConfig} rendererLoaded={!!BasicConfigRendererComponent}]
+              </div>
               <!-- Advanced: raw config editing -->
               <div class="space-y-2">
                 {#each Object.entries(editingConfig) as [key, value]}
