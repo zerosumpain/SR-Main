@@ -10,6 +10,7 @@
   import MessageAttachments from './MessageAttachments.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
+  import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
   let {
@@ -187,6 +188,11 @@
         if (f) void uploadFile(f);
       }
     }
+  }
+
+  async function handleVoiceBlob(blob: Blob): Promise<void> {
+    const f = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+    await uploadFile(f);
   }
 
   // Aggregate all tool calls across every assistant message in the conversation.
@@ -801,6 +807,7 @@
             style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); min-height: 44px; max-height: 160px;"
             rows="1"
           ></textarea>
+          <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
           <button
             onclick={send}
             disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
