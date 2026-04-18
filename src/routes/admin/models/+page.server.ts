@@ -5,10 +5,12 @@ import { loadKeys } from '$lib/deepdive/keys';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { sql } from 'drizzle-orm';
+import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 
 export const load: PageServerLoad = async () => {
-  const [chat, builder, orKey, lastRefreshed, [{ count }]] = await Promise.all([
-    getSetting<ModelContext>('jkai.chat.default_model'),
+  const [glm, alt, builder, orKey, lastRefreshed, [{ count }]] = await Promise.all([
+    getSetting<{ modelId?: string }>('jkai.chat.default_glm_model'),
+    getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model'),
     getSetting<ModelContext>('jkai.builder.default_model'),
     getSetting<{ value?: string }>('openrouter.api_key'),
     getSetting<string>('openrouter.last_refreshed_at'),
@@ -19,8 +21,11 @@ export const load: PageServerLoad = async () => {
   const dbHasKey = !!orKey?.value;
 
   return {
-    chat: chat ?? { provider: 'zai', modelId: 'glm-5.1' },
-    builder: builder ?? { provider: 'zai', modelId: 'glm-5.1' },
+    chat: {
+      glmModelId: glm?.modelId ?? DEFAULT_GLM_MODEL_ID,
+      altOpenRouterModelId: alt?.modelId ?? null,
+    },
+    builder: builder ?? { provider: 'zai', modelId: 'glm-5.1' } as ModelContext,
     openrouterKey: {
       configured: dbHasKey || keysJsonHasKey,
       source: dbHasKey ? 'db' : (keysJsonHasKey ? 'keys.json' : 'none'),
