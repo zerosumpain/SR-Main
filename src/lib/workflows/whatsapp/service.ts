@@ -146,7 +146,7 @@ export class WhatsAppService {
 			}
 		});
 
-		this.sock.ev.on('messages.upsert', (upsert: any) => {
+		this.sock.ev.on('messages.upsert', async (upsert: any) => {
 			if (!this.messageHandler) return;
 			const { messages } = upsert;
 
