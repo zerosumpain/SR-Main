@@ -1,9 +1,12 @@
 import { db } from '$lib/db';
-import { orchestratorChats, conversations } from '$lib/db/schema';
+import { orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
+import type { JkaiAttachment } from '$lib/db/schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { saveBuffer } from '$lib/jkai/media/storage';
+import { extensionForMime } from '$lib/jkai/media/mime';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
@@ -70,12 +73,40 @@ export class OrchestratorBridge {
 
 			const convId = await this.ensureConversation(from);
 
+			// Build display text — use placeholder for media-only messages
+			const displayText = !msg.text && msg.mediaKind
+				? msg.mediaKind === 'audio' ? '[voice note]'
+					: msg.mediaKind === 'image' ? '[image]'
+					: msg.mediaKind === 'video' ? '[video]'
+					: `[document: ${msg.mediaFilename ?? 'file'}]`
+				: msg.text;
+
 			// Save user message
-			await db.insert(orchestratorChats).values({
+			const [userMsg] = await db.insert(orchestratorChats).values({
 				conversationId: convId,
 				role: 'user',
-				content: text,
-			});
+				content: displayText,
+			}).returning({ id: orchestratorChats.id });
+
+			// Save media attachment if present
+			let attachment: JkaiAttachment | null = null;
+			if (msg.mediaKind && msg.mediaBuffer && msg.mediaMimeType) {
+				const ext = extensionForMime(msg.mediaMimeType);
+				const { diskPath, sizeBytes } = await saveBuffer(msg.mediaBuffer, ext);
+				const [row] = await db.insert(jkaiAttachments).values({
+					conversationId: convId,
+					messageId: userMsg.id,
+					source: 'whatsapp',
+					kind: msg.mediaKind === 'document' ? 'document' : msg.mediaKind,
+					mimeType: msg.mediaMimeType,
+					originalName: msg.mediaFilename ?? null,
+					sizeBytes,
+					diskPath,
+					duration: msg.mediaDuration ?? null,
+					metadata: { whatsappMessageId: msg.messageId },
+				}).returning();
+				attachment = row;
+			}
 
 			// Load conversation history
 			const history = await this.getConversationHistory(convId);
@@ -83,10 +114,11 @@ export class OrchestratorBridge {
 
 			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
 			const modelContext = await resolveDefaultModel('chat');
-			const { response: responseText } = await generalChat({ text }, priorHistory, {
-				modelContext,
-				priceSnapshot: null,
-			});
+			const { response: responseText } = await generalChat(
+				{ text: displayText, attachments: attachment ? [attachment] : [] },
+				priorHistory,
+				{ modelContext, priceSnapshot: null, conversationId: convId },
+			);
 
 			// Stop typing, save and send
 			await this.typingDoneFn?.(replyTo);

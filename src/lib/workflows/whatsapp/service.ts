@@ -2,7 +2,8 @@ import makeWASocket, {
 	useMultiFileAuthState,
 	fetchLatestBaileysVersion,
 	makeCacheableSignalKeyStore,
-	DisconnectReason
+	DisconnectReason,
+	downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { mkdirSync, readdirSync, chmodSync } from 'fs';
@@ -150,10 +151,58 @@ export class WhatsAppService {
 			for (const msg of messages) {
 				if (!msg.message || msg.key.fromMe) continue;
 
-				const text =
-					msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+				const content = msg.message;
 
-				if (!text) continue;
+				// Extract text from standard text messages
+				const plainText =
+					content.conversation || content.extendedTextMessage?.text || '';
+
+				// Detect media messages
+				let mediaKind: 'image' | 'audio' | 'video' | 'document' | undefined;
+				let mediaMimeType: string | undefined;
+				let mediaFilename: string | undefined;
+				let mediaBuffer: Buffer | undefined;
+				let mediaDuration: number | undefined;
+				let caption = '';
+
+				if (content.imageMessage) {
+					mediaKind = 'image';
+					mediaMimeType = content.imageMessage.mimetype ?? 'image/jpeg';
+					caption = content.imageMessage.caption ?? '';
+				} else if (content.audioMessage) {
+					mediaKind = 'audio';
+					mediaMimeType = content.audioMessage.mimetype ?? 'audio/ogg';
+					mediaDuration = content.audioMessage.seconds ?? undefined;
+				} else if (content.videoMessage) {
+					mediaKind = 'video';
+					mediaMimeType = content.videoMessage.mimetype ?? 'video/mp4';
+					mediaDuration = content.videoMessage.seconds ?? undefined;
+					caption = content.videoMessage.caption ?? '';
+				} else if (content.documentMessage) {
+					mediaKind = 'document';
+					mediaMimeType = content.documentMessage.mimetype ?? 'application/octet-stream';
+					mediaFilename = content.documentMessage.fileName ?? undefined;
+					caption = content.documentMessage.caption ?? '';
+				}
+
+				// Use caption as text for media messages, otherwise use plain text
+				const text = caption || plainText;
+
+				// Skip messages with no text and no media
+				if (!text && !mediaKind) continue;
+
+				// Download media bytes if present
+				if (mediaKind) {
+					try {
+						const stream = await downloadMediaMessage(msg, 'buffer', {}, {
+							logger: undefined as any,
+							reuploadRequest: this.sock!.updateMediaMessage,
+						});
+						mediaBuffer = stream as Buffer;
+					} catch (err) {
+						console.warn('[whatsapp] media download failed:', err);
+					}
+				}
 
 				const remoteJid = msg.key.remoteJid || '';
 				const isGroup = remoteJid.endsWith('@g.us');
@@ -191,6 +240,11 @@ export class WhatsAppService {
 					messageId: msg.key.id || '',
 					isGroup,
 					groupId: isGroup ? remoteJid : undefined,
+					mediaKind,
+					mediaMimeType,
+					mediaFilename,
+					mediaBuffer,
+					mediaDuration,
 				});
 			}
 		});

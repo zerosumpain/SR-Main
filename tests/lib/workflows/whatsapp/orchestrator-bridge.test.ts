@@ -40,7 +40,8 @@ vi.mock('$lib/db', () => ({
 
 vi.mock('$lib/db/schema', () => ({
 	conversations: {},
-	orchestratorChats: {},
+	orchestratorChats: { id: 'id' },
+	jkaiAttachments: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -56,6 +57,15 @@ vi.mock('$lib/server/models/settings', () => ({
 		modelId: 'glm-5',
 		displayName: 'GLM 5',
 	}),
+}));
+
+// Mock media utilities
+vi.mock('$lib/jkai/media/storage', () => ({
+	saveBuffer: vi.fn().mockResolvedValue({ diskPath: '2026/04/test.jpg', sizeBytes: 1024 }),
+}));
+
+vi.mock('$lib/jkai/media/mime', () => ({
+	extensionForMime: vi.fn().mockReturnValue('jpg'),
 }));
 
 // Mock general chat
@@ -115,9 +125,9 @@ describe('OrchestratorBridge', () => {
 		await bridge.handleMessage(msg);
 
 		expect(mockGeneralChat).toHaveBeenCalledWith(
-			{ text: "What's the weather like?" },
+			{ text: "What's the weather like?", attachments: [] },
 			expect.any(Array),
-			expect.any(Object),
+			expect.objectContaining({ conversationId: mockConvId }),
 		);
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
 	});
