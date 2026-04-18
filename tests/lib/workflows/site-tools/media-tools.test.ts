@@ -13,6 +13,11 @@ vi.mock('$lib/db', () => ({
         returning: async () => { inserted.push(v); return [{ ...v, id: 'att-new', createdAt: new Date() }]; },
       }),
     }),
+    select: () => ({
+      from: () => ({
+        where: async () => [{ count: '0', total: '0' }],
+      }),
+    }),
   },
 }));
 vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
