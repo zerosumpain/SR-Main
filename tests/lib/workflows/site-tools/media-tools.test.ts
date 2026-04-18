@@ -19,6 +19,9 @@ vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
 vi.mock('$lib/server/models/settings', () => ({
   getOpenRouterApiKey: async () => 'fake-or-key-for-test',
 }));
+vi.mock('$lib/deepdive/keys', () => ({
+  loadKeys: vi.fn(() => ({ elevenlabsApiKey: 'test-key' })),
+}));
 
 beforeEach(async () => {
   tmpRoot = await mkdtemp(join(tmpdir(), 'jkai-tool-test-'));
@@ -86,5 +89,36 @@ describe('generate_image', () => {
     expect(out.success).toBe(true);
     expect(out.attachments?.[0].kind).toBe('image');
     expect(inserted.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('generate_audio_tts', () => {
+  it('calls ElevenLabs and saves MP3', async () => {
+    const fakeAudio = Buffer.from([0xff, 0xfb, 0x90, 0x00]); // fake MP3 header
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(fakeAudio, {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+      });
+    }) as any;
+
+    const { handleGenerateAudioTts } = await import('$lib/workflows/site-tools/tools/media-generate-audio-tts');
+    const out = await handleGenerateAudioTts(
+      { text: 'Hello world' },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments?.[0].kind).toBe('audio');
+    expect(out.attachments?.[0].mimeType).toBe('audio/mpeg');
+  });
+
+  it('rejects text over 5000 chars', async () => {
+    const { handleGenerateAudioTts } = await import('$lib/workflows/site-tools/tools/media-generate-audio-tts');
+    const out = await handleGenerateAudioTts(
+      { text: 'x'.repeat(5001) },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(false);
+    expect(out.error).toMatch(/5000/);
   });
 });

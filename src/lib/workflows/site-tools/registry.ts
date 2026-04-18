@@ -21,6 +21,7 @@ import './tools/visualise';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
 import './tools/media-generate-image';
+import './tools/media-generate-audio-tts';
 
 // --- Public API ---
 

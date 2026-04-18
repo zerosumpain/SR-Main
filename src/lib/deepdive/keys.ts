@@ -11,6 +11,7 @@ export interface DeepDiveKeys {
   tavilyApiKey?: string;
   openrouterApiKey?: string;
   embeddingModel?: string;
+  elevenlabsApiKey?: string;
 }
 
 export function loadKeys(): DeepDiveKeys {
