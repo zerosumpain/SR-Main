@@ -765,6 +765,56 @@ All text fields support \`{{input.field}}\` template interpolation.`,
   ],
 };
 
+const webScrapeClientDef: NodeDefinition = {
+  type: 'web-scrape',
+  label: 'Web Scrape',
+  category: 'integration',
+  description: 'Fetch a URL and extract the readable article text using Mozilla Readability. Strips nav, ads, and chrome.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'URL to scrape. Supports {{input.field}} templates.' },
+      maxChars: { type: 'number', description: 'Truncate text to this many characters (0 = no limit)' },
+    },
+    required: ['url'],
+  },
+  defaultConfig: { url: '', maxChars: 0 },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Scraped content' }],
+  basicConfig: [
+    { key: 'url', label: 'URL', type: 'template-textarea', placeholder: 'https://example.com/article' },
+    { key: 'maxChars', label: 'Max characters (0 = unlimited)', type: 'number', advancedOnly: true },
+  ],
+};
+
+const tavilySearchClientDef: NodeDefinition = {
+  type: 'tavily-search',
+  label: 'Tavily Search',
+  category: 'integration',
+  description: 'Search the web via Tavily. Returns ranked results with URL, title, content snippet, and optional AI answer.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query. Supports {{input.field}} templates.' },
+      searchDepth: { type: 'string', description: 'Search depth: "basic" or "advanced"' },
+      maxResults: { type: 'number', description: 'Max results 1–20 (default 5)' },
+      includeAnswer: { type: 'boolean', description: 'Include AI-generated answer (default false)' },
+    },
+    required: ['query'],
+  },
+  defaultConfig: { query: '', searchDepth: 'basic', maxResults: 5, includeAnswer: false },
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Search results' }],
+  basicConfig: [
+    { key: 'query', label: 'Query', type: 'template-textarea', placeholder: 'svelte 5 runes best practices' },
+    { key: 'searchDepth', label: 'Depth', type: 'dropdown', options: [
+      { value: 'basic', label: 'Basic (fast)' }, { value: 'advanced', label: 'Advanced (deeper)' },
+    ]},
+    { key: 'maxResults', label: 'Max results', type: 'number' },
+    { key: 'includeAnswer', label: 'Include AI answer', type: 'toggle', advancedOnly: true },
+  ],
+};
+
 const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -794,6 +844,8 @@ const builtInDefinitions: NodeDefinition[] = [
   blogClientDef,
   jkaiClientDef,
   deepDiveClientDef,
+  webScrapeClientDef,
+  tavilySearchClientDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;

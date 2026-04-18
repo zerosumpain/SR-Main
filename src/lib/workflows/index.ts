@@ -28,6 +28,8 @@ import { healthQueryDef, healthQueryExecutor } from './nodes/health-query';
 import { blogDef, blogExecutor } from './nodes/blog';
 import { jkaiDef, jkaiExecutor } from './nodes/jkai';
 import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
+import { webScrapeDef, webScrapeExecutor } from './nodes/web-scrape';
+import { tavilySearchDef, tavilySearchExecutor } from './nodes/tavily-search';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -74,6 +76,8 @@ registry.register(healthQueryDef, healthQueryExecutor);
 registry.register(blogDef, blogExecutor);
 registry.register(jkaiDef, jkaiExecutor);
 registry.register(deepDiveDef, deepDiveExecutor);
+registry.register(webScrapeDef, webScrapeExecutor);
+registry.register(tavilySearchDef, tavilySearchExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();
