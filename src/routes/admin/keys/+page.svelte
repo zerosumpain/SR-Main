@@ -26,29 +26,40 @@
     saving = true;
     saveMsg = '';
     try {
-      const body: Record<string, string> = { zaiBaseUrl, zaiModel, embeddingModel };
-      if (zaiApiKey) body.zaiApiKey = zaiApiKey;
-      if (tavilyApiKey) body.tavilyApiKey = tavilyApiKey;
-      if (openrouterApiKey) body.openrouterApiKey = openrouterApiKey;
-      if (elevenlabsApiKey) body.elevenlabsApiKey = elevenlabsApiKey;
+      const pending: Promise<Response>[] = [];
 
-      const res = await fetch(`/api/admin/deepdive/keys?token=${adminToken}`, {
+      // Z.AI, Tavily, ElevenLabs, embedding model → keys.json
+      const fileBody: Record<string, string> = { zaiBaseUrl, zaiModel, embeddingModel };
+      if (zaiApiKey) fileBody.zaiApiKey = zaiApiKey;
+      if (tavilyApiKey) fileBody.tavilyApiKey = tavilyApiKey;
+      if (elevenlabsApiKey) fileBody.elevenlabsApiKey = elevenlabsApiKey;
+      pending.push(fetch(`/api/admin/deepdive/keys?token=${adminToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+        body: JSON.stringify(fileBody),
+      }));
 
-      if (res.ok) {
-        const updated = await res.json();
-        data.keys = updated;
-        saveMsg = 'Saved';
+      // OpenRouter → DB (app_settings.openrouter.api_key) via the models settings endpoint
+      if (openrouterApiKey) {
+        pending.push(fetch(`/api/admin/models/settings?token=${adminToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ openrouterApiKey }),
+        }));
+      }
+
+      const results = await Promise.all(pending);
+      const allOk = results.every((r) => r.ok);
+
+      if (allOk) {
+        saveMsg = 'Saved — reload to see status';
         zaiApiKey = '';
         tavilyApiKey = '';
         openrouterApiKey = '';
         elevenlabsApiKey = '';
-        setTimeout(() => (saveMsg = ''), 3000);
+        setTimeout(() => (saveMsg = ''), 4000);
       } else {
-        saveMsg = 'Save failed';
+        saveMsg = 'Save partially failed';
       }
     } finally {
       saving = false;
@@ -174,6 +185,9 @@
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
             API Key {statusLabel(data.keys.openrouterConfigured)}
+            {#if data.keys.openrouterConfigured}
+              <span class="ml-1 text-[9px] opacity-70">[stored in {(data.keys as any).openrouterSource}]</span>
+            {/if}
           </label>
           <input
             type="password"
@@ -182,6 +196,9 @@
             class="w-full px-3 py-2 rounded-lg text-sm"
             style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
           />
+          <p class="text-[9px] mt-1 opacity-60" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            Saves to app_settings table (primary). Takes effect immediately. Also used by /admin/models.
+          </p>
         </div>
 
         <div>
