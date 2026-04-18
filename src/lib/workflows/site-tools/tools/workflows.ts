@@ -70,7 +70,7 @@ register({
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `https://strangeramblings.com/workflows/${created.id}`,
+        url: `https://strangeramblings.com/jkai/workflows/${created.id}`,
       },
     };
   },
@@ -158,7 +158,7 @@ register({
           startedAtFormatted: formatTimestamp(r.startedAt),
           completedAtFormatted: formatTimestamp(r.completedAt),
         })),
-        url: `https://strangeramblings.com/workflows/${id}`,
+        url: `https://strangeramblings.com/jkai/workflows/${id}`,
       },
     };
   },

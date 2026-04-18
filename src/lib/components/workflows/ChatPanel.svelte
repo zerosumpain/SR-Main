@@ -225,7 +225,7 @@
             isProgress: false,
             content: `Still working... redirecting to the workflow page.`,
           } : m);
-          goto(`/workflows/${wfId}`);
+          goto(`/jkai/workflows/${wfId}`);
         } else {
           messages = messages.map(m => m.id === progressId ? {
             ...m,
