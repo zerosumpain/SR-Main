@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { queueNote, syncPendingNotes, getPendingNotes } from '$lib/jkai/intel/offline-queue';
+
   let title = $state('');
   let content = $state('');
   let format = $state('text');
@@ -13,6 +16,27 @@
   let audioChunks: Blob[] = [];
   let recordingDuration = $state(0);
   let recordingInterval: ReturnType<typeof setInterval>;
+
+  let online = $state(true);
+  let pendingCount = $state(0);
+  let syncing = $state(false);
+
+  onMount(() => {
+    online = navigator.onLine;
+    window.addEventListener('online', async () => {
+      online = true;
+      syncing = true;
+      const synced = await syncPendingNotes();
+      if (synced > 0) {
+        success = `Synced ${synced} offline note${synced > 1 ? 's' : ''}!`;
+        setTimeout(() => { success = ''; }, 3000);
+      }
+      pendingCount = (await getPendingNotes()).length;
+      syncing = false;
+    });
+    window.addEventListener('offline', () => { online = false; });
+    getPendingNotes().then((notes) => { pendingCount = notes.length; });
+  });
 
   const formats = [
     { value: 'text', label: 'Notes' },
@@ -32,6 +56,23 @@
     success = '';
 
     try {
+      if (!online) {
+        let fileData: { name: string; type: string; data: ArrayBuffer } | undefined;
+        if (file) {
+          fileData = { name: file.name, type: file.type, data: await file.arrayBuffer() };
+        }
+        await queueNote({ title, content, format, file: fileData });
+        title = '';
+        content = '';
+        file = null;
+        format = 'text';
+        mode = 'text';
+        pendingCount++;
+        success = 'Saved offline. Will sync when connected.';
+        setTimeout(() => { success = ''; }, 3000);
+        return;
+      }
+
       const form = new FormData();
       if (title) form.append('title', title);
       if (content) form.append('content', content);
@@ -151,6 +192,18 @@
       class="flex-1 py-2.5 rounded-lg text-sm font-medium {mode === 'audio' ? 'bg-sky-600' : 'bg-gray-800'}"
     >Audio</button>
   </div>
+
+  {#if !online}
+    <div class="bg-amber-900/30 text-amber-400 rounded-lg px-3 py-2 text-xs mb-3 text-center">
+      Offline — notes will be queued and synced when connected
+    </div>
+  {/if}
+  {#if pendingCount > 0}
+    <div class="bg-sky-900/30 text-sky-400 rounded-lg px-3 py-2 text-xs mb-3 text-center">
+      {pendingCount} note{pendingCount > 1 ? 's' : ''} pending sync
+      {#if syncing}<span class="ml-1">syncing...</span>{/if}
+    </div>
+  {/if}
 
   {#if mode === 'audio'}
     <div class="bg-gray-900 rounded-lg p-6 mb-4 text-center">
