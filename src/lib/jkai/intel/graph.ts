@@ -87,7 +87,7 @@ async function upsertEntity(
 async function updateEntitySummaries(entityIds: string[]): Promise<void> {
   if (entityIds.length === 0) return;
 
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(modelCtx);
 
   for (const entityId of entityIds) {

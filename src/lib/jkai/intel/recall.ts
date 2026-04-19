@@ -77,7 +77,7 @@ async function evaluateConnections(
 ): Promise<EvaluatedConnection[]> {
   if (similarNotes.length === 0 && similarEntities.length === 0) return [];
 
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(modelCtx);
 
   const notesContext = similarNotes

@@ -5,7 +5,7 @@ import { intelNotes, intelEntities } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client } = await getLLMClient(modelCtx);
 
   const truncated = text.slice(0, 32000);

@@ -8,7 +8,7 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
   const base64 = buffer.toString('base64');
   const mimeType = attachment.mimeType || 'image/jpeg';
 
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(modelCtx);
 
   const response = await client.chat.completions.create({
@@ -37,7 +37,7 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
 export async function transcribeAudio(attachment: JkaiAttachment): Promise<string> {
   const buffer = await readBuffer(attachment.diskPath);
 
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client } = await getLLMClient(modelCtx);
 
   try {
