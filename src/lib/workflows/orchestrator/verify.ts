@@ -22,6 +22,145 @@ type OutputSchemaGetter = (type: string, config: Record<string, unknown>) => Jso
 type DefinitionGetter = (type: string) => NodeDefinition | undefined;
 
 /**
+ * Patterns in template-textarea fields that the workflow engine CANNOT
+ * interpolate. These are common LLM hallucinations — Jinja, Handlebars, or
+ * raw template-literal syntax.
+ */
+const UNSUPPORTED_TEMPLATE_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
+  { pattern: /\{%[\s\S]*?%\}/, name: 'Jinja block ({% ... %})' },
+  { pattern: /\{\{\s*#(each|if|unless|with)\b/, name: 'Handlebars block helper ({{#each}}, {{#if}}, ...)' },
+  { pattern: /\{\{\s*\/(each|if|unless|with)\b/, name: 'Handlebars block close ({{/each}}, {{/if}}, ...)' },
+  { pattern: /\{\{\s*\.\.\//, name: 'Handlebars parent-scope reference ({{../x}})' },
+];
+
+/**
+ * Scan a value for unsupported template syntax. Returns the first match name,
+ * or null if clean. Only meant to flag template-textarea fields, not code.
+ */
+function detectUnsupportedTemplateSyntax(value: string): string | null {
+  for (const { pattern, name } of UNSUPPORTED_TEMPLATE_PATTERNS) {
+    if (pattern.test(value)) return name;
+  }
+  return null;
+}
+
+/**
+ * Common code-execute body mistakes:
+ * - `inputs` (plural) — the sandbox exposes `input` singular
+ * - `process.env.X` without a known mapped key
+ */
+function detectCodeExecuteIssues(code: string): string[] {
+  const problems: string[] = [];
+  if (/\binputs\b/.test(code)) {
+    problems.push('uses `inputs` (plural) — the sandbox exposes upstream data as `input` (singular). Replace `inputs.X` with `input.X`.');
+  }
+  // Flag reading process.env keys that aren't injected by the sandbox.
+  const INJECTED = new Set(['TAVILY_API_KEY', 'OPENROUTER_API_KEY', 'ZAI_API_KEY', 'ELEVENLABS_API_KEY']);
+  for (const m of code.matchAll(/process\.env\.([A-Z_][A-Z0-9_]*)/g)) {
+    if (!INJECTED.has(m[1])) {
+      problems.push(`reads process.env.${m[1]} — the sandbox only injects ${[...INJECTED].join(', ')} from /admin/keys. For other secrets, add a new key via admin or use a dedicated integration node instead of code-execute.`);
+      break; // one warning per unknown key is enough
+    }
+  }
+  return problems;
+}
+
+/**
+ * Per-operation required-field rules. These encode semantic requirements that
+ * can't be expressed in a static configSchema.required (which doesn't vary by
+ * operation). Returns a list of issue messages for a given node config.
+ */
+function detectSemanticGaps(node: WorkflowNodeDef): { field: string; issue: string; severity: 'error' | 'warning' }[] {
+  const out: { field: string; issue: string; severity: 'error' | 'warning' }[] = [];
+  const cfg = node.config as Record<string, unknown>;
+
+  if (node.type === 'data-store' && cfg.operation === 'set' && !cfg.valuePath) {
+    out.push({
+      field: 'valuePath',
+      issue: 'data-store set without valuePath will silently store the entire input blob. Set valuePath to the dot-path of the field to persist (e.g. "titles", "parsed.tips"), or add a transform upstream that places the value under "input.value".',
+      severity: 'warning',
+    });
+  }
+
+  if (node.type === 'blog' && (cfg.operation === 'create' || cfg.operation === 'update')) {
+    if (cfg.operation === 'create' && !cfg.title) {
+      out.push({ field: 'title', issue: 'blog create requires a title.', severity: 'error' });
+    }
+  }
+
+  if (node.type === 'http-request') {
+    const method = (cfg.method as string) || 'GET';
+    if (['POST', 'PUT', 'PATCH'].includes(method) && !cfg.body) {
+      out.push({ field: 'body', issue: `http-request with method ${method} usually needs a body — none configured.`, severity: 'warning' });
+    }
+  }
+
+  if (node.type === 'whatsapp' && !cfg.message) {
+    out.push({ field: 'message', issue: 'whatsapp message content is empty — the node will fail with "No message content configured".', severity: 'error' });
+  }
+
+  if (node.type === 'email' && !cfg.to) {
+    out.push({ field: 'to', issue: 'email recipient is empty.', severity: 'error' });
+  }
+
+  if ((node.type === 'llm-call' || node.type === 'llm-agent') && !cfg.userPrompt) {
+    out.push({ field: 'userPrompt', issue: `${node.type} requires a userPrompt.`, severity: 'error' });
+  }
+
+  return out;
+}
+
+/**
+ * Submission-time validator — checks a single node's config BEFORE it's added
+ * to the draft. Called from `use_node` / `workflow_add_node` handlers for
+ * immediate LLM feedback. Focuses on single-node issues (not graph-level).
+ * Returns null if valid, or a human-readable error string.
+ */
+export function validateNodeConfigPreSubmit(
+  type: string,
+  config: Record<string, unknown>,
+  def: NodeDefinition | undefined,
+): string | null {
+  const errors: string[] = [];
+
+  // Unknown config keys
+  if (def?.configSchema?.properties) {
+    const validKeys = new Set(Object.keys(def.configSchema.properties));
+    validKeys.add('description');
+    const unknown = Object.keys(config).filter((k) => !validKeys.has(k));
+    if (unknown.length > 0) {
+      errors.push(`Unknown config keys: ${unknown.join(', ')}. Valid keys for ${type}: ${[...validKeys].filter(k => k !== 'description').join(', ')}`);
+    }
+  }
+
+  // Template syntax in template-textarea fields
+  for (const field of def?.basicConfig ?? []) {
+    if (field.type !== 'template-textarea') continue;
+    const v = config[field.key];
+    if (typeof v !== 'string') continue;
+    const bad = detectUnsupportedTemplateSyntax(v);
+    if (bad) {
+      errors.push(`Field "${field.key}" uses ${bad}. Only {{input.field}} interpolation is supported. For loops or conditionals, add a transform node upstream that builds the string.`);
+    }
+  }
+
+  // Code-execute body issues
+  if (type === 'code-execute' && typeof config.code === 'string') {
+    for (const msg of detectCodeExecuteIssues(config.code)) {
+      errors.push(`code-execute: ${msg}`);
+    }
+  }
+
+  // Per-operation semantic gaps (errors only — warnings can wait for finalize)
+  const semantic = detectSemanticGaps({
+    id: '_', type, config, position: { x: 0, y: 0 }, label: '',
+  } as WorkflowNodeDef).filter((g) => g.severity === 'error');
+  for (const g of semantic) errors.push(`${g.field}: ${g.issue}`);
+
+  return errors.length > 0 ? errors.join('\n') : null;
+}
+
+/**
  * Extract all `input.X.Y.Z` references from a string (template or expression).
  * Handles both {{input.X}} template syntax and bare input.X in JS expressions.
  */
@@ -90,6 +229,36 @@ export function verifyWorkflow(
           });
         }
       }
+    }
+
+    // --- Template syntax validation (G1) ---
+    for (const field of def?.basicConfig ?? []) {
+      if (field.type !== 'template-textarea') continue;
+      const v = node.config[field.key];
+      if (typeof v !== 'string') continue;
+      const bad = detectUnsupportedTemplateSyntax(v);
+      if (bad) {
+        issues.push({
+          nodeId: node.id, nodeLabel: node.label, field: field.key,
+          issue: `Contains ${bad}. Only {{input.field}} interpolation is supported. Build the string in an upstream transform node instead.`,
+          severity: 'error',
+        });
+      }
+    }
+
+    // --- Code-execute body validation (G5) ---
+    if (node.type === 'code-execute' && typeof node.config.code === 'string') {
+      for (const msg of detectCodeExecuteIssues(node.config.code)) {
+        issues.push({
+          nodeId: node.id, nodeLabel: node.label, field: 'code',
+          issue: msg, severity: 'error',
+        });
+      }
+    }
+
+    // --- Per-operation semantic gaps (G4) ---
+    for (const gap of detectSemanticGaps(node)) {
+      issues.push({ nodeId: node.id, nodeLabel: node.label, ...gap });
     }
 
     // --- Upstream schema resolution ---

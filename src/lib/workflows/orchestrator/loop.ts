@@ -3,6 +3,7 @@ import type { GeneratedWorkflow, WorkflowDraft, ThinkingStep } from './types';
 import { toolSchemas } from './tools';
 import { autoLayout } from './layout';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
+import { validateNodeConfigPreSubmit } from './verify';
 
 export interface ToolCallDeps {
   searchFn?: (query: string, category?: string) => NodeDefinition[];
@@ -72,20 +73,14 @@ function formatUpstreamSchema(
     '\n\nIMPORTANT: Use ONLY these paths in templates ({{input.X}}) and expressions (input.X). Do NOT guess field names.';
 }
 
-/** Validate config keys against the node's definition. */
+/** Validate config against the node's definition. Runs all submission-time checks. */
 function validateConfigKeys(
   nodeType: string,
   config: Record<string, unknown>,
   deps: ToolCallDeps,
 ): string | null {
   const def = deps.getDefinition?.(nodeType);
-  if (!def?.configSchema?.properties) return null;
-  const validKeys = Object.keys(def.configSchema.properties);
-  const unknownKeys = Object.keys(config).filter(k => !validKeys.includes(k));
-  if (unknownKeys.length > 0) {
-    return `Invalid config keys: ${unknownKeys.join(', ')}. Valid keys for ${nodeType}: ${validKeys.join(', ')}`;
-  }
-  return null;
+  return validateNodeConfigPreSubmit(nodeType, config, def);
 }
 
 export function processToolCall(

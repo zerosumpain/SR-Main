@@ -274,17 +274,17 @@ async function validateNodeType(type: string): Promise<string | null> {
   return `Unknown node type "${type}". Valid types: ${valid.join(', ')}. If you need a new integration, use create_node via workflow_create instead of inventing a type name.`;
 }
 
-/** Validate config keys against a node's configSchema. Returns null if OK, or an error string. */
+/** Validate config against a node's configSchema + semantic rules. Returns null if OK, or an error string. */
 async function validateNodeConfig(type: string, config: Record<string, unknown>): Promise<string | null> {
   const { registry } = await import('$lib/workflows');
   const def = registry.getDefinition(type);
-  if (!def?.configSchema?.properties) return null; // no schema to validate against
-  const validKeys = Object.keys(def.configSchema.properties);
-  const unknownKeys = Object.keys(config).filter((k) => k !== 'description' && !validKeys.includes(k));
-  if (unknownKeys.length > 0) {
-    return `Unknown config keys for "${type}": ${unknownKeys.join(', ')}. Valid keys: ${validKeys.join(', ')}`;
-  }
-  const missingRequired = (def.configSchema.required || []).filter((k: string) => !(k in config));
+  // Defer to the shared validator from the orchestrator — same checks on both
+  // entry points (unknown keys, unsupported templates, code-execute typos,
+  // per-operation semantic gaps).
+  const { validateNodeConfigPreSubmit } = await import('$lib/workflows/orchestrator/verify');
+  const err = validateNodeConfigPreSubmit(type, config, def);
+  if (err) return err;
+  const missingRequired = (def?.configSchema?.required || []).filter((k: string) => !(k in config));
   if (missingRequired.length > 0) {
     return `Missing required config keys for "${type}": ${missingRequired.join(', ')}`;
   }
