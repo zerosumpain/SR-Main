@@ -413,6 +413,12 @@ export async function generateWorkflow(
 
   const workflow = assembleWorkflow(draft, name, description);
 
+  if (workflow.warnings && workflow.warnings.length > 0) {
+    for (const warning of workflow.warnings) {
+      onChunk?.(`⚠️  ${warning}\n`);
+    }
+  }
+
   onChunk?.('Reviewing workflow...\n');
   const criticResult = await runCriticRound(workflow, draft);
 
@@ -446,10 +452,13 @@ export async function generateWorkflow(
       role: 'user',
       content: userMessage,
     });
+    const warningText = finalWorkflow.warnings?.length
+      ? `⚠️ ${finalWorkflow.warnings.join('\n⚠️ ')}\n\n`
+      : '';
     await db.insert(orchestratorChats).values({
       workflowId,
       role: 'assistant',
-      content: finalWorkflow.explanation || 'Workflow generated.',
+      content: warningText + (finalWorkflow.explanation || 'Workflow generated.'),
       metadata: { workflowGenerated: true },
     });
   }
@@ -511,6 +520,12 @@ export async function modifyWorkflow(
 
   const workflow = assembleWorkflow(draft, name || 'Modified Workflow', description);
 
+  if (workflow.warnings && workflow.warnings.length > 0) {
+    for (const warning of workflow.warnings) {
+      onChunk?.(`⚠️  ${warning}\n`);
+    }
+  }
+
   if (draft.newNodeTypes.length > 0) {
     await saveDynamicNodes(draft);
   }
@@ -518,10 +533,13 @@ export async function modifyWorkflow(
   const thinking = buildThinking(draft, workflow, { issues: [], verdict: 'pass' }, []);
 
   await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: userMessage });
+  const warningText = workflow.warnings?.length
+    ? `⚠️ ${workflow.warnings.join('\n⚠️ ')}\n\n`
+    : '';
   await db.insert(orchestratorChats).values({
     workflowId,
     role: 'assistant',
-    content: workflow.explanation || 'Workflow modified.',
+    content: warningText + (workflow.explanation || 'Workflow modified.'),
     metadata: { workflowGenerated: true },
   });
 
