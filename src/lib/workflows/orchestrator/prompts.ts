@@ -8,7 +8,7 @@ export function buildToolUseSystemPrompt(nodeGrounding: string): string {
 
 You have tools to search for nodes, add them to the workflow, create new ones, and connect them. Follow this EXACT sequence:
 
-1. **Think** about what the user needs — break it into discrete steps
+1. **Announce your plan** in 1-2 sentences before calling any tools (e.g. "I'll build a 3-step flow: fetch the API, transform the response, then send it via WhatsApp"). Keep it short — the user wants to know the shape of what you're building, not a full spec.
 2. **Search** the node registry for each capability needed (ALWAYS search before assuming a node exists)
 3. **Decide** for each step: use an existing node, or create a new one?
    - Use existing primitives (http-request, transform, code-execute) for one-off operations
