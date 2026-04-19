@@ -117,6 +117,7 @@
   let WhatsAppConfigPanelComponent: any = $state(null);
   let HomeAssistantConfigPanelComponent: any = $state(null);
   let UpstreamSchemaPanelComponent: any = $state(null);
+  let DataTableComponent: any = $state(null);
 
   if (browser) {
     import('@xyflow/svelte').then(m => { SvelteFlowModule = m; });
@@ -129,6 +130,7 @@
     import('$lib/components/workflows/WhatsAppConfigPanel.svelte').then(m => WhatsAppConfigPanelComponent = m.default);
     import('$lib/components/workflows/HomeAssistantConfigPanel.svelte').then(m => HomeAssistantConfigPanelComponent = m.default);
     import('$lib/components/workflows/UpstreamSchemaPanel.svelte').then(m => UpstreamSchemaPanelComponent = m.default);
+    import('$lib/components/workflows/DataTable.svelte').then(m => DataTableComponent = m.default);
 
     // Load all node type components
     Promise.all([
@@ -968,13 +970,25 @@
               {#if modalNodeData.inputData}
                 <div class="mb-3">
                   <span class="text-[10px] uppercase tracking-wider" style="color: #569cd6; font-family: var(--font-mono);">Input</span>
-                  <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.inputData, null, 2)}</pre>
+                  <div class="mt-1">
+                    {#if DataTableComponent}
+                      <svelte:component this={DataTableComponent} data={modalNodeData.inputData} />
+                    {:else}
+                      <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.inputData, null, 2)}</pre>
+                    {/if}
+                  </div>
                 </div>
               {/if}
               {#if modalNodeData.outputData}
                 <div>
                   <span class="text-[10px] uppercase tracking-wider" style="color: #2d7d46; font-family: var(--font-mono);">Output</span>
-                  <pre class="mt-1 p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.outputData, null, 2)}</pre>
+                  <div class="mt-1">
+                    {#if DataTableComponent}
+                      <svelte:component this={DataTableComponent} data={modalNodeData.outputData} />
+                    {:else}
+                      <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(modalNodeData.outputData, null, 2)}</pre>
+                    {/if}
+                  </div>
                 </div>
               {/if}
             </div>
@@ -1022,11 +1036,17 @@
             <span class="w-2 h-2 rounded-full" style="background: #2d7d46;"></span>
             <h3 class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Source Output — {edgeSourceLabel}</h3>
           </div>
-          <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{edgeModalData.source?.outputData ? JSON.stringify(edgeModalData.source.outputData, null, 2) : 'No data — run the workflow first'}</pre>
+          {#if edgeModalData.source?.outputData && DataTableComponent}
+            <svelte:component this={DataTableComponent} data={edgeModalData.source.outputData} />
+          {:else if edgeModalData.source?.outputData}
+            <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(edgeModalData.source.outputData, null, 2)}</pre>
+          {:else}
+            <p class="text-xs" style="color: var(--text-ghost);">No data — run the workflow first</p>
+          {/if}
         </div>
 
         <div class="flex justify-center" style="color: var(--text-ghost);">
-          <span class="text-lg">↓</span>
+          <span class="text-lg">&darr;</span>
         </div>
 
         <div>
@@ -1034,7 +1054,13 @@
             <span class="w-2 h-2 rounded-full" style="background: #569cd6;"></span>
             <h3 class="text-[11px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Target Input — {edgeTargetLabel}</h3>
           </div>
-          <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{edgeModalData.target?.inputData ? JSON.stringify(edgeModalData.target.inputData, null, 2) : 'No data — run the workflow first'}</pre>
+          {#if edgeModalData.target?.inputData && DataTableComponent}
+            <svelte:component this={DataTableComponent} data={edgeModalData.target.inputData} />
+          {:else if edgeModalData.target?.inputData}
+            <pre class="p-2 rounded border text-xs overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);">{JSON.stringify(edgeModalData.target.inputData, null, 2)}</pre>
+          {:else}
+            <p class="text-xs" style="color: var(--text-ghost);">No data — run the workflow first</p>
+          {/if}
         </div>
       </div>
     </div>
