@@ -894,3 +894,104 @@ export const openrouterModels = pgTable('openrouter_models', {
   raw: jsonb('raw').notNull(),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── JKAI Intel: Knowledge Graph ─────────────────────────────────────
+
+export const intelEntityTypes = pgTable('intel_entity_types', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  name: text('name').notNull().unique(),
+  icon: text('icon').notNull().default('🔷'),
+  color: text('color').notNull().default('#7dd3fc'),
+  isSeeded: boolean('is_seeded').notNull().default(false),
+  description: text('description').notNull().default(''),
+  propertySchema: jsonb('property_schema').$type<Record<string, string>>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelEntityType = typeof intelEntityTypes.$inferSelect;
+
+export const intelNotes = pgTable('intel_notes', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  title: text('title'),
+  rawContent: text('raw_content').notNull(),
+  processedContent: text('processed_content'),
+  source: text('source').notNull().default('web'),
+  format: text('format').notNull().default('text'),
+  embedding: vector('embedding'),
+  status: text('status').notNull().default('pending'),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelNote = typeof intelNotes.$inferSelect;
+export type NewIntelNote = typeof intelNotes.$inferInsert;
+
+export const intelEntities = pgTable('intel_entities', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  name: text('name').notNull(),
+  typeId: text('type_id').notNull().references(() => intelEntityTypes.id),
+  summary: text('summary'),
+  properties: jsonb('properties').$type<Record<string, unknown>>(),
+  embedding: vector('embedding'),
+  confidence: text('confidence').notNull().default('medium'),
+  confirmed: boolean('confirmed').notNull().default(false),
+  mergedIntoId: text('merged_into_id'),
+  firstSeenIn: text('first_seen_in').references(() => intelNotes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelEntity = typeof intelEntities.$inferSelect;
+export type NewIntelEntity = typeof intelEntities.$inferInsert;
+
+export const intelRelationships = pgTable('intel_relationships', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sourceEntityId: text('source_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+  targetEntityId: text('target_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  label: text('label'),
+  strength: text('strength').notNull().default('moderate'),
+  properties: jsonb('properties').$type<Record<string, unknown>>(),
+  confidence: text('confidence').notNull().default('medium'),
+  sourceNoteId: text('source_note_id').references(() => intelNotes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelRelationship = typeof intelRelationships.$inferSelect;
+
+export const intelNoteEntities = pgTable('intel_note_entities', {
+  noteId: text('note_id').notNull().references(() => intelNotes.id, { onDelete: 'cascade' }),
+  entityId: text('entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+  relevance: text('relevance').notNull().default('mentioned'),
+  excerpt: text('excerpt'),
+});
+
+export const intelTimelineEvents = pgTable('intel_timeline_events', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  entityId: text('entity_id').references(() => intelEntities.id, { onDelete: 'set null' }),
+  noteId: text('note_id').notNull().references(() => intelNotes.id, { onDelete: 'cascade' }),
+  date: text('date').notNull(),
+  dateEnd: text('date_end'),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelTimelineEvent = typeof intelTimelineEvents.$inferSelect;
+
+export const intelAlerts = pgTable('intel_alerts', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  noteId: text('note_id').notNull().references(() => intelNotes.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  significance: text('significance').notNull().default('medium'),
+  relatedEntityIds: jsonb('related_entity_ids').$type<string[]>().notNull().default([]),
+  delivered: boolean('delivered').notNull().default(false),
+  dismissed: boolean('dismissed').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type IntelAlert = typeof intelAlerts.$inferSelect;
