@@ -95,6 +95,7 @@ async function runToolLoop(
   userMessage: string,
   conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   onChunk?: (text: string) => void,
+  existingDraft?: WorkflowDraft,
 ): Promise<{
   draft: WorkflowDraft;
   name: string;
@@ -103,9 +104,9 @@ async function runToolLoop(
 }> {
   const client = getOpenAIClient();
   const model = getModel();
-  const draft = createEmptyDraft();
+  const draft = existingDraft ?? createEmptyDraft();
+  if (!existingDraft) resetNodeCounter();
   const deps = getToolCallDeps();
-  resetNodeCounter();
 
   const messages: Array<any> = [
     { role: 'system', content: systemPrompt },
@@ -426,12 +427,38 @@ export async function generateWorkflow(
   let finalWorkflow = workflow;
 
   if (criticResult.verdict === 'fail' && criticResult.issues.length > 0) {
-    onChunk?.('Revising based on feedback...\n');
-    // Log issues — the revision round is a future enhancement
-    // that would re-enter the tool loop with the critic's feedback.
-    // For now, the issues are surfaced in the thinking UI so the
-    // user can manually address them on the canvas.
-    console.log('[orchestrator] Critic found issues:', criticResult.issues.length);
+    onChunk?.('Revising based on critic feedback...\n');
+
+    const issuesSummary = criticResult.issues
+      .map((i) => `- [${i.severity}] ${i.nodeId ? `Node ${i.nodeId}: ` : ''}${i.message}`)
+      .join('\n');
+
+    const revisionPrompt = buildRevisionPrompt();
+    const revisionSystem = `${revisionPrompt}\n\n## Node Registry\n\n${grounding}`;
+
+    try {
+      const revisionResult = await runToolLoop(
+        revisionSystem,
+        `The following issues were found in the workflow:\n\n${issuesSummary}\n\nFix these issues using the available tools, then call finalize_workflow.`,
+        [],
+        onChunk,
+        draft, // Pass the existing draft so revision builds on it
+      );
+
+      if (revisionResult.draft.nodes.size > 0) {
+        finalWorkflow = assembleWorkflow(revisionResult.draft, revisionResult.name || name, revisionResult.description || description);
+        if (finalWorkflow.warnings && finalWorkflow.warnings.length > 0) {
+          for (const warning of finalWorkflow.warnings) {
+            onChunk?.(`⚠️  ${warning}\n`);
+          }
+        }
+        onChunk?.('Revision complete.\n');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      onChunk?.(`Revision round failed: ${msg} — proceeding with original workflow.\n`);
+    }
+
     revisions = criticResult.issues.map(i => ({
       action: 'modified' as const,
       nodeId: i.nodeId,
