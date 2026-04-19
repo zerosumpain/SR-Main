@@ -43,7 +43,13 @@ export const loopExecutor: NodeExecutor = {
   },
 
   getOutputSchema() {
-    return { type: 'object', description: 'Object with results array and count' };
+    return {
+      type: 'object',
+      properties: {
+        results: { type: 'array', description: 'Array of results from each iteration' },
+        count: { type: 'number', description: 'Number of iterations completed' },
+      },
+    };
   },
 };
 

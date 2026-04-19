@@ -138,7 +138,14 @@ export const codeExecuteExecutor: NodeExecutor = {
     if (config.outputSchema && typeof config.outputSchema === 'object') {
       return config.outputSchema as JsonSchema;
     }
-    return { type: 'object', description: 'Last line of stdout parsed as JSON, or { stdout: string }' };
+    return {
+      type: 'object',
+      properties: {
+        result: { type: 'object', description: 'Return value from the code', additionalProperties: true },
+        stdout: { type: 'string', description: 'Standard output from execution' },
+        stderr: { type: 'string', description: 'Standard error from execution' },
+      },
+    };
   },
 };
 

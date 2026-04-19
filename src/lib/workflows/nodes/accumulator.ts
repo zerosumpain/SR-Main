@@ -33,7 +33,13 @@ export const accumulatorExecutor: NodeExecutor = {
   },
 
   getOutputSchema() {
-    return { type: 'object', description: 'Object with items array and count' };
+    return {
+      type: 'object',
+      properties: {
+        items: { type: 'array', description: 'Accumulated items across runs' },
+        count: { type: 'number', description: 'Number of accumulated items' },
+      },
+    };
   },
 };
 
