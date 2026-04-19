@@ -81,6 +81,12 @@ describe('buildToolUseSystemPrompt', () => {
     const prompt = buildToolUseSystemPrompt(sampleGrounding);
     expect(prompt).toContain('Composable Patterns');
   });
+
+  it('system prompt contains template accuracy and edge completeness rules', () => {
+    const prompt = buildToolUseSystemPrompt('grounding text');
+    expect(prompt).toContain('MUST match a path listed in that schema');
+    expect(prompt).toContain('zero incoming edges');
+  });
 });
 
 describe('buildCriticPrompt', () => {

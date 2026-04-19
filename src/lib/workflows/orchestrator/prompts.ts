@@ -58,7 +58,10 @@ ${getPatternsForOrchestrator()}
 - When creating nodes: use kebab-case for type names, provide working executor code
 - If you need information you don't have (API keys, URLs, preferences), call ask_user
 - Do NOT guess API endpoints — if unsure, ask the user
-- Do NOT call finalize_workflow until all nodes are connected with edges`;
+- Do NOT call finalize_workflow until all nodes are connected with edges
+- After connecting nodes with connect_nodes, review the upstream schema in the response. Every {{input.X}} reference in your node config MUST match a path listed in that schema. If a path doesn't exist, update the node's config to use the correct path.
+- Do NOT call finalize_workflow if any node (other than the trigger) has zero incoming edges.
+- When using {{input.X}} templates, prefer specific paths from the upstream schema over guessing. If the schema says "input.body.data", use "input.body.data" — not "input.data" or "input.result".`;
 }
 
 export function buildCriticPrompt(): string {
