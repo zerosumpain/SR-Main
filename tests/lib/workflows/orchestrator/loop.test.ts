@@ -125,3 +125,25 @@ describe('assembleWorkflow', () => {
     }
   });
 });
+
+describe('assembleWorkflow — no auto-connect', () => {
+  it('does NOT auto-connect disconnected nodes and reports warning', () => {
+    const draft: WorkflowDraft = {
+      nodes: new Map(),
+      edges: [],
+      newNodeTypes: [],
+      searchLog: [],
+      decisions: [],
+    };
+    draft.nodes.set('n1', { id: 'n1', type: 'manual-trigger', config: {}, label: 'Start', reason: 'Entry', alternatives: [] });
+    draft.nodes.set('n2', { id: 'n2', type: 'transform', config: {}, label: 'T1', reason: 'Process', alternatives: [] });
+    draft.nodes.set('n3', { id: 'n3', type: 'llm-call', config: {}, label: 'LLM', reason: 'Generate', alternatives: [] });
+    // No edges added
+
+    const result = assembleWorkflow(draft, 'Test', 'desc');
+
+    expect(result.edges).toHaveLength(0);
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings?.[0]).toMatch(/disconnected|no edges/i);
+  });
+});

@@ -18,6 +18,7 @@ export interface GeneratedWorkflow {
   nodes: WorkflowNodeDef[];
   edges: WorkflowEdgeDef[];
   explanation: string;
+  warnings?: string[];
 }
 
 export interface PlanningResult {

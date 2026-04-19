@@ -279,19 +279,15 @@ export function assembleWorkflow(
 ): GeneratedWorkflow {
   const nodesArray = Array.from(draft.nodes.values());
 
-  // Fallback: if the LLM didn't create any edges, auto-connect nodes sequentially
+  let warnings: string[] | undefined;
+
+  // If the LLM didn't create any edges, warn — do NOT auto-connect (that masks bugs)
   if (draft.edges.length === 0 && nodesArray.length > 1) {
-    console.warn('[orchestrator] No edges created by LLM — auto-connecting nodes in sequence');
-    for (let i = 0; i < nodesArray.length - 1; i++) {
-      draft.edges.push({
-        id: nextEdgeId(),
-        source: nodesArray[i].id,
-        target: nodesArray[i + 1].id,
-      });
-    }
+    console.warn('[orchestrator] No edges created by LLM — workflow has disconnected nodes');
+    warnings = ['No edges created — nodes are disconnected. The workflow will not pass data between nodes.'];
     draft.decisions.push({
       type: 'connect',
-      summary: `Auto-connected ${draft.edges.length} edges (LLM did not call connect_nodes)`,
+      summary: 'WARNING: No edges created — nodes are disconnected',
       timestamp: Date.now(),
     });
   }
@@ -329,5 +325,6 @@ export function assembleWorkflow(
     nodes,
     edges,
     explanation,
+    warnings,
   };
 }
