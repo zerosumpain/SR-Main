@@ -10,9 +10,25 @@ export const errorHandlerExecutor: NodeExecutor = {
     _config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    const hasError = input.error !== undefined;
+    // Detect errors from multiple sources:
+    // 1. Explicit error field (from nodes that set output.error)
+    // 2. HTTP error status codes (from http-request node returning {status, body, headers})
+    const hasExplicitError = input.error !== undefined;
+    const httpStatus = typeof input.status === 'number' ? input.status : undefined;
+    const hasHttpError = httpStatus !== undefined && httpStatus >= 400;
+
+    const hasError = hasExplicitError || hasHttpError;
+
+    // When routing to error, ensure there's a usable error message
+    const output = { ...input };
+    if (hasError && !hasExplicitError) {
+      output.error = hasHttpError
+        ? `HTTP ${httpStatus} error`
+        : 'Unknown error';
+    }
+
     return {
-      output: { ...input },
+      output,
       metadata: { _selectedHandle: hasError ? 'error' : 'success' },
     };
   },
