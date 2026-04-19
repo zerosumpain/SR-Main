@@ -18,6 +18,7 @@ import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multim
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext } from '$lib/jkai/intel/context';
+import { createNote, processNote } from '$lib/jkai/intel/ingest';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -72,6 +73,31 @@ async function buildMemorySection(): Promise<string> {
   });
 
   return `\n\n--- Memory ---\n${sections.join('\n\n')}`;
+}
+
+function maybeIngestAsNote(userMessage: string): void {
+  const capturePatterns = [
+    /^(?:remember|note|record|save|store)\s+(?:that|this|the following)/i,
+    /^(?:fyi|for the record|for reference)/i,
+    /^intel:/i,
+  ];
+
+  const isCapture = capturePatterns.some((p) => p.test(userMessage.trim()));
+  if (!isCapture) return;
+
+  createNote({
+    rawContent: userMessage,
+    source: 'web',
+    format: 'text',
+    metadata: { capturedFrom: 'chat' },
+  }).then((noteId) => {
+    processNote(noteId).catch((err) => {
+      console.error(`[intel] Chat capture processing failed:`, err);
+    });
+    console.log(`[intel] Captured chat message as note ${noteId}`);
+  }).catch((err) => {
+    console.error('[intel] Chat capture failed:', err);
+  });
 }
 
 interface RunToolContext {
@@ -231,6 +257,9 @@ export async function generalChat(
 ): Promise<{ response: string }> {
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
+
+  // Check if user wants to capture knowledge
+  maybeIngestAsNote(userMessage);
 
   // Load HA entity context (needed to know if HA is available)
   let haEntities: any[] = [];
