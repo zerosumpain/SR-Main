@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
-import { interpolateTemplate } from './template';
+import { interpolateTemplateStrict } from './template';
 import { resolveLLMClient } from './llm-helpers';
 
 export { llmCallDef } from './llm-call.def';
@@ -12,8 +12,12 @@ export const llmCallExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
-    const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
+    const { result: systemPrompt, missingPaths: sysMissing } = interpolateTemplateStrict((config.systemPrompt as string) || '', input);
+    const { result: userPrompt, missingPaths: userMissing } = interpolateTemplateStrict((config.userPrompt as string) || '', input);
+    const missing = [...sysMissing, ...userMissing];
+    if (missing.length > 0) {
+      throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
+    }
     const temperature = (config.temperature as number) ?? 0.7;
     const maxTokens = (config.maxTokens as number) ?? 1024;
 

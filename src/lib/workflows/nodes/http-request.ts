@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
-import { interpolateTemplate } from './template';
+import { interpolateTemplate, interpolateTemplateStrict } from './template';
 
 export const httpRequestExecutor: NodeExecutor = {
   type: 'http-request',
@@ -14,10 +14,23 @@ export const httpRequestExecutor: NodeExecutor = {
     const rawHeaders = (config.headers as string) || '{}';
     const rawBody = (config.body as string) || '';
     const auth = (config.auth as string) || 'none';
-    const authToken = interpolateTemplate((config.authToken as string) || '', input);
     const authHeader = (config.authHeader as string) || 'X-API-Key';
 
-    const url = interpolateTemplate(rawUrl, input);
+    const allMissing: string[] = [];
+
+    const { result: url, missingPaths: urlMissing } = interpolateTemplateStrict(rawUrl, input);
+    allMissing.push(...urlMissing);
+
+    let authToken = '';
+    if (auth !== 'none') {
+      const { result: tokenResult, missingPaths: tokenMissing } = interpolateTemplateStrict(
+        (config.authToken as string) || '', input,
+      );
+      authToken = tokenResult;
+      allMissing.push(...tokenMissing);
+    } else {
+      authToken = interpolateTemplate((config.authToken as string) || '', input);
+    }
 
     let headers: Record<string, string> = {};
     try {
@@ -30,6 +43,10 @@ export const httpRequestExecutor: NodeExecutor = {
       headers['Authorization'] = `Bearer ${authToken}`;
     } else if (auth === 'apiKey' && authToken) {
       headers[authHeader] = authToken;
+    }
+
+    if (allMissing.length > 0) {
+      throw new Error(`Template references unresolved: ${allMissing.join(', ')}. Check upstream node output.`);
     }
 
     const fetchInit: RequestInit = { method, headers };
