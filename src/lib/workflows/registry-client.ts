@@ -12,7 +12,7 @@ import { textParserDef } from './nodes/text-parser';
 import { validatorDef } from './nodes/validator';
 import { mergeDef } from './nodes/merge';
 import { accumulatorDef } from './nodes/accumulator';
-import { subWorkflowDef } from './nodes/sub-workflow';
+import { subWorkflowDef } from './nodes/sub-workflow.def';
 import { codeExecuteDef } from './nodes/code-execute.def';
 import { llmCallDef } from './nodes/llm-call.def';
 import { dataStoreDef } from './nodes/data-store.def';
