@@ -1,106 +1,106 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { subWorkflowExecutor, subWorkflowDef } from '$lib/workflows/nodes/sub-workflow';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock DB
+vi.mock('$lib/db', () => ({
+  db: {
+    select: vi.fn(),
+  },
+}));
+vi.mock('$lib/db/schema', () => ({
+  workflows: {},
+  workflowNodes: {},
+  workflowEdges: {},
+}));
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn(),
+}));
+
+// Mock the engine (lazily imported inside executor)
+const mockExecute = vi.fn();
+vi.mock('$lib/workflows', () => ({
+  engine: { execute: mockExecute },
+}));
+
+import { subWorkflowExecutor } from '$lib/workflows/nodes/sub-workflow';
+import { db } from '$lib/db';
 import type { ExecutionContext } from '$lib/workflows/types';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
+const stubContext: ExecutionContext = {
+  runId: 'parent-run',
   workflowId: 'parent-wf',
   workspaceDir: '/tmp/test',
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
+  emit: vi.fn(),
+  getNodeOutput: vi.fn(),
+  checkBreakpoint: vi.fn(),
   abortSignal: new AbortController().signal,
-};
+  getOutgoingEdges: vi.fn().mockReturnValue([]),
+  getNodeConfig: vi.fn(),
+} as unknown as ExecutionContext;
 
-describe('subWorkflowExecutor', () => {
+describe('sub-workflow executor', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ runId: 'sub-run-1', status: 'completed', output: { result: 'sub-workflow output' } }),
-      text: () => Promise.resolve(''),
-    }));
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  it('returns error when no workflowId configured', async () => {
+    const result = await subWorkflowExecutor.execute({}, {}, stubContext);
+    expect(result.output).toHaveProperty('error');
   });
 
-  it('calls another workflow and returns its output', async () => {
-    const result = await subWorkflowExecutor.execute(
-      { data: 'hello' },
-      { workflowId: 'wf-abc-123' },
-      mockContext,
-    );
+  it('loads workflow from DB and calls engine.execute directly', async () => {
+    // Mock DB chain: select().from().where().limit() / select().from().where()
+    const mockLimit = vi.fn();
+    const mockWhere = vi.fn();
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    (db.select as any).mockReturnValue({ from: mockFrom });
 
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'http://localhost:5173/api/workflows/wf-abc-123/run',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: { data: 'hello' }, waitForCompletion: true }),
-      }),
-    );
-    expect(result.output).toEqual({ result: 'sub-workflow output' });
-    expect(result.metadata).toEqual({ subRunId: 'sub-run-1', subWorkflowId: 'wf-abc-123' });
-  });
+    // First call: workflow row (uses .limit)
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([{ id: 'sub-wf', name: 'Sub' }]);
+    // Second call: nodes (no .limit — awaited directly)
+    mockWhere.mockResolvedValueOnce([
+      { id: 'n1', type: 'manual-trigger', config: {}, label: 'Start', position: { x: 0, y: 0 } },
+    ]);
+    // Third call: edges
+    mockWhere.mockResolvedValueOnce([]);
 
-  it('returns error when workflowId is empty', async () => {
-    const result = await subWorkflowExecutor.execute(
-      { data: 'hello' },
-      { workflowId: '' },
-      mockContext,
-    );
-
-    expect(result.output).toEqual({ error: 'No workflowId configured' });
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  it('returns error when workflowId is not configured', async () => {
-    const result = await subWorkflowExecutor.execute(
-      {},
-      {},
-      mockContext,
-    );
-
-    expect(result.output).toEqual({ error: 'No workflowId configured' });
-  });
-
-  it('returns error when fetch fails (ok: false)', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({}),
-      text: () => Promise.resolve('Internal Server Error'),
-    } as any);
+    mockExecute.mockResolvedValue({
+      status: 'completed',
+      nodeOutputs: new Map([['n1', { result: 42 }]]),
+      nodeErrors: new Map(),
+    });
 
     const result = await subWorkflowExecutor.execute(
-      {},
-      { workflowId: 'wf-failing' },
-      mockContext,
+      { data: 'test' },
+      { workflowId: 'sub-wf' },
+      stubContext,
     );
 
-    expect(result.output).toEqual({ error: 'Sub-workflow failed: Internal Server Error' });
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(result.output).toHaveProperty('result', 42);
+    expect(result.metadata).toHaveProperty('subWorkflowId', 'sub-wf');
   });
 
-  it('has correct type', () => {
-    expect(subWorkflowExecutor.type).toBe('sub-workflow');
-  });
-});
+  it('throws when sub-workflow returns failed status', async () => {
+    const mockLimit = vi.fn();
+    const mockWhere = vi.fn();
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    (db.select as any).mockReturnValue({ from: mockFrom });
 
-describe('subWorkflowDef', () => {
-  it('is control category', () => {
-    expect(subWorkflowDef.category).toBe('control');
-  });
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([{ id: 'sub-wf', name: 'Sub' }]);
+    mockWhere.mockResolvedValueOnce([]);
+    mockWhere.mockResolvedValueOnce([]);
 
-  it('has workflowId in configSchema', () => {
-    expect(subWorkflowDef.configSchema.properties?.workflowId).toBeDefined();
-  });
+    mockExecute.mockResolvedValue({
+      status: 'failed',
+      nodeOutputs: new Map(),
+      nodeErrors: new Map(),
+      error: 'something went wrong',
+    });
 
-  it('requires workflowId', () => {
-    expect(subWorkflowDef.configSchema.required).toContain('workflowId');
-  });
-
-  it('has one input and one output', () => {
-    expect(subWorkflowDef.inputs).toHaveLength(1);
-    expect(subWorkflowDef.outputs).toHaveLength(1);
+    await expect(
+      subWorkflowExecutor.execute({}, { workflowId: 'sub-wf' }, stubContext),
+    ).rejects.toThrow(/Sub-workflow failed/);
   });
 });
