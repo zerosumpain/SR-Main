@@ -17,6 +17,7 @@ import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
+import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -250,7 +251,8 @@ export async function generalChat(
   const basePrompt = await getCompiledPrompt();
   const siteSection = buildSiteSystemPromptSection();
   const memorySection = await buildMemorySection();
-  const systemContent = `${basePrompt}${siteSection}${memorySection}`;
+  const graphSection = await buildKnowledgeContext(userMessage);
+  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}`;
 
   // Build messages
   const messages: Array<any> = [
