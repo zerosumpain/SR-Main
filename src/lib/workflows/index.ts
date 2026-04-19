@@ -35,6 +35,7 @@ import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
 import { loadCustomTools } from './site-tools/custom-tool-loader';
 import { startMemoryReview } from './chat/memory-review';
+import { startScheduler } from './scheduler';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -188,6 +189,11 @@ loadCustomTools().catch((err: unknown) => {
 });
 
 startMemoryReview();
+
+startScheduler().catch((err: unknown) => {
+  const msg = err instanceof Error ? err.message : 'Unknown error';
+  console.error('[scheduler] Boot failed:', msg);
+});
 
 export const engine = new WorkflowEngine(registry);
 
