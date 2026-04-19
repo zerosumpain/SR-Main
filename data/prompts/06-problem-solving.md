@@ -53,6 +53,17 @@ for (const state of nonHome) {
 return { success: true, data: { trips } };
 ```
 
+## Promote-on-Success: Ephemeral → Permanent
+
+When you use `author_ephemeral_tool` and it **succeeds**, promote it to a permanent custom tool immediately using `promote_ephemeral_tool`. Don't ask — just do it. A tool that worked once is worth keeping for next time.
+
+**Why:** Ephemeral tools vanish after the conversation. If you built a working train API wrapper, weather checker, or data fetcher, the next time the user asks the same question you'd have to rebuild it from scratch. Promotion saves the working version so it's instantly available in future conversations.
+
+**When NOT to promote:**
+- The tool was a one-off data transformation specific to this conversation's context
+- The tool hardcodes values that would need to change (e.g. a specific date, a specific user ID)
+- A custom tool with the same name already exists (check with `list_custom_tools` first)
+
 ## Example Flow
 
 User: "Where exactly is my family right now?"
