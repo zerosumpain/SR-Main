@@ -64,9 +64,25 @@ export const subWorkflowExecutor: NodeExecutor = {
     if (result.status === 'failed') {
       throw new Error(`Sub-workflow failed: ${result.error || 'Unknown error'}`);
     }
+    if (result.status === 'completed_with_errors') {
+      const errorSummary = Array.from(result.nodeErrors.entries())
+        .map(([nodeId, err]) => `${nodeId}: ${err}`)
+        .join('; ');
+      throw new Error(`Sub-workflow completed with errors — ${errorSummary}`);
+    }
 
-    // Get the output from the last node in topological order
-    const lastNodeOutput = Array.from(result.nodeOutputs.values()).pop() ?? {};
+    // Identify sink nodes (nodes with no outgoing edges)
+    const sinkIds = new Set(definition.nodes.map(n => n.id));
+    for (const edge of definition.edges) {
+      sinkIds.delete(edge.sourceNodeId);
+    }
+
+    // Merge outputs from all sink nodes (common for fan-in-style terminal)
+    let lastNodeOutput: Record<string, unknown> = {};
+    for (const id of sinkIds) {
+      const out = result.nodeOutputs.get(id);
+      if (out) lastNodeOutput = { ...lastNodeOutput, ...out };
+    }
 
     return {
       output: lastNodeOutput,

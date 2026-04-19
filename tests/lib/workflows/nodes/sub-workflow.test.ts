@@ -103,4 +103,63 @@ describe('sub-workflow executor', () => {
       subWorkflowExecutor.execute({}, { workflowId: 'sub-wf' }, stubContext),
     ).rejects.toThrow(/Sub-workflow failed/);
   });
+
+  it('throws when sub-workflow returns completed_with_errors', async () => {
+    const mockLimit = vi.fn();
+    const mockWhere = vi.fn();
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    (db.select as any).mockReturnValue({ from: mockFrom });
+
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([{ id: 'sub-wf', name: 'Sub' }]);
+    mockWhere.mockResolvedValueOnce([]);
+    mockWhere.mockResolvedValueOnce([]);
+
+    mockExecute.mockResolvedValue({
+      status: 'completed_with_errors',
+      nodeOutputs: new Map([['n1', { result: 1 }]]),
+      nodeErrors: new Map([['n2', 'something broke']]),
+    });
+
+    await expect(
+      subWorkflowExecutor.execute({}, { workflowId: 'sub-wf' }, stubContext),
+    ).rejects.toThrow(/completed with errors/);
+  });
+
+  it('returns output from the sink node, not the first-completed node', async () => {
+    const mockLimit = vi.fn();
+    const mockWhere = vi.fn();
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    (db.select as any).mockReturnValue({ from: mockFrom });
+
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([{ id: 'sub-wf', name: 'Sub' }]);
+    // Two nodes: trigger → final
+    mockWhere.mockResolvedValueOnce([
+      { id: 'trigger', type: 'manual-trigger', config: {}, label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'final', type: 'transform', config: {}, label: 'Final', position: { x: 100, y: 0 } },
+    ]);
+    // One edge: trigger → final (so 'final' is the sink)
+    mockWhere.mockResolvedValueOnce([
+      { id: 'e1', sourceNodeId: 'trigger', targetNodeId: 'final', sourceHandle: null, targetHandle: null },
+    ]);
+
+    // Put trigger's output LAST in the Map to prove iteration order doesn't determine result
+    mockExecute.mockResolvedValue({
+      status: 'completed',
+      nodeOutputs: new Map([
+        ['final', { finalValue: 'correct' }],
+        ['trigger', { triggered: true }], // this is last in insertion order
+      ]),
+      nodeErrors: new Map(),
+    });
+
+    const result = await subWorkflowExecutor.execute(
+      {},
+      { workflowId: 'sub-wf' },
+      stubContext,
+    );
+
+    expect(result.output).toEqual({ finalValue: 'correct' });
+  });
 });
