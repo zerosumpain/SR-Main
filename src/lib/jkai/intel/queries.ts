@@ -6,6 +6,7 @@ import {
   intelRelationships,
   intelNoteEntities,
   intelTimelineEvents,
+  intelAlerts,
 } from '$lib/db/schema';
 import { desc, eq, sql, isNull, asc, and } from 'drizzle-orm';
 
@@ -227,4 +228,85 @@ export async function getIntelStats() {
 
 export async function listEntityTypes() {
   return db.select().from(intelEntityTypes).orderBy(asc(intelEntityTypes.name));
+}
+
+export async function listTimelineEvents(opts: { limit?: number; entityId?: string; type?: string } = {}) {
+  const { limit = 100, entityId, type } = opts;
+
+  const conditions = [
+    ...(entityId ? [eq(intelTimelineEvents.entityId, entityId)] : []),
+    ...(type ? [eq(intelTimelineEvents.type, type)] : []),
+  ];
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  return db
+    .select({
+      id: intelTimelineEvents.id,
+      date: intelTimelineEvents.date,
+      dateEnd: intelTimelineEvents.dateEnd,
+      type: intelTimelineEvents.type,
+      title: intelTimelineEvents.title,
+      description: intelTimelineEvents.description,
+      entityId: intelTimelineEvents.entityId,
+      entityName: intelEntities.name,
+      entityTypeIcon: intelEntityTypes.icon,
+      noteId: intelTimelineEvents.noteId,
+      createdAt: intelTimelineEvents.createdAt,
+    })
+    .from(intelTimelineEvents)
+    .leftJoin(intelEntities, eq(intelTimelineEvents.entityId, intelEntities.id))
+    .leftJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+    .where(where)
+    .orderBy(asc(intelTimelineEvents.date))
+    .limit(limit);
+}
+
+export async function listAlerts(opts: { limit?: number; significance?: string; includeDismissed?: boolean } = {}) {
+  const { limit = 50, significance, includeDismissed = false } = opts;
+
+  const conditions = [
+    ...(significance ? [eq(intelAlerts.significance, significance)] : []),
+    ...(!includeDismissed ? [eq(intelAlerts.dismissed, false)] : []),
+  ];
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  return db
+    .select()
+    .from(intelAlerts)
+    .where(where)
+    .orderBy(desc(intelAlerts.createdAt))
+    .limit(limit);
+}
+
+export async function listPendingReview() {
+  const entities = await db
+    .select({
+      id: intelEntities.id,
+      name: intelEntities.name,
+      typeId: intelEntities.typeId,
+      typeName: intelEntityTypes.name,
+      typeIcon: intelEntityTypes.icon,
+      confidence: intelEntities.confidence,
+      properties: intelEntities.properties,
+      createdAt: intelEntities.createdAt,
+      noteTitle: intelNotes.title,
+    })
+    .from(intelEntities)
+    .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+    .leftJoin(intelNotes, eq(intelEntities.firstSeenIn, intelNotes.id))
+    .where(and(
+      eq(intelEntities.confirmed, false),
+      isNull(intelEntities.mergedIntoId),
+    ))
+    .orderBy(asc(intelEntities.confidence), desc(intelEntities.createdAt));
+
+  const newTypes = await db
+    .select()
+    .from(intelEntityTypes)
+    .where(eq(intelEntityTypes.isSeeded, false))
+    .orderBy(desc(intelEntityTypes.createdAt));
+
+  return { entities, newTypes };
 }
