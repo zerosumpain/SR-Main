@@ -22,10 +22,10 @@ export const transformExecutor: NodeExecutor = {
       return { output };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return {
-        output: { error: message },
-        logs: [`Transform error: ${message}`],
-      };
+      if (err instanceof UnsafeExpressionError) {
+        throw err;
+      }
+      throw new Error(`Transform expression failed: ${message}`);
     }
   },
 

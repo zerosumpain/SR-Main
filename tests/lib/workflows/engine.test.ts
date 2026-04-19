@@ -93,11 +93,11 @@ describe('WorkflowEngine', () => {
       ],
     };
 
-    const result = await engine.execute(workflow, 'run-4', {});
+    // selfHealing: false to skip LLM calls in test
+    const result = await engine.execute(workflow, 'run-4', {}, undefined, undefined, { selfHealing: false });
 
-    // Transform catches errors and returns them in output, so this completes
-    expect(result.status).toBe('completed');
-    expect(result.nodeOutputs.get('t1')).toHaveProperty('error');
+    expect(result.status).toBe('failed');
+    expect(result.nodeErrors.get('t1')).toContain('kaboom');
   });
 
   it('fails on unknown node type', async () => {

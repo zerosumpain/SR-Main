@@ -40,14 +40,14 @@ describe('transformExecutor', () => {
     expect(result.output).toEqual({ a: 1 });
   });
 
-  it('returns error info on bad expression', async () => {
-    const result = await transformExecutor.execute(
-      {},
-      { expression: 'throw new Error("boom")' },
-      mockContext,
-    );
-    expect(result.output).toHaveProperty('error');
-    expect(result.logs?.[0]).toContain('boom');
+  it('throws on bad expression', async () => {
+    await expect(
+      transformExecutor.execute(
+        {},
+        { expression: 'throw new Error("boom")' },
+        mockContext,
+      ),
+    ).rejects.toThrow('Transform expression failed: boom');
   });
 
   it('has correct type', () => {
