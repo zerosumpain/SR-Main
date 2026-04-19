@@ -23,7 +23,7 @@ export const llmRouterDef: NodeDefinition = {
       null,
       2,
     ),
-    model: 'openai/gpt-4o-mini',
+    model: '',
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [
@@ -42,8 +42,9 @@ export const llmRouterDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM runs this step',
+      description: 'Which LLM runs this step. Leave as default to use the jkai admin default.',
       options: [
+        { value: '', label: 'Default (use jkai default model)' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
         { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },

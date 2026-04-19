@@ -1,13 +1,16 @@
+import type OpenAI from 'openai';
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { getOpenRouterClient } from '$lib/deepdive/keys';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import { getLLMClient } from '$lib/jkai/llm-client';
 
 export { thinkDef } from './think.def';
 
 export const thinkExecutor: NodeExecutor = {
   type: 'think',
   async execute(input, config, _context): Promise<NodeResult> {
-    const model = (config.model as string) || 'openai/gpt-4o-mini';
+    const configuredModel = (config.model as string)?.trim();
     const prompt = interpolateTemplate((config.prompt as string) || '', input);
     const temperature = (config.temperature as number) ?? 0.3;
 
@@ -22,7 +25,18 @@ Structure your response as:
 
 Be thorough in your reasoning. Consider edge cases.`;
 
-    const client = getOpenRouterClient();
+    let client: OpenAI;
+    let model: string;
+    if (configuredModel) {
+      client = getOpenRouterClient();
+      model = configuredModel;
+    } else {
+      const ctx = await resolveDefaultModel('chat');
+      const resolved = await getLLMClient(ctx);
+      client = resolved.client;
+      model = resolved.model;
+    }
+
     const response = await client.chat.completions.create({
       model,
       messages: [

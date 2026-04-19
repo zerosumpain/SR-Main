@@ -38,7 +38,7 @@ export const openrouterDef: NodeDefinition = {
   },
   defaultConfig: {
     operation: 'chat_completion',
-    model: 'openai/gpt-4o-mini',
+    model: '',
     systemPrompt: '',
     userPrompt: '',
     temperature: 0.7,
@@ -58,8 +58,9 @@ export const openrouterDef: NodeDefinition = {
     },
     {
       key: 'model', label: 'Model', type: 'dropdown',
-      description: 'Which LLM runs this step',
+      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model.',
       options: [
+        { value: '', label: 'Default (use admin alt OpenRouter model)' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
         { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },

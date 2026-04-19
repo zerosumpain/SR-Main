@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { getOpenRouterClient, loadKeys } from '$lib/deepdive/keys';
 import { interpolateTemplate } from './template';
+import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
 
 export { openrouterDef } from './openrouter.def';
 
@@ -18,7 +19,14 @@ export const openrouterExecutor: NodeExecutor = {
 
     switch (operation) {
       case 'chat_completion': {
-        const model = (config.model as string) || 'openai/gpt-4o-mini';
+        const configuredModel = (config.model as string)?.trim();
+        // Fall back to the admin-configured OpenRouter alt model (same one the
+        // chat toggle uses). Only hardcoded last-resort: openai/gpt-4o-mini.
+        let model = configuredModel;
+        if (!model) {
+          const alt = await resolveChatAltOpenRouterModel();
+          model = alt?.modelId || 'openai/gpt-4o-mini';
+        }
         const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
         const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
         const temperature = (config.temperature as number) ?? 0.7;
