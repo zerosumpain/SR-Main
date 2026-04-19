@@ -34,6 +34,7 @@
   const JKAI_ITEMS: NavItem[] = [
     { href: '/', label: 'Home' },
     { href: '/jkai', label: 'Chat' },
+    { href: '/jkai/intel', label: 'Intel' },
     { href: '/jkai/builds', label: 'Builds' },
     { href: '/jkai/prompts', label: 'Prompts' },
     { href: '/jkai/workflows', label: 'Workflows' },
