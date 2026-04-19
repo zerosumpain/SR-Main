@@ -18,9 +18,14 @@
 <div class="p-6 max-w-7xl mx-auto">
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold">Intelligence Dashboard</h1>
-    <a href="/jkai/intel/notes/new" class="px-4 py-2 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-sm font-medium">
-      + New Note
-    </a>
+    <div class="flex items-center gap-3">
+      <a href="/jkai/intel/search" class="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-sm">
+        Search
+      </a>
+      <a href="/jkai/intel/notes/new" class="px-4 py-2 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-sm font-medium">
+        + New Note
+      </a>
+    </div>
   </div>
 
   <!-- Stats Bar -->
