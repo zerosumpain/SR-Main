@@ -4,6 +4,9 @@ import { eq } from 'drizzle-orm';
 import { extractFromNote } from './extract';
 import { persistExtraction } from './graph';
 import { ocrHandwriting, transcribeAudio, parseEmail } from './preprocess';
+import { embedNote } from './embed';
+import { recallAndAlert } from './recall';
+import { pushHighAlerts } from './notify';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 export interface IngestInput {
@@ -68,6 +71,17 @@ export async function processNote(noteId: string, attachment?: JkaiAttachment): 
         updatedAt: new Date(),
       })
       .where(eq(intelNotes.id, noteId));
+
+    // Embed the note for semantic search
+    await embedNote(noteId);
+
+    // Find connections to existing knowledge and generate alerts
+    const alertCount = await recallAndAlert(noteId);
+
+    // Push high-significance alerts to WhatsApp
+    if (alertCount > 0) {
+      await pushHighAlerts(noteId);
+    }
 
     console.log(
       `[intel] Processed note ${noteId}: ${stats.entityCount} entities, ${stats.relationshipCount} relationships, ${stats.timelineEventCount} timeline events`,
