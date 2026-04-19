@@ -13,6 +13,7 @@ import { verifyWorkflow, formatIssues } from './verify';
 import { nodeDefinitions } from '../registry-client';
 import { registry } from '../index';
 import type { GeneratedWorkflow, ChatMessage, WorkflowDraft, OrchestratorThinking, CritiqueIssue, RevisionDelta } from './types';
+import { serializeDraft, deserializeDraft } from './draft-serde';
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema } from '../types';
 
 const MAX_TOOL_ROUNDS = 30;
@@ -393,17 +394,45 @@ export async function generateWorkflow(
 
   onChunk?.('Planning workflow...\n');
 
+  // Check for a persisted draft from a previous ask_user turn.
+  // NOTE: We take the most recent draftState. If the user completes a workflow
+  // and starts a new topic, a stale draft from before might be rehydrated —
+  // acceptable for now since modify-workflow is the expected flow post-completion.
+  let existingDraft: WorkflowDraft | undefined;
+  if (workflowId && conversationHistory.length > 0) {
+    const recentChats = await db
+      .select()
+      .from(orchestratorChats)
+      .where(eq(orchestratorChats.workflowId, workflowId))
+      .orderBy(desc(orchestratorChats.createdAt))
+      .limit(10);
+
+    for (const row of recentChats) {
+      const meta = row.metadata as Record<string, unknown> | null;
+      if (meta?.draftState) {
+        existingDraft = deserializeDraft(meta.draftState as Record<string, unknown>);
+        break;
+      }
+    }
+  }
+
   const { draft, name, description, followUp } = await runToolLoop(
     systemPrompt,
     userMessage,
     conversationHistory,
     onChunk,
+    existingDraft,
   );
 
   if (followUp) {
     if (workflowId) {
       await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: userMessage });
-      await db.insert(orchestratorChats).values({ workflowId, role: 'assistant', content: followUp });
+      await db.insert(orchestratorChats).values({
+        workflowId,
+        role: 'assistant',
+        content: followUp,
+        metadata: { draftState: serializeDraft(draft) },
+      });
     }
     return { workflow: null, followUp, messages: [] };
   }
