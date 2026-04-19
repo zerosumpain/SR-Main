@@ -5,8 +5,11 @@ import {
   intelRelationships,
   intelNoteEntities,
   intelTimelineEvents,
+  intelNotes,
 } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -81,6 +84,74 @@ async function upsertEntity(
   return created.id;
 }
 
+async function updateEntitySummaries(entityIds: string[]): Promise<void> {
+  if (entityIds.length === 0) return;
+
+  const modelCtx = await resolveDefaultModel('chat');
+  const { client, model } = await getLLMClient(modelCtx);
+
+  for (const entityId of entityIds) {
+    try {
+      const [entity] = await db
+        .select({
+          id: intelEntities.id,
+          name: intelEntities.name,
+          typeName: intelEntityTypes.name,
+          properties: intelEntities.properties,
+        })
+        .from(intelEntities)
+        .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+        .where(eq(intelEntities.id, entityId))
+        .limit(1);
+
+      if (!entity) continue;
+
+      const noteExcerpts = await db
+        .select({
+          content: sql<string>`substring(${intelNotes.processedContent} from 1 for 500)`,
+          date: intelNotes.createdAt,
+        })
+        .from(intelNoteEntities)
+        .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
+        .where(eq(intelNoteEntities.entityId, entityId))
+        .orderBy(desc(intelNotes.createdAt))
+        .limit(5);
+
+      if (noteExcerpts.length === 0) continue;
+
+      const excerptText = noteExcerpts
+        .map((n, i) => `Note ${i + 1} (${new Date(n.date).toLocaleDateString()}):\n${n.content}`)
+        .join('\n\n');
+
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.3,
+        max_tokens: 300,
+        messages: [
+          {
+            role: 'system',
+            content: 'Write a concise 2-3 sentence summary of this entity based on what is known from the notes. Focus on role, key relationships, and current concerns. Return only the summary text.',
+          },
+          {
+            role: 'user',
+            content: `Entity: ${entity.name} (${entity.typeName})\nProperties: ${JSON.stringify(entity.properties)}\n\nRelevant notes:\n${excerptText}`,
+          },
+        ],
+      });
+
+      const summary = response.choices[0]?.message?.content?.trim();
+      if (summary) {
+        await db
+          .update(intelEntities)
+          .set({ summary, updatedAt: new Date() })
+          .where(eq(intelEntities.id, entityId));
+      }
+    } catch (err) {
+      console.error(`[intel] Failed to update summary for entity ${entityId}:`, err);
+    }
+  }
+}
+
 export async function persistExtraction(
   noteId: string,
   result: ExtractionResult,
@@ -140,6 +211,12 @@ export async function persistExtraction(
     });
     timelineEventCount++;
   }
+
+  // Update summaries for affected entities (async, non-blocking)
+  const entityIds = [...entityIdMap.values()];
+  updateEntitySummaries(entityIds).catch((err) => {
+    console.error('[intel] Summary update failed:', err);
+  });
 
   return { entityCount: entityIdMap.size, relationshipCount, timelineEventCount };
 }
