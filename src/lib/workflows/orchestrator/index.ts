@@ -426,6 +426,8 @@ export async function generateWorkflow(
   let revisions: RevisionDelta[] = [];
   let finalWorkflow = workflow;
 
+  let finalDraft = draft;
+
   if (criticResult.verdict === 'fail' && criticResult.issues.length > 0) {
     onChunk?.('Revising based on critic feedback...\n');
 
@@ -433,20 +435,27 @@ export async function generateWorkflow(
       .map((i) => `- [${i.severity}] ${i.nodeId ? `Node ${i.nodeId}: ` : ''}${i.message}`)
       .join('\n');
 
+    const workflowSummary = JSON.stringify({
+      name: workflow.name,
+      nodes: workflow.nodes.map(n => ({ id: n.id, type: n.type, label: n.label, config: n.config })),
+      edges: workflow.edges.map(e => ({ source: e.sourceNodeId, target: e.targetNodeId, sourceHandle: e.sourceHandle })),
+    }, null, 2);
+
     const revisionPrompt = buildRevisionPrompt();
     const revisionSystem = `${revisionPrompt}\n\n## Node Registry\n\n${grounding}`;
 
     try {
       const revisionResult = await runToolLoop(
         revisionSystem,
-        `The following issues were found in the workflow:\n\n${issuesSummary}\n\nFix these issues using the available tools, then call finalize_workflow.`,
+        `## Existing Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Issues Found\n\n${issuesSummary}\n\nFix these issues using the available tools, then call finalize_workflow. You can call use_node on existing node IDs to update their config, or connect_nodes to rewire.`,
         [],
         onChunk,
         draft, // Pass the existing draft so revision builds on it
       );
 
       if (revisionResult.draft.nodes.size > 0) {
-        finalWorkflow = assembleWorkflow(revisionResult.draft, revisionResult.name || name, revisionResult.description || description);
+        finalDraft = revisionResult.draft;
+        finalWorkflow = assembleWorkflow(finalDraft, revisionResult.name || name, revisionResult.description || description);
         if (finalWorkflow.warnings && finalWorkflow.warnings.length > 0) {
           for (const warning of finalWorkflow.warnings) {
             onChunk?.(`⚠️  ${warning}\n`);
@@ -466,12 +475,12 @@ export async function generateWorkflow(
     }));
   }
 
-  if (draft.newNodeTypes.length > 0) {
+  if (finalDraft.newNodeTypes.length > 0) {
     onChunk?.('Registering new node types...\n');
-    await saveDynamicNodes(draft);
+    await saveDynamicNodes(finalDraft);
   }
 
-  const thinking = buildThinking(draft, finalWorkflow, criticResult, revisions);
+  const thinking = buildThinking(finalDraft, finalWorkflow, criticResult, revisions);
 
   if (workflowId) {
     await db.insert(orchestratorChats).values({
