@@ -548,38 +548,40 @@ export async function saveWorkflowFromGenerated(
   workflowId: string,
   generated: GeneratedWorkflow,
 ): Promise<void> {
-  await db.delete(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
-  await db.delete(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
+  await db.transaction(async (tx) => {
+    await tx.delete(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
+    await tx.delete(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
 
-  await db.update(workflows).set({
-    name: generated.name,
-    description: generated.description || null,
-    updatedAt: new Date(),
-  }).where(eq(workflows.id, workflowId));
+    await tx.update(workflows).set({
+      name: generated.name,
+      description: generated.description || null,
+      updatedAt: new Date(),
+    }).where(eq(workflows.id, workflowId));
 
-  if (generated.nodes.length > 0) {
-    await db.insert(workflowNodes).values(
-      generated.nodes.map((n) => ({
-        id: n.id,
-        workflowId,
-        type: n.type,
-        position: n.position,
-        config: n.config,
-        label: n.label,
-      })),
-    );
-  }
+    if (generated.nodes.length > 0) {
+      await tx.insert(workflowNodes).values(
+        generated.nodes.map((n) => ({
+          id: n.id,
+          workflowId,
+          type: n.type,
+          position: n.position,
+          config: n.config,
+          label: n.label,
+        })),
+      );
+    }
 
-  if (generated.edges.length > 0) {
-    await db.insert(workflowEdges).values(
-      generated.edges.map((e) => ({
-        id: e.id,
-        workflowId,
-        sourceNodeId: e.sourceNodeId,
-        targetNodeId: e.targetNodeId,
-        sourceHandle: e.sourceHandle || null,
-        targetHandle: e.targetHandle || null,
-      })),
-    );
-  }
+    if (generated.edges.length > 0) {
+      await tx.insert(workflowEdges).values(
+        generated.edges.map((e) => ({
+          id: e.id,
+          workflowId,
+          sourceNodeId: e.sourceNodeId,
+          targetNodeId: e.targetNodeId,
+          sourceHandle: e.sourceHandle || null,
+          targetHandle: e.targetHandle || null,
+        })),
+      );
+    }
+  });
 }
