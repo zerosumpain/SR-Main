@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { goto } from '$app/navigation';
 
   let title = $state('');
@@ -63,37 +64,38 @@
   }
 </script>
 
-<div class="p-6 max-w-3xl mx-auto">
-  <a href="/jkai/intel" class="text-sm text-gray-400 hover:text-gray-300 mb-4 inline-block">&larr; Dashboard</a>
+<PageHeader title="NEW NOTE" titleHref="/jkai/intel/notes" />
 
-  <h1 class="text-2xl font-bold mb-6">New Note</h1>
-
+<div class="p-6 sm:p-10 max-w-3xl mx-auto">
   <div class="space-y-4">
     <div>
-      <label class="block text-sm text-gray-400 mb-1">Title (optional)</label>
+      <label class="block text-sm mb-1" style="color: var(--text-secondary);">Title (optional)</label>
       <input
         type="text"
         bind:value={title}
         placeholder="e.g., 1:1 with Sarah — Platform concerns"
-        class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
       />
     </div>
 
     <div>
-      <label class="block text-sm text-gray-400 mb-1">Content</label>
+      <label class="block text-sm mb-1" style="color: var(--text-secondary);">Content</label>
       <textarea
         bind:value={content}
         placeholder="Paste or type your notes, transcript, email, etc."
         rows={12}
-        class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500 resize-y"
+        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border resize-y"
+        style="background: var(--card-bg); border-color: var(--card-border);"
       ></textarea>
     </div>
 
     <div>
-      <label class="block text-sm text-gray-400 mb-1">Format</label>
+      <label class="block text-sm mb-1" style="color: var(--text-secondary);">Format</label>
       <select
         bind:value={format}
-        class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
       >
         {#each formats as f}
           <option value={f.value}>{f.label}</option>
@@ -102,26 +104,28 @@
     </div>
 
     <div>
-      <label class="block text-sm text-gray-400 mb-1">Attach file (image or audio)</label>
+      <label class="block text-sm mb-1" style="color: var(--text-secondary);">Attach file (image or audio)</label>
       <input
         type="file"
         accept="image/*,audio/*"
         onchange={handleFileChange}
-        class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+        class="w-full rounded-lg px-3 py-2 text-sm border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
       />
       {#if file}
-        <div class="text-xs text-gray-400 mt-1">{file.name} ({(file.size / 1024).toFixed(0)} KB)</div>
+        <div class="text-xs mt-1" style="color: var(--text-ghost);">{file.name} ({(file.size / 1024).toFixed(0)} KB)</div>
       {/if}
     </div>
 
     {#if error}
-      <div class="text-sm text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{error}</div>
+      <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
     {/if}
 
     <button
       onclick={submit}
       disabled={submitting}
-      class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg py-3 font-medium text-sm"
+      class="w-full disabled:opacity-50 rounded-lg py-3 font-medium text-sm"
+      style="background: var(--accent); color: white;"
     >
       {submitting ? 'Submitting...' : 'Submit Note'}
     </button>

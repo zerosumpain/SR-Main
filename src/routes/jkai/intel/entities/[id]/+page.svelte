@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
+
   let { data } = $props();
 
   const entity = data.entity;
@@ -6,22 +8,22 @@
   const propEntries = Object.entries(properties).filter(([, v]) => v != null && v !== '');
 </script>
 
-<div class="p-6 max-w-5xl mx-auto">
-  <a href="/jkai/intel/entities" class="text-sm text-gray-400 hover:text-gray-300">&larr; Entities</a>
+<PageHeader title="ENTITY" titleHref="/jkai/intel/entities" />
 
+<div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <!-- Header -->
   <div class="flex items-center gap-4 mt-4 mb-6">
-    <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl" style="background: {entity.typeColor}20">
+    <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl border" style="background: {entity.typeColor}20; border-color: var(--card-border);">
       {entity.typeIcon}
     </div>
     <div>
-      <h1 class="text-2xl font-bold">{entity.name}</h1>
-      <div class="text-sm text-gray-400">
+      <h2 class="text-2xl font-bold">{entity.name}</h2>
+      <div class="text-sm" style="color: var(--text-secondary);">
         {entity.typeName}
         {#if entity.confirmed}
-          <span class="text-emerald-400 ml-2">confirmed</span>
+          <span class="text-emerald-600 ml-2">confirmed</span>
         {:else}
-          <span class="text-amber-400 ml-2">unconfirmed</span>
+          <span class="text-amber-600 ml-2">unconfirmed</span>
         {/if}
       </div>
     </div>
@@ -31,32 +33,32 @@
     <!-- Left Column -->
     <div class="space-y-4">
       {#if entity.summary}
-        <div class="bg-gray-900 rounded-lg p-4">
-          <h2 class="text-xs text-gray-400 uppercase mb-2">Summary</h2>
+        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+          <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Summary</h2>
           <p class="text-sm leading-relaxed">{entity.summary}</p>
         </div>
       {/if}
 
       {#if propEntries.length > 0}
-        <div class="bg-gray-900 rounded-lg p-4">
-          <h2 class="text-xs text-gray-400 uppercase mb-2">Properties</h2>
+        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+          <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Properties</h2>
           <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             {#each propEntries as [key, value]}
-              <span class="text-gray-400 capitalize">{key}:</span>
+              <span class="capitalize" style="color: var(--text-ghost);">{key}:</span>
               <span>{value}</span>
             {/each}
           </div>
         </div>
       {/if}
 
-      <div class="bg-gray-900 rounded-lg p-4">
-        <h2 class="text-xs text-gray-400 uppercase mb-2">Appears in {data.notes.length} notes</h2>
+      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Appears in {data.notes.length} notes</h2>
         {#each data.notes as note}
-          <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b border-gray-800 last:border-0 hover:bg-gray-800/50 -mx-2 px-2 rounded">
-            <div class="text-sm text-sky-400">{note.noteTitle ?? 'Untitled'}</div>
-            <div class="text-xs text-gray-400 mt-0.5">{new Date(note.noteCreatedAt).toLocaleDateString()} &middot; {note.relevance}</div>
+          <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--card-border);">
+            <div class="text-sm" style="color: var(--accent);">{note.noteTitle ?? 'Untitled'}</div>
+            <div class="text-xs mt-0.5" style="color: var(--text-ghost);">{new Date(note.noteCreatedAt).toLocaleDateString()} &middot; {note.relevance}</div>
             {#if note.excerpt}
-              <div class="text-xs text-gray-500 mt-1 line-clamp-2">{note.excerpt}</div>
+              <div class="text-xs mt-1 line-clamp-2" style="color: var(--text-ghost);">{note.excerpt}</div>
             {/if}
           </a>
         {/each}
@@ -65,15 +67,15 @@
 
     <!-- Right Column -->
     <div class="space-y-4">
-      <div class="bg-gray-900 rounded-lg p-4">
-        <h2 class="text-xs text-gray-400 uppercase mb-2">Relationships</h2>
+      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Relationships</h2>
         {#if data.relationships.length === 0}
-          <p class="text-sm text-gray-500">No relationships yet.</p>
+          <p class="text-sm" style="color: var(--text-ghost);">No relationships yet.</p>
         {:else}
           {#each data.relationships as rel}
-            <a href="/jkai/intel/entities/{rel.otherEntityId}" class="flex items-center gap-2 py-1.5 hover:bg-gray-800 -mx-2 px-2 rounded text-sm">
-              <span class="text-gray-500">{rel.direction === 'outgoing' ? '→' : '←'}</span>
-              <span class="text-sky-400 font-medium">{rel.type.replace(/_/g, ' ')}</span>
+            <a href="/jkai/intel/entities/{rel.otherEntityId}" class="flex items-center gap-2 py-1.5 -mx-2 px-2 rounded text-sm hover:opacity-80 transition">
+              <span style="color: var(--text-ghost);">{rel.direction === 'outgoing' ? '→' : '←'}</span>
+              <span class="font-medium" style="color: var(--accent);">{rel.type.replace(/_/g, ' ')}</span>
               <span>{rel.otherEntityIcon} {rel.otherEntityName}</span>
             </a>
           {/each}
@@ -81,15 +83,15 @@
       </div>
 
       {#if data.timelineEvents.length > 0}
-        <div class="bg-gray-900 rounded-lg p-4">
-          <h2 class="text-xs text-gray-400 uppercase mb-2">Timeline</h2>
-          <div class="border-l-2 border-gray-700 pl-3 space-y-3">
+        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+          <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Timeline</h2>
+          <div class="border-l-2 pl-3 space-y-3" style="border-color: var(--card-border);">
             {#each data.timelineEvents as event}
               <div>
-                <div class="text-xs text-gray-400">{event.date}</div>
+                <div class="text-xs" style="color: var(--text-ghost);">{event.date}</div>
                 <div class="text-sm">{event.title}</div>
                 {#if event.description}
-                  <div class="text-xs text-gray-500 mt-0.5">{event.description}</div>
+                  <div class="text-xs mt-0.5" style="color: var(--text-ghost);">{event.description}</div>
                 {/if}
               </div>
             {/each}

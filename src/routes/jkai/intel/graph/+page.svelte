@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
 
@@ -186,49 +187,48 @@
   });
 </script>
 
-<div class="p-6 max-w-full mx-auto h-screen flex flex-col">
-  <div class="flex items-center justify-between mb-4 flex-shrink-0">
-    <div>
-      <a href="/jkai/intel" class="text-sm text-gray-400 hover:text-gray-300">&larr; Dashboard</a>
-      <h1 class="text-2xl font-bold mt-1">Knowledge Graph</h1>
-    </div>
-    <div class="flex flex-wrap gap-2">
+<PageHeader title="GRAPH" titleHref="/jkai/intel" />
+
+<div class="p-6 sm:p-10 max-w-full mx-auto" style="height: calc(100vh - 60px); display: flex; flex-direction: column;">
+  <div class="flex flex-wrap gap-2 mb-4 flex-shrink-0">
+    <button
+      onclick={() => filterByType(null)}
+      class="px-3 py-1.5 rounded-full text-xs border"
+      style="{!activeTypeId ? 'background: var(--accent); color: white; border-color: var(--accent);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+    >All</button>
+    {#each types as type}
       <button
-        onclick={() => filterByType(null)}
-        class="px-3 py-1.5 rounded-full text-xs {!activeTypeId ? 'bg-sky-600' : 'bg-gray-800 hover:bg-gray-700'}"
-      >All</button>
-      {#each types as type}
-        <button
-          onclick={() => filterByType(type.id)}
-          class="px-3 py-1.5 rounded-full text-xs {activeTypeId === type.id ? 'bg-sky-600' : 'bg-gray-800 hover:bg-gray-700'}"
-        >{type.icon} {type.name}</button>
-      {/each}
-    </div>
+        onclick={() => filterByType(type.id)}
+        class="px-3 py-1.5 rounded-full text-xs border"
+        style="{activeTypeId === type.id ? 'background: var(--accent); color: white; border-color: var(--accent);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+      >{type.icon} {type.name}</button>
+    {/each}
   </div>
 
   {#if loading}
-    <div class="flex-1 flex items-center justify-center text-gray-500">Loading graph...</div>
+    <div class="flex-1 flex items-center justify-center" style="color: var(--text-ghost);">Loading graph...</div>
   {:else if nodes.length === 0}
-    <div class="flex-1 flex items-center justify-center text-gray-500">
+    <div class="flex-1 flex items-center justify-center" style="color: var(--text-ghost);">
       <p>No entities yet. Add notes to build your knowledge graph.</p>
     </div>
   {:else}
-    <div class="flex-1 bg-gray-900 rounded-lg overflow-hidden relative" bind:this={container}>
+    <!-- Dark background intentionally kept for the graph canvas — looks better for visualisation -->
+    <div class="flex-1 bg-gray-950 rounded-lg overflow-hidden relative" bind:this={container}>
     </div>
-    <div class="text-xs text-gray-500 mt-2 text-center flex-shrink-0">
+    <div class="text-xs mt-2 text-center flex-shrink-0" style="color: var(--text-ghost);">
       {nodes.length} entities &middot; {edges.length} relationships &middot; Drag to rearrange &middot; Scroll to zoom &middot; Click to view
     </div>
   {/if}
 
   {#if hoveredNode}
     <div
-      class="fixed bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm pointer-events-none z-50 max-w-xs"
-      style="left: {tooltipX + 12}px; top: {tooltipY - 10}px;"
+      class="fixed rounded-lg px-3 py-2 text-sm pointer-events-none z-50 max-w-xs border"
+      style="left: {tooltipX + 12}px; top: {tooltipY - 10}px; background: var(--card-bg); border-color: var(--card-border);"
     >
       <div class="font-medium">{hoveredNode.icon} {hoveredNode.name}</div>
-      <div class="text-xs text-gray-400">{hoveredNode.type} &middot; {hoveredNode.connectionCount} connections</div>
+      <div class="text-xs" style="color: var(--text-ghost);">{hoveredNode.type} &middot; {hoveredNode.connectionCount} connections</div>
       {#if hoveredNode.summary}
-        <div class="text-xs text-gray-300 mt-1 line-clamp-3">{hoveredNode.summary}</div>
+        <div class="text-xs mt-1 line-clamp-3" style="color: var(--text-secondary);">{hoveredNode.summary}</div>
       {/if}
     </div>
   {/if}

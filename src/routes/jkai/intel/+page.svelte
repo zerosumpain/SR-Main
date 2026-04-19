@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
+
   let { data } = $props();
 
   const significanceColor: Record<string, string> = {
@@ -15,14 +17,15 @@
   };
 </script>
 
-<div class="p-6 max-w-7xl mx-auto">
+<PageHeader title="INTEL" />
+
+<div class="p-6 sm:p-10 max-w-7xl mx-auto">
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold">Intelligence Dashboard</h1>
     <div class="flex items-center gap-3">
-      <a href="/jkai/intel/search" class="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-sm">
+      <a href="/jkai/intel/search" class="px-4 py-2 rounded-lg text-sm border" style="background: var(--card-bg); border-color: var(--card-border);">
         Search
       </a>
-      <a href="/jkai/intel/notes/new" class="px-4 py-2 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-sm font-medium">
+      <a href="/jkai/intel/notes/new" class="px-4 py-2 rounded-lg text-sm font-medium" style="background: var(--accent); color: white;">
         + New Note
       </a>
     </div>
@@ -30,38 +33,38 @@
 
   <!-- Stats Bar -->
   <div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="bg-gray-900 rounded-lg p-4 text-center">
-      <div class="text-3xl font-bold text-sky-400">{data.stats.noteCount}</div>
-      <div class="text-xs text-gray-400 mt-1">Notes</div>
+    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="text-3xl font-bold text-sky-500">{data.stats.noteCount}</div>
+      <div class="text-xs mt-1" style="color: var(--text-ghost);">Notes</div>
     </div>
-    <div class="bg-gray-900 rounded-lg p-4 text-center">
-      <div class="text-3xl font-bold text-emerald-400">{data.stats.entityCount}</div>
-      <div class="text-xs text-gray-400 mt-1">Entities</div>
+    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="text-3xl font-bold text-emerald-600">{data.stats.entityCount}</div>
+      <div class="text-xs mt-1" style="color: var(--text-ghost);">Entities</div>
     </div>
-    <div class="bg-gray-900 rounded-lg p-4 text-center">
-      <div class="text-3xl font-bold text-amber-400">{data.stats.riskCount}</div>
-      <div class="text-xs text-gray-400 mt-1">Active Risks</div>
+    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="text-3xl font-bold text-amber-600">{data.stats.riskCount}</div>
+      <div class="text-xs mt-1" style="color: var(--text-ghost);">Active Risks</div>
     </div>
-    <div class="bg-gray-900 rounded-lg p-4 text-center">
-      <div class="text-3xl font-bold text-pink-400">{data.stats.pendingReviewCount}</div>
-      <div class="text-xs text-gray-400 mt-1">Pending Review</div>
+    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="text-3xl font-bold" style="color: var(--accent);">{data.stats.pendingReviewCount}</div>
+      <div class="text-xs mt-1" style="color: var(--text-ghost);">Pending Review</div>
     </div>
   </div>
 
   <div class="grid grid-cols-2 gap-4">
     <!-- Recent Alerts -->
-    <div class="bg-gray-900 rounded-lg p-4">
+    <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-amber-400">Recent Alerts</h2>
-        <a href="/jkai/intel/alerts" class="text-xs text-gray-400 hover:text-gray-300">View all</a>
+        <h2 class="text-sm font-semibold text-amber-600">Recent Alerts</h2>
+        <a href="/jkai/intel/alerts" class="text-xs" style="color: var(--text-ghost);">View all</a>
       </div>
       {#if data.recentAlerts.length === 0}
-        <p class="text-sm text-gray-500">No alerts yet. Start adding notes!</p>
+        <p class="text-sm" style="color: var(--text-ghost);">No alerts yet. Start adding notes!</p>
       {:else}
         {#each data.recentAlerts as alert}
-          <div class="border-l-3 {significanceColor[alert.significance] ?? 'border-gray-600'} pl-3 mb-3">
+          <div class="border-l-3 {significanceColor[alert.significance] ?? 'border-gray-400'} pl-3 mb-3">
             <div class="text-sm">{alert.title}</div>
-            <div class="text-xs text-gray-400 mt-1">
+            <div class="text-xs mt-1" style="color: var(--text-ghost);">
               {new Date(alert.createdAt).toLocaleDateString()} &middot; {alert.significance}
             </div>
           </div>
@@ -70,26 +73,26 @@
     </div>
 
     <!-- Recent Notes -->
-    <div class="bg-gray-900 rounded-lg p-4">
+    <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-sky-400">Recent Notes</h2>
-        <a href="/jkai/intel/notes" class="text-xs text-gray-400 hover:text-gray-300">View all</a>
+        <h2 class="text-sm font-semibold text-sky-600">Recent Notes</h2>
+        <a href="/jkai/intel/notes" class="text-xs" style="color: var(--text-ghost);">View all</a>
       </div>
       {#if data.recentNotes.length === 0}
-        <p class="text-sm text-gray-500">No notes yet. Add your first note!</p>
+        <p class="text-sm" style="color: var(--text-ghost);">No notes yet. Add your first note!</p>
       {:else}
         {#each data.recentNotes as note}
-          <a href="/jkai/intel/notes/{note.id}" class="block py-2 border-b border-gray-800 last:border-0 hover:bg-gray-800/50 -mx-2 px-2 rounded">
+          <a href="/jkai/intel/notes/{note.id}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--card-border);">
             <div class="flex items-center gap-2">
               <span>{sourceIcon[note.source] ?? '📝'}</span>
               <span class="text-sm">{note.title ?? 'Untitled'}</span>
               {#if note.status === 'processing'}
-                <span class="text-xs bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded">processing</span>
+                <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">processing</span>
               {:else if note.status === 'failed'}
-                <span class="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded">failed</span>
+                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">failed</span>
               {/if}
             </div>
-            <div class="text-xs text-gray-400 mt-1">
+            <div class="text-xs mt-1" style="color: var(--text-ghost);">
               {note.source} &middot; {new Date(note.createdAt).toLocaleDateString()} &middot; {note.entityCount} entities
             </div>
           </a>
@@ -98,28 +101,28 @@
     </div>
 
     <!-- Upcoming Timeline -->
-    <div class="bg-gray-900 rounded-lg p-4">
+    <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-pink-400">Upcoming</h2>
-        <a href="/jkai/intel/timeline" class="text-xs text-gray-400 hover:text-gray-300">View all</a>
+        <h2 class="text-sm font-semibold" style="color: var(--accent);">Upcoming</h2>
+        <a href="/jkai/intel/timeline" class="text-xs" style="color: var(--text-ghost);">View all</a>
       </div>
       {#if data.upcomingTimeline.length === 0}
-        <p class="text-sm text-gray-500">No upcoming events.</p>
+        <p class="text-sm" style="color: var(--text-ghost);">No upcoming events.</p>
       {:else}
         {#each data.upcomingTimeline as event}
           <div class="py-2 text-sm">
-            <span class="text-amber-400">{event.date}</span> — {event.title}
+            <span class="text-amber-600">{event.date}</span> — {event.title}
           </div>
         {/each}
       {/if}
     </div>
 
     <!-- Entity Types -->
-    <div class="bg-gray-900 rounded-lg p-4">
-      <h2 class="text-sm font-semibold text-emerald-400 mb-3">Entity Types</h2>
+    <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <h2 class="text-sm font-semibold text-emerald-600 mb-3">Entity Types</h2>
       <div class="flex flex-wrap gap-2">
         {#each data.entityTypes as type}
-          <a href="/jkai/intel/entities?typeId={type.id}" class="bg-gray-800 px-3 py-1.5 rounded-full text-sm hover:bg-gray-700">
+          <a href="/jkai/intel/entities?typeId={type.id}" class="px-3 py-1.5 rounded-full text-sm border hover:opacity-80 transition" style="background: var(--bg-section); border-color: var(--card-border);">
             {type.icon} {type.name}
           </a>
         {/each}
