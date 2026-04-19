@@ -146,6 +146,12 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
           .set({ summary, updatedAt: new Date() })
           .where(eq(intelEntities.id, entityId));
       }
+
+      // Also update the entity's embedding with the new summary
+      if (summary) {
+        const { embedEntity } = await import('./embed');
+        await embedEntity(entityId);
+      }
     } catch (err) {
       console.error(`[intel] Failed to update summary for entity ${entityId}:`, err);
     }
