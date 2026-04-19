@@ -19,6 +19,7 @@ export interface GeneratedWorkflow {
   edges: WorkflowEdgeDef[];
   explanation: string;
   warnings?: string[];
+  trigger?: { type: string; config?: Record<string, unknown> };
 }
 
 export interface PlanningResult {
@@ -35,7 +36,7 @@ export interface OrchestratorConfig {
 }
 
 export interface ThinkingStep {
-  type: 'search' | 'use_node' | 'create_node' | 'connect' | 'ask_user' | 'finalize';
+  type: 'search' | 'use_node' | 'create_node' | 'connect' | 'ask_user' | 'finalize' | 'set_trigger';
   summary: string;
   detail?: string;
   nodeId?: string;
@@ -103,4 +104,5 @@ export interface WorkflowDraft {
   }>;
   searchLog: Array<{ query: string; results: string[]; timestamp: number }>;
   decisions: ThinkingStep[];
+  trigger?: { type: string; config?: Record<string, unknown> };
 }

@@ -53,6 +53,11 @@ export const finalizeWorkflowSchema = z.object({
   description: z.string().optional(),
 });
 
+export const setTriggerSchema = z.object({
+  type: z.enum(['webhook', 'cron', 'event']),
+  config: z.object({}).catchall(z.any()).optional(),
+});
+
 // --- Schema Map ---
 
 export const toolSchemas = {
@@ -62,6 +67,7 @@ export const toolSchemas = {
   connect_nodes: connectNodesSchema,
   ask_user: askUserSchema,
   finalize_workflow: finalizeWorkflowSchema,
+  set_trigger: setTriggerSchema,
 } as const;
 
 export type ToolName = keyof typeof toolSchemas;
@@ -149,4 +155,5 @@ export const openaiTools: OpenAIFunctionDef[] = [
   zodToFunction('connect_nodes', connectNodesSchema, 'Connect two nodes with an edge. Use sourceHandle/targetHandle for conditional routing.'),
   zodToFunction('ask_user', askUserSchema, 'Ask the user a clarification question before proceeding.'),
   zodToFunction('finalize_workflow', finalizeWorkflowSchema, 'Signal that the workflow design is complete.'),
+  zodToFunction('set_trigger', setTriggerSchema, 'Set the workflow trigger type. Use "webhook" for HTTP-triggered workflows, "cron" for scheduled (provide config.expression as a cron string like "0 9 * * *"), or "event" for event-driven.'),
 ];

@@ -267,6 +267,20 @@ export function processToolCall(
       return { success: true, finalized: true, response: `Workflow "${parsed.data.name}" finalized.` };
     }
 
+    case 'set_trigger': {
+      const parsed = toolSchemas.set_trigger.safeParse(args);
+      if (!parsed.success) {
+        return { success: false, error: `Validation failed: ${parsed.error.issues.map(i => i.message).join(', ')}` };
+      }
+      draft.trigger = { type: parsed.data.type, config: parsed.data.config };
+      draft.decisions.push({
+        type: 'set_trigger',
+        summary: `Trigger set to: ${parsed.data.type}${parsed.data.config ? ` (${JSON.stringify(parsed.data.config)})` : ''}`,
+        timestamp: now,
+      });
+      return { success: true, response: `Trigger set to "${parsed.data.type}".` };
+    }
+
     default:
       return { success: false, error: `Unknown tool: ${toolName}` };
   }
@@ -326,5 +340,6 @@ export function assembleWorkflow(
     edges,
     explanation,
     warnings,
+    trigger: draft.trigger,
   };
 }

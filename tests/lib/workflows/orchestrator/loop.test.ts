@@ -105,6 +105,32 @@ describe('processToolCall', () => {
     expect(draft.decisions).toHaveLength(1);
     expect(draft.decisions[0].type).toBe('finalize');
   });
+
+  it('processes set_trigger with webhook type', () => {
+    const draft = emptyDraft();
+    const result = processToolCall(
+      draft,
+      'set_trigger',
+      { type: 'webhook' },
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    expect(draft.trigger).toEqual({ type: 'webhook', config: undefined });
+  });
+
+  it('processes set_trigger with cron config', () => {
+    const draft = emptyDraft();
+    const result = processToolCall(
+      draft,
+      'set_trigger',
+      { type: 'cron', config: { expression: '0 9 * * *' } },
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    expect(draft.trigger).toEqual({ type: 'cron', config: { expression: '0 9 * * *' } });
+  });
 });
 
 describe('assembleWorkflow', () => {

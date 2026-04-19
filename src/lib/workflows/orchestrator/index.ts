@@ -609,6 +609,7 @@ export async function saveWorkflowFromGenerated(
     await tx.update(workflows).set({
       name: generated.name,
       description: generated.description || null,
+      trigger: generated.trigger ?? { type: 'manual' },
       updatedAt: new Date(),
     }).where(eq(workflows.id, workflowId));
 
