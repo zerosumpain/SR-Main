@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { transformExecutor, transformDef } from '$lib/workflows/nodes/transform';
+import { UnsafeExpressionError } from '$lib/workflows/nodes/safe-eval';
 import type { ExecutionContext } from '$lib/workflows/types';
 
 const mockContext: ExecutionContext = {
@@ -48,6 +49,16 @@ describe('transformExecutor', () => {
         mockContext,
       ),
     ).rejects.toThrow('Transform expression failed: boom');
+  });
+
+  it('re-throws UnsafeExpressionError unwrapped', async () => {
+    await expect(
+      transformExecutor.execute(
+        {},
+        { expression: 'return require("fs")' },
+        mockContext,
+      ),
+    ).rejects.toThrow(UnsafeExpressionError);
   });
 
   it('has correct type', () => {

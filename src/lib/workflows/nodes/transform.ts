@@ -21,10 +21,10 @@ export const transformExecutor: NodeExecutor = {
       const output = result && typeof result === 'object' ? result : { result };
       return { output };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
       if (err instanceof UnsafeExpressionError) {
         throw err;
       }
+      const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Transform expression failed: ${message}`);
     }
   },
