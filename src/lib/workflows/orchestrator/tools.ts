@@ -54,8 +54,14 @@ export const finalizeWorkflowSchema = z.object({
 });
 
 export const setTriggerSchema = z.object({
-  type: z.enum(['webhook', 'cron', 'event']),
+  type: z.enum(['manual', 'webhook', 'cron', 'event']),
   config: z.object({}).catchall(z.any()).optional(),
+});
+
+export const updateNodeSchema = z.object({
+  nodeId: z.string().min(1),
+  config: z.object({}).catchall(z.any()),
+  reason: z.string().min(10, 'Reason must explain what is being fixed and why'),
 });
 
 // --- Schema Map ---
@@ -68,6 +74,7 @@ export const toolSchemas = {
   ask_user: askUserSchema,
   finalize_workflow: finalizeWorkflowSchema,
   set_trigger: setTriggerSchema,
+  update_node: updateNodeSchema,
 } as const;
 
 export type ToolName = keyof typeof toolSchemas;
@@ -155,5 +162,6 @@ export const openaiTools: OpenAIFunctionDef[] = [
   zodToFunction('connect_nodes', connectNodesSchema, 'Connect two nodes with an edge. Use sourceHandle/targetHandle for conditional routing.'),
   zodToFunction('ask_user', askUserSchema, 'Ask the user a clarification question before proceeding.'),
   zodToFunction('finalize_workflow', finalizeWorkflowSchema, 'Signal that the workflow design is complete.'),
-  zodToFunction('set_trigger', setTriggerSchema, 'Set the workflow trigger type. Use "webhook" for HTTP-triggered workflows, "cron" for scheduled (provide config.expression as a cron string like "0 9 * * *"), or "event" for event-driven.'),
+  zodToFunction('set_trigger', setTriggerSchema, 'Set the workflow trigger type. Use "manual" for user-initiated runs (this is the default; you can omit this tool call for manual workflows), "webhook" for HTTP-triggered, "cron" for scheduled (provide config.expression as a cron string like "0 9 * * *"), or "event" for event-driven.'),
+  zodToFunction('update_node', updateNodeSchema, 'Update an existing node\'s config in the workflow by its ID. Use this to fix config issues (e.g. change a wrong template path, swap an operation, correct a URL). Does NOT change the node type — use create_node for that. Requires a reason explaining what issue is being fixed.'),
 ];

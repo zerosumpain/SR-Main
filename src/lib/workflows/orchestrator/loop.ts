@@ -281,6 +281,39 @@ export function processToolCall(
       return { success: true, response: `Trigger set to "${parsed.data.type}".` };
     }
 
+    case 'update_node': {
+      const parsed = toolSchemas.update_node.safeParse(args);
+      if (!parsed.success) {
+        return { success: false, error: `Validation failed: ${parsed.error.issues.map(i => i.message).join(', ')}` };
+      }
+      const { nodeId, config, reason } = parsed.data;
+
+      const existing = draft.nodes.get(nodeId);
+      if (!existing) {
+        return { success: false, error: `Node "${nodeId}" does not exist. Available nodes: ${Array.from(draft.nodes.keys()).join(', ')}` };
+      }
+
+      // Validate new config against node type's definition
+      const configErr = validateConfigKeys(existing.type, config, deps);
+      if (configErr) {
+        return { success: false, error: configErr };
+      }
+
+      // Merge new config into existing (updates replace same keys)
+      existing.config = { ...existing.config, ...config };
+
+      draft.decisions.push({
+        type: 'use_node',
+        summary: `Updated: ${existing.label} (\`${nodeId}\`)`,
+        detail: `Reason: ${reason}`,
+        nodeId,
+        timestamp: now,
+      });
+
+      const schemaInfo = formatUpstreamSchema(nodeId, draft, deps);
+      return { success: true, response: `Node "${existing.label}" (${nodeId}) config updated.${schemaInfo}` };
+    }
+
     default:
       return { success: false, error: `Unknown tool: ${toolName}` };
   }

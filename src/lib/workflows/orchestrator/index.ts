@@ -524,7 +524,7 @@ export async function generateWorkflow(
       workflowId,
       role: 'assistant',
       content: warningText + (finalWorkflow.explanation || 'Workflow generated.'),
-      metadata: { workflowGenerated: true },
+      metadata: { workflowGenerated: true, draftState: null },
     });
   }
 

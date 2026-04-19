@@ -131,6 +131,34 @@ describe('processToolCall', () => {
     expect(result.success).toBe(true);
     expect(draft.trigger).toEqual({ type: 'cron', config: { expression: '0 9 * * *' } });
   });
+
+  it('processes update_node to modify existing config', () => {
+    const draft = emptyDraft();
+    draft.nodes.set('n1', { id: 'n1', type: 'transform', config: { expression: 'return input' }, label: 'T1', reason: '', alternatives: [] });
+
+    const result = processToolCall(
+      draft,
+      'update_node',
+      { nodeId: 'n1', config: { expression: 'return { doubled: input.value * 2 }' }, reason: 'Fix config to double the value as required' },
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    expect(draft.nodes.get('n1')?.config).toEqual({ expression: 'return { doubled: input.value * 2 }' });
+  });
+
+  it('update_node rejects missing node', () => {
+    const draft = emptyDraft();
+    const result = processToolCall(
+      draft,
+      'update_node',
+      { nodeId: 'nonexistent', config: {}, reason: 'Test — should fail' },
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('nonexistent');
+  });
 });
 
 describe('assembleWorkflow', () => {

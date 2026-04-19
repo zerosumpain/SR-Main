@@ -45,14 +45,20 @@ export const httpRequestExecutor: NodeExecutor = {
       headers[authHeader] = authToken;
     }
 
+    let interpolatedBody = '';
+    if (method !== 'GET' && method !== 'HEAD' && rawBody) {
+      const { result: bodyResult, missingPaths: bodyMissing } = interpolateTemplateStrict(rawBody, input);
+      interpolatedBody = bodyResult;
+      allMissing.push(...bodyMissing);
+    }
+
     if (allMissing.length > 0) {
       throw new Error(`Template references unresolved: ${allMissing.join(', ')}. Check upstream node output.`);
     }
 
     const fetchInit: RequestInit = { method, headers };
 
-    if (method !== 'GET' && method !== 'HEAD' && rawBody) {
-      const interpolatedBody = interpolateTemplate(rawBody, input);
+    if (interpolatedBody) {
       try {
         JSON.parse(interpolatedBody); // validate
         headers['Content-Type'] = headers['Content-Type'] || 'application/json';

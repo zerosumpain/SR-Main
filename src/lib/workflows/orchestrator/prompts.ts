@@ -102,11 +102,14 @@ If no issues found, return: \`{ "issues": [], "verdict": "pass" }\``;
 }
 
 export function buildRevisionPrompt(): string {
-  return `Address each issue raised by the critic. You have the same tools available (search_nodes, use_node, create_node, connect_nodes, finalize_workflow).
+  return `Address each issue raised by the critic. You have the same tools available: search_nodes, use_node, update_node, create_node, connect_nodes, set_trigger, finalize_workflow.
 
 For each issue:
 1. Acknowledge the specific problem
-2. Use the appropriate tool to fix it (add a node, reconnect edges, update config)
+2. Use the appropriate tool to fix it:
+   - **update_node** to change config on an existing node (most common — fixes template paths, operation types, URLs, etc.)
+   - **connect_nodes** to add missing edges
+   - **use_node** or **create_node** only when the fix requires adding a new node
 3. Call finalize_workflow when all issues are addressed
 
 Fix only what the critic flagged — don't redesign the entire workflow.`;
