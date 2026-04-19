@@ -1,6 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { getOpenRouterClient, loadKeys } from '$lib/deepdive/keys';
-import { interpolateTemplate } from './template';
+import { interpolateTemplateStrict } from './template';
 import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
 
 export { openrouterDef } from './openrouter.def';
@@ -27,8 +27,12 @@ export const openrouterExecutor: NodeExecutor = {
           const alt = await resolveChatAltOpenRouterModel();
           model = alt?.modelId || 'openai/gpt-4o-mini';
         }
-        const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
-        const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
+        const { result: systemPrompt, missingPaths: sysMissing } = interpolateTemplateStrict((config.systemPrompt as string) || '', input);
+        const { result: userPrompt, missingPaths: userMissing } = interpolateTemplateStrict((config.userPrompt as string) || '', input);
+        const missing = [...sysMissing, ...userMissing];
+        if (missing.length > 0) {
+          throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
+        }
         const temperature = (config.temperature as number) ?? 0.7;
         const maxTokens = (config.maxTokens as number) ?? 1024;
 
