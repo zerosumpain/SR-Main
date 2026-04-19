@@ -3,6 +3,9 @@
 
   let { data } = $props();
 
+  let noteStatus = $state(data.note.status);
+  let retrying = $state(false);
+
   const statusBadge: Record<string, { bg: string; text: string }> = {
     pending: { bg: 'background: var(--card-bg);', text: 'color: var(--text-secondary);' },
     processing: { bg: 'background: #fef3c7;', text: 'color: #92400e;' },
@@ -10,7 +13,34 @@
     failed: { bg: 'background: #fee2e2;', text: 'color: #991b1b;' },
   };
 
-  const badge = statusBadge[data.note.status] ?? statusBadge.pending;
+  const badge = $derived(statusBadge[noteStatus] ?? statusBadge.pending);
+
+  async function retryProcessing() {
+    retrying = true;
+    noteStatus = 'processing';
+    try {
+      const res = await fetch(`/api/jkai/intel/notes/${data.note.id}`, { method: 'POST' });
+      if (!res.ok) throw new Error('Retry failed');
+      // Poll for completion
+      const poll = setInterval(async () => {
+        const r = await fetch(`/api/jkai/intel/notes/${data.note.id}`);
+        if (r.ok) {
+          const d = await r.json();
+          noteStatus = d.note.status;
+          if (d.note.status === 'processed' || d.note.status === 'failed') {
+            clearInterval(poll);
+            retrying = false;
+            if (d.note.status === 'processed') {
+              window.location.reload();
+            }
+          }
+        }
+      }, 3000);
+    } catch {
+      noteStatus = 'failed';
+      retrying = false;
+    }
+  }
 </script>
 
 <PageHeader title="NOTE" titleHref="/jkai/intel/notes" />
@@ -18,7 +48,17 @@
 <div class="p-6 sm:p-10 max-w-4xl mx-auto">
   <div class="flex items-start justify-between mb-4">
     <h2 class="text-xl font-bold">{data.note.title ?? 'Untitled Note'}</h2>
-    <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--card-border);">{data.note.status}</span>
+    <div class="flex items-center gap-2">
+      {#if noteStatus === 'failed' || noteStatus === 'pending'}
+        <button
+          onclick={retryProcessing}
+          disabled={retrying}
+          class="px-3 py-1 rounded text-xs border transition-colors hover:opacity-80"
+          style="background: var(--accent); color: white; border-color: var(--accent);"
+        >{retrying ? 'Retrying...' : 'Retry'}</button>
+      {/if}
+      <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--card-border);">{noteStatus}</span>
+    </div>
   </div>
 
   <div class="text-xs mb-6" style="color: var(--text-ghost);">

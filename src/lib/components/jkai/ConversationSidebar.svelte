@@ -222,8 +222,15 @@
       {/each}
     </div>
 
-    <!-- New conversation button -->
-    <div class="px-3 py-3 border-t" style="border-color: var(--card-border);">
+    <!-- Footer actions -->
+    <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
+      <a
+        href="/jkai/intel"
+        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors border"
+        style="border-color: var(--card-border); color: var(--accent);"
+      >
+        <span>🔷</span> Intel Dashboard
+      </a>
       <button
         onclick={onNew}
         class="w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors border"
