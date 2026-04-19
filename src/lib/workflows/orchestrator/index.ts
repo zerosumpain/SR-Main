@@ -9,12 +9,14 @@ import { openaiTools, toolSchemas } from './tools';
 import { processToolCall, assembleWorkflow, resetNodeCounter } from './loop';
 import type { ToolCallDeps } from './loop';
 import { saveDynamicNode, validateExecutorSyntax, DYNAMIC_NODES_DIR } from './dynamic-nodes';
+import { verifyWorkflow, formatIssues } from './verify';
 import { nodeDefinitions } from '../registry-client';
 import { registry } from '../index';
 import type { GeneratedWorkflow, ChatMessage, WorkflowDraft, OrchestratorThinking, CritiqueIssue, RevisionDelta } from './types';
-import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
+import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema } from '../types';
 
 const MAX_TOOL_ROUNDS = 30;
+const MAX_VERIFY_ROUNDS = 3;
 
 async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
   try {
@@ -71,12 +73,20 @@ function createEmptyDraft(): WorkflowDraft {
   };
 }
 
+function getOutputSchema(type: string, config: Record<string, unknown>): JsonSchema {
+  const executor = registry.getExecutor(type);
+  if (executor) return executor.getOutputSchema(config);
+  return { type: 'object' };
+}
+
 function getToolCallDeps(): ToolCallDeps {
   const builtinTypes = new Set(nodeDefinitions.map(d => d.type));
   return {
     searchFn: (query: string, category?: string) =>
       registry.search(query, category as any),
     builtinTypes,
+    getOutputSchema,
+    getDefinition: (type: string) => registry.getDefinition(type),
   };
 }
 
@@ -105,6 +115,7 @@ async function runToolLoop(
 
   let workflowName = 'Generated Workflow';
   let workflowDescription: string | undefined;
+  let verifyAttempts = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Retry with backoff on 429 rate limits
@@ -177,6 +188,37 @@ async function runToolLoop(
         const finalizeArgs = toolSchemas.finalize_workflow.parse(fnArgs);
         workflowName = finalizeArgs.name;
         workflowDescription = finalizeArgs.description;
+
+        // --- Post-finalize verification ---
+        const assembled = assembleWorkflow(draft, workflowName, workflowDescription);
+        const issues = verifyWorkflow(
+          assembled.nodes,
+          assembled.edges,
+          (type) => registry.getDefinition(type),
+          getOutputSchema,
+        );
+
+        if (issues.length > 0 && verifyAttempts < MAX_VERIFY_ROUNDS) {
+          verifyAttempts++;
+          const issueText = formatIssues(issues);
+          onChunk?.(`Verification round ${verifyAttempts}: found ${issues.length} issue(s), asking builder to fix...\n`);
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              success: false,
+              error: issueText,
+            }),
+          });
+          continue; // Re-enter the tool loop so the LLM can fix issues
+        }
+
+        if (issues.length > 0) {
+          onChunk?.(`Verification: ${issues.length} issue(s) remain after ${verifyAttempts} rounds — proceeding with warnings.\n`);
+        } else if (verifyAttempts > 0) {
+          onChunk?.('Verification passed after corrections.\n');
+        }
 
         messages.push({
           role: 'tool',

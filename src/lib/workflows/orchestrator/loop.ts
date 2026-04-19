@@ -1,11 +1,14 @@
-import type { NodeDefinition } from '../types';
+import type { NodeDefinition, JsonSchema, WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 import type { GeneratedWorkflow, WorkflowDraft, ThinkingStep } from './types';
 import { toolSchemas } from './tools';
 import { autoLayout } from './layout';
+import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
 
 export interface ToolCallDeps {
   searchFn?: (query: string, category?: string) => NodeDefinition[];
   builtinTypes?: Set<string>;
+  getOutputSchema?: (type: string, config: Record<string, unknown>) => JsonSchema;
+  getDefinition?: (type: string) => NodeDefinition | undefined;
 }
 
 export interface ToolCallResult {
@@ -36,6 +39,53 @@ function nextEdgeId(): string {
 export function resetNodeCounter(): void {
   nodeCounter = 0;
   runPrefix = randomHex(4);
+}
+
+/** Convert draft state to arrays suitable for resolveUpstreamSchema. */
+function draftToNodeDefs(draft: WorkflowDraft): WorkflowNodeDef[] {
+  return Array.from(draft.nodes.values()).map(n => ({
+    id: n.id, type: n.type, position: { x: 0, y: 0 }, config: n.config, label: n.label,
+  }));
+}
+
+function draftToEdgeDefs(draft: WorkflowDraft): WorkflowEdgeDef[] {
+  return draft.edges.map(e => ({
+    id: e.id, sourceNodeId: e.source, targetNodeId: e.target,
+    sourceHandle: e.sourceHandle, targetHandle: e.targetHandle,
+  }));
+}
+
+/** Format an upstream schema as a compact human-readable string. */
+function formatUpstreamSchema(
+  nodeId: string,
+  draft: WorkflowDraft,
+  deps: ToolCallDeps,
+): string {
+  if (!deps.getOutputSchema) return '';
+  const nodes = draftToNodeDefs(draft);
+  const edges = draftToEdgeDefs(draft);
+  const schema = resolveUpstreamSchema(nodeId, nodes, edges, deps.getOutputSchema);
+  const paths = schemaToVariablePaths(schema, 'input');
+  if (paths.length === 0) return '\n\nNo upstream connections yet — this node has no input data.';
+  return '\n\nUpstream input schema (data available to this node):\n' +
+    paths.map(p => `  - ${p.path} (${p.type})${p.description ? ' — ' + p.description : ''}`).join('\n') +
+    '\n\nIMPORTANT: Use ONLY these paths in templates ({{input.X}}) and expressions (input.X). Do NOT guess field names.';
+}
+
+/** Validate config keys against the node's definition. */
+function validateConfigKeys(
+  nodeType: string,
+  config: Record<string, unknown>,
+  deps: ToolCallDeps,
+): string | null {
+  const def = deps.getDefinition?.(nodeType);
+  if (!def?.configSchema?.properties) return null;
+  const validKeys = Object.keys(def.configSchema.properties);
+  const unknownKeys = Object.keys(config).filter(k => !validKeys.includes(k));
+  if (unknownKeys.length > 0) {
+    return `Invalid config keys: ${unknownKeys.join(', ')}. Valid keys for ${nodeType}: ${validKeys.join(', ')}`;
+  }
+  return null;
 }
 
 export function processToolCall(
@@ -72,7 +122,10 @@ export function processToolCall(
 
       const desc = results.map(d => {
         const ports = `Inputs: ${d.inputs.map(p => p.name).join(', ') || 'none'} | Outputs: ${d.outputs.map(p => p.name).join(', ') || 'none'}`;
-        return `- **${d.label}** (\`${d.type}\`): ${d.description}\n  ${ports}`;
+        const configKeys = d.configSchema?.properties
+          ? `Config keys: ${Object.keys(d.configSchema.properties).join(', ')}`
+          : '';
+        return `- **${d.label}** (\`${d.type}\`): ${d.description}\n  ${ports}${configKeys ? '\n  ' + configKeys : ''}`;
       }).join('\n');
 
       return { success: true, response: `Found ${results.length} matching node(s):\n${desc}` };
@@ -84,6 +137,13 @@ export function processToolCall(
         return { success: false, error: `Validation failed: ${parsed.error.issues.map(i => i.message).join(', ')}` };
       }
       const { nodeType, config, label, reason, alternativesConsidered } = parsed.data;
+
+      // Validate config keys against the node definition
+      const configErr = validateConfigKeys(nodeType, config, deps);
+      if (configErr) {
+        return { success: false, error: configErr };
+      }
+
       const id = nextNodeId(nodeType);
 
       draft.nodes.set(id, {
@@ -103,7 +163,8 @@ export function processToolCall(
         timestamp: now,
       });
 
-      return { success: true, response: `Node "${label}" (${id}) added to workflow.` };
+      const schemaInfo = formatUpstreamSchema(id, draft, deps);
+      return { success: true, response: `Node "${label}" (${id}) added to workflow.${schemaInfo}` };
     }
 
     case 'create_node': {
@@ -174,7 +235,9 @@ export function processToolCall(
         timestamp: now,
       });
 
-      return { success: true, response: `Edge ${edgeId}: ${sourceId} → ${targetId}` };
+      // After wiring, show the TARGET node what data it now receives
+      const schemaInfo = formatUpstreamSchema(targetId, draft, deps);
+      return { success: true, response: `Edge ${edgeId}: ${sourceId} → ${targetId}${schemaInfo}` };
     }
 
     case 'ask_user': {

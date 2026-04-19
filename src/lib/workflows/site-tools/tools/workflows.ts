@@ -274,6 +274,23 @@ async function validateNodeType(type: string): Promise<string | null> {
   return `Unknown node type "${type}". Valid types: ${valid.join(', ')}. If you need a new integration, use create_node via workflow_create instead of inventing a type name.`;
 }
 
+/** Validate config keys against a node's configSchema. Returns null if OK, or an error string. */
+async function validateNodeConfig(type: string, config: Record<string, unknown>): Promise<string | null> {
+  const { registry } = await import('$lib/workflows');
+  const def = registry.getDefinition(type);
+  if (!def?.configSchema?.properties) return null; // no schema to validate against
+  const validKeys = Object.keys(def.configSchema.properties);
+  const unknownKeys = Object.keys(config).filter((k) => k !== 'description' && !validKeys.includes(k));
+  if (unknownKeys.length > 0) {
+    return `Unknown config keys for "${type}": ${unknownKeys.join(', ')}. Valid keys: ${validKeys.join(', ')}`;
+  }
+  const missingRequired = (def.configSchema.required || []).filter((k: string) => !(k in config));
+  if (missingRequired.length > 0) {
+    return `Missing required config keys for "${type}": ${missingRequired.join(', ')}`;
+  }
+  return null;
+}
+
 register({
   name: 'workflow_update_node',
   description: "Update a workflow node's config, label, or type. When changing type, the new type must exist in the node registry.",
@@ -329,14 +346,18 @@ register({
   toolset: 'workflows',
   handler: async (args) => {
     const type = args.type as string;
-    const err = await validateNodeType(type);
-    if (err) return { success: false, error: err };
+    const typeErr = await validateNodeType(type);
+    if (typeErr) return { success: false, error: typeErr };
+
+    const config = (args.config as Record<string, unknown>) || {};
+    const configErr = await validateNodeConfig(type, config);
+    if (configErr) return { success: false, error: configErr };
 
     const [node] = await db.insert(workflowNodes).values({
       workflowId: args.workflowId as string,
       type,
       label: args.label as string,
-      config: (args.config as Record<string, unknown>) || {},
+      config,
       position: (args.position as { x: number; y: number }) || { x: 0, y: 0 },
     }).returning();
     return { success: true, data: node };
