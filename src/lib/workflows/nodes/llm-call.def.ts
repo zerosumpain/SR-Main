@@ -16,7 +16,7 @@ export const llmCallDef: NodeDefinition = {
     },
     required: ['userPrompt'],
   },
-  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
+  defaultConfig: { model: 'glm-5-turbo', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
   basicConfig: [
@@ -40,9 +40,10 @@ export const llmCallDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM answers this step. Leave as default unless you need a specific one.',
+      description: 'Which LLM answers this step. Bare IDs (e.g. glm-5-turbo) route to the jkai default provider. Slashed IDs (e.g. openai/gpt-4o-mini) route via OpenRouter.',
       options: [
-        { value: '', label: 'Default (use jkai default model)' },
+        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
+        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
         { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },

@@ -1,4 +1,3 @@
-import type OpenAI from 'openai';
 import type {
   NodeExecutor,
   NodeResult,
@@ -6,9 +5,7 @@ import type {
   JsonSchema,
 } from '../types';
 import { interpolateTemplate } from './template';
-import { getOpenRouterClient } from '$lib/deepdive/keys';
-import { resolveDefaultModel } from '$lib/server/models/settings';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveLLMClient } from './llm-helpers';
 
 export { llmAgentDef } from './llm-agent.def';
 
@@ -114,7 +111,6 @@ export const llmAgentExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     context: ExecutionContext,
   ): Promise<NodeResult> {
-    const configuredModel = (config.model as string)?.trim();
     const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
     const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
     const temperature = (config.temperature as number) ?? 0.7;
@@ -127,17 +123,7 @@ export const llmAgentExecutor: NodeExecutor = {
     const registry = (context as any)._registry;
     const { tools, toolMap } = discoverTools(agentNodeId, config, context);
 
-    let client: OpenAI;
-    let model: string;
-    if (configuredModel) {
-      client = getOpenRouterClient();
-      model = configuredModel;
-    } else {
-      const ctx = await resolveDefaultModel('chat');
-      const resolved = await getLLMClient(ctx);
-      client = resolved.client;
-      model = resolved.model;
-    }
+    const { client, model } = await resolveLLMClient(config.model as string | undefined);
 
     const messages: any[] = [
       ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),

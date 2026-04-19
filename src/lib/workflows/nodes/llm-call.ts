@@ -1,9 +1,6 @@
-import type OpenAI from 'openai';
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
-import { getOpenRouterClient } from '$lib/deepdive/keys';
-import { resolveDefaultModel } from '$lib/server/models/settings';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveLLMClient } from './llm-helpers';
 
 export { llmCallDef } from './llm-call.def';
 
@@ -15,27 +12,12 @@ export const llmCallExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    const configuredModel = (config.model as string)?.trim();
     const systemPrompt = interpolateTemplate((config.systemPrompt as string) || '', input);
     const userPrompt = interpolateTemplate((config.userPrompt as string) || '', input);
     const temperature = (config.temperature as number) ?? 0.7;
     const maxTokens = (config.maxTokens as number) ?? 1024;
 
-    // When no model is configured, fall back to the same default jkai uses
-    // (chat default — routed via the correct provider client). When a model
-    // string is configured, it's treated as an OpenRouter modelId to preserve
-    // backwards compatibility with existing nodes.
-    let client: OpenAI;
-    let model: string;
-    if (configuredModel) {
-      client = getOpenRouterClient();
-      model = configuredModel;
-    } else {
-      const ctx = await resolveDefaultModel('chat');
-      const resolved = await getLLMClient(ctx);
-      client = resolved.client;
-      model = resolved.model;
-    }
+    const { client, model } = await resolveLLMClient(config.model as string | undefined);
 
     const response = await client.chat.completions.create({
       model,
