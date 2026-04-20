@@ -307,6 +307,101 @@
     configDirty = true;
   }
 
+  // Known models for the LLM dropdown — mirrors llm-call.def.ts
+  const MODEL_OPTIONS = [
+    { value: '', label: 'Default (site setting)' },
+    { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
+    { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
+    { value: 'glm-4-flash', label: 'GLM 4 Flash — Z.AI' },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
+    { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+    { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku' },
+  ];
+
+  let pipePickerOpen = $state(false);
+  let actionError = $state<string | null>(null);
+
+  async function postAction(
+    url: string,
+    init?: RequestInit,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      return (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+      return null;
+    }
+  }
+
+  async function reloadCanvas() {
+    await invalidate(`/jkai/canvas/${canvas.slug}`);
+  }
+
+  async function actReRun() {
+    closeMenu();
+    await runCanvas();
+  }
+
+  async function actDelete() {
+    if (!menuNode) return;
+    if (!confirm(`Delete node "${menuNode.name}"? This also removes its edges.`)) return;
+    actionError = null;
+    const result = await postAction(
+      `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+      { method: 'DELETE' },
+    );
+    if (result) {
+      closeMenu();
+      await reloadCanvas();
+    }
+  }
+
+  async function actDetach() {
+    if (!menuNode) return;
+    actionError = null;
+    const result = await postAction(
+      `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'detach' }),
+      },
+    );
+    if (result) await reloadCanvas();
+  }
+
+  async function actBranch() {
+    if (!menuNode) return;
+    actionError = null;
+    const result = await postAction(
+      `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'branch' }),
+      },
+    );
+    if (result) await reloadCanvas();
+  }
+
+  async function pipeTo(targetId: string) {
+    if (!menuNode) return;
+    actionError = null;
+    pipePickerOpen = false;
+    const result = await postAction(`/api/workflows/${canvas.workflowId}/edges`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceNodeId: menuNode.id, targetNodeId: targetId }),
+    });
+    if (result) await reloadCanvas();
+  }
+
   async function saveNode() {
     if (!menuNode || saving) return;
     saving = true;
@@ -649,14 +744,21 @@
                 <section class="nm-sec nm-sec-row">
                   <div class="nm-control">
                     <span class="sr-label-tight">MODEL</span>
-                    <input
+                    <select
                       class="nm-text-input"
-                      type="text"
                       value={(configDraft.model as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('model', (e.target as HTMLInputElement).value)}
-                      placeholder="default (site setting)"
-                    />
+                      onchange={(e) =>
+                        setConfigField('model', (e.target as HTMLSelectElement).value)}
+                    >
+                      {#each MODEL_OPTIONS as opt (opt.value)}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                      {#if configDraft.model && !MODEL_OPTIONS.some((o) => o.value === configDraft.model)}
+                        <option value={configDraft.model as string}
+                          >{configDraft.model} (custom)</option
+                        >
+                      {/if}
+                    </select>
                   </div>
                   <div class="nm-control">
                     <span class="sr-label-tight">TEMP</span>
@@ -896,14 +998,74 @@
 
             <!-- Actions footer -->
             <div class="nm-foot">
+              {#if actionError}
+                <div class="nm-action-err">⚠ {actionError}</div>
+              {/if}
               <div class="nm-actions">
-                <button class="nm-act"><span class="nm-act-ic">↻</span>Re-run</button>
-                <button class="nm-act"><span class="nm-act-ic">⎇</span>Branch</button>
-                <button class="nm-act"><span class="nm-act-ic">↘</span>Pipe to…</button>
-                <button class="nm-act"><span class="nm-act-ic">◉</span>Pin to chat</button>
-                <button class="nm-act"><span class="nm-act-ic">⊘</span>Detach</button>
-                <button class="nm-act is-danger"><span class="nm-act-ic">×</span>Delete</button>
+                <button
+                  class="nm-act"
+                  onclick={actReRun}
+                  disabled={runMeta.state === 'running'}
+                  title="Run the full workflow"
+                >
+                  <span class="nm-act-ic">↻</span>Re-run
+                </button>
+                <button class="nm-act" onclick={actBranch} title="Clone this node">
+                  <span class="nm-act-ic">⎇</span>Branch
+                </button>
+                <button
+                  class="nm-act"
+                  onclick={() => (pipePickerOpen = !pipePickerOpen)}
+                  title="Add an edge to another node"
+                >
+                  <span class="nm-act-ic">↘</span>Pipe to…
+                </button>
+                <button
+                  class="nm-act"
+                  disabled
+                  title="Chat integration coming in phase E"
+                >
+                  <span class="nm-act-ic">◉</span>Pin to chat
+                </button>
+                <button
+                  class="nm-act"
+                  onclick={actDetach}
+                  title="Remove all edges to/from this node"
+                >
+                  <span class="nm-act-ic">⊘</span>Detach
+                </button>
+                <button
+                  class="nm-act is-danger"
+                  onclick={actDelete}
+                  title="Delete this node and its edges"
+                >
+                  <span class="nm-act-ic">×</span>Delete
+                </button>
               </div>
+
+              {#if pipePickerOpen}
+                <div class="pipe-picker">
+                  <div class="pipe-picker-hd">
+                    <span class="sr-label-tight">PIPE TO…</span>
+                    <button
+                      class="p-icon-btn"
+                      onclick={() => (pipePickerOpen = false)}
+                      aria-label="Cancel">✕</button
+                    >
+                  </div>
+                  <div class="pipe-picker-list">
+                    {#each viewNodes.filter((n) => n.id !== menuNode.id) as target (target.id)}
+                      <button class="nm-pin pipe-target" onclick={() => pipeTo(target.id)}>
+                        <span class="nm-pin-kind-bar" data-kind={target.kind}></span>
+                        <span>{target.name}</span>
+                      </button>
+                    {/each}
+                    {#if viewNodes.length <= 1}
+                      <span class="nm-ctx-empty">no other nodes</span>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
             </div>
           </div>
         </div>
@@ -1746,6 +1908,69 @@
   .nm-act.is-danger:hover {
     color: #c44;
     border-color: rgba(196, 68, 68, 0.4);
+  }
+  .nm-act:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .nm-act:disabled:hover {
+    background: transparent;
+    border-color: transparent;
+  }
+  .nm-action-err {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #c44;
+    padding: 4px 6px;
+    margin-bottom: 6px;
+    background: rgba(196, 68, 68, 0.06);
+    border: 1px solid rgba(196, 68, 68, 0.3);
+  }
+  .pipe-picker {
+    margin-top: 8px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    padding: 8px;
+  }
+  .pipe-picker-hd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .pipe-picker-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pipe-target {
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .pipe-target:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .nm-pin-kind-bar {
+    display: inline-block;
+    width: 2px;
+    height: 10px;
+    background: var(--text-ghost);
+    margin-right: 6px;
+  }
+  .nm-pin-kind-bar[data-kind='llm'],
+  .nm-pin-kind-bar[data-kind='intel'] {
+    background: var(--accent);
+  }
+  .nm-pin-kind-bar[data-kind='parse'] {
+    background: #c44;
+  }
+  .nm-pin-kind-bar[data-kind='output'],
+  .nm-pin-kind-bar[data-kind='agent'] {
+    background: var(--text-primary);
+  }
+  .nm-pin-kind-bar[data-kind='input'] {
+    background: var(--text-muted);
   }
   .nm-act-ic {
     font-family: var(--font-mono);
