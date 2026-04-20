@@ -9,8 +9,9 @@ import {
   nodeExecutions,
   orchestratorChats,
 } from '$lib/db/schema';
-import { desc, eq, asc, and, or } from 'drizzle-orm';
+import { desc, eq, asc, and, or, like } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
+import { slugify } from '$lib/canvas/slug';
 
 // ==========================================
 // Existing Tools (moved)
@@ -18,11 +19,25 @@ import { formatTimestamp } from '../format-time';
 
 register({
   name: 'workflow_create',
-  description: 'Create an automated workflow from a natural language description. Use this when the user needs something that runs automatically or on a schedule — things like "every morning send me a health summary", "check X every hour and notify me". The workflow engine supports: manual-trigger (with cron scheduling), WhatsApp messaging, Home Assistant queries/control, LLM calls, code execution, Strava, blog, email, loops, data stores, conditionals, and more. The trigger node is always manual-trigger (supports cron schedules). For event-driven HA automations, create a scheduled workflow that polls state. After creating, share the returned URL as a clickable markdown link: [Review workflow](url).',
+  description:
+    'Create a NEW separate canvas (workflow) from a natural language description. ' +
+    'Only call this when the user explicitly asks for a new, separate canvas. ' +
+    'If you are currently inside a canvas (see "Current Canvas" context) and the ' +
+    'user is asking to build/extend it, use workflow_add_node / workflow_add_edge ' +
+    'on the existing workflowId instead. ' +
+    'The created canvas gets a trigger node + any generated nodes, and is available ' +
+    'at the returned /jkai/canvas/:slug URL. ' +
+    'Supported node types: trigger, chat, llm-call, llm-agent, text-parser, ' +
+    'transform, http-request, conditional, delay, intel-write, intel-query, ' +
+    'data-store, whatsapp, email, blog, home-assistant, and more. ' +
+    'After creating, share the returned URL as a clickable markdown link: [Open canvas](url).',
   parameters: {
     type: 'object',
     properties: {
-      description: { type: 'string', description: 'Natural language description of what the workflow should do. Be specific about triggers, conditions, and actions.' },
+      description: {
+        type: 'string',
+        description: 'Natural language description of what the canvas should do.',
+      },
     },
     required: ['description'],
   },
@@ -39,38 +54,127 @@ register({
     }
 
     if (!workflow || workflow.nodes.length === 0) {
-      return { success: false, error: 'Could not generate a valid workflow. Try being more specific about what triggers it and what it should do.' };
+      return {
+        success: false,
+        error:
+          'Could not generate a valid workflow. Try being more specific about triggers, inputs, and outputs.',
+      };
     }
 
-    const [created] = await db.insert(workflows).values({
-      name: workflow.name || 'Generated Workflow',
-      description: workflow.description || null,
-    }).returning();
+    // Canvas-compatible naming: pick a slug from the generated title + ensure
+    // "canvas:" prefix. If the slug is already taken, append -2, -3, ...
+    const baseSlug = slugify(workflow.name || 'generated') || 'canvas';
+    let slug = baseSlug;
+    let attempt = 1;
+    while (attempt < 50) {
+      const [existing] = await db
+        .select()
+        .from(workflows)
+        .where(eq(workflows.name, `canvas:${slug}`));
+      if (!existing) break;
+      attempt += 1;
+      slug = `${baseSlug}-${attempt}`;
+    }
+
+    const [created] = await db
+      .insert(workflows)
+      .values({
+        name: `canvas:${slug}`,
+        description: workflow.description || workflow.name || slug,
+        trigger: { type: 'manual' },
+      })
+      .returning();
 
     try {
-      await db.insert(workflowNodes).values(
-        workflow.nodes.map((n) => ({ id: n.id, workflowId: created.id, type: n.type, position: n.position, config: n.config, label: n.label })),
+      // Ensure there is exactly one trigger node. If the generated workflow
+      // emits manual-trigger / cron-trigger / or no trigger, normalise to the
+      // canvas `trigger` node at (20,20).
+      const nodes = workflow.nodes.slice();
+      let triggerNodeId: string | null = null;
+      const legacyTriggerIdx = nodes.findIndex(
+        (n) => n.type === 'trigger' || n.type === 'manual-trigger',
       );
-      if (workflow.edges.length > 0) {
+      if (legacyTriggerIdx >= 0) {
+        const existing = nodes[legacyTriggerIdx];
+        triggerNodeId = existing.id;
+        nodes[legacyTriggerIdx] = {
+          ...existing,
+          type: 'trigger',
+          label: existing.label || 'Trigger',
+          config: { kind: 'manual', ...(existing.config || {}) },
+          position: existing.position || { x: 20, y: 20 },
+        };
+      } else {
+        const newId = crypto.randomUUID();
+        triggerNodeId = newId;
+        nodes.unshift({
+          id: newId,
+          type: 'trigger',
+          label: 'Trigger',
+          config: { kind: 'manual' },
+          position: { x: 20, y: 20 },
+        });
+      }
+
+      await db.insert(workflowNodes).values(
+        nodes.map((n) => ({
+          id: n.id,
+          workflowId: created.id,
+          type: n.type,
+          position: n.position,
+          config: n.config,
+          label: n.label,
+        })),
+      );
+
+      const edges = workflow.edges.slice();
+
+      // If the trigger has no outgoing edges in the generated spec, wire it
+      // to whatever root node(s) were supposed to start the run.
+      const triggerHasOutgoing = edges.some((e) => e.sourceNodeId === triggerNodeId);
+      if (!triggerHasOutgoing) {
+        const roots = nodes.filter(
+          (n) => n.id !== triggerNodeId && !edges.some((e) => e.targetNodeId === n.id),
+        );
+        for (const root of roots.slice(0, 1)) {
+          edges.push({
+            id: crypto.randomUUID(),
+            sourceNodeId: triggerNodeId,
+            targetNodeId: root.id,
+            sourceHandle: null,
+            targetHandle: null,
+          });
+        }
+      }
+
+      if (edges.length > 0) {
         await db.insert(workflowEdges).values(
-          workflow.edges.map((e) => ({ id: e.id, workflowId: created.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
+          edges.map((e) => ({
+            id: e.id,
+            workflowId: created.id,
+            sourceNodeId: e.sourceNodeId,
+            targetNodeId: e.targetNodeId,
+            sourceHandle: e.sourceHandle || null,
+            targetHandle: e.targetHandle || null,
+          })),
         );
       }
     } catch (dbErr: unknown) {
       await db.delete(workflows).where(eq(workflows.id, created.id));
       const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
-      return { success: false, error: `Failed to save workflow: ${dbMsg}` };
+      return { success: false, error: `Failed to save canvas: ${dbMsg}` };
     }
 
     return {
       success: true,
       data: {
         workflowId: created.id,
+        slug,
         name: workflow.name,
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `https://strangeramblings.com/jkai/workflows/${created.id}`,
+        url: `https://strangeramblings.com/jkai/canvas/${slug}`,
       },
     };
   },
@@ -346,15 +450,30 @@ register({
   toolset: 'workflows',
   handler: async (args) => {
     const type = args.type as string;
+    const workflowId = args.workflowId as string;
     const typeErr = await validateNodeType(type);
     if (typeErr) return { success: false, error: typeErr };
+
+    // One trigger per canvas — same rule the REST endpoint enforces.
+    if (type === 'trigger') {
+      const [existing] = await db
+        .select()
+        .from(workflowNodes)
+        .where(and(eq(workflowNodes.workflowId, workflowId), eq(workflowNodes.type, 'trigger')));
+      if (existing) {
+        return {
+          success: false,
+          error: `A trigger node already exists on this canvas (id=${existing.id}). Use workflow_update_node to reconfigure it, or workflow_remove_node first.`,
+        };
+      }
+    }
 
     const config = (args.config as Record<string, unknown>) || {};
     const configErr = await validateNodeConfig(type, config);
     if (configErr) return { success: false, error: configErr };
 
     const [node] = await db.insert(workflowNodes).values({
-      workflowId: args.workflowId as string,
+      workflowId,
       type,
       label: args.label as string,
       config,

@@ -1,7 +1,14 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
 import { db } from '$lib/db';
-import { homeAssistantConfig, jkaiMemories, orchestratorChats } from '$lib/db/schema';
+import {
+  homeAssistantConfig,
+  jkaiMemories,
+  orchestratorChats,
+  workflows,
+  workflowNodes,
+  workflowEdges,
+} from '$lib/db/schema';
 import { eq, isNull, desc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
@@ -252,6 +259,71 @@ async function runSingleToolCall(
   };
 }
 
+/**
+ * When chat is running inside a canvas (i.e. options.workflowId is set),
+ * tell the model exactly which workflow it's in and what's already there,
+ * so the workflow_* tools target THIS canvas rather than spawning a
+ * parallel one via workflow_create.
+ */
+async function buildCanvasContextSection(
+  workflowId?: string | null,
+): Promise<string> {
+  if (!workflowId) return '';
+  try {
+    const [wf] = await db
+      .select()
+      .from(workflows)
+      .where(eq(workflows.id, workflowId))
+      .limit(1);
+    if (!wf) return '';
+    const nodes = await db
+      .select()
+      .from(workflowNodes)
+      .where(eq(workflowNodes.workflowId, workflowId));
+    const edges = await db
+      .select()
+      .from(workflowEdges)
+      .where(eq(workflowEdges.workflowId, workflowId));
+    const slug = wf.name.startsWith('canvas:') ? wf.name.slice('canvas:'.length) : null;
+    const hasTrigger = nodes.some((n) => n.type === 'trigger');
+    const trigger = (wf.trigger as Record<string, unknown> | null) ?? {};
+    const nodesLine =
+      nodes.length === 0
+        ? '(none yet)'
+        : nodes
+            .map((n) => `  - ${n.id} | type=${n.type} | label="${n.label}"`)
+            .join('\n');
+    return `\n\n--- Current Canvas ---
+You are chatting inside a canvas, not /jkai. Treat the workflow you are
+embedded in as the one the user wants to work on unless they explicitly
+ask for a separate canvas.
+
+- workflowId: ${workflowId}
+${slug ? `- slug: ${slug}` : ''}
+- title: ${wf.description ?? wf.name}
+- trigger type: ${trigger.type ?? 'manual'}
+- node count: ${nodes.length} (trigger present: ${hasTrigger ? 'yes' : 'no'})
+- edge count: ${edges.length}
+
+When the user asks to build, extend, or wire this canvas:
+- Use workflow_add_node / workflow_add_edge / workflow_update_node /
+  workflow_update_edge / workflow_remove_* / workflow_add_schedule
+  with workflowId="${workflowId}".
+- DO NOT call workflow_create — that spawns a NEW separate canvas.
+  Only call workflow_create if the user explicitly asks for a new canvas.
+${hasTrigger ? '- A trigger node already exists; do NOT add another (one per canvas).' : '- No trigger node yet. If the user needs scheduled/webhook/event firing, add ONE trigger node.'}
+- When adding LLM/parser/output nodes, wire them from the trigger (or
+  from an existing downstream node) — do not leave nodes orphaned.
+
+Existing nodes:
+${nodesLine}
+`;
+  } catch (err) {
+    console.warn('[general-chat] canvas context section failed:', err instanceof Error ? err.message : err);
+    return '';
+  }
+}
+
 export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
@@ -281,12 +353,13 @@ export async function generalChat(
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
   const siteSection = buildSiteSystemPromptSection();
-  const [basePrompt, memorySection, graphSection] = await Promise.all([
+  const [basePrompt, memorySection, graphSection, canvasSection] = await Promise.all([
     getCompiledPrompt(),
     buildMemorySection(),
     options.useIntelContext === false ? Promise.resolve('') : buildKnowledgeContext(userMessage),
+    buildCanvasContextSection(options.workflowId),
   ]);
-  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}`;
+  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -326,6 +399,14 @@ export async function generalChat(
     if (ts === 'home' && haEntities.length === 0) continue;
     activeTools.push(...getToolsetDefinitions(ts));
     activatedToolsets.add(ts);
+  }
+
+  // Canvas context: always include the workflows toolset so the model
+  // can build/modify THIS canvas without needing the user to say a magic
+  // keyword first.
+  if (options.workflowId && !activatedToolsets.has('workflows')) {
+    activeTools.push(...getToolsetDefinitions('workflows'));
+    activatedToolsets.add('workflows');
   }
 
   // Visualise tools are always available — the LLM should be able to reach
