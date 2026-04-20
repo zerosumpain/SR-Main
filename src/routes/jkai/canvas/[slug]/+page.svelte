@@ -281,6 +281,58 @@
     }
   }
 
+  // ——— Inline menu — editable config state ———
+  let configDraft = $state<Record<string, unknown>>({});
+  let labelDraft = $state('');
+  let configDirty = $state(false);
+  let saving = $state(false);
+  let saveError = $state<string | null>(null);
+
+  $effect(() => {
+    if (menuNode) {
+      configDraft = { ...menuNode.config };
+      labelDraft = menuNode.name;
+      configDirty = false;
+      saveError = null;
+    }
+  });
+
+  function setConfigField(key: string, value: unknown) {
+    configDraft = { ...configDraft, [key]: value };
+    configDirty = true;
+  }
+
+  function setLabel(v: string) {
+    labelDraft = v;
+    configDirty = true;
+  }
+
+  async function saveNode() {
+    if (!menuNode || saving) return;
+    saving = true;
+    saveError = null;
+    try {
+      const res = await fetch(
+        `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: configDraft, label: labelDraft }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      configDirty = false;
+      await invalidate(`/jkai/canvas/${canvas.slug}`);
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : String(err);
+    } finally {
+      saving = false;
+    }
+  }
+
   // Phase C — double-click menu (inline shape)
   let menuForNodeId = $state<string | null>(null);
 
@@ -466,6 +518,7 @@
           class="wf-node"
           class:active={n.status === 'running'}
           class:failed={n.status === 'failed'}
+          class:ok={n.status === 'ok'}
           class:is-selected={selectedId === n.id}
           data-kind={n.kind}
           style:left="{n.x}px"
@@ -483,21 +536,6 @@
         </div>
       {/each}
 
-      <!-- Status pips -->
-      {#each viewNodes.filter((n) => n.status) as n (n.id + '-s')}
-        <div
-          class="pip"
-          class:failed={n.status === 'failed'}
-          class:running={n.status === 'running'}
-          style:left="{n.x + 16}px"
-          style:top="{n.y + 56}px"
-        >
-          {#if n.status === 'failed'}✕ failed
-          {:else if n.status === 'running'}⟳ running…
-          {:else if n.durationMs != null}✓ ok · {(n.durationMs / 1000).toFixed(1)}s
-          {:else}✓ ok{/if}
-        </div>
-      {/each}
 
       <!-- Inline context menu -->
       {#if menuNode}
@@ -510,8 +548,22 @@
         >
           <div class="nm-inline-hdr">
             <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
-            <span class="wf-name mono12">{menuNode.name}</span>
+            <input
+              class="nm-label-input"
+              type="text"
+              value={labelDraft}
+              oninput={(e) => setLabel((e.target as HTMLInputElement).value)}
+              aria-label="Node label"
+            />
             <span class="nm-hdr-kind">{menuNode.kind}</span>
+            {#if configDirty}
+              <button class="nm-save-btn" onclick={saveNode} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            {/if}
+            {#if saveError}
+              <span class="nm-save-err" title={saveError}>⚠</span>
+            {/if}
             <button
               class="p-icon-btn"
               onclick={closeMenu}
@@ -564,6 +616,83 @@
               {#if menuNode.kind === 'llm'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
+                    <span class="sr-label-tight">USER PROMPT</span>
+                    <span class="nm-sec-meta">supports {'{{input.field}}'} templates</span>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      rows="4"
+                      value={(configDraft.userPrompt as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('userPrompt', (e.target as HTMLTextAreaElement).value)}
+                      placeholder="What you want the LLM to do…"
+                    ></textarea>
+                  </div>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">SYSTEM PROMPT</span>
+                    <span class="nm-sec-meta">optional</span>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      rows="2"
+                      value={(configDraft.systemPrompt as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('systemPrompt', (e.target as HTMLTextAreaElement).value)}
+                      placeholder="You are a helpful assistant…"
+                    ></textarea>
+                  </div>
+                </section>
+
+                <section class="nm-sec nm-sec-row">
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MODEL</span>
+                    <input
+                      class="nm-text-input"
+                      type="text"
+                      value={(configDraft.model as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('model', (e.target as HTMLInputElement).value)}
+                      placeholder="default (site setting)"
+                    />
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">TEMP</span>
+                    <input
+                      class="nm-text-input"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      value={(configDraft.temperature as number) ?? 0.7}
+                      oninput={(e) =>
+                        setConfigField(
+                          'temperature',
+                          parseFloat((e.target as HTMLInputElement).value),
+                        )}
+                    />
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MAX TOK</span>
+                    <input
+                      class="nm-text-input"
+                      type="number"
+                      step="64"
+                      min="1"
+                      value={(configDraft.maxTokens as number) ?? 1024}
+                      oninput={(e) =>
+                        setConfigField(
+                          'maxTokens',
+                          parseInt((e.target as HTMLInputElement).value, 10),
+                        )}
+                    />
+                  </div>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
                     <span class="nm-sec-meta">from ↑ upstream</span>
                   </div>
@@ -605,6 +734,47 @@
                   </section>
                 {/if}
               {:else if menuNode.kind === 'parse'}
+                <section class="nm-sec nm-sec-row">
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MODE</span>
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.mode as string) ?? 'json'}
+                      onchange={(e) =>
+                        setConfigField('mode', (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="json">json</option>
+                      <option value="regex">regex</option>
+                    </select>
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">INPUT FIELD</span>
+                    <input
+                      class="nm-text-input"
+                      type="text"
+                      value={(configDraft.inputField as string) ?? 'response'}
+                      oninput={(e) =>
+                        setConfigField('inputField', (e.target as HTMLInputElement).value)}
+                      placeholder="response"
+                    />
+                  </div>
+                </section>
+                {#if (configDraft.mode as string) === 'regex'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd"><span class="sr-label-tight">PATTERN</span></div>
+                    <div class="nm-field">
+                      <input
+                        class="nm-text-input"
+                        style:width="100%"
+                        type="text"
+                        value={(configDraft.pattern as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('pattern', (e.target as HTMLInputElement).value)}
+                        placeholder="\\d+"
+                      />
+                    </div>
+                  </section>
+                {/if}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
@@ -617,10 +787,6 @@
                       <pre class="ghost">// no run yet</pre>
                     {/if}
                   </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">PARSER</span></div>
-                  <div class="nm-field"><pre>JSON.parse(input.response)</pre></div>
                 </section>
                 {#if menuNode.error}
                   <section class="nm-sec nm-sec-error">
@@ -658,6 +824,26 @@
                   </div>
                 </section>
               {:else if menuNode.kind === 'output'}
+                {#if menuNode.type === 'transform'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">TRANSFORM EXPRESSION</span>
+                      <span class="nm-sec-meta">optional · JS, `input` is the payload</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="3"
+                        value={(configDraft.expression as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField(
+                            'expression',
+                            (e.target as HTMLTextAreaElement).value,
+                          )}
+                        placeholder={'return { reply: input.response }'}
+                      ></textarea>
+                    </div>
+                  </section>
+                {/if}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
@@ -1091,6 +1277,19 @@
   .wf-node.failed {
     border-color: #c44;
   }
+  .wf-node.ok {
+    border-color: #3a8a56;
+  }
+  /* Status wins over kind on the left bar */
+  .wf-node.active::before {
+    background: var(--accent);
+  }
+  .wf-node.ok::before {
+    background: #3a8a56;
+  }
+  .wf-node.failed::before {
+    background: #c44;
+  }
   .wf-node.is-selected {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -1357,10 +1556,6 @@
     flex-direction: column;
     gap: 5px;
   }
-  .nm-sec.nm-sec-row {
-    flex-direction: row;
-    gap: 12px;
-  }
   .nm-sec-error {
     background: rgba(196, 68, 68, 0.06);
     border: 1px solid rgba(196, 68, 68, 0.3);
@@ -1418,24 +1613,6 @@
   }
   .nm-field-read {
     background: var(--bg-section);
-  }
-  .nm-field textarea {
-    width: 100%;
-    border: none;
-    background: transparent;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    resize: vertical;
-    min-height: 60px;
-    outline: none;
-  }
-  .nm-control {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
   }
   .nm-select {
     font-family: var(--font-mono);
@@ -1576,6 +1753,83 @@
     width: 14px;
     text-align: center;
     font-size: 12px;
+  }
+
+  .nm-label-input {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 3px 6px;
+    outline: none;
+    min-width: 0;
+  }
+  .nm-label-input:hover,
+  .nm-label-input:focus {
+    border-color: var(--card-border);
+    background: var(--bg);
+  }
+  .nm-save-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    background: var(--accent);
+    color: var(--bg);
+    border: 1px solid var(--accent);
+    cursor: pointer;
+  }
+  .nm-save-btn:hover:not(:disabled) {
+    background: var(--accent-hover, #a84808);
+  }
+  .nm-save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .nm-save-err {
+    color: #c44;
+    font-size: 14px;
+  }
+  .nm-text-input {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-primary);
+    outline: none;
+    min-width: 0;
+    width: 100%;
+  }
+  .nm-text-input:focus {
+    border-color: var(--accent);
+  }
+  .nm-field textarea {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 40px;
+    outline: none;
+  }
+  .nm-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+  .nm-sec.nm-sec-row {
+    flex-direction: row;
+    gap: 8px;
   }
 
   .p-icon-btn {

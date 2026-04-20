@@ -17,6 +17,8 @@ export type CanvasNode = {
   name: string;
   x: number;
   y: number;
+  type: string; // workflow node type (e.g., "llm-call")
+  config: Record<string, unknown>;
   status?: NodeStatus;
   inputData?: unknown;
   outputData?: unknown;
@@ -248,6 +250,8 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
       name: n.label,
       x: typeof pos.x === 'number' ? pos.x : 0,
       y: typeof pos.y === 'number' ? pos.y : 0,
+      type: n.type,
+      config: (n.config as Record<string, unknown>) || {},
       status: mapExecStatus(ex?.status),
       inputData: ex?.inputData ?? undefined,
       outputData: ex?.outputData ?? undefined,
