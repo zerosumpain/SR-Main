@@ -31,6 +31,7 @@ import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
 import { webScrapeDef, webScrapeExecutor } from './nodes/web-scrape';
 import { tavilySearchDef, tavilySearchExecutor } from './nodes/tavily-search';
 import { intelWriteDef, intelWriteExecutor } from './nodes/intel-write';
+import { intelQueryDef, intelQueryExecutor } from './nodes/intel-query';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -81,6 +82,7 @@ registry.register(deepDiveDef, deepDiveExecutor);
 registry.register(webScrapeDef, webScrapeExecutor);
 registry.register(tavilySearchDef, tavilySearchExecutor);
 registry.register(intelWriteDef, intelWriteExecutor);
+registry.register(intelQueryDef, intelQueryExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();

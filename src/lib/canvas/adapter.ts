@@ -6,6 +6,7 @@ import {
   workflowRuns,
   nodeExecutions,
   openrouterModels,
+  orchestratorChats,
 } from '$lib/db/schema';
 import { eq, desc, asc } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
@@ -36,6 +37,15 @@ export type CanvasEdge = {
   active?: boolean;
 };
 
+export type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: string;
+  runId?: string | null;
+  nodeId?: string | null;
+};
+
 export type Canvas = {
   slug: string;
   title: string;
@@ -44,6 +54,7 @@ export type Canvas = {
   runStatus: string | null;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
+  messages: ChatMessage[];
 };
 
 export type NodeTypeOption = {
@@ -88,6 +99,13 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     kind: 'parse',
     description: 'JSON / regex extraction from upstream response.',
     defaultConfig: { mode: 'json', inputField: 'response' },
+  },
+  {
+    type: 'intel-query',
+    label: 'Intel · query',
+    kind: 'intel',
+    description: 'Search the knowledge graph; appends matching context to downstream input.',
+    defaultConfig: { query: '{{input.message}}' },
   },
   {
     type: 'intel-write',
@@ -170,7 +188,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')
     return 'llm';
   if (type === 'text-parser' || type === 'validator') return 'parse';
-  if (type === 'intel-write' || type === 'deep-dive') return 'intel';
+  if (type === 'intel-write' || type === 'intel-query' || type === 'deep-dive') return 'intel';
   return 'output';
 }
 
@@ -387,6 +405,28 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     active: activeEdgeKeys.has(e.id),
   }));
 
+  // Recent chat history for this workflow
+  const msgRows = await db
+    .select()
+    .from(orchestratorChats)
+    .where(eq(orchestratorChats.workflowId, workflowId))
+    .orderBy(desc(orchestratorChats.createdAt))
+    .limit(80);
+  const messages: ChatMessage[] = msgRows
+    .slice()
+    .reverse()
+    .map((m) => {
+      const meta = (m.metadata as Record<string, unknown> | null) || {};
+      return {
+        id: m.id,
+        role: (m.role as ChatMessage['role']) ?? 'user',
+        content: m.content,
+        createdAt: new Date(m.createdAt).toISOString(),
+        runId: (meta.runId as string | undefined) ?? null,
+        nodeId: (meta.nodeId as string | undefined) ?? null,
+      };
+    });
+
   return {
     slug,
     title,
@@ -395,5 +435,35 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     runStatus: latestRun?.status ?? null,
     nodes: canvasNodes,
     edges: canvasEdges,
+    messages,
   };
+}
+
+/** Identify terminal output node(s) — nodes with no outgoing edges. */
+export function findTerminalNodeIds(
+  nodes: { id: string }[],
+  edges: { from: string; to: string }[],
+): string[] {
+  const hasOutgoing = new Set(edges.map((e) => e.from));
+  return nodes.filter((n) => !hasOutgoing.has(n.id)).map((n) => n.id);
+}
+
+/** Extract a text reply from a terminal node's last outputData. */
+export function terminalReplyText(outputData: unknown): string {
+  if (outputData === null || outputData === undefined) return '';
+  if (typeof outputData === 'string') return outputData;
+  if (typeof outputData === 'object') {
+    const obj = outputData as Record<string, unknown>;
+    // Common shapes: { reply }, { response }, { text }, { content }, { output }
+    for (const k of ['reply', 'response', 'text', 'content', 'output', 'message']) {
+      const v = obj[k];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch {
+      return String(obj);
+    }
+  }
+  return String(outputData);
 }

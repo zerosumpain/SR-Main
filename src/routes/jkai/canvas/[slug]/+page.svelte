@@ -21,9 +21,16 @@
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
     state: 'idle',
   });
-  let runInput = $state(
-    'How should I handle node retries when the LLM returns malformed JSON three times in a row?',
-  );
+  let chatDraft = $state('');
+  let pendingRunId = $state<string | null>(null);
+  let chatBodyEl: HTMLDivElement | undefined;
+  function scrollChatToBottom() {
+    if (!chatBodyEl) return;
+    // Defer so the DOM update from the just-inserted message is visible
+    requestAnimationFrame(() => {
+      chatBodyEl?.scrollTo({ top: chatBodyEl.scrollHeight, behavior: 'smooth' });
+    });
+  }
 
   // Merged view of each node: base canvas row + any live overlay
   type ViewNode = CanvasNode;
@@ -83,17 +90,17 @@
   const runningCount = $derived(viewNodes.filter((n) => n.status === 'running').length);
   const isRunning = $derived(runMeta.state === 'running');
 
-  // ——— Run trigger + SSE live updates ———
-  async function runCanvas() {
-    if (runMeta.state === 'running') return;
+  // ——— Chat + run lifecycle ———
+  async function sendMessage(text: string) {
+    if (runMeta.state === 'running' || !text.trim()) return;
     liveStatus = {};
     liveData = {};
     runMeta = { state: 'running' };
     try {
-      const res = await fetch(`/api/workflows/${canvas.workflowId}/run`, {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: { message: runInput } }),
+        body: JSON.stringify({ text }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -101,10 +108,26 @@
       }
       const { runId } = await res.json();
       activeRunId = runId;
+      pendingRunId = runId;
       subscribeToRun(runId);
+      await invalidateAll(); // surface the new user message
+      scrollChatToBottom();
     } catch (err) {
       runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  async function sendChat() {
+    const text = chatDraft.trim();
+    if (!text) return;
+    chatDraft = '';
+    await sendMessage(text);
+  }
+
+  async function runCanvas() {
+    // Re-run from the last user message (or a default) without typing
+    const lastUser = [...canvas.messages].reverse().find((m) => m.role === 'user');
+    await sendMessage(lastUser?.content || 'run');
   }
 
   function subscribeToRun(runId: string) {
@@ -164,15 +187,29 @@
       };
     } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
       runMeta = { state: 'completed' };
-      invalidateAll().catch(() => {
-        /* harmless */
-      });
+      finalizeChatReply();
     } else if (evt.type === 'run_failed') {
       runMeta = { state: 'failed', error: evt.error };
-      invalidateAll().catch(() => {
-        /* harmless */
-      });
+      finalizeChatReply();
     }
+  }
+
+  async function finalizeChatReply() {
+    const runId = pendingRunId;
+    pendingRunId = null;
+    if (runId) {
+      try {
+        await fetch(`/api/workflows/${canvas.workflowId}/chat/respond`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId }),
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+    await invalidateAll();
+    scrollChatToBottom();
   }
 
   // Phase B — pan/zoom/selection state
@@ -238,7 +275,7 @@
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest(
-      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, .nm-inline, button, a, input, textarea, select',
+      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, .add-node-menu, button, a, input, textarea, select',
     );
   }
 
@@ -247,6 +284,7 @@
     if (isInteractiveTarget(e.target)) return;
     selectedId = null;
     menuForNodeId = null;
+    edgeInspectorFor = null;
     panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
@@ -573,6 +611,39 @@
 
   // Phase C — double-click menu (inline shape)
   let menuForNodeId = $state<string | null>(null);
+  let edgeInspectorFor = $state<string | null>(null);
+  const inspectorEdge = $derived(
+    edgeInspectorFor ? canvas.edges.find((e) => e.id === edgeInspectorFor) ?? null : null,
+  );
+  const inspectorFrom = $derived(inspectorEdge ? byId[inspectorEdge.from] ?? null : null);
+  const inspectorTo = $derived(inspectorEdge ? byId[inspectorEdge.to] ?? null : null);
+  const inspectorPos = $derived<{ x: number; y: number } | null>(
+    inspectorFrom && inspectorTo
+      ? (() => {
+          const sameCol = Math.abs(inspectorFrom.x - inspectorTo.x) < 4;
+          if (sameCol) {
+            return {
+              x: inspectorFrom.x + NODE_W / 2 - 160, // 320/2 centred
+              y: (inspectorFrom.y + NODE_H + inspectorTo.y) / 2 - 10,
+            };
+          }
+          return {
+            x: (inspectorFrom.x + NODE_W + inspectorTo.x) / 2 - 160,
+            y:
+              (inspectorFrom.y + NODE_H / 2 + (inspectorTo.y + NODE_H / 2)) / 2 - 10,
+          };
+        })()
+      : null,
+  );
+
+  function openEdgeInspector(e: MouseEvent, edgeId: string) {
+    e.stopPropagation();
+    menuForNodeId = null;
+    edgeInspectorFor = edgeId;
+  }
+  function closeEdgeInspector() {
+    edgeInspectorFor = null;
+  }
 
   const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
   const menuUpstream = $derived(
@@ -609,7 +680,10 @@
         selectedId = null;
         addNodeOpen = false;
         pipePickerOpen = false;
+        edgeInspectorFor = null;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+        // Let the chat textarea's own handler send the draft
+        if (isTypingTarget(ev.target)) return;
         ev.preventDefault();
         runCanvas();
       } else if (
@@ -662,18 +736,13 @@
       {viewNodes.length} nodes · {canvas.edges.length} edges · {runningCount} running
     </span>
     <div class="toolbar-right">
-      <input
-        class="run-input"
-        type="text"
-        bind:value={runInput}
-        placeholder="Initial message…"
-        title="Passed as input.message to the workflow"
-      />
       <button
         class="composer-pill run-btn"
         onclick={runCanvas}
         disabled={runMeta.state === 'running' || !canvas.workflowId}
-        title={runMeta.state === 'running' ? 'Running…' : 'Run the workflow (Cmd/Ctrl+Enter)'}
+        title={runMeta.state === 'running'
+          ? 'Running…'
+          : 'Re-run the canvas with the last chat message'}
       >
         {runMeta.state === 'running' ? '⟳ running…' : '▶ Run'}
       </button>
@@ -739,30 +808,66 @@
     <div class="chat-card">
       <div class="p-pane-head">
         <span class="p-pane-title"><span class="dot"></span>CHAT</span>
-        <span class="p-pane-kicker">· hub</span>
+        <span class="p-pane-kicker"
+          >· {canvas.messages.length}
+          {canvas.messages.length === 1 ? 'msg' : 'msgs'}</span
+        >
       </div>
-      <div class="chat-body">
-        <div class="msg-meta"><b>JOHN</b><span class="sr-sep">/</span><span>12:42</span></div>
-        <p class="chat-p">
-          Build a workflow that self-heals JSON parse errors. Use my notes on retry policy.
-        </p>
-        <div class="msg-meta">
-          <b>JKAI</b><span class="sr-sep">/</span><span>claude-haiku-4-5</span
-          ><span class="sr-sep">/</span><span>4 sources</span>
-        </div>
-        <p class="chat-p">
-          Built — 6 nodes, piped from your intel scope<a href="#1" class="cite">1</a>. Currently
-          retrying the failed parse:
-        </p>
-        <div class="embed">
-          <div class="embed-head">
-            <span class="chip chip-accent chip-pill chip-live">LIVE</span>
-            <span class="mono10 muted">workflow · json-retry-policy</span>
+      <div class="chat-body" bind:this={chatBodyEl}>
+        {#if canvas.messages.length === 0 && runMeta.state !== 'running'}
+          <div class="chat-empty">
+            <div class="sr-label-tight">EMPTY · send a message to kick off the canvas</div>
           </div>
-          <div class="embed-body mono10 muted">
-            ● claude-haiku-4-5 running · 1.1s elapsed<br />
-            ✕ json.parse failed ×1 · branching
+        {/if}
+        {#each canvas.messages as msg (msg.id)}
+          <div class="chat-msg" class:is-user={msg.role === 'user'}>
+            <div class="msg-meta">
+              <b
+                >{msg.role === 'user'
+                  ? 'YOU'
+                  : msg.role === 'assistant'
+                    ? 'JKAI'
+                    : msg.role.toUpperCase()}</b
+              >
+              <span class="sr-sep">/</span>
+              <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div class="chat-msg-body">{msg.content}</div>
           </div>
+        {/each}
+        {#if runMeta.state === 'running'}
+          <div class="chat-msg chat-msg-pending">
+            <div class="msg-meta">
+              <b>JKAI</b><span class="sr-sep">/</span><span>running · {runningCount} active</span>
+            </div>
+            <div class="chat-msg-body ghost">⟳ piping through the canvas…</div>
+          </div>
+        {/if}
+      </div>
+      <div class="chat-composer">
+        <textarea
+          class="chat-input"
+          bind:value={chatDraft}
+          placeholder="Message the canvas — ⌘⏎ to send"
+          rows="2"
+          onkeydown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              sendChat();
+            }
+          }}
+        ></textarea>
+        <div class="chat-composer-foot">
+          <span class="mono10 muted">
+            {#if runMeta.state === 'running'}running…{:else}⌘⏎ send{/if}
+          </span>
+          <button
+            class="composer-pill run-btn"
+            onclick={sendChat}
+            disabled={runMeta.state === 'running' || !chatDraft.trim()}
+          >
+            SEND
+          </button>
         </div>
       </div>
     </div>
@@ -786,13 +891,31 @@
         <!-- workflow edges -->
         {#each canvas.edges as e (e.id)}
           {@const isActive = activeEdgeIds.has(e.id)}
+          {@const d = orthPath(byId[e.from], byId[e.to])}
+          <!-- Wide transparent hit target for dbl-click -->
           <path
-            d={orthPath(byId[e.from], byId[e.to])}
-            stroke={isActive ? 'var(--accent)' : 'var(--text-ghost)'}
-            stroke-width={isActive ? 1.75 : 1.25}
+            class="edge-hit"
+            {d}
+            stroke="transparent"
+            stroke-width="14"
+            fill="none"
+            pointer-events="stroke"
+            ondblclick={(ev) => openEdgeInspector(ev, e.id)}
+          />
+          <path
+            class="edge-stroke"
+            class:selected={edgeInspectorFor === e.id}
+            {d}
+            stroke={edgeInspectorFor === e.id
+              ? 'var(--accent)'
+              : isActive
+                ? 'var(--accent)'
+                : 'var(--text-ghost)'}
+            stroke-width={edgeInspectorFor === e.id ? 1.75 : isActive ? 1.75 : 1.25}
             stroke-dasharray={isActive ? '3 3' : ''}
             fill="none"
             vector-effect="non-scaling-stroke"
+            pointer-events="none"
           />
         {/each}
         <!-- output → back to chat -->
@@ -833,6 +956,65 @@
         </div>
       {/each}
 
+
+      <!-- Edge inspector -->
+      {#if inspectorEdge && inspectorFrom && inspectorTo && inspectorPos}
+        <div
+          class="edge-inspector"
+          style:left="{inspectorPos.x}px"
+          style:top="{inspectorPos.y}px"
+          role="dialog"
+          aria-label="Edge inspector"
+        >
+          <div class="edge-inspector-hd">
+            <span class="sr-label-tight">EDGE</span>
+            <span class="edge-inspector-route">
+              <span class="edge-pin" data-kind={inspectorFrom.kind}>{inspectorFrom.name}</span>
+              <span class="edge-arrow">→</span>
+              <span class="edge-pin" data-kind={inspectorTo.kind}>{inspectorTo.name}</span>
+            </span>
+            <button
+              class="p-icon-btn"
+              onclick={closeEdgeInspector}
+              aria-label="Close"
+              title="Close (Esc)">✕</button
+            >
+          </div>
+          <div class="edge-inspector-body">
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">OUTPUT FROM {inspectorFrom.name.toUpperCase()}</span>
+                {#if inspectorFrom.durationMs != null}
+                  <span class="nm-sec-meta">
+                    took {(inspectorFrom.durationMs / 1000).toFixed(2)}s
+                  </span>
+                {/if}
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if inspectorFrom.outputData !== undefined}
+                  <pre>{pretty(inspectorFrom.outputData)}</pre>
+                {:else if inspectorFrom.error}
+                  <pre class="error-text">{inspectorFrom.error}</pre>
+                {:else}
+                  <pre class="ghost">// no run yet on this edge</pre>
+                {/if}
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INPUT RECEIVED BY {inspectorTo.name.toUpperCase()}</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if inspectorTo.inputData !== undefined}
+                  <pre>{pretty(inspectorTo.inputData)}</pre>
+                {:else}
+                  <pre class="ghost">// no run yet</pre>
+                {/if}
+              </div>
+            </section>
+          </div>
+        </div>
+      {/if}
 
       <!-- Inline context menu -->
       {#if menuNode}
@@ -1188,27 +1370,90 @@
                   </div>
                 </section>
               {:else if menuNode.kind === 'intel'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">SCOPE</span></div>
-                  <div class="nm-scope">
-                    <div>
-                      <span class="nm-scope-lbl">TOPIC</span>
-                      <button class="composer-pill active">retry policy</button>
+                {#if menuNode.type === 'intel-query'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">QUERY</span>
+                      <span class="nm-sec-meta">supports {'{{input.field}}'} templates</span>
                     </div>
-                    <div>
-                      <span class="nm-scope-lbl">PERSON</span>
-                      <button class="composer-pill ghost">any</button>
+                    <div class="nm-field">
+                      <textarea
+                        rows="2"
+                        value={(configDraft.query as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('query', (e.target as HTMLTextAreaElement).value)}
+                        placeholder={'{{input.message}}'}
+                      ></textarea>
                     </div>
-                    <div>
-                      <span class="nm-scope-lbl">WHEN</span>
-                      <button class="composer-pill active">last 30d</button>
+                  </section>
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">LAST RESULT</span>
+                      <span class="nm-sec-meta">intelContext appended to downstream input</span>
                     </div>
-                  </div>
-                </section>
+                    <div class="nm-field nm-field-read">
+                      {#if menuNode.outputData !== undefined}
+                        <pre>{pretty(menuNode.outputData)}</pre>
+                      {:else}
+                        <pre class="ghost">// no run yet</pre>
+                      {/if}
+                    </div>
+                  </section>
+                {:else if menuNode.type === 'intel-write'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">CONTENT</span>
+                      <span class="nm-sec-meta">text to add to intel</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="3"
+                        value={(configDraft.content as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('content', (e.target as HTMLTextAreaElement).value)}
+                        placeholder={'{{input.summary}}'}
+                      ></textarea>
+                    </div>
+                  </section>
+                  <section class="nm-sec nm-sec-row">
+                    <div class="nm-control">
+                      <span class="sr-label-tight">TITLE</span>
+                      <input
+                        class="nm-text-input"
+                        type="text"
+                        value={(configDraft.title as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('title', (e.target as HTMLInputElement).value)}
+                        placeholder="optional"
+                      />
+                    </div>
+                    <div class="nm-control">
+                      <span class="sr-label-tight">FORMAT</span>
+                      <select
+                        class="nm-text-input"
+                        value={(configDraft.format as string) ?? 'summary'}
+                        onchange={(e) =>
+                          setConfigField('format', (e.target as HTMLSelectElement).value)}
+                      >
+                        <option value="summary">summary</option>
+                        <option value="text">text</option>
+                        <option value="email">email</option>
+                        <option value="meeting_transcript">meeting_transcript</option>
+                      </select>
+                    </div>
+                  </section>
+                {/if}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
-                    <span class="sr-label-tight">MATCHING</span>
-                    <span class="nm-sec-meta">84 notes · 6 entities</span>
+                    <span class="sr-label-tight">INPUT DATA</span>
+                    <span class="nm-sec-meta">from ↑ upstream</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    {#if menuNode.inputData !== undefined}
+                      <pre>{pretty(menuNode.inputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// no run yet</pre>
+                    {/if}
                   </div>
                 </section>
               {/if}
@@ -1546,9 +1791,12 @@
     left: 16px;
     top: 24px;
     width: 300px;
+    max-height: calc(100% - 48px);
     background: var(--bg);
     border: 1.5px solid var(--text-primary);
     z-index: 5;
+    display: flex;
+    flex-direction: column;
   }
   .p-pane-head {
     display: flex;
@@ -1586,9 +1834,80 @@
     font-size: 12px;
     line-height: 1.55;
     color: var(--text-primary);
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
-  .chat-p {
-    margin: 0 0 10px;
+  .chat-empty {
+    padding: 24px 8px;
+    text-align: center;
+    color: var(--text-ghost);
+  }
+  .chat-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chat-msg.is-user {
+    align-items: flex-end;
+    text-align: right;
+  }
+  .chat-msg.is-user .msg-meta {
+    justify-content: flex-end;
+  }
+  .chat-msg-body {
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .chat-msg.is-user .chat-msg-body {
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 6px 10px;
+    display: inline-block;
+  }
+  .chat-msg-body.ghost {
+    color: var(--text-ghost);
+  }
+  .chat-msg-pending .chat-msg-body {
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .chat-composer {
+    border-top: 1px solid var(--divider);
+    background: var(--bg-section);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .chat-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 48px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  .chat-composer-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-top: 1px solid var(--divider);
+  }
+  .chat-composer-foot .run-btn {
+    padding: 4px 14px;
+    font-size: 10px;
   }
   .msg-meta {
     font-family: var(--font-mono);
@@ -1662,7 +1981,9 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
+  }
+  .edges .edge-hit {
+    cursor: pointer;
   }
   /* Node */
   .wf-node {
@@ -1838,6 +2159,84 @@
     inset: 0;
     border: 1.5px solid var(--accent);
     pointer-events: none;
+  }
+
+  /* ——— Edge inspector ——— */
+  .edge-inspector {
+    position: absolute;
+    width: 320px;
+    background: var(--bg);
+    border: 1.5px solid var(--accent);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+    z-index: 38;
+    display: flex;
+    flex-direction: column;
+  }
+  .edge-inspector-hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--divider);
+    background: var(--accent-tint-08);
+  }
+  .edge-inspector-route {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .edge-pin {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    font-size: 10px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .edge-pin::before {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 10px;
+    background: var(--text-ghost);
+    margin-right: 5px;
+    flex-shrink: 0;
+  }
+  .edge-pin[data-kind='llm']::before,
+  .edge-pin[data-kind='intel']::before {
+    background: var(--accent);
+  }
+  .edge-pin[data-kind='parse']::before {
+    background: #c44;
+  }
+  .edge-pin[data-kind='output']::before,
+  .edge-pin[data-kind='agent']::before {
+    background: var(--text-primary);
+  }
+  .edge-pin[data-kind='input']::before {
+    background: var(--text-muted);
+  }
+  .edge-arrow {
+    color: var(--accent);
+    font-size: 12px;
+  }
+  .edge-inspector-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
   }
 
   /* ——— Inline node menu (phase C) ——— */

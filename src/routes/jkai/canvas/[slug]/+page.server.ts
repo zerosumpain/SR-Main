@@ -7,6 +7,7 @@ export type {
   CanvasNode,
   CanvasEdge,
   Canvas,
+  ChatMessage,
   ModelCatalogue,
   ModelOption,
   NodeTypeOption,
