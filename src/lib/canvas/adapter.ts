@@ -71,8 +71,15 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     type: 'chat',
     label: 'Chat',
     kind: 'chat',
-    description: 'Chat panel with its own history. Send a message to trigger the workflow.',
-    defaultConfig: {},
+    description:
+      'Chat panel with its own history. Calls the configured LLM when terminal, or triggers the workflow when wired downstream.',
+    defaultConfig: {
+      model: '',
+      systemPrompt:
+        'You are a helpful AI assistant. Keep replies concise unless asked otherwise.',
+      temperature: 0.7,
+      maxTokens: 1024,
+    },
   },
   {
     type: 'manual-trigger',
@@ -231,7 +238,13 @@ const SEED_NODES: SeedNode[] = [
     label: 'Chat',
     x: 20,
     y: 20,
-    config: {},
+    config: {
+      model: '',
+      systemPrompt:
+        'You are a helpful AI assistant. Keep replies concise unless asked otherwise.',
+      temperature: 0.7,
+      maxTokens: 1024,
+    },
   },
   {
     localId: 'llm_primary',

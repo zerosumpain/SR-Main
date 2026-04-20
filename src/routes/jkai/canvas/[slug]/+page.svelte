@@ -22,10 +22,88 @@
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
     state: 'idle',
   });
-  // Per-chat-node composer draft, scroll refs, and active-run target
+  // Per-chat-node composer draft, scroll refs, size overrides, active-run target
   let chatDrafts = $state<Record<string, string>>({});
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
+  let chatSizes = $state<Record<string, { w: number; h: number }>>({});
+  let chatResize = $state<{
+    nodeId: string;
+    startClientX: number;
+    startClientY: number;
+    startW: number;
+    startH: number;
+    pointerId: number;
+  } | null>(null);
   let pendingRun = $state<{ runId: string; chatNodeId: string | null } | null>(null);
+
+  const MIN_CHAT_W = 220;
+  const MIN_CHAT_H = 240;
+  const MAX_CHAT_W = 720;
+  const MAX_CHAT_H = 900;
+
+  function chatNodeSize(n: CanvasNode): { w: number; h: number } {
+    const override = chatSizes[n.id];
+    if (override) return override;
+    const cfgSize = (n.config?.size as { w?: number; h?: number } | undefined) ?? null;
+    return {
+      w: typeof cfgSize?.w === 'number' ? cfgSize.w : CHAT_NODE_W,
+      h: typeof cfgSize?.h === 'number' ? cfgSize.h : CHAT_NODE_H,
+    };
+  }
+
+  function onChatResizeDown(e: PointerEvent, n: CanvasNode) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const { w, h } = chatNodeSize(n);
+    chatResize = {
+      nodeId: n.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startW: w,
+      startH: h,
+      pointerId: e.pointerId,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onChatResizeMove(e: PointerEvent) {
+    if (!chatResize || chatResize.pointerId !== e.pointerId) return;
+    const dx = (e.clientX - chatResize.startClientX) / zoom;
+    const dy = (e.clientY - chatResize.startClientY) / zoom;
+    const nw = Math.max(MIN_CHAT_W, Math.min(MAX_CHAT_W, Math.round((chatResize.startW + dx) / 20) * 20));
+    const nh = Math.max(MIN_CHAT_H, Math.min(MAX_CHAT_H, Math.round((chatResize.startH + dy) / 20) * 20));
+    chatSizes = { ...chatSizes, [chatResize.nodeId]: { w: nw, h: nh } };
+  }
+  async function onChatResizeUp(e: PointerEvent) {
+    if (!chatResize || chatResize.pointerId !== e.pointerId) return;
+    const nodeId = chatResize.nodeId;
+    const final = chatSizes[nodeId];
+    chatResize = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* no-op */
+    }
+    if (!final) return;
+    // Persist to node.config.size so it sticks across reloads
+    try {
+      const node = byId[nodeId];
+      if (!node) return;
+      const nextConfig = { ...node.config, size: final };
+      await fetch(`/api/workflows/${canvas.workflowId}/nodes/${nodeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: nextConfig }),
+      });
+      await invalidateAll();
+    } catch {
+      /* non-fatal, override stays */
+    } finally {
+      // Clear override so server state takes over
+      const next = { ...chatSizes };
+      delete next[nodeId];
+      chatSizes = next;
+    }
+  }
 
   function messagesFor(chatNodeId: string) {
     return data.canvas.messagesByChat[chatNodeId] ?? [];
@@ -71,11 +149,13 @@
     ),
   );
 
-  function nodeW(n: { kind: string }) {
-    return n.kind === 'chat' ? CHAT_NODE_W : NODE_W;
+  function nodeW(n: CanvasNode | { kind: string }) {
+    if (n.kind !== 'chat') return NODE_W;
+    return chatNodeSize(n as CanvasNode).w;
   }
-  function nodeH(n: { kind: string }) {
-    return n.kind === 'chat' ? CHAT_NODE_H : NODE_H;
+  function nodeH(n: CanvasNode | { kind: string }) {
+    if (n.kind !== 'chat') return NODE_H;
+    return chatNodeSize(n as CanvasNode).h;
   }
 
   function orthPath(from: CanvasNode, to: CanvasNode): string {
@@ -283,8 +363,6 @@
     if (!viewportEl || canvas.nodes.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
     const pad = 48;
-    const nodeW = (n: { kind: string }) => (n.kind === 'chat' ? CHAT_NODE_W : NODE_W);
-    const nodeH = (n: { kind: string }) => (n.kind === 'chat' ? CHAT_NODE_H : NODE_H);
     const minX = Math.min(...canvas.nodes.map((n) => n.x)) - pad;
     const minY = Math.min(...canvas.nodes.map((n) => n.y)) - pad;
     const maxX = Math.max(...canvas.nodes.map((n) => n.x + nodeW(n))) + pad;
@@ -902,12 +980,15 @@
       {#each viewNodes as n (n.id)}
         {#if n.kind === 'chat'}
           {@const msgs = messagesFor(n.id)}
+          {@const size = chatNodeSize(n)}
           <div
             class="chat-node"
             class:is-selected={selectedId === n.id}
             class:active={isRunning && pendingRun?.chatNodeId === n.id}
             style:left="{n.x}px"
             style:top="{n.y}px"
+            style:width="{size.w}px"
+            style:height="{size.h}px"
             role="group"
             aria-label="Chat node"
           >
@@ -971,6 +1052,15 @@
               {/if}
             </div>
 
+            <!-- Resize handle (bottom-right corner) -->
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
             <div
               class="chat-node-composer"
               onpointerdown={(e) => e.stopPropagation()}
@@ -1169,7 +1259,92 @@
 
             <!-- Kind-specific body -->
             <div class="nm-body">
-              {#if menuNode.kind === 'llm'}
+              {#if menuNode.kind === 'chat'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">SYSTEM PROMPT</span>
+                    <span class="nm-sec-meta">used when this chat is terminal (no downstream)</span>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      rows="3"
+                      value={(configDraft.systemPrompt as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField(
+                          'systemPrompt',
+                          (e.target as HTMLTextAreaElement).value,
+                        )}
+                      placeholder="You are a helpful AI assistant."
+                    ></textarea>
+                  </div>
+                </section>
+
+                <section class="nm-sec nm-sec-row">
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MODEL</span>
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.model as string) ?? ''}
+                      onchange={(e) =>
+                        setConfigField('model', (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="">{modelCatalogue.defaultLabel}</option>
+                      {#if modelCatalogue.glm.length}
+                        <optgroup label="GLM · Z.AI">
+                          {#each modelCatalogue.glm as opt (opt.value)}
+                            <option value={opt.value}>{opt.label}</option>
+                          {/each}
+                        </optgroup>
+                      {/if}
+                      {#if modelCatalogue.openrouter.length}
+                        <optgroup label="OpenRouter ({modelCatalogue.openrouter.length})">
+                          {#each modelCatalogue.openrouter as opt (opt.value)}
+                            <option value={opt.value}>{opt.label}</option>
+                          {/each}
+                        </optgroup>
+                      {/if}
+                      {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
+                        <optgroup label="Custom">
+                          <option value={configDraft.model as string}
+                            >{configDraft.model}</option
+                          >
+                        </optgroup>
+                      {/if}
+                    </select>
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">TEMP</span>
+                    <input
+                      class="nm-text-input"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      value={(configDraft.temperature as number) ?? 0.7}
+                      oninput={(e) =>
+                        setConfigField(
+                          'temperature',
+                          parseFloat((e.target as HTMLInputElement).value),
+                        )}
+                    />
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MAX TOK</span>
+                    <input
+                      class="nm-text-input"
+                      type="number"
+                      step="64"
+                      min="1"
+                      value={(configDraft.maxTokens as number) ?? 1024}
+                      oninput={(e) =>
+                        setConfigField(
+                          'maxTokens',
+                          parseInt((e.target as HTMLInputElement).value, 10),
+                        )}
+                    />
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'llm'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">USER PROMPT</span>
@@ -1866,13 +2041,37 @@
   /* ——— Chat node (in-graph) ——— */
   .chat-node {
     position: absolute;
-    width: 300px;
-    height: 360px;
     background: var(--bg);
     border: 1.5px solid var(--text-primary);
     display: flex;
     flex-direction: column;
     user-select: none;
+    overflow: hidden;
+  }
+  .chat-node-resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    background: linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 42%,
+      var(--text-ghost) 42%,
+      var(--text-ghost) 50%,
+      transparent 50%,
+      transparent 68%,
+      var(--text-ghost) 68%,
+      var(--text-ghost) 76%,
+      transparent 76%
+    );
+    opacity: 0.7;
+    z-index: 3;
+  }
+  .chat-node-resize:hover {
+    opacity: 1;
   }
   .chat-node.is-selected {
     outline: 2px solid var(--accent);
@@ -2031,7 +2230,7 @@
     font-size: 11px;
     line-height: 1.5;
     color: var(--text-primary);
-    resize: vertical;
+    resize: none;
     min-height: 48px;
     padding: 10px 12px;
     outline: none;

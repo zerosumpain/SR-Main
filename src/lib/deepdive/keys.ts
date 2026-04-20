@@ -15,12 +15,27 @@ export interface DeepDiveKeys {
 }
 
 export function loadKeys(): DeepDiveKeys {
-  if (!existsSync(KEYS_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(KEYS_PATH, 'utf-8'));
-  } catch {
-    return {};
-  }
+  const fileKeys: DeepDiveKeys = (() => {
+    if (!existsSync(KEYS_PATH)) return {};
+    try {
+      return JSON.parse(readFileSync(KEYS_PATH, 'utf-8')) as DeepDiveKeys;
+    } catch {
+      return {};
+    }
+  })();
+
+  // Env vars fill in any keys the file didn't provide. A populated
+  // keys.json still takes precedence when both are set.
+  const env = process.env;
+  return {
+    zaiApiKey: fileKeys.zaiApiKey ?? env.ZAI_API_KEY,
+    zaiBaseUrl: fileKeys.zaiBaseUrl ?? env.ZAI_BASE_URL,
+    zaiModel: fileKeys.zaiModel ?? env.ZAI_MODEL,
+    tavilyApiKey: fileKeys.tavilyApiKey ?? env.TAVILY_API_KEY,
+    openrouterApiKey: fileKeys.openrouterApiKey ?? env.OPENROUTER_API_KEY,
+    embeddingModel: fileKeys.embeddingModel ?? env.EMBEDDING_MODEL,
+    elevenlabsApiKey: fileKeys.elevenlabsApiKey ?? env.ELEVENLABS_API_KEY,
+  };
 }
 
 export function saveKeys(keys: DeepDiveKeys): void {
