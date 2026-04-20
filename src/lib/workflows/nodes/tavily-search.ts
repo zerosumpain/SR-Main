@@ -22,8 +22,12 @@ export const tavilySearchExecutor: NodeExecutor = {
     const searchDepth = (config.searchDepth as 'basic' | 'advanced') || 'basic';
     const maxResults = Math.min(Math.max(Number(config.maxResults) || 5, 1), 20);
     const includeAnswer = config.includeAnswer === true || config.includeAnswer === 'true';
+    const topicRaw = (config.topic as string | undefined) ?? 'general';
+    const topic: 'general' | 'news' = topicRaw === 'news' ? 'news' : 'general';
+    const daysNum = Number(config.days);
+    const days = Number.isFinite(daysNum) && daysNum > 0 ? Math.min(Math.floor(daysNum), 30) : undefined;
 
-    const response = await search(query, { maxResults, searchDepth, includeAnswer });
+    const response = await search(query, { maxResults, searchDepth, includeAnswer, topic, days });
 
     return {
       output: {

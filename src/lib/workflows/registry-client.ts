@@ -33,6 +33,7 @@ import { jkaiDef } from './nodes/jkai.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
+import { intelWriteDef } from './nodes/intel-write.def';
 import type { NodeDefinition } from './types';
 // Dynamic node definitions are loaded server-side only (in index.ts).
 // This file must stay client-safe — no Node.js imports (fs, path, etc).
@@ -68,6 +69,7 @@ const builtInDefinitions: NodeDefinition[] = [
   deepDiveDef,
   webScrapeDef,
   tavilySearchDef,
+  intelWriteDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;

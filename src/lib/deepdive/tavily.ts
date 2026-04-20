@@ -27,7 +27,14 @@ export interface TavilySearchResponse {
 
 export async function search(
   query: string,
-  options?: { maxResults?: number; searchDepth?: 'basic' | 'advanced'; includeAnswer?: boolean; signal?: AbortSignal },
+  options?: {
+    maxResults?: number;
+    searchDepth?: 'basic' | 'advanced';
+    includeAnswer?: boolean;
+    topic?: 'general' | 'news';
+    days?: number;
+    signal?: AbortSignal;
+  },
 ): Promise<TavilySearchResponse> {
   const apiKey = getTavilyKey();
 
@@ -42,6 +49,10 @@ export async function search(
         search_depth: options?.searchDepth ?? 'basic',
         include_raw_content: false,
         ...(options?.includeAnswer ? { include_answer: true } : {}),
+        ...(options?.topic ? { topic: options.topic } : {}),
+        // `days` is only honoured by the Tavily API when topic='news'; sending
+        // it otherwise is ignored by the server but harmless.
+        ...(options?.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
       }),
       signal: options?.signal,
     });

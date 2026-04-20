@@ -32,6 +32,7 @@
   import DeepDiveNode from './nodes/DeepDiveNode.svelte';
   import TavilySearchNode from './nodes/TavilySearchNode.svelte';
   import WebScrapeNode from './nodes/WebScrapeNode.svelte';
+  import IntelWriteNode from './nodes/IntelWriteNode.svelte';
   import FitViewHelper from './FitViewHelper.svelte';
 
   let {
@@ -79,6 +80,7 @@
     'deep-dive': DeepDiveNode,
     'tavily-search': TavilySearchNode,
     'web-scrape': WebScrapeNode,
+    'intel-write': IntelWriteNode,
   };
 
   const MAX_ZOOM = 1.5;
