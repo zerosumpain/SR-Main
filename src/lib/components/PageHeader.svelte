@@ -37,7 +37,7 @@
     { href: '/jkai/intel', label: 'Intel' },
     { href: '/jkai/builds', label: 'Builds' },
     { href: '/jkai/prompts', label: 'Prompts' },
-    { href: '/jkai/workflows', label: 'Workflows' },
+    { href: '/jkai/canvas', label: 'Canvases' },
     { href: '/jkai/channels', label: 'Channels' },
   ];
   const DEEPDIVE_ITEMS: NavItem[] = [

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChatMessage from '$lib/components/workflows/ChatMessage.svelte';
+  import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';

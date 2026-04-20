@@ -132,7 +132,7 @@ export const POST: RequestHandler = async ({ request }) => {
             success: true,
             workflow: null,
             workflowId: resolvedWorkflowId,
-            redirectTo: !workflowId ? `/jkai/workflows/${resolvedWorkflowId}` : undefined,
+            redirectTo: !workflowId ? `/jkai/canvas/${resolvedWorkflowId}` : undefined,
             message: followUp,
           };
         } else if (workflow && workflow.nodes.length > 0) {
@@ -165,7 +165,7 @@ export const POST: RequestHandler = async ({ request }) => {
             await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'user', content: message });
             await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'assistant', content: workflow.explanation || 'Workflow created.', metadata: { workflowGenerated: true } });
 
-            job.result = { success: true, workflow, workflowId: created.id, redirectTo: `/jkai/workflows/${created.id}`, thinking, message: workflow.explanation || 'Workflow created.' };
+            job.result = { success: true, workflow, workflowId: created.id, redirectTo: `/jkai/canvas/${created.id}`, thinking, message: workflow.explanation || 'Workflow created.' };
           }
         } else {
           job.result = { success: true, workflow: null, message: 'Could not generate a valid workflow. Try being more specific.' };

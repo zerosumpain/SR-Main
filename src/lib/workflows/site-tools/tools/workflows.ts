@@ -276,7 +276,9 @@ register({
           startedAtFormatted: formatTimestamp(r.startedAt),
           completedAtFormatted: formatTimestamp(r.completedAt),
         })),
-        url: `https://strangeramblings.com/jkai/workflows/${id}`,
+        url: `https://strangeramblings.com/jkai/canvas/${
+          wf.name.startsWith('canvas:') ? wf.name.slice('canvas:'.length) : id
+        }`,
       },
     };
   },
