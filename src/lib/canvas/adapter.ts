@@ -20,7 +20,8 @@ export type NodeKind =
   | 'intel'
   | 'agent'
   | 'chat'
-  | 'trigger';
+  | 'trigger'
+  | 'inspector';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -146,6 +147,14 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     defaultConfig: {},
   },
   {
+    type: 'inspector',
+    label: 'Inspector · debug',
+    kind: 'inspector',
+    description:
+      'Runtime debug panel. Wire upstream → inspector; renders JSON, tables, CSV, HTML, images, video, audio.',
+    defaultConfig: {},
+  },
+  {
     type: 'http-request',
     label: 'Input · HTTP request',
     kind: 'input',
@@ -209,6 +218,7 @@ export async function loadModelCatalogue(): Promise<ModelCatalogue> {
 export function mapTypeToKind(type: string): NodeKind {
   if (type === 'trigger') return 'trigger';
   if (type === 'chat') return 'chat';
+  if (type === 'inspector') return 'inspector';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
   if (type === 'llm-agent') return 'agent';
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')

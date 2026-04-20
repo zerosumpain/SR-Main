@@ -34,6 +34,7 @@ import { intelWriteDef, intelWriteExecutor } from './nodes/intel-write';
 import { intelQueryDef, intelQueryExecutor } from './nodes/intel-query';
 import { chatDef, chatExecutor } from './nodes/chat';
 import { triggerDef, triggerExecutor } from './nodes/trigger';
+import { inspectorDef, inspectorExecutor } from './nodes/inspector';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -87,6 +88,7 @@ registry.register(intelWriteDef, intelWriteExecutor);
 registry.register(intelQueryDef, intelQueryExecutor);
 registry.register(chatDef, chatExecutor);
 registry.register(triggerDef, triggerExecutor);
+registry.register(inspectorDef, inspectorExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();

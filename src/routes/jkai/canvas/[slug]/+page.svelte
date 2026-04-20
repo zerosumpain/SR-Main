@@ -2,6 +2,7 @@
   import type { CanvasNode, NodeStatus } from './+page.server';
   import { invalidateAll } from '$app/navigation';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import InspectorBody from '$lib/canvas/InspectorBody.svelte';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -46,16 +47,23 @@
   const MIN_CHAT_H = 240;
   const MAX_CHAT_W = 720;
   const MAX_CHAT_H = 900;
+  const INSPECTOR_NODE_W = 320;
+  const INSPECTOR_NODE_H = 300;
 
-  function chatNodeSize(n: CanvasNode): { w: number; h: number } {
+  /** Size lookup for both chat and inspector nodes (chatSizes is shared). */
+  function resizableSize(n: CanvasNode): { w: number; h: number } {
     const override = chatSizes[n.id];
     if (override) return override;
     const cfgSize = (n.config?.size as { w?: number; h?: number } | undefined) ?? null;
+    const defaultW = n.kind === 'chat' ? CHAT_NODE_W : INSPECTOR_NODE_W;
+    const defaultH = n.kind === 'chat' ? CHAT_NODE_H : INSPECTOR_NODE_H;
     return {
-      w: typeof cfgSize?.w === 'number' ? cfgSize.w : CHAT_NODE_W,
-      h: typeof cfgSize?.h === 'number' ? cfgSize.h : CHAT_NODE_H,
+      w: typeof cfgSize?.w === 'number' ? cfgSize.w : defaultW,
+      h: typeof cfgSize?.h === 'number' ? cfgSize.h : defaultH,
     };
   }
+  // Back-compat alias so chat code still compiles
+  const chatNodeSize = resizableSize;
 
   function onChatResizeDown(e: PointerEvent, n: CanvasNode) {
     if (e.button !== 0) return;
@@ -159,12 +167,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat') return chatNodeSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat') return chatNodeSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -197,6 +205,7 @@
     intel: 'var(--accent)',
     agent: 'var(--text-primary)',
     chat: 'var(--accent)',
+    inspector: '#567',
   };
 
   const peerCanvases = $derived(data.peerCanvases);
@@ -1437,6 +1446,61 @@
               </div>
             </div>
           </div>
+        {:else if n.kind === 'inspector'}
+          {@const isize = resizableSize(n)}
+          <div
+            class="chat-node inspector-node"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:active={isRunning && n.status === 'running'}
+            class:failed={isRunning && n.status === 'failed'}
+            class:ok={isRunning && n.status === 'ok'}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{isize.w}px"
+            style:height="{isize.h}px"
+            role="group"
+            aria-label="Inspector node"
+          >
+            <div
+              class="chat-node-hdr inspector-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="inspector-bar"></span>
+              <span class="chat-node-title">INSPECT</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+              {#if n.status}
+                <span class="chat-node-count">{n.status}</span>
+              {/if}
+            </div>
+
+            <div class="inspector-body" onpointerdown={(e) => e.stopPropagation()}>
+              <InspectorBody data={n.inputData} />
+            </div>
+
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
         {:else}
           <div
             class="wf-node"
@@ -2658,6 +2722,45 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+  }
+
+  /* ——— Inspector node ——— */
+  .inspector-node {
+    border-color: #567;
+  }
+  .inspector-node.is-selected {
+    outline-color: #567;
+  }
+  .inspector-hdr {
+    background: #2a3642;
+    color: #dde4eb;
+  }
+  .inspector-bar {
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: #89a3c0;
+  }
+  .inspector-node .chat-node-title {
+    color: #dde4eb;
+  }
+  .inspector-node .chat-node-label {
+    color: rgba(221, 228, 235, 0.7);
+    text-transform: none;
+    letter-spacing: 0.05em;
+  }
+  .inspector-node .chat-node-count {
+    color: rgba(221, 228, 235, 0.55);
+    text-transform: uppercase;
+  }
+  .inspector-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px 12px;
+    background: var(--bg);
+    color: var(--text-primary);
+    cursor: auto;
   }
   .p-pane-head {
     display: flex;
