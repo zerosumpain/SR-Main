@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CanvasNode, NodeStatus } from './+page.server';
   import { invalidateAll } from '$app/navigation';
+  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -1262,7 +1263,9 @@
                       })}
                     </span>
                   </div>
-                  <div class="chat-msg-body">{msg.content}</div>
+                  <div class="chat-msg-body">
+                    <ChatMarkdown content={msg.content} role={msg.role} />
+                  </div>
                 </div>
               {/each}
               {#if isRunning && pendingRun?.chatNodeId === n.id}
@@ -1281,9 +1284,10 @@
                     </div>
                   {/if}
                   {#if streamingReplies[n.id]}
-                    <div class="chat-msg-body">{streamingReplies[n.id]}<span
-                        class="chat-cursor">▊</span
-                      ></div>
+                    <div class="chat-msg-body chat-msg-streaming">
+                      <ChatMarkdown content={streamingReplies[n.id]} role="assistant" />
+                      <span class="chat-cursor">▊</span>
+                    </div>
                   {:else if !(liveToolSteps[n.id] && liveToolSteps[n.id].length > 0)}
                     <div class="chat-msg-body ghost">⟳ thinking…</div>
                   {/if}
