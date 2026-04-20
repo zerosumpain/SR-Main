@@ -307,17 +307,14 @@
     configDirty = true;
   }
 
-  // Known models for the LLM dropdown — mirrors llm-call.def.ts
-  const MODEL_OPTIONS = [
-    { value: '', label: 'Default (site setting)' },
-    { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-    { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
-    { value: 'glm-4-flash', label: 'GLM 4 Flash — Z.AI' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-    { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku' },
-  ];
+  const modelCatalogue = $derived(data.modelCatalogue);
+  const knownModelValues = $derived(
+    new Set([
+      '',
+      ...modelCatalogue.glm.map((m) => m.value),
+      ...modelCatalogue.openrouter.map((m) => m.value),
+    ]),
+  );
 
   let pipePickerOpen = $state(false);
   let actionError = $state<string | null>(null);
@@ -750,13 +747,29 @@
                       onchange={(e) =>
                         setConfigField('model', (e.target as HTMLSelectElement).value)}
                     >
-                      {#each MODEL_OPTIONS as opt (opt.value)}
-                        <option value={opt.value}>{opt.label}</option>
-                      {/each}
-                      {#if configDraft.model && !MODEL_OPTIONS.some((o) => o.value === configDraft.model)}
-                        <option value={configDraft.model as string}
-                          >{configDraft.model} (custom)</option
+                      <option value="">{modelCatalogue.defaultLabel}</option>
+                      {#if modelCatalogue.glm.length}
+                        <optgroup label="GLM · Z.AI">
+                          {#each modelCatalogue.glm as opt (opt.value)}
+                            <option value={opt.value}>{opt.label}</option>
+                          {/each}
+                        </optgroup>
+                      {/if}
+                      {#if modelCatalogue.openrouter.length}
+                        <optgroup
+                          label="OpenRouter ({modelCatalogue.openrouter.length})"
                         >
+                          {#each modelCatalogue.openrouter as opt (opt.value)}
+                            <option value={opt.value}>{opt.label}</option>
+                          {/each}
+                        </optgroup>
+                      {/if}
+                      {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
+                        <optgroup label="Custom">
+                          <option value={configDraft.model as string}
+                            >{configDraft.model}</option
+                          >
+                        </optgroup>
                       {/if}
                     </select>
                   </div>

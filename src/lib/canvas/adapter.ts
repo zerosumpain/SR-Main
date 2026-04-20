@@ -5,8 +5,11 @@ import {
   workflowEdges,
   workflowRuns,
   nodeExecutions,
+  openrouterModels,
 } from '$lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, asc } from 'drizzle-orm';
+import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+import { getSetting } from '$lib/server/models/settings';
 
 export type NodeKind = 'input' | 'llm' | 'parse' | 'output' | 'intel' | 'agent';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
@@ -42,6 +45,43 @@ export type Canvas = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
 };
+
+export type ModelOption = { value: string; label: string };
+export type ModelCatalogue = {
+  defaultLabel: string; // what "" resolves to, for the first option
+  glm: ModelOption[];
+  openrouter: ModelOption[];
+};
+
+/** Pull the model catalogue the user configured on /admin/models. */
+export async function loadModelCatalogue(): Promise<ModelCatalogue> {
+  const [glmSetting, orAltSetting, orModels] = await Promise.all([
+    getSetting<{ modelId?: string }>('jkai.chat.default_glm_model'),
+    getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model'),
+    db
+      .select({
+        id: openrouterModels.id,
+        name: openrouterModels.name,
+      })
+      .from(openrouterModels)
+      .orderBy(asc(openrouterModels.id)),
+  ]);
+
+  const defaultGlmId = glmSetting?.modelId ?? DEFAULT_GLM_MODEL_ID;
+  const altOrId = orAltSetting?.modelId ?? null;
+  const defaultLabel = altOrId
+    ? `Default → ${defaultGlmId} / alt: ${altOrId}`
+    : `Default → ${defaultGlmId}`;
+
+  return {
+    defaultLabel,
+    glm: GLM_MODELS.map((m) => ({ value: m.id, label: m.label })),
+    openrouter: orModels.map((m) => ({
+      value: m.id,
+      label: m.name ? `${m.name} (${m.id})` : m.id,
+    })),
+  };
+}
 
 /** Map workflow node types to canvas visual kinds. */
 export function mapTypeToKind(type: string): NodeKind {
