@@ -12,7 +12,7 @@ import { eq, desc, asc } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import { getSetting } from '$lib/server/models/settings';
 
-export type NodeKind = 'input' | 'llm' | 'parse' | 'output' | 'intel' | 'agent';
+export type NodeKind = 'input' | 'llm' | 'parse' | 'output' | 'intel' | 'agent' | 'chat';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -54,7 +54,7 @@ export type Canvas = {
   runStatus: string | null;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
-  messages: ChatMessage[];
+  messagesByChat: Record<string, ChatMessage[]>;
 };
 
 export type NodeTypeOption = {
@@ -67,6 +67,13 @@ export type NodeTypeOption = {
 
 /** Curated set of workflow node types offered in the canvas "+ node" picker. */
 export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
+  {
+    type: 'chat',
+    label: 'Chat',
+    kind: 'chat',
+    description: 'Chat panel with its own history. Send a message to trigger the workflow.',
+    defaultConfig: {},
+  },
   {
     type: 'manual-trigger',
     label: 'Input · manual',
@@ -183,6 +190,7 @@ export async function loadModelCatalogue(): Promise<ModelCatalogue> {
 
 /** Map workflow node types to canvas visual kinds. */
 export function mapTypeToKind(type: string): NodeKind {
+  if (type === 'chat') return 'chat';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
   if (type === 'llm-agent') return 'agent';
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')
@@ -204,7 +212,8 @@ function mapExecStatus(s: string | null | undefined): NodeStatus | undefined {
  * Seed — the default "canvas-sample" workflow.
  * Layout mirrors the canvas column grid [320, 540, 760, 980].
  * ———————————————————————————————————————————————————————— */
-const COL = [320, 540, 760, 980] as const;
+// Chat is wide (300×360); rest of the canvas uses the regular 148×52 nodes.
+const COL = [360, 560, 740, 920] as const;
 
 type SeedNode = {
   localId: string; // referenced by seed edges
@@ -217,19 +226,19 @@ type SeedNode = {
 
 const SEED_NODES: SeedNode[] = [
   {
-    localId: 'trigger',
-    type: 'manual-trigger',
-    label: 'User message',
-    x: COL[0],
-    y: 120,
+    localId: 'chat',
+    type: 'chat',
+    label: 'Chat',
+    x: 20,
+    y: 20,
     config: {},
   },
   {
     localId: 'llm_primary',
     type: 'llm-call',
     label: 'glm-4-flash',
-    x: COL[1],
-    y: 120,
+    x: COL[0],
+    y: 40,
     config: {
       model: '',
       userPrompt:
@@ -242,16 +251,16 @@ const SEED_NODES: SeedNode[] = [
     localId: 'parser',
     type: 'text-parser',
     label: 'JSON.parse',
-    x: COL[1],
-    y: 240,
+    x: COL[0],
+    y: 160,
     config: { mode: 'json', inputField: 'response' },
   },
   {
     localId: 'llm_retry',
     type: 'llm-call',
     label: 'claude-haiku-4-5',
-    x: COL[2],
-    y: 240,
+    x: COL[1],
+    y: 160,
     config: {
       model: '',
       userPrompt:
@@ -264,14 +273,14 @@ const SEED_NODES: SeedNode[] = [
     localId: 'output',
     type: 'transform',
     label: 'Reply',
-    x: COL[3],
-    y: 240,
+    x: COL[2],
+    y: 160,
     config: {},
   },
 ];
 
 const SEED_EDGES: Array<{ from: string; to: string }> = [
-  { from: 'trigger', to: 'llm_primary' },
+  { from: 'chat', to: 'llm_primary' },
   { from: 'llm_primary', to: 'parser' },
   { from: 'parser', to: 'llm_retry' },
   { from: 'llm_retry', to: 'output' },
@@ -405,27 +414,34 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     active: activeEdgeKeys.has(e.id),
   }));
 
-  // Recent chat history for this workflow
+  // Chat history — grouped by chat node id. Legacy messages without a
+  // chatNodeId tag all get bucketed under the first chat node (if any).
+  const chatNodeIds = nodes.filter((n) => n.type === 'chat').map((n) => n.id);
   const msgRows = await db
     .select()
     .from(orchestratorChats)
     .where(eq(orchestratorChats.workflowId, workflowId))
     .orderBy(desc(orchestratorChats.createdAt))
-    .limit(80);
-  const messages: ChatMessage[] = msgRows
-    .slice()
-    .reverse()
-    .map((m) => {
-      const meta = (m.metadata as Record<string, unknown> | null) || {};
-      return {
-        id: m.id,
-        role: (m.role as ChatMessage['role']) ?? 'user',
-        content: m.content,
-        createdAt: new Date(m.createdAt).toISOString(),
-        runId: (meta.runId as string | undefined) ?? null,
-        nodeId: (meta.nodeId as string | undefined) ?? null,
-      };
-    });
+    .limit(400);
+
+  const messagesByChat: Record<string, ChatMessage[]> = {};
+  for (const id of chatNodeIds) messagesByChat[id] = [];
+
+  const legacyBucket = chatNodeIds[0] ?? null;
+  for (const m of msgRows.slice().reverse()) {
+    const meta = (m.metadata as Record<string, unknown> | null) || {};
+    const msg: ChatMessage = {
+      id: m.id,
+      role: (m.role as ChatMessage['role']) ?? 'user',
+      content: m.content,
+      createdAt: new Date(m.createdAt).toISOString(),
+      runId: (meta.runId as string | undefined) ?? null,
+      nodeId: (meta.nodeId as string | undefined) ?? null,
+    };
+    const explicit = (meta.chatNodeId as string | undefined) ?? null;
+    const bucket = explicit && messagesByChat[explicit] ? explicit : legacyBucket;
+    if (bucket && messagesByChat[bucket]) messagesByChat[bucket].push(msg);
+  }
 
   return {
     slug,
@@ -435,7 +451,7 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     runStatus: latestRun?.status ?? null,
     nodes: canvasNodes,
     edges: canvasEdges,
-    messages,
+    messagesByChat,
   };
 }
 

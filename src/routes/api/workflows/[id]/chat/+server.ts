@@ -24,18 +24,28 @@ import type { WorkflowDefinition } from '$lib/workflows';
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
   const text = typeof body.text === 'string' ? body.text.trim() : '';
+  const chatNodeId = typeof body.chatNodeId === 'string' ? body.chatNodeId : null;
   if (!text) return json({ error: 'text required' }, { status: 400 });
 
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!workflow) return json({ error: 'Workflow not found' }, { status: 404 });
 
-  const [userMsg] = await db
-    .insert(orchestratorChats)
-    .values({ workflowId: params.id, role: 'user', content: text, metadata: {} })
-    .returning();
-
   const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id));
   const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id));
+
+  // Default chat node = the first chat-type node if caller didn't specify.
+  const resolvedChatNodeId =
+    chatNodeId ?? nodes.find((n) => n.type === 'chat')?.id ?? null;
+
+  const [userMsg] = await db
+    .insert(orchestratorChats)
+    .values({
+      workflowId: params.id,
+      role: 'user',
+      content: text,
+      metadata: resolvedChatNodeId ? { chatNodeId: resolvedChatNodeId } : {},
+    })
+    .returning();
 
   const [run] = await db
     .insert(workflowRuns)
@@ -71,10 +81,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
   };
 
   engine
-    .execute(definition, run.id, { message: text }, undefined, params.id, { selfHealing: true })
+    .execute(
+      definition,
+      run.id,
+      { message: text, _chatNodeId: resolvedChatNodeId },
+      undefined,
+      params.id,
+      { selfHealing: true },
+    )
     .catch((err) => {
       console.error('[canvas/chat] workflow execution failed', err);
     });
 
-  return json({ runId: run.id, userMessageId: userMsg.id });
+  return json({ runId: run.id, userMessageId: userMsg.id, chatNodeId: resolvedChatNodeId });
 };

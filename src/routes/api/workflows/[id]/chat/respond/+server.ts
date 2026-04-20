@@ -20,6 +20,7 @@ import { findTerminalNodeIds, terminalReplyText } from '$lib/canvas/adapter';
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
   const runId = typeof body.runId === 'string' ? body.runId : '';
+  const chatNodeId = typeof body.chatNodeId === 'string' ? body.chatNodeId : null;
   if (!runId) return json({ error: 'runId required' }, { status: 400 });
 
   const nodes = await db
@@ -63,7 +64,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         workflowId: params.id,
         role: 'assistant',
         content: '(run finished with no terminal output)',
-        metadata: { runId, nodeId: null },
+        metadata: { runId, nodeId: null, chatNodeId },
       })
       .returning();
     return json({ message: assistant });
@@ -77,7 +78,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       workflowId: params.id,
       role: 'assistant',
       content,
-      metadata: { runId, nodeId: chosenNodeId },
+      metadata: { runId, nodeId: chosenNodeId, chatNodeId },
     })
     .returning();
 

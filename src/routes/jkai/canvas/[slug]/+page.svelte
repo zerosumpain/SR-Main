@@ -10,7 +10,8 @@
   const COL = [320, 540, 760, 980];
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3;
-  const CHAT_CARD_RIGHT_EDGE = 316; // left (16) + width (300)
+  const CHAT_NODE_W = 300;
+  const CHAT_NODE_H = 360;
 
   // Live run state — overlays the server-provided canvas snapshot
   let liveStatus = $state<Record<string, NodeStatus>>({});
@@ -21,14 +22,20 @@
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
     state: 'idle',
   });
-  let chatDraft = $state('');
-  let pendingRunId = $state<string | null>(null);
-  let chatBodyEl: HTMLDivElement | undefined;
-  function scrollChatToBottom() {
-    if (!chatBodyEl) return;
-    // Defer so the DOM update from the just-inserted message is visible
+  // Per-chat-node composer draft, scroll refs, and active-run target
+  let chatDrafts = $state<Record<string, string>>({});
+  let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
+  let pendingRun = $state<{ runId: string; chatNodeId: string | null } | null>(null);
+
+  function messagesFor(chatNodeId: string) {
+    return data.canvas.messagesByChat[chatNodeId] ?? [];
+  }
+
+  function scrollChatToBottom(chatNodeId: string) {
+    const el = chatBodyEls[chatNodeId];
+    if (!el) return;
     requestAnimationFrame(() => {
-      chatBodyEl?.scrollTo({ top: chatBodyEl.scrollHeight, behavior: 'smooth' });
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     });
   }
 
@@ -53,6 +60,9 @@
     Object.fromEntries(viewNodes.map((n) => [n.id, n])),
   );
 
+  const chatNodeIds = $derived(viewNodes.filter((n) => n.kind === 'chat').map((n) => n.id));
+  const firstChatId = $derived(chatNodeIds[0] ?? null);
+
   const activeEdgeIds = $derived(
     new Set(
       runMeta.state === 'running'
@@ -61,19 +71,29 @@
     ),
   );
 
+  function nodeW(n: { kind: string }) {
+    return n.kind === 'chat' ? CHAT_NODE_W : NODE_W;
+  }
+  function nodeH(n: { kind: string }) {
+    return n.kind === 'chat' ? CHAT_NODE_H : NODE_H;
+  }
+
   function orthPath(from: CanvasNode, to: CanvasNode): string {
+    const fw = nodeW(from);
+    const fh = nodeH(from);
+    const th = nodeH(to);
     const sameCol = Math.abs(from.x - to.x) < 4;
     if (sameCol) {
-      const bx = from.x + NODE_W / 2;
-      const by = from.y + NODE_H;
-      const tgtX = to.x + NODE_W / 2;
+      const bx = from.x + fw / 2;
+      const by = from.y + fh;
+      const tgtX = to.x + nodeW(to) / 2;
       const tgtY = to.y;
       return `M${bx} ${by} L${bx} ${tgtY - 6} L${tgtX} ${tgtY - 6} L${tgtX} ${tgtY}`;
     }
-    const x1 = from.x + NODE_W;
-    const y1 = from.y + NODE_H / 2;
+    const x1 = from.x + fw;
+    const y1 = from.y + fh / 2;
     const x2 = to.x;
-    const y2 = to.y + NODE_H / 2;
+    const y2 = to.y + th / 2;
     const midX = x1 + Math.max(16, (x2 - x1) / 2);
     return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
   }
@@ -91,7 +111,7 @@
   const isRunning = $derived(runMeta.state === 'running');
 
   // ——— Chat + run lifecycle ———
-  async function sendMessage(text: string) {
+  async function sendMessageFrom(chatNodeId: string | null, text: string) {
     if (runMeta.state === 'running' || !text.trim()) return;
     liveStatus = {};
     liveData = {};
@@ -100,34 +120,45 @@
       const res = await fetch(`/api/workflows/${canvas.workflowId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, chatNodeId }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      const { runId } = await res.json();
+      const { runId, chatNodeId: resolvedId } = await res.json();
       activeRunId = runId;
-      pendingRunId = runId;
+      pendingRun = { runId, chatNodeId: resolvedId ?? chatNodeId };
       subscribeToRun(runId);
-      await invalidateAll(); // surface the new user message
-      scrollChatToBottom();
+      await invalidateAll();
+      if (resolvedId) scrollChatToBottom(resolvedId);
     } catch (err) {
       runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
     }
   }
 
-  async function sendChat() {
-    const text = chatDraft.trim();
+  async function sendFromChat(chatNodeId: string) {
+    const text = (chatDrafts[chatNodeId] ?? '').trim();
     if (!text) return;
-    chatDraft = '';
-    await sendMessage(text);
+    chatDrafts = { ...chatDrafts, [chatNodeId]: '' };
+    await sendMessageFrom(chatNodeId, text);
   }
 
   async function runCanvas() {
-    // Re-run from the last user message (or a default) without typing
-    const lastUser = [...canvas.messages].reverse().find((m) => m.role === 'user');
-    await sendMessage(lastUser?.content || 'run');
+    // Re-run from the most recent user message across any chat node
+    const all: { chatId: string; text: string; ts: string }[] = [];
+    for (const chatId of chatNodeIds) {
+      for (const m of messagesFor(chatId)) {
+        if (m.role === 'user') all.push({ chatId, text: m.content, ts: m.createdAt });
+      }
+    }
+    all.sort((a, b) => b.ts.localeCompare(a.ts));
+    const last = all[0];
+    if (last) {
+      await sendMessageFrom(last.chatId, last.text);
+    } else {
+      await sendMessageFrom(firstChatId, 'run');
+    }
   }
 
   function subscribeToRun(runId: string) {
@@ -195,21 +226,21 @@
   }
 
   async function finalizeChatReply() {
-    const runId = pendingRunId;
-    pendingRunId = null;
-    if (runId) {
+    const pending = pendingRun;
+    pendingRun = null;
+    if (pending) {
       try {
         await fetch(`/api/workflows/${canvas.workflowId}/chat/respond`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId }),
+          body: JSON.stringify({ runId: pending.runId, chatNodeId: pending.chatNodeId }),
         });
       } catch {
         /* non-fatal */
       }
     }
     await invalidateAll();
-    scrollChatToBottom();
+    if (pending?.chatNodeId) scrollChatToBottom(pending.chatNodeId);
   }
 
   // Phase B — pan/zoom/selection state
@@ -252,17 +283,19 @@
     if (!viewportEl || canvas.nodes.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
     const pad = 48;
+    const nodeW = (n: { kind: string }) => (n.kind === 'chat' ? CHAT_NODE_W : NODE_W);
+    const nodeH = (n: { kind: string }) => (n.kind === 'chat' ? CHAT_NODE_H : NODE_H);
     const minX = Math.min(...canvas.nodes.map((n) => n.x)) - pad;
     const minY = Math.min(...canvas.nodes.map((n) => n.y)) - pad;
-    const maxX = Math.max(...canvas.nodes.map((n) => n.x + NODE_W)) + pad;
-    const maxY = Math.max(...canvas.nodes.map((n) => n.y + NODE_H)) + pad + 24; // pip clearance
+    const maxX = Math.max(...canvas.nodes.map((n) => n.x + nodeW(n))) + pad;
+    const maxY = Math.max(...canvas.nodes.map((n) => n.y + nodeH(n))) + pad;
     const contentW = maxX - minX;
     const contentH = maxY - minY;
-    const availW = Math.max(200, vp.width - CHAT_CARD_RIGHT_EDGE - 24);
+    const availW = Math.max(200, vp.width - 24);
     const availH = Math.max(200, vp.height - 24);
     const fitZ = clampZoom(Math.min(availW / contentW, availH / contentH, 1));
     zoom = fitZ;
-    panX = CHAT_CARD_RIGHT_EDGE + 12 + (availW - contentW * fitZ) / 2 - minX * fitZ;
+    panX = 12 + (availW - contentW * fitZ) / 2 - minX * fitZ;
     panY = 12 + (availH - contentH * fitZ) / 2 - minY * fitZ;
   }
 
@@ -275,7 +308,7 @@
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest(
-      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, .add-node-menu, button, a, input, textarea, select',
+      '.wf-node, .chat-node, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, .add-node-menu, button, a, input, textarea, select',
     );
   }
 
@@ -620,17 +653,20 @@
   const inspectorPos = $derived<{ x: number; y: number } | null>(
     inspectorFrom && inspectorTo
       ? (() => {
+          const fw = nodeW(inspectorFrom);
+          const fh = nodeH(inspectorFrom);
+          const th = nodeH(inspectorTo);
           const sameCol = Math.abs(inspectorFrom.x - inspectorTo.x) < 4;
           if (sameCol) {
             return {
-              x: inspectorFrom.x + NODE_W / 2 - 160, // 320/2 centred
-              y: (inspectorFrom.y + NODE_H + inspectorTo.y) / 2 - 10,
+              x: inspectorFrom.x + fw / 2 - 160,
+              y: (inspectorFrom.y + fh + inspectorTo.y) / 2 - 10,
             };
           }
           return {
-            x: (inspectorFrom.x + NODE_W + inspectorTo.x) / 2 - 160,
+            x: (inspectorFrom.x + fw + inspectorTo.x) / 2 - 160,
             y:
-              (inspectorFrom.y + NODE_H / 2 + (inspectorTo.y + NODE_H / 2)) / 2 - 10,
+              (inspectorFrom.y + fh / 2 + (inspectorTo.y + th / 2)) / 2 - 10,
           };
         })()
       : null,
@@ -804,73 +840,6 @@
     onpointercancel={onPointerUp}
     onwheel={onWheel}
   >
-    <!-- Chat card (left) -->
-    <div class="chat-card">
-      <div class="p-pane-head">
-        <span class="p-pane-title"><span class="dot"></span>CHAT</span>
-        <span class="p-pane-kicker"
-          >· {canvas.messages.length}
-          {canvas.messages.length === 1 ? 'msg' : 'msgs'}</span
-        >
-      </div>
-      <div class="chat-body" bind:this={chatBodyEl}>
-        {#if canvas.messages.length === 0 && runMeta.state !== 'running'}
-          <div class="chat-empty">
-            <div class="sr-label-tight">EMPTY · send a message to kick off the canvas</div>
-          </div>
-        {/if}
-        {#each canvas.messages as msg (msg.id)}
-          <div class="chat-msg" class:is-user={msg.role === 'user'}>
-            <div class="msg-meta">
-              <b
-                >{msg.role === 'user'
-                  ? 'YOU'
-                  : msg.role === 'assistant'
-                    ? 'JKAI'
-                    : msg.role.toUpperCase()}</b
-              >
-              <span class="sr-sep">/</span>
-              <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-            <div class="chat-msg-body">{msg.content}</div>
-          </div>
-        {/each}
-        {#if runMeta.state === 'running'}
-          <div class="chat-msg chat-msg-pending">
-            <div class="msg-meta">
-              <b>JKAI</b><span class="sr-sep">/</span><span>running · {runningCount} active</span>
-            </div>
-            <div class="chat-msg-body ghost">⟳ piping through the canvas…</div>
-          </div>
-        {/if}
-      </div>
-      <div class="chat-composer">
-        <textarea
-          class="chat-input"
-          bind:value={chatDraft}
-          placeholder="Message the canvas — ⌘⏎ to send"
-          rows="2"
-          onkeydown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-              e.preventDefault();
-              sendChat();
-            }
-          }}
-        ></textarea>
-        <div class="chat-composer-foot">
-          <span class="mono10 muted">
-            {#if runMeta.state === 'running'}running…{:else}⌘⏎ send{/if}
-          </span>
-          <button
-            class="composer-pill run-btn"
-            onclick={sendChat}
-            disabled={runMeta.state === 'running' || !chatDraft.trim()}
-          >
-            SEND
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- Graph area (pan/zoom stage) -->
     <div
@@ -931,29 +900,137 @@
 
       <!-- Nodes -->
       {#each viewNodes as n (n.id)}
-        <div
-          class="wf-node"
-          class:active={isRunning && n.status === 'running'}
-          class:failed={isRunning && n.status === 'failed'}
-          class:ok={isRunning && n.status === 'ok'}
-          class:is-selected={selectedId === n.id}
-          data-kind={n.kind}
-          style:left="{n.x}px"
-          style:top="{n.y}px"
-          role="button"
-          tabindex="0"
-          onpointerdown={(e) => onNodePointerDown(e, n)}
-          onpointermove={onNodePointerMove}
-          onpointerup={(e) => onNodePointerUp(e, n)}
-          onpointercancel={(e) => onNodePointerUp(e, n)}
-          ondblclick={(e) => openMenu(e, n.id)}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') openMenu(e, n.id);
-            else if (e.key === ' ') selectNode(e, n.id);
-          }}
-        >
-          <span class="wf-name">{n.name}</span>
-        </div>
+        {#if n.kind === 'chat'}
+          {@const msgs = messagesFor(n.id)}
+          <div
+            class="chat-node"
+            class:is-selected={selectedId === n.id}
+            class:active={isRunning && pendingRun?.chatNodeId === n.id}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            role="group"
+            aria-label="Chat node"
+          >
+            <div
+              class="chat-node-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit"
+            >
+              <span class="chat-node-bar"></span>
+              <span class="chat-node-title">CHAT</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+              <span class="chat-node-count">{msgs.length} msg</span>
+            </div>
+
+            <div
+              class="chat-node-body"
+              bind:this={chatBodyEls[n.id]}
+              onpointerdown={(e) => e.stopPropagation()}
+            >
+              {#if msgs.length === 0 && !(isRunning && pendingRun?.chatNodeId === n.id)}
+                <div class="chat-empty">
+                  <div class="sr-label-tight">EMPTY · send to kick off the canvas</div>
+                </div>
+              {/if}
+              {#each msgs as msg (msg.id)}
+                <div class="chat-msg" class:is-user={msg.role === 'user'}>
+                  <div class="msg-meta">
+                    <b>
+                      {msg.role === 'user'
+                        ? 'YOU'
+                        : msg.role === 'assistant'
+                          ? 'JKAI'
+                          : msg.role.toUpperCase()}
+                    </b>
+                    <span class="sr-sep">/</span>
+                    <span>
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div class="chat-msg-body">{msg.content}</div>
+                </div>
+              {/each}
+              {#if isRunning && pendingRun?.chatNodeId === n.id}
+                <div class="chat-msg chat-msg-pending">
+                  <div class="msg-meta">
+                    <b>JKAI</b><span class="sr-sep">/</span>
+                    <span>running · {runningCount} active</span>
+                  </div>
+                  <div class="chat-msg-body ghost">⟳ piping through the canvas…</div>
+                </div>
+              {/if}
+            </div>
+
+            <div
+              class="chat-node-composer"
+              onpointerdown={(e) => e.stopPropagation()}
+            >
+              <textarea
+                class="chat-input"
+                value={chatDrafts[n.id] ?? ''}
+                oninput={(e) =>
+                  (chatDrafts = {
+                    ...chatDrafts,
+                    [n.id]: (e.target as HTMLTextAreaElement).value,
+                  })}
+                placeholder="Message this chat — ⌘⏎ to send"
+                rows="2"
+                onkeydown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    sendFromChat(n.id);
+                  }
+                }}
+              ></textarea>
+              <div class="chat-composer-foot">
+                <span class="mono10 muted">
+                  {#if isRunning && pendingRun?.chatNodeId === n.id}running…{:else}⌘⏎ send{/if}
+                </span>
+                <button
+                  class="composer-pill run-btn"
+                  onclick={() => sendFromChat(n.id)}
+                  disabled={runMeta.state === 'running' || !(chatDrafts[n.id] ?? '').trim()}
+                >
+                  SEND
+                </button>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div
+            class="wf-node"
+            class:active={isRunning && n.status === 'running'}
+            class:failed={isRunning && n.status === 'failed'}
+            class:ok={isRunning && n.status === 'ok'}
+            class:is-selected={selectedId === n.id}
+            data-kind={n.kind}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            role="button"
+            tabindex="0"
+            onpointerdown={(e) => onNodePointerDown(e, n)}
+            onpointermove={onNodePointerMove}
+            onpointerup={(e) => onNodePointerUp(e, n)}
+            onpointercancel={(e) => onNodePointerUp(e, n)}
+            ondblclick={(e) => openMenu(e, n.id)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') openMenu(e, n.id);
+              else if (e.key === ' ') selectNode(e, n.id);
+            }}
+          >
+            <span class="wf-name">{n.name}</span>
+          </div>
+        {/if}
       {/each}
 
 
@@ -1786,17 +1863,78 @@
   }
 
   /* Chat card */
-  .chat-card {
+  /* ——— Chat node (in-graph) ——— */
+  .chat-node {
     position: absolute;
-    left: 16px;
-    top: 24px;
     width: 300px;
-    max-height: calc(100% - 48px);
+    height: 360px;
     background: var(--bg);
     border: 1.5px solid var(--text-primary);
-    z-index: 5;
     display: flex;
     flex-direction: column;
+    user-select: none;
+  }
+  .chat-node.is-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .chat-node.active {
+    border-color: var(--accent);
+  }
+  .chat-node-hdr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--text-primary);
+    color: var(--bg);
+    cursor: grab;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .chat-node-hdr:active {
+    cursor: grabbing;
+  }
+  .chat-node-bar {
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: var(--accent);
+  }
+  .chat-node-title {
+    color: var(--bg);
+  }
+  .chat-node-label {
+    color: rgba(237, 228, 212, 0.7);
+    text-transform: none;
+    letter-spacing: 0.05em;
+  }
+  .chat-node-count {
+    margin-left: auto;
+    color: rgba(237, 228, 212, 0.55);
+    font-size: 9px;
+  }
+  .chat-node-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    cursor: auto;
+  }
+  .chat-node-composer {
+    border-top: 1px solid var(--divider);
+    background: var(--bg-section);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
   }
   .p-pane-head {
     display: flex;
