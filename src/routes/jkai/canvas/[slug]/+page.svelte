@@ -762,6 +762,22 @@
   const modelCatalogue = $derived(data.modelCatalogue);
   const nodeTypes = $derived(data.nodeTypes);
   let addNodeOpen = $state(false);
+  let addNodeFilter = $state('');
+
+  const groupedNodeTypes = $derived(() => {
+    const q = addNodeFilter.trim().toLowerCase();
+    const groups = new Map<string, typeof nodeTypes>();
+    for (const t of nodeTypes) {
+      if (q) {
+        const hay = `${t.label} ${t.type} ${t.description}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      const arr = groups.get(t.group) ?? [];
+      arr.push(t);
+      groups.set(t.group, arr);
+    }
+    return Array.from(groups.entries());
+  });
 
   function viewportCenterInWorld(): { x: number; y: number } {
     if (!viewportEl) return { x: 320, y: 120 };
@@ -782,6 +798,7 @@
     defaultConfig: Record<string, unknown>;
   }) {
     addNodeOpen = false;
+    addNodeFilter = '';
     addError = null;
     actionError = null;
     const position = viewportCenterInWorld();
@@ -1202,24 +1219,43 @@
         {/if}
         {#if addNodeOpen}
           {@const hasTrigger = viewNodes.some((n) => n.kind === 'trigger')}
+          {@const groups = groupedNodeTypes()}
           <div class="add-node-menu" role="menu" aria-label="Add node">
-            {#each nodeTypes as t (t.type)}
-              {@const blocked = t.type === 'trigger' && hasTrigger}
-              <button
-                class="add-node-item"
-                class:blocked
-                role="menuitem"
-                disabled={blocked}
-                onclick={() => !blocked && addNode(t)}
-                title={blocked
-                  ? 'This canvas already has a trigger'
-                  : t.description}
-              >
-                <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                <span class="add-node-label">{t.label}</span>
-                <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
-              </button>
-            {/each}
+            <input
+              class="add-node-search"
+              type="text"
+              bind:value={addNodeFilter}
+              placeholder="Search node types…"
+              onkeydown={(e) => {
+                if (e.key === 'Escape') {
+                  addNodeFilter = '';
+                  addNodeOpen = false;
+                }
+              }}
+            />
+            <div class="add-node-scroll">
+              {#if groups.length === 0}
+                <div class="add-node-empty">No types match "{addNodeFilter}"</div>
+              {/if}
+              {#each groups as [group, items] (group)}
+                <div class="add-node-group">{group}</div>
+                {#each items as t (t.type)}
+                  {@const blocked = t.type === 'trigger' && hasTrigger}
+                  <button
+                    class="add-node-item"
+                    class:blocked
+                    role="menuitem"
+                    disabled={blocked}
+                    onclick={() => !blocked && addNode(t)}
+                    title={blocked ? 'This canvas already has a trigger' : t.description}
+                  >
+                    <span class="add-node-kind-bar" data-kind={t.kind}></span>
+                    <span class="add-node-label">{t.label}</span>
+                    <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
+                  </button>
+                {/each}
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
@@ -2525,7 +2561,8 @@
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    min-width: 240px;
+    width: 340px;
+    max-height: 480px;
     background: var(--bg);
     border: 1.5px solid var(--accent);
     box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
@@ -2533,6 +2570,45 @@
     display: flex;
     flex-direction: column;
     padding: 4px;
+  }
+  .add-node-search {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 8px;
+    margin: 2px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-primary);
+    outline: none;
+  }
+  .add-node-search:focus {
+    border-color: var(--accent);
+  }
+  .add-node-scroll {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .add-node-group {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-ghost);
+    padding: 8px 6px 4px;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    border-bottom: 1px solid var(--divider);
+    z-index: 1;
+  }
+  .add-node-empty {
+    padding: 24px 10px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-ghost);
+    font-style: italic;
   }
   .add-node-item {
     display: flex;
