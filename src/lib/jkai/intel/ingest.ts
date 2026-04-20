@@ -1,6 +1,11 @@
 import { db } from '$lib/db';
-import { intelNotes } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+  intelNotes,
+  intelEntities,
+  intelRelationships,
+  intelNoteEntities,
+} from '$lib/db/schema';
+import { eq, ne, and, inArray } from 'drizzle-orm';
 import { extractFromNote } from './extract';
 import { persistExtraction } from './graph';
 import { ocrHandwriting, transcribeAudio, parseEmail } from './preprocess';
@@ -93,4 +98,75 @@ export async function processNote(noteId: string, attachment?: JkaiAttachment): 
       .set({ status: 'failed', updatedAt: new Date() })
       .where(eq(intelNotes.id, noteId));
   }
+}
+
+export interface CascadeDeleteResult {
+  deleted: true;
+  removedRelationships: number;
+  removedEntities: number;
+}
+
+/**
+ * Delete a note and every piece of intelligence that was sourced only from it.
+ *
+ * - Relationships with source_note_id = noteId are deleted.
+ * - Entities whose only intel_note_entities link was this note are deleted.
+ * - Entities referenced by other notes survive; seed/manual entities with no
+ *   note links are unaffected.
+ *
+ * Runs inside a single transaction. Returns counts for logging / UI use.
+ */
+export async function deleteNoteCascade(noteId: string): Promise<CascadeDeleteResult> {
+  return await db.transaction(async (tx) => {
+    // A. Find entities linked to this note.
+    const linkedHere = await tx
+      .select({ entityId: intelNoteEntities.entityId })
+      .from(intelNoteEntities)
+      .where(eq(intelNoteEntities.noteId, noteId));
+    const candidateIds = [...new Set(linkedHere.map((r) => r.entityId))];
+
+    // B. Of those, find which are linked to a DIFFERENT note. Anything not
+    // in that set is orphaned by this deletion.
+    let orphanIds: string[] = candidateIds;
+    if (candidateIds.length > 0) {
+      const linkedElsewhere = await tx
+        .select({ entityId: intelNoteEntities.entityId })
+        .from(intelNoteEntities)
+        .where(
+          and(
+            inArray(intelNoteEntities.entityId, candidateIds),
+            ne(intelNoteEntities.noteId, noteId),
+          ),
+        );
+      const elsewhereSet = new Set(linkedElsewhere.map((r) => r.entityId));
+      orphanIds = candidateIds.filter((id) => !elsewhereSet.has(id));
+    }
+
+    // C. Delete relationships sourced from this note. Must happen BEFORE the
+    // note delete — otherwise the FK rule sets source_note_id = null first
+    // and we lose the link that tells us which relationships to remove.
+    const relResult = await tx
+      .delete(intelRelationships)
+      .where(eq(intelRelationships.sourceNoteId, noteId));
+
+    // D. Delete the note. FK cascades handle:
+    //    - intel_note_entities rows for this note
+    //    - intel_timeline_events rows for this note
+    //    - intel_alerts rows for this note
+    await tx.delete(intelNotes).where(eq(intelNotes.id, noteId));
+
+    // E. Delete orphan entities. FK cascades on intel_relationships
+    // (source_entity_id / target_entity_id) remove any surviving
+    // relationships that those entities were part of.
+    if (orphanIds.length > 0) {
+      await tx.delete(intelEntities).where(inArray(intelEntities.id, orphanIds));
+    }
+
+    const rowCount = (relResult as { rowCount?: number | null }).rowCount;
+    return {
+      deleted: true,
+      removedRelationships: typeof rowCount === 'number' ? rowCount : 0,
+      removedEntities: orphanIds.length,
+    };
+  });
 }
