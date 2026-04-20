@@ -763,20 +763,37 @@
   const nodeTypes = $derived(data.nodeTypes);
   let addNodeOpen = $state(false);
   let addNodeFilter = $state('');
+  let addNodeCategory = $state<string | null>(null);
 
-  const groupedNodeTypes = $derived(() => {
-    const q = addNodeFilter.trim().toLowerCase();
-    const groups = new Map<string, typeof nodeTypes>();
+  const nodeGroupsOrdered = $derived(() => {
+    // Preserve the declared order from CANVAS_NODE_TYPES
+    const seen = new Set<string>();
+    const ordered: string[] = [];
     for (const t of nodeTypes) {
-      if (q) {
-        const hay = `${t.label} ${t.type} ${t.description}`.toLowerCase();
-        if (!hay.includes(q)) continue;
+      if (!seen.has(t.group)) {
+        seen.add(t.group);
+        ordered.push(t.group);
       }
-      const arr = groups.get(t.group) ?? [];
-      arr.push(t);
-      groups.set(t.group, arr);
     }
-    return Array.from(groups.entries());
+    return ordered;
+  });
+
+  const nodeTypesByGroup = $derived(() => {
+    const m = new Map<string, typeof nodeTypes>();
+    for (const t of nodeTypes) {
+      const arr = m.get(t.group) ?? [];
+      arr.push(t);
+      m.set(t.group, arr);
+    }
+    return m;
+  });
+
+  const nodeSearchResults = $derived(() => {
+    const q = addNodeFilter.trim().toLowerCase();
+    if (!q) return [];
+    return nodeTypes.filter((t) =>
+      `${t.label} ${t.type} ${t.description}`.toLowerCase().includes(q),
+    );
   });
 
   function viewportCenterInWorld(): { x: number; y: number } {
@@ -799,6 +816,7 @@
   }) {
     addNodeOpen = false;
     addNodeFilter = '';
+    addNodeCategory = null;
     addError = null;
     actionError = null;
     const position = viewportCenterInWorld();
@@ -1167,6 +1185,14 @@
     return () => window.removeEventListener('click', onDocClick);
   });
 
+  // Reset drill-down state whenever the menu closes
+  $effect(() => {
+    if (!addNodeOpen) {
+      addNodeCategory = null;
+      addNodeFilter = '';
+    }
+  });
+
   // Resume SSE if the server says there's an in-flight run at load
   $effect(() => {
     if (canvas.runStatus === 'running' && canvas.latestRunId && !activeRunId) {
@@ -1219,27 +1245,70 @@
         {/if}
         {#if addNodeOpen}
           {@const hasTrigger = viewNodes.some((n) => n.kind === 'trigger')}
-          {@const groups = groupedNodeTypes()}
+          {@const searchActive = addNodeFilter.trim().length > 0}
+          {@const searchHits = nodeSearchResults()}
+          {@const byGroup = nodeTypesByGroup()}
+          {@const groupsOrdered = nodeGroupsOrdered()}
+          {@const currentItems =
+            addNodeCategory && byGroup.has(addNodeCategory)
+              ? byGroup.get(addNodeCategory) ?? []
+              : []}
           <div class="add-node-menu" role="menu" aria-label="Add node">
             <input
               class="add-node-search"
               type="text"
               bind:value={addNodeFilter}
-              placeholder="Search node types…"
+              placeholder="Search all node types…"
               onkeydown={(e) => {
                 if (e.key === 'Escape') {
-                  addNodeFilter = '';
-                  addNodeOpen = false;
+                  if (addNodeFilter) {
+                    addNodeFilter = '';
+                  } else if (addNodeCategory) {
+                    addNodeCategory = null;
+                  } else {
+                    addNodeOpen = false;
+                  }
                 }
               }}
             />
+
             <div class="add-node-scroll">
-              {#if groups.length === 0}
-                <div class="add-node-empty">No types match "{addNodeFilter}"</div>
-              {/if}
-              {#each groups as [group, items] (group)}
-                <div class="add-node-group">{group}</div>
-                {#each items as t (t.type)}
+              {#if searchActive}
+                <!-- Search mode: flat results, ignore drill-down -->
+                {#if searchHits.length === 0}
+                  <div class="add-node-empty">No types match "{addNodeFilter}"</div>
+                {:else}
+                  <div class="add-node-group">{searchHits.length} result{searchHits.length === 1 ? '' : 's'}</div>
+                  {#each searchHits as t (t.type)}
+                    {@const blocked = t.type === 'trigger' && hasTrigger}
+                    <button
+                      class="add-node-item"
+                      class:blocked
+                      role="menuitem"
+                      disabled={blocked}
+                      onclick={() => !blocked && addNode(t)}
+                      title={blocked ? 'This canvas already has a trigger' : t.description}
+                    >
+                      <span class="add-node-kind-bar" data-kind={t.kind}></span>
+                      <span class="add-node-stack">
+                        <span class="add-node-label">{t.label}</span>
+                        <span class="add-node-group-hint">{t.group}</span>
+                      </span>
+                      <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
+                    </button>
+                  {/each}
+                {/if}
+              {:else if addNodeCategory}
+                <!-- Level 2: items within a category -->
+                <button
+                  class="add-node-back"
+                  onclick={() => (addNodeCategory = null)}
+                  title="Back to categories"
+                >
+                  ← All categories
+                </button>
+                <div class="add-node-group">{addNodeCategory}</div>
+                {#each currentItems as t (t.type)}
                   {@const blocked = t.type === 'trigger' && hasTrigger}
                   <button
                     class="add-node-item"
@@ -1250,11 +1319,29 @@
                     title={blocked ? 'This canvas already has a trigger' : t.description}
                   >
                     <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                    <span class="add-node-label">{t.label}</span>
+                    <span class="add-node-stack">
+                      <span class="add-node-label">{t.label}</span>
+                      <span class="add-node-desc">{t.description}</span>
+                    </span>
                     <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
                   </button>
                 {/each}
-              {/each}
+              {:else}
+                <!-- Level 1: category cards -->
+                <div class="add-node-group">Pick a category</div>
+                {#each groupsOrdered as g (g)}
+                  {@const items = byGroup.get(g) ?? []}
+                  <button
+                    class="add-node-category"
+                    role="menuitem"
+                    onclick={() => (addNodeCategory = g)}
+                  >
+                    <span class="add-node-category-label">{g}</span>
+                    <span class="add-node-category-count">{items.length}</span>
+                    <span class="add-node-category-chev">›</span>
+                  </button>
+                {/each}
+              {/if}
             </div>
           </div>
         {/if}
@@ -2609,6 +2696,87 @@
     font-size: 11px;
     color: var(--text-ghost);
     font-style: italic;
+  }
+
+  /* Category cards (level 1) */
+  .add-node-category {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 10px;
+    margin: 2px 2px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-align: left;
+    color: var(--text-primary);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .add-node-category:hover {
+    background: var(--accent-tint-08);
+    border-color: var(--accent);
+  }
+  .add-node-category-label {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .add-node-category-count {
+    font-size: 9px;
+    color: var(--text-ghost);
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+  }
+  .add-node-category-chev {
+    color: var(--text-ghost);
+    font-size: 14px;
+  }
+
+  /* Back button (level 2 header) */
+  .add-node-back {
+    display: block;
+    width: calc(100% - 4px);
+    margin: 2px;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    text-align: left;
+  }
+  .add-node-back:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Stacked label (used in search and category views) */
+  .add-node-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .add-node-desc,
+  .add-node-group-hint {
+    font-size: 9px;
+    color: var(--text-ghost);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .add-node-group-hint {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
   .add-node-item {
     display: flex;
