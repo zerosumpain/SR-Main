@@ -106,7 +106,7 @@
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest(
-      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, button, a, input, textarea',
+      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, .nm-inline, button, a, input, textarea, select',
     );
   }
 
@@ -114,6 +114,7 @@
     if (e.button !== 0) return;
     if (isInteractiveTarget(e.target)) return;
     selectedId = null;
+    menuForNodeId = null;
     panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
@@ -147,6 +148,42 @@
     e.stopPropagation();
     selectedId = id;
   }
+
+  // Phase C — double-click menu (inline shape)
+  let menuForNodeId = $state<string | null>(null);
+
+  const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
+  const menuUpstream = $derived(
+    menuNode
+      ? canvas.edges.filter((e) => e.to === menuNode.id).map((e) => byId[e.from]).filter(Boolean)
+      : [],
+  );
+  const menuDownstream = $derived(
+    menuNode
+      ? canvas.edges.filter((e) => e.from === menuNode.id).map((e) => byId[e.to]).filter(Boolean)
+      : [],
+  );
+
+  function openMenu(e: Event, id: string) {
+    e.stopPropagation();
+    menuForNodeId = id;
+    selectedId = id;
+  }
+
+  function closeMenu() {
+    menuForNodeId = null;
+  }
+
+  $effect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === 'Escape') {
+        menuForNodeId = null;
+        selectedId = null;
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 </script>
 
 <svelte:head>
@@ -275,8 +312,10 @@
           role="button"
           tabindex="0"
           onclick={(e) => selectNode(e, n.id)}
+          ondblclick={(e) => openMenu(e, n.id)}
           onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') selectNode(e, n.id);
+            if (e.key === 'Enter') openMenu(e, n.id);
+            else if (e.key === ' ') selectNode(e, n.id);
           }}
         >
           <span class="wf-name">{n.name}</span>
@@ -297,6 +336,252 @@
           {:else}✓ ok · 0.4s{/if}
         </div>
       {/each}
+
+      <!-- Inline context menu -->
+      {#if menuNode}
+        <div
+          class="nm-inline"
+          style:left="{menuNode.x - 18}px"
+          style:top="{menuNode.y - 18}px"
+          role="dialog"
+          aria-label="Node inspector"
+        >
+          <div class="nm-inline-hdr">
+            <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
+            <span class="wf-name mono12">{menuNode.name}</span>
+            <span class="nm-hdr-kind">{menuNode.kind}</span>
+            <button
+              class="p-icon-btn"
+              onclick={closeMenu}
+              aria-label="Close inspector"
+              title="Close (Esc)">✕</button
+            >
+          </div>
+          <div class="nm-inline-body">
+            <!-- Shared header: kind · id · status · name · upstream/downstream chips -->
+            <div class="nm-hdr">
+              <div class="nm-hdr-row">
+                <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
+                <span class="nm-hdr-kind">{menuNode.kind.toUpperCase()} NODE</span>
+                <span class="nm-hdr-id">#{menuNode.id}</span>
+                {#if menuNode.status === 'running'}
+                  <span class="chip chip-accent chip-pill chip-live ms-auto">RUNNING</span>
+                {:else if menuNode.status === 'failed'}
+                  <span class="chip chip-pill chip-failed ms-auto">FAILED ×1</span>
+                {:else if menuNode.status === 'ok'}
+                  <span class="chip chip-pill ms-auto">OK</span>
+                {/if}
+              </div>
+              <div class="nm-hdr-name">{menuNode.name}</div>
+              <div class="nm-ctx">
+                <div class="nm-ctx-row">
+                  <span class="nm-ctx-lbl">↑ UPSTREAM</span>
+                  {#if menuUpstream.length}
+                    {#each menuUpstream as u (u.id)}
+                      <span class="nm-pin" data-kind={u.kind}>{u.name}</span>
+                    {/each}
+                  {:else}
+                    <span class="nm-ctx-empty">none</span>
+                  {/if}
+                </div>
+                <div class="nm-ctx-row">
+                  <span class="nm-ctx-lbl">↓ DOWNSTREAM</span>
+                  {#if menuDownstream.length}
+                    {#each menuDownstream as d (d.id)}
+                      <span class="nm-pin" data-kind={d.kind}>{d.name}</span>
+                    {/each}
+                  {:else}
+                    <span class="nm-ctx-empty">none</span>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <!-- Kind-specific body -->
+            <div class="nm-body">
+              {#if menuNode.kind === 'llm'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">INPUT DATA</span>
+                    <span class="nm-sec-meta">from ↑ upstream · last value</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    <pre>{`{
+  "error": "Unexpected token } in JSON at position 247",
+  "raw": "{\\"plan\\": \\"retry\\", \\"att..."
+}`}</pre>
+                  </div>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">PROMPT</span>
+                    <a class="nm-link" href="#edit">Edit in full →</a>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      placeholder="Prompt template..."
+                      value={`You are a JSON repair engine. The upstream parser failed on this payload. Return ONLY a valid JSON object that preserves intent. Do not explain.\n\n{{ input.raw }}`}
+                    ></textarea>
+                  </div>
+                </section>
+
+                <section class="nm-sec nm-sec-row">
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MODEL</span>
+                    <button class="nm-select">{menuNode.name} ▾</button>
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">TEMP</span>
+                    <div class="nm-slider">
+                      <div class="nm-slider-track">
+                        <div class="nm-slider-fill" style:width="0%"></div>
+                      </div>
+                      <span class="nm-slider-val">0.0</span>
+                    </div>
+                  </div>
+                  <div class="nm-control">
+                    <span class="sr-label-tight">MAX TOK</span>
+                    <button class="nm-select">2048 ▾</button>
+                  </div>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">OUTPUT DATA</span>
+                    <span class="nm-sec-meta">pipes to ↓ downstream · schema: {`{ reply: string }`}</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    <pre class="ghost">// pending — running now (1.1s elapsed)</pre>
+                  </div>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">LAST RUN</span>
+                    <span class="nm-sec-meta">3 tool calls · $0.008 · 2.1s</span>
+                  </div>
+                  <div class="nm-trace">
+                    <div><span>→</span> kb.search(query=&quot;JSON retry&quot;, top_k=6)<span
+                        class="nm-trace-t">0.4s</span
+                      ></div>
+                    <div><span>→</span> workflow.compile(nodes=5)<span class="nm-trace-t"
+                        >0.2s</span
+                      ></div>
+                    <div><span>→</span> code.synthesize(lang=&quot;ts&quot;, lines=42)<span
+                        class="nm-trace-t">1.3s</span
+                      ></div>
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'parse'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">INPUT DATA</span>
+                    <span class="nm-sec-meta">from ↑ upstream</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    <pre>{`{
+  "plan": "retry",
+  "attempts: 3,   // ← malformed — missing quote
+  "bail_on": "parse_error"
+}`}</pre>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd"><span class="sr-label-tight">PARSER</span></div>
+                  <div class="nm-field"><pre>JSON.parse(input, reviver?)</pre></div>
+                </section>
+                <section class="nm-sec nm-sec-error">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight error">ERROR</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    <pre class="error-text">{`SyntaxError: Unexpected token , in JSON at position 27
+  at JSON.parse (native)
+  at wf.parse (workflow/parser.ts:14)`}</pre>
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'input'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd"><span class="sr-label-tight">SOURCE</span></div>
+                  <div class="nm-field">
+                    <button class="nm-select" style:width="100%"
+                      >User message (from chat) ▾</button
+                    >
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">OUTPUT DATA</span>
+                    <span class="nm-sec-meta">pipes to ↓ downstream</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    <pre>{`"How should I handle node retries when the LLM returns malformed JSON three times in a row?"`}</pre>
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'output'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd"><span class="sr-label-tight">SINK</span></div>
+                  <div class="nm-field">
+                    <button class="nm-select" style:width="100%">Reply to chat ▾</button>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">INPUT DATA</span>
+                    <span class="nm-sec-meta">from ↑ upstream</span>
+                  </div>
+                  <div class="nm-field nm-field-read"><pre class="ghost">// pending</pre></div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd"><span class="sr-label-tight">FORMAT</span></div>
+                  <div class="nm-chips">
+                    <button class="composer-pill active">markdown</button>
+                    <button class="composer-pill">plain</button>
+                    <button class="composer-pill">json</button>
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'intel'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd"><span class="sr-label-tight">SCOPE</span></div>
+                  <div class="nm-scope">
+                    <div>
+                      <span class="nm-scope-lbl">TOPIC</span>
+                      <button class="composer-pill active">retry policy</button>
+                    </div>
+                    <div>
+                      <span class="nm-scope-lbl">PERSON</span>
+                      <button class="composer-pill ghost">any</button>
+                    </div>
+                    <div>
+                      <span class="nm-scope-lbl">WHEN</span>
+                      <button class="composer-pill active">last 30d</button>
+                    </div>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">MATCHING</span>
+                    <span class="nm-sec-meta">84 notes · 6 entities</span>
+                  </div>
+                </section>
+              {/if}
+            </div>
+
+            <!-- Actions footer -->
+            <div class="nm-foot">
+              <div class="nm-actions">
+                <button class="nm-act"><span class="nm-act-ic">↻</span>Re-run</button>
+                <button class="nm-act"><span class="nm-act-ic">⎇</span>Branch</button>
+                <button class="nm-act"><span class="nm-act-ic">↘</span>Pipe to…</button>
+                <button class="nm-act"><span class="nm-act-ic">◉</span>Pin to chat</button>
+                <button class="nm-act"><span class="nm-act-ic">⊘</span>Detach</button>
+                <button class="nm-act is-danger"><span class="nm-act-ic">×</span>Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Legend -->
@@ -735,5 +1020,406 @@
     inset: 0;
     border: 1.5px solid var(--accent);
     pointer-events: none;
+  }
+
+  /* ——— Inline node menu (phase C) ——— */
+  .nm-inline {
+    position: absolute;
+    width: 420px;
+    background: var(--bg);
+    border: 1.5px solid var(--accent);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+  }
+  .nm-inline-hdr {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--divider);
+    background: var(--accent-tint-08);
+  }
+  .nm-inline-hdr .wf-name {
+    position: static;
+    background: none;
+    border: none;
+    padding: 0;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    font-weight: 500;
+  }
+  .mono12 {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .nm-bar {
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .nm-inline-body {
+    display: flex;
+    flex-direction: column;
+    max-height: 60vh;
+    overflow: auto;
+  }
+
+  .nm-hdr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--divider);
+    background: var(--bg);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .nm-hdr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .nm-hdr-kind {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-ghost);
+  }
+  .nm-hdr-id {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+  .nm-hdr-name {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .ms-auto {
+    margin-left: auto;
+  }
+  .chip-failed {
+    background: #c44;
+    color: var(--bg);
+    border-color: #c44;
+  }
+
+  .nm-ctx {
+    display: grid;
+    gap: 4px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--divider);
+  }
+  .nm-ctx-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .nm-ctx-lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .nm-ctx-empty {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-ghost);
+    font-style: italic;
+  }
+  .nm-pin {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 2px 7px;
+    color: var(--text-primary);
+    cursor: default;
+  }
+  .nm-pin::before {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 10px;
+    background: var(--text-ghost);
+    margin-right: 6px;
+  }
+  .nm-pin[data-kind='llm']::before {
+    background: var(--accent);
+  }
+  .nm-pin[data-kind='parse']::before {
+    background: #c44;
+  }
+  .nm-pin[data-kind='output']::before {
+    background: var(--text-primary);
+  }
+  .nm-pin[data-kind='input']::before {
+    background: var(--text-muted);
+  }
+  .nm-pin[data-kind='intel']::before {
+    background: var(--accent);
+  }
+  .nm-pin[data-kind='agent']::before {
+    background: var(--text-primary);
+  }
+
+  .nm-body {
+    padding: 10px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .nm-sec {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .nm-sec.nm-sec-row {
+    flex-direction: row;
+    gap: 12px;
+  }
+  .nm-sec-error {
+    background: rgba(196, 68, 68, 0.06);
+    border: 1px solid rgba(196, 68, 68, 0.3);
+    padding: 6px 8px;
+  }
+  .nm-sec-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .sr-label-tight {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .sr-label-tight.error {
+    color: #c44;
+  }
+  .nm-sec-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+  .nm-link {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-left: auto;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-decoration: none;
+  }
+  .nm-field {
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid rgba(26, 16, 8, 0.12);
+    padding: 8px 10px;
+  }
+  .nm-field pre {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .nm-field pre.ghost {
+    color: var(--text-ghost);
+  }
+  .nm-field pre.error-text {
+    color: #c44;
+  }
+  .nm-field-read {
+    background: var(--bg-section);
+  }
+  .nm-field textarea {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 60px;
+    outline: none;
+  }
+  .nm-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+  .nm-select {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    padding: 5px 9px;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .nm-select:hover {
+    border-color: var(--accent);
+  }
+  .nm-slider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nm-slider-track {
+    flex: 1;
+    height: 3px;
+    background: var(--divider);
+    position: relative;
+  }
+  .nm-slider-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--accent);
+  }
+  .nm-slider-track::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    transform: translate(-5px, -5px);
+  }
+  .nm-slider-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    width: 24px;
+  }
+  .nm-trace {
+    background: var(--bg-section);
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--text-muted);
+  }
+  .nm-trace div {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .nm-trace div span:first-child {
+    color: var(--accent);
+  }
+  .nm-trace-t {
+    margin-left: auto;
+    color: var(--text-ghost);
+  }
+  .nm-scope {
+    display: grid;
+    gap: 6px;
+  }
+  .nm-scope > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nm-scope-lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-ghost);
+    width: 54px;
+    flex-shrink: 0;
+  }
+  .nm-chips {
+    display: flex;
+    gap: 6px;
+  }
+  .composer-pill.active {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-08);
+  }
+  .composer-pill.ghost {
+    color: var(--text-ghost);
+  }
+
+  .nm-foot {
+    border-top: 1px solid var(--divider);
+    padding: 8px 10px;
+    background: var(--bg-section);
+    flex-shrink: 0;
+  }
+  .nm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .nm-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 5px 9px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+  .nm-act:hover {
+    background: var(--bg);
+    border-color: var(--card-border);
+  }
+  .nm-act.is-danger:hover {
+    color: #c44;
+    border-color: rgba(196, 68, 68, 0.4);
+  }
+  .nm-act-ic {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    width: 14px;
+    text-align: center;
+    font-size: 12px;
+  }
+
+  .p-icon-btn {
+    margin-left: auto;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 7px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .p-icon-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
   }
 </style>
