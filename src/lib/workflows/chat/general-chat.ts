@@ -278,11 +278,14 @@ export async function generalChat(
     console.warn('[general-chat] Failed to load HA config:', err instanceof Error ? err.message : err);
   }
 
-  // Build system prompt — no longer includes HA entity registry or full tool list
-  const basePrompt = await getCompiledPrompt();
+  // Build system prompt — fetched in parallel to cut cold-start latency.
+  // siteSection is synchronous, so no Promise.all entry for it.
   const siteSection = buildSiteSystemPromptSection();
-  const memorySection = await buildMemorySection();
-  const graphSection = options.useIntelContext === false ? '' : await buildKnowledgeContext(userMessage);
+  const [basePrompt, memorySection, graphSection] = await Promise.all([
+    getCompiledPrompt(),
+    buildMemorySection(),
+    options.useIntelContext === false ? Promise.resolve('') : buildKnowledgeContext(userMessage),
+  ]);
   const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}`;
 
   // Build messages

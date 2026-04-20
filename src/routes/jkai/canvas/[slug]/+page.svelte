@@ -25,6 +25,11 @@
   // Per-chat-node composer draft, scroll refs, size overrides, active-run target
   let chatDrafts = $state<Record<string, string>>({});
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
+  // Live-streaming assistant reply per chat node (cleared when run settles)
+  let streamingReplies = $state<Record<string, string>>({});
+  let liveToolSteps = $state<Record<string, Array<{ tool: string; status: string }>>>(
+    {},
+  );
   let chatSizes = $state<Record<string, { w: number; h: number }>>({});
   let chatResize = $state<{
     nodeId: string;
@@ -353,6 +358,34 @@
           error: evt.error ?? (evt.data?.error as string) ?? null,
         },
       };
+    } else if (evt.type === 'log' && evt.data) {
+      const kind = evt.data.kind as string | undefined;
+      const chatNodeId = (evt.data.chatNodeId as string | undefined) ?? null;
+      if (kind === 'chat_stream' && chatNodeId) {
+        const event = (evt.data.event as { type?: string; delta?: string }) ?? {};
+        if (event.type === 'token' && typeof event.delta === 'string') {
+          streamingReplies = {
+            ...streamingReplies,
+            [chatNodeId]: (streamingReplies[chatNodeId] ?? '') + event.delta,
+          };
+          if (pendingRun?.chatNodeId === chatNodeId) scrollChatToBottom(chatNodeId);
+        }
+      } else if (kind === 'chat_tool' && chatNodeId) {
+        const step = evt.data.step as { tool?: string; status?: string } | undefined;
+        if (step && step.tool) {
+          const existing = liveToolSteps[chatNodeId] ?? [];
+          const idx = existing.findIndex(
+            (s) => s.tool === step.tool && s.status === 'running',
+          );
+          const next = existing.slice();
+          if (idx >= 0 && step.status !== 'running') {
+            next[idx] = { tool: step.tool, status: step.status ?? 'done' };
+          } else {
+            next.push({ tool: step.tool, status: step.status ?? 'running' });
+          }
+          liveToolSteps = { ...liveToolSteps, [chatNodeId]: next };
+        }
+      }
     } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
       runMeta = { state: 'completed' };
       finalizeChatReply();
@@ -377,7 +410,16 @@
       }
     }
     await invalidateAll();
-    if (pending?.chatNodeId) scrollChatToBottom(pending.chatNodeId);
+    // Clear streaming state — the persisted message now owns the text.
+    if (pending?.chatNodeId) {
+      const next = { ...streamingReplies };
+      delete next[pending.chatNodeId];
+      streamingReplies = next;
+      const nextTools = { ...liveToolSteps };
+      delete nextTools[pending.chatNodeId];
+      liveToolSteps = nextTools;
+      scrollChatToBottom(pending.chatNodeId);
+    }
   }
 
   // Phase B — pan/zoom/selection state
@@ -755,6 +797,82 @@
     if (result) await reloadCanvas();
   }
 
+  // ——— Drag-to-connect edges ———
+  let edgeDrag = $state<{
+    sourceId: string;
+    pointerId: number;
+    cursorX: number;
+    cursorY: number;
+    hoverTargetId: string | null;
+  } | null>(null);
+
+  function onHandlePointerDown(e: PointerEvent, source: CanvasNode) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    edgeDrag = {
+      sourceId: source.id,
+      pointerId: e.pointerId,
+      cursorX: source.x + nodeW(source) + 8,
+      cursorY: source.y + nodeH(source) / 2,
+      hoverTargetId: null,
+    };
+  }
+
+  $effect(() => {
+    if (!edgeDrag) return;
+    function onMove(e: PointerEvent) {
+      if (!edgeDrag || e.pointerId !== edgeDrag.pointerId) return;
+      if (!viewportEl) return;
+      const vp = viewportEl.getBoundingClientRect();
+      const worldX = (e.clientX - vp.left - panX) / zoom;
+      const worldY = (e.clientY - vp.top - panY) / zoom;
+      let hover: string | null = null;
+      for (const n of viewNodes) {
+        if (n.id === edgeDrag.sourceId) continue;
+        const w = nodeW(n);
+        const h = nodeH(n);
+        if (worldX >= n.x && worldX <= n.x + w && worldY >= n.y && worldY <= n.y + h) {
+          hover = n.id;
+          break;
+        }
+      }
+      edgeDrag = { ...edgeDrag, cursorX: worldX, cursorY: worldY, hoverTargetId: hover };
+    }
+    async function onUp(e: PointerEvent) {
+      if (!edgeDrag || e.pointerId !== edgeDrag.pointerId) return;
+      const { sourceId, hoverTargetId } = edgeDrag;
+      edgeDrag = null;
+      if (hoverTargetId) {
+        actionError = null;
+        try {
+          const res = await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sourceNodeId: sourceId, targetNodeId: hoverTargetId }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${res.status}`);
+          }
+          await invalidateAll();
+        } catch (err) {
+          actionError = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') edgeDrag = null;
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('keydown', onKey);
+    };
+  });
+
   async function pipeTo(targetId: string) {
     if (!menuNode) return;
     actionError = null;
@@ -1007,6 +1125,20 @@
     >
       <svg class="edges" aria-hidden="true">
         <!-- workflow edges -->
+        {#if edgeDrag}
+          {@const src = byId[edgeDrag.sourceId]}
+          {#if src}
+            <path
+              d={`M ${src.x + nodeW(src)} ${src.y + nodeH(src) / 2} L ${edgeDrag.cursorX} ${edgeDrag.cursorY}`}
+              stroke="var(--accent)"
+              stroke-width="1.75"
+              stroke-dasharray="4 3"
+              fill="none"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+            />
+          {/if}
+        {/if}
         {#each visibleEdges as e (e.id)}
           {@const isActive = activeEdgeIds.has(e.id)}
           {@const d = orthPath(byId[e.from], byId[e.to])}
@@ -1047,6 +1179,7 @@
             class="chat-node"
             class:is-selected={selectedId === n.id}
             class:active={isRunning && pendingRun?.chatNodeId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{size.w}px"
@@ -1054,6 +1187,11 @@
             role="group"
             aria-label="Chat node"
           >
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
             <div
               class="chat-node-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -1131,9 +1269,24 @@
                 <div class="chat-msg chat-msg-pending">
                   <div class="msg-meta">
                     <b>JKAI</b><span class="sr-sep">/</span>
-                    <span>running · {runningCount} active</span>
+                    <span>streaming…</span>
                   </div>
-                  <div class="chat-msg-body ghost">⟳ piping through the canvas…</div>
+                  {#if liveToolSteps[n.id] && liveToolSteps[n.id].length > 0}
+                    <div class="chat-tool-trace">
+                      {#each liveToolSteps[n.id] as step (step.tool + step.status)}
+                        <div class="chat-tool-step" class:running={step.status === 'running'}>
+                          <span class="chat-tool-dot"></span>{step.tool}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if streamingReplies[n.id]}
+                    <div class="chat-msg-body">{streamingReplies[n.id]}<span
+                        class="chat-cursor">▊</span
+                      ></div>
+                  {:else if !(liveToolSteps[n.id] && liveToolSteps[n.id].length > 0)}
+                    <div class="chat-msg-body ghost">⟳ thinking…</div>
+                  {/if}
                 </div>
               {/if}
             </div>
@@ -1189,6 +1342,7 @@
             class:failed={isRunning && n.status === 'failed'}
             class:ok={isRunning && n.status === 'ok'}
             class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
             data-kind={n.kind}
             style:left="{n.x}px"
             style:top="{n.y}px"
@@ -1205,6 +1359,11 @@
             }}
           >
             <span class="wf-name">{n.name}</span>
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
           </div>
         {/if}
       {/each}
@@ -2324,6 +2483,54 @@
     font-family: var(--font-mono);
     font-size: 11px;
   }
+  .chat-cursor {
+    display: inline-block;
+    color: var(--accent);
+    animation: chat-cursor-blink 1s steps(1) infinite;
+    margin-left: 1px;
+    font-weight: 400;
+  }
+  @keyframes chat-cursor-blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  .chat-tool-trace {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+    padding: 6px 8px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .chat-tool-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chat-tool-step.running {
+    color: var(--text-primary);
+  }
+  .chat-tool-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .chat-tool-step.running .chat-tool-dot {
+    background: var(--accent);
+    animation: chat-tool-pulse 1s ease-in-out infinite;
+  }
+  @keyframes chat-tool-pulse {
+    50% {
+      opacity: 0.3;
+    }
+  }
   .chat-composer {
     border-top: 1px solid var(--divider);
     background: var(--bg-section);
@@ -2504,6 +2711,33 @@
   .wf-node.is-selected {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+  .wf-node.drop-target,
+  .chat-node.drop-target {
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
+  }
+  .node-handle {
+    position: absolute;
+    right: -7px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translateY(-50%);
+    background: var(--bg);
+    border: 1.5px solid var(--text-ghost);
+    border-radius: 50%;
+    cursor: crosshair;
+    z-index: 4;
+    transition:
+      border-color 0.12s,
+      background 0.12s,
+      transform 0.12s;
+  }
+  .node-handle:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    transform: translateY(-50%) scale(1.15);
   }
   .wf-node:focus-visible {
     outline: 2px solid var(--accent);

@@ -98,6 +98,19 @@ export const chatExecutor: NodeExecutor = {
 
     const useIntelContext = config.useIntelContext !== false;
 
+    // Surface live tokens + tool progress to the SSE stream so the
+    // canvas chat panel can render them as they arrive.
+    const chatNodeId = thisNodeId ?? null;
+    const streamLog = (kind: string, data: Record<string, unknown>) => {
+      context.emit({
+        type: 'log',
+        runId: context.runId,
+        nodeId: chatNodeId ?? undefined,
+        data: { kind, chatNodeId, ...data },
+        timestamp: new Date().toISOString(),
+      });
+    };
+
     const { response } = await generalChat(
       { text: message, attachments: [] },
       history,
@@ -107,6 +120,12 @@ export const chatExecutor: NodeExecutor = {
         modelContext,
         priceSnapshot: null,
         useIntelContext,
+        onStreamEvent: (event) => {
+          streamLog('chat_stream', { event });
+        },
+        onToolProgress: (step) => {
+          streamLog('chat_tool', { step });
+        },
       },
     );
 
