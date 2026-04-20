@@ -320,19 +320,31 @@
   }
 
   async function runCanvas() {
-    // Re-run from the most recent user message across any chat node
-    const all: { chatId: string; text: string; ts: string }[] = [];
-    for (const chatId of chatNodeIds) {
-      for (const m of messagesFor(chatId)) {
-        if (m.role === 'user') all.push({ chatId, text: m.content, ts: m.createdAt });
+    // Toolbar Run — a pure workflow execution. No chat message is
+    // inserted; the chat panels are untouched. If a chat node is
+    // wired into the graph it still runs (getting empty input), but
+    // the common case is: user detached chat to decouple, and Run
+    // fires the real pipe from the trigger outward.
+    if (runMeta.state === 'running') return;
+    liveStatus = {};
+    liveData = {};
+    runMeta = { state: 'running' };
+    pendingRun = null;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: {} }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
       }
-    }
-    all.sort((a, b) => b.ts.localeCompare(a.ts));
-    const last = all[0];
-    if (last) {
-      await sendMessageFrom(last.chatId, last.text);
-    } else {
-      await sendMessageFrom(firstChatId, 'run');
+      const { runId } = await res.json();
+      activeRunId = runId;
+      subscribeToRun(runId);
+    } catch (err) {
+      runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -1124,7 +1136,7 @@
         disabled={runMeta.state === 'running' || !canvas.workflowId}
         title={runMeta.state === 'running'
           ? 'Running…'
-          : 'Re-run the canvas with the last chat message'}
+          : 'Fire the trigger. Does NOT touch chat.'}
       >
         {runMeta.state === 'running' ? '⟳ running…' : '▶ Run'}
       </button>
