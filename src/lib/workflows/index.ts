@@ -203,6 +203,17 @@ loadCustomTools().catch((err: unknown) => {
 
 startMemoryReview();
 
+// Bring every workflow into canvas shape before the scheduler takes
+// a fresh snapshot. Idempotent — no-ops on a clean DB.
+(async () => {
+  try {
+    const { migrateWorkflowsToCanvas } = await import('$lib/canvas/migrate');
+    await migrateWorkflowsToCanvas();
+  } catch (err) {
+    console.error('[canvas-migrate] Boot migration failed:', err);
+  }
+})();
+
 startScheduler().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : 'Unknown error';
   console.error('[scheduler] Boot failed:', msg);

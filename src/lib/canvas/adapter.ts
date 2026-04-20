@@ -442,19 +442,40 @@ export async function deleteCanvas(slug: string): Promise<boolean> {
   return res.length > 0;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Idempotently ensure a workflow exists for this slug; return its id + title. */
 export async function ensureCanvasWorkflow(
-  slug: string,
+  slugOrId: string,
 ): Promise<{ workflowId: string; title: string }> {
-  const name = workflowNameFor(slug);
-  const [existing] = await db.select().from(workflows).where(eq(workflows.name, name));
-  if (existing) {
-    return { workflowId: existing.id, title: existing.description || SEED_TITLE };
+  // Canvas-named lookup first (the post-migration happy path)
+  const [byName] = await db
+    .select()
+    .from(workflows)
+    .where(eq(workflows.name, workflowNameFor(slugOrId)));
+  if (byName) {
+    return { workflowId: byName.id, title: byName.description || SEED_TITLE };
   }
 
+  // UUID param? Look up directly by id.
+  if (UUID_RE.test(slugOrId)) {
+    const [byId] = await db.select().from(workflows).where(eq(workflows.id, slugOrId));
+    if (byId) return { workflowId: byId.id, title: byId.description || byId.name };
+  }
+
+  // Legacy fallback: pre-migration workflow with a plain name match.
+  const [legacy] = await db.select().from(workflows).where(eq(workflows.name, slugOrId));
+  if (legacy) return { workflowId: legacy.id, title: legacy.description || legacy.name };
+
+  // Nothing matched — seed a fresh canvas under the slugified param.
+  const seedSlug = _slugify(slugOrId) || slugOrId;
   const [created] = await db
     .insert(workflows)
-    .values({ name, description: SEED_TITLE, trigger: { type: 'manual' } })
+    .values({
+      name: workflowNameFor(seedSlug),
+      description: SEED_TITLE,
+      trigger: { type: 'manual' },
+    })
     .returning();
 
   const idByLocal: Record<string, string> = {};
