@@ -262,11 +262,6 @@
         />
       </svg>
 
-      <!-- Column labels -->
-      {#each ['INPUT', 'PROCESS', 'RETRY', 'OUTPUT'] as lbl, i}
-        <div class="col-label" style:left="{COL[i]}px">{lbl}</div>
-      {/each}
-
       <!-- Nodes -->
       {#each canvas.nodes as n (n.id)}
         <div
@@ -583,17 +578,6 @@
     height: 100%;
     pointer-events: none;
   }
-  .col-label {
-    position: absolute;
-    top: 72px;
-    width: 148px;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    color: var(--text-ghost);
-    text-transform: uppercase;
-  }
-
   /* Node */
   .wf-node {
     position: absolute;
