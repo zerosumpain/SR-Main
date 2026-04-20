@@ -296,14 +296,8 @@ function workflowNameFor(slug: string): string {
 
 const SLUG_PREFIX = 'canvas:';
 
-/** Turn free text into a canvas slug: lowercase, kebab, trimmed to 48 chars. */
-export function slugify(input: string): string {
-  return (input || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)+/g, '')
-    .slice(0, 48);
-}
+export { slugify } from './slug';
+import { slugify as _slugify } from './slug';
 
 export type CanvasSummary = {
   slug: string;
@@ -366,7 +360,7 @@ export async function createCanvas(
   slugInput: string,
   title: string,
 ): Promise<{ workflowId: string; slug: string }> {
-  const slug = slugify(slugInput);
+  const slug = _slugify(slugInput);
   if (!slug) throw new Error('Slug is required (letters, numbers, dashes).');
   const name = workflowNameFor(slug);
   const [existing] = await db.select().from(workflows).where(eq(workflows.name, name));

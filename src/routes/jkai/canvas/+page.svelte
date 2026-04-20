@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
-  import { slugify } from '$lib/canvas/adapter';
+  import { slugify } from '$lib/canvas/slug';
 
   let { data } = $props();
   const canvases = $derived(data.canvases);
