@@ -1,10 +1,13 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import { goto } from '$app/navigation';
 
   let { data } = $props();
 
   let noteStatus = $state(data.note.status);
   let retrying = $state(false);
+  let deleting = $state(false);
+  let deleteError = $state<string | null>(null);
 
   const statusBadge: Record<string, { bg: string; text: string }> = {
     pending: { bg: 'background: var(--card-bg);', text: 'color: var(--text-secondary);' },
@@ -41,6 +44,24 @@
       retrying = false;
     }
   }
+
+  async function deleteNote() {
+    const ok = confirm(
+      'Delete this note? Any entities and relationships that came only from this note will also be removed.',
+    );
+    if (!ok) return;
+
+    deleting = true;
+    deleteError = null;
+    try {
+      const res = await fetch(`/api/jkai/intel/notes/${data.note.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+      await goto('/jkai/intel/notes');
+    } catch (err) {
+      deleteError = err instanceof Error ? err.message : 'Delete failed';
+      deleting = false;
+    }
+  }
 </script>
 
 <PageHeader title="NOTE" titleHref="/jkai/intel/notes" />
@@ -58,8 +79,18 @@
         >{retrying ? 'Retrying...' : 'Retry'}</button>
       {/if}
       <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--card-border);">{noteStatus}</span>
+      <button
+        onclick={deleteNote}
+        disabled={deleting}
+        class="px-3 py-1 rounded text-xs border transition-colors hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+        style="background: transparent; color: var(--text-secondary); border-color: var(--card-border);"
+        aria-label="Delete note"
+      >{deleting ? 'Deleting...' : 'Delete'}</button>
     </div>
   </div>
+  {#if deleteError}
+    <div class="mb-4 text-sm" style="color: #dc2626;">{deleteError}</div>
+  {/if}
 
   <div class="text-xs mb-6" style="color: var(--text-ghost);">
     {data.note.source} &middot; {data.note.format} &middot; {new Date(data.note.createdAt).toLocaleString()}
