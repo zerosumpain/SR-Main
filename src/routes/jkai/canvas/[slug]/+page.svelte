@@ -764,6 +764,7 @@
   let addNodeOpen = $state(false);
   let addNodeFilter = $state('');
   let addNodeCategory = $state<string | null>(null);
+  let addNodeWrapEl: HTMLDivElement | undefined = $state(undefined);
 
   const nodeGroupsOrdered = $derived(() => {
     // Preserve the declared order from CANVAS_NODE_TYPES
@@ -1174,12 +1175,17 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Close the add-node menu on outside click
+  // Close the add-node menu on outside click. composedPath() is captured
+  // at event dispatch time, so it stays valid even if Svelte detaches the
+  // clicked element during its reactive re-render (which is exactly what
+  // happens when the click changes addNodeCategory).
   $effect(() => {
     if (!addNodeOpen) return;
     function onDocClick(ev: MouseEvent) {
-      const t = ev.target as HTMLElement | null;
-      if (!t || !t.closest('.add-node-wrap')) addNodeOpen = false;
+      if (!addNodeWrapEl) return;
+      const path = ev.composedPath();
+      if (path.includes(addNodeWrapEl)) return;
+      addNodeOpen = false;
     }
     window.addEventListener('click', onDocClick);
     return () => window.removeEventListener('click', onDocClick);
@@ -1232,7 +1238,7 @@
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
       {/if}
       <span class="sep-v"></span>
-      <div class="add-node-wrap">
+      <div class="add-node-wrap" bind:this={addNodeWrapEl}>
         <button
           class="composer-pill"
           onclick={() => (addNodeOpen = !addNodeOpen)}
