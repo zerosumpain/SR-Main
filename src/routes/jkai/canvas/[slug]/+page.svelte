@@ -2655,7 +2655,6 @@
     top: calc(100% + 4px);
     left: 0;
     width: 340px;
-    max-height: 480px;
     background: var(--bg);
     border: 1.5px solid var(--accent);
     box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
@@ -2678,9 +2677,7 @@
     border-color: var(--accent);
   }
   .add-node-scroll {
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
+    /* No scrollbar; the menu grows to fit its contents. */
   }
   .add-node-group {
     font-family: var(--font-mono);
@@ -2690,10 +2687,7 @@
     color: var(--text-ghost);
     padding: 8px 6px 4px;
     background: var(--bg);
-    position: sticky;
-    top: 0;
     border-bottom: 1px solid var(--divider);
-    z-index: 1;
   }
   .add-node-empty {
     padding: 24px 10px;
@@ -2770,19 +2764,27 @@
     min-width: 0;
     flex: 1;
   }
-  .add-node-desc,
+  .add-node-desc {
+    font-size: 9px;
+    color: var(--text-ghost);
+    line-height: 1.4;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: normal;
+    word-break: break-word;
+  }
   .add-node-group-hint {
     font-size: 9px;
     color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-transform: none;
-    letter-spacing: 0;
   }
-  .add-node-group-hint {
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .add-node-item {
+    align-items: flex-start;
+    padding: 6px 8px;
   }
   .add-node-item {
     display: flex;

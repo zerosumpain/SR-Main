@@ -91,8 +91,7 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     label: 'Trigger',
     kind: 'trigger',
     group: 'Trigger & Flow',
-    description:
-      'Workflow entry point — manual / cron / webhook / event. Exactly one per canvas.',
+    description: 'Entry point — manual, cron, webhook, or event. One per canvas.',
     defaultConfig: { kind: 'manual' },
   },
   {
@@ -100,8 +99,7 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     label: 'Chat',
     kind: 'chat',
     group: 'Trigger & Flow',
-    description:
-      'Chat panel with its own history. Standalone: full jkai chat (tools + memory + intel). Wired downstream: triggers the workflow.',
+    description: 'Chat panel. Standalone = full jkai; wired = workflow trigger.',
     defaultConfig: { model: '', useIntelContext: true },
   },
   {
@@ -375,8 +373,7 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     label: 'Inspector · debug',
     kind: 'inspector',
     group: 'Integrations',
-    description:
-      'Runtime debug panel. Wire upstream → inspector; renders JSON, tables, CSV, HTML, images, video, audio.',
+    description: 'Debug panel. Renders JSON, tables, CSV, HTML, media.',
     defaultConfig: {},
   },
 ];
