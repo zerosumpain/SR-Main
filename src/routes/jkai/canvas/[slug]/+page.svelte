@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CanvasNode, CanvasEdge } from './+page.server';
+  import type { CanvasNode } from './+page.server';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -7,6 +7,9 @@
   const NODE_W = 148;
   const NODE_H = 52;
   const COL = [320, 540, 760, 980];
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 3;
+  const CHAT_CARD_RIGHT_EDGE = 316; // left (16) + width (300)
 
   const byId: Record<string, CanvasNode> = $derived(
     Object.fromEntries(canvas.nodes.map((n) => [n.id, n])),
@@ -17,9 +20,9 @@
     if (sameCol) {
       const bx = from.x + NODE_W / 2;
       const by = from.y + NODE_H;
-      const tx = to.x + NODE_W / 2;
-      const ty = to.y;
-      return `M${bx} ${by} L${bx} ${ty - 6} L${tx} ${ty - 6} L${tx} ${ty}`;
+      const tgtX = to.x + NODE_W / 2;
+      const tgtY = to.y;
+      return `M${bx} ${by} L${bx} ${tgtY - 6} L${tgtX} ${tgtY - 6} L${tgtX} ${tgtY}`;
     }
     const x1 = from.x + NODE_W;
     const y1 = from.y + NODE_H / 2;
@@ -39,6 +42,111 @@
   };
 
   const runningCount = $derived(canvas.nodes.filter((n) => n.status === 'running').length);
+
+  // Phase B — pan/zoom/selection state
+  let panX = $state(0);
+  let panY = $state(0);
+  let zoom = $state(1);
+  let selectedId = $state<string | null>(null);
+  const zoomPct = $derived(Math.round(zoom * 100));
+
+  let viewportEl: HTMLDivElement | undefined;
+  let panStart = $state<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+    pointerId: number;
+  } | null>(null);
+
+  function clampZoom(z: number) {
+    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+  }
+
+  function zoomAt(cx: number, cy: number, factor: number) {
+    const newZoom = clampZoom(zoom * factor);
+    if (newZoom === zoom) return;
+    const worldX = (cx - panX) / zoom;
+    const worldY = (cy - panY) / zoom;
+    zoom = newZoom;
+    panX = cx - worldX * newZoom;
+    panY = cy - worldY * newZoom;
+  }
+
+  function zoomCentered(factor: number) {
+    const vp = viewportEl?.getBoundingClientRect();
+    if (!vp) return;
+    zoomAt(vp.width / 2, vp.height / 2, factor);
+  }
+
+  function fit() {
+    if (!viewportEl || canvas.nodes.length === 0) return;
+    const vp = viewportEl.getBoundingClientRect();
+    const pad = 48;
+    const minX = Math.min(...canvas.nodes.map((n) => n.x)) - pad;
+    const minY = Math.min(...canvas.nodes.map((n) => n.y)) - pad;
+    const maxX = Math.max(...canvas.nodes.map((n) => n.x + NODE_W)) + pad;
+    const maxY = Math.max(...canvas.nodes.map((n) => n.y + NODE_H)) + pad + 24; // pip clearance
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const availW = Math.max(200, vp.width - CHAT_CARD_RIGHT_EDGE - 24);
+    const availH = Math.max(200, vp.height - 24);
+    const fitZ = clampZoom(Math.min(availW / contentW, availH / contentH, 1));
+    zoom = fitZ;
+    panX = CHAT_CARD_RIGHT_EDGE + 12 + (availW - contentW * fitZ) / 2 - minX * fitZ;
+    panY = 12 + (availH - contentH * fitZ) / 2 - minY * fitZ;
+  }
+
+  function reset() {
+    panX = 0;
+    panY = 0;
+    zoom = 1;
+  }
+
+  function isInteractiveTarget(el: EventTarget | null): boolean {
+    if (!(el instanceof HTMLElement)) return false;
+    return !!el.closest(
+      '.wf-node, .chat-card, .minimap, .legend, .hifi-toolbar, button, a, input, textarea',
+    );
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    if (isInteractiveTarget(e.target)) return;
+    selectedId = null;
+    panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!panStart || panStart.pointerId !== e.pointerId) return;
+    panX = panStart.panX + (e.clientX - panStart.x);
+    panY = panStart.panY + (e.clientY - panStart.y);
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!panStart || panStart.pointerId !== e.pointerId) return;
+    panStart = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* no-op */
+    }
+  }
+
+  function onWheel(e: WheelEvent) {
+    e.preventDefault();
+    const vp = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const cx = e.clientX - vp.left;
+    const cy = e.clientY - vp.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    zoomAt(cx, cy, factor);
+  }
+
+  function selectNode(e: Event, id: string) {
+    e.stopPropagation();
+    selectedId = id;
+  }
 </script>
 
 <svelte:head>
@@ -61,16 +169,30 @@
       <button class="composer-pill" disabled>+ workflow</button>
       <span class="sep-v"></span>
       <div class="hifi-zoomctl">
-        <button disabled>−</button><span class="zv">100%</span><button disabled>+</button>
+        <button onclick={() => zoomCentered(1 / 1.2)} title="Zoom out">−</button><span class="zv"
+          >{zoomPct}%</span
+        ><button onclick={() => zoomCentered(1.2)} title="Zoom in">+</button>
       </div>
-      <button class="composer-pill" disabled>Fit</button>
+      <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
+      <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
       <span class="sep-v"></span>
-      <span class="kicker">dbl-click node · phase C</span>
+      <span class="kicker">click to select · drag bg to pan · wheel to zoom</span>
     </div>
   </div>
 
   <!-- Viewport -->
-  <div class="viewport">
+  <div
+    class="viewport"
+    class:panning={panStart !== null}
+    bind:this={viewportEl}
+    role="application"
+    aria-label="Canvas graph"
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
+    onwheel={onWheel}
+  >
     <!-- Chat card (left) -->
     <div class="chat-card">
       <div class="p-pane-head">
@@ -103,8 +225,12 @@
       </div>
     </div>
 
-    <!-- Graph area -->
-    <div class="graph">
+    <!-- Graph area (pan/zoom stage) -->
+    <div
+      class="graph"
+      style:transform="translate({panX}px, {panY}px) scale({zoom})"
+      style:transform-origin="0 0"
+    >
       <svg class="edges" aria-hidden="true">
         <!-- chat → first-column nodes -->
         <path
@@ -113,6 +239,7 @@
           stroke-width="1.25"
           stroke-dasharray="3 3"
           fill="none"
+          vector-effect="non-scaling-stroke"
         />
         <!-- workflow edges -->
         {#each canvas.edges as e (e.id)}
@@ -131,6 +258,7 @@
           stroke-width="1"
           stroke-dasharray="2 3"
           fill="none"
+          vector-effect="non-scaling-stroke"
         />
       </svg>
 
@@ -145,9 +273,16 @@
           class="wf-node"
           class:active={n.status === 'running'}
           class:failed={n.status === 'failed'}
+          class:is-selected={selectedId === n.id}
           data-kind={n.kind}
           style:left="{n.x}px"
           style:top="{n.y}px"
+          role="button"
+          tabindex="0"
+          onclick={(e) => selectNode(e, n.id)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') selectNode(e, n.id);
+          }}
         >
           <span class="wf-name">{n.name}</span>
         </div>
@@ -313,10 +448,15 @@
     flex: 1;
     position: relative;
     overflow: hidden;
+    touch-action: none;
+    cursor: grab;
     background:
       linear-gradient(var(--divider) 1px, transparent 1px) 0 0 / 32px 32px,
       linear-gradient(90deg, var(--divider) 1px, transparent 1px) 0 0 / 32px 32px,
       var(--bg);
+  }
+  .viewport.panning {
+    cursor: grabbing;
   }
 
   /* Chat card */
@@ -510,6 +650,17 @@
   }
   .wf-node.failed {
     border-color: #c44;
+  }
+  .wf-node.is-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .wf-node:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .wf-node {
+    cursor: pointer;
   }
 
   /* Status pip */
