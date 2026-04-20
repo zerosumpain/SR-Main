@@ -47,7 +47,11 @@
   );
 
   const activeEdgeIds = $derived(
-    new Set(canvas.edges.filter((e) => byId[e.to]?.status === 'running').map((e) => e.id)),
+    new Set(
+      runMeta.state === 'running'
+        ? canvas.edges.filter((e) => byId[e.to]?.status === 'running').map((e) => e.id)
+        : [],
+    ),
   );
 
   function orthPath(from: CanvasNode, to: CanvasNode): string {
@@ -77,6 +81,7 @@
   };
 
   const runningCount = $derived(viewNodes.filter((n) => n.status === 'running').length);
+  const isRunning = $derived(runMeta.state === 'running');
 
   // ——— Run trigger + SSE live updates ———
   async function runCanvas() {
@@ -479,18 +484,25 @@
     await runCanvas();
   }
 
-  async function actDelete() {
-    if (!menuNode) return;
-    if (!confirm(`Delete node "${menuNode.name}"? This also removes its edges.`)) return;
+  async function deleteNode(id: string, skipConfirm = false) {
+    const node = byId[id];
+    if (!node) return;
+    if (!skipConfirm && !confirm(`Delete node "${node.name}"? This also removes its edges.`)) return;
     actionError = null;
     const result = await postAction(
-      `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+      `/api/workflows/${canvas.workflowId}/nodes/${id}`,
       { method: 'DELETE' },
     );
     if (result) {
-      closeMenu();
+      if (menuForNodeId === id) closeMenu();
+      if (selectedId === id) selectedId = null;
       await reloadCanvas();
     }
+  }
+
+  async function actDelete() {
+    if (!menuNode) return;
+    await deleteNode(menuNode.id);
   }
 
   async function actDetach() {
@@ -584,14 +596,30 @@
     menuForNodeId = null;
   }
 
+  function isTypingTarget(t: EventTarget | null): boolean {
+    if (!(t instanceof HTMLElement)) return false;
+    const tag = t.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
+  }
+
   $effect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === 'Escape') {
         menuForNodeId = null;
         selectedId = null;
+        addNodeOpen = false;
+        pipePickerOpen = false;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
         ev.preventDefault();
         runCanvas();
+      } else if (
+        (ev.key === 'Delete' || ev.key === 'Backspace') &&
+        selectedId &&
+        !menuForNodeId &&
+        !isTypingTarget(ev.target)
+      ) {
+        ev.preventDefault();
+        deleteNode(selectedId);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -782,9 +810,9 @@
       {#each viewNodes as n (n.id)}
         <div
           class="wf-node"
-          class:active={n.status === 'running'}
-          class:failed={n.status === 'failed'}
-          class:ok={n.status === 'ok'}
+          class:active={isRunning && n.status === 'running'}
+          class:failed={isRunning && n.status === 'failed'}
+          class:ok={isRunning && n.status === 'ok'}
           class:is-selected={selectedId === n.id}
           data-kind={n.kind}
           style:left="{n.x}px"
