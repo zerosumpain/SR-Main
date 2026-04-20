@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CanvasNode } from './+page.server';
+  import type { CanvasNode, NodeStatus } from './+page.server';
+  import { invalidate } from '$app/navigation';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -11,8 +12,37 @@
   const MAX_ZOOM = 3;
   const CHAT_CARD_RIGHT_EDGE = 316; // left (16) + width (300)
 
-  const byId: Record<string, CanvasNode> = $derived(
-    Object.fromEntries(canvas.nodes.map((n) => [n.id, n])),
+  // Live run state — overlays the server-provided canvas snapshot
+  let liveStatus = $state<Record<string, NodeStatus>>({});
+  let liveData = $state<
+    Record<string, { inputData?: unknown; outputData?: unknown; error?: string | null }>
+  >({});
+  let activeRunId = $state<string | null>(null);
+  let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
+    state: 'idle',
+  });
+  let runInput = $state(
+    'How should I handle node retries when the LLM returns malformed JSON three times in a row?',
+  );
+
+  // Merged view of each node: base canvas row + any live overlay
+  type ViewNode = CanvasNode;
+  const viewNodes = $derived<ViewNode[]>(
+    canvas.nodes.map((n) => ({
+      ...n,
+      status: liveStatus[n.id] ?? n.status,
+      inputData: liveData[n.id]?.inputData ?? n.inputData,
+      outputData: liveData[n.id]?.outputData ?? n.outputData,
+      error: liveData[n.id]?.error ?? n.error,
+    })),
+  );
+
+  const byId: Record<string, ViewNode> = $derived(
+    Object.fromEntries(viewNodes.map((n) => [n.id, n])),
+  );
+
+  const activeEdgeIds = $derived(
+    new Set(canvas.edges.filter((e) => byId[e.to]?.status === 'running').map((e) => e.id)),
   );
 
   function orthPath(from: CanvasNode, to: CanvasNode): string {
@@ -41,7 +71,99 @@
     agent: 'var(--text-primary)',
   };
 
-  const runningCount = $derived(canvas.nodes.filter((n) => n.status === 'running').length);
+  const runningCount = $derived(viewNodes.filter((n) => n.status === 'running').length);
+
+  // ——— Run trigger + SSE live updates ———
+  async function runCanvas() {
+    if (runMeta.state === 'running') return;
+    liveStatus = {};
+    liveData = {};
+    runMeta = { state: 'running' };
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: { message: runInput } }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const { runId } = await res.json();
+      activeRunId = runId;
+      subscribeToRun(runId);
+    } catch (err) {
+      runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  function subscribeToRun(runId: string) {
+    const es = new EventSource(`/api/workflows/${canvas.workflowId}/runs/${runId}/stream`);
+    es.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data) as {
+          type: string;
+          nodeId?: string;
+          data?: Record<string, unknown>;
+          error?: string;
+        };
+        handleEvent(data);
+      } catch {
+        /* ignore parse errors */
+      }
+    };
+    es.onerror = () => {
+      es.close();
+    };
+  }
+
+  function handleEvent(evt: {
+    type: string;
+    nodeId?: string;
+    data?: Record<string, unknown>;
+    error?: string;
+  }) {
+    if (evt.type === 'node_started' && evt.nodeId) {
+      liveStatus = { ...liveStatus, [evt.nodeId]: 'running' };
+      if (evt.data && 'inputData' in evt.data) {
+        liveData = {
+          ...liveData,
+          [evt.nodeId]: { ...liveData[evt.nodeId], inputData: evt.data.inputData },
+        };
+      }
+    } else if (evt.type === 'node_completed' && evt.nodeId) {
+      liveStatus = { ...liveStatus, [evt.nodeId]: 'ok' };
+      if (evt.data) {
+        liveData = {
+          ...liveData,
+          [evt.nodeId]: {
+            ...liveData[evt.nodeId],
+            inputData: (evt.data.inputData ?? liveData[evt.nodeId]?.inputData) as unknown,
+            outputData: (evt.data.outputData ?? evt.data.output ?? undefined) as unknown,
+          },
+        };
+      }
+    } else if (evt.type === 'node_failed' && evt.nodeId) {
+      liveStatus = { ...liveStatus, [evt.nodeId]: 'failed' };
+      liveData = {
+        ...liveData,
+        [evt.nodeId]: {
+          ...liveData[evt.nodeId],
+          error: evt.error ?? (evt.data?.error as string) ?? null,
+        },
+      };
+    } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
+      runMeta = { state: 'completed' };
+      invalidate(`/jkai/canvas/${canvas.slug}`).catch(() => {
+        /* harmless */
+      });
+    } else if (evt.type === 'run_failed') {
+      runMeta = { state: 'failed', error: evt.error };
+      invalidate(`/jkai/canvas/${canvas.slug}`).catch(() => {
+        /* harmless */
+      });
+    }
+  }
 
   // Phase B — pan/zoom/selection state
   let panX = $state(0);
@@ -149,6 +271,16 @@
     selectedId = id;
   }
 
+  function pretty(v: unknown): string {
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'string') return v;
+    try {
+      return JSON.stringify(v, null, 2);
+    } catch {
+      return String(v);
+    }
+  }
+
   // Phase C — double-click menu (inline shape)
   let menuForNodeId = $state<string | null>(null);
 
@@ -179,10 +311,22 @@
       if (ev.key === 'Escape') {
         menuForNodeId = null;
         selectedId = null;
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+        ev.preventDefault();
+        runCanvas();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Resume SSE if the server says there's an in-flight run at load
+  $effect(() => {
+    if (canvas.runStatus === 'running' && canvas.latestRunId && !activeRunId) {
+      activeRunId = canvas.latestRunId;
+      runMeta = { state: 'running' };
+      subscribeToRun(canvas.latestRunId);
+    }
   });
 </script>
 
@@ -198,12 +342,27 @@
     <span class="mono11 primary">{canvas.title}</span>
     <span class="sr-sep">/</span>
     <span class="mono11 muted">
-      {canvas.nodes.length} nodes · {canvas.edges.length} edges · {runningCount} running
+      {viewNodes.length} nodes · {canvas.edges.length} edges · {runningCount} running
     </span>
     <div class="toolbar-right">
-      <button class="composer-pill" disabled>+ node</button>
-      <button class="composer-pill" disabled>+ intel</button>
-      <button class="composer-pill" disabled>+ workflow</button>
+      <input
+        class="run-input"
+        type="text"
+        bind:value={runInput}
+        placeholder="Initial message…"
+        title="Passed as input.message to the workflow"
+      />
+      <button
+        class="composer-pill run-btn"
+        onclick={runCanvas}
+        disabled={runMeta.state === 'running' || !canvas.workflowId}
+        title={runMeta.state === 'running' ? 'Running…' : 'Run the workflow (Cmd/Ctrl+Enter)'}
+      >
+        {runMeta.state === 'running' ? '⟳ running…' : '▶ Run'}
+      </button>
+      {#if runMeta.state === 'failed'}
+        <span class="run-err" title={runMeta.error}>⚠ run failed</span>
+      {/if}
       <span class="sep-v"></span>
       <div class="hifi-zoomctl">
         <button onclick={() => zoomCentered(1 / 1.2)} title="Zoom out">−</button><span class="zv"
@@ -280,12 +439,14 @@
         />
         <!-- workflow edges -->
         {#each canvas.edges as e (e.id)}
+          {@const isActive = activeEdgeIds.has(e.id)}
           <path
             d={orthPath(byId[e.from], byId[e.to])}
-            stroke={e.active ? 'var(--accent)' : 'var(--text-ghost)'}
-            stroke-width={e.active ? 1.75 : 1.25}
-            stroke-dasharray={e.active ? '3 3' : ''}
+            stroke={isActive ? 'var(--accent)' : 'var(--text-ghost)'}
+            stroke-width={isActive ? 1.75 : 1.25}
+            stroke-dasharray={isActive ? '3 3' : ''}
             fill="none"
+            vector-effect="non-scaling-stroke"
           />
         {/each}
         <!-- output → back to chat -->
@@ -300,7 +461,7 @@
       </svg>
 
       <!-- Nodes -->
-      {#each canvas.nodes as n (n.id)}
+      {#each viewNodes as n (n.id)}
         <div
           class="wf-node"
           class:active={n.status === 'running'}
@@ -323,7 +484,7 @@
       {/each}
 
       <!-- Status pips -->
-      {#each canvas.nodes.filter((n) => n.status) as n (n.id + '-s')}
+      {#each viewNodes.filter((n) => n.status) as n (n.id + '-s')}
         <div
           class="pip"
           class:failed={n.status === 'failed'}
@@ -331,9 +492,10 @@
           style:left="{n.x + 16}px"
           style:top="{n.y + 56}px"
         >
-          {#if n.status === 'failed'}✕ failed ×1
-          {:else if n.status === 'running'}⟳ running · 1.1s
-          {:else}✓ ok · 0.4s{/if}
+          {#if n.status === 'failed'}✕ failed
+          {:else if n.status === 'running'}⟳ running…
+          {:else if n.durationMs != null}✓ ok · {(n.durationMs / 1000).toFixed(1)}s
+          {:else}✓ ok{/if}
         </div>
       {/each}
 
@@ -403,76 +565,45 @@
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
-                    <span class="nm-sec-meta">from ↑ upstream · last value</span>
+                    <span class="nm-sec-meta">from ↑ upstream</span>
                   </div>
                   <div class="nm-field nm-field-read">
-                    <pre>{`{
-  "error": "Unexpected token } in JSON at position 247",
-  "raw": "{\\"plan\\": \\"retry\\", \\"att..."
-}`}</pre>
-                  </div>
-                </section>
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">PROMPT</span>
-                    <a class="nm-link" href="#edit">Edit in full →</a>
-                  </div>
-                  <div class="nm-field">
-                    <textarea
-                      placeholder="Prompt template..."
-                      value={`You are a JSON repair engine. The upstream parser failed on this payload. Return ONLY a valid JSON object that preserves intent. Do not explain.\n\n{{ input.raw }}`}
-                    ></textarea>
-                  </div>
-                </section>
-
-                <section class="nm-sec nm-sec-row">
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MODEL</span>
-                    <button class="nm-select">{menuNode.name} ▾</button>
-                  </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">TEMP</span>
-                    <div class="nm-slider">
-                      <div class="nm-slider-track">
-                        <div class="nm-slider-fill" style:width="0%"></div>
-                      </div>
-                      <span class="nm-slider-val">0.0</span>
-                    </div>
-                  </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MAX TOK</span>
-                    <button class="nm-select">2048 ▾</button>
+                    {#if menuNode.inputData !== undefined}
+                      <pre>{pretty(menuNode.inputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// no run yet — press ▶ Run to pipe data</pre>
+                    {/if}
                   </div>
                 </section>
 
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">OUTPUT DATA</span>
-                    <span class="nm-sec-meta">pipes to ↓ downstream · schema: {`{ reply: string }`}</span>
+                    <span class="nm-sec-meta">pipes to ↓ downstream</span>
                   </div>
                   <div class="nm-field nm-field-read">
-                    <pre class="ghost">// pending — running now (1.1s elapsed)</pre>
+                    {#if menuNode.status === 'running'}
+                      <pre class="ghost">// running…</pre>
+                    {:else if menuNode.outputData !== undefined}
+                      <pre>{pretty(menuNode.outputData)}</pre>
+                    {:else if menuNode.error}
+                      <pre class="error-text">{menuNode.error}</pre>
+                    {:else}
+                      <pre class="ghost">// pending</pre>
+                    {/if}
                   </div>
                 </section>
 
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">LAST RUN</span>
-                    <span class="nm-sec-meta">3 tool calls · $0.008 · 2.1s</span>
-                  </div>
-                  <div class="nm-trace">
-                    <div><span>→</span> kb.search(query=&quot;JSON retry&quot;, top_k=6)<span
-                        class="nm-trace-t">0.4s</span
-                      ></div>
-                    <div><span>→</span> workflow.compile(nodes=5)<span class="nm-trace-t"
-                        >0.2s</span
-                      ></div>
-                    <div><span>→</span> code.synthesize(lang=&quot;ts&quot;, lines=42)<span
-                        class="nm-trace-t">1.3s</span
-                      ></div>
-                  </div>
-                </section>
+                {#if menuNode.durationMs != null}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">LAST RUN</span>
+                      <span class="nm-sec-meta"
+                        >completed in {(menuNode.durationMs / 1000).toFixed(2)}s</span
+                      >
+                    </div>
+                  </section>
+                {/if}
               {:else if menuNode.kind === 'parse'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
@@ -480,34 +611,37 @@
                     <span class="nm-sec-meta">from ↑ upstream</span>
                   </div>
                   <div class="nm-field nm-field-read">
-                    <pre>{`{
-  "plan": "retry",
-  "attempts: 3,   // ← malformed — missing quote
-  "bail_on": "parse_error"
-}`}</pre>
+                    {#if menuNode.inputData !== undefined}
+                      <pre>{pretty(menuNode.inputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// no run yet</pre>
+                    {/if}
                   </div>
                 </section>
                 <section class="nm-sec">
                   <div class="nm-sec-hd"><span class="sr-label-tight">PARSER</span></div>
-                  <div class="nm-field"><pre>JSON.parse(input, reviver?)</pre></div>
+                  <div class="nm-field"><pre>JSON.parse(input.response)</pre></div>
                 </section>
-                <section class="nm-sec nm-sec-error">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight error">ERROR</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    <pre class="error-text">{`SyntaxError: Unexpected token , in JSON at position 27
-  at JSON.parse (native)
-  at wf.parse (workflow/parser.ts:14)`}</pre>
-                  </div>
-                </section>
+                {#if menuNode.error}
+                  <section class="nm-sec nm-sec-error">
+                    <div class="nm-sec-hd"><span class="sr-label-tight error">ERROR</span></div>
+                    <div class="nm-field nm-field-read">
+                      <pre class="error-text">{menuNode.error}</pre>
+                    </div>
+                  </section>
+                {:else if menuNode.outputData !== undefined}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">OUTPUT DATA</span>
+                    </div>
+                    <div class="nm-field nm-field-read"><pre>{pretty(menuNode.outputData)}</pre></div>
+                  </section>
+                {/if}
               {:else if menuNode.kind === 'input'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd"><span class="sr-label-tight">SOURCE</span></div>
                   <div class="nm-field">
-                    <button class="nm-select" style:width="100%"
-                      >User message (from chat) ▾</button
-                    >
+                    <button class="nm-select" style:width="100%">Manual trigger (run button)</button>
                   </div>
                 </section>
                 <section class="nm-sec">
@@ -516,29 +650,35 @@
                     <span class="nm-sec-meta">pipes to ↓ downstream</span>
                   </div>
                   <div class="nm-field nm-field-read">
-                    <pre>{`"How should I handle node retries when the LLM returns malformed JSON three times in a row?"`}</pre>
+                    {#if menuNode.outputData !== undefined}
+                      <pre>{pretty(menuNode.outputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// no run yet</pre>
+                    {/if}
                   </div>
                 </section>
               {:else if menuNode.kind === 'output'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">SINK</span></div>
-                  <div class="nm-field">
-                    <button class="nm-select" style:width="100%">Reply to chat ▾</button>
-                  </div>
-                </section>
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
                     <span class="nm-sec-meta">from ↑ upstream</span>
                   </div>
-                  <div class="nm-field nm-field-read"><pre class="ghost">// pending</pre></div>
+                  <div class="nm-field nm-field-read">
+                    {#if menuNode.inputData !== undefined}
+                      <pre>{pretty(menuNode.inputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// pending</pre>
+                    {/if}
+                  </div>
                 </section>
                 <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">FORMAT</span></div>
-                  <div class="nm-chips">
-                    <button class="composer-pill active">markdown</button>
-                    <button class="composer-pill">plain</button>
-                    <button class="composer-pill">json</button>
+                  <div class="nm-sec-hd"><span class="sr-label-tight">OUTPUT DATA</span></div>
+                  <div class="nm-field nm-field-read">
+                    {#if menuNode.outputData !== undefined}
+                      <pre>{pretty(menuNode.outputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// pending</pre>
+                    {/if}
                   </div>
                 </section>
               {:else if menuNode.kind === 'intel'}
@@ -697,7 +837,38 @@
     cursor: default;
   }
   .composer-pill:disabled {
-    opacity: 0.85;
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .run-input {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-primary);
+    width: 240px;
+    outline: none;
+  }
+  .run-input:focus {
+    border-color: var(--accent);
+  }
+  .run-btn {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-tint-08);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .run-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .run-err {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #c44;
+    padding: 0 6px;
   }
   .hifi-zoomctl {
     display: inline-flex;
