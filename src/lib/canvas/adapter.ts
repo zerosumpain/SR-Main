@@ -72,14 +72,8 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     label: 'Chat',
     kind: 'chat',
     description:
-      'Chat panel with its own history. Calls the configured LLM when terminal, or triggers the workflow when wired downstream.',
-    defaultConfig: {
-      model: '',
-      systemPrompt:
-        'You are a helpful AI assistant. Keep replies concise unless asked otherwise.',
-      temperature: 0.7,
-      maxTokens: 1024,
-    },
+      'Chat panel with its own history. Standalone: full jkai chat (tools + memory + intel). Wired downstream: triggers the workflow.',
+    defaultConfig: { model: '', useIntelContext: true },
   },
   {
     type: 'manual-trigger',
@@ -238,13 +232,7 @@ const SEED_NODES: SeedNode[] = [
     label: 'Chat',
     x: 20,
     y: 20,
-    config: {
-      model: '',
-      systemPrompt:
-        'You are a helpful AI assistant. Keep replies concise unless asked otherwise.',
-      temperature: 0.7,
-      maxTokens: 1024,
-    },
+    config: { model: '', useIntelContext: true },
   },
   {
     localId: 'llm_primary',
@@ -427,9 +415,28 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     active: activeEdgeKeys.has(e.id),
   }));
 
-  // Chat history — grouped by chat node id. Legacy messages without a
-  // chatNodeId tag all get bucketed under the first chat node (if any).
-  const chatNodeIds = nodes.filter((n) => n.type === 'chat').map((n) => n.id);
+  // Chat history — one bucket per chat node, sourced either from a
+  // pinned conversationId (preferred) or from the metadata.chatNodeId
+  // tag on orchestrator_chats rows.
+  const chatNodes = nodes.filter((n) => n.type === 'chat');
+  const chatNodeIds = chatNodes.map((n) => n.id);
+  const messagesByChat: Record<string, ChatMessage[]> = {};
+  for (const id of chatNodeIds) messagesByChat[id] = [];
+
+  // Pull the per-node conversationId (if any) from node.config
+  const conversationIdByNode: Record<string, string> = {};
+  const conversationIdToNode: Record<string, string> = {};
+  for (const n of chatNodes) {
+    const cfg = (n.config as Record<string, unknown> | null) ?? {};
+    const cid = typeof cfg.conversationId === 'string' ? (cfg.conversationId as string) : null;
+    if (cid) {
+      conversationIdByNode[n.id] = cid;
+      conversationIdToNode[cid] = n.id;
+    }
+  }
+
+  // Pull messages for this workflow (covers legacy rows without a
+  // conversationId) AND any rows linked only by conversationId.
   const msgRows = await db
     .select()
     .from(orchestratorChats)
@@ -437,10 +444,8 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     .orderBy(desc(orchestratorChats.createdAt))
     .limit(400);
 
-  const messagesByChat: Record<string, ChatMessage[]> = {};
-  for (const id of chatNodeIds) messagesByChat[id] = [];
-
   const legacyBucket = chatNodeIds[0] ?? null;
+
   for (const m of msgRows.slice().reverse()) {
     const meta = (m.metadata as Record<string, unknown> | null) || {};
     const msg: ChatMessage = {
@@ -451,8 +456,13 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
       runId: (meta.runId as string | undefined) ?? null,
       nodeId: (meta.nodeId as string | undefined) ?? null,
     };
-    const explicit = (meta.chatNodeId as string | undefined) ?? null;
-    const bucket = explicit && messagesByChat[explicit] ? explicit : legacyBucket;
+    // Prefer conversationId routing, fall back to metadata tag, fall
+    // back to the first chat node for ancient un-tagged rows.
+    const byConversation = m.conversationId
+      ? conversationIdToNode[m.conversationId] ?? null
+      : null;
+    const byMeta = typeof meta.chatNodeId === 'string' ? meta.chatNodeId : null;
+    const bucket = byConversation ?? byMeta ?? legacyBucket;
     if (bucket && messagesByChat[bucket]) messagesByChat[bucket].push(msg);
   }
 

@@ -1282,86 +1282,73 @@
               {#if menuNode.kind === 'chat'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
-                    <span class="sr-label-tight">SYSTEM PROMPT</span>
-                    <span class="nm-sec-meta">used when this chat is terminal (no downstream)</span>
+                    <span class="sr-label-tight">MODEL</span>
+                    <span class="nm-sec-meta"
+                      >conversation-pinned; applies on standalone chat runs</span
+                    >
                   </div>
-                  <div class="nm-field">
-                    <textarea
-                      rows="3"
-                      value={(configDraft.systemPrompt as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField(
-                          'systemPrompt',
-                          (e.target as HTMLTextAreaElement).value,
-                        )}
-                      placeholder="You are a helpful AI assistant."
-                    ></textarea>
-                  </div>
+                  <select
+                    class="nm-text-input"
+                    value={(configDraft.model as string) ?? ''}
+                    onchange={(e) =>
+                      setConfigField('model', (e.target as HTMLSelectElement).value)}
+                  >
+                    <option value="">{modelCatalogue.defaultLabel}</option>
+                    {#if modelCatalogue.glm.length}
+                      <optgroup label="GLM · Z.AI">
+                        {#each modelCatalogue.glm as opt (opt.value)}
+                          <option value={opt.value}>{opt.label}</option>
+                        {/each}
+                      </optgroup>
+                    {/if}
+                    {#if modelCatalogue.openrouter.length}
+                      <optgroup label="OpenRouter ({modelCatalogue.openrouter.length})">
+                        {#each modelCatalogue.openrouter as opt (opt.value)}
+                          <option value={opt.value}>{opt.label}</option>
+                        {/each}
+                      </optgroup>
+                    {/if}
+                    {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
+                      <optgroup label="Custom">
+                        <option value={configDraft.model as string}>{configDraft.model}</option>
+                      </optgroup>
+                    {/if}
+                  </select>
                 </section>
 
-                <section class="nm-sec nm-sec-row">
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MODEL</span>
-                    <select
-                      class="nm-text-input"
-                      value={(configDraft.model as string) ?? ''}
-                      onchange={(e) =>
-                        setConfigField('model', (e.target as HTMLSelectElement).value)}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">INTEL KNOWLEDGE GRAPH</span>
+                    <span class="nm-sec-meta"
+                      >vector-search your notes & entities into the system prompt</span
                     >
-                      <option value="">{modelCatalogue.defaultLabel}</option>
-                      {#if modelCatalogue.glm.length}
-                        <optgroup label="GLM · Z.AI">
-                          {#each modelCatalogue.glm as opt (opt.value)}
-                            <option value={opt.value}>{opt.label}</option>
-                          {/each}
-                        </optgroup>
-                      {/if}
-                      {#if modelCatalogue.openrouter.length}
-                        <optgroup label="OpenRouter ({modelCatalogue.openrouter.length})">
-                          {#each modelCatalogue.openrouter as opt (opt.value)}
-                            <option value={opt.value}>{opt.label}</option>
-                          {/each}
-                        </optgroup>
-                      {/if}
-                      {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
-                        <optgroup label="Custom">
-                          <option value={configDraft.model as string}
-                            >{configDraft.model}</option
-                          >
-                        </optgroup>
-                      {/if}
-                    </select>
                   </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">TEMP</span>
+                  <label class="nm-toggle">
                     <input
-                      class="nm-text-input"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={(configDraft.temperature as number) ?? 0.7}
-                      oninput={(e) =>
-                        setConfigField(
-                          'temperature',
-                          parseFloat((e.target as HTMLInputElement).value),
-                        )}
+                      type="checkbox"
+                      checked={configDraft.useIntelContext !== false}
+                      onchange={(e) =>
+                        setConfigField('useIntelContext', (e.target as HTMLInputElement).checked)}
                     />
+                    <span>Inject intel context per turn</span>
+                  </label>
+                </section>
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">BEHAVIOUR</span>
                   </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MAX TOK</span>
-                    <input
-                      class="nm-text-input"
-                      type="number"
-                      step="64"
-                      min="1"
-                      value={(configDraft.maxTokens as number) ?? 1024}
-                      oninput={(e) =>
-                        setConfigField(
-                          'maxTokens',
-                          parseInt((e.target as HTMLInputElement).value, 10),
-                        )}
-                    />
+                  <div class="chat-explainer">
+                    <p>
+                      Standalone (no outgoing edges): runs the full jkai chat loop — dynamic
+                      system prompt, memory, intel, and tool calling. A lone chat node is a
+                      usable AI workspace.
+                    </p>
+                    <p>
+                      Wired downstream: acts as a trigger. The user message (and the chat
+                      node's conversation id) are piped into the graph; the LLM work happens
+                      in downstream nodes.
+                    </p>
                   </div>
                 </section>
               {:else if menuNode.kind === 'llm'}
@@ -3020,6 +3007,31 @@
     width: 14px;
     text-align: center;
     font-size: 12px;
+  }
+
+  .nm-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .nm-toggle input {
+    margin: 0;
+    cursor: pointer;
+  }
+  .chat-explainer {
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+  .chat-explainer p {
+    margin: 0 0 6px;
+  }
+  .chat-explainer p:last-child {
+    margin-bottom: 0;
   }
 
   .nm-label-input {

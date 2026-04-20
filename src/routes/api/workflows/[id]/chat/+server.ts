@@ -8,23 +8,30 @@ import {
   workflowRuns,
   nodeExecutions,
   orchestratorChats,
+  conversations,
 } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 
 /**
  * POST /api/workflows/:id/chat
  *
- * 1. Inserts the user message
- * 2. Creates a workflow run with input.message = text
- * 3. Returns { runId, userMessageId } immediately; client subscribes to the
- *    existing SSE stream and calls /chat/respond once it completes.
+ * 1. Resolves (or creates) a jkai_conversations row for the target
+ *    chat node, storing its id in the node's config.conversationId.
+ * 2. Inserts the user message (conversationId + metadata.chatNodeId).
+ * 3. Kicks off a workflow run with initialInput that threads both ids
+ *    into the chat executor.
+ *
+ * Client polls /runs/{runId}/stream (SSE) for progress and POSTs to
+ * /chat/respond once the run completes to persist the assistant reply.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
   const text = typeof body.text === 'string' ? body.text.trim() : '';
-  const chatNodeId = typeof body.chatNodeId === 'string' ? body.chatNodeId : null;
+  const requestedChatNodeId =
+    typeof body.chatNodeId === 'string' ? (body.chatNodeId as string) : null;
   if (!text) return json({ error: 'text required' }, { status: 400 });
 
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -33,17 +40,60 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id));
   const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id));
 
-  // Default chat node = the first chat-type node if caller didn't specify.
-  const resolvedChatNodeId =
-    chatNodeId ?? nodes.find((n) => n.type === 'chat')?.id ?? null;
+  // Pick the chat node (caller-specified, else first chat-type node).
+  const chatNodeId =
+    requestedChatNodeId ?? nodes.find((n) => n.type === 'chat')?.id ?? null;
+  const chatNode = chatNodeId ? nodes.find((n) => n.id === chatNodeId) : null;
+  if (!chatNode) {
+    return json({ error: 'No chat node resolved for this workflow' }, { status: 400 });
+  }
+
+  // Ensure the chat node has a conversation. Each chat node gets its
+  // own jkai_conversations row so history, pinned model, and usage
+  // tracking are scoped per panel.
+  const chatConfig = (chatNode.config as Record<string, unknown>) || {};
+  let conversationId =
+    typeof chatConfig.conversationId === 'string' ? (chatConfig.conversationId as string) : null;
+
+  if (conversationId) {
+    // Verify it still exists; otherwise drop and recreate.
+    const [exists] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    if (!exists) conversationId = null;
+  }
+
+  if (!conversationId) {
+    const defaultCtx = await resolveDefaultModel('chat');
+    const [conv] = await db
+      .insert(conversations)
+      .values({
+        title: text.slice(0, 50),
+        source: 'web',
+        modelProvider: defaultCtx.provider,
+        modelId: defaultCtx.modelId,
+      })
+      .returning();
+    conversationId = conv.id;
+
+    await db
+      .update(workflowNodes)
+      .set({ config: { ...chatConfig, conversationId } })
+      .where(
+        and(eq(workflowNodes.id, chatNode.id), eq(workflowNodes.workflowId, params.id)),
+      );
+  }
 
   const [userMsg] = await db
     .insert(orchestratorChats)
     .values({
+      conversationId,
       workflowId: params.id,
       role: 'user',
       content: text,
-      metadata: resolvedChatNodeId ? { chatNodeId: resolvedChatNodeId } : {},
+      metadata: { chatNodeId },
     })
     .returning();
 
@@ -84,7 +134,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .execute(
       definition,
       run.id,
-      { message: text, _chatNodeId: resolvedChatNodeId },
+      { message: text, _chatNodeId: chatNodeId, _conversationId: conversationId },
       undefined,
       params.id,
       { selfHealing: true },
@@ -93,5 +143,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
       console.error('[canvas/chat] workflow execution failed', err);
     });
 
-  return json({ runId: run.id, userMessageId: userMsg.id, chatNodeId: resolvedChatNodeId });
+  return json({
+    runId: run.id,
+    userMessageId: userMsg.id,
+    chatNodeId,
+    conversationId,
+  });
 };

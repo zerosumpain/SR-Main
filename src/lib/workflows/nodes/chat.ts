@@ -1,18 +1,30 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
-import { resolveLLMClient } from './llm-helpers';
+import { generalChat } from '$lib/workflows/chat/general-chat';
+import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext } from '$lib/server/models/types';
+import { db } from '$lib/db';
+import { conversations } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Chat node.
  *
- * - If the node has outgoing edges, it behaves as a trigger: passes
- *   the initialInput (typically `{ message: string }`) to downstream
- *   nodes untouched.
- * - If it has no outgoing edges (terminal), it calls an LLM directly
- *   with the node's configured model + system prompt and emits the
- *   reply, so a lone chat node is a usable standalone chatbot.
+ * Two modes, chosen by topology:
  *
- * Per-node chat history lives in `orchestrator_chats` keyed by
- * `metadata.chatNodeId = this node's id`.
+ *  - Wired downstream (outgoing edges > 0): acts as a trigger, passing
+ *    the initialInput ({ message, _chatNodeId, _conversationId }) through
+ *    to downstream nodes untouched. The downstream chain runs
+ *    deterministically; the LLM work happens there.
+ *
+ *  - Terminal (no outgoing edges): runs the full jkai general-chat loop
+ *    via `generalChat()`. Dynamic system prompt assembly, memory, intel
+ *    context, and tool calling are all included, so a lone chat node is
+ *    equivalent to a conversation on `/jkai`.
+ *
+ * Per-node chat history lives in a dedicated `jkai_conversations` row
+ * (id stored in `node.config.conversationId`, created by the /chat
+ * endpoint on first send).
  */
 export const chatExecutor: NodeExecutor = {
   type: 'chat',
@@ -22,49 +34,91 @@ export const chatExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     context: ExecutionContext,
   ): Promise<NodeResult> {
-    const message = typeof input.message === 'string' ? (input.message as string) : '';
     const thisNodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId;
     const outgoing = thisNodeId ? context.getOutgoingEdges(thisNodeId) : [];
 
-    // With downstream wiring the chat is just a trigger.
+    // Passthrough trigger mode.
     if (outgoing.length > 0) {
       return { output: { ...input } };
     }
 
-    // Standalone chat → call the LLM directly.
+    const message =
+      typeof input.message === 'string' ? (input.message as string).trim() : '';
     if (!message) {
       return { output: { ...input, response: '', reply: '' } };
     }
 
-    const { client, model } = await resolveLLMClient(config.model as string | undefined);
-    const systemPrompt =
-      typeof config.systemPrompt === 'string' && config.systemPrompt.trim()
-        ? (config.systemPrompt as string)
-        : 'You are a helpful AI assistant. Keep replies concise unless asked otherwise.';
-    const temperature = typeof config.temperature === 'number' ? config.temperature : 0.7;
-    const maxTokens = typeof config.maxTokens === 'number' ? config.maxTokens : 1024;
+    // The /api/workflows/[id]/chat endpoint guarantees a conversationId
+    // is set on the chat node's config before kicking off the run and
+    // threads it through initialInput as _conversationId.
+    const conversationId =
+      typeof input._conversationId === 'string' ? (input._conversationId as string) : null;
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    });
+    // Resolve the model to use: conversation-pinned first, then node
+    // config override, then admin default.
+    let modelContext: ModelContext = await resolveDefaultModel('chat');
+    if (conversationId) {
+      try {
+        const [conv] = await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, conversationId))
+          .limit(1);
+        if (conv) {
+          modelContext = {
+            provider: conv.modelProvider as 'zai' | 'openrouter',
+            modelId: conv.modelId,
+          };
+        }
+      } catch {
+        /* fall back to admin default */
+      }
+    }
+    const configModel =
+      typeof config.model === 'string' && config.model.trim() ? (config.model as string) : '';
+    if (configModel) {
+      if (configModel.includes('/')) {
+        modelContext = { provider: 'openrouter', modelId: configModel };
+      } else {
+        modelContext = { provider: modelContext.provider, modelId: configModel };
+      }
+    }
 
-    const reply = response.choices[0]?.message?.content ?? '';
+    // Load prior turns. The user message for THIS turn has already been
+    // persisted by the /chat endpoint, so we drop it from the history we
+    // feed to generalChat (otherwise generalChat would see it as prior
+    // context and also include its own current-turn user message).
+    let history = conversationId ? await loadConversationHistory(conversationId) : [];
+    if (history.length > 0) {
+      const last = history[history.length - 1];
+      if (last.role === 'user' && last.content.trim() === message) {
+        history = history.slice(0, -1);
+      }
+    }
+
+    const useIntelContext = config.useIntelContext !== false;
+
+    const { response } = await generalChat(
+      { text: message, attachments: [] },
+      history,
+      {
+        workflowId: context.workflowId,
+        conversationId,
+        modelContext,
+        priceSnapshot: null,
+        useIntelContext,
+      },
+    );
+
     return {
       output: {
         ...input,
-        response: reply,
-        reply,
+        response,
+        reply: response,
       },
       metadata: {
-        model,
-        promptTokens: response.usage?.prompt_tokens ?? 0,
-        completionTokens: response.usage?.completion_tokens ?? 0,
+        model: modelContext.modelId,
+        provider: modelContext.provider,
       },
     };
   },
@@ -72,7 +126,8 @@ export const chatExecutor: NodeExecutor = {
   getInputSchema() {
     return {
       type: 'object',
-      description: 'The user message provided as initialInput (or from an upstream node).',
+      description:
+        'Expects `message` (user text). `_conversationId` is threaded in by the canvas /chat endpoint.',
     };
   },
 
@@ -80,7 +135,7 @@ export const chatExecutor: NodeExecutor = {
     return {
       type: 'object',
       description:
-        'Passes through the input. When standalone (no outgoing edges), also sets `response`/`reply` from the LLM call.',
+        'Passes input through. When terminal, also sets `response`/`reply` from the generalChat loop.',
     };
   },
 };
@@ -90,21 +145,25 @@ export const chatDef: NodeDefinition = {
   label: 'Chat',
   category: 'trigger',
   description:
-    'Canvas chat panel with its own history. Acts as a trigger when wired downstream, or as a standalone LLM chatbot when terminal.',
+    'Canvas chat panel. Standalone uses the full jkai chat loop (dynamic prompt, memory, intel context, tool calling). Wired downstream, acts as a workflow trigger.',
   configSchema: {
     type: 'object',
     properties: {
-      model: { type: 'string', description: 'LLM model ID (empty = site default).' },
-      systemPrompt: { type: 'string', description: 'System prompt used in standalone mode.' },
-      temperature: { type: 'number', description: 'Sampling temperature 0–2.' },
-      maxTokens: { type: 'number', description: 'Max tokens to generate.' },
+      model: {
+        type: 'string',
+        description:
+          'LLM model ID (empty = conversation-pinned / admin default). Slashed IDs route via OpenRouter.',
+      },
+      useIntelContext: {
+        type: 'boolean',
+        description:
+          'When false, skip injecting the intel knowledge graph into the system prompt (default true).',
+      },
     },
   },
   defaultConfig: {
     model: '',
-    systemPrompt: 'You are a helpful AI assistant. Keep replies concise unless asked otherwise.',
-    temperature: 0.7,
-    maxTokens: 1024,
+    useIntelContext: true,
   },
   inputs: [],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
@@ -115,14 +174,6 @@ export const chatDef: NodeDefinition = {
       type: 'dropdown',
       description: 'LLM model (leave empty for the site default).',
       options: [{ value: '', label: 'Default (site setting)' }],
-      section: 'LLM',
-    },
-    {
-      key: 'systemPrompt',
-      label: 'System prompt',
-      type: 'template-textarea',
-      description: 'Role / style instructions used when this chat is standalone.',
-      placeholder: 'You are a helpful AI assistant.',
       section: 'LLM',
     },
   ],

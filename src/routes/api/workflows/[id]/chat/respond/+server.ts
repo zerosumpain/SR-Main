@@ -6,16 +6,18 @@ import {
   workflowEdges,
   nodeExecutions,
   orchestratorChats,
+  conversations,
 } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { findTerminalNodeIds, terminalReplyText } from '$lib/canvas/adapter';
 
 /**
  * POST /api/workflows/:id/chat/respond
- * Body: { runId }
+ * Body: { runId, chatNodeId }
  *
- * Finds the terminal node's outputData for the given run, formats it as text,
- * and inserts it as an assistant message. Returns the new message.
+ * After a chat-triggered run completes, find the terminal node's
+ * outputData, format it as text, and persist it as an assistant
+ * message scoped to the chat node's conversation.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
@@ -32,6 +34,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .from(workflowEdges)
     .where(eq(workflowEdges.workflowId, params.id));
 
+  // Resolve the chat node's conversation (so the assistant reply lands
+  // in the right panel's history).
+  let conversationId: string | null = null;
+  if (chatNodeId) {
+    const chatNode = nodes.find((n) => n.id === chatNodeId);
+    const cfg = (chatNode?.config as Record<string, unknown>) || {};
+    if (typeof cfg.conversationId === 'string') conversationId = cfg.conversationId;
+  }
+
   const terminalIds = findTerminalNodeIds(
     nodes.map((n) => ({ id: n.id })),
     edges.map((e) => ({ from: e.sourceNodeId, to: e.targetNodeId })),
@@ -40,7 +51,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ error: 'No terminal node — nothing to reply with' }, { status: 400 });
   }
 
-  // Prefer the first terminal node that has an output for this run
   let chosenNodeId: string | null = null;
   let chosenOutput: unknown = null;
   for (const nid of terminalIds) {
@@ -55,16 +65,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
     }
   }
 
+  const assistantValues = {
+    workflowId: params.id,
+    conversationId,
+    role: 'assistant' as const,
+    content: '',
+    metadata: { runId, nodeId: chosenNodeId, chatNodeId } as Record<string, unknown>,
+  };
+
   if (chosenNodeId === null) {
-    // No terminal output — still post a placeholder so the user sees the run
-    // actually produced nothing, rather than an empty UI state.
     const [assistant] = await db
       .insert(orchestratorChats)
       .values({
-        workflowId: params.id,
-        role: 'assistant',
+        ...assistantValues,
         content: '(run finished with no terminal output)',
-        metadata: { runId, nodeId: null, chatNodeId },
       })
       .returning();
     return json({ message: assistant });
@@ -74,13 +88,26 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const [assistant] = await db
     .insert(orchestratorChats)
-    .values({
-      workflowId: params.id,
-      role: 'assistant',
-      content,
-      metadata: { runId, nodeId: chosenNodeId, chatNodeId },
-    })
+    .values({ ...assistantValues, content })
     .returning();
+
+  // Bump the conversation's updatedAt and set a title if still blank.
+  if (conversationId) {
+    try {
+      const [conv] = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+      if (conv) {
+        const patch: Record<string, unknown> = { updatedAt: new Date() };
+        if (!conv.title) patch.title = content.slice(0, 50);
+        await db.update(conversations).set(patch).where(eq(conversations.id, conversationId));
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
 
   return json({ message: assistant });
 };
