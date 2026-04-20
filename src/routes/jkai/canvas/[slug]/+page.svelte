@@ -220,6 +220,60 @@
     }
   }
 
+  function formatChatTranscript(chatNodeId: string): string {
+    const msgs = messagesFor(chatNodeId);
+    if (msgs.length === 0) return '';
+    return msgs
+      .map((m) => {
+        const who =
+          m.role === 'user' ? 'YOU' : m.role === 'assistant' ? 'JKAI' : m.role.toUpperCase();
+        const t = new Date(m.createdAt).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return `${who} · ${t}\n${m.content}`;
+      })
+      .join('\n\n');
+  }
+
+  let chatCopiedFor = $state<string | null>(null);
+  async function copyChatTranscript(chatNodeId: string) {
+    const text = formatChatTranscript(chatNodeId);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      chatCopiedFor = chatNodeId;
+      setTimeout(() => {
+        if (chatCopiedFor === chatNodeId) chatCopiedFor = null;
+      }, 1500);
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'clipboard not available';
+    }
+  }
+
+  async function clearChatTranscript(chatNodeId: string) {
+    const msgs = messagesFor(chatNodeId);
+    if (msgs.length === 0) return;
+    if (!confirm(`Clear all ${msgs.length} message${msgs.length === 1 ? '' : 's'} in this chat?`))
+      return;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/chat/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatNodeId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      await invalidateAll();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   async function sendFromChat(chatNodeId: string) {
     const text = (chatDrafts[chatNodeId] ?? '').trim();
     if (!text) return;
@@ -1016,6 +1070,30 @@
               <span class="sr-sep">/</span>
               <span class="chat-node-label">{n.name}</span>
               <span class="chat-node-count">{msgs.length} msg</span>
+              <button
+                class="chat-node-act"
+                title="Copy transcript"
+                disabled={msgs.length === 0}
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  copyChatTranscript(n.id);
+                }}
+              >
+                {chatCopiedFor === n.id ? '✓' : 'copy'}
+              </button>
+              <button
+                class="chat-node-act chat-node-act-danger"
+                title="Clear this chat"
+                disabled={msgs.length === 0}
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  clearChatTranscript(n.id);
+                }}
+              >
+                clear
+              </button>
             </div>
 
             <div
@@ -2122,6 +2200,30 @@
     margin-left: auto;
     color: rgba(237, 228, 212, 0.55);
     font-size: 9px;
+  }
+  .chat-node-act {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    margin-left: 4px;
+    color: rgba(237, 228, 212, 0.75);
+    background: transparent;
+    border: 1px solid rgba(237, 228, 212, 0.2);
+    cursor: pointer;
+  }
+  .chat-node-act:hover:not(:disabled) {
+    color: var(--bg);
+    border-color: rgba(237, 228, 212, 0.5);
+  }
+  .chat-node-act:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .chat-node-act-danger:hover:not(:disabled) {
+    color: #ffb0b0;
+    border-color: rgba(255, 176, 176, 0.55);
   }
   .chat-node-body {
     flex: 1;
