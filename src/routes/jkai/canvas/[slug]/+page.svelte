@@ -3,6 +3,7 @@
   import { invalidateAll } from '$app/navigation';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -1213,8 +1214,25 @@
   <title>Canvas · {canvas.slug} — JKAI</title>
 </svelte:head>
 
-<div class="canvas-root">
-  <!-- Top toolbar -->
+<div class="page-shell">
+  <PageHeader title={canvas.title} titleHref="/jkai/canvas">
+    {#snippet meta()}
+      <span class="canvas-head-meta">
+        <span class="canvas-head-slug">/{canvas.slug}</span>
+        <span class="canvas-head-sep">·</span>
+        <span>{viewNodes.length} {viewNodes.length === 1 ? 'node' : 'nodes'}</span>
+        <span class="canvas-head-sep">·</span>
+        <span>{visibleEdges.length} {visibleEdges.length === 1 ? 'edge' : 'edges'}</span>
+        {#if runningCount > 0}
+          <span class="canvas-head-sep">·</span>
+          <span class="canvas-head-running">{runningCount} running</span>
+        {/if}
+      </span>
+    {/snippet}
+  </PageHeader>
+
+  <div class="canvas-root">
+    <!-- Top toolbar -->
   <div class="hifi-toolbar">
     <span class="sr-label">Canvas · hi-fi</span>
     <span class="sr-sep">/</span>
@@ -2529,6 +2547,7 @@
       </div>
     </div>
   </div>
+  </div>
 </div>
 
 <style>
@@ -2538,13 +2557,39 @@
     --accent-tint-35: rgba(196, 87, 10, 0.35);
   }
 
-  .canvas-root {
-    position: fixed;
-    inset: 0;
+  .page-shell {
     display: flex;
     flex-direction: column;
+    height: 100vh;
     background: var(--bg);
     color: var(--text-primary);
+  }
+  .canvas-root {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .canvas-head-meta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .canvas-head-slug {
+    color: var(--text-ghost);
+  }
+  .canvas-head-sep {
+    color: var(--text-ghost);
+    opacity: 0.5;
+  }
+  .canvas-head-running {
+    color: var(--accent);
   }
 
   /* Toolbar */

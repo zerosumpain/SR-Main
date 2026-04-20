@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { slugify } from '$lib/canvas/slug';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data } = $props();
   const canvases = $derived(data.canvases);
@@ -72,10 +73,17 @@
   <title>Canvases — JKAI</title>
 </svelte:head>
 
+<PageHeader title="Canvases">
+  {#snippet meta()}
+    <span class="idx-head-meta">
+      <span>{canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}</span>
+    </span>
+  {/snippet}
+</PageHeader>
+
 <div class="page">
   <header class="page-head">
     <div>
-      <h1 class="page-title">Canvases</h1>
       <p class="page-sub">
         Spatial workspaces. Each canvas is one workflow, one conversation, any number of LLM /
         parse / intel / agent nodes.
@@ -162,15 +170,12 @@
     color: var(--text-primary);
   }
   .page-head {
-    margin-bottom: 32px;
+    margin-bottom: 24px;
   }
-  .page-title {
-    font-family: var(--font-serif, var(--font-mono));
-    font-size: 32px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-    margin: 0 0 6px;
-    line-height: 1.1;
+  .idx-head-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
   }
   .page-sub {
     color: var(--text-muted);
