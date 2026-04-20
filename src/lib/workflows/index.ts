@@ -33,6 +33,7 @@ import { tavilySearchDef, tavilySearchExecutor } from './nodes/tavily-search';
 import { intelWriteDef, intelWriteExecutor } from './nodes/intel-write';
 import { intelQueryDef, intelQueryExecutor } from './nodes/intel-query';
 import { chatDef, chatExecutor } from './nodes/chat';
+import { triggerDef, triggerExecutor } from './nodes/trigger';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -85,6 +86,7 @@ registry.register(tavilySearchDef, tavilySearchExecutor);
 registry.register(intelWriteDef, intelWriteExecutor);
 registry.register(intelQueryDef, intelQueryExecutor);
 registry.register(chatDef, chatExecutor);
+registry.register(triggerDef, triggerExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();

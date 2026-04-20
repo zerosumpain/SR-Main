@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
@@ -20,6 +20,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const [wf] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!wf) return json({ error: 'Workflow not found' }, { status: 404 });
+
+  // Enforce one trigger per canvas.
+  if (type === 'trigger') {
+    const [existing] = await db
+      .select()
+      .from(workflowNodes)
+      .where(and(eq(workflowNodes.workflowId, params.id), eq(workflowNodes.type, 'trigger')));
+    if (existing) {
+      return json(
+        { error: 'This canvas already has a trigger node; delete it first.' },
+        { status: 409 },
+      );
+    }
+  }
 
   const [node] = await db
     .insert(workflowNodes)

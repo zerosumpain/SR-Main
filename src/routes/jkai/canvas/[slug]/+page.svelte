@@ -159,12 +159,13 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind !== 'chat') return NODE_W;
-    return chatNodeSize(n as CanvasNode).w;
+    if (n.kind === 'chat') return chatNodeSize(n as CanvasNode).w;
+    if (n.kind === 'trigger') return 188;
+    return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind !== 'chat') return NODE_H;
-    return chatNodeSize(n as CanvasNode).h;
+    if (n.kind === 'chat') return chatNodeSize(n as CanvasNode).h;
+    return NODE_H;
   }
 
   function orthPath(from: CanvasNode, to: CanvasNode): string {
@@ -188,13 +189,44 @@
   }
 
   const KIND_COLOR: Record<string, string> = {
+    trigger: '#3a8a56',
     input: 'var(--text-muted)',
     llm: 'var(--accent)',
     parse: '#c44',
     output: 'var(--text-primary)',
     intel: 'var(--accent)',
     agent: 'var(--text-primary)',
+    chat: 'var(--accent)',
   };
+
+  const peerCanvases = $derived(data.peerCanvases);
+
+  // Preset cron expressions exposed in the trigger menu
+  const CRON_PRESETS = [
+    { label: 'Every 5 minutes', value: '*/5 * * * *' },
+    { label: 'Every 15 minutes', value: '*/15 * * * *' },
+    { label: 'Every 30 minutes', value: '*/30 * * * *' },
+    { label: 'Every hour', value: '0 * * * *' },
+    { label: 'Every 6 hours', value: '0 */6 * * *' },
+    { label: 'Every day at 08:00', value: '0 8 * * *' },
+    { label: 'Weekdays at 08:00', value: '0 8 * * 1-5' },
+    { label: 'Sundays at 09:00', value: '0 9 * * 0' },
+  ];
+
+  function triggerSummary(cfg: Record<string, unknown>): string {
+    const kind = (cfg.kind as string) || 'manual';
+    if (kind === 'cron') {
+      const c = (cfg.cron as string) || '';
+      const preset = CRON_PRESETS.find((p) => p.value === c);
+      return preset ? preset.label.toLowerCase() : (c || 'cron');
+    }
+    if (kind === 'webhook') return 'webhook';
+    if (kind === 'event') {
+      const et = (cfg.eventType as string) || 'event';
+      return `on ${et}`;
+    }
+    return 'manual';
+  }
 
   const runningCount = $derived(viewNodes.filter((n) => n.status === 'running').length);
   const isRunning = $derived(runMeta.state === 'running');
@@ -886,6 +918,43 @@
     if (result) await reloadCanvas();
   }
 
+  async function saveTrigger() {
+    if (!menuNode || menuNode.kind !== 'trigger' || saving) return;
+    saving = true;
+    saveError = null;
+    try {
+      const payload: Record<string, unknown> = {
+        kind: (configDraft.kind as string) || 'manual',
+        enabled: configDraft.enabled !== false,
+      };
+      if (payload.kind === 'cron') payload.cron = (configDraft.cron as string) || '';
+      if (payload.kind === 'event') {
+        payload.eventType = (configDraft.eventType as string) || '';
+        if (configDraft.sourceWorkflowId)
+          payload.sourceWorkflowId = configDraft.sourceWorkflowId;
+      }
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/trigger`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      // Also update the node label to reflect the trigger type
+      await fetch(`/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: labelDraft || 'Trigger' }),
+      });
+      configDirty = false;
+      await invalidateAll();
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : String(err);
+    } finally {
+      saving = false;
+    }
+  }
+
   async function saveNode() {
     if (!menuNode || saving) return;
     saving = true;
@@ -1075,17 +1144,23 @@
           <span class="run-err" title={addError}>⚠ add failed</span>
         {/if}
         {#if addNodeOpen}
+          {@const hasTrigger = viewNodes.some((n) => n.kind === 'trigger')}
           <div class="add-node-menu" role="menu" aria-label="Add node">
             {#each nodeTypes as t (t.type)}
+              {@const blocked = t.type === 'trigger' && hasTrigger}
               <button
                 class="add-node-item"
+                class:blocked
                 role="menuitem"
-                onclick={() => addNode(t)}
-                title={t.description}
+                disabled={blocked}
+                onclick={() => !blocked && addNode(t)}
+                title={blocked
+                  ? 'This canvas already has a trigger'
+                  : t.description}
               >
                 <span class="add-node-kind-bar" data-kind={t.kind}></span>
                 <span class="add-node-label">{t.label}</span>
-                <span class="add-node-type">{t.type}</span>
+                <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
               </button>
             {/each}
           </div>
@@ -1347,6 +1422,7 @@
             class:ok={isRunning && n.status === 'ok'}
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-trigger={n.kind === 'trigger'}
             data-kind={n.kind}
             style:left="{n.x}px"
             style:top="{n.y}px"
@@ -1362,7 +1438,15 @@
               else if (e.key === ' ') selectNode(e, n.id);
             }}
           >
-            <span class="wf-name">{n.name}</span>
+            {#if n.kind === 'trigger'}
+              <span class="trig-icon">▶</span>
+              <div class="trig-stack">
+                <span class="wf-name">{n.name}</span>
+                <span class="trig-summary">{triggerSummary(n.config)}</span>
+              </div>
+            {:else}
+              <span class="wf-name">{n.name}</span>
+            {/if}
             <div
               class="node-handle"
               title="Drag to connect to another node"
@@ -1464,7 +1548,11 @@
             />
             <span class="nm-hdr-kind">{menuNode.kind}</span>
             {#if configDirty}
-              <button class="nm-save-btn" onclick={saveNode} disabled={saving}>
+              <button
+                class="nm-save-btn"
+                onclick={menuNode.kind === 'trigger' ? saveTrigger : saveNode}
+                disabled={saving}
+              >
                 {saving ? 'Saving…' : 'Save'}
               </button>
             {/if}
@@ -1520,7 +1608,144 @@
 
             <!-- Kind-specific body -->
             <div class="nm-body">
-              {#if menuNode.kind === 'chat'}
+              {#if menuNode.kind === 'trigger'}
+                {@const kind = ((configDraft.kind as string) || 'manual') as
+                  | 'manual'
+                  | 'cron'
+                  | 'webhook'
+                  | 'event'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">TRIGGER TYPE</span>
+                  </div>
+                  <div class="trig-pills">
+                    {#each ['manual', 'cron', 'webhook', 'event'] as k}
+                      <button
+                        class="trig-pill"
+                        class:active={kind === k}
+                        onclick={() => setConfigField('kind', k)}
+                      >
+                        {k}
+                      </button>
+                    {/each}
+                  </div>
+                </section>
+
+                {#if kind === 'manual'}
+                  <section class="nm-sec">
+                    <div class="chat-explainer">
+                      <p>
+                        Fires on demand: a chat send, a "Run" click from the canvas toolbar, or
+                        any POST to <code>/api/workflows/{canvas.workflowId}/run</code>.
+                      </p>
+                    </div>
+                  </section>
+                {:else if kind === 'cron'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">SCHEDULE</span>
+                      <span class="nm-sec-meta">picks the cron expression</span>
+                    </div>
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.cron as string) ?? ''}
+                      onchange={(e) =>
+                        setConfigField('cron', (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="">— pick a preset —</option>
+                      {#each CRON_PRESETS as p (p.value)}
+                        <option value={p.value}>{p.label}</option>
+                      {/each}
+                    </select>
+                  </section>
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">CUSTOM CRON</span>
+                      <span class="nm-sec-meta">min hour dom mon dow</span>
+                    </div>
+                    <input
+                      class="nm-text-input"
+                      type="text"
+                      value={(configDraft.cron as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('cron', (e.target as HTMLInputElement).value)}
+                      placeholder="*/15 * * * *"
+                    />
+                  </section>
+                {:else if kind === 'webhook'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">WEBHOOK URL</span>
+                      <span class="nm-sec-meta">POST to fire the workflow</span>
+                    </div>
+                    <div class="nm-field nm-field-read">
+                      <pre>POST https://strangeramblings.com/api/workflows/webhook/{canvas.workflowId}</pre>
+                    </div>
+                  </section>
+                  <section class="nm-sec">
+                    <div class="chat-explainer">
+                      <p>
+                        The body becomes <code>initialInput</code> for the run. Any shape is
+                        accepted; downstream nodes can template it as <code>{'{{input.field}}'}</code>.
+                      </p>
+                    </div>
+                  </section>
+                {:else if kind === 'event'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">EVENT TYPE</span>
+                    </div>
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.eventType as string) ?? ''}
+                      onchange={(e) =>
+                        setConfigField('eventType', (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="">— pick an event —</option>
+                      <option value="workflow_completed">workflow_completed</option>
+                      <option value="strava_activity_synced">strava_activity_synced</option>
+                      <option value="whoop_recovery_updated">whoop_recovery_updated</option>
+                    </select>
+                  </section>
+                  {#if configDraft.eventType === 'workflow_completed'}
+                    <section class="nm-sec">
+                      <div class="nm-sec-hd">
+                        <span class="sr-label-tight">SOURCE CANVAS</span>
+                        <span class="nm-sec-meta">leave empty to fire on ANY workflow</span>
+                      </div>
+                      <select
+                        class="nm-text-input"
+                        value={(configDraft.sourceWorkflowId as string) ?? ''}
+                        onchange={(e) =>
+                          setConfigField(
+                            'sourceWorkflowId',
+                            (e.target as HTMLSelectElement).value,
+                          )}
+                      >
+                        <option value="">any canvas</option>
+                        {#each peerCanvases as c (c.workflowId)}
+                          <option value={c.workflowId}>{c.title} · /{c.slug}</option>
+                        {/each}
+                      </select>
+                    </section>
+                  {/if}
+                {/if}
+
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">ENABLED</span>
+                  </div>
+                  <label class="nm-toggle">
+                    <input
+                      type="checkbox"
+                      checked={configDraft.enabled !== false}
+                      onchange={(e) =>
+                        setConfigField('enabled', (e.target as HTMLInputElement).checked)}
+                    />
+                    <span>Fire on matching signal</span>
+                  </label>
+                </section>
+              {:else if menuNode.kind === 'chat'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">MODEL</span>
@@ -2209,9 +2434,13 @@
     text-align: left;
     color: var(--text-primary);
   }
-  .add-node-item:hover {
+  .add-node-item:hover:not(.blocked) {
     background: var(--accent-tint-08);
     border-color: var(--card-border);
+  }
+  .add-node-item.blocked {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
   .add-node-kind-bar {
     display: inline-block;
@@ -2685,6 +2914,67 @@
   }
   .wf-node[data-kind='agent']::before {
     background: var(--text-primary);
+  }
+  .wf-node[data-kind='trigger']::before {
+    background: #3a8a56;
+  }
+
+  /* ——— Trigger node variant ——— */
+  .wf-node.is-trigger {
+    width: 188px;
+    padding: 0 12px 0 20px;
+    border-radius: 0 32px 32px 0;
+    border-color: #3a8a56;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trig-icon {
+    color: #3a8a56;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .trig-stack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .trig-summary {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Trigger menu — type-picker pills */
+  .trig-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .trig-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 5px 12px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .trig-pill:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+  .trig-pill.active {
+    background: #3a8a56;
+    border-color: #3a8a56;
+    color: var(--bg);
   }
   .wf-node .wf-name {
     font-size: 12px;

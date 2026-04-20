@@ -38,7 +38,14 @@ async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
 
   const matching = schedules.filter((s) => {
     const config = s.config as Record<string, unknown>;
-    return config.eventType === event.type;
+    if (config.eventType !== event.type) return false;
+    // If a specific source workflow is pinned, only fire on that one.
+    const sourceWorkflowId = config.sourceWorkflowId as string | undefined;
+    if (sourceWorkflowId) {
+      const payloadWfId = (event.payload as Record<string, unknown> | undefined)?.workflowId;
+      if (payloadWfId !== sourceWorkflowId) return false;
+    }
+    return true;
   });
 
   for (const schedule of matching) {

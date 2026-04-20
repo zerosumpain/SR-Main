@@ -12,7 +12,15 @@ import { eq, desc, asc } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import { getSetting } from '$lib/server/models/settings';
 
-export type NodeKind = 'input' | 'llm' | 'parse' | 'output' | 'intel' | 'agent' | 'chat';
+export type NodeKind =
+  | 'input'
+  | 'llm'
+  | 'parse'
+  | 'output'
+  | 'intel'
+  | 'agent'
+  | 'chat'
+  | 'trigger';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -67,6 +75,14 @@ export type NodeTypeOption = {
 
 /** Curated set of workflow node types offered in the canvas "+ node" picker. */
 export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
+  {
+    type: 'trigger',
+    label: 'Trigger',
+    kind: 'trigger',
+    description:
+      'Workflow entry point — manual / cron / webhook / event. Exactly one per canvas.',
+    defaultConfig: { kind: 'manual' },
+  },
   {
     type: 'chat',
     label: 'Chat',
@@ -191,6 +207,7 @@ export async function loadModelCatalogue(): Promise<ModelCatalogue> {
 
 /** Map workflow node types to canvas visual kinds. */
 export function mapTypeToKind(type: string): NodeKind {
+  if (type === 'trigger') return 'trigger';
   if (type === 'chat') return 'chat';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
   if (type === 'llm-agent') return 'agent';
@@ -375,12 +392,32 @@ export async function createCanvas(
     })
     .returning();
 
-  await db.insert(workflowNodes).values({
+  const [triggerNode] = await db
+    .insert(workflowNodes)
+    .values({
+      workflowId: created.id,
+      type: 'trigger',
+      label: 'Trigger',
+      position: { x: 20, y: 20 },
+      config: { kind: 'manual' },
+    })
+    .returning();
+
+  const [chatNode] = await db
+    .insert(workflowNodes)
+    .values({
+      workflowId: created.id,
+      type: 'chat',
+      label: 'Chat',
+      position: { x: 260, y: 20 },
+      config: { model: '', useIntelContext: true },
+    })
+    .returning();
+
+  await db.insert(workflowEdges).values({
     workflowId: created.id,
-    type: 'chat',
-    label: 'Chat',
-    position: { x: 40, y: 40 },
-    config: { model: '', useIntelContext: true },
+    sourceNodeId: triggerNode.id,
+    targetNodeId: chatNode.id,
   });
 
   return { workflowId: created.id, slug };
