@@ -1081,10 +1081,10 @@
                     ...chatDrafts,
                     [n.id]: (e.target as HTMLTextAreaElement).value,
                   })}
-                placeholder="Message this chat — ⌘⏎ to send"
+                placeholder="Message this chat — ⏎ send · ⇧⏎ newline"
                 rows="2"
                 onkeydown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
                     sendFromChat(n.id);
                   }
@@ -1092,7 +1092,7 @@
               ></textarea>
               <div class="chat-composer-foot">
                 <span class="mono10 muted">
-                  {#if isRunning && pendingRun?.chatNodeId === n.id}running…{:else}⌘⏎ send{/if}
+                  {#if isRunning && pendingRun?.chatNodeId === n.id}running…{:else}⏎ send · ⇧⏎ newline{/if}
                 </span>
                 <button
                   class="composer-pill run-btn"

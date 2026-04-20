@@ -11,8 +11,8 @@ import {
   conversations,
 } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
+import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 /**
@@ -130,18 +130,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
     })),
   };
 
-  engine
-    .execute(
-      definition,
-      run.id,
-      { message: text, _chatNodeId: chatNodeId, _conversationId: conversationId },
-      undefined,
-      params.id,
-      { selfHealing: true },
-    )
-    .catch((err) => {
-      console.error('[canvas/chat] workflow execution failed', err);
-    });
+  runWorkflowAndPersist(
+    definition,
+    run.id,
+    { message: text, _chatNodeId: chatNodeId, _conversationId: conversationId },
+    { workflowId: params.id, label: 'canvas/chat' },
+  );
 
   return json({
     runId: run.id,
