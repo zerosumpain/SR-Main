@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getNoteDetail } from '$lib/jkai/intel/queries';
-import { processNote } from '$lib/jkai/intel/ingest';
+import { processNote, deleteNoteCascade } from '$lib/jkai/intel/ingest';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -29,6 +29,11 @@ export const POST: RequestHandler = async ({ params }) => {
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {
-  await db.delete(intelNotes).where(eq(intelNotes.id, params.id));
-  return json({ deleted: true });
+  try {
+    const result = await deleteNoteCascade(params.id);
+    return json(result);
+  } catch (err) {
+    console.error(`[intel] Cascade delete failed for note ${params.id}:`, err);
+    return json({ error: 'Delete failed' }, { status: 500 });
+  }
 };
