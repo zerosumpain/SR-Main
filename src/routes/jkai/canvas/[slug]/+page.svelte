@@ -141,10 +141,13 @@
   const chatNodeIds = $derived(viewNodes.filter((n) => n.kind === 'chat').map((n) => n.id));
   const firstChatId = $derived(chatNodeIds[0] ?? null);
 
+  // Guard against orphan edges whose endpoints no longer exist
+  const visibleEdges = $derived(canvas.edges.filter((e) => byId[e.from] && byId[e.to]));
+
   const activeEdgeIds = $derived(
     new Set(
       runMeta.state === 'running'
-        ? canvas.edges.filter((e) => byId[e.to]?.status === 'running').map((e) => e.id)
+        ? visibleEdges.filter((e) => byId[e.to]?.status === 'running').map((e) => e.id)
         : [],
     ),
   );
@@ -526,6 +529,22 @@
   let configDirty = $state(false);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
+  let labelInputEl = $state<HTMLInputElement | undefined>(undefined);
+  let renameRequested = $state(false);
+
+  $effect(() => {
+    if (renameRequested && menuNode && labelInputEl) {
+      labelInputEl.focus();
+      labelInputEl.select();
+      renameRequested = false;
+    }
+  });
+
+  function beginRename(nodeId: string) {
+    selectedId = nodeId;
+    menuForNodeId = nodeId;
+    renameRequested = true;
+  }
 
   $effect(() => {
     if (menuNode) {
@@ -808,6 +827,13 @@
       ) {
         ev.preventDefault();
         deleteNode(selectedId);
+      } else if (
+        ev.key === 'F2' &&
+        selectedId &&
+        !isTypingTarget(ev.target)
+      ) {
+        ev.preventDefault();
+        beginRename(selectedId);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -847,7 +873,7 @@
     <span class="mono11 primary">{canvas.title}</span>
     <span class="sr-sep">/</span>
     <span class="mono11 muted">
-      {viewNodes.length} nodes · {canvas.edges.length} edges · {runningCount} running
+      {viewNodes.length} nodes · {visibleEdges.length} edges · {runningCount} running
     </span>
     <div class="toolbar-right">
       <button
@@ -901,7 +927,7 @@
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
       <span class="sep-v"></span>
-      <span class="kicker">click to select · drag node to move · drag bg to pan</span>
+      <span class="kicker">click to select · F2 rename · ⌫ delete · drag bg to pan</span>
     </div>
   </div>
 
@@ -926,17 +952,8 @@
       style:transform-origin="0 0"
     >
       <svg class="edges" aria-hidden="true">
-        <!-- chat → first-column nodes -->
-        <path
-          d={`M 316 140 L ${COL[0]} 140`}
-          stroke="var(--accent)"
-          stroke-width="1.25"
-          stroke-dasharray="3 3"
-          fill="none"
-          vector-effect="non-scaling-stroke"
-        />
         <!-- workflow edges -->
-        {#each canvas.edges as e (e.id)}
+        {#each visibleEdges as e (e.id)}
           {@const isActive = activeEdgeIds.has(e.id)}
           {@const d = orthPath(byId[e.from], byId[e.to])}
           <!-- Wide transparent hit target for dbl-click -->
@@ -965,15 +982,6 @@
             pointer-events="none"
           />
         {/each}
-        <!-- output → back to chat -->
-        <path
-          d={`M ${COL[3] + 148} 266 L ${COL[3] + 190} 266 L ${COL[3] + 190} 460 L 200 460 L 200 340`}
-          stroke="var(--text-ghost)"
-          stroke-width="1"
-          stroke-dasharray="2 3"
-          fill="none"
-          vector-effect="non-scaling-stroke"
-        />
       </svg>
 
       <!-- Nodes -->
@@ -1198,8 +1206,20 @@
               class="nm-label-input"
               type="text"
               value={labelDraft}
+              bind:this={labelInputEl}
               oninput={(e) => setLabel((e.target as HTMLInputElement).value)}
-              aria-label="Node label"
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && configDirty && !saving) {
+                  e.preventDefault();
+                  saveNode();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  closeMenu();
+                }
+              }}
+              placeholder="Node name"
+              title="Press Enter to save, Esc to cancel"
+              aria-label="Node name"
             />
             <span class="nm-hdr-kind">{menuNode.kind}</span>
             {#if configDirty}
