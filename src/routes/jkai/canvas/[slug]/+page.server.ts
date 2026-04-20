@@ -26,7 +26,7 @@ export type Canvas = {
   edges: CanvasEdge[];
 };
 
-const COL = [320, 470, 620, 770] as const;
+const COL = [320, 540, 760, 980] as const;
 
 const SAMPLE: Canvas = {
   slug: 'sample',

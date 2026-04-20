@@ -6,7 +6,7 @@
 
   const NODE_W = 148;
   const NODE_H = 52;
-  const COL = [320, 470, 620, 770];
+  const COL = [320, 540, 760, 980];
 
   const byId: Record<string, CanvasNode> = $derived(
     Object.fromEntries(canvas.nodes.map((n) => [n.id, n])),
