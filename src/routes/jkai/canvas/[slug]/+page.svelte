@@ -177,11 +177,18 @@
   }
 
   /**
-   * Orthogonal edge routing. Picks which edge of the source/target the
-   * connector should dock to based on the relative position of the
-   * centres: horizontal-dominant pairs exit right/left, vertical-dominant
-   * pairs exit top/bottom. Guarantees the path touches both nodes on
-   * their closest side regardless of layout.
+   * Orthogonal edge routing that docks to the closest side of each node.
+   *
+   * Axis choice:
+   *  1. If the two nodes overlap horizontally (source.left < target.right
+   *     && target.left < source.right) but NOT vertically, there is
+   *     clear space above/below — route vertically.
+   *  2. Symmetrically: vertical overlap only → route horizontally.
+   *  3. Otherwise pick the dominant centre-to-centre axis.
+   *
+   * That avoids the old bug where a horizontal-dominant pair whose
+   * source right edge was past the target left edge would loop the
+   * connector back through the source body.
    */
   function orthPath(from: CanvasNode, to: CanvasNode): string {
     const fw = nodeW(from);
@@ -195,19 +202,27 @@
     const dx = tCx - sCx;
     const dy = tCy - sCy;
 
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      // Horizontal-dominant — H / V / H zigzag
-      const [x1, x2] =
-        dx >= 0 ? [from.x + fw, to.x] : [from.x, to.x + tw];
+    const overlapX = from.x < to.x + tw && to.x < from.x + fw;
+    const overlapY = from.y < to.y + th && to.y < from.y + fh;
+
+    let horizontal: boolean;
+    if (overlapX && !overlapY) {
+      horizontal = false;
+    } else if (overlapY && !overlapX) {
+      horizontal = true;
+    } else {
+      horizontal = Math.abs(dx) >= Math.abs(dy);
+    }
+
+    if (horizontal) {
+      const [x1, x2] = dx >= 0 ? [from.x + fw, to.x] : [from.x, to.x + tw];
       const y1 = sCy;
       const y2 = tCy;
       const midX = (x1 + x2) / 2;
       return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
     }
 
-    // Vertical-dominant — V / H / V zigzag
-    const [y1, y2] =
-      dy >= 0 ? [from.y + fh, to.y] : [from.y, to.y + th];
+    const [y1, y2] = dy >= 0 ? [from.y + fh, to.y] : [from.y, to.y + th];
     const x1 = sCx;
     const x2 = tCx;
     const midY = (y1 + y2) / 2;
@@ -1241,7 +1256,7 @@
       style:transform="translate({panX}px, {panY}px) scale({zoom})"
       style:transform-origin="0 0"
     >
-      <svg class="edges" aria-hidden="true">
+      <svg class="edges" aria-hidden="true" overflow="visible">
         <!-- workflow edges -->
         {#if edgeDrag}
           {@const src = byId[edgeDrag.sourceId]}
@@ -3003,6 +3018,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
+    overflow: visible;
   }
   .edges .edge-hit {
     cursor: pointer;
