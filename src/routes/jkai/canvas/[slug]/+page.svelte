@@ -27,6 +27,9 @@
 
   // Merged view of each node: base canvas row + any live overlay
   type ViewNode = CanvasNode;
+  // Optimistic position override during drag — cleared after PATCH+invalidate
+  let nodePositions = $state<Record<string, { x: number; y: number }>>({});
+
   const viewNodes = $derived<ViewNode[]>(
     canvas.nodes.map((n) => ({
       ...n,
@@ -34,6 +37,8 @@
       inputData: liveData[n.id]?.inputData ?? n.inputData,
       outputData: liveData[n.id]?.outputData ?? n.outputData,
       error: liveData[n.id]?.error ?? n.error,
+      x: nodePositions[n.id]?.x ?? n.x,
+      y: nodePositions[n.id]?.y ?? n.y,
     })),
   );
 
@@ -271,6 +276,86 @@
     selectedId = id;
   }
 
+  // ——— Node drag ———
+  const DRAG_THRESHOLD = 3; // px
+  const GRID = 20;
+  let nodeDrag = $state<{
+    nodeId: string;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    pointerId: number;
+  } | null>(null);
+
+  function onNodePointerDown(e: PointerEvent, n: ViewNode) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    nodeDrag = {
+      nodeId: n.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: n.x,
+      startY: n.y,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onNodePointerMove(e: PointerEvent) {
+    if (!nodeDrag || nodeDrag.pointerId !== e.pointerId) return;
+    const dxClient = e.clientX - nodeDrag.startClientX;
+    const dyClient = e.clientY - nodeDrag.startClientY;
+    if (
+      !nodeDrag.moved &&
+      Math.hypot(dxClient, dyClient) < DRAG_THRESHOLD
+    )
+      return;
+    nodeDrag.moved = true;
+    // Convert client delta to world delta by dividing by zoom
+    const dx = dxClient / zoom;
+    const dy = dyClient / zoom;
+    const nx = Math.round((nodeDrag.startX + dx) / GRID) * GRID;
+    const ny = Math.round((nodeDrag.startY + dy) / GRID) * GRID;
+    nodePositions = { ...nodePositions, [nodeDrag.nodeId]: { x: nx, y: ny } };
+  }
+
+  async function onNodePointerUp(e: PointerEvent, n: ViewNode) {
+    if (!nodeDrag || nodeDrag.pointerId !== e.pointerId) return;
+    const wasMoved = nodeDrag.moved;
+    const nodeId = nodeDrag.nodeId;
+    const finalPos = nodePositions[nodeId];
+    nodeDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* no-op */
+    }
+
+    if (wasMoved && finalPos) {
+      // Persist position
+      try {
+        await fetch(`/api/workflows/${canvas.workflowId}/nodes/${nodeId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position: finalPos }),
+        });
+        await invalidate(`/jkai/canvas/${canvas.slug}`);
+      } catch {
+        /* keep override so the UI doesn't snap back on network blip */
+      }
+      // Drop override
+      const next = { ...nodePositions };
+      delete next[nodeId];
+      nodePositions = next;
+    } else {
+      // Click (no drag) → select
+      selectedId = n.id;
+    }
+  }
+
   function pretty(v: unknown): string {
     if (v === undefined || v === null) return '';
     if (typeof v === 'string') return v;
@@ -308,6 +393,44 @@
   }
 
   const modelCatalogue = $derived(data.modelCatalogue);
+  const nodeTypes = $derived(data.nodeTypes);
+  let addNodeOpen = $state(false);
+
+  function viewportCenterInWorld(): { x: number; y: number } {
+    if (!viewportEl) return { x: 320, y: 120 };
+    const vp = viewportEl.getBoundingClientRect();
+    const cx = (vp.width / 2 - panX) / zoom;
+    const cy = (vp.height / 2 - panY) / zoom;
+    // Snap to grid, and offset by half a node so center, not corner, is centered
+    const x = Math.round((cx - NODE_W / 2) / 20) * 20;
+    const y = Math.round((cy - NODE_H / 2) / 20) * 20;
+    return { x, y };
+  }
+
+  async function addNode(opt: { type: string; label: string; defaultConfig: Record<string, unknown> }) {
+    addNodeOpen = false;
+    actionError = null;
+    const position = viewportCenterInWorld();
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: opt.type,
+          label: opt.label,
+          position,
+          config: opt.defaultConfig,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      await invalidate(`/jkai/canvas/${canvas.slug}`);
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    }
+  }
   const knownModelValues = $derived(
     new Set([
       '',
@@ -464,6 +587,17 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // Close the add-node menu on outside click
+  $effect(() => {
+    if (!addNodeOpen) return;
+    function onDocClick(ev: MouseEvent) {
+      const t = ev.target as HTMLElement | null;
+      if (!t || !t.closest('.add-node-wrap')) addNodeOpen = false;
+    }
+    window.addEventListener('click', onDocClick);
+    return () => window.removeEventListener('click', onDocClick);
+  });
+
   // Resume SSE if the server says there's an in-flight run at load
   $effect(() => {
     if (canvas.runStatus === 'running' && canvas.latestRunId && !activeRunId) {
@@ -508,6 +642,32 @@
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
       {/if}
       <span class="sep-v"></span>
+      <div class="add-node-wrap">
+        <button
+          class="composer-pill"
+          onclick={() => (addNodeOpen = !addNodeOpen)}
+          title="Add a new node"
+        >
+          + node
+        </button>
+        {#if addNodeOpen}
+          <div class="add-node-menu" role="menu" aria-label="Add node">
+            {#each nodeTypes as t (t.type)}
+              <button
+                class="add-node-item"
+                role="menuitem"
+                onclick={() => addNode(t)}
+                title={t.description}
+              >
+                <span class="add-node-kind-bar" data-kind={t.kind}></span>
+                <span class="add-node-label">{t.label}</span>
+                <span class="add-node-type">{t.type}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <span class="sep-v"></span>
       <div class="hifi-zoomctl">
         <button onclick={() => zoomCentered(1 / 1.2)} title="Zoom out">−</button><span class="zv"
           >{zoomPct}%</span
@@ -516,7 +676,7 @@
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
       <span class="sep-v"></span>
-      <span class="kicker">click to select · drag bg to pan · wheel to zoom</span>
+      <span class="kicker">click to select · drag node to move · drag bg to pan</span>
     </div>
   </div>
 
@@ -617,7 +777,10 @@
           style:top="{n.y}px"
           role="button"
           tabindex="0"
-          onclick={(e) => selectNode(e, n.id)}
+          onpointerdown={(e) => onNodePointerDown(e, n)}
+          onpointermove={onNodePointerMove}
+          onpointerup={(e) => onNodePointerUp(e, n)}
+          onpointercancel={(e) => onNodePointerUp(e, n)}
           ondblclick={(e) => openMenu(e, n.id)}
           onkeydown={(e) => {
             if (e.key === 'Enter') openMenu(e, n.id);
@@ -1231,6 +1394,70 @@
     color: #c44;
     padding: 0 6px;
   }
+  .add-node-wrap {
+    position: relative;
+  }
+  .add-node-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 240px;
+    background: var(--bg);
+    border: 1.5px solid var(--accent);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+  }
+  .add-node-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-align: left;
+    color: var(--text-primary);
+  }
+  .add-node-item:hover {
+    background: var(--accent-tint-08);
+    border-color: var(--card-border);
+  }
+  .add-node-kind-bar {
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    background: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .add-node-kind-bar[data-kind='llm'],
+  .add-node-kind-bar[data-kind='intel'] {
+    background: var(--accent);
+  }
+  .add-node-kind-bar[data-kind='parse'] {
+    background: #c44;
+  }
+  .add-node-kind-bar[data-kind='output'],
+  .add-node-kind-bar[data-kind='agent'] {
+    background: var(--text-primary);
+  }
+  .add-node-kind-bar[data-kind='input'] {
+    background: var(--text-muted);
+  }
+  .add-node-label {
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .add-node-type {
+    font-size: 9px;
+    color: var(--text-ghost);
+    margin-left: auto;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
   .hifi-zoomctl {
     display: inline-flex;
     align-items: center;
@@ -1474,7 +1701,11 @@
     outline-offset: 2px;
   }
   .wf-node {
-    cursor: pointer;
+    cursor: grab;
+    user-select: none;
+  }
+  .wf-node:active {
+    cursor: grabbing;
   }
 
   /* Status pip */

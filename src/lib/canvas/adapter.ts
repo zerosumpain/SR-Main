@@ -46,6 +46,86 @@ export type Canvas = {
   edges: CanvasEdge[];
 };
 
+export type NodeTypeOption = {
+  type: string;
+  label: string;
+  kind: NodeKind;
+  description: string;
+  defaultConfig: Record<string, unknown>;
+};
+
+/** Curated set of workflow node types offered in the canvas "+ node" picker. */
+export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
+  {
+    type: 'manual-trigger',
+    label: 'Input · manual',
+    kind: 'input',
+    description: 'Workflow entry point. Accepts data from the Run button.',
+    defaultConfig: {},
+  },
+  {
+    type: 'llm-call',
+    label: 'LLM · single call',
+    kind: 'llm',
+    description: 'Single LLM call with a prompt template.',
+    defaultConfig: {
+      model: '',
+      userPrompt: '{{input.message}}',
+      temperature: 0.7,
+      maxTokens: 1024,
+    },
+  },
+  {
+    type: 'llm-agent',
+    label: 'Agent · LLM with tools',
+    kind: 'agent',
+    description: 'Tool-calling agent loop. Downstream nodes become tools.',
+    defaultConfig: { model: '', systemPrompt: '', userPrompt: '{{input.message}}' },
+  },
+  {
+    type: 'text-parser',
+    label: 'Parse · text',
+    kind: 'parse',
+    description: 'JSON / regex extraction from upstream response.',
+    defaultConfig: { mode: 'json', inputField: 'response' },
+  },
+  {
+    type: 'intel-write',
+    label: 'Intel · write',
+    kind: 'intel',
+    description: 'Write findings into the knowledge graph.',
+    defaultConfig: {},
+  },
+  {
+    type: 'transform',
+    label: 'Output · transform',
+    kind: 'output',
+    description: 'Identity pass-through, or apply a JS expression.',
+    defaultConfig: {},
+  },
+  {
+    type: 'http-request',
+    label: 'Input · HTTP request',
+    kind: 'input',
+    description: 'Fetch data from an external URL.',
+    defaultConfig: { method: 'GET', url: '' },
+  },
+  {
+    type: 'delay',
+    label: 'Delay',
+    kind: 'output',
+    description: 'Pause N milliseconds before continuing.',
+    defaultConfig: { ms: 1000 },
+  },
+  {
+    type: 'conditional',
+    label: 'Conditional branch',
+    kind: 'parse',
+    description: 'Route to one of two downstream handles based on a condition.',
+    defaultConfig: { condition: 'input.ok' },
+  },
+];
+
 export type ModelOption = { value: string; label: string };
 export type ModelCatalogue = {
   defaultLabel: string; // what "" resolves to, for the first option

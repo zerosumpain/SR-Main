@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { loadCanvas, loadModelCatalogue } from '$lib/canvas/adapter';
+import { loadCanvas, loadModelCatalogue, CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 
 export type {
   NodeKind,
@@ -9,6 +9,7 @@ export type {
   Canvas,
   ModelCatalogue,
   ModelOption,
+  NodeTypeOption,
 } from '$lib/canvas/adapter';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -16,5 +17,5 @@ export const load: PageServerLoad = async ({ params }) => {
     loadCanvas(params.slug),
     loadModelCatalogue(),
   ]);
-  return { canvas, modelCatalogue };
+  return { canvas, modelCatalogue, nodeTypes: CANVAS_NODE_TYPES };
 };
