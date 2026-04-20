@@ -1,17 +1,17 @@
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { intelNotes, intelEntities } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+const EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const modelCtx = await resolveDefaultModel('builder');
-  const { client } = await getLLMClient(modelCtx);
+  const { client } = await getLLMClient({ provider: 'openrouter', modelId: EMBEDDING_MODEL });
 
   const truncated = text.slice(0, 32000);
 
   const response = await client.embeddings.create({
-    model: 'text-embedding-3-small',
+    model: EMBEDDING_MODEL,
     input: truncated,
   });
 

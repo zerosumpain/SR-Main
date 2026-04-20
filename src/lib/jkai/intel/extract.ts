@@ -122,7 +122,7 @@ export async function extractFromNote(
   noteFormat: string,
 ): Promise<ExtractionResult> {
   const context = await buildExtractionContext();
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(modelCtx);
 
   const today = new Date().toISOString().split('T')[0];
@@ -130,7 +130,8 @@ export async function extractFromNote(
   const response = await client.chat.completions.create({
     model,
     temperature: 0.3,
-    max_tokens: 4096,
+    max_tokens: 16384,
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
       {
@@ -162,7 +163,7 @@ Extract all entities, relationships, timeline events, and any proposed new types
       proposedNewTypes: parsed.proposedNewTypes ?? [],
     };
   } catch {
-    console.error('[intel] Failed to parse extraction result:', cleaned.slice(0, 200));
+    console.error('[intel] Failed to parse extraction result:', cleaned.slice(0, 500));
     return {
       summary: '',
       entities: [],
