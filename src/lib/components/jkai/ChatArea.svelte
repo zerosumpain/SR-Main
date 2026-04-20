@@ -22,6 +22,7 @@
     messageCount = 0,
     onmodelchange,
     modelCapabilities = null,
+    useIntelContext = true,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -38,6 +39,7 @@
     messageCount?: number;
     onmodelchange?: (ctx: ModelContext) => void;
     modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
+    useIntelContext?: boolean;
   } = $props();
 
   interface ToolStep {
@@ -428,6 +430,7 @@
           message: text,
           conversationId,
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
+          useIntelContext,
         }),
       });
 

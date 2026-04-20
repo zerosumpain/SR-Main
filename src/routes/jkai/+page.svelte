@@ -4,6 +4,7 @@
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import type { ModelContext } from '$lib/server/models/types';
+  import { onMount } from 'svelte';
 
   let { data } = $props();
 
@@ -15,6 +16,27 @@
   let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
   let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
   let sidebarOpen = $state(false);
+
+  const INTEL_CONTEXT_STORAGE_KEY = 'jkai.useIntelContext';
+  let useIntelContext = $state(true);
+
+  onMount(() => {
+    try {
+      const stored = localStorage.getItem(INTEL_CONTEXT_STORAGE_KEY);
+      if (stored === 'false') useIntelContext = false;
+    } catch {
+      // localStorage unavailable (private mode / SSR hydration race) — fall back to default.
+    }
+  });
+
+  function toggleIntelContext(next: boolean) {
+    useIntelContext = next;
+    try {
+      localStorage.setItem(INTEL_CONTEXT_STORAGE_KEY, String(next));
+    } catch {
+      // swallow — state remains in-memory for this session.
+    }
+  }
 
   async function selectConversation(id: string) {
     activeConversationId = id;
@@ -141,6 +163,8 @@
         onDelete={deleteConversation}
         collapsed={false}
         onToggleCollapse={() => {}}
+        {useIntelContext}
+        onToggleIntelContext={toggleIntelContext}
       />
     </div>
 
@@ -168,6 +192,8 @@
             onDelete={deleteConversation}
             collapsed={false}
             onToggleCollapse={() => { sidebarOpen = false; }}
+            {useIntelContext}
+            onToggleIntelContext={toggleIntelContext}
           />
         </div>
       </div>
@@ -183,6 +209,7 @@
         defaultGlmModelId={data.defaultChatModel.modelId}
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
+        {useIntelContext}
         onmodelchange={(ctx: ModelContext) => {
           if (activeConversation) {
             activeConversation = {

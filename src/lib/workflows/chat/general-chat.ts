@@ -38,6 +38,8 @@ interface ChatOptions {
   onStreamEvent?: (event: JobEvent) => void;
   modelContext: ModelContext;
   priceSnapshot: PriceSnapshot | null;
+  /** When false, skips injecting the intel knowledge graph into the system prompt. Defaults to true. */
+  useIntelContext?: boolean;
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -280,7 +282,7 @@ export async function generalChat(
   const basePrompt = await getCompiledPrompt();
   const siteSection = buildSiteSystemPromptSection();
   const memorySection = await buildMemorySection();
-  const graphSection = await buildKnowledgeContext(userMessage);
+  const graphSection = options.useIntelContext === false ? '' : await buildKnowledgeContext(userMessage);
   const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}`;
 
   // Build messages

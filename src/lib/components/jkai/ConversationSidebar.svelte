@@ -24,6 +24,8 @@
     onDelete,
     collapsed = false,
     onToggleCollapse,
+    useIntelContext = true,
+    onToggleIntelContext,
   }: {
     conversations: ConversationItem[];
     whatsappThread: WhatsAppThread | null;
@@ -34,6 +36,8 @@
     onDelete: (id: string) => void;
     collapsed?: boolean;
     onToggleCollapse: () => void;
+    useIntelContext?: boolean;
+    onToggleIntelContext?: (next: boolean) => void;
   } = $props();
 
   type Bucket = 'today' | 'yesterday' | 'last_week' | 'older';
@@ -224,13 +228,33 @@
 
     <!-- Footer actions -->
     <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
-      <a
-        href="/jkai/intel"
-        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors border"
-        style="border-color: var(--card-border); color: var(--accent);"
+      <div
+        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border"
+        style="border-color: var(--card-border);"
       >
-        <span>🔷</span> Intel Dashboard
-      </a>
+        <a
+          href="/jkai/intel"
+          class="flex items-center gap-2 flex-1 min-w-0 text-xs font-medium hover:opacity-80 transition-opacity"
+          style="color: var(--accent);"
+        >
+          <span>🔷</span> Intel Dashboard
+        </a>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={useIntelContext}
+          aria-label="Use intel knowledge in chat replies"
+          title={useIntelContext ? 'Chat uses intel knowledge — click to turn off' : 'Chat ignores intel knowledge — click to turn on'}
+          onclick={() => onToggleIntelContext?.(!useIntelContext)}
+          class="relative inline-flex items-center w-9 h-5 shrink-0 rounded-full transition-colors"
+          style="background: {useIntelContext ? 'var(--accent)' : 'var(--card-border)'};"
+        >
+          <span
+            class="inline-block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform"
+            style="transform: translateX({useIntelContext ? '18px' : '3px'});"
+          ></span>
+        </button>
+      </div>
       <button
         onclick={onNew}
         class="w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors border"

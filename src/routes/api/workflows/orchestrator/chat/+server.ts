@@ -18,7 +18,7 @@ const MAX_MESSAGE_LEN = 20_000;
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId, attachmentIds } = body as {
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId, attachmentIds, useIntelContext } = body as {
     message: string;
     workflowId?: string;
     mode?: string;
@@ -26,6 +26,7 @@ export const POST: RequestHandler = async ({ request }) => {
     currentEdges?: any;
     conversationId?: string;
     attachmentIds?: string[];
+    useIntelContext?: boolean;
   };
 
   if (!message || typeof message !== 'string') {
@@ -235,6 +236,7 @@ export const POST: RequestHandler = async ({ request }) => {
           },
           modelContext,
           priceSnapshot,
+          useIntelContext: useIntelContext !== false,
         });
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
