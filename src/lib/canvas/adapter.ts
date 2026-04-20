@@ -294,6 +294,113 @@ function workflowNameFor(slug: string): string {
   return `canvas:${slug}`;
 }
 
+const SLUG_PREFIX = 'canvas:';
+
+/** Turn free text into a canvas slug: lowercase, kebab, trimmed to 48 chars. */
+export function slugify(input: string): string {
+  return (input || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '')
+    .slice(0, 48);
+}
+
+export type CanvasSummary = {
+  slug: string;
+  title: string;
+  workflowId: string;
+  nodeCount: number;
+  edgeCount: number;
+  triggerType: string;
+  latestRunAt: string | null;
+  latestRunStatus: string | null;
+  updatedAt: string;
+};
+
+/** All canvases (workflows whose name starts with "canvas:"). */
+export async function listCanvases(): Promise<CanvasSummary[]> {
+  const { like } = await import('drizzle-orm');
+  const rows = await db
+    .select()
+    .from(workflows)
+    .where(like(workflows.name, `${SLUG_PREFIX}%`))
+    .orderBy(desc(workflows.updatedAt));
+
+  const summaries: CanvasSummary[] = [];
+  for (const w of rows) {
+    const nodeCountRes = await db
+      .select({ n: workflowNodes.id })
+      .from(workflowNodes)
+      .where(eq(workflowNodes.workflowId, w.id));
+    const edgeCountRes = await db
+      .select({ n: workflowEdges.id })
+      .from(workflowEdges)
+      .where(eq(workflowEdges.workflowId, w.id));
+    const [latestRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.workflowId, w.id))
+      .orderBy(desc(workflowRuns.startedAt))
+      .limit(1);
+    const trigger = (w.trigger as { type?: string } | null) ?? {};
+    summaries.push({
+      slug: w.name.startsWith(SLUG_PREFIX) ? w.name.slice(SLUG_PREFIX.length) : w.name,
+      title: w.description || w.name,
+      workflowId: w.id,
+      nodeCount: nodeCountRes.length,
+      edgeCount: edgeCountRes.length,
+      triggerType: trigger.type ?? 'manual',
+      latestRunAt: latestRun?.startedAt ? new Date(latestRun.startedAt).toISOString() : null,
+      latestRunStatus: latestRun?.status ?? null,
+      updatedAt: new Date(w.updatedAt).toISOString(),
+    });
+  }
+  return summaries;
+}
+
+/**
+ * Create a fresh canvas — a workflow named `canvas:<slug>` seeded with a
+ * single chat node and no edges. Rejects if the slug is already taken.
+ */
+export async function createCanvas(
+  slugInput: string,
+  title: string,
+): Promise<{ workflowId: string; slug: string }> {
+  const slug = slugify(slugInput);
+  if (!slug) throw new Error('Slug is required (letters, numbers, dashes).');
+  const name = workflowNameFor(slug);
+  const [existing] = await db.select().from(workflows).where(eq(workflows.name, name));
+  if (existing) throw new Error(`Canvas "${slug}" already exists.`);
+
+  const [created] = await db
+    .insert(workflows)
+    .values({
+      name,
+      description: title.trim() || slug,
+      trigger: { type: 'manual' },
+    })
+    .returning();
+
+  await db.insert(workflowNodes).values({
+    workflowId: created.id,
+    type: 'chat',
+    label: 'Chat',
+    position: { x: 40, y: 40 },
+    config: { model: '', useIntelContext: true },
+  });
+
+  return { workflowId: created.id, slug };
+}
+
+/** Drop a canvas and everything cascaded to it. */
+export async function deleteCanvas(slug: string): Promise<boolean> {
+  const name = workflowNameFor(slug);
+  const res = await db.delete(workflows).where(eq(workflows.name, name)).returning({
+    id: workflows.id,
+  });
+  return res.length > 0;
+}
+
 /** Idempotently ensure a workflow exists for this slug; return its id + title. */
 export async function ensureCanvasWorkflow(
   slug: string,
