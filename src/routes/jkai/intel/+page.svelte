@@ -15,6 +15,9 @@
     pwa: '📱',
     email: '📧',
   };
+
+  const riskType = $derived(data.entityTypes.find((t) => t.name === 'risk'));
+  const risksHref = $derived(riskType ? `/jkai/intel/entities?typeId=${riskType.id}` : '/jkai/intel/entities');
 </script>
 
 <PageHeader title="INTEL" />
@@ -33,22 +36,22 @@
 
   <!-- Stats Bar -->
   <div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <a href="/jkai/intel/notes" class="rounded-lg p-4 text-center border block hover:opacity-80 transition" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="text-3xl font-bold text-sky-500">{data.stats.noteCount}</div>
       <div class="text-xs mt-1" style="color: var(--text-ghost);">Notes</div>
-    </div>
-    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+    </a>
+    <a href="/jkai/intel/entities" class="rounded-lg p-4 text-center border block hover:opacity-80 transition" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="text-3xl font-bold text-emerald-600">{data.stats.entityCount}</div>
       <div class="text-xs mt-1" style="color: var(--text-ghost);">Entities</div>
-    </div>
-    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+    </a>
+    <a href={risksHref} class="rounded-lg p-4 text-center border block hover:opacity-80 transition" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="text-3xl font-bold text-amber-600">{data.stats.riskCount}</div>
       <div class="text-xs mt-1" style="color: var(--text-ghost);">Active Risks</div>
-    </div>
-    <div class="rounded-lg p-4 text-center border" style="background: var(--card-bg); border-color: var(--card-border);">
+    </a>
+    <a href="/jkai/intel/review" class="rounded-lg p-4 text-center border block hover:opacity-80 transition" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="text-3xl font-bold" style="color: var(--accent);">{data.stats.pendingReviewCount}</div>
       <div class="text-xs mt-1" style="color: var(--text-ghost);">Pending Review</div>
-    </div>
+    </a>
   </div>
 
   <div class="grid grid-cols-2 gap-4">
