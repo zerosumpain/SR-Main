@@ -100,4 +100,28 @@ describe('deleteNoteCascade', () => {
     expect(result.removedEntities).toBe(0);
     expect(calls.map((c) => c.table)).toEqual(['intel_relationships', 'intel_notes']);
   });
+
+  it('reports removedRelationships: 0 when the driver returns a null rowCount', async () => {
+    vi.doMock('$lib/db', () => ({
+      db: {
+        transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            select: () => ({
+              from: (_table: unknown) => ({
+                where: async (_cond: unknown) => [],
+              }),
+            }),
+            delete: (_table: unknown) => ({
+              where: async (_cond: unknown) => ({ rowCount: null }),
+            }),
+          };
+          return cb(tx);
+        },
+      },
+    }));
+    const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
+    const result = await deleteNoteCascade('note-null-driver');
+    expect(result.removedRelationships).toBe(0);
+    expect(result.removedEntities).toBe(0);
+  });
 });
