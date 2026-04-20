@@ -176,24 +176,42 @@
     return NODE_H;
   }
 
+  /**
+   * Orthogonal edge routing. Picks which edge of the source/target the
+   * connector should dock to based on the relative position of the
+   * centres: horizontal-dominant pairs exit right/left, vertical-dominant
+   * pairs exit top/bottom. Guarantees the path touches both nodes on
+   * their closest side regardless of layout.
+   */
   function orthPath(from: CanvasNode, to: CanvasNode): string {
     const fw = nodeW(from);
     const fh = nodeH(from);
+    const tw = nodeW(to);
     const th = nodeH(to);
-    const sameCol = Math.abs(from.x - to.x) < 4;
-    if (sameCol) {
-      const bx = from.x + fw / 2;
-      const by = from.y + fh;
-      const tgtX = to.x + nodeW(to) / 2;
-      const tgtY = to.y;
-      return `M${bx} ${by} L${bx} ${tgtY - 6} L${tgtX} ${tgtY - 6} L${tgtX} ${tgtY}`;
+    const sCx = from.x + fw / 2;
+    const sCy = from.y + fh / 2;
+    const tCx = to.x + tw / 2;
+    const tCy = to.y + th / 2;
+    const dx = tCx - sCx;
+    const dy = tCy - sCy;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      // Horizontal-dominant — H / V / H zigzag
+      const [x1, x2] =
+        dx >= 0 ? [from.x + fw, to.x] : [from.x, to.x + tw];
+      const y1 = sCy;
+      const y2 = tCy;
+      const midX = (x1 + x2) / 2;
+      return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
     }
-    const x1 = from.x + fw;
-    const y1 = from.y + fh / 2;
-    const x2 = to.x;
-    const y2 = to.y + th / 2;
-    const midX = x1 + Math.max(16, (x2 - x1) / 2);
-    return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
+
+    // Vertical-dominant — V / H / V zigzag
+    const [y1, y2] =
+      dy >= 0 ? [from.y + fh, to.y] : [from.y, to.y + th];
+    const x1 = sCx;
+    const x2 = tCx;
+    const midY = (y1 + y2) / 2;
+    return `M${x1} ${y1} L${x1} ${midY} L${x2} ${midY} L${x2} ${y2}`;
   }
 
   const KIND_COLOR: Record<string, string> = {
@@ -1026,19 +1044,11 @@
       ? (() => {
           const fw = nodeW(inspectorFrom);
           const fh = nodeH(inspectorFrom);
+          const tw = nodeW(inspectorTo);
           const th = nodeH(inspectorTo);
-          const sameCol = Math.abs(inspectorFrom.x - inspectorTo.x) < 4;
-          if (sameCol) {
-            return {
-              x: inspectorFrom.x + fw / 2 - 160,
-              y: (inspectorFrom.y + fh + inspectorTo.y) / 2 - 10,
-            };
-          }
-          return {
-            x: (inspectorFrom.x + fw + inspectorTo.x) / 2 - 160,
-            y:
-              (inspectorFrom.y + fh / 2 + (inspectorTo.y + th / 2)) / 2 - 10,
-          };
+          const mx = (inspectorFrom.x + fw / 2 + inspectorTo.x + tw / 2) / 2;
+          const my = (inspectorFrom.y + fh / 2 + inspectorTo.y + th / 2) / 2;
+          return { x: mx - 160, y: my - 10 };
         })()
       : null,
   );
