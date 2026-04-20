@@ -278,7 +278,12 @@
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
       };
     });
-    scrollToBottom();
+    // Jump instantly to the latest message on initial load / conversation switch.
+    // Child content (markdown, tool drawers, attachments) renders across multiple
+    // frames, so retry after layout settles to catch the real scrollHeight.
+    scrollToBottom('instant');
+    setTimeout(() => scrollToBottom('instant'), 50);
+    setTimeout(() => scrollToBottom('instant'), 200);
   });
 
   // SSE connection for real-time follow-up messages
@@ -606,9 +611,9 @@
     scrollToBottom();
   }
 
-  function scrollToBottom() {
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
     requestAnimationFrame(() => {
-      chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+      chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior });
     });
   }
 

@@ -162,7 +162,9 @@
       import('$lib/components/workflows/nodes/BlogNode.svelte'),
       import('$lib/components/workflows/nodes/JkaiNode.svelte'),
       import('$lib/components/workflows/nodes/DeepDiveNode.svelte'),
-    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa, ha, hq, bl, jk, dd]) => {
+      import('$lib/components/workflows/nodes/TavilySearchNode.svelte'),
+      import('$lib/components/workflows/nodes/WebScrapeNode.svelte'),
+    ]).then(([mt, ce, tr, hr, lc, co, lo, de, eh, ds, em, st, wh, or_, va, th, lr, me, tp, ac, sw, la, wa, ha, hq, bl, jk, dd, ts, ws]) => {
       nodeTypeComponents = {
         'manual-trigger': mt.default,
         'code-execute': ce.default,
@@ -192,6 +194,8 @@
         'blog': bl.default,
         'jkai': jk.default,
         'deep-dive': dd.default,
+        'tavily-search': ts.default,
+        'web-scrape': ws.default,
       };
     });
   }
