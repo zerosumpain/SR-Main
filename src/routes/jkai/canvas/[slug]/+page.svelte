@@ -561,6 +561,17 @@
   }
 
   function onWheel(e: WheelEvent) {
+    // If the wheel happens inside a scrollable child (chat body, inline
+    // menu, edge inspector), let the browser scroll it natively.
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      target.closest(
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu',
+      )
+    ) {
+      return;
+    }
     e.preventDefault();
     const vp = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const cx = e.clientX - vp.left;
