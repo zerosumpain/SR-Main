@@ -62,7 +62,8 @@ ${getPatternsForOrchestrator()}
 - After connecting nodes with connect_nodes, review the upstream schema in the response. Every {{input.X}} reference in your node config MUST match a path listed in that schema. If a path doesn't exist, update the node's config to use the correct path.
 - Do NOT call finalize_workflow if any node (other than the trigger) has zero incoming edges.
 - When using {{input.X}} templates, prefer specific paths from the upstream schema over guessing. If the schema says "input.body.data", use "input.body.data" — not "input.data" or "input.result".
-- When using \`error-handler\` after an \`http-request\`, the error-handler MUST be the ONLY node connected from http-request. Route the success output of error-handler to the next processing step (e.g. transform). Do NOT connect http-request directly to the transform AND also to the error-handler — that bypasses error detection.`;
+- When using \`error-handler\` after an \`http-request\`, the error-handler MUST be the ONLY node connected from http-request. Route the success output of error-handler to the next processing step (e.g. transform). Do NOT connect http-request directly to the transform AND also to the error-handler — that bypasses error detection.
+- For any LLM node (\`llm-call\`, \`llm-agent\`, \`llm-router\`), DO NOT set the \`model\` field unless the user has explicitly asked for a specific model. Leave \`model\` empty (or omit it) so the call uses the site-wide admin default — that path is always configured and requires no per-workflow key setup. Setting \`model\` to a slashed ID like \`openai/gpt-4o\` forces OpenRouter and will fail if an OpenRouter key is not configured. Default first, override only on request.`;
 }
 
 export function buildCriticPrompt(): string {

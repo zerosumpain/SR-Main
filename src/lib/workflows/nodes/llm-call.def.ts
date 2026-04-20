@@ -8,7 +8,7 @@ export const llmCallDef: NodeDefinition = {
   configSchema: {
     type: 'object',
     properties: {
-      model: { type: 'string', description: 'Optional OpenRouter model ID (e.g. openai/gpt-4o-mini). Leave empty to use the jkai chat default, configured in admin.' },
+      model: { type: 'string', description: 'LEAVE EMPTY to use the site default (configured in admin → model defaults). This is the recommended option and requires no per-workflow key management. Only set a value to explicitly override — slashed IDs like "openai/gpt-4o" route via OpenRouter and require an OpenRouter key to be configured.' },
       systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
       userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
       temperature: { type: 'number', description: 'Sampling temperature 0–2 (default 0.7)' },
@@ -16,7 +16,7 @@ export const llmCallDef: NodeDefinition = {
     },
     required: ['userPrompt'],
   },
-  defaultConfig: { model: 'glm-5-turbo', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
+  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
   basicConfig: [
@@ -40,9 +40,10 @@ export const llmCallDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM answers this step. Bare IDs (e.g. glm-5-turbo) route to the jkai default provider. Slashed IDs (e.g. openai/gpt-4o-mini) route via OpenRouter.',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override.',
       options: [
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
+        { value: '', label: 'Default (site setting)' },
+        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
         { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },

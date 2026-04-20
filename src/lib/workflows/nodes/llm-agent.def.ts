@@ -9,7 +9,7 @@ export const llmAgentDef: NodeDefinition = {
   configSchema: {
     type: 'object',
     properties: {
-      model: { type: 'string', description: 'OpenRouter model ID (default: openai/gpt-4o)' },
+      model: { type: 'string', description: 'LEAVE EMPTY to use the site default (configured in admin → model defaults). This is the recommended option and requires no per-workflow key management. Only set a value to explicitly override — slashed IDs like "openai/gpt-4o" route via OpenRouter and require an OpenRouter key to be configured.' },
       systemPrompt: {
         type: 'string',
         description: 'System prompt. Supports {{input.field}} templates.',
@@ -41,7 +41,7 @@ export const llmAgentDef: NodeDefinition = {
     required: ['userPrompt'],
   },
   defaultConfig: {
-    model: 'glm-5-turbo',
+    model: '',
     systemPrompt: '',
     userPrompt: '',
     temperature: 0.7,
@@ -72,9 +72,10 @@ export const llmAgentDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM runs this step. Bare IDs route to the jkai default provider (Z.AI). Slashed IDs go via OpenRouter.',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override.',
       options: [
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
+        { value: '', label: 'Default (site setting)' },
+        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
         { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
@@ -138,7 +139,7 @@ export const llmAgentDef: NodeDefinition = {
     'Use when the task requires multi-step reasoning with tool use. The agent can call connected nodes as tools in a loop until it has the answer. Best for complex tasks that need planning, research, or iterative refinement.',
   llmExamples: [
     {
-      model: 'openai/gpt-4o',
+      // model omitted on purpose — defaults to the site admin default.
       systemPrompt: 'You are a research assistant. Use the available tools to answer questions.',
       userPrompt: '{{input.question}}',
       maxIterations: 5,

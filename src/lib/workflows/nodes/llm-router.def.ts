@@ -10,7 +10,7 @@ export const llmRouterDef: NodeDefinition = {
     type: 'object',
     properties: {
       routes: { type: 'string', description: 'JSON array of { handle, description }' },
-      model: { type: 'string', description: 'OpenRouter model ID' },
+      model: { type: 'string', description: 'LEAVE EMPTY to use the site default (configured in admin → model defaults). This is the recommended option and requires no per-workflow key management. Only set a value to explicitly override.' },
     },
     required: ['routes'],
   },
@@ -23,7 +23,7 @@ export const llmRouterDef: NodeDefinition = {
       null,
       2,
     ),
-    model: 'glm-5-turbo',
+    model: '',
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [
@@ -42,9 +42,10 @@ export const llmRouterDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM runs this step. Bare IDs route to the jkai default provider (Z.AI). Slashed IDs go via OpenRouter.',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override.',
       options: [
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
+        { value: '', label: 'Default (site setting)' },
+        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
         { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
@@ -63,7 +64,7 @@ export const llmRouterDef: NodeDefinition = {
         { handle: 'negative', description: 'Negative sentiment' },
         { handle: 'neutral', description: 'Neutral or informational' },
       ]),
-      model: 'openai/gpt-4o-mini',
+      // model omitted on purpose — defaults to the site admin default.
     },
   ],
 };
