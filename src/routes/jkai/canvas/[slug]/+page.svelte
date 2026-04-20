@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CanvasNode, NodeStatus } from './+page.server';
-  import { invalidate } from '$app/navigation';
+  import { invalidateAll } from '$app/navigation';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -159,12 +159,12 @@
       };
     } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
       runMeta = { state: 'completed' };
-      invalidate(`/jkai/canvas/${canvas.slug}`).catch(() => {
+      invalidateAll().catch(() => {
         /* harmless */
       });
     } else if (evt.type === 'run_failed') {
       runMeta = { state: 'failed', error: evt.error };
-      invalidate(`/jkai/canvas/${canvas.slug}`).catch(() => {
+      invalidateAll().catch(() => {
         /* harmless */
       });
     }
@@ -342,7 +342,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ position: finalPos }),
         });
-        await invalidate(`/jkai/canvas/${canvas.slug}`);
+        await invalidateAll();
       } catch {
         /* keep override so the UI doesn't snap back on network blip */
       }
@@ -407,8 +407,15 @@
     return { x, y };
   }
 
-  async function addNode(opt: { type: string; label: string; defaultConfig: Record<string, unknown> }) {
+  let addError = $state<string | null>(null);
+
+  async function addNode(opt: {
+    type: string;
+    label: string;
+    defaultConfig: Record<string, unknown>;
+  }) {
     addNodeOpen = false;
+    addError = null;
     actionError = null;
     const position = viewportCenterInWorld();
     try {
@@ -422,13 +429,17 @@
           config: opt.defaultConfig,
         }),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        console.error('[canvas] add-node failed', res.status, body);
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      await invalidate(`/jkai/canvas/${canvas.slug}`);
+      const newId = body.node?.id as string | undefined;
+      await invalidateAll();
+      if (newId) selectedId = newId;
     } catch (err) {
-      actionError = err instanceof Error ? err.message : String(err);
+      addError = err instanceof Error ? err.message : String(err);
+      actionError = addError;
     }
   }
   const knownModelValues = $derived(
@@ -460,7 +471,7 @@
   }
 
   async function reloadCanvas() {
-    await invalidate(`/jkai/canvas/${canvas.slug}`);
+    await invalidateAll();
   }
 
   async function actReRun() {
@@ -540,7 +551,7 @@
         throw new Error(body.error || `HTTP ${res.status}`);
       }
       configDirty = false;
-      await invalidate(`/jkai/canvas/${canvas.slug}`);
+      await invalidateAll();
     } catch (err) {
       saveError = err instanceof Error ? err.message : String(err);
     } finally {
@@ -650,6 +661,9 @@
         >
           + node
         </button>
+        {#if addError}
+          <span class="run-err" title={addError}>⚠ add failed</span>
+        {/if}
         {#if addNodeOpen}
           <div class="add-node-menu" role="menu" aria-label="Add node">
             {#each nodeTypes as t (t.type)}
