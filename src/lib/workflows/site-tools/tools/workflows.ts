@@ -61,9 +61,23 @@ register({
       };
     }
 
-    // Canvas-compatible naming: pick a slug from the generated title + ensure
-    // "canvas:" prefix. If the slug is already taken, append -2, -3, ...
-    const baseSlug = slugify(workflow.name || 'generated') || 'canvas';
+    // Canvas-compatible naming: pick a SHORT slug (≤ 24 chars, 3–4 words
+    // max) from the generated title, ensure the "canvas:" prefix. If the
+    // slug is already taken, append -2, -3, ... as a collision suffix.
+    function shortSlug(src: string): string {
+      const base = slugify(src || 'canvas');
+      if (!base) return 'canvas';
+      if (base.length <= 24) return base;
+      const words = base.split('-');
+      let out = '';
+      for (const w of words) {
+        const next = out ? `${out}-${w}` : w;
+        if (next.length > 24) break;
+        out = next;
+      }
+      return out || base.slice(0, 24);
+    }
+    const baseSlug = shortSlug(workflow.name || 'generated');
     let slug = baseSlug;
     let attempt = 1;
     while (attempt < 50) {

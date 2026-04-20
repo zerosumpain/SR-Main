@@ -287,33 +287,57 @@ async function buildCanvasContextSection(
     const slug = wf.name.startsWith('canvas:') ? wf.name.slice('canvas:'.length) : null;
     const hasTrigger = nodes.some((n) => n.type === 'trigger');
     const trigger = (wf.trigger as Record<string, unknown> | null) ?? {};
+
+    // "Empty" = only the seed nodes (trigger + chat), nothing else built.
+    // User policy: empty canvas → extend THIS one; non-empty → new canvas.
+    const nonSeedKinds = nodes.filter(
+      (n) => n.type !== 'trigger' && n.type !== 'chat',
+    );
+    const isEmpty = nonSeedKinds.length === 0;
+
     const nodesLine =
       nodes.length === 0
         ? '(none yet)'
         : nodes
             .map((n) => `  - ${n.id} | type=${n.type} | label="${n.label}"`)
             .join('\n');
+
+    const policyBlock = isEmpty
+      ? `THIS CANVAS IS EMPTY (only the seed trigger + chat, no real work yet).
+→ When the user asks for a workflow, BUILD IT INTO THIS CANVAS.
+  Call workflow_add_node and workflow_add_edge with workflowId="${workflowId}".
+→ DO NOT call workflow_create. That would spawn a separate canvas and
+  leave the one the user is looking at empty. The user WILL be surprised.
+→ Wire new processing nodes from the existing trigger (or downstream of
+  it); do not leave nodes orphaned.`
+      : `THIS CANVAS ALREADY HAS A WORKFLOW BUILT (${nonSeedKinds.length} non-seed node${nonSeedKinds.length === 1 ? '' : 's'}).
+→ If the user wants to extend or edit this workflow, use
+  workflow_add_node / workflow_add_edge / workflow_update_node with
+  workflowId="${workflowId}".
+→ If the user clearly wants a NEW, separate workflow (words like "new
+  canvas", "another one", "separate", or a distinct unrelated topic),
+  call workflow_create — it will create a new canvas with a short slug.`;
+
     return `\n\n--- Current Canvas ---
-You are chatting inside a canvas, not /jkai. Treat the workflow you are
-embedded in as the one the user wants to work on unless they explicitly
-ask for a separate canvas.
+You are chatting inside a canvas, not /jkai. The workflow you are
+embedded in is THE workflow for this conversation unless the user
+explicitly asks for a separate canvas.
 
 - workflowId: ${workflowId}
 ${slug ? `- slug: ${slug}` : ''}
 - title: ${wf.description ?? wf.name}
 - trigger type: ${trigger.type ?? 'manual'}
-- node count: ${nodes.length} (trigger present: ${hasTrigger ? 'yes' : 'no'})
+- node count: ${nodes.length} (trigger: ${hasTrigger ? 'present' : 'missing'})
 - edge count: ${edges.length}
+- state: ${isEmpty ? 'EMPTY (extend here)' : 'HAS WORKFLOW (extend or create new)'}
 
-When the user asks to build, extend, or wire this canvas:
-- Use workflow_add_node / workflow_add_edge / workflow_update_node /
-  workflow_update_edge / workflow_remove_* / workflow_add_schedule
-  with workflowId="${workflowId}".
-- DO NOT call workflow_create — that spawns a NEW separate canvas.
-  Only call workflow_create if the user explicitly asks for a new canvas.
-${hasTrigger ? '- A trigger node already exists; do NOT add another (one per canvas).' : '- No trigger node yet. If the user needs scheduled/webhook/event firing, add ONE trigger node.'}
-- When adding LLM/parser/output nodes, wire them from the trigger (or
-  from an existing downstream node) — do not leave nodes orphaned.
+${policyBlock}
+
+Rules that always apply:
+${hasTrigger ? '- A trigger node already exists; do NOT add another (one per canvas).' : '- No trigger node yet. If the workflow needs scheduled/webhook/event firing, add ONE trigger node.'}
+- When adding LLM/parser/output nodes, wire them from an existing node
+  (usually the trigger or chat) — orphan nodes never run.
+- Use workflow_list_node_types if you are unsure of the exact type string.
 
 Existing nodes:
 ${nodesLine}
@@ -407,6 +431,28 @@ export async function generalChat(
   if (options.workflowId && !activatedToolsets.has('workflows')) {
     activeTools.push(...getToolsetDefinitions('workflows'));
     activatedToolsets.add('workflows');
+  }
+
+  // If we're inside an empty canvas, hide workflow_create entirely — the
+  // model should extend the current canvas, not spawn a parallel one.
+  if (options.workflowId) {
+    try {
+      const siblingNodes = await db
+        .select()
+        .from(workflowNodes)
+        .where(eq(workflowNodes.workflowId, options.workflowId));
+      const hasRealNodes = siblingNodes.some(
+        (n) => n.type !== 'trigger' && n.type !== 'chat',
+      );
+      if (!hasRealNodes) {
+        for (let i = activeTools.length - 1; i >= 0; i--) {
+          const t = activeTools[i] as { function?: { name?: string } };
+          if (t.function?.name === 'workflow_create') activeTools.splice(i, 1);
+        }
+      }
+    } catch {
+      /* non-fatal — the system prompt is still a strong nudge */
+    }
   }
 
   // Visualise tools are always available — the LLM should be able to reach
