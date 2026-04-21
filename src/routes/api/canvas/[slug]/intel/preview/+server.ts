@@ -6,22 +6,19 @@ import { eq } from 'drizzle-orm';
 import { searchIntel, type IntelFacets } from '$lib/jkai/intel/search';
 
 export const GET: RequestHandler = async ({ url, params }) => {
-  // Canvas slug maps to a workflow via the canvas:<slug> name convention.
   const [wf] = await db
-    .select()
+    .select({ id: workflows.id })
     .from(workflows)
     .where(eq(workflows.name, `canvas:${params.slug}`))
-    .limit(1)
-    .catch(() => []);
-
-  // Slug-based lookup is optional — the single-user model means we proceed if
-  // the workflow isn't found. The important thing is consistent shape.
-  void wf;
+    .limit(1);
+  if (!wf) throw error(404, 'Canvas not found');
 
   const query = url.searchParams.get('query') ?? '';
   const limitRaw = url.searchParams.get('limit');
   const limit = limitRaw ? Math.max(1, Math.min(50, Number(limitRaw))) : 20;
-  const ordering = (url.searchParams.get('ordering') ?? 'relevant') as 'recent' | 'relevant';
+  const orderingRaw = url.searchParams.get('ordering');
+  const ordering: 'recent' | 'relevant' =
+    orderingRaw === 'recent' || orderingRaw === 'relevant' ? orderingRaw : 'relevant';
 
   const entityTypes = url.searchParams.getAll('entityType');
   const tags = url.searchParams.getAll('tag');
