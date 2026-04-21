@@ -44,7 +44,7 @@ describe('intelligence executor', () => {
     expect(searchIntelMock).toHaveBeenCalledWith('projects since yesterday', expect.objectContaining({ entityTypes: ['project'] }));
     expect(res.output.intelItems).toHaveLength(1);
     expect(res.output.intelQuery).toBe('projects since yesterday');
-    expect(res.output.intelFocus.query).toBe('projects since yesterday');
+    expect((res.output.intelFocus as any).query).toBe('projects since yesterday');
     expect(res.output.intelContext).toBe('ctx-prose');
   });
 });
