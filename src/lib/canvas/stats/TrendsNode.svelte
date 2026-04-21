@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Chart, Svg, Bars, Spline, Axis } from 'layerchart';
+  import { scaleBand, scaleTime, scaleLinear } from 'd3-scale';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs } from './format';
 
@@ -25,23 +26,36 @@
     () => refreshKey,
   );
 
+  // Short label for each bucket on the x-axis (HH for hour-granularity, MM-DD otherwise).
+  function bucketLabel(t: Date, granularity: string): string {
+    if (granularity === 'hour') return String(t.getUTCHours()).padStart(2, '0');
+    return `${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  const granularity = $derived(stats.data ? 'day' : 'day');
   const runsSeries = $derived(
     stats.data?.buckets.map((b) => ({
       t: new Date(b.t),
+      label: bucketLabel(new Date(b.t), 'day'),
+      total: b.runs.success + b.runs.failed + b.runs.healing,
       success: b.runs.success,
       failed: b.runs.failed,
       healing: b.runs.healing,
-      total: b.runs.success + b.runs.failed + b.runs.healing,
     })) ?? [],
   );
 
   const durationSeries = $derived(
-    stats.data?.buckets.map((b) => ({
-      t: new Date(b.t),
-      p50: b.durationMs.p50 ?? null,
-      p95: b.durationMs.p95 ?? null,
-    })) ?? [],
+    stats.data?.buckets
+      .filter((b) => b.durationMs.p50 !== null || b.durationMs.p95 !== null)
+      .map((b) => ({
+        t: new Date(b.t),
+        p50: b.durationMs.p50 ?? 0,
+        p95: b.durationMs.p95 ?? 0,
+      })) ?? [],
   );
+
+  const hasRuns = $derived(runsSeries.some((r) => r.total > 0));
+  const hasDuration = $derived(durationSeries.length > 0);
 </script>
 
 <div class="stats-node stats-trends">
@@ -58,29 +72,52 @@
     <section class="chart-block">
       <h4>Runs over time</h4>
       <div class="chart-host">
-        <Chart data={runsSeries} x="t" y="total" padding={{ top: 8, right: 8, bottom: 24, left: 32 }}>
-          <Svg>
-            <Axis placement="left" rule grid ticks={3} />
-            <Axis placement="bottom" rule />
-            <Bars y="success" fill="#3a8a56" strokeWidth={0} />
-            <Bars y="failed" fill="#c44" strokeWidth={0} />
-            <Bars y="healing" fill="#ffcf40" strokeWidth={0} />
-          </Svg>
-        </Chart>
+        {#if hasRuns}
+          <Chart
+            data={runsSeries}
+            x="label"
+            xScale={scaleBand().padding(0.2)}
+            y="total"
+            yScale={scaleLinear()}
+            yNice
+            padding={{ top: 8, right: 8, bottom: 20, left: 28 }}
+          >
+            <Svg>
+              <Axis placement="left" rule grid ticks={3} />
+              <Axis placement="bottom" rule ticks={Math.min(6, runsSeries.length)} />
+              <Bars y="total" fill="var(--accent, #7a6cd4)" strokeWidth={0} radius={2} />
+              <Bars y="failed" fill="#c44" strokeWidth={0} radius={2} />
+            </Svg>
+          </Chart>
+        {:else}
+          <div class="empty">No runs in this window</div>
+        {/if}
       </div>
     </section>
 
     <section class="chart-block">
-      <h4>Run duration (p50 / p95)</h4>
+      <h4>Run duration (p50 solid / p95 dashed)</h4>
       <div class="chart-host">
-        <Chart data={durationSeries} x="t" y="p95" padding={{ top: 8, right: 8, bottom: 24, left: 40 }}>
-          <Svg>
-            <Axis placement="left" rule grid ticks={3} format={(v: number) => formatDurationMs(v)} />
-            <Axis placement="bottom" rule />
-            <Spline y="p50" stroke="var(--accent)" strokeWidth={1.5} />
-            <Spline y="p95" stroke="var(--accent)" strokeWidth={1} strokeDasharray="4 3" />
-          </Svg>
-        </Chart>
+        {#if hasDuration}
+          <Chart
+            data={durationSeries}
+            x="t"
+            xScale={scaleTime()}
+            y="p95"
+            yScale={scaleLinear()}
+            yNice
+            padding={{ top: 8, right: 8, bottom: 20, left: 44 }}
+          >
+            <Svg>
+              <Axis placement="left" rule grid ticks={3} format={(v: number) => formatDurationMs(v)} />
+              <Axis placement="bottom" rule ticks={Math.min(4, durationSeries.length)} />
+              <Spline y="p50" stroke="var(--accent, #7a6cd4)" strokeWidth={1.5} />
+              <Spline y="p95" stroke="var(--accent, #7a6cd4)" strokeWidth={1} strokeDasharray="4 3" />
+            </Svg>
+          </Chart>
+        {:else}
+          <div class="empty">No duration data in this window</div>
+        {/if}
       </div>
     </section>
   {/if}
@@ -105,5 +142,13 @@
   .chart-block h4 { font-size: 10px; margin: 0; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; }
   .chart-host { flex: 1; min-height: 80px; }
   .error-strip { color: #c44; font-size: 10px; padding: 4px; border: 1px solid #c44; border-radius: 4px; }
-  .skel { color: var(--text-muted, #888); font-style: italic; font-size: 10px; }
+  .skel, .empty {
+    color: var(--text-muted, #888);
+    font-style: italic;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
 </style>
