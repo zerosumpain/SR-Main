@@ -894,6 +894,40 @@ export interface QuickAnswerSource {
 export type QuickAnswer = typeof quickAnswers.$inferSelect;
 
 // ==========================================
+// Intel explorations — per-canvas index of
+// deep/quick research sessions commissioned
+// from an intelligence node's "Explore further"
+// action. Authoritative data lives in
+// research_sessions / quick_answers; this row
+// lets the canvas rehydrate pending children
+// on reload without reverse-engineering the
+// node's config.
+// ==========================================
+
+export const intelExplorations = pgTable('intel_explorations', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id')
+    .notNull()
+    .references(() => workflows.id, { onDelete: 'cascade' }),
+  nodeId: text('node_id')
+    .notNull()
+    .references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  parentNodeId: text('parent_node_id')
+    .notNull()
+    .references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  engine: text('engine').notNull(), // 'deep' | 'quick'
+  sessionId: text('session_id').notNull(),
+  status: text('status').notNull(), // 'running' | 'complete' | 'failed' | 'cancelled'
+  topic: text('topic').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+});
+
+export type IntelExploration = typeof intelExplorations.$inferSelect;
+export type NewIntelExploration = typeof intelExplorations.$inferInsert;
+
+// ==========================================
 // App Settings (generic key/value) + OpenRouter models cache
 // ==========================================
 
