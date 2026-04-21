@@ -1048,26 +1048,15 @@
     researchStatus[nodeId] = 'complete';
     researchReport[nodeId] = result.report;
     researchSources[nodeId] = result.sources;
-    const next = { ...pendingExplorations };
-    delete next[nodeId];
-    pendingExplorations = next;
-    // TODO: no /api/canvas/[slug]/nodes/[id] PATCH endpoint exists yet.
-    // Persist via the workflows API as a best-effort; the intel_explorations
-    // row update plus in-memory state is the authoritative source for this session.
+    delete pendingExplorations[nodeId];
     try {
-      await fetch(`/api/workflows/${canvas.workflowId}/nodes/${nodeId}`, {
-        method: 'PATCH',
+      await fetch(`/api/canvas/${canvas.slug}/nodes/${nodeId}/complete-exploration`, {
+        method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          outputData: {
-            researchReport: result.report,
-            researchSources: result.sources,
-            researchDurationMs: result.durationMs,
-          },
-        }),
+        body: JSON.stringify({ report: result.report, sources: result.sources, durationMs: result.durationMs }),
       });
     } catch (err) {
-      console.error('[canvas] persist research result failed', err);
+      console.error('[canvas] complete-exploration failed', err);
     }
   }
 
@@ -1352,6 +1341,8 @@
   // Hydrate pending explorations — mark running so ResearchResultNode opens its SSE stream.
   $effect(() => {
     for (const nodeId of Object.keys(pendingExplorations)) {
+      const node = canvas.nodes.find((n) => n.id === nodeId);
+      if (node?.config?.completedReport) continue; // already done, just persisted
       researchStatus[nodeId] ??= 'running';
     }
   });
@@ -1910,10 +1901,10 @@
               <ResearchResultNode
                 engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
                 topic={(n.config.topic as string) ?? ''}
-                status={researchStatus[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete'}
-                report={researchReport[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
-                sources={researchSources[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
-                durationMs={(n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
+                status={researchStatus[n.id] ?? ((n.config as Record<string, unknown>)?.completedReport ? 'complete' : ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete')}
+                report={researchReport[n.id] ?? (n.config.completedReport as string) ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
+                sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
+                durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
                 streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
                 oncancel={() => cancelExplore(n.id)}
                 ondone={(result) => finaliseResearch(n.id, result)}
