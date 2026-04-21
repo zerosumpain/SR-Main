@@ -996,6 +996,7 @@
   let longPressStart: { x: number; y: number } | null = null;
 
   function onViewportTouchStart(e: TouchEvent) {
+    if (paletteOpen) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.chat-node, .wf-node')) return;
     const t = e.touches[0];
@@ -1010,6 +1011,14 @@
       });
     }, 450);
   }
+
+  $effect(() => {
+    return () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+    };
+  });
   function onViewportTouchMove(e: TouchEvent) {
     if (!longPressStart) return;
     const t = e.touches[0];
