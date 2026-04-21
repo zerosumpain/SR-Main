@@ -45,8 +45,10 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
 # Destructive changes (DROP / type narrowing) will make drizzle-kit prompt
 # and this step will hang — that's intentional, run it manually.
 echo "==> Applying DB schema (drizzle-kit push)..."
+# drizzle-kit is a devDep and we strip devDeps in prod. Install it locally
+# without touching package.json so it resolves the project's drizzle-orm.
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
-  "cd $VPS_DIR && npx --yes drizzle-kit push --config=drizzle.config.json"
+  "cd $VPS_DIR && (test -x node_modules/.bin/drizzle-kit || npm install --no-save --silent drizzle-kit@^0.31.10) && node_modules/.bin/drizzle-kit push --config=drizzle.config.json"
 
 echo "==> Updating systemd service (if needed)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \

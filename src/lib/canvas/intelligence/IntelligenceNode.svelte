@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import * as d3 from 'd3';
   import FacetPopover from './FacetPopover.svelte';
 
   type IntelItem = {
@@ -36,10 +38,10 @@
 
   type ViewMode = 'list' | 'detailed' | 'map' | 'graph';
   const VIEW_MODES: { value: ViewMode; label: string }[] = [
-    { value: 'list', label: 'list' },
-    { value: 'detailed', label: 'detailed' },
-    { value: 'map', label: 'map' },
-    { value: 'graph', label: 'graph' },
+    { value: 'list', label: 'List' },
+    { value: 'detailed', label: 'Detailed' },
+    { value: 'map', label: 'Map' },
+    { value: 'graph', label: 'Graph' },
   ];
 
   let {
@@ -88,6 +90,41 @@
   let exploreOpen = $state(false);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ---- Map state ----
+  type LeafletMap = {
+    setView: (c: [number, number], z: number) => unknown;
+    fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
+    invalidateSize: () => unknown;
+    scrollWheelZoom: { enable: () => unknown; disable: () => unknown };
+    on: (ev: string, fn: () => void) => unknown;
+    remove: () => void;
+  };
+  type LeafletGlobal = {
+    map: (el: HTMLElement, opts?: Record<string, unknown>) => LeafletMap;
+    tileLayer: (url: string, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown };
+    marker: (latlng: [number, number], opts?: Record<string, unknown>) => { addTo: (m: unknown) => { bindTooltip: (t: string) => unknown } };
+    latLngBounds: (corners: Array<[number, number]>) => { extend: (p: [number, number]) => unknown };
+  };
+
+  let mapContainer = $state<HTMLDivElement | undefined>();
+  let leafletMap: LeafletMap | null = null;
+  let mapLoading = $state(false);
+  let mapError = $state<string | null>(null);
+  type GeoItem = { id: string; name: string; lat: number; lng: number; type: string };
+  let geoItems = $state<GeoItem[]>([]);
+  let mapInitialized = $state(false);
+
+  // ---- Graph state ----
+  type GraphNode = { id: string; name: string; type: string; icon: string; color: string; summary: string | null; connectionCount: number };
+  type GraphEdge = { id: string; source: string; target: string; type: string; label: string | null; strength: string };
+  let graphContainer = $state<HTMLDivElement | undefined>();
+  let graphLoading = $state(false);
+  let graphError = $state<string | null>(null);
+  let graphNodes = $state<GraphNode[]>([]);
+  let graphEdges = $state<GraphEdge[]>([]);
+  let graphInitialized = $state(false);
+  let d3Simulation: d3.Simulation<GraphNode & d3.SimulationNodeDatum, undefined> | null = null;
 
   /** Convert selectedCategories pill values → entityTypes for the API. */
   function categoriesToEntityTypes(cats: string[]): string[] {
@@ -173,6 +210,8 @@
   }
 
   function onViewModeChange(mode: ViewMode) {
+    destroyMap();
+    destroyGraph();
     viewMode = mode;
     onsave({ viewMode: mode });
   }
@@ -181,8 +220,304 @@
     exploreOpen = !exploreOpen;
   }
 
+  // ---- Leaflet helpers ----
+
+  function ensureLeafletLoaded(): Promise<LeafletGlobal> {
+    const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
+    if (existing) return Promise.resolve(existing);
+
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/vendor/leaflet.min.css';
+      link.dataset.leaflet = 'true';
+      document.head.appendChild(link);
+    }
+
+    return new Promise((resolve, reject) => {
+      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => {
+          const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
+          L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
+        });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = '/vendor/leaflet.min.js';
+      script.dataset.leaflet = 'true';
+      script.onload = () => {
+        const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
+        L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
+      };
+      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
+      document.head.appendChild(script);
+    });
+  }
+
+  function destroyMap() {
+    if (leafletMap) {
+      leafletMap.remove();
+      leafletMap = null;
+    }
+    mapInitialized = false;
+    mapError = null;
+    geoItems = [];
+  }
+
+  async function initMap() {
+    if (mapInitialized || mapLoading) return;
+    mapLoading = true;
+    mapError = null;
+    try {
+      const entityIds = items.filter((i) => i.kind === 'entity').map((i) => i.id);
+      const res = await fetch(`/api/canvas/${slug}/intel/geo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityIds }),
+      });
+      if (!res.ok) throw new Error(`Geo API error: ${res.status}`);
+      const data = await res.json();
+      geoItems = data.items ?? [];
+
+      if (geoItems.length === 0) {
+        mapLoading = false;
+        mapInitialized = true;
+        return;
+      }
+
+      // Wait for container to be in the DOM
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      if (!mapContainer) {
+        mapLoading = false;
+        return;
+      }
+
+      const L = await ensureLeafletLoaded();
+      if (!mapContainer) {
+        mapLoading = false;
+        return;
+      }
+
+      const map = L.map(mapContainer, {
+        scrollWheelZoom: false,
+        zoomControl: true,
+        touchZoom: true,
+        doubleClickZoom: true,
+        dragging: true,
+      });
+      leafletMap = map;
+
+      map.on('focus', () => map.scrollWheelZoom.enable());
+      map.on('blur', () => map.scrollWheelZoom.disable());
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map);
+
+      const allPoints: Array<[number, number]> = [];
+      for (const item of geoItems) {
+        const m = L.marker([item.lat, item.lng]).addTo(map);
+        m.bindTooltip(item.name);
+        allPoints.push([item.lat, item.lng]);
+      }
+
+      if (allPoints.length === 1) {
+        map.setView(allPoints[0], 12);
+      } else if (allPoints.length > 1) {
+        const [head, ...rest] = allPoints;
+        const bounds = L.latLngBounds([head, head]);
+        for (const p of rest) bounds.extend(p);
+        map.fitBounds(bounds, { padding: [20, 20] });
+      }
+
+      mapInitialized = true;
+    } catch (err) {
+      mapError = err instanceof Error ? err.message : String(err);
+    } finally {
+      mapLoading = false;
+    }
+  }
+
+  // ---- D3 graph helpers ----
+
+  function destroyGraph() {
+    if (d3Simulation) {
+      d3Simulation.stop();
+      d3Simulation = null;
+    }
+    if (graphContainer) {
+      graphContainer.innerHTML = '';
+    }
+    graphInitialized = false;
+    graphError = null;
+    graphNodes = [];
+    graphEdges = [];
+  }
+
+  async function initGraph() {
+    if (graphInitialized || graphLoading) return;
+    graphLoading = true;
+    graphError = null;
+    try {
+      const entityIds = items.filter((i) => i.kind === 'entity').map((i) => i.id);
+      const res = await fetch(`/api/canvas/${slug}/intel/graph`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityIds }),
+      });
+      if (!res.ok) throw new Error(`Graph API error: ${res.status}`);
+      const data = await res.json();
+      graphNodes = data.nodes ?? [];
+      graphEdges = data.edges ?? [];
+
+      if (graphNodes.length === 0) {
+        graphLoading = false;
+        graphInitialized = true;
+        return;
+      }
+
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      if (!graphContainer) {
+        graphLoading = false;
+        return;
+      }
+
+      renderD3Graph(graphContainer, graphNodes, graphEdges);
+      graphInitialized = true;
+    } catch (err) {
+      graphError = err instanceof Error ? err.message : String(err);
+    } finally {
+      graphLoading = false;
+    }
+  }
+
+  function renderD3Graph(container: HTMLDivElement, nodes: GraphNode[], edges: GraphEdge[]) {
+    const width = container.clientWidth || 340;
+    const height = container.clientHeight || 280;
+
+    const svg = d3
+      .select(container)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .style('display', 'block');
+
+    const g = svg.append('g');
+
+    // Zoom + pan
+    const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.2, 4]).on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
+
+    // Simulation nodes need x/y
+    type SimNode = GraphNode & d3.SimulationNodeDatum;
+    const simNodes: SimNode[] = nodes.map((n) => ({ ...n }));
+    const nodeById = new Map(simNodes.map((n) => [n.id, n]));
+
+    type SimEdge = d3.SimulationLinkDatum<SimNode> & { id: string; label: string | null; strength: string };
+    const simEdges: SimEdge[] = edges.map((e) => ({
+      ...e,
+      source: nodeById.get(e.source) ?? e.source,
+      target: nodeById.get(e.target) ?? e.target,
+    }));
+
+    const link = g
+      .append('g')
+      .attr('class', 'links')
+      .selectAll('line')
+      .data(simEdges)
+      .join('line')
+      .attr('stroke', 'var(--text-muted, #888)')
+      .attr('stroke-opacity', 0.4)
+      .attr('stroke-width', 1);
+
+    const nodeGroup = g
+      .append('g')
+      .attr('class', 'nodes')
+      .selectAll('g')
+      .data(simNodes)
+      .join('g')
+      .attr('cursor', 'grab');
+
+    nodeGroup
+      .append('circle')
+      .attr('r', (d) => 4 + Math.log(d.connectionCount + 1) * 2)
+      .attr('fill', (d) => d.color || '#5dbea3')
+      .attr('stroke', 'var(--bg, #0d1117)')
+      .attr('stroke-width', 1.5);
+
+    nodeGroup
+      .append('text')
+      .text((d) => d.name)
+      .attr('text-anchor', 'middle')
+      .attr('dy', (d) => (4 + Math.log(d.connectionCount + 1) * 2) + 10)
+      .attr('fill', 'var(--text-muted, #888)')
+      .attr('font-size', '8px')
+      .attr('font-family', 'var(--font-mono, monospace)');
+
+    // Drag behaviour
+    nodeGroup.call(
+      d3
+        .drag<SVGGElement, SimNode>()
+        .on('start', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on('drag', (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on('end', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }),
+    );
+
+    const simulation = d3
+      .forceSimulation<SimNode>(simNodes)
+      .force('link', d3.forceLink<SimNode, SimEdge>(simEdges).id((d) => d.id).distance(60))
+      .force('charge', d3.forceManyBody().strength(-120))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .on('tick', () => {
+        link
+          .attr('x1', (d) => (d.source as SimNode).x ?? 0)
+          .attr('y1', (d) => (d.source as SimNode).y ?? 0)
+          .attr('x2', (d) => (d.target as SimNode).x ?? 0)
+          .attr('y2', (d) => (d.target as SimNode).y ?? 0);
+
+        nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+      });
+
+    d3Simulation = simulation as unknown as d3.Simulation<GraphNode & d3.SimulationNodeDatum, undefined>;
+  }
+
+  // ---- Reactive triggers for map and graph ----
+
+  $effect(() => {
+    if (viewMode === 'map' && !mapInitialized && !mapLoading) {
+      initMap();
+    }
+  });
+
+  $effect(() => {
+    if (viewMode === 'graph' && !graphInitialized && !graphLoading) {
+      initGraph();
+    }
+  });
+
   $effect(() => {
     fetchPreview();
+  });
+
+  onDestroy(() => {
+    destroyMap();
+    destroyGraph();
   });
 </script>
 
@@ -226,23 +561,27 @@
     {/each}
   </div>
 
-  <!-- View mode + facets row -->
+  <!-- View mode pill group + facets row -->
   <div class="controls-row">
-    <select
-      class="view-select"
-      value={viewMode}
-      onchange={(e) => onViewModeChange((e.currentTarget as HTMLSelectElement).value as ViewMode)}
-    >
+    <div class="view-pill-group">
+      <span class="view-label">VIEW</span>
       {#each VIEW_MODES as vm}
-        <option value={vm.value}>{vm.label}</option>
+        <button
+          type="button"
+          class="view-pill"
+          class:active={viewMode === vm.value}
+          onclick={() => onViewModeChange(vm.value)}
+        >{vm.label}</button>
       {/each}
-    </select>
-    <button type="button" class="facet-chip" onclick={() => (facetsOpen = !facetsOpen)}>
-      time · {facets.timeRange ? 'filtered' : 'all'}
-    </button>
-    <button type="button" class="facet-chip" onclick={() => (facetsOpen = !facetsOpen)}>
-      order · {facets.ordering}
-    </button>
+    </div>
+    <div class="facet-chips">
+      <button type="button" class="facet-chip" onclick={() => (facetsOpen = !facetsOpen)}>
+        time · {facets.timeRange ? 'filtered' : 'all'}
+      </button>
+      <button type="button" class="facet-chip" onclick={() => (facetsOpen = !facetsOpen)}>
+        order · {facets.ordering}
+      </button>
+    </div>
     {#if facetsOpen}
       <FacetPopover
         facets={facets}
@@ -288,15 +627,25 @@
       {/each}
     </ul>
   {:else if viewMode === 'map'}
-    <div class="placeholder-pane">
-      <span class="placeholder-icon">🗺</span>
-      <span>Map view — coming soon</span>
-    </div>
+    {#if mapLoading}
+      <div class="pane-loading">Loading map data…</div>
+    {:else if mapError}
+      <div class="pane-error">{mapError}</div>
+    {:else if mapInitialized && geoItems.length === 0}
+      <div class="empty pane-center">No geocoded places in this selection. Tag an entity's properties with lat/lng to see it on the map.</div>
+    {:else}
+      <div class="map-pane" bind:this={mapContainer}></div>
+    {/if}
   {:else if viewMode === 'graph'}
-    <div class="placeholder-pane">
-      <span class="placeholder-icon">🕸</span>
-      <span>Graph view — coming soon</span>
-    </div>
+    {#if graphLoading}
+      <div class="pane-loading">Loading graph data…</div>
+    {:else if graphError}
+      <div class="pane-error">{graphError}</div>
+    {:else if graphInitialized && graphNodes.length === 0}
+      <div class="empty pane-center">No connected entities in this selection.</div>
+    {:else}
+      <div class="graph-pane" bind:this={graphContainer}></div>
+    {/if}
   {/if}
 
   <div class="footer">
@@ -403,27 +752,52 @@
     color: var(--bg);
     border-color: #5dbea3;
   }
-  /* View mode + facets */
+  /* View mode pill group + facets */
   .controls-row {
     position: relative;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 4px;
     padding: 0 8px 6px;
   }
-  .view-select {
-    background: var(--bg);
-    color: var(--text-primary);
-    border: 1px solid var(--divider);
-    border-radius: 6px;
-    padding: 2px 6px;
-    font: inherit;
-    font-size: 10px;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
+  .view-pill-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
   }
-  .view-select:hover { border-color: var(--text-muted); }
+  .view-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-right: 2px;
+  }
+  .view-pill {
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    padding: 3px 10px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .view-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+  .view-pill.active {
+    background: #5dbea3;
+    color: var(--bg);
+    border-color: #5dbea3;
+  }
+  .facet-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
   .facet-chip {
     background: var(--bg);
     color: var(--text-muted);
@@ -511,18 +885,45 @@
     padding: 0 4px;
   }
   .item-date { color: var(--text-ghost); }
-  /* Placeholder panes */
-  .placeholder-pane {
+  /* Map and graph panes */
+  .map-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .graph-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .pane-loading {
     flex: 1 1 auto;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    color: var(--text-ghost);
     font-size: 11px;
+    color: var(--text-ghost);
   }
-  .placeholder-icon { font-size: 22px; }
+  .pane-error {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #e05252;
+    padding: 8px;
+    text-align: center;
+  }
+  .pane-center {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 12px 16px;
+    line-height: 1.5;
+  }
   .empty { color: var(--text-ghost); padding: 8px; font-size: 11px; }
   .footer {
     position: relative;
