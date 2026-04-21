@@ -71,12 +71,29 @@
   });
 
   $effect(() => {
-    if (open) {
-      query = '';
+    const len = query
+      ? visible.rest.length
+      : visible.suggested.length + visible.rest.length;
+    if (len === 0) {
       activeIndex = 0;
-      // focus the input on next tick
-      queueMicrotask(() => searchEl?.focus());
+      return;
     }
+    if (activeIndex >= len) activeIndex = len - 1;
+  });
+
+  $effect(() => {
+    if (!open) return;
+    query = '';
+    activeIndex = 0;
+    queueMicrotask(() => searchEl?.focus());
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   });
 
   function pick(type: string) {
@@ -101,13 +118,37 @@
       e.preventDefault();
       if (flat[activeIndex]) pick(flat[activeIndex].type);
     }
+    if (e.key === 'Tab') {
+      // Trap focus between search input and row buttons
+      const root = (e.currentTarget as HTMLElement);
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>('input, button')
+      ).filter((el) => !el.hasAttribute('disabled'));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
   }
 
-  const style = $derived(
-    anchor === 'center'
-      ? 'left:50%; top:40%; transform:translate(-50%, -40%);'
-      : `left:${(anchor as { x: number; y: number }).x}px; top:${(anchor as { x: number; y: number }).y}px;`
-  );
+  const PALETTE_WIDTH = 420;
+  const style = $derived.by(() => {
+    if (anchor === 'center') {
+      return 'left:50%; top:40%; transform:translate(-50%, -40%);';
+    }
+    if (typeof window === 'undefined') return `left:${anchor.x}px; top:${anchor.y}px;`;
+    const maxH = window.innerHeight * 0.6; // matches CSS max-height: 60vh
+    const x = Math.max(8, Math.min(anchor.x, window.innerWidth - PALETTE_WIDTH - 8));
+    const y = Math.max(8, Math.min(anchor.y, window.innerHeight - maxH - 8));
+    return `left:${x}px; top:${y}px;`;
+  });
 </script>
 
 {#if open}
@@ -122,6 +163,7 @@
     style={style}
     role="dialog"
     aria-label="Node palette"
+    aria-modal="true"
     tabindex="-1"
     onkeydown={onKey}
   >
