@@ -8,6 +8,7 @@ import {
   doublePrecision,
   boolean,
   uniqueIndex,
+  index,
   jsonb,
   numeric,
   customType,
@@ -628,6 +629,27 @@ export const nodeExecutions = pgTable('node_executions', {
 
 export type NodeExecution = typeof nodeExecutions.$inferSelect;
 export type NewNodeExecution = typeof nodeExecutions.$inferInsert;
+
+export const workflowAuditLog = pgTable(
+  'workflow_audit_log',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id, { onDelete: 'cascade' }),
+    entity: text('entity').notNull(), // 'workflow' | 'node' | 'edge' | 'trigger' | 'schedule'
+    entityId: text('entity_id'),
+    action: text('action').notNull(), // 'create' | 'delete' | 'rename' | 'config' | 'update'
+    details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byWorkflowAt: index('workflow_audit_log_workflow_at_idx').on(t.workflowId, t.at.desc()),
+  }),
+);
+
+export type WorkflowAuditLog = typeof workflowAuditLog.$inferSelect;
+export type NewWorkflowAuditLog = typeof workflowAuditLog.$inferInsert;
 
 export const workflowSchedules = pgTable('workflow_schedules', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
