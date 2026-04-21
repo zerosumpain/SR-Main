@@ -1907,6 +1907,7 @@
                 sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
                 durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
                 streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
+                sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
                 oncancel={() => cancelExplore(n.id)}
                 ondone={(result) => finaliseResearch(n.id, result)}
               />
@@ -2009,6 +2010,16 @@
               <div class="trig-stack">
                 <span class="wf-name">{n.name}</span>
                 <span class="trig-summary">{triggerSummary(n.config)}</span>
+              </div>
+            {:else if n.type === 'quick-answer' && n.config.topic}
+              <div class="trig-stack">
+                <span class="wf-name">{n.name}</span>
+                <span class="trig-summary">{String(n.config.topic).slice(0, 60)}{String(n.config.topic).length > 60 ? '…' : ''}</span>
+              </div>
+            {:else if n.type === 'deep-research' && n.config.topic}
+              <div class="trig-stack">
+                <span class="wf-name">{n.name}</span>
+                <span class="trig-summary">{String(n.config.topic).slice(0, 60)}{String(n.config.topic).length > 60 ? '…' : ''}</span>
               </div>
             {:else}
               <span class="wf-name">{n.name}</span>
