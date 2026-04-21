@@ -42,7 +42,7 @@
     word-break: break-word;
   }
   .chat-md :global(p) {
-    margin: 0 0 1em;
+    margin: 0 0 0.5em;
   }
   .chat-md :global(p:last-child) {
     margin-bottom: 0;
@@ -80,12 +80,12 @@
     font-size: inherit;
   }
   .chat-md :global(ul) {
-    margin: 0 0 1em;
+    margin: 0 0 0.5em;
     padding-left: 1.3em;
     list-style: disc outside;
   }
   .chat-md :global(ol) {
-    margin: 0 0 1em;
+    margin: 0 0 0.5em;
     padding-left: 1.3em;
     list-style: decimal outside;
   }
@@ -94,20 +94,20 @@
     margin-bottom: 0;
   }
   .chat-md :global(li) {
-    margin: 0 0 0.25em;
+    margin: 0 0 0.12em;
   }
   .chat-md :global(li:last-child) {
     margin-bottom: 0;
   }
   .chat-md :global(li > p) {
-    margin: 0 0 0.25em;
+    margin: 0 0 0.12em;
   }
   .chat-md :global(li > p:last-child) {
     margin-bottom: 0;
   }
   .chat-md :global(li > ul),
   .chat-md :global(li > ol) {
-    margin: 0.25em 0 0;
+    margin: 0.12em 0 0;
   }
   .chat-md :global(h1),
   .chat-md :global(h2),
