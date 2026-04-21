@@ -271,6 +271,7 @@
     chat: 'var(--accent)',
     inspector: '#567',
     stats: '#7a6cd4',
+    intelligence: '#5dbea3',
   };
 
   const peerCanvases = $derived(data.peerCanvases);
