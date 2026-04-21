@@ -657,7 +657,7 @@
     if (
       target &&
       target.closest(
-        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu, .stats-node',
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
       )
     ) {
       return;
