@@ -269,7 +269,7 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intelligence',
     description:
       'Deep or quick research output. Slowly pulses while running; populates when complete.',
-    defaultConfig: { size: { w: 340, h: 360 }, engine: 'deep', sessionId: '', topic: '' },
+    defaultConfig: { size: { w: 460, h: 520 }, engine: 'deep', sessionId: '', topic: '' },
   },
   {
     type: 'quick-answer',

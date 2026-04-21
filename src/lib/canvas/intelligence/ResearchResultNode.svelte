@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DeepResearchViewer from './DeepResearchViewer.svelte';
+
   type Source = { url: string; title: string; domain: string };
   type Status = 'pending' | 'running' | 'complete' | 'failed';
 
@@ -32,10 +34,17 @@
   let fetchedReport = $state('');
   let fetchedSources = $state<Source[]>([]);
   let fetchedSessionId = $state('');
+  let fetchedDeepReport = $state<Record<string, unknown> | null>(null);
   let fetchError = $state<string | null>(null);
 
   const effectiveReport = $derived(report || fetchedReport);
   const effectiveSources = $derived((sources && sources.length ? sources : fetchedSources));
+
+  // For deep+complete: the full report object for DeepResearchViewer
+  const deepReportData = $derived(
+    engine === 'deep' && status === 'complete' ? fetchedDeepReport : null,
+  );
+  const showDeepViewer = $derived(engine === 'deep' && status === 'complete' && !!sessionId);
 
   $effect(() => {
     if (status !== 'complete') return;
@@ -45,6 +54,7 @@
     fetchedSessionId = sid;
     fetchedReport = '';
     fetchedSources = [];
+    fetchedDeepReport = null;
     fetchError = null;
     const url = engine === 'deep' ? `/api/deepdive/${sid}` : `/api/quickanswer/${sid}`;
     (async () => {
@@ -57,11 +67,12 @@
         const body = await resp.json();
         if (engine === 'deep') {
           const deepReport = body.report as Record<string, unknown> | string | null | undefined;
-          if (typeof deepReport === 'string' && deepReport) {
-            fetchedReport = deepReport;
-          } else if (typeof deepReport === 'object' && deepReport !== null) {
-            const execSummary = (deepReport as Record<string, unknown>).executive_summary;
+          if (typeof deepReport === 'object' && deepReport !== null) {
+            fetchedDeepReport = deepReport as Record<string, unknown>;
+            const execSummary = deepReport.executive_summary;
             if (typeof execSummary === 'string') fetchedReport = execSummary;
+          } else if (typeof deepReport === 'string' && deepReport) {
+            fetchedReport = deepReport;
           }
           if (Array.isArray(body.sources) && body.sources.length > 0) {
             fetchedSources = body.sources as Source[];
@@ -100,12 +111,12 @@
         ) {
           es?.close();
           status = 'complete';
-          const durationMs = evt.data?.durationMs;
+          const evtDuration = evt.data?.durationMs;
           if (engine === 'deep' && !report) {
             (async () => {
               try {
-                const sessionId = new URL(streamUrl!, location.origin).pathname.split('/')[3];
-                const resp = await fetch(`/api/deepdive/${sessionId}`);
+                const sid = new URL(streamUrl!, location.origin).pathname.split('/')[3];
+                const resp = await fetch(`/api/deepdive/${sid}`);
                 if (resp.ok) {
                   const body = await resp.json();
                   const deepReport = body.report as Record<string, unknown> | null | undefined;
@@ -116,10 +127,10 @@
               } catch (err) {
                 console.error('[research-result] fetch deep report failed', err);
               }
-              ondone({ report, sources, durationMs });
+              ondone({ report, sources, durationMs: evtDuration });
             })();
           } else {
-            ondone({ report, sources, durationMs });
+            ondone({ report, sources, durationMs: evtDuration });
           }
         } else if (evt.type === 'error') {
           status = 'failed';
@@ -146,6 +157,15 @@
     {#if status === 'running' || status === 'pending'}
       <button type="button" class="cancel" onclick={oncancel}>cancel</button>
     {/if}
+    {#if status === 'complete' && sessionId}
+      <a
+        href="/deepdive/{sessionId}/dashboard"
+        target="_blank"
+        rel="noreferrer"
+        class="open-link"
+        title="Open full dashboard"
+      >↗</a>
+    {/if}
   </div>
 
   {#if status === 'running' || status === 'pending'}
@@ -155,7 +175,16 @@
     </div>
   {:else if status === 'failed'}
     <div class="failed">Research failed.</div>
+  {:else if showDeepViewer}
+    <!-- Deep research complete: rich tabbed viewer -->
+    <div class="viewer-wrap">
+      <DeepResearchViewer
+        sessionId={sessionId!}
+        reportData={deepReportData}
+      />
+    </div>
   {:else}
+    <!-- Quick research or deep without session id: simple view -->
     <div class="body">
       {#if effectiveReport}
         <div class="report">{effectiveReport}</div>
@@ -222,9 +251,10 @@
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.08em;
+    flex-shrink: 0;
   }
-  .kind-bar { width: 3px; align-self: stretch; background: #5dbea3; }
-  .title { flex: 1; }
+  .kind-bar { width: 3px; align-self: stretch; background: #5dbea3; flex-shrink: 0; }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cancel {
     background: var(--bg);
     color: var(--text-muted);
@@ -234,10 +264,19 @@
     font: inherit;
     font-size: 10px;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .cancel:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .open-link {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .open-link:hover { color: #5dbea3; }
   .pending {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -253,13 +292,31 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .log { color: var(--text-muted); font-size: 11px; text-align: center; padding: 0 12px; }
-  .failed { padding: 12px; color: #c66; font-size: 11px; }
-  .body { flex: 1; overflow: auto; padding: 8px 10px; font-size: 11px; }
+  .failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
+  /* Viewer wrap — fills remaining space and lets DeepResearchViewer control its own scroll */
+  .viewer-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Quick/no-session: simple scrollable body */
+  .body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 10px;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
   .report { white-space: pre-wrap; color: var(--text-primary); }
-  .sources { margin-top: 8px; font-size: 10px; }
+  .sources { margin-top: 4px; font-size: 10px; }
   .sources summary { cursor: pointer; color: var(--text-muted); }
   .sources ul { list-style: none; padding: 0; margin: 4px 0 0; }
   .sources a { color: var(--accent); text-decoration: none; }
   .domain { color: var(--text-ghost); margin-left: 6px; }
-  .duration { color: var(--text-ghost); font-size: 9px; text-align: right; margin-top: 8px; }
+  .duration { color: var(--text-ghost); font-size: 9px; text-align: right; margin-top: 4px; }
 </style>

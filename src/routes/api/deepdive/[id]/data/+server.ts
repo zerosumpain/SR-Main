@@ -1,0 +1,90 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { db } from '$lib/db';
+import {
+  researchSessions,
+  facts,
+  entities,
+  sources,
+  relationships,
+  entityMentions,
+} from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
+
+/**
+ * GET /api/deepdive/[id]/data
+ * Returns facts, entities, sources, relationships and the report for a session.
+ * Used by the embedded DeepResearchViewer canvas node.
+ */
+export const GET: RequestHandler = async ({ params }) => {
+  const [session] = await db
+    .select({ id: researchSessions.id, report: researchSessions.report })
+    .from(researchSessions)
+    .where(eq(researchSessions.id, params.id))
+    .limit(1);
+
+  if (!session) {
+    return json({ error: 'Session not found' }, { status: 404 });
+  }
+
+  const report = (session.report ?? {}) as Record<string, unknown>;
+  const entityCentrality = (report?.entity_centrality ?? {}) as Record<string, number>;
+
+  const [allFacts, allEntities, allSources, allRelationships] = await Promise.all([
+    db
+      .select({
+        id: facts.id,
+        content: facts.content,
+        confidence: facts.confidence,
+        eventDate: facts.eventDate,
+        isCounterfactual: facts.isCounterfactual,
+        refutesFactId: facts.refutesFactId,
+        sourceId: facts.sourceId,
+        tags: facts.tags,
+      })
+      .from(facts)
+      .where(eq(facts.sessionId, params.id)),
+
+    db.select().from(entities).where(eq(entities.sessionId, params.id)),
+
+    db
+      .select({
+        id: sources.id,
+        url: sources.url,
+        title: sources.title,
+        domain: sources.domain,
+        category: sources.category,
+        credibilityScore: sources.credibilityScore,
+        credibilityType: sources.credibilityType,
+      })
+      .from(sources)
+      .where(eq(sources.sessionId, params.id)),
+
+    db
+      .select({
+        id: relationships.id,
+        fromEntityId: relationships.fromEntityId,
+        toEntityId: relationships.toEntityId,
+        relationshipType: relationships.relationshipType,
+        sentiment: relationships.sentiment,
+      })
+      .from(relationships)
+      .where(eq(relationships.sessionId, params.id)),
+  ]);
+
+  return json({
+    facts: allFacts.map((f) => ({
+      ...f,
+      eventDate: f.eventDate?.toISOString() ?? null,
+    })),
+    entities: allEntities.map((e) => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      description: e.description,
+      centrality: entityCentrality[e.id] ?? 0,
+    })),
+    sources: allSources,
+    relationships: allRelationships,
+  });
+};

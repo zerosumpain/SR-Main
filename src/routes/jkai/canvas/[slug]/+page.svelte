@@ -4798,6 +4798,32 @@
     cursor: auto;
   }
 
+  /* ——— Research-result node ——— */
+  .research-result-node {
+    border-color: #5dbea3;
+  }
+  .research-result-node.is-selected {
+    outline-color: #5dbea3;
+  }
+  .research-result-hdr {
+    background: #1a2e2a;
+    color: #5dbea3;
+  }
+  .research-result-bar {
+    width: 3px;
+    align-self: stretch;
+    background: #5dbea3;
+  }
+  .research-result-node-body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    cursor: auto;
+  }
+
   /* Flash animation for scrollToNode */
   .wf-node.flash,
   .chat-node.flash {
