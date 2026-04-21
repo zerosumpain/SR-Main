@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createCanvas, listCanvases } from '$lib/canvas/adapter';
+import { createCanvas, listCanvases } from '$lib/canvas/adapter.server';
 
 export const GET: RequestHandler = async () => {
   const canvases = await listCanvases();

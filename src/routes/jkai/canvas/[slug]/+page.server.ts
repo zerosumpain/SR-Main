@@ -1,10 +1,6 @@
 import type { PageServerLoad } from './$types';
-import {
-  loadCanvas,
-  loadModelCatalogue,
-  listCanvases,
-  CANVAS_NODE_TYPES,
-} from '$lib/canvas/adapter';
+import { loadCanvas, loadModelCatalogue, listCanvases } from '$lib/canvas/adapter.server';
+import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 import { db } from '$lib/db';
 import { intelExplorations } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
