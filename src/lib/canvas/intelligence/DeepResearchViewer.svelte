@@ -727,14 +727,16 @@
 
 <style>
   .drv {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    width: 100%;
-    height: 100%;
     overflow: hidden;
     background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-mono);
+    min-height: 0;
+    min-width: 0;
   }
 
   /* ── Tab bar ── */
@@ -788,7 +790,17 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #5dbea3 transparent;
   }
+  .tab-pane::-webkit-scrollbar { width: 10px; }
+  .tab-pane::-webkit-scrollbar-track { background: transparent; }
+  .tab-pane::-webkit-scrollbar-thumb {
+    background: #2f5a50;
+    border-radius: 5px;
+    border: 2px solid var(--bg);
+  }
+  .tab-pane::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
 
   /* ── Graph pane override ── */
   .graph-pane {

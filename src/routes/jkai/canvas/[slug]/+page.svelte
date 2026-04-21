@@ -4815,6 +4815,7 @@
     background: #5dbea3;
   }
   .research-result-node-body {
+    position: relative;
     flex: 1 1 0;
     min-height: 0;
     overflow: hidden;

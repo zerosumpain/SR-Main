@@ -214,9 +214,8 @@
 
 <style>
   .research-result {
-    position: relative;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     background: var(--bg);
     border: 1.5px solid #5dbea3;
     color: var(--text-primary);
@@ -224,6 +223,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
+    min-width: 0;
   }
   .research-result[data-status='pending'],
   .research-result[data-status='running'] {
@@ -295,6 +296,7 @@
   .failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
   /* Viewer wrap — fills remaining space and lets DeepResearchViewer control its own scroll */
   .viewer-wrap {
+    position: relative;
     flex: 1 1 0;
     min-height: 0;
     overflow: hidden;
@@ -305,13 +307,24 @@
   .body {
     flex: 1 1 0;
     min-height: 0;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 8px 10px;
     font-size: 11px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: #5dbea3 transparent;
   }
+  .body::-webkit-scrollbar { width: 10px; }
+  .body::-webkit-scrollbar-track { background: transparent; }
+  .body::-webkit-scrollbar-thumb {
+    background: #2f5a50;
+    border-radius: 5px;
+    border: 2px solid var(--bg);
+  }
+  .body::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
   .report { white-space: pre-wrap; color: var(--text-primary); }
   .sources { margin-top: 4px; font-size: 10px; }
   .sources summary { cursor: pointer; color: var(--text-muted); }
