@@ -92,7 +92,7 @@ export const CANVAS_NODE_GROUPS = [
 ] as const;
 
 /** Curated set of workflow node types offered in the canvas "+ node" picker. */
-export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
+export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
   // ————————————————————————— Trigger & Flow
   {
     type: 'trigger',
@@ -630,9 +630,9 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
       outputs: [],
     },
   },
-];
+]);
 
-export function allTypes(): NodeTypeOption[] {
+export function allTypes(): readonly NodeTypeOption[] {
   return CANVAS_NODE_TYPES;
 }
 
