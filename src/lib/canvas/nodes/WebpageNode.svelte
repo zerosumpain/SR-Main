@@ -85,6 +85,31 @@
     }
   }
 
+  async function emitExtractedText() {
+    if (!config.url) return;
+    try {
+      const body: Record<string, unknown> = { url: config.url };
+      if (config.mode === 'proxied') {
+        body.session = nodeId;
+      } else {
+        try {
+          body.html = iframeEl?.contentDocument?.documentElement?.outerHTML ?? '';
+        } catch {
+          body.html = ''; // cross-origin: skip extract
+        }
+      }
+      if (!body.html && !body.session) return;
+      const res = await fetch('/api/webframe/extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return;
+      const { text } = (await res.json().catch(() => ({ text: '' }))) as { text: string };
+      if (text) onOutput?.('extractedText', text);
+    } catch {}
+  }
+
   function escalateToProxy(target: string, reason: string) {
     clearEscalationTimers();
     if (config.mode === 'proxied') return;
@@ -113,6 +138,7 @@
         pongReceived = true;
         showStatus('Loaded · proxied via homeserv');
         if (config.url) onOutput?.('currentUrl', config.url);
+        void emitExtractedText();
         return;
       }
       // Direct load: give the page 1s to post a pong (same-origin check).
@@ -121,6 +147,7 @@
         if (!pongReceived && config.url) escalateToProxy(config.url, 'cross-origin on direct load');
       }, 1000);
       if (config.url) onOutput?.('currentUrl', config.url);
+      void emitExtractedText();
     }
     iframeEl.addEventListener('load', onLoad);
     return () => iframeEl?.removeEventListener('load', onLoad);

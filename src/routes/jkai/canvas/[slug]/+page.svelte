@@ -963,6 +963,9 @@
             }),
           });
           await invalidateAll();
+          if (meta.type === 'webpage') {
+            await syncWebpageFromUpstream(newNode.id);
+          }
         } catch (err) {
           actionError = err instanceof Error ? err.message : String(err);
         }
@@ -1160,6 +1163,73 @@
     }
   }
 
+  // ——— Webpage node runtime outputs ———
+
+  const webpageOutputs = $state<Record<string, Record<string, string>>>({});
+
+  function webpageNodeOutput(
+    nodeId: string,
+    handleId: 'currentUrl' | 'selectedText' | 'extractedText',
+    value: string,
+  ) {
+    const existing = webpageOutputs[nodeId] ?? {};
+    if (existing[handleId] === value) return;
+    webpageOutputs[nodeId] = { ...existing, [handleId]: value };
+    propagateWebpageOutput(nodeId, handleId, value);
+  }
+
+  function propagateWebpageOutput(
+    _nodeId: string,
+    _handleId: 'currentUrl' | 'selectedText' | 'extractedText',
+    _value: string,
+  ) {
+    // Outputs are consumed by downstream nodes via run data; UI-side propagation
+    // is not needed in v1. Hook reserved for later.
+  }
+
+  function extractFirstUrl(s: string): string | null {
+    const m = s.match(/\bhttps?:\/\/\S+/i);
+    return m ? m[0] : null;
+  }
+
+  // Seeded when a webpage node is created with an upstream connection: check
+  // the last known output of the upstream node and set urlDraft / config.url.
+  async function syncWebpageFromUpstream(webpageNodeId: string) {
+    const incoming = (canvas?.edges ?? []).filter((e) => e.to === webpageNodeId);
+    if (incoming.length === 0) return;
+    // Consider the most-recent incoming edge the one that drives the url.
+    const edge = incoming[incoming.length - 1];
+    const source = (canvas?.nodes ?? []).find((n) => n.id === edge.from);
+    if (!source) return;
+    const sourceMeta = byNodeType(source.type);
+    const outputKinds = new Set(
+      (sourceMeta?.handles.outputs ?? []).flatMap((h) => h.kinds),
+    );
+    const outputData = source.outputData as Record<string, unknown> | undefined;
+    let candidate: string | undefined;
+    if (outputKinds.has('url')) {
+      candidate =
+        (outputData?.currentUrl as string | undefined) ??
+        (outputData?.url as string | undefined) ??
+        undefined;
+    }
+    if (!candidate && outputKinds.has('research-result')) {
+      const sources =
+        (outputData?.researchSources as Array<{ url: string }> | undefined) ?? [];
+      candidate = sources[0]?.url;
+    }
+    if (!candidate && outputKinds.has('text')) {
+      const text = (outputData?.text as string | undefined) ?? '';
+      const found = extractFirstUrl(text);
+      candidate = found ?? undefined;
+    }
+    if (!candidate) return;
+    const target = canvas?.nodes.find((n) => n.id === webpageNodeId);
+    const currentUrl = (target?.config as { url?: string } | undefined)?.url ?? '';
+    if (currentUrl === candidate) return;
+    await saveNodeConfig(webpageNodeId, { url: candidate, mode: null });
+  }
+
   async function startExplore(parentId: string, engine: 'deep' | 'quick') {
     const res = await fetch(`/api/canvas/${data.canvas.slug}/nodes/${parentId}/explore`, {
       method: 'POST',
@@ -1304,6 +1374,9 @@
                 throw new Error(body.error || `HTTP ${res.status}`);
               }
               await invalidateAll();
+              if (target.type === 'webpage') {
+                await syncWebpageFromUpstream(hoverTargetId);
+              }
             } catch (err) {
               actionError = err instanceof Error ? err.message : String(err);
             }
@@ -2103,6 +2176,7 @@
                 nodeId={n.id}
                 config={(n.config as WebpageConfig) ?? { url: '', mode: null, size: { w: 720, h: 480 } }}
                 onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+                onOutput={(handleId, value) => webpageNodeOutput(n.id, handleId, value)}
               />
             </div>
             <div
