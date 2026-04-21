@@ -5,6 +5,9 @@ import {
   listCanvases,
   CANVAS_NODE_TYPES,
 } from '$lib/canvas/adapter';
+import { db } from '$lib/db';
+import { intelExplorations } from '$lib/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 
 export type {
   NodeKind,
@@ -27,5 +30,36 @@ export const load: PageServerLoad = async ({ params }) => {
   ]);
   // Strip this canvas from the peers list (used by the event-trigger picker)
   const peerCanvases = allCanvases.filter((c) => c.workflowId !== canvas.workflowId);
-  return { canvas, modelCatalogue, nodeTypes: CANVAS_NODE_TYPES, peerCanvases };
+
+  const activeExplorations = await db
+    .select({
+      nodeId: intelExplorations.nodeId,
+      engine: intelExplorations.engine,
+      sessionId: intelExplorations.sessionId,
+      status: intelExplorations.status,
+    })
+    .from(intelExplorations)
+    .where(
+      and(
+        eq(intelExplorations.workflowId, canvas.workflowId),
+        inArray(intelExplorations.status, ['running', 'failed']),
+      ),
+    );
+
+  const pendingExplorations = Object.fromEntries(
+    activeExplorations.map((e) => [
+      e.nodeId,
+      {
+        engine: e.engine as 'deep' | 'quick',
+        sessionId: e.sessionId,
+        status: e.status as 'running' | 'failed',
+        streamUrl:
+          e.engine === 'deep'
+            ? `/api/deepdive/${e.sessionId}/stream`
+            : `/api/quickanswer/${e.sessionId}/stream`,
+      },
+    ]),
+  );
+
+  return { canvas, modelCatalogue, nodeTypes: CANVAS_NODE_TYPES, peerCanvases, pendingExplorations };
 };
