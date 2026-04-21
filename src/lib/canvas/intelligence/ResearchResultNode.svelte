@@ -28,6 +28,45 @@
     ondone: (res: { report: string; sources: Source[]; durationMs?: number }) => void;
   }>();
 
+  // ResizeObserver: measure the parent .chat-node and set --scroll-h
+  // so that inner scroll containers get an explicit pixel height instead
+  // of relying on the flex chain (which has repeatedly failed to propagate).
+  let rrRootEl = $state<HTMLDivElement | null>(null);
+  let rrHeaderEl = $state<HTMLDivElement | null>(null);
+
+  // applyScrollH is called both by ResizeObserver and by the reactive $effect below.
+  function applyScrollH(isDeep: boolean) {
+    if (!rrRootEl) return;
+    const chatNode = rrRootEl.parentElement;
+    if (!chatNode) return;
+    const nodeH = chatNode.getBoundingClientRect().height;
+    const hdrH = rrHeaderEl ? rrHeaderEl.getBoundingClientRect().height : 27;
+    // 36px = drv-tabs bar height in DeepResearchViewer (fixed, flex-shrink:0)
+    // For quick engine there is no tab bar.
+    const tabBarH = isDeep ? 36 : 0;
+    const scrollH = Math.max(60, nodeH - hdrH - tabBarH);
+    rrRootEl.style.setProperty('--scroll-h', `${scrollH}px`);
+  }
+
+  // Set up ResizeObserver on the parent .chat-node element.
+  $effect(() => {
+    const el = rrRootEl;
+    if (!el) return;
+    const chatNode = el.parentElement;
+    if (!chatNode) return;
+    const ro = new ResizeObserver(() => applyScrollH(showDeepViewer));
+    ro.observe(chatNode);
+    ro.observe(el);
+    applyScrollH(showDeepViewer);
+    return () => ro.disconnect();
+  });
+
+  // Re-apply when showDeepViewer changes (e.g. status flips to complete).
+  $effect(() => {
+    const isDeep = showDeepViewer;
+    applyScrollH(isDeep);
+  });
+
   let logLine = $state('');
   let es: EventSource | null = null;
   // Local state so the fetched report survives parent re-renders.
@@ -156,8 +195,8 @@
   It must fill that parent with flex:1 and provide scroll containers as direct flex children.
   No position:absolute here — that breaks the flex height chain.
 -->
-<div class="rr-root" data-status={status}>
-  <div class="rr-header">
+<div class="rr-root" data-status={status} bind:this={rrRootEl}>
+  <div class="rr-header" bind:this={rrHeaderEl}>
     <span class="kind-bar"></span>
     <span class="title">{engine === 'deep' ? 'Deep' : 'Quick'} · {topic}</span>
     {#if status === 'running' || status === 'pending'}
@@ -298,10 +337,11 @@
 
   /*
     .rr-body — quick engine scroll container.
-    Mirrors .chat-node-body exactly: flex:1 + overflow-y:auto as a direct flex child.
+    Uses --scroll-h (set by ResizeObserver) for an explicit pixel height so the
+    scroll container is guaranteed to have a concrete size regardless of flex chain.
   */
   .rr-body {
-    flex: 1;
+    height: var(--scroll-h, 300px);
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px 10px;
@@ -309,6 +349,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex-shrink: 0;
     scrollbar-width: thin;
     scrollbar-color: #5dbea3 transparent;
   }

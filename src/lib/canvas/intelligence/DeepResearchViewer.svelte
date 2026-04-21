@@ -775,14 +775,15 @@
 
   /* ── Body ── */
   /*
-    flex:1 fills remaining height after tab bar. position:relative gives .tab-pane
-    (position:absolute; inset:0) a concrete sized ancestor to anchor against.
+    Uses --scroll-h (set by ResizeObserver in ResearchResultNode) minus the 36px tab bar
+    for an explicit pixel height. This sidesteps all flex-chain height propagation issues:
+    the scroll container gets a concrete pixel height regardless of ancestor layout.
   */
   .drv-body {
-    flex: 1;
-    min-height: 0;
+    height: calc(var(--scroll-h, 300px) - 36px);
     overflow: hidden;
     position: relative;
+    flex-shrink: 0;
   }
 
   .tab-pane {
