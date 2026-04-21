@@ -21,7 +21,8 @@ export type NodeKind =
   | 'agent'
   | 'chat'
   | 'trigger'
-  | 'inspector';
+  | 'inspector'
+  | 'stats';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -81,6 +82,7 @@ export const CANVAS_NODE_GROUPS = [
   'Parse & Transform',
   'Intel & Web',
   'Integrations',
+  'Observability',
 ] as const;
 
 /** Curated set of workflow node types offered in the canvas "+ node" picker. */
@@ -376,6 +378,32 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     description: 'Debug panel. Renders JSON, tables, CSV, HTML, media.',
     defaultConfig: {},
   },
+
+  // ————————————————————————— Observability
+  {
+    type: 'stats-summary',
+    label: 'Stats · summary',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Headline counters, sparkline, recent runs, recent edits. Uses shared time filter.',
+    defaultConfig: { size: { w: 300, h: 280 } },
+  },
+  {
+    type: 'stats-trends',
+    label: 'Stats · trends',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Runs over time (stacked) and run duration (p50 / p95) over time.',
+    defaultConfig: { size: { w: 520, h: 360 } },
+  },
+  {
+    type: 'stats-per-node',
+    label: 'Stats · per-node',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Table of every node with run count, success rate, avg / p95 duration, last error.',
+    defaultConfig: { size: { w: 420, h: 400 } },
+  },
 ];
 
 export type ModelOption = { value: string; label: string };
@@ -420,6 +448,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'trigger') return 'trigger';
   if (type === 'chat') return 'chat';
   if (type === 'inspector') return 'inspector';
+  if (type === 'stats-summary' || type === 'stats-trends' || type === 'stats-per-node') return 'stats';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
   if (type === 'llm-agent') return 'agent';
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')
