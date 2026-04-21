@@ -57,14 +57,23 @@
 </script>
 
 <header class="site-nav-bar flex items-center justify-between gap-4 flex-shrink-0">
-  <div class="flex items-center gap-3 sm:gap-5 min-w-0">
+  <div class="flex items-center gap-3 sm:gap-5 min-w-0 flex-shrink">
     {#if before}{@render before()}{/if}
     {#if titleHref}
-      <a href={titleHref} class="display text-[20px] sm:text-[24px] leading-none truncate hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
+      <a
+        href={titleHref}
+        title={title}
+        class="display text-[20px] sm:text-[24px] leading-none truncate hover:text-[var(--accent)] transition-colors min-w-0 flex-shrink"
+        style="color: var(--text-primary); max-width: min(55vw, 520px);"
+      >
         {title}
       </a>
     {:else}
-      <h1 class="display text-[20px] sm:text-[24px] leading-none truncate" style="color: var(--text-primary);">
+      <h1
+        title={title}
+        class="display text-[20px] sm:text-[24px] leading-none truncate min-w-0 flex-shrink"
+        style="color: var(--text-primary); max-width: min(55vw, 520px);"
+      >
         {title}
       </h1>
     {/if}
