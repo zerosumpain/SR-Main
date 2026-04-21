@@ -1926,20 +1926,18 @@
               <span class="sr-sep">/</span>
               <span class="chat-node-label">{n.name}</span>
             </div>
-            <div class="research-result-node-body" onpointerdown={(e) => e.stopPropagation()}>
-              <ResearchResultNode
-                engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
-                topic={(n.config.topic as string) ?? ''}
-                status={researchStatus[n.id] ?? ((n.config as Record<string, unknown>)?.completedReport ? 'complete' : ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete')}
-                report={researchReport[n.id] ?? (n.config.completedReport as string) ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
-                sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
-                durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
-                streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
-                sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
-                oncancel={() => cancelExplore(n.id)}
-                ondone={(result) => finaliseResearch(n.id, result)}
-              />
-            </div>
+            <ResearchResultNode
+              engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
+              topic={(n.config.topic as string) ?? ''}
+              status={researchStatus[n.id] ?? ((n.config as Record<string, unknown>)?.completedReport ? 'complete' : ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete')}
+              report={researchReport[n.id] ?? (n.config.completedReport as string) ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
+              sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
+              durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
+              streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
+              sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
+              oncancel={() => cancelExplore(n.id)}
+              ondone={(result) => finaliseResearch(n.id, result)}
+            />
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -4813,16 +4811,6 @@
     width: 3px;
     align-self: stretch;
     background: #5dbea3;
-  }
-  .research-result-node-body {
-    position: relative;
-    flex: 1 1 0;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
-    cursor: auto;
   }
 
   /* Flash animation for scrollToNode */

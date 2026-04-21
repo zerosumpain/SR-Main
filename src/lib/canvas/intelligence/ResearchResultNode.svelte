@@ -150,8 +150,14 @@
   });
 </script>
 
-<div class="research-result" data-status={status}>
-  <div class="header">
+<!--
+  This component is rendered as a DIRECT flex child of .chat-node.research-result-node
+  (position:absolute; display:flex; flex-direction:column; overflow:hidden).
+  It must fill that parent with flex:1 and provide scroll containers as direct flex children.
+  No position:absolute here — that breaks the flex height chain.
+-->
+<div class="rr-root" data-status={status}>
+  <div class="rr-header">
     <span class="kind-bar"></span>
     <span class="title">{engine === 'deep' ? 'Deep' : 'Quick'} · {topic}</span>
     {#if status === 'running' || status === 'pending'}
@@ -169,27 +175,25 @@
   </div>
 
   {#if status === 'running' || status === 'pending'}
-    <div class="pending">
+    <div class="rr-pending">
       <div class="spinner"></div>
       <div class="log">{logLine || 'Commissioning…'}</div>
     </div>
   {:else if status === 'failed'}
-    <div class="failed">Research failed.</div>
+    <div class="rr-failed">Research failed.</div>
   {:else if showDeepViewer}
-    <!-- Deep research complete: rich tabbed viewer -->
-    <div class="viewer-wrap">
-      <DeepResearchViewer
-        sessionId={sessionId!}
-        reportData={deepReportData}
-      />
-    </div>
+    <!-- Deep research complete: rich tabbed viewer — direct flex child, fills remaining space -->
+    <DeepResearchViewer
+      sessionId={sessionId!}
+      reportData={deepReportData}
+    />
   {:else}
-    <!-- Quick research or deep without session id: simple view -->
-    <div class="body">
+    <!-- Quick research or deep without session id: simple scrollable body -->
+    <div class="rr-body">
       {#if effectiveReport}
         <div class="report">{effectiveReport}</div>
       {:else if fetchError}
-        <div class="failed">{fetchError}</div>
+        <div class="rr-failed">{fetchError}</div>
       {:else if sessionId}
         <div class="log">Loading session {sessionId.slice(0, 8)}…</div>
       {:else}
@@ -213,37 +217,34 @@
 </div>
 
 <style>
-  .research-result {
-    position: absolute;
-    inset: 0;
-    background: var(--bg);
-    border: 1.5px solid #5dbea3;
-    color: var(--text-primary);
-    font-family: var(--font-mono);
+  /*
+    .rr-root is a direct flex child of .chat-node (position:absolute; display:flex; flex-direction:column; overflow:hidden).
+    flex:1 makes it fill the remaining height after the header. overflow:hidden clips children.
+    No position:absolute — we rely on the flex chain exactly like .chat-node-body does.
+  */
+  .rr-root {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    min-height: 0;
-    min-width: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
   }
-  .research-result[data-status='pending'],
-  .research-result[data-status='running'] {
+  .rr-root[data-status='pending'],
+  .rr-root[data-status='running'] {
     animation: intel-pulse 2s ease-in-out infinite;
-  }
-  .research-result[data-status='failed'] {
-    border-color: #c44;
   }
   @keyframes intel-pulse {
     0%, 100% {
-      box-shadow: 0 0 0 0 rgba(93, 190, 163, 0.35);
-      border-color: #5dbea3;
+      box-shadow: inset 0 0 0 0 rgba(93, 190, 163, 0.15);
     }
     50% {
-      box-shadow: 0 0 0 8px rgba(93, 190, 163, 0);
-      border-color: rgba(93, 190, 163, 0.55);
+      box-shadow: inset 0 0 12px 2px rgba(93, 190, 163, 0.12);
     }
   }
-  .header {
+  .rr-header {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -275,8 +276,8 @@
     flex-shrink: 0;
   }
   .open-link:hover { color: #5dbea3; }
-  .pending {
-    flex: 1 1 0;
+  .rr-pending {
+    flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -293,18 +294,14 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .log { color: var(--text-muted); font-size: 11px; text-align: center; padding: 0 12px; }
-  .failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
-  /* Viewer wrap — absolute positioned below the 26px header so inner
-     absolute/inset children have a concrete frame to anchor against. */
-  .viewer-wrap {
-    position: absolute;
-    inset: 26px 0 0 0;
-    overflow: hidden;
-  }
-  /* Quick/no-session: simple scrollable body */
-  .body {
-    flex: 1 1 0;
-    min-height: 0;
+  .rr-failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
+
+  /*
+    .rr-body — quick engine scroll container.
+    Mirrors .chat-node-body exactly: flex:1 + overflow-y:auto as a direct flex child.
+  */
+  .rr-body {
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px 10px;
@@ -315,14 +312,14 @@
     scrollbar-width: thin;
     scrollbar-color: #5dbea3 transparent;
   }
-  .body::-webkit-scrollbar { width: 10px; }
-  .body::-webkit-scrollbar-track { background: transparent; }
-  .body::-webkit-scrollbar-thumb {
+  .rr-body::-webkit-scrollbar { width: 10px; }
+  .rr-body::-webkit-scrollbar-track { background: transparent; }
+  .rr-body::-webkit-scrollbar-thumb {
     background: #2f5a50;
     border-radius: 5px;
     border: 2px solid var(--bg);
   }
-  .body::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
+  .rr-body::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
   .report { white-space: pre-wrap; color: var(--text-primary); }
   .sources { margin-top: 4px; font-size: 10px; }
   .sources summary { cursor: pointer; color: var(--text-muted); }

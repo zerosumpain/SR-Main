@@ -726,17 +726,19 @@
 </div>
 
 <style>
+  /*
+    .drv is a direct flex child of .rr-root (flex:1; display:flex; flex-direction:column; overflow:hidden).
+    Must use flex:1 (not position:absolute) to fill via the flex chain.
+  */
   .drv {
-    position: absolute;
-    inset: 0;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    min-height: 0;
-    min-width: 0;
   }
 
   /* ── Tab bar ── */
@@ -772,12 +774,15 @@
   }
 
   /* ── Body ── */
-  /* Absolute-positioned region below the tab bar. No flex dependency. */
+  /*
+    flex:1 fills remaining height after tab bar. position:relative gives .tab-pane
+    (position:absolute; inset:0) a concrete sized ancestor to anchor against.
+  */
   .drv-body {
-    position: absolute;
-    inset: 36px 0 0 0;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
-    display: block;
+    position: relative;
   }
 
   .tab-pane {
