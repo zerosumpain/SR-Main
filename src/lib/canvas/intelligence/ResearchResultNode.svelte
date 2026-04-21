@@ -28,41 +28,55 @@
 
   let logLine = $state('');
   let es: EventSource | null = null;
+  // Local state so the fetched report survives parent re-renders.
+  let fetchedReport = $state('');
+  let fetchedSources = $state<Source[]>([]);
+  let fetchedSessionId = $state('');
+  let fetchError = $state<string | null>(null);
 
-  // On mount: if status is already 'complete' but report is empty, fetch it.
+  const effectiveReport = $derived(report || fetchedReport);
+  const effectiveSources = $derived((sources && sources.length ? sources : fetchedSources));
+
   $effect(() => {
     if (status !== 'complete') return;
-    if (report) return;
     const sid = sessionId;
-    if (!sid) return;
+    if (!sid || sid === fetchedSessionId) return;
+    // A new / different session id was picked. Reset local fetched state and re-fetch.
+    fetchedSessionId = sid;
+    fetchedReport = '';
+    fetchedSources = [];
+    fetchError = null;
     const url = engine === 'deep' ? `/api/deepdive/${sid}` : `/api/quickanswer/${sid}`;
     (async () => {
       try {
         const resp = await fetch(url);
-        if (!resp.ok) return;
+        if (!resp.ok) {
+          fetchError = `Fetch failed (${resp.status})`;
+          return;
+        }
         const body = await resp.json();
         if (engine === 'deep') {
           const deepReport = body.report as Record<string, unknown> | string | null | undefined;
           if (typeof deepReport === 'string' && deepReport) {
-            report = deepReport;
+            fetchedReport = deepReport;
           } else if (typeof deepReport === 'object' && deepReport !== null) {
             const execSummary = (deepReport as Record<string, unknown>).executive_summary;
-            if (typeof execSummary === 'string') report = execSummary;
+            if (typeof execSummary === 'string') fetchedReport = execSummary;
           }
-          if (Array.isArray(body.sources) && body.sources.length > 0 && !sources?.length) {
-            sources = body.sources as Source[];
+          if (Array.isArray(body.sources) && body.sources.length > 0) {
+            fetchedSources = body.sources as Source[];
           }
         } else {
-          // quick engine
           if (typeof body.answer === 'string' && body.answer) {
-            report = body.answer;
+            fetchedReport = body.answer;
           }
-          if (Array.isArray(body.sources) && body.sources.length > 0 && !sources?.length) {
-            sources = body.sources as Source[];
+          if (Array.isArray(body.sources) && body.sources.length > 0) {
+            fetchedSources = body.sources as Source[];
           }
         }
       } catch (err) {
-        console.error('[research-result] mount-fetch failed', err);
+        console.error('[research-result] fetch failed', err);
+        fetchError = err instanceof Error ? err.message : 'Fetch failed';
       }
     })();
   });
@@ -143,12 +157,20 @@
     <div class="failed">Research failed.</div>
   {:else}
     <div class="body">
-      <div class="report">{report}</div>
-      {#if sources?.length}
+      {#if effectiveReport}
+        <div class="report">{effectiveReport}</div>
+      {:else if fetchError}
+        <div class="failed">{fetchError}</div>
+      {:else if sessionId}
+        <div class="log">Loading session {sessionId.slice(0, 8)}…</div>
+      {:else}
+        <div class="log">Pick a session in the config panel, or wire an upstream node that emits <code>researchSessionId</code>.</div>
+      {/if}
+      {#if effectiveSources?.length}
         <details class="sources">
-          <summary>{sources.length} source{sources.length === 1 ? '' : 's'}</summary>
+          <summary>{effectiveSources.length} source{effectiveSources.length === 1 ? '' : 's'}</summary>
           <ul>
-            {#each sources as s}
+            {#each effectiveSources as s}
               <li><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> <span class="domain">{s.domain}</span></li>
             {/each}
           </ul>
