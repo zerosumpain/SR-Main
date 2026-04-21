@@ -1560,6 +1560,9 @@
     bind:this={viewportEl}
     role="application"
     aria-label="Canvas graph"
+    style:--grid-offset-x="{panX}px"
+    style:--grid-offset-y="{panY}px"
+    style:--grid-cell="{32 * zoom}px"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
@@ -3469,10 +3472,16 @@
     overflow: hidden;
     touch-action: none;
     cursor: grab;
-    background:
-      linear-gradient(var(--divider) 1px, transparent 1px) 0 0 / 32px 32px,
-      linear-gradient(90deg, var(--divider) 1px, transparent 1px) 0 0 / 32px 32px,
-      var(--bg);
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--divider) 1px, transparent 1px),
+      linear-gradient(90deg, var(--divider) 1px, transparent 1px);
+    background-size:
+      var(--grid-cell, 32px) var(--grid-cell, 32px),
+      var(--grid-cell, 32px) var(--grid-cell, 32px);
+    background-position:
+      var(--grid-offset-x, 0) var(--grid-offset-y, 0),
+      var(--grid-offset-x, 0) var(--grid-offset-y, 0);
   }
   .viewport.panning {
     cursor: grabbing;
@@ -3693,11 +3702,11 @@
     gap: 4px;
   }
   .chat-msg.is-user {
-    align-items: flex-end;
-    text-align: right;
+    align-items: flex-start;
+    text-align: left;
   }
   .chat-msg.is-user .msg-meta {
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
   .chat-msg-body {
     font-size: 12px;
@@ -3708,9 +3717,10 @@
   }
   .chat-msg.is-user .chat-msg-body {
     background: var(--bg-section);
-    border: 1px solid var(--card-border);
-    padding: 6px 10px;
-    display: inline-block;
+    border-left: 2px solid var(--accent);
+    padding: 4px 10px;
+    display: block;
+    width: 100%;
   }
   .chat-msg-body.ghost {
     color: var(--text-ghost);

@@ -42,7 +42,7 @@
     word-break: break-word;
   }
   .chat-md :global(p) {
-    margin: 0 0 0.5em;
+    margin: 0 0 1em;
   }
   .chat-md :global(p:last-child) {
     margin-bottom: 0;
@@ -79,16 +79,35 @@
     color: inherit;
     font-size: inherit;
   }
-  .chat-md :global(ul),
-  .chat-md :global(ol) {
-    margin: 0.3em 0 0.5em;
+  .chat-md :global(ul) {
+    margin: 0 0 1em;
     padding-left: 1.3em;
+    list-style: disc outside;
+  }
+  .chat-md :global(ol) {
+    margin: 0 0 1em;
+    padding-left: 1.3em;
+    list-style: decimal outside;
+  }
+  .chat-md :global(ul:last-child),
+  .chat-md :global(ol:last-child) {
+    margin-bottom: 0;
   }
   .chat-md :global(li) {
-    margin: 0.15em 0;
+    margin: 0 0 0.25em;
+  }
+  .chat-md :global(li:last-child) {
+    margin-bottom: 0;
   }
   .chat-md :global(li > p) {
-    margin: 0;
+    margin: 0 0 0.25em;
+  }
+  .chat-md :global(li > p:last-child) {
+    margin-bottom: 0;
+  }
+  .chat-md :global(li > ul),
+  .chat-md :global(li > ol) {
+    margin: 0.25em 0 0;
   }
   .chat-md :global(h1),
   .chat-md :global(h2),
