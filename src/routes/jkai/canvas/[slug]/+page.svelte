@@ -645,7 +645,7 @@
     if (
       target &&
       target.closest(
-        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu',
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu, .stats-node',
       )
     ) {
       return;
@@ -654,7 +654,9 @@
     const vp = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const cx = e.clientX - vp.left;
     const cy = e.clientY - vp.top;
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    // Smooth exponential zoom: gentler than the old fixed 10%-per-tick,
+    // and scales with trackpad pixel deltas instead of over-shooting.
+    const factor = Math.exp(-e.deltaY * 0.0015);
     zoomAt(cx, cy, factor);
   }
 

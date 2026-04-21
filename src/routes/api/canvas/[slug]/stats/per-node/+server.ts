@@ -52,6 +52,11 @@ export const GET: RequestHandler = async ({ params, url }) => {
   }
 
   // Aggregate node_executions in the window, joined to workflow_runs so we can filter by started_at
+  const nodeIdList = sql.join(
+    nodes.map((n) => sql`${n.id}`),
+    sql`, `,
+  );
+
   const aggRows = await db.execute<{
     node_id: string;
     runs: number;
@@ -75,7 +80,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
     WHERE wr.workflow_id = ${wf.id}
       AND wr.started_at >= ${period.from}
       AND wr.started_at < ${period.to}
-      AND ne.node_id = ANY(${nodes.map((n) => n.id)})
+      AND ne.node_id IN (${nodeIdList})
     GROUP BY ne.node_id
   `);
 
@@ -99,7 +104,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       AND wr.started_at < ${period.to}
       AND ne.status = 'failed'
       AND ne.error IS NOT NULL
-      AND ne.node_id = ANY(${nodes.map((n) => n.id)})
+      AND ne.node_id IN (${nodeIdList})
     ORDER BY ne.node_id, ne.completed_at DESC NULLS LAST
   `);
 
