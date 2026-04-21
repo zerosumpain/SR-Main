@@ -162,6 +162,41 @@ export async function listWorkspaceFiles(buildId: string): Promise<string> {
   return result.exitCode === 0 ? result.stdout.trim() : '';
 }
 
+// --- Port Allocation ---
+
+const PORT_RANGE_START = 8000;
+const PORT_RANGE_END = 8999;
+
+/**
+ * Deterministic port per build in the 8000-8999 range.
+ * Hash the build ID so the same build always gets the same port — avoids
+ * races and makes restarts idempotent. Collisions between different builds
+ * are resolved by scanning for a free port nearby.
+ */
+export async function allocatePort(buildId: string): Promise<number> {
+  let hash = 0;
+  for (let i = 0; i < buildId.length; i++) {
+    hash = (hash * 31 + buildId.charCodeAt(i)) | 0;
+  }
+  const base = PORT_RANGE_START + (Math.abs(hash) % (PORT_RANGE_END - PORT_RANGE_START));
+
+  // Probe successive ports; pick the first one not currently bound inside the sandbox.
+  // Read /proc/net/tcp directly (no ss/netstat dependency) — entries have hex-encoded
+  // local_port in column 2, e.g. "0100007F:1F40" = 127.0.0.1:8000.
+  const probeResult = await execInSandbox(
+    `awk 'NR>1 { split($2,a,":"); print strtonum("0x"a[2]) }' /proc/net/tcp /proc/net/tcp6 2>/dev/null | sort -u`,
+    5000,
+  );
+  const busy = new Set<number>(
+    probeResult.stdout.split('\n').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)),
+  );
+  for (let offset = 0; offset < 200; offset++) {
+    const port = PORT_RANGE_START + ((base - PORT_RANGE_START + offset) % (PORT_RANGE_END - PORT_RANGE_START));
+    if (!busy.has(port)) return port;
+  }
+  return base;
+}
+
 // --- Serve Management ---
 
 export async function readServeJson(buildId: string): Promise<any | null> {
@@ -175,19 +210,18 @@ export async function readServeJson(buildId: string): Promise<any | null> {
   }
 }
 
-export async function killProjectServer(): Promise<void> {
-  // Kill via PID file first
+/**
+ * Kill the server owned by `buildId` (tracked via per-build pid file).
+ * If called with no buildId, falls back to the legacy global pid file for
+ * backwards compatibility with already-running single-build sandboxes.
+ */
+export async function killProjectServer(buildId?: string): Promise<void> {
+  const pidFile = buildId ? `/tmp/jkai-serve-${buildId}.pid` : '/tmp/jkai-serve.pid';
   await execInSandbox(
-    'if [ -f /tmp/jkai-serve.pid ]; then kill $(cat /tmp/jkai-serve.pid) 2>/dev/null; rm -f /tmp/jkai-serve.pid; fi',
+    `if [ -f ${pidFile} ]; then kill $(cat ${pidFile}) 2>/dev/null; rm -f ${pidFile}; fi`,
     5000,
   ).catch(() => {});
-  // pkill may not exist in minimal containers — use grep+kill as fallback
-  await execInSandbox(
-    `for pid in $(grep -rl "http.server\\|node.*serve\\|python.*serve" /proc/[0-9]*/cmdline 2>/dev/null | grep -oP '/proc/\\K[0-9]+'); do kill $pid 2>/dev/null; done`,
-    5000,
-  ).catch(() => {});
-  // Wait briefly for ports to release
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 300));
 }
 
 export async function startProjectServer(
@@ -196,11 +230,13 @@ export async function startProjectServer(
   port: number,
   healthCheck: string,
 ): Promise<boolean> {
-  await killProjectServer();
+  await killProjectServer(buildId);
 
   const dir = `/home/jkai/workspace/${buildId}/live`;
+  const pidFile = `/tmp/jkai-serve-${buildId}.pid`;
+  const logFile = `/tmp/jkai-serve-${buildId}.log`;
   await execInSandbox(
-    `cd ${dir} && nohup bash -c '${startCommand.replace(/'/g, "'\\''")}' > /tmp/jkai-serve.log 2>&1 & echo $! > /tmp/jkai-serve.pid`,
+    `cd ${dir} && nohup bash -c '${startCommand.replace(/'/g, "'\\''")}' > ${logFile} 2>&1 & echo $! > ${pidFile}`,
     10000,
   );
 
@@ -271,8 +307,8 @@ export async function activateSnapshot(
     120000,
   );
 
-  // Restart server from live
-  await killProjectServer();
+  // Restart server from live (kill only this build's process)
+  await killProjectServer(buildId);
   return startProjectServer(buildId, startCommand, port, healthCheck);
 }
 

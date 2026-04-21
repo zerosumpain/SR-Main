@@ -12,6 +12,8 @@ import {
   promoteDevToLive,
   seedDevFromLive,
   snapshotIteration,
+  allocatePort,
+  writeFileInSandbox,
 } from './sandbox';
 import { validateServeConfig } from './serve';
 import { failOrphanedIterations } from './orchestrator-helpers';
@@ -451,7 +453,40 @@ class Orchestrator {
       .from(jkaiBuilds)
       .where(eq(jkaiBuilds.id, buildId));
 
+    // Enforce per-build port allocation. If the agent picked a port that
+    // collides with another build's stored serveConfig, reassign it.
     const currentConfig = build?.serveConfig as any;
+    const keepExisting = currentConfig?.port === config.port;
+    if (!keepExisting) {
+      const conflicts = await db
+        .select()
+        .from(jkaiBuilds)
+        .where(eq(jkaiBuilds.id, buildId));
+      const allBuilds = await db.select().from(jkaiBuilds);
+      const takenPorts = new Set(
+        allBuilds
+          .filter((b) => b.id !== buildId && b.serveConfig)
+          .map((b) => (b.serveConfig as any)?.port)
+          .filter(Boolean),
+      );
+      void conflicts;
+      if (takenPorts.has(config.port)) {
+        const assigned = await allocatePort(buildId);
+        await emitLog(
+          buildId,
+          'system',
+          `Port ${config.port} already assigned to another build — reassigning to ${assigned}`,
+        );
+        // Rewrite start command's port number if present
+        const rewritten = config.startCommand.replace(new RegExp(`\\b${config.port}\\b`, 'g'), String(assigned));
+        config.port = assigned;
+        config.startCommand = rewritten;
+        // Persist the rewrite back to both dev/ and live/ serve.json so the agent sees it next turn
+        const payload = JSON.stringify(config, null, 2);
+        await writeFileInSandbox(`/home/jkai/workspace/${buildId}/dev/serve.json`, payload);
+        await writeFileInSandbox(`/home/jkai/workspace/${buildId}/live/serve.json`, payload).catch(() => {});
+      }
+    }
     const configChanged = currentConfig?.port !== config.port || currentConfig?.startCommand !== config.startCommand;
 
     // Always promote dev to live after a successful iteration
@@ -479,7 +514,7 @@ class Orchestrator {
       }
     } else if (currentConfig) {
       // Config unchanged but still promote and restart to pick up code changes
-      await killProjectServer();
+      await killProjectServer(buildId);
       const healthy = await startProjectServer(
         buildId,
         config.startCommand,

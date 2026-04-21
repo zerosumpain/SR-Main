@@ -24,10 +24,10 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const DEFAULT_BUDGET = {
-    maxIterations: 20,
-    maxTotalMinutes: 60,
-    maxTokensPerHour: 200_000,
-    activeMinutesPerHour: 30,
+    maxIterations: 25,
+    maxTotalMinutes: 120,
+    maxTokensPerHour: 1_000_000,
+    activeMinutesPerHour: 45,
   };
 
   let ctx: ModelContext;

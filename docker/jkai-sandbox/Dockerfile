@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir \
 
 RUN playwright install chromium
 
-RUN npm install -g typescript tsx
+RUN npm install -g typescript tsx @mariozechner/pi-coding-agent
 
 RUN useradd -m -s /bin/bash jkai
 WORKDIR /home/jkai/workspace

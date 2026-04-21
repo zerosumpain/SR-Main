@@ -61,6 +61,9 @@
       bash: 'bash', sh: 'bash', python: 'python', py: 'python',
       javascript: 'javascript', js: 'javascript', typescript: 'typescript',
       ts: 'typescript', node: 'javascript', json: 'json', html: 'markup',
+      // pi native tools: render as bash for a reasonable default
+      read: 'markup', write: 'markup', edit: 'markup',
+      grep: 'bash', find: 'bash', ls: 'bash',
     };
     return map[lang] || 'bash';
   }
@@ -97,7 +100,11 @@
         const res = await fetch(`/api/jkai/builds/${build.id}`);
         if (res.ok) {
           const fresh = await res.json();
+          const prevIterCount = build.iterationsCompleted;
           build = { ...fresh };
+          if (fresh.iterationsCompleted > prevIterCount) {
+            previewKey = Date.now();
+          }
         }
       } catch {}
     }, 10000);
@@ -109,6 +116,7 @@
   let activeIteration = $state<number | null>(null);
   let activating = $state(false);
   let fullscreen = $state(false);
+  let previewKey = $state(Date.now());
   let publishing = $state(false);
   let publishedUrl = $state<string | null>(build.publishedSlug ? `/projects/jkai/${build.publishedSlug}/` : null);
   let continuePrompt = $state('');
@@ -124,6 +132,7 @@
       });
       if (res.ok) {
         activeIteration = iterationNumber;
+        previewKey = Date.now();
       }
     } catch (err) {
       console.error('Failed to activate iteration:', err);
@@ -388,11 +397,20 @@
           </div>
         </div>
         <iframe
-          src={`/api/jkai/proxy/${build.id}/`}
+          src={`/api/jkai/proxy/${build.id}/?v=${previewKey}`}
           class="w-full rounded-lg border"
           style="height: {fullscreen ? '100vh' : '70vh'}; border-color: var(--card-border);"
           title="Project preview"
         ></iframe>
+        <div class="mt-2 text-right">
+          <button
+            onclick={() => (previewKey = Date.now())}
+            class="px-2 py-1 rounded text-[11px] border"
+            style="border-color: var(--card-border); color: var(--text-ghost);"
+          >
+            Reload preview
+          </button>
+        </div>
         {#if fullscreen}
           <button
             onclick={() => fullscreen = false}

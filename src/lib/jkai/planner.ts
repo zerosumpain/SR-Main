@@ -18,10 +18,10 @@ Given a project objective, write a delivery plan covering:
 - For each iteration: goal, deliverables, milestone (what the user sees), and tests
 
 CONSTRAINTS YOUR PLAN MUST RESPECT:
-1. CLIENT-SIDE FIRST: The project is published as a static site. All data fetching must happen in the browser via fetch(). No server-side routes as primary data sources. Use public APIs directly, with the CORS proxy (/api/jkai/cors/{encoded-url}) if needed.
-2. REAL DATA ONLY: Every data source must be a real, public API or dataset. Name the specific API and endpoint URL (e.g., Open-Meteo, REST Countries, Wikipedia API). Never propose placeholder or hardcoded data.
-3. ITERATION SIZING: Each iteration must be completable in ~15 shell/code execution steps. Iteration 1 must produce a visible, served page — even a skeleton. No iteration should attempt to build the complete feature set.
-4. STATIC SERVING: The dev server is a lightweight static server (python3 -m http.server or npx serve). All app logic must work when files are served statically.
+1. FULL-STACK ALLOWED: The agent runs inside a Linux sandbox with Python, Node, internet access, and root permissions. Servers (Flask, FastAPI, Express, Hono, Next.js, plain http.server) are all supported — the sandbox reverse-proxies the chosen port to the user's browser. Pick whichever stack best serves the objective; static sites are fine, backends are fine.
+2. REAL DATA ONLY: Every data source must be real. Name the specific API, dataset, or scraping target (e.g., Open-Meteo, REST Countries, Wikipedia API, government open-data portals). Never propose placeholder or hardcoded data unless it's explicitly a demo feature the user can edit.
+3. ITERATION SIZING: Each iteration must be completable in a generous but finite budget — roughly 10 minutes of wall-clock, unbounded tool calls. Iteration 1 must produce a visible, served page (even a skeleton). No iteration should attempt to build the complete feature set.
+4. SERVING MODEL: The agent writes a serve.json declaring its start command and port. Any TCP server binding 0.0.0.0 on the assigned port works. Long-lived background workers, WebSockets, and in-memory state are all permitted.
 
 Format your response as:
 
@@ -49,7 +49,7 @@ const CRITIC_SYSTEM_PROMPT = `You are a rigorous technical reviewer stress-testi
 
 Evaluate the proposed plan across these SIX dimensions:
 
-1. CLIENT-SIDE ARCHITECTURE: Does the plan violate the static publishing constraint? Look for: server-side routes as primary data sources, backend frameworks (Flask, Express) doing data fetching, environment variables for runtime config, assumptions that a server process persists between requests. Flag each with "VIOLATION:" and explain why it breaks static publishing.
+1. SERVING MODEL: Does the plan specify a concrete start command and port that the sandbox reverse-proxy can hit? Look for: missing serve.json plan, ambiguous tech stack choice, routes that rely on assumptions the sandbox doesn't support (e.g. OAuth callbacks to unknown hostnames). Flag each with "VIOLATION:" and explain what needs to change.
 
 2. DATA SOURCING: Are all proposed APIs real, public, and CORS-accessible from a browser? Look for: vague descriptions ("use an API"), APIs requiring server-side auth, APIs with CORS restrictions without proxy support, placeholder data. For each questionable source, suggest a specific replacement with a concrete API URL.
 
