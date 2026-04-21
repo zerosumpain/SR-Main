@@ -226,20 +226,27 @@ class Orchestrator {
   }
 
   async recoverOnStartup(): Promise<void> {
-    const [runningBuild] = await db
+    // Mark every build that was mid-flight as failed. A pi subprocess lives
+    // in our process tree, so a systemctl restart kills it mid-iteration —
+    // there is no safe way to resume from that state. The user can retry
+    // with /continue if they want to pick up the work.
+    const runningBuilds = await db
       .select()
       .from(jkaiBuilds)
-      .where(eq(jkaiBuilds.status, 'running'))
-      .limit(1);
+      .where(eq(jkaiBuilds.status, 'running'));
 
-    if (!runningBuild) return;
-
-    await failOrphanedIterations(runningBuild.id);
-
-    await emitLog(runningBuild.id, 'system', 'Recovered after restart — resuming build');
-    this.activeBuildId = runningBuild.id;
-    this.stopped = false;
-    this.scheduleNext(runningBuild.id);
+    for (const build of runningBuilds) {
+      await failOrphanedIterations(build.id);
+      await db
+        .update(jkaiBuilds)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, build.id));
+      await emitLog(
+        build.id,
+        'error',
+        'Service restarted mid-build — marked failed. Use Continue to pick up from the last good iteration.',
+      );
+    }
   }
 
   private async initAndPlan(buildId: string): Promise<void> {
