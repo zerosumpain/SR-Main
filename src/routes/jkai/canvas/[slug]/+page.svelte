@@ -12,7 +12,7 @@
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
-  import { byType as byNodeType, allTypes as allNodeTypes } from '$lib/canvas/adapter';
+  import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import type { HandleSpec } from '$lib/canvas/handles';
 
   let { data } = $props();
@@ -875,7 +875,7 @@
   });
 
   const nodeTypesByGroup = $derived(() => {
-    const m = new Map<string, typeof nodeTypes>();
+    const m = new Map<string, NodeTypeOption[]>();
     for (const t of nodeTypes) {
       const arr = m.get(t.group) ?? [];
       arr.push(t);
