@@ -12,28 +12,36 @@ import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
 const CONTAINER_NAME = 'jkai-sandbox';
 
-// --- Pi JSON event shape (subset we care about) ---
+// --- Pi JSON event shape (based on pi 0.68 actual output) ---
+//
+// message_end events carry the canonical shape:
+//   role: "user"       → content: [{type:"text", text}]
+//   role: "assistant"  → content: [{type:"thinking", thinking}, {type:"toolCall", id, name, arguments}, {type:"text", text}, ...]
+//   role: "toolResult" → toolCallId, toolName, content:[{type:"text", text}], isError
 
 interface PiContent {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking';
+  type: string;
   text?: string;
+  thinking?: string;
+  id?: string;
   name?: string;
-  input?: Record<string, unknown>;
-  content?: Array<{ type: string; text?: string }>;
-  is_error?: boolean;
+  arguments?: Record<string, unknown>;
 }
 
 interface PiMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'toolResult';
   content?: PiContent[];
-  usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost?: { total: number } };
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
+  usage?: { input: number; output: number; totalTokens: number; cost?: { total: number } };
   errorMessage?: string;
+  stopReason?: string;
 }
 
 interface PiEvent {
   type: string;
   message?: PiMessage;
-  toolResults?: Array<{ name?: string; content?: PiContent[]; is_error?: boolean }>;
 }
 
 // --- Result ---
@@ -70,43 +78,17 @@ function sh(s: string): string {
 
 // --- Content helpers ---
 
-function contentToString(content: PiContent[] | undefined): string {
-  if (!content) return '';
-  return content
-    .map((c) => {
-      if (c.type === 'text') return c.text ?? '';
-      if (c.type === 'thinking') return `[thinking] ${c.text ?? ''}`;
-      if (c.type === 'tool_use') return `[tool:${c.name}] ${JSON.stringify(c.input ?? {})}`;
-      if (c.type === 'tool_result') {
-        const inner = (c.content ?? []).map((x) => x.text ?? '').join('\n');
-        return `[tool-result${c.is_error ? ' error' : ''}]\n${inner}`;
-      }
-      return '';
-    })
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function toolUseToAction(toolUse: PiContent, result?: PiContent): ActionRecord {
-  const input = (toolUse.input ?? {}) as Record<string, unknown>;
-  const lang = toolUse.name ?? 'tool';
-  const code =
-    typeof input.command === 'string'
-      ? (input.command as string)
-      : typeof input.content === 'string'
-        ? `[write ${input.path}]\n${input.content}`
-        : typeof input.path === 'string'
-          ? `[${lang} ${input.path}]`
-          : JSON.stringify(input, null, 2);
-  const resultText = (result?.content ?? []).map((x) => x.text ?? '').join('\n');
-  const isError = Boolean(result?.is_error);
-  return {
-    lang,
-    code,
-    stdout: isError ? '' : resultText,
-    stderr: isError ? resultText : '',
-    exitCode: isError ? 1 : 0,
-  };
+function summarizeArgs(args: Record<string, unknown> | undefined): string {
+  if (!args) return '';
+  const a = args as { command?: string; path?: string; content?: string; pattern?: string; oldString?: string; newString?: string };
+  if (typeof a.command === 'string') return a.command;
+  if (typeof a.path === 'string') {
+    if (typeof a.content === 'string') return `write ${a.path}\n${a.content}`;
+    if (typeof a.oldString === 'string') return `edit ${a.path}\n- ${a.oldString}\n+ ${a.newString ?? ''}`;
+    return a.path;
+  }
+  if (typeof a.pattern === 'string') return a.pattern;
+  return JSON.stringify(args, null, 2);
 }
 
 // --- Main runner ---
@@ -176,7 +158,8 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   let finalAssistantText = '';
   let tokensUsed = 0;
   let errorMessage: string | null = null;
-  const pendingToolUses = new Map<string, PiContent>();
+  // toolCallId → {name, args} captured from the most recent assistant message
+  const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
   const child = spawn('docker', dockerArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
@@ -191,7 +174,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const wallClockTimer = setTimeout(() => {
     try {
       child.kill('SIGTERM');
-      emitLog(build.id, 'system', `Pi wall-clock timeout reached (${Math.round(maxWallClockMs / 1000)}s)`, iteration.id);
+      emitLog(
+        build.id,
+        'system',
+        `Pi wall-clock timeout reached (${Math.round(maxWallClockMs / 1000)}s)`,
+        iteration.id,
+      );
     } catch {}
   }, maxWallClockMs);
 
@@ -226,88 +214,92 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       return;
     }
 
-    if (ev.type === 'message_end' && ev.message) {
-      const m = ev.message;
-      const role = m.role;
-      const contentStr = contentToString(m.content);
+    if (ev.type !== 'message_end' || !ev.message) return;
+    const m = ev.message;
 
-      if (role === 'assistant') {
-        // Track tool uses for later matching with tool_result
-        for (const c of m.content ?? []) {
-          if (c.type === 'tool_use') {
-            const id = (c as { id?: string } & PiContent).id;
-            if (id) pendingToolUses.set(id, c);
-          }
-        }
-        // Record tokens + cost
-        if (m.usage) {
-          tokensUsed += m.usage.totalTokens ?? 0;
-          await recordBuildUsage(
+    // --- Assistant message ---
+    if (m.role === 'assistant') {
+      if (m.usage) {
+        tokensUsed += m.usage.totalTokens ?? 0;
+        await recordBuildUsage(
+          build.id,
+          {
+            promptTokens: m.usage.input ?? 0,
+            completionTokens: m.usage.output ?? 0,
+          },
+          build.priceSnapshot as PriceSnapshot | null,
+        );
+      }
+      if (m.errorMessage) {
+        errorMessage = m.errorMessage;
+        await emitLog(build.id, 'error', `Pi error: ${m.errorMessage}`, iteration.id);
+      }
+
+      const textParts: string[] = [];
+      for (const c of m.content ?? []) {
+        if (c.type === 'text' && c.text) {
+          textParts.push(c.text);
+          await emitLog(build.id, 'text', c.text, iteration.id);
+        } else if (c.type === 'thinking' && c.thinking) {
+          await emitLog(build.id, 'thinking', c.thinking, iteration.id);
+        } else if (c.type === 'toolCall') {
+          if (c.id) pendingCalls.set(c.id, { name: c.name ?? 'tool', args: c.arguments });
+          const body = summarizeArgs(c.arguments);
+          await emitLog(
             build.id,
-            {
-              promptTokens: m.usage.input ?? 0,
-              completionTokens: m.usage.output ?? 0,
-            },
-            build.priceSnapshot as PriceSnapshot | null,
+            'code',
+            `\`\`\`${c.name ?? 'tool'}\n${body}\n\`\`\``,
+            iteration.id,
           );
         }
-        if (m.errorMessage) {
-          errorMessage = m.errorMessage;
-          await emitLog(build.id, 'error', `Pi error: ${m.errorMessage}`, iteration.id);
-        }
-        // Emit text segments for UI
-        for (const c of m.content ?? []) {
-          if (c.type === 'text' && c.text) {
-            finalAssistantText = c.text;
-            await emitLog(build.id, 'text', c.text, iteration.id);
-          } else if (c.type === 'thinking' && c.text) {
-            await emitLog(build.id, 'thinking', c.text, iteration.id);
-          } else if (c.type === 'tool_use') {
-            const code =
-              typeof c.input?.command === 'string'
-                ? (c.input.command as string)
-                : JSON.stringify(c.input ?? {}, null, 2);
-            await emitLog(
-              build.id,
-              'code',
-              `\`\`\`${c.name}\n${code}\n\`\`\``,
-              iteration.id,
-            );
-          }
-        }
-      } else if (role === 'user') {
-        // Tool results for prior tool_uses
-        for (const c of m.content ?? []) {
-          if (c.type === 'tool_result') {
-            const tuId = (c as { tool_use_id?: string } & PiContent).tool_use_id;
-            const tu = tuId ? pendingToolUses.get(tuId) : undefined;
-            if (tu) {
-              actions.push(toolUseToAction(tu, c));
-              pendingToolUses.delete(tuId!);
-            } else {
-              actions.push(toolUseToAction({ type: 'tool_use', name: 'unknown' }, c));
-            }
-            const txt = (c.content ?? []).map((x) => x.text ?? '').join('\n');
-            await emitLog(
-              build.id,
-              c.is_error ? 'error' : 'output',
-              txt.slice(0, 4000),
-              iteration.id,
-            );
-          }
-        }
       }
-
-      if (contentStr) {
-        messages.push({ role, content: contentStr.slice(0, 32000) });
-        // Persist incrementally
-        await db
-          .update(jkaiIterations)
-          .set({ messages, tokensUsed })
-          .where(eq(jkaiIterations.id, iteration.id))
-          .catch(() => {});
-      }
+      if (textParts.length) finalAssistantText = textParts.join('\n\n');
+      const combined = (m.content ?? [])
+        .map((c) => (c.type === 'text' ? c.text ?? '' : c.type === 'thinking' ? `[thinking] ${c.thinking ?? ''}` : `[${c.type}:${c.name ?? ''}] ${JSON.stringify(c.arguments ?? {})}`))
+        .join('\n');
+      if (combined.trim()) messages.push({ role: 'assistant', content: combined.slice(0, 32000) });
     }
+
+    // --- Tool result ---
+    else if (m.role === 'toolResult') {
+      const resultText = (m.content ?? []).map((c) => c.text ?? '').join('\n');
+      const call = m.toolCallId ? pendingCalls.get(m.toolCallId) : undefined;
+      if (m.toolCallId) pendingCalls.delete(m.toolCallId);
+
+      const name = call?.name ?? m.toolName ?? 'tool';
+      const code = summarizeArgs(call?.args);
+
+      actions.push({
+        lang: name,
+        code,
+        stdout: m.isError ? '' : resultText,
+        stderr: m.isError ? resultText : '',
+        exitCode: m.isError ? 1 : 0,
+      });
+      await emitLog(
+        build.id,
+        m.isError ? 'error' : 'output',
+        resultText.slice(0, 4000),
+        iteration.id,
+      );
+      messages.push({
+        role: 'user',
+        content: `[tool:${name}${m.isError ? ' error' : ''}]\n${resultText}`.slice(0, 32000),
+      });
+    }
+
+    // --- User (just the initial prompt echo — record but don't log) ---
+    else if (m.role === 'user') {
+      const text = (m.content ?? []).map((c) => c.text ?? '').join('\n');
+      if (text) messages.push({ role: 'user', content: text.slice(0, 32000) });
+    }
+
+    // Persist incrementally
+    await db
+      .update(jkaiIterations)
+      .set({ messages, tokensUsed })
+      .where(eq(jkaiIterations.id, iteration.id))
+      .catch(() => {});
   }
 
   const exitCode: number = await new Promise((resolve) => {
