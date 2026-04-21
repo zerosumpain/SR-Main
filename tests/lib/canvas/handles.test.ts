@@ -76,4 +76,14 @@ describe('rankForWorkflow', () => {
     const ranked = rankForWorkflow(candidates, many, {}, 1);
     expect(ranked.length).toBe(1);
   });
+  it('breaks ties on score by candidate type ascending', () => {
+    const empty: NodeHandles = { inputs: [], outputs: [] };
+    const candidates = [
+      { type: 'zeta', handles: empty, defaultWeight: 1 },
+      { type: 'alpha', handles: empty, defaultWeight: 1 },
+      { type: 'middle', handles: empty, defaultWeight: 1 },
+    ];
+    const ranked = rankForWorkflow(candidates, [], {}, 3);
+    expect(ranked.map((c) => c.type)).toEqual(['alpha', 'middle', 'zeta']);
+  });
 });

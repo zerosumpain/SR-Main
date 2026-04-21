@@ -67,7 +67,7 @@ export function rankForWorkflow(
     candidate: c,
     score: scoreCandidate(c.handles, canvasNodes, recents[c.type] ?? 0, c.defaultWeight),
   }));
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => b.score - a.score || a.candidate.type.localeCompare(b.candidate.type));
   return scored.slice(0, topN).map((s) => s.candidate);
 }
 
