@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { workflowSchedules } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { reloadSchedule } from '$lib/workflows/scheduler';
+import { recordAudit } from '$lib/canvas/audit';
 
 export const GET: RequestHandler = async ({ params }) => {
   const [schedule] = await db
@@ -39,6 +40,18 @@ export const PUT: RequestHandler = async ({ params, request }) => {
     await reloadSchedule(schedule.id);
   }
 
+  await recordAudit({
+    workflowId: params.id,
+    entity: 'schedule',
+    entityId: schedule.id,
+    action: 'update',
+    details: {
+      type: schedule.type,
+      config: schedule.config,
+      enabled: schedule.enabled,
+    },
+  });
+
   return json({ schedule });
 };
 
@@ -54,6 +67,18 @@ export const DELETE: RequestHandler = async ({ params }) => {
     const { unregisterCronJob } = await import('$lib/workflows/scheduler');
     unregisterCronJob(existing.id);
     await db.delete(workflowSchedules).where(eq(workflowSchedules.id, existing.id));
+
+    await recordAudit({
+      workflowId: params.id,
+      entity: 'schedule',
+      entityId: existing.id,
+      action: 'delete',
+      details: {
+        type: existing.type,
+        config: existing.config,
+        enabled: existing.enabled,
+      },
+    });
   }
 
   return json({ success: true });
