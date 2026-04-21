@@ -11,6 +11,7 @@ import {
 import { eq, desc, asc } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import { getSetting } from '$lib/server/models/settings';
+import type { NodeHandles } from './handles';
 
 export type NodeKind =
   | 'input'
@@ -23,7 +24,8 @@ export type NodeKind =
   | 'trigger'
   | 'inspector'
   | 'stats'
-  | 'intelligence';
+  | 'intelligence'
+  | 'webpage';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -75,6 +77,8 @@ export type NodeTypeOption = {
   group: string;
   description: string;
   defaultConfig: Record<string, unknown>;
+  handles: NodeHandles;
+  defaultWeight?: number;
 };
 
 export const CANVAS_NODE_GROUPS = [
@@ -97,6 +101,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Entry point — manual, cron, webhook, or event. One per canvas.',
     defaultConfig: { kind: 'manual' },
+    handles: {
+      inputs: [],
+      outputs: [{ id: 'signal', kinds: ['trigger-signal'] }],
+    },
   },
   {
     type: 'chat',
@@ -105,6 +113,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Chat panel. Standalone = full jkai; wired = workflow trigger.',
     defaultConfig: { model: '', useIntelContext: true },
+    handles: {
+      inputs: [{ id: 'trigger', kinds: ['trigger-signal', 'text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'conditional',
@@ -113,6 +125,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Route to one of two downstream handles based on a JS expression.',
     defaultConfig: { condition: 'input.ok' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json', 'any'] }],
+    },
   },
   {
     type: 'loop',
@@ -121,6 +137,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Iterate over an array; downstream runs once per item.',
     defaultConfig: { items: '{{input.items}}', maxIterations: 100 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'delay',
@@ -129,6 +149,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Pause N milliseconds before continuing.',
     defaultConfig: { ms: 1000 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'error-handler',
@@ -137,6 +161,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Catch downstream failures and route to a recovery branch.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'sub-workflow',
@@ -145,6 +173,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Trigger & Flow',
     description: 'Call another canvas as a reusable block.',
     defaultConfig: { workflowId: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
 
   // ————————————————————————— LLM & AI
@@ -160,6 +192,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
       temperature: 0.7,
       maxTokens: 1024,
     },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'llm-agent',
@@ -173,6 +209,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
       userPrompt: '{{input.message}}',
       maxIterations: 10,
     },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'llm-router',
@@ -181,6 +221,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'LLM & AI',
     description: 'LLM classifies input and routes to a named downstream handle.',
     defaultConfig: { model: '', prompt: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'think',
@@ -189,6 +233,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'LLM & AI',
     description: 'Hidden reasoning step — LLM plans but does not emit the reasoning.',
     defaultConfig: { model: '', prompt: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'openrouter',
@@ -197,6 +245,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'LLM & AI',
     description: 'Direct OpenRouter completion (explicit model id).',
     defaultConfig: { model: 'openai/gpt-4o-mini' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
 
   // ————————————————————————— Parse & Transform
@@ -207,6 +259,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Extract JSON or regex matches from an upstream string.',
     defaultConfig: { mode: 'json', inputField: 'response' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'validator',
@@ -215,6 +271,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Check input against a JSON schema. Pass or fail downstream.',
     defaultConfig: { schema: {} },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'transform',
@@ -223,6 +283,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Identity pass-through, or apply a JS expression to reshape data.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'code-execute',
@@ -231,6 +295,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Run arbitrary JS in a sandbox; input/output passed through `input`/`return`.',
     defaultConfig: { code: 'return { ...input };' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'merge',
@@ -239,6 +307,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Combine multiple upstream outputs into one object.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'accumulator',
@@ -247,6 +319,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Append each run\'s data into a persistent list across runs.',
     defaultConfig: { key: 'items' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
 
   // ————————————————————————— Intelligence
@@ -261,6 +337,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
       query: '',
       facets: { entityTypes: [], tags: [], timeRange: null, limit: 20, ordering: 'relevant' },
     },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['intel-session', 'text'] }],
+    },
   },
   {
     type: 'research-result',
@@ -270,6 +350,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     description:
       'Deep or quick research output. Slowly pulses while running; populates when complete.',
     defaultConfig: { size: { w: 460, h: 520 }, engine: 'deep', sessionId: '', topic: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
+      outputs: [{ id: 'result', kinds: ['research-result', 'text'] }],
+    },
   },
   {
     type: 'quick-answer',
@@ -278,6 +362,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intelligence',
     description: 'DAG-driven quick answer (Tavily + synthesis). Useful for per-item fan-out.',
     defaultConfig: { topic: '{{item.title}}', goals: [], pollIntervalMs: 1500, maxWaitMs: 180000 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'deep-research',
@@ -286,6 +374,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intelligence',
     description: 'DAG-driven deep research (commission via pipeline). Emits researchReport + sources.',
     defaultConfig: { topic: '{{item.title}}', goals: '', depth: 'medium', pollIntervalMs: 5000, maxWaitMs: 900000 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
+    },
   },
 
   // ————————————————————————— Intel & Web
@@ -296,6 +388,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Search the knowledge graph; appends matching context to downstream input.',
     defaultConfig: { query: '{{input.message}}' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'intel-write',
@@ -304,6 +400,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Write findings into the knowledge graph.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'tavily-search',
@@ -312,6 +412,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Web search via Tavily. Returns an array of results.',
     defaultConfig: { query: '{{input.query}}', maxResults: 5 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'web-scrape',
@@ -320,6 +424,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Fetch a URL and extract its readable text content.',
     defaultConfig: { url: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['url', 'text'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'deep-dive',
@@ -328,6 +436,27 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Multi-hop research session; kicks off, run id returned for polling.',
     defaultConfig: { topic: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
+    },
+  },
+  {
+    type: 'webpage',
+    label: 'Webpage',
+    kind: 'webpage',
+    group: 'Intel & Web',
+    description: 'Render a live webpage inside the canvas (falls back to a proxy for sites that block framing).',
+    defaultConfig: { url: '', mode: null, size: { w: 720, h: 480 } },
+    handles: {
+      inputs: [{ id: 'src', kinds: ['url', 'research-result', 'text'] }],
+      outputs: [
+        { id: 'currentUrl', kinds: ['url'] },
+        { id: 'selectedText', kinds: ['text'] },
+        { id: 'extractedText', kinds: ['text'] },
+      ],
+    },
+    defaultWeight: 0.3,
   },
   {
     type: 'http-request',
@@ -336,6 +465,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Intel & Web',
     description: 'Fetch data from an external URL (GET / POST / PUT / DELETE).',
     defaultConfig: { method: 'GET', url: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'url'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
 
   // ————————————————————————— Integrations
@@ -346,6 +479,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Send a message, attachment, or voice note to a WhatsApp number.',
     defaultConfig: { to: '', message: '{{input.message}}' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'email',
@@ -354,6 +491,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Send an email via the configured SMTP provider.',
     defaultConfig: { to: '', subject: '', body: '{{input.body}}' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'blog',
@@ -362,6 +503,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Publish a post to the strangeramblings blog.',
     defaultConfig: { title: '', body: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'jkai',
@@ -370,6 +515,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Send into a jkai conversation or notification channel.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
   },
   {
     type: 'home-assistant',
@@ -378,6 +527,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Query or control Home Assistant entities.',
     defaultConfig: { operation: 'get_state', entityId: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
+    },
   },
   {
     type: 'whoop',
@@ -386,6 +539,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Pull Whoop recovery / sleep / workout data.',
     defaultConfig: { kind: 'recovery' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
   },
   {
     type: 'strava',
@@ -394,6 +551,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Fetch Strava activities / stats / athlete profile.',
     defaultConfig: { kind: 'activities', limit: 10 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
   },
   {
     type: 'health-query',
@@ -402,6 +563,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Natural-language query across Apple Health / Whoop / Strava.',
     defaultConfig: { query: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
   },
   {
     type: 'data-store',
@@ -410,6 +575,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Per-workflow key-value store. Read, write, or increment.',
     defaultConfig: { operation: 'get', key: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
   },
   {
     type: 'inspector',
@@ -418,6 +587,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Integrations',
     description: 'Debug panel. Renders JSON, tables, CSV, HTML, media.',
     defaultConfig: {},
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [],
+    },
   },
 
   // ————————————————————————— Observability
@@ -428,6 +601,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Observability',
     description: 'Headline counters, sparkline, recent runs, recent edits. Uses shared time filter.',
     defaultConfig: { size: { w: 300, h: 280 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
   },
   {
     type: 'stats-trends',
@@ -436,6 +613,10 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Observability',
     description: 'Runs over time (stacked) and run duration (p50 / p95) over time.',
     defaultConfig: { size: { w: 520, h: 360 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
   },
   {
     type: 'stats-per-node',
@@ -444,8 +625,20 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Observability',
     description: 'Table of every node with run count, success rate, avg / p95 duration, last error.',
     defaultConfig: { size: { w: 420, h: 400 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
   },
 ];
+
+export function allTypes(): NodeTypeOption[] {
+  return CANVAS_NODE_TYPES;
+}
+
+export function byType(type: string): NodeTypeOption | undefined {
+  return CANVAS_NODE_TYPES.find((t) => t.type === type);
+}
 
 export type ModelOption = { value: string; label: string };
 export type ModelCatalogue = {
@@ -499,6 +692,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'intelligence' || type === 'research-result') return 'intelligence';
   if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
+  if (type === 'webpage') return 'webpage';
   return 'output';
 }
 
