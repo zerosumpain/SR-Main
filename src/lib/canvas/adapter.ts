@@ -22,7 +22,8 @@ export type NodeKind =
   | 'chat'
   | 'trigger'
   | 'inspector'
-  | 'stats';
+  | 'stats'
+  | 'intelligence';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -80,6 +81,7 @@ export const CANVAS_NODE_GROUPS = [
   'Trigger & Flow',
   'LLM & AI',
   'Parse & Transform',
+  'Intelligence',
   'Intel & Web',
   'Integrations',
   'Observability',
@@ -245,6 +247,37 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     group: 'Parse & Transform',
     description: 'Append each run\'s data into a persistent list across runs.',
     defaultConfig: { key: 'items' },
+  },
+
+  // ————————————————————————— Intelligence
+  {
+    type: 'intelligence',
+    label: 'Intelligence',
+    kind: 'intelligence',
+    group: 'Intelligence',
+    description: 'Filtered view onto the knowledge graph. Queryable. Spawns deep/quick research.',
+    defaultConfig: {
+      size: { w: 360, h: 440 },
+      query: '',
+      facets: { entityTypes: [], tags: [], timeRange: null, limit: 20, ordering: 'relevant' },
+    },
+  },
+  {
+    type: 'research-result',
+    label: 'Research Result',
+    kind: 'intelligence',
+    group: 'Intelligence',
+    description:
+      'Deep or quick research output. Slowly pulses while running; populates when complete.',
+    defaultConfig: { size: { w: 340, h: 360 }, engine: 'deep', sessionId: '', topic: '' },
+  },
+  {
+    type: 'quick-answer',
+    label: 'Quick Answer',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'DAG-driven quick answer (Tavily + synthesis). Useful for per-item fan-out.',
+    defaultConfig: { topic: '{{item.title}}', goals: [], pollIntervalMs: 1500, maxWaitMs: 180000 },
   },
 
   // ————————————————————————— Intel & Web
@@ -455,6 +488,8 @@ export function mapTypeToKind(type: string): NodeKind {
     return 'llm';
   if (type === 'text-parser' || type === 'validator') return 'parse';
   if (type === 'intel-write' || type === 'intel-query' || type === 'deep-dive') return 'intel';
+  if (type === 'intelligence' || type === 'research-result') return 'intelligence';
+  if (type === 'quick-answer') return 'intel';
   return 'output';
 }
 
