@@ -5,6 +5,7 @@ import { workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions }
 import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
+import { isDisplayOnlyType } from '$lib/workflows/types';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -28,8 +29,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
     startedAt: new Date(),
   }).returning();
 
+  const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
+  const runnableEdges = edges.filter((e) => {
+    const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
+    const tgt = runnableNodes.find((n) => n.id === e.targetNodeId);
+    return src && tgt;
+  });
+
   // Create pending node execution records
-  for (const node of nodes) {
+  for (const node of runnableNodes) {
     await db.insert(nodeExecutions).values({
       runId: run.id,
       nodeId: node.id,
@@ -40,14 +48,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const definition: WorkflowDefinition = {
     id: workflow.id,
     name: workflow.name,
-    nodes: nodes.map((n) => ({
+    nodes: runnableNodes.map((n) => ({
       id: n.id,
       type: n.type,
       position: n.position as { x: number; y: number },
       config: (n.config || {}) as Record<string, unknown>,
       label: n.label,
     })),
-    edges: edges.map((e) => ({
+    edges: runnableEdges.map((e) => ({
       id: e.id,
       sourceNodeId: e.sourceNodeId,
       targetNodeId: e.targetNodeId,

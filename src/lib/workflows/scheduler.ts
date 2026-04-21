@@ -4,6 +4,7 @@ import { workflowSchedules, workflows, workflowNodes, workflowEdges, workflowRun
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
+import { isDisplayOnlyType } from '$lib/workflows/types';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -98,17 +99,24 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
       .from(workflowEdges)
       .where(eq(workflowEdges.workflowId, workflowId));
 
+    const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
+    const runnableEdges = edges.filter((e) => {
+      const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
+      const tgt = runnableNodes.find((n) => n.id === e.targetNodeId);
+      return src && tgt;
+    });
+
     const definition: WorkflowDefinition = {
       id: workflowId,
       name: workflow.name,
-      nodes: nodes.map((n) => ({
+      nodes: runnableNodes.map((n) => ({
         id: n.id,
         type: n.type,
         config: (n.config as Record<string, unknown>) ?? {},
         label: n.label ?? n.type,
         position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
       })),
-      edges: edges.map((e) => ({
+      edges: runnableEdges.map((e) => ({
         id: e.id,
         sourceNodeId: e.sourceNodeId,
         targetNodeId: e.targetNodeId,
@@ -119,7 +127,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
 
     // Create pending node execution records so scheduled runs have the same
     // diagnostic trail as manual runs (see routes/api/workflows/[id]/run/+server.ts).
-    for (const node of nodes) {
+    for (const node of runnableNodes) {
       await db.insert(nodeExecutions).values({
         runId,
         nodeId: node.id,

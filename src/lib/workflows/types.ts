@@ -194,3 +194,11 @@ export interface WorkflowEdgeDef {
   sourceHandle?: string | null;
   targetHandle?: string | null;
 }
+
+/**
+ * Display-only node types never participate in the DAG: they exist only
+ * for side-panel rendering on the canvas (stats, etc.).
+ */
+export function isDisplayOnlyType(type: string): boolean {
+  return type.startsWith('stats-');
+}
