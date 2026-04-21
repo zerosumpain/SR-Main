@@ -28,9 +28,25 @@ rsync -avz \
   data/ \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/data/"
 
+echo "==> Syncing DB schema files..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/src/lib/constants"
+rsync -avz -e "ssh -i $VPS_KEY" \
+  src/lib/db/schema.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/db/"
+rsync -avz -e "ssh -i $VPS_KEY" \
+  drizzle.config.json "$VPS_USER@$VPS_HOST:$VPS_DIR/"
+
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "cd $VPS_DIR && npm install --omit=dev --silent"
+
+# Apply any new/changed schema BEFORE restarting the service so the new
+# code doesn't hit a missing table. Additive migrations (CREATE TABLE,
+# CREATE INDEX, ADD COLUMN nullable/default) are applied non-interactively.
+# Destructive changes (DROP / type narrowing) will make drizzle-kit prompt
+# and this step will hang — that's intentional, run it manually.
+echo "==> Applying DB schema (drizzle-kit push)..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "cd $VPS_DIR && npx --yes drizzle-kit push --config=drizzle.config.json"
 
 echo "==> Updating systemd service (if needed)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
