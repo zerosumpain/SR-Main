@@ -32,7 +32,7 @@ export const deepDiveExecutor: NodeExecutor = {
       case 'status': {
         const sessionId = interpolateTemplate((config.sessionId as string) || '', input);
         if (!sessionId) return { output: { success: false, error: 'Session ID is required' } };
-        const result = await executeSiteTool('research_status', { sessionId });
+        const result = await executeSiteTool('research_status', { id: sessionId });
         return { output: result };
       }
 
@@ -44,7 +44,7 @@ export const deepDiveExecutor: NodeExecutor = {
       case 'report': {
         const sessionId = interpolateTemplate((config.sessionId as string) || '', input);
         if (!sessionId) return { output: { success: false, error: 'Session ID is required for report' } };
-        const result = await executeSiteTool('research_report', { sessionId });
+        const result = await executeSiteTool('research_get_report', { id: sessionId });
         return { output: result };
       }
 
@@ -53,7 +53,7 @@ export const deepDiveExecutor: NodeExecutor = {
         const action = config.action as string;
         if (!sessionId) return { output: { success: false, error: 'Session ID is required' } };
         if (!action) return { output: { success: false, error: 'Action is required' } };
-        const result = await executeSiteTool('research_control', { sessionId, action });
+        const result = await executeSiteTool('research_control', { id: sessionId, action });
         return { output: result };
       }
 

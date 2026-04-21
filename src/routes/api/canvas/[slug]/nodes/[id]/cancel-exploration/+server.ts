@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ params }) => {
 
   if (row.engine === 'deep') {
     try {
-      await executeSiteTool('research_control', { sessionId: row.sessionId, action: 'stop' });
+      await executeSiteTool('research_control', { id: row.sessionId, action: 'stop' });
     } catch (err) {
       console.error('[cancel-exploration] deep stop failed:', err);
     }

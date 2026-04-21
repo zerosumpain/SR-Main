@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 type Engine = 'deep' | 'quick';
 
 async function fetchDeepReport(sessionId: string) {
-  const result = await executeSiteTool('research_report', { sessionId });
+  const result = await executeSiteTool('research_get_report', { id: sessionId });
   if (!result?.success) {
     return { status: 'failed' as const, report: '', sources: [] as any[], durationMs: undefined };
   }

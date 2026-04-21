@@ -48,13 +48,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (engine === 'deep') {
     const result = (await executeSiteTool('research_start', { topic, goals })) as {
       success: boolean;
-      data?: { sessionId?: string };
+      data?: { id?: string };
       error?: string;
     };
-    if (!result.success || !result.data?.sessionId) {
+    if (!result.success || !result.data?.id) {
       throw error(500, `Deep research failed to start: ${result.error ?? 'unknown'}`);
     }
-    sessionId = result.data.sessionId;
+    sessionId = result.data.id;
     streamUrl = `/api/deepdive/${sessionId}/stream`;
   } else {
     const [row] = await db
