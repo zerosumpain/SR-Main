@@ -11,6 +11,9 @@
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
+  import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
+  import { byType as byNodeType, allTypes as allNodeTypes } from '$lib/canvas/adapter';
+  import type { HandleSpec } from '$lib/canvas/handles';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -900,19 +903,143 @@
     return { x, y };
   }
 
+  function screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    if (!viewportEl) return { x: 0, y: 0 };
+    const vp = viewportEl.getBoundingClientRect();
+    return {
+      x: (clientX - vp.left - panX) / zoom,
+      y: (clientY - vp.top - panY) / zoom,
+    };
+  }
+
+  function resolveOverlap(p: { x: number; y: number }): { x: number; y: number } {
+    let { x, y } = p;
+    const limit = 20;
+    for (let i = 0; i < limit; i++) {
+      const clashes = (canvas?.nodes ?? []).some(
+        (n) => Math.hypot(n.x - x, n.y - y) < 40,
+      );
+      if (!clashes) return { x, y };
+      x += 24;
+      y += 24;
+    }
+    return { x, y };
+  }
+
+  // ——— Node palette (cmd-K / right-click / long-press / drag-from-handle) ———
+  let paletteOpen = $state(false);
+  let paletteAnchor = $state<{ x: number; y: number } | 'center'>('center');
+  let paletteMode = $state<PaletteMode>({ kind: 'workflow-ranked' });
+  let paletteFromNodeId = $state<string | null>(null);
+  let palettePositionOverride = $state<{ x: number; y: number } | null>(null);
+
+  function openPalette(opts: {
+    anchor: { x: number; y: number } | 'center';
+    mode: PaletteMode;
+    fromNodeId?: string | null;
+    worldPosition?: { x: number; y: number } | null;
+  }) {
+    paletteAnchor = opts.anchor;
+    paletteMode = opts.mode;
+    paletteFromNodeId = opts.fromNodeId ?? null;
+    palettePositionOverride = opts.worldPosition ?? null;
+    paletteOpen = true;
+  }
+  function closePalette() {
+    paletteOpen = false;
+    paletteFromNodeId = null;
+    palettePositionOverride = null;
+  }
+
+  async function onPalettePick(type: string) {
+    const meta = byNodeType(type);
+    if (!meta) {
+      closePalette();
+      return;
+    }
+    const worldPos = palettePositionOverride ?? viewportCenterInWorld();
+    const placement = resolveOverlap(worldPos);
+    const newNode = await addNode({
+      type: meta.type,
+      label: meta.label,
+      defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>) },
+      position: placement,
+    });
+    if (paletteFromNodeId && newNode) {
+      const source = byId[paletteFromNodeId];
+      if (source) {
+        const sourceMeta = byNodeType(source.type);
+        const srcHandle = sourceMeta?.handles.outputs[0]?.id ?? null;
+        const tgtHandle = meta.handles.inputs[0]?.id ?? null;
+        try {
+          await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sourceNodeId: paletteFromNodeId,
+              targetNodeId: newNode.id,
+              sourceHandle: srcHandle,
+              targetHandle: tgtHandle,
+            }),
+          });
+          await invalidateAll();
+        } catch (err) {
+          actionError = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    closePalette();
+  }
+
+  // Long-press (touch) trigger state
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressStart: { x: number; y: number } | null = null;
+
+  function onViewportTouchStart(e: TouchEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('.chat-node, .wf-node')) return;
+    const t = e.touches[0];
+    if (!t) return;
+    longPressStart = { x: t.clientX, y: t.clientY };
+    longPressTimer = setTimeout(() => {
+      const world = screenToWorld(t.clientX, t.clientY);
+      openPalette({
+        anchor: { x: t.clientX, y: t.clientY },
+        mode: { kind: 'workflow-ranked' },
+        worldPosition: world,
+      });
+    }, 450);
+  }
+  function onViewportTouchMove(e: TouchEvent) {
+    if (!longPressStart) return;
+    const t = e.touches[0];
+    if (!t) return;
+    if (Math.hypot(t.clientX - longPressStart.x, t.clientY - longPressStart.y) > 10) {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+    }
+  }
+  function onViewportTouchEnd() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = null;
+    longPressStart = null;
+  }
+
   let addError = $state<string | null>(null);
 
   async function addNode(opt: {
     type: string;
     label: string;
     defaultConfig: Record<string, unknown>;
-  }) {
+    position?: { x: number; y: number };
+  }): Promise<{ id: string } | null> {
     addNodeOpen = false;
     addNodeFilter = '';
     addNodeCategory = null;
     addError = null;
     actionError = null;
-    const position = viewportCenterInWorld();
+    const position = opt.position ?? viewportCenterInWorld();
     try {
       const res = await fetch(`/api/workflows/${canvas.workflowId}/nodes`, {
         method: 'POST',
@@ -931,10 +1058,15 @@
       }
       const newId = body.node?.id as string | undefined;
       await invalidateAll();
-      if (newId) selectedId = newId;
+      if (newId) {
+        selectedId = newId;
+        return { id: newId };
+      }
+      return null;
     } catch (err) {
       addError = err instanceof Error ? err.message : String(err);
       actionError = addError;
+      return null;
     }
   }
   const knownModelValues = $derived(
@@ -1165,6 +1297,20 @@
         } catch (err) {
           actionError = err instanceof Error ? err.message : String(err);
         }
+      } else {
+        // Dropped into empty space — open palette in strict-downstream mode
+        const source = byId[sourceId];
+        if (source) {
+          const meta = byNodeType(source.type);
+          const outputs = (meta?.handles.outputs ?? []) as HandleSpec[];
+          const world = screenToWorld(e.clientX, e.clientY);
+          openPalette({
+            anchor: { x: e.clientX, y: e.clientY },
+            mode: { kind: 'strict-downstream', sourceType: source.type, sourceOutputs: outputs },
+            fromNodeId: sourceId,
+            worldPosition: world,
+          });
+        }
       }
     }
     function onKey(e: KeyboardEvent) {
@@ -1346,6 +1492,29 @@
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Global keyboard triggers for the node palette (cmd/ctrl-K, slash)
+  $effect(() => {
+    function onGlobalKey(e: KeyboardEvent) {
+      if (paletteOpen) return; // palette handles its own keys while open
+      const target = e.target as HTMLElement | null;
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+      const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+      const metaKey = isMac ? e.metaKey : e.ctrlKey;
+      if (metaKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+      } else if (e.key === '/' && !typing) {
+        e.preventDefault();
+        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+      }
+    }
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
   });
 
   // Close the add-node menu on outside click. composedPath() is captured
@@ -1590,6 +1759,21 @@
     onpointerup={onPointerUp}
     onpointercancel={onPointerUp}
     onwheel={onWheel}
+    oncontextmenu={(e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.chat-node, .wf-node')) return;
+      e.preventDefault();
+      const world = screenToWorld(e.clientX, e.clientY);
+      openPalette({
+        anchor: { x: e.clientX, y: e.clientY },
+        mode: { kind: 'workflow-ranked' },
+        worldPosition: world,
+      });
+    }}
+    ontouchstart={onViewportTouchStart}
+    ontouchmove={onViewportTouchMove}
+    ontouchend={onViewportTouchEnd}
+    ontouchcancel={onViewportTouchEnd}
   >
 
     <!-- Graph area (pan/zoom stage) -->
@@ -3129,6 +3313,15 @@
   </div>
   </div>
 </div>
+
+<NodePalette
+  open={paletteOpen}
+  anchor={paletteAnchor}
+  mode={paletteMode}
+  canvasNodes={canvas?.nodes ?? []}
+  onPick={onPalettePick}
+  onClose={closePalette}
+/>
 
 <style>
   :root {
