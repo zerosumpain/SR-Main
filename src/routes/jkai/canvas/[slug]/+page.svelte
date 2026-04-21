@@ -9,6 +9,8 @@
   import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
   import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
+  import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
+  import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -49,6 +51,14 @@
   } | null>(null);
   let pendingRun = $state<{ runId: string; chatNodeId: string | null } | null>(null);
 
+  // Intelligence node state maps
+  let researchStatus = $state<Record<string, 'pending' | 'running' | 'complete' | 'failed'>>({});
+  let researchReport = $state<Record<string, string>>({});
+  let researchSources = $state<Record<string, Array<{ url: string; title: string; domain: string }>>>({});
+  let pendingExplorations = $state<
+    Record<string, { engine: 'deep' | 'quick'; sessionId: string; status: string; streamUrl: string }>
+  >(data.pendingExplorations ?? {});
+
   const MIN_CHAT_W = 220;
   const MIN_CHAT_H = 240;
   const MAX_CHAT_W = 720;
@@ -65,6 +75,7 @@
       chat: { w: CHAT_NODE_W, h: CHAT_NODE_H },
       inspector: { w: INSPECTOR_NODE_W, h: INSPECTOR_NODE_H },
       stats: { w: 420, h: 360 },
+      intelligence: { w: 340, h: 420 },
     };
     const { w: defaultW, h: defaultH } = defaults[n.kind] ?? { w: NODE_W, h: NODE_H };
     return {
@@ -187,12 +198,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats') return resizableSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats') return resizableSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -969,6 +980,97 @@
     if (result) await reloadCanvas();
   }
 
+  // ——— Intelligence node helpers ———
+
+  /** Persist a node's config patch without needing the inline menu open. */
+  async function saveNodeConfig(nodeId: string, patch: Record<string, unknown>) {
+    const node = byId[nodeId];
+    if (!node) return;
+    const nextConfig = { ...node.config, ...patch };
+    try {
+      await fetch(`/api/workflows/${canvas.workflowId}/nodes/${nodeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: nextConfig }),
+      });
+      await invalidateAll();
+    } catch (err) {
+      console.error('[canvas] saveNodeConfig failed', err);
+    }
+  }
+
+  async function startExplore(parentId: string, engine: 'deep' | 'quick') {
+    const res = await fetch(`/api/canvas/${data.canvas.slug}/nodes/${parentId}/explore`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ engine }),
+    });
+    if (!res.ok) {
+      console.error('[canvas] explore failed', await res.text());
+      return;
+    }
+    const { node, edge, streamUrl } = await res.json();
+    // Optimistically insert the new node + edge into local canvas state.
+    data.canvas.nodes = [
+      ...data.canvas.nodes,
+      {
+        id: node.id,
+        kind: 'intelligence',
+        name: node.label,
+        x: node.position.x,
+        y: node.position.y,
+        type: node.type,
+        config: node.config,
+      } as import('$lib/canvas/adapter').CanvasNode,
+    ];
+    data.canvas.edges = [
+      ...data.canvas.edges,
+      { id: edge.id, from: edge.sourceNodeId, to: edge.targetNodeId },
+    ];
+    pendingExplorations[node.id] = { engine, sessionId: node.config.sessionId as string, status: 'running', streamUrl };
+    researchStatus[node.id] = 'running';
+  }
+
+  async function cancelExplore(nodeId: string) {
+    await fetch(`/api/canvas/${data.canvas.slug}/nodes/${nodeId}/cancel-exploration`, {
+      method: 'POST',
+    });
+    researchStatus[nodeId] = 'failed';
+    const next = { ...pendingExplorations };
+    delete next[nodeId];
+    pendingExplorations = next;
+  }
+
+  async function finaliseResearch(
+    nodeId: string,
+    result: { report: string; sources: Array<{ url: string; title: string; domain: string }>; durationMs?: number },
+  ) {
+    researchStatus[nodeId] = 'complete';
+    researchReport[nodeId] = result.report;
+    researchSources[nodeId] = result.sources;
+    const next = { ...pendingExplorations };
+    delete next[nodeId];
+    pendingExplorations = next;
+    // TODO: no /api/canvas/[slug]/nodes/[id] PATCH endpoint exists yet.
+    // Persist via the workflows API as a best-effort; the intel_explorations
+    // row update plus in-memory state is the authoritative source for this session.
+    try {
+      await fetch(`/api/workflows/${canvas.workflowId}/nodes/${nodeId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          outputData: {
+            researchReport: result.report,
+            researchSources: result.sources,
+            researchDurationMs: result.durationMs,
+          },
+        }),
+      });
+    } catch (err) {
+      console.error('[canvas] persist research result failed', err);
+    }
+  }
+
   // ——— Drag-to-connect edges ———
   let edgeDrag = $state<{
     sourceId: string;
@@ -1244,6 +1346,13 @@
       activeRunId = canvas.latestRunId;
       runMeta = { state: 'running' };
       subscribeToRun(canvas.latestRunId);
+    }
+  });
+
+  // Hydrate pending explorations — mark running so ResearchResultNode opens its SSE stream.
+  $effect(() => {
+    for (const nodeId of Object.keys(pendingExplorations)) {
+      researchStatus[nodeId] ??= 'running';
     }
   });
 </script>
@@ -1708,6 +1817,116 @@
               onpointercancel={onChatResizeUp}
             ></div>
 
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
+        {:else if n.kind === 'intelligence' && n.type === 'intelligence'}
+          {@const isize = resizableSize(n)}
+          <div
+            class="chat-node intelligence-node"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{isize.w}px"
+            style:height="{isize.h}px"
+            role="group"
+            aria-label="Intelligence node"
+            onpointerdown={(e) => e.stopPropagation()}
+          >
+            <div
+              class="chat-node-hdr intelligence-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="intelligence-bar"></span>
+              <span class="chat-node-title">INTEL</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+            <div class="intelligence-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              <IntelligenceNode
+                slug={data.canvas.slug}
+                nodeId={n.id}
+                config={n.config as { query?: string; facets?: Record<string, unknown>; size?: { w: number; h: number } }}
+                onsave={(patch) => saveNodeConfig(n.id, patch)}
+                onexplore={(engine) => startExplore(n.id, engine)}
+              />
+            </div>
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
+        {:else if n.kind === 'intelligence' && n.type === 'research-result'}
+          {@const rsize = resizableSize(n)}
+          <div
+            class="chat-node research-result-node"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{rsize.w}px"
+            style:height="{rsize.h}px"
+            role="group"
+            aria-label="Research result node"
+            onpointerdown={(e) => e.stopPropagation()}
+          >
+            <div
+              class="chat-node-hdr research-result-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="research-result-bar"></span>
+              <span class="chat-node-title">RESEARCH</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+            <div class="research-result-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              <ResearchResultNode
+                engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
+                topic={(n.config.topic as string) ?? ''}
+                status={researchStatus[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete'}
+                report={researchReport[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
+                sources={researchSources[n.id] ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
+                durationMs={(n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
+                streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
+                oncancel={() => cancelExplore(n.id)}
+                ondone={(result) => finaliseResearch(n.id, result)}
+              />
+            </div>
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
             <div
               class="node-handle"
               title="Drag to connect to another node"
