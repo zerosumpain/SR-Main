@@ -1,9 +1,14 @@
 <script lang="ts">
   import type { CanvasNode, NodeStatus } from './+page.server';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidateAll, goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import TimeFilter from '$lib/canvas/stats/TimeFilter.svelte';
+  import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
+  import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
+  import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -51,13 +56,17 @@
   const INSPECTOR_NODE_W = 320;
   const INSPECTOR_NODE_H = 300;
 
-  /** Size lookup for both chat and inspector nodes (chatSizes is shared). */
+  /** Size lookup for chat, inspector, and stats nodes (chatSizes is shared). */
   function resizableSize(n: CanvasNode): { w: number; h: number } {
     const override = chatSizes[n.id];
     if (override) return override;
     const cfgSize = (n.config?.size as { w?: number; h?: number } | undefined) ?? null;
-    const defaultW = n.kind === 'chat' ? CHAT_NODE_W : INSPECTOR_NODE_W;
-    const defaultH = n.kind === 'chat' ? CHAT_NODE_H : INSPECTOR_NODE_H;
+    const defaults: Record<string, { w: number; h: number }> = {
+      chat: { w: CHAT_NODE_W, h: CHAT_NODE_H },
+      inspector: { w: INSPECTOR_NODE_W, h: INSPECTOR_NODE_H },
+      stats: { w: 420, h: 360 },
+    };
+    const { w: defaultW, h: defaultH } = defaults[n.kind] ?? { w: NODE_W, h: NODE_H };
     return {
       w: typeof cfgSize?.w === 'number' ? cfgSize.w : defaultW,
       h: typeof cfgSize?.h === 'number' ? cfgSize.h : defaultH,
@@ -156,6 +165,16 @@
   const chatNodeIds = $derived(viewNodes.filter((n) => n.kind === 'chat').map((n) => n.id));
   const firstChatId = $derived(chatNodeIds[0] ?? null);
 
+  const period = $derived(($page.url.searchParams.get('period') ?? '30d') as string);
+  async function changePeriod(next: string) {
+    const url = new URL($page.url);
+    url.searchParams.set('period', next);
+    await goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+  }
+  const hasStatsNode = $derived(viewNodes.some((n) => n.kind === 'stats'));
+  let refreshKey = $state(0);
+  let flashNodeId = $state<string | null>(null);
+
   // Guard against orphan edges whose endpoints no longer exist
   const visibleEdges = $derived(canvas.edges.filter((e) => byId[e.from] && byId[e.to]));
 
@@ -168,12 +187,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector') return resizableSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector') return resizableSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -240,6 +259,7 @@
     agent: 'var(--text-primary)',
     chat: 'var(--accent)',
     inspector: '#567',
+    stats: '#7a6cd4',
   };
 
   const peerCanvases = $derived(data.peerCanvases);
@@ -476,9 +496,11 @@
       }
     } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
       runMeta = { state: 'completed' };
+      refreshKey += 1;
       finalizeChatReply();
     } else if (evt.type === 'run_failed') {
       runMeta = { state: 'failed', error: evt.error };
+      refreshKey += 1;
       finalizeChatReply();
     }
   }
@@ -568,6 +590,19 @@
     panX = 0;
     panY = 0;
     zoom = 1;
+  }
+
+  async function scrollToNode(nodeId: string) {
+    const n = byId[nodeId];
+    if (!n) return;
+    const cx = n.x + nodeW(n) / 2;
+    const cy = n.y + nodeH(n) / 2;
+    panX = (typeof window !== 'undefined' ? window.innerWidth / 2 : 0) - cx * zoom;
+    panY = (typeof window !== 'undefined' ? window.innerHeight / 2 : 0) - cy * zoom;
+    flashNodeId = nodeId;
+    setTimeout(() => {
+      if (flashNodeId === nodeId) flashNodeId = null;
+    }, 800);
   }
 
   function isInteractiveTarget(el: EventTarget | null): boolean {
@@ -964,6 +999,7 @@
       let hover: string | null = null;
       for (const n of viewNodes) {
         if (n.id === edgeDrag.sourceId) continue;
+        if (n.kind === 'stats') continue;
         const w = nodeW(n);
         const h = nodeH(n);
         if (worldX >= n.x && worldX <= n.x + w && worldY >= n.y && worldY <= n.y + h) {
@@ -1242,6 +1278,9 @@
       {viewNodes.length} nodes · {visibleEdges.length} edges · {runningCount} running
     </span>
     <div class="toolbar-right">
+      {#if hasStatsNode}
+        <TimeFilter value={period} onchange={changePeriod} />
+      {/if}
       <button
         class="composer-pill run-btn"
         onclick={runCanvas}
@@ -1673,6 +1712,60 @@
               onpointerdown={(e) => onHandlePointerDown(e, n)}
             ></div>
           </div>
+        {:else if n.kind === 'stats'}
+          {@const ssize = resizableSize(n)}
+          <div
+            class="chat-node stats-node"
+            class:is-selected={selectedId === n.id}
+            class:flash={flashNodeId === n.id}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{ssize.w}px"
+            style:height="{ssize.h}px"
+            role="group"
+            aria-label="Stats node"
+          >
+            <div
+              class="chat-node-hdr stats-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="stats-bar"></span>
+              <span class="chat-node-title">STATS</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+
+            <div class="stats-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              {#if n.type === 'stats-summary'}
+                <SummaryNode slug={canvas.slug} period={period} refreshKey={refreshKey} />
+              {:else if n.type === 'stats-trends'}
+                <TrendsNode slug={canvas.slug} period={period} refreshKey={refreshKey} />
+              {:else if n.type === 'stats-per-node'}
+                <PerNodeNode
+                  slug={canvas.slug}
+                  period={period}
+                  refreshKey={refreshKey}
+                  onrowclick={(nodeId) => scrollToNode(nodeId)}
+                />
+              {/if}
+            </div>
+
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+          </div>
         {:else}
           <div
             class="wf-node"
@@ -1682,6 +1775,7 @@
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
             class:is-trigger={n.kind === 'trigger'}
+            class:flash={flashNodeId === n.id}
             data-kind={n.kind}
             style:left="{n.x}px"
             style:top="{n.y}px"
@@ -4204,5 +4298,53 @@
   .p-icon-btn:hover {
     color: var(--text-primary);
     border-color: var(--text-muted);
+  }
+
+  /* ——— Stats node ——— */
+  .stats-node {
+    border-color: #7a6cd4;
+  }
+  .stats-node.is-selected {
+    outline-color: #7a6cd4;
+  }
+  .stats-hdr {
+    background: #2e2856;
+    color: #e0dbf8;
+  }
+  .stats-bar {
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: #7a6cd4;
+  }
+  .stats-node .chat-node-title {
+    color: #e0dbf8;
+  }
+  .stats-node .chat-node-label {
+    color: rgba(224, 219, 248, 0.7);
+    text-transform: none;
+    letter-spacing: 0.05em;
+  }
+  .stats-node-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    cursor: auto;
+  }
+
+  /* Flash animation for scrollToNode */
+  .wf-node.flash,
+  .chat-node.flash {
+    outline: 2px solid var(--accent, #7a6cd4);
+    outline-offset: 3px;
+    animation: node-flash 0.8s ease-out;
+  }
+  @keyframes node-flash {
+    0% { outline-color: var(--accent, #7a6cd4); outline-offset: 0; }
+    50% { outline-color: var(--accent, #7a6cd4); outline-offset: 6px; }
+    100% { outline-color: transparent; outline-offset: 3px; }
   }
 </style>
