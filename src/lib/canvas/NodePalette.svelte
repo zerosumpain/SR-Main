@@ -138,6 +138,29 @@
     }
   }
 
+  type GroupedEntry = { name: string; startIndex: number; items: CandidateType[] };
+
+  function groupedRest(rest: CandidateType[]): GroupedEntry[] {
+    const order: string[] = [];
+    const buckets = new Map<string, CandidateType[]>();
+    for (const c of rest) {
+      const g = byType(c.type)?.group ?? 'Other';
+      if (!buckets.has(g)) {
+        buckets.set(g, []);
+        order.push(g);
+      }
+      buckets.get(g)!.push(c);
+    }
+    const out: GroupedEntry[] = [];
+    let startIndex = 0;
+    for (const name of order) {
+      const items = buckets.get(name)!;
+      out.push({ name, startIndex, items });
+      startIndex += items.length;
+    }
+    return out;
+  }
+
   const PALETTE_WIDTH = 420;
   const style = $derived.by(() => {
     if (anchor === 'center') {
@@ -198,29 +221,60 @@
       </div>
     {/if}
 
-    <div class="palette-section">
-      <div class="palette-section-label">{query ? 'Results' : 'All nodes'}</div>
-      {#if visible.rest.length === 0}
-        <div class="palette-empty">No matches</div>
-      {/if}
-      {#each visible.rest as c, i (c.type)}
-        {@const meta = byType(c.type)}
-        {@const offset = query ? 0 : visible.suggested.length}
-        <button
-          type="button"
-          class="palette-row"
-          class:active={i + offset === activeIndex}
-          onclick={() => pick(c.type)}
-          onmouseenter={() => (activeIndex = i + offset)}
-        >
-          <span class="palette-row-label">{meta?.label ?? c.type}</span>
-          <span class="palette-row-desc">{meta?.description ?? ''}</span>
-          {#if recents[c.type]}
-            <span class="palette-row-recent" title="Recently used">↺</span>
-          {/if}
-        </button>
+    {#if query}
+      <div class="palette-section">
+        <div class="palette-section-label">Results · {visible.rest.length}</div>
+        {#if visible.rest.length === 0}
+          <div class="palette-empty">No matches for “{query}”</div>
+        {/if}
+        {#each visible.rest as c, i (c.type)}
+          {@const meta = byType(c.type)}
+          <button
+            type="button"
+            class="palette-row"
+            class:active={i === activeIndex}
+            onclick={() => pick(c.type)}
+            onmouseenter={() => (activeIndex = i)}
+          >
+            <span class="palette-row-label">{meta?.label ?? c.type}</span>
+            <span class="palette-row-group">{meta?.group ?? ''}</span>
+            <span class="palette-row-desc">{meta?.description ?? ''}</span>
+            {#if recents[c.type]}
+              <span class="palette-row-recent" title="Recently used">↺</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    {:else}
+      {@const offset = visible.suggested.length}
+      {@const groups = groupedRest(visible.rest)}
+      {#each groups as grp (grp.name)}
+        <div class="palette-section palette-group">
+          <div class="palette-group-label">
+            <span class="palette-group-bar"></span>
+            <span class="palette-group-name">{grp.name}</span>
+            <span class="palette-group-count">{grp.items.length}</span>
+          </div>
+          {#each grp.items as c, j (c.type)}
+            {@const idx = offset + grp.startIndex + j}
+            {@const meta = byType(c.type)}
+            <button
+              type="button"
+              class="palette-row"
+              class:active={idx === activeIndex}
+              onclick={() => pick(c.type)}
+              onmouseenter={() => (activeIndex = idx)}
+            >
+              <span class="palette-row-label">{meta?.label ?? c.type}</span>
+              <span class="palette-row-desc">{meta?.description ?? ''}</span>
+              {#if recents[c.type]}
+                <span class="palette-row-recent" title="Recently used">↺</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
       {/each}
-    </div>
+    {/if}
   </div>
 {/if}
 
@@ -230,65 +284,148 @@
     width: 420px;
     max-height: 60vh;
     overflow-y: auto;
-    background: var(--bg-2, #1a1a1a);
-    border: 1px solid var(--border, #2a2a2a);
-    border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--text-primary);
+    border-radius: 2px;
+    box-shadow: 6px 6px 0 var(--text-primary);
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    font-family: var(--font-body);
+    scrollbar-width: thin;
+    scrollbar-color: var(--card-border) transparent;
+  }
+  .palette::-webkit-scrollbar {
+    width: 8px;
+  }
+  .palette::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .palette::-webkit-scrollbar-thumb {
+    background: var(--card-border);
+    border-radius: 4px;
+  }
+  .palette::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
   .palette-scrim {
     position: fixed;
     inset: 0;
     z-index: 999;
-    background: transparent;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   }
   .palette-search {
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--border, #2a2a2a);
-    color: var(--fg, #e0e0e0);
+    border-bottom: 1px solid var(--card-border);
+    color: var(--text-primary);
     outline: none;
-    font: inherit;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-elevated);
+  }
+  .palette-search::placeholder {
+    color: var(--text-ghost);
   }
   .palette-banner {
-    padding: 6px 12px;
-    background: var(--bg-3, #252525);
-    color: var(--fg-2, #a0a0a0);
-    font-size: 12px;
+    padding: 6px 14px;
+    background: var(--bg-section);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    border-bottom: 1px solid var(--card-border);
   }
   .palette-section-label {
-    padding: 8px 12px 4px;
+    padding: 10px 14px 4px;
     text-transform: uppercase;
-    font-size: 11px;
-    color: var(--fg-2, #a0a0a0);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+  }
+  .palette-group {
+    border-top: 1px solid var(--divider);
+  }
+  .palette-group:first-of-type {
+    border-top: none;
+  }
+  .palette-group-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 6px;
+    position: sticky;
+    top: 41px;
+    background: var(--surface-elevated);
+    z-index: 1;
+  }
+  .palette-group-bar {
+    width: 3px;
+    height: 11px;
+    background: var(--accent);
+    display: inline-block;
+  }
+  .palette-group-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-primary);
+    font-weight: 500;
+    flex: 1;
+  }
+  .palette-group-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
     letter-spacing: 0.05em;
   }
   .palette-row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: baseline;
-    padding: 8px 12px;
+    padding: 8px 14px;
     text-align: left;
     background: transparent;
     border: none;
-    color: var(--fg, #e0e0e0);
+    border-left: 3px solid transparent;
+    color: var(--text-primary);
     cursor: pointer;
     font: inherit;
     width: 100%;
+    transition: background 0.08s ease, border-left-color 0.08s ease;
   }
   .palette-row:hover,
   .palette-row.active {
-    background: var(--bg-3, #252525);
+    background: var(--bg-section);
+    border-left-color: var(--accent);
   }
   .palette-row-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
     font-weight: 500;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+  .palette-row-group {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
     white-space: nowrap;
   }
   .palette-row-desc {
-    color: var(--fg-2, #a0a0a0);
+    color: var(--text-muted);
     font-size: 12px;
     flex: 1;
     overflow: hidden;
@@ -296,13 +433,15 @@
     white-space: nowrap;
   }
   .palette-row-recent {
-    color: var(--accent, #7aa2f7);
+    color: var(--accent);
     font-size: 12px;
   }
   .palette-empty {
-    padding: 12px;
-    color: var(--fg-2, #a0a0a0);
-    font-size: 12px;
+    padding: 14px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
     text-align: center;
+    letter-spacing: 0.05em;
   }
 </style>
