@@ -2,6 +2,7 @@
   import type { CanvasNode, NodeStatus } from './+page.server';
   import { invalidateAll, goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -18,6 +19,7 @@
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
+  const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
 
   const NODE_W = 148;
   const NODE_H = 52;
@@ -979,6 +981,7 @@
   let longPressStart: { x: number; y: number } | null = null;
 
   function onViewportTouchStart(e: TouchEvent) {
+    if (!NEW_PALETTE) return;
     if (paletteOpen) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.chat-node, .wf-node')) return;
@@ -1417,6 +1420,7 @@
         }
       } else {
         // Dropped into empty space — open palette in strict-downstream mode
+        if (!NEW_PALETTE) return;
         const source = byId[sourceId];
         if (source) {
           const meta = byNodeType(source.type);
@@ -1614,6 +1618,7 @@
   // Global keyboard triggers for the node palette (cmd/ctrl-K, slash)
   $effect(() => {
     function onGlobalKey(e: KeyboardEvent) {
+      if (!NEW_PALETTE) return;
       if (paletteOpen) return; // palette handles its own keys while open
       const target = e.target as HTMLElement | null;
       const typing =
@@ -1717,6 +1722,13 @@
           >{zoomPct}%</span
         ><button onclick={() => zoomCentered(1.2)} title="Zoom in">+</button>
       </div>
+      {#if !NEW_PALETTE}
+        <button
+          class="composer-pill"
+          title="Add node (palette disabled via env)"
+          onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
+        >+ node</button>
+      {/if}
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
     </div>
@@ -1738,6 +1750,7 @@
     onpointercancel={onPointerUp}
     onwheel={onWheel}
     oncontextmenu={(e) => {
+      if (!NEW_PALETTE) return;
       const target = e.target as HTMLElement;
       if (target.closest('.chat-node, .wf-node')) return;
       e.preventDefault();
