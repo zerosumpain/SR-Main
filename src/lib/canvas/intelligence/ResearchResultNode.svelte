@@ -40,14 +40,33 @@
           report = (report ?? '') + String(evt.data.token);
         } else if (evt.type === 'sources' && evt.data?.sources) {
           sources = evt.data.sources as Source[];
-        } else if (evt.type === 'status' && evt.data?.status === 'complete') {
-          status = 'complete';
-          ondone({ report, sources, durationMs: evt.data?.durationMs });
+        } else if (
+          (evt.type === 'status' && evt.data?.status === 'complete') ||
+          evt.type === 'complete'
+        ) {
           es?.close();
-        } else if (evt.type === 'complete') {
           status = 'complete';
-          ondone({ report, sources, durationMs: evt.data?.durationMs });
-          es?.close();
+          const durationMs = evt.data?.durationMs;
+          if (engine === 'deep' && !report) {
+            (async () => {
+              try {
+                const sessionId = new URL(streamUrl!, location.origin).pathname.split('/')[3];
+                const resp = await fetch(`/api/deepdive/${sessionId}`);
+                if (resp.ok) {
+                  const body = await resp.json();
+                  const deepReport = body.report as Record<string, unknown> | null | undefined;
+                  if (typeof deepReport?.executive_summary === 'string') {
+                    report = deepReport.executive_summary;
+                  }
+                }
+              } catch (err) {
+                console.error('[research-result] fetch deep report failed', err);
+              }
+              ondone({ report, sources, durationMs });
+            })();
+          } else {
+            ondone({ report, sources, durationMs });
+          }
         } else if (evt.type === 'error') {
           status = 'failed';
           es?.close();
