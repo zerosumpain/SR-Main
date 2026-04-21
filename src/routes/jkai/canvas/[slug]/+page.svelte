@@ -13,7 +13,7 @@
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
-  import type { HandleSpec } from '$lib/canvas/handles';
+  import { compatibility, type HandleSpec } from '$lib/canvas/handles';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -926,6 +926,18 @@
     return { x, y };
   }
 
+  function inputsFor(type: string): HandleSpec[] {
+    return (byNodeType(type)?.handles.inputs ?? []) as HandleSpec[];
+  }
+  function outputsFor(type: string): HandleSpec[] {
+    return (byNodeType(type)?.handles.outputs ?? []) as HandleSpec[];
+  }
+  function allKinds(specs: HandleSpec[]): string[] {
+    const s = new Set<string>();
+    for (const h of specs) for (const k of h.kinds) s.add(k);
+    return Array.from(s);
+  }
+
   // ——— Node palette (cmd-K / right-click / long-press / drag-from-handle) ———
   let paletteOpen = $state(false);
   let paletteAnchor = $state<{ x: number; y: number } | 'center'>('center');
@@ -1253,6 +1265,14 @@
     hoverTargetId: string | null;
   } | null>(null);
 
+  const edgeDragCompatible = $derived.by(() => {
+    if (!edgeDrag || !edgeDrag.hoverTargetId) return null;
+    const src = byId[edgeDrag.sourceId];
+    const tgt = byId[edgeDrag.hoverTargetId];
+    if (!src || !tgt) return null;
+    return compatibility(outputsFor(src.type), inputsFor(tgt.type)) === 1;
+  });
+
   function onHandlePointerDown(e: PointerEvent, source: CanvasNode) {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -1291,20 +1311,38 @@
       const { sourceId, hoverTargetId } = edgeDrag;
       edgeDrag = null;
       if (hoverTargetId) {
-        actionError = null;
-        try {
-          const res = await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sourceNodeId: sourceId, targetNodeId: hoverTargetId }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `HTTP ${res.status}`);
+        const source = byId[sourceId];
+        const target = byId[hoverTargetId];
+        if (source && target) {
+          if (compatibility(outputsFor(source.type), inputsFor(target.type)) === 0) {
+            actionError = 'Incompatible handle types';
+            setTimeout(() => {
+              if (actionError === 'Incompatible handle types') actionError = null;
+            }, 1500);
+          } else {
+            const srcHandle = outputsFor(source.type)[0]?.id ?? null;
+            const tgtHandle = inputsFor(target.type)[0]?.id ?? null;
+            actionError = null;
+            try {
+              const res = await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sourceNodeId: sourceId,
+                  targetNodeId: hoverTargetId,
+                  sourceHandle: srcHandle,
+                  targetHandle: tgtHandle,
+                }),
+              });
+              if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || `HTTP ${res.status}`);
+              }
+              await invalidateAll();
+            } catch (err) {
+              actionError = err instanceof Error ? err.message : String(err);
+            }
           }
-          await invalidateAll();
-        } catch (err) {
-          actionError = err instanceof Error ? err.message : String(err);
         }
       } else {
         // Dropped into empty space — open palette in strict-downstream mode
@@ -1848,6 +1886,7 @@
             class:is-selected={selectedId === n.id}
             class:active={isRunning && pendingRun?.chatNodeId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{size.w}px"
@@ -1855,6 +1894,12 @@
             role="group"
             aria-label="Chat node"
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="node-handle"
               title="Drag to connect to another node"
@@ -2012,6 +2057,7 @@
             class="chat-node inspector-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             class:active={isRunning && n.status === 'running'}
             class:failed={isRunning && n.status === 'failed'}
             class:ok={isRunning && n.status === 'ok'}
@@ -2022,6 +2068,12 @@
             role="group"
             aria-label="Inspector node"
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr inspector-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -2067,6 +2119,7 @@
             class="chat-node intelligence-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{isize.w}px"
@@ -2075,6 +2128,12 @@
             aria-label="Intelligence node"
             onpointerdown={(e) => e.stopPropagation()}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr intelligence-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -2120,6 +2179,7 @@
             class="chat-node research-result-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{rsize.w}px"
@@ -2128,6 +2188,12 @@
             aria-label="Research result node"
             onpointerdown={(e) => e.stopPropagation()}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr research-result-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -2232,6 +2298,7 @@
             class:ok={isRunning && n.status === 'ok'}
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             class:is-trigger={n.kind === 'trigger'}
             class:flash={flashNodeId === n.id}
             data-kind={n.kind}
@@ -2249,6 +2316,12 @@
               else if (e.key === ' ') selectNode(e, n.id);
             }}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
               <div class="trig-stack">
@@ -4293,6 +4366,24 @@
     border-color: var(--accent);
     background: var(--accent);
     transform: translateY(-50%) scale(1.15);
+  }
+  .node-handle-input {
+    left: -7px;
+    right: auto;
+    cursor: default;
+  }
+  .node-handle-input:hover {
+    background: var(--accent-dim, #3a5074);
+  }
+  .wf-node.is-incompatible,
+  .chat-node.is-incompatible {
+    outline: 2px dashed var(--danger, #c26060);
+    outline-offset: 2px;
+    animation: incompat-flash 0.4s ease-out;
+  }
+  @keyframes incompat-flash {
+    0% { outline-color: rgba(194, 96, 96, 1); }
+    100% { outline-color: rgba(194, 96, 96, 0.35); }
   }
   .wf-node:focus-visible {
     outline: 2px solid var(--accent);
