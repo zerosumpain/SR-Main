@@ -40,3 +40,32 @@ export async function emitLog(
     iterationId: log.iterationId,
   });
 }
+
+// --- Live (non-persisted) stream ---
+//
+// onBuildLive subscribes to transient streaming events that are NOT written
+// to the jkai_logs table — e.g. token-level deltas from the pi agent. The
+// SSE handler fans these out to connected clients with negative IDs so they
+// never collide with persisted log IDs and are not replayed on reconnect.
+
+export interface LiveEvent {
+  type: 'stream_text' | 'stream_thinking' | 'stream_tool_start' | 'stream_tool_delta' | 'stream_tool_end' | 'stream_turn_end';
+  iterationId: string | null;
+  streamId: string; // stable within one streaming segment
+  delta?: string;   // incremental content for text / thinking / tool-delta
+  full?: string;    // full snapshot at end of segment
+  toolName?: string; // tool_start / tool_end
+}
+
+export function onBuildLive(
+  buildId: string,
+  handler: (event: LiveEvent) => void,
+): () => void {
+  const key = `live:${buildId}`;
+  emitter.on(key, handler);
+  return () => emitter.off(key, handler);
+}
+
+export function emitLive(buildId: string, event: LiveEvent): void {
+  emitter.emit(`live:${buildId}`, event);
+}

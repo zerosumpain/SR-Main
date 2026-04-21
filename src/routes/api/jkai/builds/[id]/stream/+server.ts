@@ -3,12 +3,14 @@ import { db } from '$lib/db';
 import { jkaiLogs } from '$lib/db/schema';
 import { eq, gt, and, asc } from 'drizzle-orm';
 import { onBuildLog } from '$lib/jkai/orchestrator';
+import { onBuildLive } from '$lib/jkai/log-emitter';
 
 export const GET: RequestHandler = async ({ params, request }) => {
   const buildId = params.id;
   const lastEventId = request.headers.get('Last-Event-ID');
 
   let unsub: (() => void) | null = null;
+  let unsubLive: (() => void) | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   let closed = false;
 
@@ -17,8 +19,10 @@ export const GET: RequestHandler = async ({ params, request }) => {
     closed = true;
     if (keepalive) clearInterval(keepalive);
     if (unsub) unsub();
+    if (unsubLive) unsubLive();
     keepalive = null;
     unsub = null;
+    unsubLive = null;
   }
 
   const stream = new ReadableStream({
@@ -58,9 +62,17 @@ export const GET: RequestHandler = async ({ params, request }) => {
         }
       }
 
-      // Live events
+      // Persisted log events (replayable via Last-Event-ID, positive IDs)
       unsub = onBuildLog(buildId, (log) => {
         send(log.id, { type: log.type, content: log.content, iterationId: log.iterationId });
+      });
+
+      // Transient streaming events (not persisted, negative IDs so the client
+      // can distinguish them and never replay them on reconnect)
+      let liveSeq = 0;
+      unsubLive = onBuildLive(buildId, (ev) => {
+        liveSeq += 1;
+        send(-liveSeq, ev);
       });
 
       // Keepalive every 15s — also serves as liveness check

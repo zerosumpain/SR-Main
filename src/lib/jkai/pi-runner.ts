@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { db } from '$lib/db';
 import { jkaiIterations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { emitLog } from './log-emitter';
+import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ActionRecord } from './types';
@@ -42,6 +42,13 @@ interface PiMessage {
 interface PiEvent {
   type: string;
   message?: PiMessage;
+  // message_update events carry streaming deltas; we only need a few fields.
+  assistantMessageEvent?: {
+    type: string; // text_start, text_delta, text_end, thinking_start, thinking_delta, thinking_end, tool_input_start, tool_input_delta, tool_input_end
+    contentIndex?: number;
+    delta?: string;
+    content?: string;
+  };
 }
 
 // --- Result ---
@@ -211,6 +218,48 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     try {
       ev = JSON.parse(line);
     } catch {
+      return;
+    }
+
+    // --- Streaming deltas (live, not persisted) ---
+    if (ev.type === 'message_update' && ev.assistantMessageEvent) {
+      const sub = ev.assistantMessageEvent;
+      const streamId = `${iteration.id}:${sub.contentIndex ?? 0}`;
+      if (sub.type === 'text_delta' && sub.delta) {
+        emitLive(build.id, {
+          type: 'stream_text',
+          iterationId: iteration.id,
+          streamId,
+          delta: sub.delta,
+        });
+      } else if (sub.type === 'thinking_delta' && sub.delta) {
+        emitLive(build.id, {
+          type: 'stream_thinking',
+          iterationId: iteration.id,
+          streamId,
+          delta: sub.delta,
+        });
+      } else if (sub.type === 'tool_input_start') {
+        emitLive(build.id, {
+          type: 'stream_tool_start',
+          iterationId: iteration.id,
+          streamId,
+        });
+      } else if (sub.type === 'tool_input_delta' && sub.delta) {
+        emitLive(build.id, {
+          type: 'stream_tool_delta',
+          iterationId: iteration.id,
+          streamId,
+          delta: sub.delta,
+        });
+      } else if (sub.type === 'text_end' || sub.type === 'thinking_end' || sub.type === 'tool_input_end') {
+        emitLive(build.id, {
+          type: sub.type === 'tool_input_end' ? 'stream_tool_end' : 'stream_turn_end',
+          iterationId: iteration.id,
+          streamId,
+          full: sub.content,
+        });
+      }
       return;
     }
 

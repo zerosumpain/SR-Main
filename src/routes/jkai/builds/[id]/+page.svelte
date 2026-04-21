@@ -73,13 +73,50 @@
     eventSource = new EventSource(`/api/jkai/builds/${build.id}/stream`);
 
     eventSource.onmessage = (e) => {
-      const log = JSON.parse(e.data);
-      logs = [...logs, { ...log, id: parseInt(e.lastEventId) }];
+      const id = parseInt(e.lastEventId);
+      const payload = JSON.parse(e.data);
+
+      // Negative IDs are transient live events (streaming deltas) — accumulate
+      // into liveStreams without touching persisted logs.
+      if (id < 0) {
+        const stream = liveStreams[payload.streamId] ?? {
+          streamId: payload.streamId,
+          kind: payload.type,
+          text: '',
+          closed: false,
+        };
+        if (payload.type === 'stream_text' || payload.type === 'stream_thinking' || payload.type === 'stream_tool_delta') {
+          stream.text += payload.delta ?? '';
+          stream.kind = payload.type;
+        } else if (payload.type === 'stream_turn_end' || payload.type === 'stream_tool_end') {
+          stream.closed = true;
+          if (payload.full) stream.text = payload.full;
+        } else if (payload.type === 'stream_tool_start') {
+          stream.kind = 'stream_tool_delta';
+          stream.text = '';
+        }
+        liveStreams = { ...liveStreams, [payload.streamId]: stream };
+        requestAnimationFrame(() => {
+          logContainer?.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
+        });
+        return;
+      }
+
+      // Persisted log event — when it arrives, the matching live stream is
+      // already in the DB, so retire any live streams scoped to the same
+      // iteration to avoid double-rendering once the turn completes.
+      logs = [...logs, { ...payload, id }];
+      if (payload.iterationId) {
+        const next: typeof liveStreams = {};
+        for (const [k, v] of Object.entries(liveStreams)) {
+          if (!k.startsWith(`${payload.iterationId}:`)) next[k] = v;
+        }
+        liveStreams = next;
+      }
       requestAnimationFrame(() => {
         logContainer?.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
       });
       highlightAll();
-      // Reset backoff on successful message
       reconnectDelay = 3000;
     };
 
@@ -113,6 +150,8 @@
 
   let reconnectDelay = $state(3000);
   let closed = $state(false);
+  type LiveStream = { streamId: string; kind: string; text: string; closed: boolean };
+  let liveStreams = $state<Record<string, LiveStream>>({});
   let activeIteration = $state<number | null>(null);
   let activating = $state(false);
   let fullscreen = $state(false);
@@ -301,6 +340,17 @@
             {:else}
               <p class="whitespace-pre-wrap">{log.content}</p>
             {/if}
+          </div>
+        {/each}
+        {#each Object.values(liveStreams).filter((s) => !s.closed) as stream (stream.streamId)}
+          <div class="mb-1 border-l-2 pl-3" style="border-color: var(--accent); color: {stream.kind === 'stream_thinking' ? 'var(--text-ghost)' : stream.kind === 'stream_tool_delta' ? '#6a9955' : 'var(--text-primary)'};">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style="background: var(--accent);"></span>
+              <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                {stream.kind === 'stream_thinking' ? 'thinking' : stream.kind === 'stream_tool_delta' ? 'tool input' : 'writing'}
+              </span>
+            </div>
+            <pre class="whitespace-pre-wrap">{stream.text}<span class="inline-block w-2 h-4 bg-current align-middle animate-pulse"></span></pre>
           </div>
         {/each}
       {/if}
