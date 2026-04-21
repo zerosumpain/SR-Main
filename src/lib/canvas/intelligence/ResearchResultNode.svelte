@@ -10,6 +10,7 @@
     sources = $bindable(),
     durationMs,
     streamUrl,
+    sessionId,
     oncancel,
     ondone,
   } = $props<{
@@ -20,12 +21,51 @@
     sources: Source[];
     durationMs?: number | null;
     streamUrl?: string | null;
+    sessionId?: string | null;
     oncancel: () => void;
     ondone: (res: { report: string; sources: Source[]; durationMs?: number }) => void;
   }>();
 
   let logLine = $state('');
   let es: EventSource | null = null;
+
+  // On mount: if status is already 'complete' but report is empty, fetch it.
+  $effect(() => {
+    if (status !== 'complete') return;
+    if (report) return;
+    const sid = sessionId;
+    if (!sid) return;
+    const url = engine === 'deep' ? `/api/deepdive/${sid}` : `/api/quickanswer/${sid}`;
+    (async () => {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return;
+        const body = await resp.json();
+        if (engine === 'deep') {
+          const deepReport = body.report as Record<string, unknown> | string | null | undefined;
+          if (typeof deepReport === 'string' && deepReport) {
+            report = deepReport;
+          } else if (typeof deepReport === 'object' && deepReport !== null) {
+            const execSummary = (deepReport as Record<string, unknown>).executive_summary;
+            if (typeof execSummary === 'string') report = execSummary;
+          }
+          if (Array.isArray(body.sources) && body.sources.length > 0 && !sources?.length) {
+            sources = body.sources as Source[];
+          }
+        } else {
+          // quick engine
+          if (typeof body.answer === 'string' && body.answer) {
+            report = body.answer;
+          }
+          if (Array.isArray(body.sources) && body.sources.length > 0 && !sources?.length) {
+            sources = body.sources as Source[];
+          }
+        }
+      } catch (err) {
+        console.error('[research-result] mount-fetch failed', err);
+      }
+    })();
+  });
 
   $effect(() => {
     if (status !== 'running' && status !== 'pending') return;

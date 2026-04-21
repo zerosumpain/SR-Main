@@ -112,5 +112,24 @@ export const researchResultDef: NodeDefinition = {
   defaultConfig: { engine: 'deep', sessionId: '', topic: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Research output' }],
-  basicConfig: [],
+  basicConfig: [
+    {
+      key: 'engine',
+      label: 'Engine',
+      type: 'dropdown',
+      options: [
+        { value: 'deep', label: 'Deep research' },
+        { value: 'quick', label: 'Quick research' },
+      ],
+      section: 'SOURCE',
+    },
+    {
+      key: 'sessionId',
+      label: 'Session ID',
+      type: 'template-textarea',
+      description: 'Existing session ID. Supports {{input.*}} placeholders from an upstream connection.',
+      placeholder: '{{input.researchSessionId}}',
+      section: 'SOURCE',
+    },
+  ],
 };

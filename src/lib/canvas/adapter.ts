@@ -279,6 +279,14 @@ export const CANVAS_NODE_TYPES: NodeTypeOption[] = [
     description: 'DAG-driven quick answer (Tavily + synthesis). Useful for per-item fan-out.',
     defaultConfig: { topic: '{{item.title}}', goals: [], pollIntervalMs: 1500, maxWaitMs: 180000 },
   },
+  {
+    type: 'deep-research',
+    label: 'Deep Research',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'DAG-driven deep research (commission via pipeline). Emits researchReport + sources.',
+    defaultConfig: { topic: '{{item.title}}', goals: '', depth: 'medium', pollIntervalMs: 5000, maxWaitMs: 900000 },
+  },
 
   // ————————————————————————— Intel & Web
   {
@@ -490,6 +498,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'intel-write' || type === 'intel-query' || type === 'deep-dive') return 'intel';
   if (type === 'intelligence' || type === 'research-result') return 'intelligence';
   if (type === 'quick-answer') return 'intel';
+  if (type === 'deep-research') return 'intel';
   return 'output';
 }
 
