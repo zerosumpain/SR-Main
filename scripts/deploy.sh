@@ -33,7 +33,7 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/s
 rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/db/schema.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/db/"
 rsync -avz -e "ssh -i $VPS_KEY" \
-  drizzle.config.json "$VPS_USER@$VPS_HOST:$VPS_DIR/"
+  drizzle.config.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/"
 
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
@@ -47,8 +47,26 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
 echo "==> Applying DB schema (drizzle-kit push)..."
 # drizzle-kit is a devDep and we strip devDeps in prod. Install it locally
 # without touching package.json so it resolves the project's drizzle-orm.
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
-  "cd $VPS_DIR && (test -x node_modules/.bin/drizzle-kit || npm install --no-save --silent drizzle-kit@^0.31.10) && node_modules/.bin/drizzle-kit push --config=drizzle.config.json"
+DRIZZLE_TIMEOUT="${DRIZZLE_TIMEOUT:-180}"
+# Install drizzle-kit if absent, then run via a remote bash script to keep
+# quoting sane. CI=1 + --force disables drizzle's interactive prompt; stdbuf
+# forces line buffering so its spinner output flushes over ssh.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<REMOTE
+set -e
+cd "$VPS_DIR"
+if [ ! -x node_modules/.bin/drizzle-kit ]; then
+  npm install --no-save --silent drizzle-kit@^0.31.10
+fi
+set -a; . ./.env; set +a
+CI=1 FORCE_COLOR=0 timeout ${DRIZZLE_TIMEOUT}s stdbuf -oL -eL \
+  node_modules/.bin/drizzle-kit push --config=drizzle.config.ts --force
+ec=\$?
+if [ "\$ec" -eq 124 ]; then
+  echo "==> drizzle-kit timed out after ${DRIZZLE_TIMEOUT}s — destructive change awaiting confirmation? Run manually."
+  exit 1
+fi
+exit \$ec
+REMOTE
 
 echo "==> Updating systemd service (if needed)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
