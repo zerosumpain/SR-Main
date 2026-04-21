@@ -772,18 +772,18 @@
   }
 
   /* ── Body ── */
+  /* Absolute-positioned region below the tab bar. No flex dependency. */
   .drv-body {
-    flex: 1 1 0;
-    min-height: 0;
+    position: absolute;
+    inset: 36px 0 0 0;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
 
   .tab-pane {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
+    position: absolute;
+    inset: 0;
+    overflow-y: scroll;
     overflow-x: hidden;
     padding: 8px 10px;
     font-size: 11px;
@@ -794,19 +794,21 @@
     scrollbar-color: #5dbea3 transparent;
   }
   .tab-pane::-webkit-scrollbar { width: 10px; }
-  .tab-pane::-webkit-scrollbar-track { background: transparent; }
+  .tab-pane::-webkit-scrollbar-track { background: var(--bg); }
   .tab-pane::-webkit-scrollbar-thumb {
-    background: #2f5a50;
+    background: #5dbea3;
     border-radius: 5px;
     border: 2px solid var(--bg);
   }
-  .tab-pane::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
+  .tab-pane::-webkit-scrollbar-thumb:hover { background: #7fd4be; }
 
   /* ── Graph pane override ── */
   .graph-pane {
     overflow: hidden;
     padding: 4px 6px 0;
     gap: 4px;
+    display: flex !important;
+    flex-direction: column !important;
   }
   .graph-hint {
     font-size: 9px;

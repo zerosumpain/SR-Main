@@ -294,14 +294,12 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .log { color: var(--text-muted); font-size: 11px; text-align: center; padding: 0 12px; }
   .failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
-  /* Viewer wrap — fills remaining space and lets DeepResearchViewer control its own scroll */
+  /* Viewer wrap — absolute positioned below the 26px header so inner
+     absolute/inset children have a concrete frame to anchor against. */
   .viewer-wrap {
-    position: relative;
-    flex: 1 1 0;
-    min-height: 0;
+    position: absolute;
+    inset: 26px 0 0 0;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
   }
   /* Quick/no-session: simple scrollable body */
   .body {
