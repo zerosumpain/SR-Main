@@ -47,6 +47,12 @@ interface ChatOptions {
   priceSnapshot: PriceSnapshot | null;
   /** When false, skips injecting the intel knowledge graph into the system prompt. Defaults to true. */
   useIntelContext?: boolean;
+  /**
+   * Pre-built intel context to inject verbatim, overriding the global
+   * buildKnowledgeContext() call. Non-empty string = use it. Empty string =
+   * no intel section. null/undefined = fall back to useIntelContext.
+   */
+  intelContextOverride?: string | null;
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -377,10 +383,17 @@ export async function generalChat(
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
   const siteSection = buildSiteSystemPromptSection();
+  const graphSectionPromise =
+    options.intelContextOverride != null
+      ? Promise.resolve(options.intelContextOverride)
+      : options.useIntelContext === false
+        ? Promise.resolve('')
+        : buildKnowledgeContext(userMessage);
+
   const [basePrompt, memorySection, graphSection, canvasSection] = await Promise.all([
     getCompiledPrompt(),
     buildMemorySection(),
-    options.useIntelContext === false ? Promise.resolve('') : buildKnowledgeContext(userMessage),
+    graphSectionPromise,
     buildCanvasContextSection(options.workflowId),
   ]);
   const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}`;
