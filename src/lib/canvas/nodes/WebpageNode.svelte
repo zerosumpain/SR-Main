@@ -24,6 +24,11 @@
   let statusText = $state('');
   let statusVisible = $state(false);
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
+  let escalationTimer: ReturnType<typeof setTimeout> | null = null;
+  let postLoadPongTimer: ReturnType<typeof setTimeout> | null = null;
+  let pongReceived = $state(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let probing = $state(false);
 
   function showStatus(text: string) {
     statusText = text;
@@ -41,22 +46,57 @@
     }
   }
 
-  function load() {
+  function clearEscalationTimers() {
+    if (escalationTimer) clearTimeout(escalationTimer);
+    escalationTimer = null;
+    if (postLoadPongTimer) clearTimeout(postLoadPongTimer);
+    postLoadPongTimer = null;
+  }
+
+  async function load() {
     const target = urlDraft.trim();
     if (!target) return;
     if (!isValidUrl(target)) {
       showStatus('Invalid URL — must start with http(s)://');
       return;
     }
-    // Direct-iframe only in C2. Proxy escalation lands in D4.
-    onConfigChange({ url: target, mode: 'direct', lastLoadedAt: new Date().toISOString() });
+    pongReceived = false;
+    clearEscalationTimers();
+    probing = true;
+    try {
+      const res = await fetch(`/api/webframe/probe?url=${encodeURIComponent(target)}`);
+      const probe = res.ok
+        ? ((await res.json().catch(() => ({ canFrame: true }))) as { canFrame: boolean; reason?: string })
+        : { canFrame: true, reason: 'probe error' };
+      if (probe.canFrame) {
+        onConfigChange({ url: target, mode: 'direct', lastLoadedAt: new Date().toISOString() });
+        // Escalate if load+pong doesn't happen within 6s
+        escalationTimer = setTimeout(() => {
+          if (!pongReceived) escalateToProxy(target, 'no pong within 6s');
+        }, 6000);
+      } else {
+        onConfigChange({ url: target, mode: 'proxied', lastLoadedAt: new Date().toISOString() });
+        showStatus('Loaded · proxied via homeserv');
+      }
+    } catch {
+      onConfigChange({ url: target, mode: 'direct', lastLoadedAt: new Date().toISOString() });
+    } finally {
+      probing = false;
+    }
+  }
+
+  function escalateToProxy(target: string, reason: string) {
+    clearEscalationTimers();
+    if (config.mode === 'proxied') return;
+    onConfigChange({ url: target, mode: 'proxied', lastLoadedAt: new Date().toISOString() });
+    showStatus(`Loaded · proxied via homeserv (${reason})`);
   }
 
   function reload() {
     try {
       iframeEl?.contentWindow?.location.reload();
     } catch {
-      if (config.url) onConfigChange({ url: config.url, mode: 'direct' });
+      if (config.url) onConfigChange({ url: config.url, mode: config.mode ?? 'direct' });
     }
   }
 
@@ -67,7 +107,19 @@
   $effect(() => {
     if (!iframeEl) return;
     function onLoad() {
-      showStatus('Loaded · direct');
+      if (config.mode === 'proxied') {
+        // Proxy page's injected script posts pong itself; accept success.
+        clearEscalationTimers();
+        pongReceived = true;
+        showStatus('Loaded · proxied via homeserv');
+        if (config.url) onOutput?.('currentUrl', config.url);
+        return;
+      }
+      // Direct load: give the page 1s to post a pong (same-origin check).
+      if (postLoadPongTimer) clearTimeout(postLoadPongTimer);
+      postLoadPongTimer = setTimeout(() => {
+        if (!pongReceived && config.url) escalateToProxy(config.url, 'cross-origin on direct load');
+      }, 1000);
       if (config.url) onOutput?.('currentUrl', config.url);
     }
     iframeEl.addEventListener('load', onLoad);
@@ -78,10 +130,28 @@
     function onMsg(e: MessageEvent) {
       if (!iframeEl || e.source !== iframeEl.contentWindow) return;
       const data = e.data;
-      if (data && typeof data === 'object') {
-        if (data.type === 'webframe-selection' && typeof data.text === 'string') {
-          onOutput?.('selectedText', data.text);
-        }
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'webframe-pong') {
+        pongReceived = true;
+        clearEscalationTimers();
+        if (config.mode === 'direct') showStatus('Loaded · direct');
+      }
+      if (data.type === 'webframe-selection' && typeof data.text === 'string') {
+        onOutput?.('selectedText', data.text);
+      }
+      if (data.type === 'webframe-click' && config.mode === 'proxied') {
+        void fetch('/api/webframe/event', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session: nodeId, kind: 'click', payload: { x: data.x, y: data.y } }),
+        });
+      }
+      if (data.type === 'webframe-scroll' && config.mode === 'proxied') {
+        void fetch('/api/webframe/event', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session: nodeId, kind: 'scroll', payload: { dy: 80 } }),
+        });
       }
     }
     window.addEventListener('message', onMsg);
@@ -90,7 +160,16 @@
 
   $effect(() => {
     return () => {
+      clearEscalationTimers();
       if (statusTimer) clearTimeout(statusTimer);
+      // Best-effort Playwright session cleanup
+      if (config.mode === 'proxied') {
+        void fetch('/api/webframe/close', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session: nodeId }),
+        });
+      }
     };
   });
 
@@ -125,9 +204,12 @@
 
   <div class="webpage-viewport">
     {#if config.url}
+      {@const iframeSrc = config.mode === 'proxied'
+        ? `/api/webframe/render?url=${encodeURIComponent(config.url)}&session=${encodeURIComponent(nodeId)}`
+        : config.url}
       <iframe
         bind:this={iframeEl}
-        src={config.url}
+        src={iframeSrc}
         sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         title="Webpage node {nodeId}"
       ></iframe>
