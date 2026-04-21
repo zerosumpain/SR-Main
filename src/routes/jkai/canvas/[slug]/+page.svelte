@@ -1291,6 +1291,39 @@
     }
   }
 
+  async function openAsWebpageNode(url: string, fromNodeId: string) {
+    const source = (canvas?.nodes ?? []).find((n) => n.id === fromNodeId);
+    if (!source) return;
+    const meta = byNodeType('webpage');
+    if (!meta) return;
+    const pos = resolveOverlap({ x: source.x + 340, y: source.y });
+    const newNode = await addNode({
+      type: 'webpage',
+      label: meta.label,
+      defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>), url },
+      position: pos,
+    });
+    if (!newNode) return;
+    const sourceMeta = byNodeType(source.type);
+    const srcHandle = sourceMeta?.handles.outputs[0]?.id ?? null;
+    const tgtHandle = meta.handles.inputs[0]?.id ?? null;
+    try {
+      await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sourceNodeId: fromNodeId,
+          targetNodeId: newNode.id,
+          sourceHandle: srcHandle,
+          targetHandle: tgtHandle,
+        }),
+      });
+      await invalidateAll();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   // ——— Drag-to-connect edges ———
   let edgeDrag = $state<{
     sourceId: string;
@@ -2117,8 +2150,10 @@
               durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
               streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
               sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
+              nodeId={n.id}
               oncancel={() => cancelExplore(n.id)}
               ondone={(result) => finaliseResearch(n.id, result)}
+              onopenaswebpage={(e) => openAsWebpageNode(e.url, e.fromNodeId)}
             />
             <div
               class="chat-node-resize"
