@@ -637,7 +637,7 @@
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest(
-      '.wf-node, .chat-node, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, .add-node-menu, button, a, input, textarea, select',
+      '.wf-node, .chat-node, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, button, a, input, textarea, select',
     );
   }
 
@@ -674,7 +674,7 @@
     if (
       target &&
       target.closest(
-        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
       )
     ) {
       return;
@@ -856,41 +856,7 @@
 
   const modelCatalogue = $derived(data.modelCatalogue);
   const nodeTypes = $derived(data.nodeTypes);
-  let addNodeOpen = $state(false);
-  let addNodeFilter = $state('');
-  let addNodeCategory = $state<string | null>(null);
-  let addNodeWrapEl: HTMLDivElement | undefined = $state(undefined);
 
-  const nodeGroupsOrdered = $derived(() => {
-    // Preserve the declared order from CANVAS_NODE_TYPES
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const t of nodeTypes) {
-      if (!seen.has(t.group)) {
-        seen.add(t.group);
-        ordered.push(t.group);
-      }
-    }
-    return ordered;
-  });
-
-  const nodeTypesByGroup = $derived(() => {
-    const m = new Map<string, NodeTypeOption[]>();
-    for (const t of nodeTypes) {
-      const arr = m.get(t.group) ?? [];
-      arr.push(t);
-      m.set(t.group, arr);
-    }
-    return m;
-  });
-
-  const nodeSearchResults = $derived(() => {
-    const q = addNodeFilter.trim().toLowerCase();
-    if (!q) return [];
-    return nodeTypes.filter((t) =>
-      `${t.label} ${t.type} ${t.description}`.toLowerCase().includes(q),
-    );
-  });
 
   function viewportCenterInWorld(): { x: number; y: number } {
     if (!viewportEl) return { x: 320, y: 120 };
@@ -1055,9 +1021,6 @@
     defaultConfig: Record<string, unknown>;
     position?: { x: number; y: number };
   }): Promise<{ id: string } | null> {
-    addNodeOpen = false;
-    addNodeFilter = '';
-    addNodeCategory = null;
     addError = null;
     actionError = null;
     const position = opt.position ?? viewportCenterInWorld();
@@ -1512,7 +1475,6 @@
       if (ev.key === 'Escape') {
         menuForNodeId = null;
         selectedId = null;
-        addNodeOpen = false;
         pipePickerOpen = false;
         edgeInspectorFor = null;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
@@ -1562,30 +1524,6 @@
     }
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
-  });
-
-  // Close the add-node menu on outside click. composedPath() is captured
-  // at event dispatch time, so it stays valid even if Svelte detaches the
-  // clicked element during its reactive re-render (which is exactly what
-  // happens when the click changes addNodeCategory).
-  $effect(() => {
-    if (!addNodeOpen) return;
-    function onDocClick(ev: MouseEvent) {
-      if (!addNodeWrapEl) return;
-      const path = ev.composedPath();
-      if (path.includes(addNodeWrapEl)) return;
-      addNodeOpen = false;
-    }
-    window.addEventListener('click', onDocClick);
-    return () => window.removeEventListener('click', onDocClick);
-  });
-
-  // Reset drill-down state whenever the menu closes
-  $effect(() => {
-    if (!addNodeOpen) {
-      addNodeCategory = null;
-      addNodeFilter = '';
-    }
   });
 
   // Resume SSE if the server says there's an in-flight run at load
@@ -1665,121 +1603,6 @@
       {#if runMeta.state === 'failed'}
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
       {/if}
-      <span class="sep-v"></span>
-      <div class="add-node-wrap" bind:this={addNodeWrapEl}>
-        <button
-          class="composer-pill"
-          onclick={() => (addNodeOpen = !addNodeOpen)}
-          title="Add a new node"
-        >
-          + node
-        </button>
-        {#if addError}
-          <span class="run-err" title={addError}>⚠ add failed</span>
-        {/if}
-        {#if addNodeOpen}
-          {@const hasTrigger = viewNodes.some((n) => n.kind === 'trigger')}
-          {@const searchActive = addNodeFilter.trim().length > 0}
-          {@const searchHits = nodeSearchResults()}
-          {@const byGroup = nodeTypesByGroup()}
-          {@const groupsOrdered = nodeGroupsOrdered()}
-          {@const currentItems =
-            addNodeCategory && byGroup.has(addNodeCategory)
-              ? byGroup.get(addNodeCategory) ?? []
-              : []}
-          <div class="add-node-menu" role="menu" aria-label="Add node">
-            <input
-              class="add-node-search"
-              type="text"
-              bind:value={addNodeFilter}
-              placeholder="Search all node types…"
-              onkeydown={(e) => {
-                if (e.key === 'Escape') {
-                  if (addNodeFilter) {
-                    addNodeFilter = '';
-                  } else if (addNodeCategory) {
-                    addNodeCategory = null;
-                  } else {
-                    addNodeOpen = false;
-                  }
-                }
-              }}
-            />
-
-            <div class="add-node-scroll">
-              {#if searchActive}
-                <!-- Search mode: flat results, ignore drill-down -->
-                {#if searchHits.length === 0}
-                  <div class="add-node-empty">No types match "{addNodeFilter}"</div>
-                {:else}
-                  <div class="add-node-group">{searchHits.length} result{searchHits.length === 1 ? '' : 's'}</div>
-                  {#each searchHits as t (t.type)}
-                    {@const blocked = t.type === 'trigger' && hasTrigger}
-                    <button
-                      class="add-node-item"
-                      class:blocked
-                      role="menuitem"
-                      disabled={blocked}
-                      onclick={() => !blocked && addNode(t)}
-                      title={blocked ? 'This canvas already has a trigger' : t.description}
-                    >
-                      <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                      <span class="add-node-stack">
-                        <span class="add-node-label">{t.label}</span>
-                        <span class="add-node-group-hint">{t.group}</span>
-                      </span>
-                      <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
-                    </button>
-                  {/each}
-                {/if}
-              {:else if addNodeCategory}
-                <!-- Level 2: items within a category -->
-                <button
-                  class="add-node-back"
-                  onclick={() => (addNodeCategory = null)}
-                  title="Back to categories"
-                >
-                  ← All categories
-                </button>
-                <div class="add-node-group">{addNodeCategory}</div>
-                {#each currentItems as t (t.type)}
-                  {@const blocked = t.type === 'trigger' && hasTrigger}
-                  <button
-                    class="add-node-item"
-                    class:blocked
-                    role="menuitem"
-                    disabled={blocked}
-                    onclick={() => !blocked && addNode(t)}
-                    title={blocked ? 'This canvas already has a trigger' : t.description}
-                  >
-                    <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                    <span class="add-node-stack">
-                      <span class="add-node-label">{t.label}</span>
-                      <span class="add-node-desc">{t.description}</span>
-                    </span>
-                    <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
-                  </button>
-                {/each}
-              {:else}
-                <!-- Level 1: category cards -->
-                <div class="add-node-group">Pick a category</div>
-                {#each groupsOrdered as g (g)}
-                  {@const items = byGroup.get(g) ?? []}
-                  <button
-                    class="add-node-category"
-                    role="menuitem"
-                    onclick={() => (addNodeCategory = g)}
-                  >
-                    <span class="add-node-category-label">{g}</span>
-                    <span class="add-node-category-count">{items.length}</span>
-                    <span class="add-node-category-chev">›</span>
-                  </button>
-                {/each}
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </div>
       <span class="sep-v"></span>
       <div class="hifi-zoomctl">
         <button onclick={() => zoomCentered(1 / 1.2)} title="Zoom out">−</button><span class="zv"
@@ -3569,197 +3392,6 @@
     font-size: 10px;
     color: #c44;
     padding: 0 6px;
-  }
-  .add-node-wrap {
-    position: relative;
-  }
-  .add-node-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    width: 340px;
-    background: var(--bg);
-    border: 1.5px solid var(--accent);
-    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    padding: 4px;
-  }
-  .add-node-search {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 6px 8px;
-    margin: 2px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    color: var(--text-primary);
-    outline: none;
-  }
-  .add-node-search:focus {
-    border-color: var(--accent);
-  }
-  .add-node-scroll {
-    /* No scrollbar; the menu grows to fit its contents. */
-  }
-  .add-node-group {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-ghost);
-    padding: 8px 6px 4px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--divider);
-  }
-  .add-node-empty {
-    padding: 24px 10px;
-    text-align: center;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-ghost);
-    font-style: italic;
-  }
-
-  /* Category cards (level 1) */
-  .add-node-category {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 10px;
-    margin: 2px 2px;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    text-align: left;
-    color: var(--text-primary);
-    transition: border-color 0.12s, background 0.12s;
-  }
-  .add-node-category:hover {
-    background: var(--accent-tint-08);
-    border-color: var(--accent);
-  }
-  .add-node-category-label {
-    flex: 1;
-    font-size: 12px;
-    font-weight: 500;
-  }
-  .add-node-category-count {
-    font-size: 9px;
-    color: var(--text-ghost);
-    letter-spacing: 0.1em;
-    padding: 2px 8px;
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-  }
-  .add-node-category-chev {
-    color: var(--text-ghost);
-    font-size: 14px;
-  }
-
-  /* Back button (level 2 header) */
-  .add-node-back {
-    display: block;
-    width: calc(100% - 4px);
-    margin: 2px;
-    padding: 6px 8px;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    text-align: left;
-  }
-  .add-node-back:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-
-  /* Stacked label (used in search and category views) */
-  .add-node-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-  }
-  .add-node-desc {
-    font-size: 9px;
-    color: var(--text-ghost);
-    line-height: 1.4;
-    text-transform: none;
-    letter-spacing: 0;
-    white-space: normal;
-    word-break: break-word;
-  }
-  .add-node-group-hint {
-    font-size: 9px;
-    color: var(--text-ghost);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .add-node-item {
-    align-items: flex-start;
-    padding: 6px 8px;
-  }
-  .add-node-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    cursor: pointer;
-    font-family: var(--font-mono);
-    text-align: left;
-    color: var(--text-primary);
-  }
-  .add-node-item:hover:not(.blocked) {
-    background: var(--accent-tint-08);
-    border-color: var(--card-border);
-  }
-  .add-node-item.blocked {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .add-node-kind-bar {
-    display: inline-block;
-    width: 3px;
-    height: 14px;
-    background: var(--text-ghost);
-    flex-shrink: 0;
-  }
-  .add-node-kind-bar[data-kind='llm'],
-  .add-node-kind-bar[data-kind='intel'] {
-    background: var(--accent);
-  }
-  .add-node-kind-bar[data-kind='parse'] {
-    background: #c44;
-  }
-  .add-node-kind-bar[data-kind='output'],
-  .add-node-kind-bar[data-kind='agent'] {
-    background: var(--text-primary);
-  }
-  .add-node-kind-bar[data-kind='input'] {
-    background: var(--text-muted);
-  }
-  .add-node-label {
-    font-size: 11px;
-    font-weight: 500;
-  }
-  .add-node-type {
-    font-size: 9px;
-    color: var(--text-ghost);
-    margin-left: auto;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
   .hifi-zoomctl {
     display: inline-flex;
