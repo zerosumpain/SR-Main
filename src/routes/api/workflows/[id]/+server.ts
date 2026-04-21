@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { recordAuditBatch } from '$lib/canvas/audit';
+import { diffWorkflowPatch } from '$lib/canvas/audit-diff';
 
 export const GET: RequestHandler = async ({ params }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -23,6 +25,25 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   const [existing] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!existing) {
     return json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const wfEntries = diffWorkflowPatch(
+    { name: existing.name, description: existing.description },
+    {
+      name: typeof name === 'string' ? name : undefined,
+      description: typeof description === 'string' ? description : undefined,
+    },
+  );
+  if (wfEntries.length > 0) {
+    await recordAuditBatch(
+      wfEntries.map((e) => ({
+        workflowId: params.id,
+        entity: 'workflow' as const,
+        entityId: params.id,
+        action: e.action,
+        details: e.details,
+      })),
+    );
   }
 
   await db.update(workflows).set({

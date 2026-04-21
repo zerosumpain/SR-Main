@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowSchedules } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { registerCronJob, unregisterCronJob } from '$lib/workflows/scheduler';
+import { recordAudit } from '$lib/canvas/audit';
 
 /**
  * PUT /api/workflows/:id/trigger
@@ -110,6 +111,22 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   for (const t of triggerNode) {
     await db.update(workflowNodes).set({ config: nodeConfig }).where(eq(workflowNodes.id, t.id));
   }
+
+  await recordAudit({
+    workflowId: params.id,
+    entity: 'trigger',
+    entityId: params.id,
+    action: 'update',
+    details: {
+      old: (workflow.trigger as Record<string, unknown>) ?? null,
+      new: {
+        kind,
+        cron: kind === 'cron' ? cron : null,
+        eventType: kind === 'event' ? eventType : null,
+        enabled,
+      },
+    },
+  });
 
   return json({ trigger: triggerMetadata });
 };
