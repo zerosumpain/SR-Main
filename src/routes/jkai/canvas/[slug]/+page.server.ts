@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ params }) => {
         streamUrl:
           e.engine === 'deep'
             ? `/api/deepdive/${e.sessionId}/stream`
-            : `/api/quickanswer/${e.sessionId}/stream`,
+            : `/quickanswer/${e.sessionId}/stream`,
       },
     ]),
   );

@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       .values({ topic, goals, status: 'pending' })
       .returning({ id: quickAnswers.id });
     sessionId = row.id;
-    streamUrl = `/api/quickanswer/${sessionId}/stream`;
+    streamUrl = `/quickanswer/${sessionId}/stream`;
     startQuickAnswer(sessionId).catch((err) =>
       console.error('[explore] quick-answer start failed:', err),
     );
