@@ -45,7 +45,7 @@
       }
 
       const build = await res.json();
-      goto(`/jkai/${build.id}`);
+      goto(`/jkai/builds/${build.id}`);
     } catch (err: any) {
       error = err.message;
     } finally {
