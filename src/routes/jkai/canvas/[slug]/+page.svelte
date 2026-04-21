@@ -11,6 +11,7 @@
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
+  import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
@@ -79,6 +80,7 @@
       inspector: { w: INSPECTOR_NODE_W, h: INSPECTOR_NODE_H },
       stats: { w: 420, h: 360 },
       intelligence: { w: 340, h: 420 },
+      webpage: { w: 720, h: 480 },
     };
     const { w: defaultW, h: defaultH } = defaults[n.kind] ?? { w: NODE_W, h: NODE_H };
     return {
@@ -201,12 +203,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -2045,6 +2047,64 @@
               oncancel={() => cancelExplore(n.id)}
               ondone={(result) => finaliseResearch(n.id, result)}
             />
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
+        {:else if n.kind === 'webpage'}
+          {@const wsize = resizableSize(n)}
+          <div
+            class="chat-node webpage-node-wrapper"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{wsize.w}px"
+            style:height="{wsize.h}px"
+            role="group"
+            aria-label="Webpage node"
+            onpointerdown={(e) => e.stopPropagation()}
+          >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
+            <div
+              class="chat-node-hdr webpage-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="webpage-bar"></span>
+              <span class="chat-node-title">WEB</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+            <div class="webpage-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              <WebpageNode
+                nodeId={n.id}
+                config={(n.config as WebpageConfig) ?? { url: '', mode: null, size: { w: 720, h: 480 } }}
+                onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+              />
+            </div>
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -4791,6 +4851,26 @@
     width: 3px;
     align-self: stretch;
     background: #5dbea3;
+  }
+
+  /* ——— Webpage node ——— */
+  .webpage-bar {
+    display: inline-block;
+    width: 4px;
+    height: 1em;
+    background: var(--accent, #7aa2f7);
+    margin-right: 6px;
+    border-radius: 1px;
+  }
+  .webpage-node-wrapper .chat-node-hdr {
+    gap: 4px;
+  }
+  .webpage-node-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Flash animation for scrollToNode */
