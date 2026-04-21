@@ -776,11 +776,39 @@
   let labelInputEl = $state<HTMLInputElement | undefined>(undefined);
   let renameRequested = $state(false);
 
+  // Session lists for the research-result picker (lazy-loaded when menu opens).
+  let deepSessions = $state<Array<{ id: string; topic: string; status: string; createdAt: string }>>([]);
+  let quickSessions = $state<Array<{ id: string; topic: string; status: string; createdAt: string }>>([]);
+  let sessionsLoaded = $state<{ deep: boolean; quick: boolean }>({ deep: false, quick: false });
+  async function loadSessionsFor(engine: 'deep' | 'quick') {
+    if (engine === 'deep' && !sessionsLoaded.deep) {
+      try {
+        const res = await fetch('/api/deepdive');
+        if (res.ok) deepSessions = await res.json();
+      } catch (err) { console.error('[canvas] deep sessions list failed', err); }
+      sessionsLoaded.deep = true;
+    }
+    if (engine === 'quick' && !sessionsLoaded.quick) {
+      try {
+        const res = await fetch('/api/quickanswer');
+        if (res.ok) quickSessions = await res.json();
+      } catch (err) { console.error('[canvas] quick sessions list failed', err); }
+      sessionsLoaded.quick = true;
+    }
+  }
+
   $effect(() => {
     if (renameRequested && menuNode && labelInputEl) {
       labelInputEl.focus();
       labelInputEl.select();
       renameRequested = false;
+    }
+  });
+
+  $effect(() => {
+    if (menuNode?.type === 'research-result') {
+      const engine = (menuNode.config?.engine as 'deep' | 'quick') ?? 'deep';
+      loadSessionsFor(engine);
     }
   });
 
@@ -2701,6 +2729,117 @@
                       {/if}
                     </div>
                   </section>
+                {:else if menuNode.type === 'quick-answer'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">TOPIC</span>
+                      <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="2"
+                        value={(configDraft.topic as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
+                        placeholder={'What is the impact of …'}
+                      ></textarea>
+                    </div>
+                  </section>
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">GOALS</span>
+                      <span class="nm-sec-meta">optional — one per line</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="3"
+                        value={Array.isArray(configDraft.goals) ? (configDraft.goals as string[]).join('\n') : ((configDraft.goals as string) ?? '')}
+                        oninput={(e) => {
+                          const lines = (e.target as HTMLTextAreaElement).value.split('\n').map((l) => l.trim()).filter(Boolean);
+                          setConfigField('goals', lines);
+                        }}
+                        placeholder="Understand key players, risks, opportunities"
+                      ></textarea>
+                    </div>
+                  </section>
+                  <section class="nm-sec nm-sec-row">
+                    <div class="nm-control">
+                      <span class="sr-label-tight">MAX WAIT (MS)</span>
+                      <input
+                        class="nm-text-input"
+                        type="number"
+                        value={(configDraft.maxWaitMs as number) ?? 180000}
+                        oninput={(e) =>
+                          setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 180000)}
+                      />
+                    </div>
+                    <div class="nm-control">
+                      <span class="sr-label-tight">POLL INTERVAL</span>
+                      <input
+                        class="nm-text-input"
+                        type="number"
+                        value={(configDraft.pollIntervalMs as number) ?? 1500}
+                        oninput={(e) =>
+                          setConfigField('pollIntervalMs', Number((e.target as HTMLInputElement).value) || 1500)}
+                      />
+                    </div>
+                  </section>
+                {:else if menuNode.type === 'deep-research'}
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">TOPIC</span>
+                      <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="2"
+                        value={(configDraft.topic as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
+                        placeholder={'{{item.title}}'}
+                      ></textarea>
+                    </div>
+                  </section>
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">GOALS</span>
+                      <span class="nm-sec-meta">optional — free text</span>
+                    </div>
+                    <div class="nm-field">
+                      <textarea
+                        rows="3"
+                        value={(configDraft.goals as string) ?? ''}
+                        oninput={(e) =>
+                          setConfigField('goals', (e.target as HTMLTextAreaElement).value)}
+                        placeholder="Key advances, practical applications"
+                      ></textarea>
+                    </div>
+                  </section>
+                  <section class="nm-sec nm-sec-row">
+                    <div class="nm-control">
+                      <span class="sr-label-tight">DEPTH</span>
+                      <select
+                        class="nm-text-input"
+                        value={(configDraft.depth as string) ?? 'medium'}
+                        onchange={(e) =>
+                          setConfigField('depth', (e.target as HTMLSelectElement).value)}
+                      >
+                        <option value="shallow">shallow</option>
+                        <option value="medium">medium</option>
+                        <option value="deep">deep</option>
+                      </select>
+                    </div>
+                    <div class="nm-control">
+                      <span class="sr-label-tight">MAX WAIT (MS)</span>
+                      <input
+                        class="nm-text-input"
+                        type="number"
+                        value={(configDraft.maxWaitMs as number) ?? 900000}
+                        oninput={(e) =>
+                          setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 900000)}
+                      />
+                    </div>
+                  </section>
                 {:else if menuNode.type === 'intel-write'}
                   <section class="nm-sec">
                     <div class="nm-sec-hd">
@@ -2753,6 +2892,106 @@
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
                       <pre>{pretty(menuNode.inputData)}</pre>
+                    {:else}
+                      <pre class="ghost">// no run yet</pre>
+                    {/if}
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'intelligence' && menuNode.type === 'research-result'}
+                {@const rrEngine = ((configDraft.engine as string) ?? 'deep') as 'deep' | 'quick'}
+                {@const rrSessions = rrEngine === 'deep' ? deepSessions : quickSessions}
+                <section class="nm-sec nm-sec-row">
+                  <div class="nm-control">
+                    <span class="sr-label-tight">ENGINE</span>
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.engine as string) ?? 'deep'}
+                      onchange={(e) => {
+                        const engine = (e.target as HTMLSelectElement).value as 'deep' | 'quick';
+                        setConfigField('engine', engine);
+                        loadSessionsFor(engine);
+                      }}
+                    >
+                      <option value="deep">Deep research</option>
+                      <option value="quick">Quick research</option>
+                    </select>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">PICK EXISTING SESSION</span>
+                    <span class="nm-sec-meta">most recent first</span>
+                  </div>
+                  <select
+                    class="nm-text-input"
+                    value={(configDraft.sessionId as string) ?? ''}
+                    onchange={(e) => {
+                      const id = (e.target as HTMLSelectElement).value;
+                      setConfigField('sessionId', id);
+                      const found = rrSessions.find((s) => s.id === id);
+                      if (found) setConfigField('topic', found.topic);
+                    }}
+                  >
+                    <option value="">— select a session —</option>
+                    {#each rrSessions as s (s.id)}
+                      <option value={s.id}>{s.topic} · {s.status}</option>
+                    {/each}
+                  </select>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">SESSION ID</span>
+                    <span class="nm-sec-meta">or template from upstream · {'{{input.researchSessionId}}'}</span>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      rows="1"
+                      value={(configDraft.sessionId as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('sessionId', (e.target as HTMLTextAreaElement).value)}
+                      placeholder={'{{input.researchSessionId}}'}
+                    ></textarea>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">TOPIC</span>
+                    <span class="nm-sec-meta">shown in header</span>
+                  </div>
+                  <div class="nm-field">
+                    <input
+                      class="nm-text-input"
+                      type="text"
+                      value={(configDraft.topic as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('topic', (e.target as HTMLInputElement).value)}
+                    />
+                  </div>
+                </section>
+              {:else if menuNode.kind === 'intelligence' && menuNode.type === 'intelligence'}
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">QUERY</span>
+                    <span class="nm-sec-meta">edit inline on the node for live preview</span>
+                  </div>
+                  <div class="nm-field">
+                    <textarea
+                      rows="2"
+                      value={(configDraft.query as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('query', (e.target as HTMLTextAreaElement).value)}
+                      placeholder="new projects"
+                    ></textarea>
+                  </div>
+                </section>
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">CURRENT FOCUS</span>
+                    <span class="nm-sec-meta">from last run</span>
+                  </div>
+                  <div class="nm-field nm-field-read">
+                    {#if menuNode.outputData !== undefined}
+                      <pre>{pretty((menuNode.outputData as any)?.intelFocus ?? menuNode.outputData)}</pre>
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
