@@ -190,6 +190,25 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     } catch {}
   }, maxWallClockMs);
 
+  // Idle-watchdog: if pi emits nothing on stdout for this long, assume the
+  // upstream API connection has stalled (seen with ZAI hanging mid-stream)
+  // and kill the subprocess so the orchestrator can move on.
+  const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+  let lastOutputAt = Date.now();
+  const idleCheck = setInterval(() => {
+    if (Date.now() - lastOutputAt > IDLE_TIMEOUT_MS) {
+      try {
+        child.kill('SIGTERM');
+        emitLog(
+          build.id,
+          'error',
+          `Pi idle for ${Math.round(IDLE_TIMEOUT_MS / 1000)}s with no stream events — likely a stalled upstream connection. Killed.`,
+          iteration.id,
+        );
+      } catch {}
+    }
+  }, 15000);
+
   let stdoutBuf = '';
   let stderrBuf = '';
 
@@ -197,6 +216,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   child.stderr.setEncoding('utf-8');
 
   child.stdout.on('data', (chunk: string) => {
+    lastOutputAt = Date.now();
     stdoutBuf += chunk;
     let nlIdx = stdoutBuf.indexOf('\n');
     while (nlIdx !== -1) {
@@ -356,6 +376,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   });
 
   clearInterval(stopTimer);
+  clearInterval(idleCheck);
   clearTimeout(wallClockTimer);
 
   if (exitCode !== 0 && !errorMessage) {
