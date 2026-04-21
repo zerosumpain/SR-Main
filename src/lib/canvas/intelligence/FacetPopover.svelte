@@ -69,8 +69,8 @@
 <style>
   .facet-popover {
     position: absolute;
-    background: var(--card-bg, #0e1014);
-    border: 1px solid var(--card-border, #2a2e37);
+    background: var(--bg);
+    border: 1px solid var(--text-primary);
     padding: 10px 12px;
     border-radius: 8px;
     font-size: 11px;
@@ -95,15 +95,15 @@
     margin-bottom: 4px;
   }
   .chip {
-    background: transparent;
+    background: var(--bg);
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--divider);
     border-radius: 12px;
     padding: 2px 8px;
     margin: 2px 4px 2px 0;
     font-size: 10px;
     cursor: pointer;
   }
-  .chip:hover { color: var(--text-primary); }
-  .chip.active { color: var(--text-primary); border-color: var(--accent); }
+  .chip:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .chip.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 </style>

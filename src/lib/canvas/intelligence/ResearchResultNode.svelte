@@ -164,13 +164,12 @@
 <style>
   .research-result {
     position: relative;
-    width: 340px;
-    height: 360px;
-    background: var(--card-bg, #0c0e12);
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
     border: 1.5px solid #5dbea3;
-    border-radius: 8px;
-    color: var(--text-primary, #ddd);
-    font-family: var(--font-mono, ui-monospace, monospace);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -205,15 +204,16 @@
   .kind-bar { width: 3px; align-self: stretch; background: #5dbea3; }
   .title { flex: 1; }
   .cancel {
-    background: transparent;
+    background: var(--bg);
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--divider);
     border-radius: 10px;
     padding: 0 6px;
     font: inherit;
     font-size: 10px;
     cursor: pointer;
   }
+  .cancel:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .pending {
     flex: 1;
     display: flex;
@@ -224,7 +224,7 @@
   }
   .spinner {
     width: 16px; height: 16px;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--divider);
     border-top-color: #5dbea3;
     border-radius: 50%;
     animation: spin 0.9s linear infinite;

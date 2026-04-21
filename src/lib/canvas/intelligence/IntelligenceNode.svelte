@@ -338,14 +338,15 @@
 <style>
   .intelligence-node {
     position: relative;
-    background: var(--card-bg, #0c0e12);
+    background: var(--bg);
     border: 1.5px solid #5dbea3;
-    border-radius: 8px;
-    color: var(--text-primary, #ddd);
-    font-family: var(--font-mono, ui-monospace, monospace);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    width: 100%;
+    height: 100%;
   }
   .header {
     display: flex;
@@ -365,15 +366,16 @@
   .query-wrap { padding: 6px 8px; }
   .query {
     width: 100%;
-    background: transparent;
+    background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border, #2a2e37);
+    border: 1px solid var(--divider);
     border-radius: 6px;
     padding: 6px;
     font: inherit;
     font-size: 11px;
     resize: none;
   }
+  .query:focus { outline: none; border-color: var(--text-muted); }
   /* Category pills */
   .category-row {
     display: flex;
@@ -382,9 +384,9 @@
     padding: 0 8px 6px;
   }
   .cat-pill {
-    background: transparent;
+    background: var(--bg);
     color: var(--text-muted);
-    border: 1px solid var(--card-border, #2a2e37);
+    border: 1px solid var(--divider);
     border-radius: 10px;
     padding: 2px 7px;
     font: inherit;
@@ -392,9 +394,13 @@
     cursor: pointer;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
+  .cat-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
   .cat-pill.active {
-    background: rgba(93, 190, 163, 0.18);
-    color: #5dbea3;
+    background: #5dbea3;
+    color: var(--bg);
     border-color: #5dbea3;
   }
   /* View mode + facets */
@@ -406,9 +412,9 @@
     padding: 0 8px 6px;
   }
   .view-select {
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid var(--card-border, #2a2e37);
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--divider);
     border-radius: 6px;
     padding: 2px 6px;
     font: inherit;
@@ -417,16 +423,18 @@
     appearance: none;
     -webkit-appearance: none;
   }
+  .view-select:hover { border-color: var(--text-muted); }
   .facet-chip {
-    background: transparent;
+    background: var(--bg);
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--divider);
     border-radius: 12px;
     padding: 2px 8px;
     font: inherit;
     font-size: 10px;
     cursor: pointer;
   }
+  .facet-chip:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .meta {
     font-size: 10px;
     color: var(--text-ghost);
@@ -535,8 +543,8 @@
     position: absolute;
     bottom: 38px;
     left: 8px;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    background: var(--bg);
+    border: 1px solid var(--text-primary);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
