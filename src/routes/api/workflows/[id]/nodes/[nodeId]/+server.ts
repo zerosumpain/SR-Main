@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowNodes, workflowEdges } from '$lib/db/schema';
 import { and, eq, or } from 'drizzle-orm';
+import { recordAudit, recordAuditBatch } from '$lib/canvas/audit';
+import { diffNodePatch } from '$lib/canvas/audit-diff';
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
@@ -15,6 +17,13 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     return json({ error: 'No updatable fields provided' }, { status: 400 });
   }
 
+  // Load current state BEFORE the update so we can diff.
+  const [before] = await db
+    .select()
+    .from(workflowNodes)
+    .where(and(eq(workflowNodes.id, params.nodeId), eq(workflowNodes.workflowId, params.id)));
+  if (!before) return json({ error: 'Node not found' }, { status: 404 });
+
   const [updated] = await db
     .update(workflowNodes)
     .set(updates)
@@ -23,6 +32,30 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
   if (!updated) {
     return json({ error: 'Node not found' }, { status: 404 });
+  }
+
+  // Emit audit entries for non-cosmetic changes.
+  const entries = diffNodePatch(
+    {
+      label: before.label,
+      config: (before.config as Record<string, unknown>) ?? {},
+      position: (before.position as { x: number; y: number }) ?? { x: 0, y: 0 },
+    },
+    {
+      label: typeof body.label === 'string' ? body.label : undefined,
+      config: body.config as Record<string, unknown> | undefined,
+    },
+  );
+  if (entries.length > 0) {
+    await recordAuditBatch(
+      entries.map((e) => ({
+        workflowId: params.id,
+        entity: 'node' as const,
+        entityId: params.nodeId,
+        action: e.action,
+        details: { ...e.details, label: updated.label, nodeType: updated.type },
+      })),
+    );
   }
 
   return json({ node: updated });
@@ -48,6 +81,15 @@ export const DELETE: RequestHandler = async ({ params }) => {
     .returning();
 
   if (!removed) return json({ error: 'Node not found' }, { status: 404 });
+
+  await recordAudit({
+    workflowId: params.id,
+    entity: 'node',
+    entityId: removed.id,
+    action: 'delete',
+    details: { nodeType: removed.type, label: removed.label },
+  });
+
   return json({ deleted: removed.id });
 };
 

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { recordAudit } from '$lib/canvas/audit';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
@@ -39,6 +40,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .insert(workflowNodes)
     .values({ workflowId: params.id, type, label, position, config })
     .returning();
+
+  await recordAudit({
+    workflowId: params.id,
+    entity: 'node',
+    entityId: node.id,
+    action: 'create',
+    details: { nodeType: node.type, label: node.label },
+  });
 
   return json({ node });
 };
