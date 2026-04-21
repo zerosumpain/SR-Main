@@ -240,7 +240,7 @@ export async function startProjectServer(
     10000,
   );
 
-  const maxAttempts = 30; // 60 seconds total
+  const maxAttempts = 60; // 120 seconds total — npm run dev / framework boots can be slow
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const check = await execInSandbox(

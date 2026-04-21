@@ -111,7 +111,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     workdir,
     systemPrompt,
     userPrompt,
-    maxWallClockMs = 10 * 60 * 1000,
+    maxWallClockMs = 30 * 60 * 1000,
     isStopped,
   } = opts;
 

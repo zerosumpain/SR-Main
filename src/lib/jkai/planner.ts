@@ -20,7 +20,7 @@ Given a project objective, write a delivery plan covering:
 CONSTRAINTS YOUR PLAN MUST RESPECT:
 1. FULL-STACK ALLOWED: The agent runs inside a Linux sandbox with Python, Node, internet access, and root permissions. Servers (Flask, FastAPI, Express, Hono, Next.js, plain http.server) are all supported — the sandbox reverse-proxies the chosen port to the user's browser. Pick whichever stack best serves the objective; static sites are fine, backends are fine.
 2. REAL DATA ONLY: Every data source must be real. Name the specific API, dataset, or scraping target (e.g., Open-Meteo, REST Countries, Wikipedia API, government open-data portals). Never propose placeholder or hardcoded data unless it's explicitly a demo feature the user can edit.
-3. ITERATION SIZING: Each iteration must be completable in a generous but finite budget — roughly 10 minutes of wall-clock, unbounded tool calls. Iteration 1 must produce a visible, served page (even a skeleton). No iteration should attempt to build the complete feature set.
+3. ITERATION SIZING: Each iteration is a full feature slice, up to ~30 minutes of wall-clock and unbounded tool calls. Frame each iteration around ONE complete user-visible capability (e.g. "auth flow working end-to-end", "map view with live GPS", "admin dashboard with CRUD"), not a laundry list of micro-tasks. Iteration 1 must produce a served, reachable page. The project should fit in roughly 3-5 iterations total.
 4. SERVING MODEL: The agent writes a serve.json declaring its start command and port. Any TCP server binding 0.0.0.0 on the assigned port works. Long-lived background workers, WebSockets, and in-memory state are all permitted.
 
 Format your response as:
@@ -53,7 +53,7 @@ Evaluate the proposed plan across these SIX dimensions:
 
 2. DATA SOURCING: Are all proposed APIs real, public, and CORS-accessible from a browser? Look for: vague descriptions ("use an API"), APIs requiring server-side auth, APIs with CORS restrictions without proxy support, placeholder data. For each questionable source, suggest a specific replacement with a concrete API URL.
 
-3. ITERATION SCOPING: Is each iteration realistically completable in ~15 code execution steps? Look for: iterations that build too much at once, iteration 1 not delivering a served page, unclear milestones, cascading dependencies. Flag oversized iterations with "OVERSIZED:" and suggest how to split them.
+3. ITERATION SCOPING: Does each iteration map to ONE coherent user-visible capability the agent can deliver end-to-end in ~30 minutes? Look for: laundry-list iterations ("add X, Y, Z, refactor W"), iteration 1 not delivering a served page, unclear acceptance criteria ("polish the UI" isn't a scope), hidden cross-iteration dependencies. Flag fragmented iterations with "FRAGMENTED:" (split into multiple features jammed together) or "VAGUE:" (no checkable definition of done) and rewrite them as single-capability slices.
 
 4. TECHNICAL FEASIBILITY: Are the technology choices viable in a sandboxed Linux environment with Python 3.12, Node 22, and internet access? Look for: packages requiring native compilation, UI frameworks needing a build step without one, unnecessarily complex patterns. Flag each with "INFEASIBLE:" and explain what won't work.
 
