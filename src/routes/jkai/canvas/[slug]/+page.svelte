@@ -394,6 +394,20 @@
     await sendMessageFrom(chatNodeId, text);
   }
 
+  async function cancelRun() {
+    if (runMeta.state !== 'running') return;
+    const rid = activeRunId;
+    if (rid) {
+      try {
+        await fetch(`/api/workflows/${canvas.workflowId}/runs/${rid}/cancel`, { method: 'POST' });
+      } catch (err) {
+        console.error('[canvas] cancel run failed', err);
+      }
+    }
+    runMeta = { state: 'idle' };
+    pendingRun = null;
+  }
+
   async function runCanvas() {
     // Toolbar Run — a pure workflow execution. No chat message is
     // inserted; the chat panels are untouched. If a chat node is
@@ -1403,25 +1417,35 @@
   <div class="hifi-toolbar">
     <span class="sr-label">Canvas · hi-fi</span>
     <span class="sr-sep">/</span>
-    <span class="mono11 primary">{canvas.title}</span>
+    <span class="mono11 primary canvas-title" title={canvas.title}>{canvas.title}</span>
     <span class="sr-sep">/</span>
-    <span class="mono11 muted">
+    <span class="mono11 muted canvas-stats">
       {viewNodes.length} nodes · {visibleEdges.length} edges · {runningCount} running
     </span>
     <div class="toolbar-right">
       {#if hasStatsNode}
         <TimeFilter value={period} onchange={changePeriod} />
       {/if}
-      <button
-        class="composer-pill run-btn"
-        onclick={runCanvas}
-        disabled={runMeta.state === 'running' || !canvas.workflowId}
-        title={runMeta.state === 'running'
-          ? 'Running…'
-          : 'Fire the trigger. Does NOT touch chat.'}
-      >
-        {runMeta.state === 'running' ? '⟳ running…' : '▶ Run'}
-      </button>
+      {#if runMeta.state === 'running'}
+        <button
+          class="composer-pill run-btn running"
+          onclick={runCanvas}
+          disabled
+          title="Running…"
+        >⟳ running…</button>
+        <button
+          class="composer-pill stop-btn"
+          onclick={cancelRun}
+          title="Cancel the current run"
+        >■ stop</button>
+      {:else}
+        <button
+          class="composer-pill run-btn"
+          onclick={runCanvas}
+          disabled={!canvas.workflowId}
+          title="Fire the trigger. Does NOT touch chat."
+        >▶ Run</button>
+      {/if}
       {#if runMeta.state === 'failed'}
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
       {/if}
@@ -1548,8 +1572,6 @@
       </div>
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
-      <span class="sep-v"></span>
-      <span class="kicker">click to select · F2 rename · ⌫ delete · drag bg to pan</span>
     </div>
   </div>
 
@@ -3176,6 +3198,20 @@
     font-family: var(--font-mono);
     font-size: 11px;
   }
+  .canvas-title {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: bottom;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  .canvas-stats {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
   .mono10 {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -3191,6 +3227,15 @@
     display: flex;
     gap: 4px;
     align-items: center;
+    flex-shrink: 0;
+  }
+  .stop-btn {
+    color: #c44;
+    border-color: #c44;
+  }
+  .stop-btn:hover {
+    color: #e66;
+    border-color: #e66;
   }
   .sep-v {
     width: 1px;
