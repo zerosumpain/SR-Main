@@ -2,6 +2,7 @@
   import type { CanvasNode, NodeStatus } from './+page.server';
   import { invalidateAll, goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -11,9 +12,14 @@
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
+  import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
+  import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
+  import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
+  import { compatibility, type HandleSpec } from '$lib/canvas/handles';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
+  const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
 
   const NODE_W = 148;
   const NODE_H = 52;
@@ -76,6 +82,7 @@
       inspector: { w: INSPECTOR_NODE_W, h: INSPECTOR_NODE_H },
       stats: { w: 420, h: 360 },
       intelligence: { w: 340, h: 420 },
+      webpage: { w: 720, h: 480 },
     };
     const { w: defaultW, h: defaultH } = defaults[n.kind] ?? { w: NODE_W, h: NODE_H };
     return {
@@ -198,12 +205,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence') return resizableSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -634,7 +641,7 @@
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest(
-      '.wf-node, .chat-node, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, .add-node-menu, button, a, input, textarea, select',
+      '.wf-node, .chat-node, .minimap, .legend, .hifi-toolbar, .nm-inline, .edge-inspector, button, a, input, textarea, select',
     );
   }
 
@@ -671,7 +678,7 @@
     if (
       target &&
       target.closest(
-        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .add-node-menu, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
       )
     ) {
       return;
@@ -853,41 +860,7 @@
 
   const modelCatalogue = $derived(data.modelCatalogue);
   const nodeTypes = $derived(data.nodeTypes);
-  let addNodeOpen = $state(false);
-  let addNodeFilter = $state('');
-  let addNodeCategory = $state<string | null>(null);
-  let addNodeWrapEl: HTMLDivElement | undefined = $state(undefined);
 
-  const nodeGroupsOrdered = $derived(() => {
-    // Preserve the declared order from CANVAS_NODE_TYPES
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const t of nodeTypes) {
-      if (!seen.has(t.group)) {
-        seen.add(t.group);
-        ordered.push(t.group);
-      }
-    }
-    return ordered;
-  });
-
-  const nodeTypesByGroup = $derived(() => {
-    const m = new Map<string, typeof nodeTypes>();
-    for (const t of nodeTypes) {
-      const arr = m.get(t.group) ?? [];
-      arr.push(t);
-      m.set(t.group, arr);
-    }
-    return m;
-  });
-
-  const nodeSearchResults = $derived(() => {
-    const q = addNodeFilter.trim().toLowerCase();
-    if (!q) return [];
-    return nodeTypes.filter((t) =>
-      `${t.label} ${t.type} ${t.description}`.toLowerCase().includes(q),
-    );
-  });
 
   function viewportCenterInWorld(): { x: number; y: number } {
     if (!viewportEl) return { x: 320, y: 120 };
@@ -900,19 +873,165 @@
     return { x, y };
   }
 
+  function screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    if (!viewportEl) return { x: 0, y: 0 };
+    const vp = viewportEl.getBoundingClientRect();
+    return {
+      x: (clientX - vp.left - panX) / zoom,
+      y: (clientY - vp.top - panY) / zoom,
+    };
+  }
+
+  function resolveOverlap(p: { x: number; y: number }): { x: number; y: number } {
+    let { x, y } = p;
+    const limit = 20;
+    for (let i = 0; i < limit; i++) {
+      const clashes = (canvas?.nodes ?? []).some(
+        (n) => Math.hypot(n.x - x, n.y - y) < 40,
+      );
+      if (!clashes) return { x, y };
+      x += 24;
+      y += 24;
+    }
+    return { x, y };
+  }
+
+  function inputsFor(type: string): HandleSpec[] {
+    return (byNodeType(type)?.handles.inputs ?? []) as HandleSpec[];
+  }
+  function outputsFor(type: string): HandleSpec[] {
+    return (byNodeType(type)?.handles.outputs ?? []) as HandleSpec[];
+  }
+  function allKinds(specs: HandleSpec[]): string[] {
+    const s = new Set<string>();
+    for (const h of specs) for (const k of h.kinds) s.add(k);
+    return Array.from(s);
+  }
+
+  // ——— Node palette (cmd-K / right-click / long-press / drag-from-handle) ———
+  let paletteOpen = $state(false);
+  let paletteAnchor = $state<{ x: number; y: number } | 'center'>('center');
+  let paletteMode = $state<PaletteMode>({ kind: 'workflow-ranked' });
+  let paletteFromNodeId = $state<string | null>(null);
+  let palettePositionOverride = $state<{ x: number; y: number } | null>(null);
+
+  function openPalette(opts: {
+    anchor: { x: number; y: number } | 'center';
+    mode: PaletteMode;
+    fromNodeId?: string | null;
+    worldPosition?: { x: number; y: number } | null;
+  }) {
+    paletteAnchor = opts.anchor;
+    paletteMode = opts.mode;
+    paletteFromNodeId = opts.fromNodeId ?? null;
+    palettePositionOverride = opts.worldPosition ?? null;
+    paletteOpen = true;
+  }
+  function closePalette() {
+    paletteOpen = false;
+    paletteFromNodeId = null;
+    palettePositionOverride = null;
+  }
+
+  async function onPalettePick(type: string) {
+    const meta = byNodeType(type);
+    if (!meta) {
+      closePalette();
+      return;
+    }
+    const worldPos = palettePositionOverride ?? viewportCenterInWorld();
+    const placement = resolveOverlap(worldPos);
+    const newNode = await addNode({
+      type: meta.type,
+      label: meta.label,
+      defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>) },
+      position: placement,
+    });
+    if (paletteFromNodeId && newNode) {
+      const source = byId[paletteFromNodeId];
+      if (source) {
+        const sourceMeta = byNodeType(source.type);
+        const srcHandle = sourceMeta?.handles.outputs[0]?.id ?? null;
+        const tgtHandle = meta.handles.inputs[0]?.id ?? null;
+        try {
+          await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sourceNodeId: paletteFromNodeId,
+              targetNodeId: newNode.id,
+              sourceHandle: srcHandle,
+              targetHandle: tgtHandle,
+            }),
+          });
+          await invalidateAll();
+          if (meta.type === 'webpage') {
+            await syncWebpageFromUpstream(newNode.id);
+          }
+        } catch (err) {
+          actionError = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    closePalette();
+  }
+
+  // Long-press (touch) trigger state
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressStart: { x: number; y: number } | null = null;
+
+  function onViewportTouchStart(e: TouchEvent) {
+    if (!NEW_PALETTE) return;
+    if (paletteOpen) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('.chat-node, .wf-node')) return;
+    const t = e.touches[0];
+    if (!t) return;
+    longPressStart = { x: t.clientX, y: t.clientY };
+    longPressTimer = setTimeout(() => {
+      const world = screenToWorld(t.clientX, t.clientY);
+      openPalette({
+        anchor: { x: t.clientX, y: t.clientY },
+        mode: { kind: 'workflow-ranked' },
+        worldPosition: world,
+      });
+    }, 450);
+  }
+
+  $effect(() => {
+    return () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+    };
+  });
+  function onViewportTouchMove(e: TouchEvent) {
+    if (!longPressStart) return;
+    const t = e.touches[0];
+    if (!t) return;
+    if (Math.hypot(t.clientX - longPressStart.x, t.clientY - longPressStart.y) > 10) {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+    }
+  }
+  function onViewportTouchEnd() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = null;
+    longPressStart = null;
+  }
+
   let addError = $state<string | null>(null);
 
   async function addNode(opt: {
     type: string;
     label: string;
     defaultConfig: Record<string, unknown>;
-  }) {
-    addNodeOpen = false;
-    addNodeFilter = '';
-    addNodeCategory = null;
+    position?: { x: number; y: number };
+  }): Promise<{ id: string } | null> {
     addError = null;
     actionError = null;
-    const position = viewportCenterInWorld();
+    const position = opt.position ?? viewportCenterInWorld();
     try {
       const res = await fetch(`/api/workflows/${canvas.workflowId}/nodes`, {
         method: 'POST',
@@ -931,10 +1050,15 @@
       }
       const newId = body.node?.id as string | undefined;
       await invalidateAll();
-      if (newId) selectedId = newId;
+      if (newId) {
+        selectedId = newId;
+        return { id: newId };
+      }
+      return null;
     } catch (err) {
       addError = err instanceof Error ? err.message : String(err);
       actionError = addError;
+      return null;
     }
   }
   const knownModelValues = $derived(
@@ -1042,6 +1166,73 @@
     }
   }
 
+  // ——— Webpage node runtime outputs ———
+
+  const webpageOutputs = $state<Record<string, Record<string, string>>>({});
+
+  function webpageNodeOutput(
+    nodeId: string,
+    handleId: 'currentUrl' | 'selectedText' | 'extractedText',
+    value: string,
+  ) {
+    const existing = webpageOutputs[nodeId] ?? {};
+    if (existing[handleId] === value) return;
+    webpageOutputs[nodeId] = { ...existing, [handleId]: value };
+    propagateWebpageOutput(nodeId, handleId, value);
+  }
+
+  function propagateWebpageOutput(
+    _nodeId: string,
+    _handleId: 'currentUrl' | 'selectedText' | 'extractedText',
+    _value: string,
+  ) {
+    // Outputs are consumed by downstream nodes via run data; UI-side propagation
+    // is not needed in v1. Hook reserved for later.
+  }
+
+  function extractFirstUrl(s: string): string | null {
+    const m = s.match(/\bhttps?:\/\/\S+/i);
+    return m ? m[0] : null;
+  }
+
+  // Seeded when a webpage node is created with an upstream connection: check
+  // the last known output of the upstream node and set urlDraft / config.url.
+  async function syncWebpageFromUpstream(webpageNodeId: string) {
+    const incoming = (canvas?.edges ?? []).filter((e) => e.to === webpageNodeId);
+    if (incoming.length === 0) return;
+    // Consider the most-recent incoming edge the one that drives the url.
+    const edge = incoming[incoming.length - 1];
+    const source = (canvas?.nodes ?? []).find((n) => n.id === edge.from);
+    if (!source) return;
+    const sourceMeta = byNodeType(source.type);
+    const outputKinds = new Set(
+      (sourceMeta?.handles.outputs ?? []).flatMap((h) => h.kinds),
+    );
+    const outputData = source.outputData as Record<string, unknown> | undefined;
+    let candidate: string | undefined;
+    if (outputKinds.has('url')) {
+      candidate =
+        (outputData?.currentUrl as string | undefined) ??
+        (outputData?.url as string | undefined) ??
+        undefined;
+    }
+    if (!candidate && outputKinds.has('research-result')) {
+      const sources =
+        (outputData?.researchSources as Array<{ url: string }> | undefined) ?? [];
+      candidate = sources[0]?.url;
+    }
+    if (!candidate && outputKinds.has('text')) {
+      const text = (outputData?.text as string | undefined) ?? '';
+      const found = extractFirstUrl(text);
+      candidate = found ?? undefined;
+    }
+    if (!candidate) return;
+    const target = canvas?.nodes.find((n) => n.id === webpageNodeId);
+    const currentUrl = (target?.config as { url?: string } | undefined)?.url ?? '';
+    if (currentUrl === candidate) return;
+    await saveNodeConfig(webpageNodeId, { url: candidate, mode: null });
+  }
+
   async function startExplore(parentId: string, engine: 'deep' | 'quick') {
     const res = await fetch(`/api/canvas/${data.canvas.slug}/nodes/${parentId}/explore`, {
       method: 'POST',
@@ -1103,6 +1294,39 @@
     }
   }
 
+  async function openAsWebpageNode(url: string, fromNodeId: string) {
+    const source = (canvas?.nodes ?? []).find((n) => n.id === fromNodeId);
+    if (!source) return;
+    const meta = byNodeType('webpage');
+    if (!meta) return;
+    const pos = resolveOverlap({ x: source.x + 340, y: source.y });
+    const newNode = await addNode({
+      type: 'webpage',
+      label: meta.label,
+      defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>), url },
+      position: pos,
+    });
+    if (!newNode) return;
+    const sourceMeta = byNodeType(source.type);
+    const srcHandle = sourceMeta?.handles.outputs[0]?.id ?? null;
+    const tgtHandle = meta.handles.inputs[0]?.id ?? null;
+    try {
+      await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sourceNodeId: fromNodeId,
+          targetNodeId: newNode.id,
+          sourceHandle: srcHandle,
+          targetHandle: tgtHandle,
+        }),
+      });
+      await invalidateAll();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   // ——— Drag-to-connect edges ———
   let edgeDrag = $state<{
     sourceId: string;
@@ -1111,6 +1335,14 @@
     cursorY: number;
     hoverTargetId: string | null;
   } | null>(null);
+
+  const edgeDragCompatible = $derived.by(() => {
+    if (!edgeDrag || !edgeDrag.hoverTargetId) return null;
+    const src = byId[edgeDrag.sourceId];
+    const tgt = byId[edgeDrag.hoverTargetId];
+    if (!src || !tgt) return null;
+    return compatibility(outputsFor(src.type), inputsFor(tgt.type)) === 1;
+  });
 
   function onHandlePointerDown(e: PointerEvent, source: CanvasNode) {
     if (e.button !== 0) return;
@@ -1150,20 +1382,56 @@
       const { sourceId, hoverTargetId } = edgeDrag;
       edgeDrag = null;
       if (hoverTargetId) {
-        actionError = null;
-        try {
-          const res = await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sourceNodeId: sourceId, targetNodeId: hoverTargetId }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `HTTP ${res.status}`);
+        const source = byId[sourceId];
+        const target = byId[hoverTargetId];
+        if (source && target) {
+          if (compatibility(outputsFor(source.type), inputsFor(target.type)) === 0) {
+            actionError = 'Incompatible handle types';
+            setTimeout(() => {
+              if (actionError === 'Incompatible handle types') actionError = null;
+            }, 1500);
+          } else {
+            const srcHandle = outputsFor(source.type)[0]?.id ?? null;
+            const tgtHandle = inputsFor(target.type)[0]?.id ?? null;
+            actionError = null;
+            try {
+              const res = await fetch(`/api/workflows/${canvas.workflowId}/edges`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sourceNodeId: sourceId,
+                  targetNodeId: hoverTargetId,
+                  sourceHandle: srcHandle,
+                  targetHandle: tgtHandle,
+                }),
+              });
+              if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || `HTTP ${res.status}`);
+              }
+              await invalidateAll();
+              if (target.type === 'webpage') {
+                await syncWebpageFromUpstream(hoverTargetId);
+              }
+            } catch (err) {
+              actionError = err instanceof Error ? err.message : String(err);
+            }
           }
-          await invalidateAll();
-        } catch (err) {
-          actionError = err instanceof Error ? err.message : String(err);
+        }
+      } else {
+        // Dropped into empty space — open palette in strict-downstream mode
+        if (!NEW_PALETTE) return;
+        const source = byId[sourceId];
+        if (source) {
+          const meta = byNodeType(source.type);
+          const outputs = (meta?.handles.outputs ?? []) as HandleSpec[];
+          const world = screenToWorld(e.clientX, e.clientY);
+          openPalette({
+            anchor: { x: e.clientX, y: e.clientY },
+            mode: { kind: 'strict-downstream', sourceType: source.type, sourceOutputs: outputs },
+            fromNodeId: sourceId,
+            worldPosition: world,
+          });
         }
       }
     }
@@ -1319,7 +1587,6 @@
       if (ev.key === 'Escape') {
         menuForNodeId = null;
         selectedId = null;
-        addNodeOpen = false;
         pipePickerOpen = false;
         edgeInspectorFor = null;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
@@ -1348,28 +1615,28 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Close the add-node menu on outside click. composedPath() is captured
-  // at event dispatch time, so it stays valid even if Svelte detaches the
-  // clicked element during its reactive re-render (which is exactly what
-  // happens when the click changes addNodeCategory).
+  // Global keyboard triggers for the node palette (cmd/ctrl-K, slash)
   $effect(() => {
-    if (!addNodeOpen) return;
-    function onDocClick(ev: MouseEvent) {
-      if (!addNodeWrapEl) return;
-      const path = ev.composedPath();
-      if (path.includes(addNodeWrapEl)) return;
-      addNodeOpen = false;
+    function onGlobalKey(e: KeyboardEvent) {
+      if (!NEW_PALETTE) return;
+      if (paletteOpen) return; // palette handles its own keys while open
+      const target = e.target as HTMLElement | null;
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+      const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+      const metaKey = isMac ? e.metaKey : e.ctrlKey;
+      if (metaKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+      } else if (e.key === '/' && !typing) {
+        e.preventDefault();
+        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+      }
     }
-    window.addEventListener('click', onDocClick);
-    return () => window.removeEventListener('click', onDocClick);
-  });
-
-  // Reset drill-down state whenever the menu closes
-  $effect(() => {
-    if (!addNodeOpen) {
-      addNodeCategory = null;
-      addNodeFilter = '';
-    }
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
   });
 
   // Resume SSE if the server says there's an in-flight run at load
@@ -1450,126 +1717,18 @@
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
       {/if}
       <span class="sep-v"></span>
-      <div class="add-node-wrap" bind:this={addNodeWrapEl}>
-        <button
-          class="composer-pill"
-          onclick={() => (addNodeOpen = !addNodeOpen)}
-          title="Add a new node"
-        >
-          + node
-        </button>
-        {#if addError}
-          <span class="run-err" title={addError}>⚠ add failed</span>
-        {/if}
-        {#if addNodeOpen}
-          {@const hasTrigger = viewNodes.some((n) => n.kind === 'trigger')}
-          {@const searchActive = addNodeFilter.trim().length > 0}
-          {@const searchHits = nodeSearchResults()}
-          {@const byGroup = nodeTypesByGroup()}
-          {@const groupsOrdered = nodeGroupsOrdered()}
-          {@const currentItems =
-            addNodeCategory && byGroup.has(addNodeCategory)
-              ? byGroup.get(addNodeCategory) ?? []
-              : []}
-          <div class="add-node-menu" role="menu" aria-label="Add node">
-            <input
-              class="add-node-search"
-              type="text"
-              bind:value={addNodeFilter}
-              placeholder="Search all node types…"
-              onkeydown={(e) => {
-                if (e.key === 'Escape') {
-                  if (addNodeFilter) {
-                    addNodeFilter = '';
-                  } else if (addNodeCategory) {
-                    addNodeCategory = null;
-                  } else {
-                    addNodeOpen = false;
-                  }
-                }
-              }}
-            />
-
-            <div class="add-node-scroll">
-              {#if searchActive}
-                <!-- Search mode: flat results, ignore drill-down -->
-                {#if searchHits.length === 0}
-                  <div class="add-node-empty">No types match "{addNodeFilter}"</div>
-                {:else}
-                  <div class="add-node-group">{searchHits.length} result{searchHits.length === 1 ? '' : 's'}</div>
-                  {#each searchHits as t (t.type)}
-                    {@const blocked = t.type === 'trigger' && hasTrigger}
-                    <button
-                      class="add-node-item"
-                      class:blocked
-                      role="menuitem"
-                      disabled={blocked}
-                      onclick={() => !blocked && addNode(t)}
-                      title={blocked ? 'This canvas already has a trigger' : t.description}
-                    >
-                      <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                      <span class="add-node-stack">
-                        <span class="add-node-label">{t.label}</span>
-                        <span class="add-node-group-hint">{t.group}</span>
-                      </span>
-                      <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
-                    </button>
-                  {/each}
-                {/if}
-              {:else if addNodeCategory}
-                <!-- Level 2: items within a category -->
-                <button
-                  class="add-node-back"
-                  onclick={() => (addNodeCategory = null)}
-                  title="Back to categories"
-                >
-                  ← All categories
-                </button>
-                <div class="add-node-group">{addNodeCategory}</div>
-                {#each currentItems as t (t.type)}
-                  {@const blocked = t.type === 'trigger' && hasTrigger}
-                  <button
-                    class="add-node-item"
-                    class:blocked
-                    role="menuitem"
-                    disabled={blocked}
-                    onclick={() => !blocked && addNode(t)}
-                    title={blocked ? 'This canvas already has a trigger' : t.description}
-                  >
-                    <span class="add-node-kind-bar" data-kind={t.kind}></span>
-                    <span class="add-node-stack">
-                      <span class="add-node-label">{t.label}</span>
-                      <span class="add-node-desc">{t.description}</span>
-                    </span>
-                    <span class="add-node-type">{blocked ? 'one only' : t.type}</span>
-                  </button>
-                {/each}
-              {:else}
-                <!-- Level 1: category cards -->
-                <div class="add-node-group">Pick a category</div>
-                {#each groupsOrdered as g (g)}
-                  {@const items = byGroup.get(g) ?? []}
-                  <button
-                    class="add-node-category"
-                    role="menuitem"
-                    onclick={() => (addNodeCategory = g)}
-                  >
-                    <span class="add-node-category-label">{g}</span>
-                    <span class="add-node-category-count">{items.length}</span>
-                    <span class="add-node-category-chev">›</span>
-                  </button>
-                {/each}
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </div>
-      <span class="sep-v"></span>
       <div class="hifi-zoomctl">
         <button onclick={() => zoomCentered(1 / 1.2)} title="Zoom out">−</button><span class="zv"
           >{zoomPct}%</span
         ><button onclick={() => zoomCentered(1.2)} title="Zoom in">+</button>
       </div>
+      {#if !NEW_PALETTE}
+        <button
+          class="composer-pill"
+          title="Add node (palette disabled via env)"
+          onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
+        >+ node</button>
+      {/if}
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
     </div>
@@ -1590,6 +1749,22 @@
     onpointerup={onPointerUp}
     onpointercancel={onPointerUp}
     onwheel={onWheel}
+    oncontextmenu={(e) => {
+      if (!NEW_PALETTE) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('.chat-node, .wf-node')) return;
+      e.preventDefault();
+      const world = screenToWorld(e.clientX, e.clientY);
+      openPalette({
+        anchor: { x: e.clientX, y: e.clientY },
+        mode: { kind: 'workflow-ranked' },
+        worldPosition: world,
+      });
+    }}
+    ontouchstart={onViewportTouchStart}
+    ontouchmove={onViewportTouchMove}
+    ontouchend={onViewportTouchEnd}
+    ontouchcancel={onViewportTouchEnd}
   >
 
     <!-- Graph area (pan/zoom stage) -->
@@ -1655,6 +1830,7 @@
             class:is-selected={selectedId === n.id}
             class:active={isRunning && pendingRun?.chatNodeId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{size.w}px"
@@ -1662,6 +1838,12 @@
             role="group"
             aria-label="Chat node"
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="node-handle"
               title="Drag to connect to another node"
@@ -1819,6 +2001,7 @@
             class="chat-node inspector-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             class:active={isRunning && n.status === 'running'}
             class:failed={isRunning && n.status === 'failed'}
             class:ok={isRunning && n.status === 'ok'}
@@ -1829,6 +2012,12 @@
             role="group"
             aria-label="Inspector node"
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr inspector-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -1874,6 +2063,7 @@
             class="chat-node intelligence-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{isize.w}px"
@@ -1882,6 +2072,12 @@
             aria-label="Intelligence node"
             onpointerdown={(e) => e.stopPropagation()}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr intelligence-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -1927,6 +2123,7 @@
             class="chat-node research-result-node"
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
             style:top="{n.y}px"
             style:width="{rsize.w}px"
@@ -1935,6 +2132,12 @@
             aria-label="Research result node"
             onpointerdown={(e) => e.stopPropagation()}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             <div
               class="chat-node-hdr research-result-hdr"
               onpointerdown={(e) => onNodePointerDown(e, n)}
@@ -1960,9 +2163,70 @@
               durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
               streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
               sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
+              nodeId={n.id}
               oncancel={() => cancelExplore(n.id)}
               ondone={(result) => finaliseResearch(n.id, result)}
+              onopenaswebpage={(e) => openAsWebpageNode(e.url, e.fromNodeId)}
             />
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
+        {:else if n.kind === 'webpage'}
+          {@const wsize = resizableSize(n)}
+          <div
+            class="chat-node webpage-node-wrapper"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{wsize.w}px"
+            style:height="{wsize.h}px"
+            role="group"
+            aria-label="Webpage node"
+            onpointerdown={(e) => e.stopPropagation()}
+          >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
+            <div
+              class="chat-node-hdr webpage-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="webpage-bar"></span>
+              <span class="chat-node-title">WEB</span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+            <div class="webpage-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              <WebpageNode
+                nodeId={n.id}
+                config={(n.config as WebpageConfig) ?? { url: '', mode: null, size: { w: 720, h: 480 } }}
+                onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+                onOutput={(handleId, value) => webpageNodeOutput(n.id, handleId, value)}
+              />
+            </div>
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -2039,6 +2303,7 @@
             class:ok={isRunning && n.status === 'ok'}
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             class:is-trigger={n.kind === 'trigger'}
             class:flash={flashNodeId === n.id}
             data-kind={n.kind}
@@ -2056,6 +2321,12 @@
               else if (e.key === ' ') selectNode(e, n.id);
             }}
           >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
               <div class="trig-stack">
@@ -3130,6 +3401,15 @@
   </div>
 </div>
 
+<NodePalette
+  open={paletteOpen}
+  anchor={paletteAnchor}
+  mode={paletteMode}
+  canvasNodes={canvas?.nodes ?? []}
+  onPick={onPalettePick}
+  onClose={closePalette}
+/>
+
 <style>
   :root {
     --accent-tint-08: rgba(196, 87, 10, 0.08);
@@ -3294,197 +3574,6 @@
     font-size: 10px;
     color: #c44;
     padding: 0 6px;
-  }
-  .add-node-wrap {
-    position: relative;
-  }
-  .add-node-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    width: 340px;
-    background: var(--bg);
-    border: 1.5px solid var(--accent);
-    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    padding: 4px;
-  }
-  .add-node-search {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 6px 8px;
-    margin: 2px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    color: var(--text-primary);
-    outline: none;
-  }
-  .add-node-search:focus {
-    border-color: var(--accent);
-  }
-  .add-node-scroll {
-    /* No scrollbar; the menu grows to fit its contents. */
-  }
-  .add-node-group {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-ghost);
-    padding: 8px 6px 4px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--divider);
-  }
-  .add-node-empty {
-    padding: 24px 10px;
-    text-align: center;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-ghost);
-    font-style: italic;
-  }
-
-  /* Category cards (level 1) */
-  .add-node-category {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 10px;
-    margin: 2px 2px;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    text-align: left;
-    color: var(--text-primary);
-    transition: border-color 0.12s, background 0.12s;
-  }
-  .add-node-category:hover {
-    background: var(--accent-tint-08);
-    border-color: var(--accent);
-  }
-  .add-node-category-label {
-    flex: 1;
-    font-size: 12px;
-    font-weight: 500;
-  }
-  .add-node-category-count {
-    font-size: 9px;
-    color: var(--text-ghost);
-    letter-spacing: 0.1em;
-    padding: 2px 8px;
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-  }
-  .add-node-category-chev {
-    color: var(--text-ghost);
-    font-size: 14px;
-  }
-
-  /* Back button (level 2 header) */
-  .add-node-back {
-    display: block;
-    width: calc(100% - 4px);
-    margin: 2px;
-    padding: 6px 8px;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    text-align: left;
-  }
-  .add-node-back:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-
-  /* Stacked label (used in search and category views) */
-  .add-node-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-  }
-  .add-node-desc {
-    font-size: 9px;
-    color: var(--text-ghost);
-    line-height: 1.4;
-    text-transform: none;
-    letter-spacing: 0;
-    white-space: normal;
-    word-break: break-word;
-  }
-  .add-node-group-hint {
-    font-size: 9px;
-    color: var(--text-ghost);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .add-node-item {
-    align-items: flex-start;
-    padding: 6px 8px;
-  }
-  .add-node-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    cursor: pointer;
-    font-family: var(--font-mono);
-    text-align: left;
-    color: var(--text-primary);
-  }
-  .add-node-item:hover:not(.blocked) {
-    background: var(--accent-tint-08);
-    border-color: var(--card-border);
-  }
-  .add-node-item.blocked {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .add-node-kind-bar {
-    display: inline-block;
-    width: 3px;
-    height: 14px;
-    background: var(--text-ghost);
-    flex-shrink: 0;
-  }
-  .add-node-kind-bar[data-kind='llm'],
-  .add-node-kind-bar[data-kind='intel'] {
-    background: var(--accent);
-  }
-  .add-node-kind-bar[data-kind='parse'] {
-    background: #c44;
-  }
-  .add-node-kind-bar[data-kind='output'],
-  .add-node-kind-bar[data-kind='agent'] {
-    background: var(--text-primary);
-  }
-  .add-node-kind-bar[data-kind='input'] {
-    background: var(--text-muted);
-  }
-  .add-node-label {
-    font-size: 11px;
-    font-weight: 500;
-  }
-  .add-node-type {
-    font-size: 9px;
-    color: var(--text-ghost);
-    margin-left: auto;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
   .hifi-zoomctl {
     display: inline-flex;
@@ -4091,6 +4180,24 @@
     border-color: var(--accent);
     background: var(--accent);
     transform: translateY(-50%) scale(1.15);
+  }
+  .node-handle-input {
+    left: -7px;
+    right: auto;
+    cursor: default;
+  }
+  .node-handle-input:hover {
+    background: var(--accent-dim, #3a5074);
+  }
+  .wf-node.is-incompatible,
+  .chat-node.is-incompatible {
+    outline: 2px dashed var(--danger, #c26060);
+    outline-offset: 2px;
+    animation: incompat-flash 0.4s ease-out;
+  }
+  @keyframes incompat-flash {
+    0% { outline-color: rgba(194, 96, 96, 1); }
+    100% { outline-color: rgba(194, 96, 96, 0.35); }
   }
   .wf-node:focus-visible {
     outline: 2px solid var(--accent);
@@ -4866,6 +4973,26 @@
     width: 3px;
     align-self: stretch;
     background: #5dbea3;
+  }
+
+  /* ——— Webpage node ——— */
+  .webpage-bar {
+    display: inline-block;
+    width: 4px;
+    height: 1em;
+    background: var(--accent, #7aa2f7);
+    margin-right: 6px;
+    border-radius: 1px;
+  }
+  .webpage-node-wrapper .chat-node-hdr {
+    gap: 4px;
+  }
+  .webpage-node-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Flash animation for scrollToNode */

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { deleteCanvas } from '$lib/canvas/adapter';
+import { deleteCanvas } from '$lib/canvas/adapter.server';
 
 export const DELETE: RequestHandler = async ({ params }) => {
   const ok = await deleteCanvas(params.slug);

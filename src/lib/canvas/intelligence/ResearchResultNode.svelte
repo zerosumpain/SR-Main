@@ -1,5 +1,6 @@
 <script lang="ts">
   import DeepResearchViewer from './DeepResearchViewer.svelte';
+  import OpenAsWebpageButton from '../OpenAsWebpageButton.svelte';
 
   type Source = { url: string; title: string; domain: string };
   type Status = 'pending' | 'running' | 'complete' | 'failed';
@@ -13,8 +14,10 @@
     durationMs,
     streamUrl,
     sessionId,
+    nodeId,
     oncancel,
     ondone,
+    onopenaswebpage,
   } = $props<{
     engine: 'deep' | 'quick';
     topic: string;
@@ -24,8 +27,10 @@
     durationMs?: number | null;
     streamUrl?: string | null;
     sessionId?: string | null;
+    nodeId: string;
     oncancel: () => void;
     ondone: (res: { report: string; sources: Source[]; durationMs?: number }) => void;
+    onopenaswebpage?: (e: { url: string; fromNodeId: string }) => void;
   }>();
 
   // ResizeObserver: measure the parent .chat-node and set --scroll-h
@@ -243,7 +248,13 @@
           <summary>{effectiveSources.length} source{effectiveSources.length === 1 ? '' : 's'}</summary>
           <ul>
             {#each effectiveSources as s}
-              <li><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> <span class="domain">{s.domain}</span></li>
+              <li>
+                <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a>
+                <span class="domain">{s.domain}</span>
+                {#if onopenaswebpage}
+                  <OpenAsWebpageButton url={s.url} sourceNodeId={nodeId} onCreate={onopenaswebpage} />
+                {/if}
+              </li>
             {/each}
           </ul>
         </details>

@@ -19,6 +19,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!type) return json({ error: 'type required' }, { status: 400 });
   if (!position) return json({ error: 'position required' }, { status: 400 });
 
+  // `type` is intentionally freeform — the palette uses the adapter registry
+  // (src/lib/canvas/adapter.ts) as the source of truth for valid types and
+  // their handle metadata. New types (e.g. `webpage`) need only be registered
+  // there; no server-side whitelist to keep in sync.
+
   const [wf] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!wf) return json({ error: 'Workflow not found' }, { status: 404 });
 
