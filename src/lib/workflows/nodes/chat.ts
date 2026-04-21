@@ -98,6 +98,11 @@ export const chatExecutor: NodeExecutor = {
 
     const useIntelContext = config.useIntelContext !== false;
 
+    const upstreamIntel =
+      typeof input.intelContext === 'string' && input.intelContext.length > 0
+        ? (input.intelContext as string)
+        : null;
+
     // Surface live tokens + tool progress to the SSE stream so the
     // canvas chat panel can render them as they arrive.
     const chatNodeId = thisNodeId ?? null;
@@ -120,6 +125,7 @@ export const chatExecutor: NodeExecutor = {
         modelContext,
         priceSnapshot: null,
         useIntelContext,
+        intelContextOverride: upstreamIntel,
         onStreamEvent: (event) => {
           streamLog('chat_stream', { event });
         },
