@@ -45,7 +45,7 @@ export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<Mod
     return { provider: 'zai', modelId: v?.modelId ?? 'glm-5-turbo' };
   }
   const v = await getSetting<ModelContext>('jkai.builder.default_model');
-  return v ?? { provider: 'zai', modelId: 'glm-5.1' };
+  return v ?? { provider: 'zai', modelId: 'glm-4.6' };
 }
 
 /** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */

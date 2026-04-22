@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
     vim-tiny \
+    iproute2 \
+    procps \
     build-essential \
     ca-certificates \
     # Playwright browser deps

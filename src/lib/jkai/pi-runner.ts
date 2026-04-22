@@ -126,6 +126,76 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const modelId = build.modelId ?? 'anthropic/claude-sonnet-4.5';
   const { envVar, value: apiKey } = await resolveApiKey(provider);
 
+  // Retry the whole pi invocation if the upstream LLM connection stalls.
+  // Accumulates state across retries so a stalled-then-recovered run still
+  // surfaces a full actions/messages/tokens tally.
+  const MAX_ATTEMPTS = 3;
+  const accumulated: PiRunResult = {
+    actions: [],
+    messages: [],
+    finalAssistantText: '',
+    tokensUsed: 0,
+    errorMessage: null,
+  };
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const result = await runPiOnce({
+      build,
+      iteration,
+      workdir,
+      systemPrompt,
+      userPrompt,
+      maxWallClockMs,
+      isStopped,
+      provider,
+      modelId,
+      envVar,
+      apiKey,
+      attempt,
+    });
+    accumulated.actions.push(...result.actions);
+    accumulated.messages.push(...result.messages);
+    accumulated.tokensUsed += result.tokensUsed;
+    if (result.finalAssistantText) accumulated.finalAssistantText = result.finalAssistantText;
+    accumulated.errorMessage = result.errorMessage;
+    if (!result.stalled || attempt === MAX_ATTEMPTS || isStopped()) break;
+    await emitLog(
+      build.id,
+      'system',
+      `Pi stalled — retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
+      iteration.id,
+    );
+  }
+  return accumulated;
+}
+
+interface PiOnceOptions extends PiRunOptions {
+  provider: string;
+  modelId: string;
+  envVar: string;
+  apiKey: string;
+  attempt: number;
+}
+
+interface PiOnceResult extends PiRunResult {
+  stalled: boolean;
+}
+
+async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
+  const {
+    build,
+    iteration,
+    workdir,
+    systemPrompt,
+    userPrompt,
+    maxWallClockMs = 30 * 60 * 1000,
+    isStopped,
+    provider,
+    modelId,
+    envVar,
+    apiKey,
+    attempt,
+  } = opts;
+
   const piCmd = [
     'pi',
     '--mode', 'json',
@@ -156,7 +226,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   await emitLog(
     build.id,
     'system',
-    `Launching pi agent (${provider}/${modelId})`,
+    `Launching pi agent (${provider}/${modelId})${attempt > 1 ? ` — attempt ${attempt}` : ''}`,
     iteration.id,
   );
 
@@ -192,11 +262,13 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   // Idle-watchdog: if pi emits nothing on stdout for this long, assume the
   // upstream API connection has stalled (seen with ZAI hanging mid-stream)
-  // and kill the subprocess so the orchestrator can move on.
-  const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+  // and kill the subprocess so the orchestrator can retry or move on.
+  const IDLE_TIMEOUT_MS = 90 * 1000;
   let lastOutputAt = Date.now();
+  let stalled = false;
   const idleCheck = setInterval(() => {
     if (Date.now() - lastOutputAt > IDLE_TIMEOUT_MS) {
+      stalled = true;
       try {
         child.kill('SIGTERM');
         emitLog(
@@ -207,7 +279,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
         );
       } catch {}
     }
-  }, 15000);
+  }, 10000);
 
   let stdoutBuf = '';
   let stderrBuf = '';
@@ -390,5 +462,6 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     finalAssistantText,
     tokensUsed,
     errorMessage,
+    stalled,
   };
 }
