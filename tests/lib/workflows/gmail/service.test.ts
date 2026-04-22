@@ -22,10 +22,12 @@ vi.mock('$env/dynamic/private', () => ({
 vi.mock('googleapis', () => ({
   google: {
     auth: {
-      OAuth2: vi.fn().mockImplementation(() => ({
-        setCredentials: vi.fn(),
-        refreshAccessToken: mockRefreshAccessToken,
-      })),
+      OAuth2: vi.fn().mockImplementation(function () {
+        return {
+          setCredentials: vi.fn(),
+          refreshAccessToken: mockRefreshAccessToken,
+        };
+      }),
     },
     gmail: vi.fn(() => ({
       users: {

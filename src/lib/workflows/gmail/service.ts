@@ -13,14 +13,7 @@ export class GmailService {
 
   private buildClient(): OAuth2Client {
     const OAuth2 = google.auth.OAuth2 as any;
-    // Call as factory to support both the real googleapis constructor and
-    // vi.fn() arrow-function mocks used in tests.
-    const args = [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, undefined];
-    try {
-      return new OAuth2(...args);
-    } catch {
-      return OAuth2(...args);
-    }
+    return new OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, undefined);
   }
 
   async getAuthenticatedClient(account: GmailAccount): Promise<OAuth2Client> {
