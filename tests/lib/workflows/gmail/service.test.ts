@@ -97,3 +97,94 @@ describe('GmailService.getAuthenticatedClient', () => {
     expect(setArg?.status).toBe('auth_expired');
   });
 });
+
+describe('GmailService.fetchMessage', () => {
+  it('parses headers + text + html + attachments', async () => {
+    mockRequest.mockResolvedValueOnce({
+      data: {
+        id: 'm1',
+        threadId: 't1',
+        labelIds: ['INBOX', 'UNREAD'],
+        snippet: 'hello world',
+        historyId: '12345',
+        internalDate: '1700000000000',
+        payload: {
+          headers: [
+            { name: 'From', value: 'alice@x.com' },
+            { name: 'To', value: 'me@x.com' },
+            { name: 'Subject', value: 'Hi' },
+            { name: 'Date', value: 'Mon, 1 Jan 2024' },
+            { name: 'Message-ID', value: '<abc@x.com>' },
+          ],
+          mimeType: 'multipart/mixed',
+          parts: [
+            { mimeType: 'text/plain', body: { data: Buffer.from('Hello').toString('base64url') } },
+            { mimeType: 'text/html', body: { data: Buffer.from('<b>Hi</b>').toString('base64url') } },
+            { mimeType: 'application/pdf', filename: 'x.pdf',
+              body: { attachmentId: 'att1', size: 1024 } },
+          ],
+        },
+      },
+    });
+
+    const svc = new GmailService();
+    const account = { id: 1, refreshTokenEnc: encryptToken('r'), accessTokenEnc: encryptToken('a'),
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000), email: 'me@x.com', scopes: '', status: 'active' } as any;
+
+    const msg = await svc.fetchMessage(account, 'm1');
+    expect(msg.id).toBe('m1');
+    expect(msg.headers.from).toBe('alice@x.com');
+    expect(msg.headers.subject).toBe('Hi');
+    expect(msg.bodyText).toBe('Hello');
+    expect(msg.bodyHtml).toBe('<b>Hi</b>');
+    expect(msg.attachments).toHaveLength(1);
+    expect(msg.attachments[0].filename).toBe('x.pdf');
+  });
+});
+
+describe('GmailService.sendMessage', () => {
+  it('builds RFC822 message and sends', async () => {
+    mockRequest.mockResolvedValueOnce({ data: { id: 'sent1', threadId: 't2' } });
+
+    const svc = new GmailService();
+    const account = { id: 1, refreshTokenEnc: encryptToken('r'), accessTokenEnc: encryptToken('a'),
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000), email: 'me@x.com', scopes: '', status: 'active' } as any;
+
+    const result = await svc.sendMessage(account, {
+      to: 'b@x.com',
+      subject: 'Hey',
+      bodyText: 'body',
+    });
+
+    expect(result.messageId).toBe('sent1');
+    expect(result.threadId).toBe('t2');
+    const call = mockRequest.mock.calls.at(-1)![0];
+    expect(call.requestBody.raw).toBeDefined();
+    const decoded = Buffer.from(call.requestBody.raw, 'base64url').toString('utf8');
+    expect(decoded).toContain('To: b@x.com');
+    expect(decoded).toContain('Subject: Hey');
+    expect(decoded).toContain('body');
+  });
+
+  it('preserves In-Reply-To and References when threading', async () => {
+    mockRequest.mockResolvedValueOnce({ data: { id: 's2', threadId: 't3' } });
+    const svc = new GmailService();
+    const account = { id: 1, refreshTokenEnc: encryptToken('r'), accessTokenEnc: encryptToken('a'),
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000), email: 'me@x.com', scopes: '', status: 'active' } as any;
+
+    await svc.sendMessage(account, {
+      to: 'b@x.com',
+      subject: 'Re: Hey',
+      bodyText: 'reply',
+      inReplyTo: '<orig@x.com>',
+      references: '<orig@x.com>',
+      threadId: 't3',
+    });
+
+    const call = mockRequest.mock.calls.at(-1)![0];
+    const decoded = Buffer.from(call.requestBody.raw, 'base64url').toString('utf8');
+    expect(decoded).toContain('In-Reply-To: <orig@x.com>');
+    expect(decoded).toContain('References: <orig@x.com>');
+    expect(call.requestBody.threadId).toBe('t3');
+  });
+});
