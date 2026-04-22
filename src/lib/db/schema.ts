@@ -1054,4 +1054,32 @@ export const intelAlerts = pgTable('intel_alerts', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ---- Scraper ----
+
+export const scraperCredentials = pgTable('scraper_credentials', {
+  id: serial('id').primaryKey(),
+  domain: text('domain').notNull(),      // e.g. 'civilservicejobs.gov.uk'
+  label: text('label').notNull(),        // human-friendly label
+  credentialEnc: text('credential_enc').notNull(), // AES-GCM, JSON blob
+  loginUrl: text('login_url'),           // optional — where to POST/fill credentials
+  loginStrategy: text('login_strategy').notNull().default('form'), // 'form' | 'script' | 'cookie'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const scraperRunLog = pgTable('scraper_run_log', {
+  id: serial('id').primaryKey(),
+  url: text('url').notNull(),
+  profile: text('profile').notNull(),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  endedAt: timestamp('ended_at'),
+  success: boolean('success').notNull().default(false),
+  pagesLoaded: integer('pages_loaded').notNull().default(0),
+  error: text('error'),
+  workflowRunId: text('workflow_run_id'),
+});
+
+export type ScraperCredential = typeof scraperCredentials.$inferSelect;
+export type ScraperRunLogRow = typeof scraperRunLog.$inferSelect;
+
 export type IntelAlert = typeof intelAlerts.$inferSelect;
