@@ -39,6 +39,8 @@ RUN pip install --no-cache-dir \
     httpx \
     pyyaml \
     playwright \
+    playwright-stealth \
+    tenacity \
     lxml
 
 RUN playwright install chromium
