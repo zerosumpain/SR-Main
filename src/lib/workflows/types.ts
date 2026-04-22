@@ -108,13 +108,43 @@ export type WorkflowEventType =
   | 'healing_blocked'
   | 'log';
 
-export interface WorkflowEvent {
-  type: WorkflowEventType;
+export interface BaseWorkflowEvent {
   runId: string;
-  nodeId?: string;
-  data?: Record<string, unknown>;
   timestamp: string;
 }
+
+export interface GenericWorkflowEvent extends BaseWorkflowEvent {
+  type: WorkflowEventType;
+  nodeId?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface GmailMessageReceivedEvent extends BaseWorkflowEvent {
+  type: 'gmail.message.received';
+  accountId: number;
+  accountEmail: string;
+  watchId: number;
+  watchLabel: string;
+  messageId: string;
+  threadId: string;
+  from: string;
+  to: string;
+  subject: string;
+  snippet: string;
+  labels: string[];
+}
+
+export interface GmailAuthExpiredEvent extends BaseWorkflowEvent {
+  type: 'gmail.auth.expired';
+  accountId: number;
+  accountEmail: string;
+  error: string;
+}
+
+export type WorkflowEvent =
+  | GenericWorkflowEvent
+  | GmailMessageReceivedEvent
+  | GmailAuthExpiredEvent;
 
 export type RunStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed';
 export type NodeExecutionStatus = 'pending' | 'running' | 'paused_breakpoint' | 'completed' | 'failed' | 'skipped' | 'blocked' | 'healing';
