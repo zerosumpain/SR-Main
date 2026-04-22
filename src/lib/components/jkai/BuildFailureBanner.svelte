@@ -12,13 +12,20 @@
   let { buildId, failure, currentProvider, currentModelId, onContinued }: Props = $props();
 
   const MODEL_OPTIONS = [
-    { provider: 'zai', modelId: 'glm-5.1', label: 'zai / glm-5.1' },
+    { provider: 'zai', modelId: 'glm-5-turbo', label: 'zai / glm-5-turbo (recommended — avoids glm-5.1 rate limit)' },
     { provider: 'zai', modelId: 'glm-4.6', label: 'zai / glm-4.6' },
+    { provider: 'zai', modelId: 'glm-5.1', label: 'zai / glm-5.1' },
     { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4.5', label: 'openrouter / claude-sonnet-4.5' },
     { provider: 'openrouter', modelId: 'anthropic/claude-opus-4.7', label: 'openrouter / claude-opus-4.7' },
   ];
 
-  let selectedKey = $state(`${currentProvider}::${currentModelId}`);
+  // Default to glm-5-turbo when the current model is glm-5.1 (rate-limit / stall
+  // prone) — the most common recovery path right now.
+  const suggestedKey =
+    currentProvider === 'zai' && currentModelId === 'glm-5.1'
+      ? 'zai::glm-5-turbo'
+      : `${currentProvider}::${currentModelId}`;
+  let selectedKey = $state(suggestedKey);
   let improvementPrompt = $state('');
   let submitting = $state(false);
   let error = $state<string | null>(null);

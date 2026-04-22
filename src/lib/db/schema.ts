@@ -502,7 +502,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   modelProvider: text('model_provider').notNull().default('zai'),
-  modelId: text('model_id').notNull().default('glm-5.1'),
+  modelId: text('model_id').notNull().default('glm-5-turbo'),
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
   failure: jsonb('failure'),

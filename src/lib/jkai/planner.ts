@@ -79,7 +79,7 @@ export async function planBuild(
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   const { client, model } = await getLLMClient({
     provider: (build?.modelProvider ?? 'zai') as 'zai' | 'openrouter',
-    modelId: build?.modelId ?? 'glm-5.1',
+    modelId: build?.modelId ?? 'glm-5-turbo',
   });
   const priceSnapshot = (build?.priceSnapshot ?? null) as PriceSnapshot | null;
   const deadline = Date.now() + timeLimitMs;
@@ -255,7 +255,7 @@ export async function replanBuild(buildId: string): Promise<boolean> {
 
   const { client, model } = await getLLMClient({
     provider: (build.modelProvider ?? 'zai') as 'zai' | 'openrouter',
-    modelId: build.modelId ?? 'glm-5.1',
+    modelId: build.modelId ?? 'glm-5-turbo',
   });
   const priceSnapshot = (build.priceSnapshot ?? null) as PriceSnapshot | null;
 
