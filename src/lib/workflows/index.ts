@@ -33,6 +33,8 @@ import { researchResultDef, researchResultExecutor } from './nodes/research-resu
 import { quickAnswerDef, quickAnswerExecutor } from './nodes/quick-answer';
 import { deepResearchDef, deepResearchExecutor } from './nodes/deep-research';
 import { webScrapeDef, webScrapeExecutor } from './nodes/web-scrape';
+import { stealthScrapeDef, stealthScrapeExecutor } from './nodes/stealth-scrape';
+import { stealthScrapeLlmDef, stealthScrapeLlmExecutor } from './nodes/stealth-scrape-llm';
 import { tavilySearchDef, tavilySearchExecutor } from './nodes/tavily-search';
 import { intelWriteDef, intelWriteExecutor } from './nodes/intel-write';
 import { intelQueryDef, intelQueryExecutor } from './nodes/intel-query';
@@ -91,6 +93,8 @@ registry.register(researchResultDef, researchResultExecutor);
 registry.register(quickAnswerDef, quickAnswerExecutor);
 registry.register(deepResearchDef, deepResearchExecutor);
 registry.register(webScrapeDef, webScrapeExecutor);
+registry.register(stealthScrapeDef, stealthScrapeExecutor);
+registry.register(stealthScrapeLlmDef, stealthScrapeLlmExecutor);
 registry.register(tavilySearchDef, tavilySearchExecutor);
 registry.register(intelWriteDef, intelWriteExecutor);
 registry.register(intelQueryDef, intelQueryExecutor);

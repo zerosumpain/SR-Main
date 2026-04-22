@@ -32,6 +32,8 @@ import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
+import { stealthScrapeDef } from './nodes/stealth-scrape.def';
+import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
 import { intelWriteDef } from './nodes/intel-write.def';
 import type { NodeDefinition } from './types';
@@ -68,6 +70,8 @@ const builtInDefinitions: NodeDefinition[] = [
   jkaiDef,
   deepDiveDef,
   webScrapeDef,
+  stealthScrapeDef,
+  stealthScrapeLlmDef,
   tavilySearchDef,
   intelWriteDef,
 ];
