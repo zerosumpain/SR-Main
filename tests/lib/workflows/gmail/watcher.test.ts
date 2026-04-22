@@ -37,12 +37,11 @@ vi.mock('$lib/db/schema', () => ({
 }));
 vi.mock('drizzle-orm', () => ({ and: (...xs: any[]) => xs, eq: (a: any, b: any) => ({ eq: [a, b] }) }));
 
-const emit = vi.fn();
-vi.mock('$lib/workflows/event-bus', () => ({
-  eventBus: { emit: (...a: any[]) => emit(...a) },
-}));
+import { pollAccountOnce, gmailEventBus } from '$lib/workflows/gmail/watcher';
 
-import { pollAccountOnce } from '$lib/workflows/gmail/watcher';
+const emit = vi.fn();
+gmailEventBus.on('gmail.message.received', (e) => emit(e));
+gmailEventBus.on('gmail.auth.expired', (e) => emit(e));
 
 describe('pollAccountOnce', () => {
   beforeEach(() => {

@@ -1,8 +1,16 @@
+import { EventEmitter } from 'events';
 import { db } from '$lib/db';
 import { gmailAccounts, gmailWatches, gmailHistoryCursors, type GmailAccount } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { gmailService } from './service';
-import { eventBus } from '$lib/workflows/event-bus';
+
+// Local event bus. The upcoming orchestrator-bridge (plan Task 10) will
+// subscribe to this and route events into the workflow engine.
+export const gmailEventBus = new EventEmitter();
+const eventBus = {
+  emit: (event: Record<string, unknown>) =>
+    gmailEventBus.emit(String(event.type), event),
+};
 
 const POLL_INTERVAL_MS = 45_000;
 
