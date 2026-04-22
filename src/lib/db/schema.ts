@@ -1055,3 +1055,38 @@ export const intelAlerts = pgTable('intel_alerts', {
 });
 
 export type IntelAlert = typeof intelAlerts.$inferSelect;
+
+// ---- Gmail channel ----
+
+export const gmailAccounts = pgTable('gmail_accounts', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  // Encrypted with AES-GCM; format iv:tag:ct
+  refreshTokenEnc: text('refresh_token_enc').notNull(),
+  accessTokenEnc: text('access_token_enc'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at'),
+  scopes: text('scopes').notNull(), // space-separated
+  status: text('status').notNull().default('active'), // active | auth_expired | disabled
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const gmailWatches = pgTable('gmail_watches', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').notNull(),
+  label: text('label').notNull(),
+  query: text('query').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const gmailHistoryCursors = pgTable('gmail_history_cursors', {
+  accountId: integer('account_id').primaryKey(),
+  historyId: text('history_id').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type GmailAccount = typeof gmailAccounts.$inferSelect;
+export type GmailWatch = typeof gmailWatches.$inferSelect;
+export type GmailHistoryCursor = typeof gmailHistoryCursors.$inferSelect;
