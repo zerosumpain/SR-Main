@@ -1,5 +1,5 @@
 import { buildSystemPrompt, buildIterationContext } from './prompt';
-import { listWorkspaceFiles, allocatePort } from './sandbox';
+import { listWorkspaceFiles, allocatePort, ensureSandboxRunning, ensureWorkspace } from './sandbox';
 import { emitLog } from './log-emitter';
 import type { ActionRecord } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
@@ -36,6 +36,12 @@ export async function executeIteration(
   isStopped: () => boolean,
 ): Promise<IterationResult> {
   const workdir = `/home/jkai/workspace/${build.id}/dev`;
+
+  // Containers can be removed between iterations (admin intervention, image
+  // rebuild, crash). Make sure the sandbox exists and the workspace tree is
+  // intact before every launch so a missing container doesn't fail the run.
+  await ensureSandboxRunning();
+  await ensureWorkspace(build.id);
 
   // Assign the build its own serving port up-front so the agent knows which
   // port its serve.json should use. The orchestrator also enforces this later.
