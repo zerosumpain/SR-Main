@@ -9,7 +9,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
     if (!prompt) {
       return json({ error: 'Improvement prompt is required' }, { status: 400 });
     }
-    await orchestrator.continueBuild(params.id, prompt);
+    const modelOverride =
+      body.modelProvider || body.modelId
+        ? { provider: body.modelProvider, modelId: body.modelId }
+        : undefined;
+    await orchestrator.continueBuild(params.id, prompt, modelOverride);
     return json({ ok: true });
   } catch (err: any) {
     return json({ error: err.message }, { status: 400 });

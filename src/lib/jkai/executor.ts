@@ -1,7 +1,7 @@
 import { buildSystemPrompt, buildIterationContext } from './prompt';
 import { listWorkspaceFiles, allocatePort, ensureSandboxRunning, ensureWorkspace } from './sandbox';
 import { emitLog } from './log-emitter';
-import type { ActionRecord } from './types';
+import type { ActionRecord, FailureEnvelope } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { runPi } from './pi-runner';
 
@@ -23,6 +23,7 @@ export interface IterationResult {
   evaluation: string | null;
   nextSteps: string | null;
   tokensUsed: number;
+  failure: FailureEnvelope | null;
 }
 
 // --- Executor (pi-backed) ---
@@ -34,20 +35,19 @@ export async function executeIteration(
   projectPlan: string | null,
   iterationNumber: number,
   isStopped: () => boolean,
+  systemPromptSuffix?: string,
 ): Promise<IterationResult> {
   const workdir = `/home/jkai/workspace/${build.id}/dev`;
 
-  // Containers can be removed between iterations (admin intervention, image
-  // rebuild, crash). Make sure the sandbox exists and the workspace tree is
-  // intact before every launch so a missing container doesn't fail the run.
+  // Verify-then-fix: the sandbox may have been removed since the last iteration
+  // (admin action, image rebuild, crash). Re-verify every time.
   await ensureSandboxRunning();
   await ensureWorkspace(build.id);
 
-  // Assign the build its own serving port up-front so the agent knows which
-  // port its serve.json should use. The orchestrator also enforces this later.
   const assignedPort = await allocatePort(build.id);
 
-  const systemPrompt = buildSystemPrompt(build.id, assignedPort);
+  let systemPrompt = buildSystemPrompt(build.id, assignedPort);
+  if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
   const fileList = await listWorkspaceFiles(build.id);
   const contextMessages = buildIterationContext(
     build.prompt,
@@ -75,19 +75,30 @@ export async function executeIteration(
     isStopped,
   });
 
-  // Derive goals/plan/evaluation/nextSteps from pi's final assistant text.
-  // Pi uses native tools so we no longer parse code blocks from markdown,
-  // but we still ask the agent to close with structured ## Evaluation / ## Next Steps.
   const tailText = result.finalAssistantText || '';
   const goals = extractSection(tailText, 'Goals') ?? (tailText ? tailText.split('\n').slice(0, 4).join('\n') : null);
   const plan = extractSection(tailText, 'Plan') ?? null;
   let evaluation = extractSection(tailText, 'Evaluation');
   let nextSteps = extractSection(tailText, 'Next Steps');
 
+  // Classify "empty output": pi finished without failure, but produced no tool
+  // calls. Pi-runner can't distinguish this from a legitimate no-op turn, so
+  // the executor owns the classification.
+  let failure = result.failure;
+  if (!failure && result.actions.length === 0) {
+    failure = {
+      kind: 'empty_output',
+      message: 'Pi finished without making any tool calls.',
+      attempts: 1,
+    };
+  }
+
   if (!evaluation) {
     evaluation =
       result.errorMessage
         ? `Iteration ended with error: ${result.errorMessage}`
+        : failure?.kind === 'empty_output'
+        ? `Pi produced no tool calls this turn (${failure.message}).`
         : `Iteration finished. Pi executed ${result.actions.length} tool calls. No structured evaluation produced — consider lowering iteration scope or checking the agent's final message.`;
   }
   if (!nextSteps) {
@@ -102,5 +113,6 @@ export async function executeIteration(
     evaluation,
     nextSteps,
     tokensUsed: result.tokensUsed,
+    failure,
   };
 }

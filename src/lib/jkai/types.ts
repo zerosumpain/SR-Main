@@ -38,3 +38,24 @@ export interface BudgetCheckResult {
 export type BuildStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed';
 export type IterationStatus = 'running' | 'completed' | 'failed';
 export type LogType = 'thinking' | 'text' | 'code' | 'output' | 'error' | 'system';
+
+export type FailureKind =
+  | 'stalled'
+  | 'provider_error'
+  | 'rate_limited'
+  | 'auth_failed'
+  | 'container_missing'
+  | 'wall_clock_timeout'
+  | 'nonzero_exit'
+  | 'empty_output';
+
+export interface FailureEnvelope {
+  kind: FailureKind;
+  message: string;
+  httpStatus?: number;
+  providerErrorCode?: string;
+  lastEventAgeMs?: number;
+  tokensBeforeStall?: number;
+  stderrTail?: string;
+  attempts: number;
+}

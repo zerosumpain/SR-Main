@@ -505,6 +505,8 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   modelId: text('model_id').notNull().default('glm-5.1'),
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
+  failure: jsonb('failure'),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
 });
 
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
@@ -524,6 +526,8 @@ export const jkaiIterations = pgTable('jkai_iterations', {
   tokensUsed: integer('tokens_used').notNull().default(0),
   durationMs: integer('duration_ms'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  failure: jsonb('failure'),
+  retryOfIterationId: text('retry_of_iteration_id'),
 });
 
 export type JkaiIteration = typeof jkaiIterations.$inferSelect;

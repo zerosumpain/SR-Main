@@ -39,6 +39,7 @@ export async function getSandboxStatus(): Promise<SandboxStatus> {
 }
 
 export async function ensureSandboxRunning(): Promise<void> {
+  // Verify-then-fix: trust nothing, always re-inspect before every launch.
   const status = await getSandboxStatus();
   if (status.running) return;
 
@@ -56,6 +57,16 @@ export async function ensureSandboxRunning(): Promise<void> {
     `--network bridge -v jkai-workspace:/home/jkai/workspace ${IMAGE_NAME}`,
   );
   clearContainerIpCache();
+
+  // Post-condition check: make sure the container actually came up. A failed
+  // `docker run` can succeed at the CLI level but leave the container stopped
+  // (e.g. bad image, port conflict). Don't let callers proceed into a dead pipe.
+  const after = await getSandboxStatus();
+  if (!after.running) {
+    throw new Error(
+      `Sandbox container ${CONTAINER_NAME} failed to start after docker run`,
+    );
+  }
 }
 
 export async function buildSandboxImage(): Promise<void> {

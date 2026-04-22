@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
-import type { ActionRecord } from './types';
+import type { ActionRecord, FailureEnvelope, FailureKind } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { loadKeys } from '$lib/deepdive/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
@@ -37,6 +37,8 @@ interface PiMessage {
   usage?: { input: number; output: number; totalTokens: number; cost?: { total: number } };
   errorMessage?: string;
   stopReason?: string;
+  httpStatus?: number;
+  errorCode?: string;
 }
 
 interface PiEvent {
@@ -59,6 +61,7 @@ export interface PiRunResult {
   finalAssistantText: string;
   tokensUsed: number;
   errorMessage: string | null;
+  failure: FailureEnvelope | null;
 }
 
 // --- Provider resolution ---
@@ -126,76 +129,6 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const modelId = build.modelId ?? 'anthropic/claude-sonnet-4.5';
   const { envVar, value: apiKey } = await resolveApiKey(provider);
 
-  // Retry the whole pi invocation if the upstream LLM connection stalls.
-  // Accumulates state across retries so a stalled-then-recovered run still
-  // surfaces a full actions/messages/tokens tally.
-  const MAX_ATTEMPTS = 3;
-  const accumulated: PiRunResult = {
-    actions: [],
-    messages: [],
-    finalAssistantText: '',
-    tokensUsed: 0,
-    errorMessage: null,
-  };
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = await runPiOnce({
-      build,
-      iteration,
-      workdir,
-      systemPrompt,
-      userPrompt,
-      maxWallClockMs,
-      isStopped,
-      provider,
-      modelId,
-      envVar,
-      apiKey,
-      attempt,
-    });
-    accumulated.actions.push(...result.actions);
-    accumulated.messages.push(...result.messages);
-    accumulated.tokensUsed += result.tokensUsed;
-    if (result.finalAssistantText) accumulated.finalAssistantText = result.finalAssistantText;
-    accumulated.errorMessage = result.errorMessage;
-    if (!result.stalled || attempt === MAX_ATTEMPTS || isStopped()) break;
-    await emitLog(
-      build.id,
-      'system',
-      `Pi stalled — retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
-      iteration.id,
-    );
-  }
-  return accumulated;
-}
-
-interface PiOnceOptions extends PiRunOptions {
-  provider: string;
-  modelId: string;
-  envVar: string;
-  apiKey: string;
-  attempt: number;
-}
-
-interface PiOnceResult extends PiRunResult {
-  stalled: boolean;
-}
-
-async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
-  const {
-    build,
-    iteration,
-    workdir,
-    systemPrompt,
-    userPrompt,
-    maxWallClockMs = 30 * 60 * 1000,
-    isStopped,
-    provider,
-    modelId,
-    envVar,
-    apiKey,
-    attempt,
-  } = opts;
-
   const piCmd = [
     'pi',
     '--mode', 'json',
@@ -226,7 +159,7 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
   await emitLog(
     build.id,
     'system',
-    `Launching pi agent (${provider}/${modelId})${attempt > 1 ? ` — attempt ${attempt}` : ''}`,
+    `Launching pi agent (${provider}/${modelId})`,
     iteration.id,
   );
 
@@ -235,6 +168,9 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
   let finalAssistantText = '';
   let tokensUsed = 0;
   let errorMessage: string | null = null;
+  let providerHttpStatus: number | undefined;
+  let providerErrorCode: string | undefined;
+  let wallClockHit = false;
   // toolCallId → {name, args} captured from the most recent assistant message
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
@@ -250,6 +186,7 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
 
   const wallClockTimer = setTimeout(() => {
     try {
+      wallClockHit = true;
       child.kill('SIGTERM');
       emitLog(
         build.id,
@@ -260,15 +197,18 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
     } catch {}
   }, maxWallClockMs);
 
-  // Idle-watchdog: if pi emits nothing on stdout for this long, assume the
-  // upstream API connection has stalled (seen with ZAI hanging mid-stream)
-  // and kill the subprocess so the orchestrator can retry or move on.
+  // Idle-watchdog: if pi emits nothing on stdout for this long, the upstream
+  // API connection has stalled. Surface as a `stalled` failure envelope so
+  // the orchestrator can abort and prompt the user to switch model.
   const IDLE_TIMEOUT_MS = 90 * 1000;
   let lastOutputAt = Date.now();
   let stalled = false;
+  let stalledAgeMs = 0;
   const idleCheck = setInterval(() => {
-    if (Date.now() - lastOutputAt > IDLE_TIMEOUT_MS) {
+    const age = Date.now() - lastOutputAt;
+    if (age > IDLE_TIMEOUT_MS) {
       stalled = true;
+      stalledAgeMs = age;
       try {
         child.kill('SIGTERM');
         emitLog(
@@ -373,6 +313,8 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
       }
       if (m.errorMessage) {
         errorMessage = m.errorMessage;
+        if (typeof m.httpStatus === 'number') providerHttpStatus = m.httpStatus;
+        if (typeof m.errorCode === 'string') providerErrorCode = m.errorCode;
         await emitLog(build.id, 'error', `Pi error: ${m.errorMessage}`, iteration.id);
       }
 
@@ -456,12 +398,102 @@ async function runPiOnce(opts: PiOnceOptions): Promise<PiOnceResult> {
     await emitLog(build.id, 'error', `Pi exited non-zero (${exitCode}): ${errorMessage}`, iteration.id);
   }
 
+  const failure = classifyFailure({
+    stalled,
+    stalledAgeMs,
+    wallClockHit,
+    exitCode,
+    errorMessage,
+    providerHttpStatus,
+    providerErrorCode,
+    stderrTail: stderrBuf.slice(-2000),
+    tokensUsed,
+    maxWallClockMs,
+  });
+
   return {
     actions,
     messages,
     finalAssistantText,
     tokensUsed,
     errorMessage,
-    stalled,
+    failure,
+  };
+}
+
+interface ClassifyInput {
+  stalled: boolean;
+  stalledAgeMs: number;
+  wallClockHit: boolean;
+  exitCode: number;
+  errorMessage: string | null;
+  providerHttpStatus: number | undefined;
+  providerErrorCode: string | undefined;
+  stderrTail: string;
+  tokensUsed: number;
+  maxWallClockMs: number;
+}
+
+function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
+  const stderrLc = i.stderrTail.toLowerCase();
+  const errLc = (i.errorMessage ?? '').toLowerCase();
+
+  // Auth failure — check first so 401/403 doesn't get misclassified as generic provider_error
+  if (i.providerHttpStatus === 401 || i.providerHttpStatus === 403 ||
+      /401|403|unauthorized|forbidden|invalid[\s-]*api[\s-]*key/.test(errLc)) {
+    return base('auth_failed',
+      i.errorMessage ?? 'Provider rejected the API key.', i);
+  }
+
+  // Rate limited
+  if (i.providerHttpStatus === 429 || /429|rate[\s_-]*limit/.test(errLc)) {
+    return base('rate_limited',
+      i.errorMessage ?? 'Provider rate limit hit.', i);
+  }
+
+  if (i.wallClockHit) {
+    return base('wall_clock_timeout',
+      `Pi exceeded wall-clock cap (${Math.round(i.maxWallClockMs / 1000)}s).`, i);
+  }
+
+  if (i.stalled) {
+    return base('stalled',
+      `Pi emitted no stream events for ${Math.round(i.stalledAgeMs / 1000)}s — upstream connection stalled.`,
+      i);
+  }
+
+  // Container missing — look at stderr (docker's own message)
+  if (/no such container/.test(stderrLc)) {
+    return base('container_missing',
+      'Sandbox container disappeared mid-run.', i);
+  }
+
+  // Provider error with an explicit error message but exit 0 (pi reports then exits)
+  if (i.errorMessage && i.exitCode === 0) {
+    return base('provider_error',
+      i.errorMessage, i);
+  }
+
+  if (i.exitCode !== 0) {
+    return base('nonzero_exit',
+      i.errorMessage ?? `pi exited with code ${i.exitCode}`, i);
+  }
+
+  // Note: empty_output is NOT classified here — the executor decides that
+  // based on actions.length, because pi-runner can't tell "pi did nothing"
+  // from "pi legitimately finished with no tool calls".
+  return null;
+}
+
+function base(kind: FailureKind, message: string, i: ClassifyInput): FailureEnvelope {
+  return {
+    kind,
+    message,
+    httpStatus: i.providerHttpStatus,
+    providerErrorCode: i.providerErrorCode,
+    lastEventAgeMs: i.stalled ? i.stalledAgeMs : undefined,
+    tokensBeforeStall: i.stalled ? i.tokensUsed : undefined,
+    stderrTail: i.stderrTail || undefined,
+    attempts: 1,
   };
 }

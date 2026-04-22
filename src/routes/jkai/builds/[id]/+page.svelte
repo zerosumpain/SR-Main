@@ -3,6 +3,8 @@
   import { tick } from 'svelte';
   import type { PageData } from './$types';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import BuildFailureBanner from '$lib/components/jkai/BuildFailureBanner.svelte';
+  import type { FailureEnvelope } from '$lib/jkai/types';
 
   let { data } = $props();
   let activeTab = $state<'activity' | 'iterations' | 'preview' | 'controls'>('activity');
@@ -278,6 +280,16 @@
 </PageHeader>
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
+  {#if build.status === 'failed'}
+    <BuildFailureBanner
+      buildId={build.id}
+      failure={build.failure as FailureEnvelope | null}
+      currentProvider={build.modelProvider}
+      currentModelId={build.modelId}
+      onContinued={() => window.location.reload()}
+    />
+  {/if}
+
   <div class="mb-6">
     <div class="flex items-start justify-between">
       <div>

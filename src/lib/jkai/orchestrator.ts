@@ -21,6 +21,7 @@ import { executeIteration } from './executor';
 import { runTests } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
+import type { FailureEnvelope } from './types';
 
 export { onBuildLog } from './log-emitter';
 
@@ -143,7 +144,11 @@ class Orchestrator {
     await emitLog(buildId, 'system', 'Build stopped by user');
   }
 
-  async continueBuild(buildId: string, improvementPrompt: string): Promise<void> {
+  async continueBuild(
+    buildId: string,
+    improvementPrompt: string,
+    modelOverride?: { provider?: string; modelId?: string },
+  ): Promise<void> {
     if (this.activeBuildId) {
       throw new Error(`Build ${this.activeBuildId} is already active`);
     }
@@ -160,12 +165,22 @@ class Orchestrator {
     // Append the improvement prompt to the original build prompt
     const combinedPrompt = `${build.prompt}\n\n--- Continuation ---\nThe project above has been built. The user now wants the following improvements:\n${improvementPrompt}`;
 
-    await db
-      .update(jkaiBuilds)
-      .set({ status: 'running', prompt: combinedPrompt, updatedAt: new Date() })
-      .where(eq(jkaiBuilds.id, buildId));
+    const updates: Record<string, unknown> = {
+      status: 'running',
+      prompt: combinedPrompt,
+      updatedAt: new Date(),
+      failure: null,
+      consecutiveFailures: 0,
+    };
+    if (modelOverride?.provider) updates.modelProvider = modelOverride.provider;
+    if (modelOverride?.modelId) updates.modelId = modelOverride.modelId;
 
-    await emitLog(buildId, 'system', `Build continuing with new objectives: ${improvementPrompt.slice(0, 200)}`);
+    await db.update(jkaiBuilds).set(updates).where(eq(jkaiBuilds.id, buildId));
+
+    const modelNote = modelOverride?.provider || modelOverride?.modelId
+      ? ` (model: ${modelOverride.provider ?? build.modelProvider}/${modelOverride.modelId ?? build.modelId})`
+      : '';
+    await emitLog(buildId, 'system', `Build continuing with new objectives${modelNote}: ${improvementPrompt.slice(0, 200)}`);
 
     // Run a fresh planning debate with full context of existing work, then resume iterations
     this.initContinuation(buildId, combinedPrompt).catch(async (err) => {
@@ -320,12 +335,20 @@ class Orchestrator {
 
       const iterationNumber = (lastIteration?.number || 0) + 1;
 
+      // If the previous iteration failed with empty_output, this one is a retry
+      // with a corrective prompt nudge. Track that so the retry's own failure
+      // signals the build-level abort rather than another retry.
+      const isEmptyOutputRetry =
+        lastIteration?.status === 'failed' &&
+        (lastIteration.failure as FailureEnvelope | null)?.kind === 'empty_output';
+
       const [iteration] = await db
         .insert(jkaiIterations)
         .values({
           buildId,
           number: iterationNumber,
           status: 'running',
+          retryOfIterationId: isEmptyOutputRetry ? lastIteration!.id : null,
         })
         .returning();
 
@@ -350,15 +373,28 @@ class Orchestrator {
 
       const startTime = Date.now();
 
-      const result = await executeIteration(build, iteration, prevIteration, projectPlan, iterationNumber, () => this.stopped);
+      const retryNudge = isEmptyOutputRetry
+        ? 'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.'
+        : undefined;
+
+      const result = await executeIteration(
+        build,
+        iteration,
+        prevIteration,
+        projectPlan,
+        iterationNumber,
+        () => this.stopped,
+        retryNudge,
+      );
 
       const durationMs = Date.now() - startTime;
+      const failure = result.failure;
+      const iterationStatus: 'completed' | 'failed' = failure ? 'failed' : 'completed';
 
-      // Always update the iteration record, even if no evaluation was produced
       await db
         .update(jkaiIterations)
         .set({
-          status: 'completed',
+          status: iterationStatus,
           goals: result.goals,
           plan: result.plan,
           actions: result.actions,
@@ -367,19 +403,54 @@ class Orchestrator {
           nextSteps: result.nextSteps,
           tokensUsed: result.tokensUsed,
           durationMs,
+          failure: failure as unknown as Record<string, unknown> | null,
         })
         .where(eq(jkaiIterations.id, iteration.id));
 
-      // Update build counters
+      // Build counters: failed iterations don't consume active-minutes budget
+      // (per design: only successful work counts). Token spend still counts.
+      const newConsecutiveFailures = failure ? build.consecutiveFailures + 1 : 0;
       await db
         .update(jkaiBuilds)
         .set({
           iterationsCompleted: build.iterationsCompleted + 1,
           tokensUsed: build.tokensUsed + result.tokensUsed,
-          activeMinutesUsed: build.activeMinutesUsed + durationMs / 60000,
+          activeMinutesUsed: failure
+            ? build.activeMinutesUsed
+            : build.activeMinutesUsed + durationMs / 60000,
+          consecutiveFailures: newConsecutiveFailures,
           updatedAt: new Date(),
         })
         .where(eq(jkaiBuilds.id, buildId));
+
+      // --- Abort paths ---
+      //
+      // 1. empty_output + already a retry → abort (we gave it one chance).
+      // 2. empty_output + first time     → schedule retry (the next iteration
+      //    will detect the lastIteration.status=failed/kind=empty_output and
+      //    inject the corrective nudge).
+      // 3. Any other failure kind        → abort immediately.
+      // 4. consecutive_failures >= 2     → safety net abort.
+      if (failure) {
+        const shouldAbort =
+          failure.kind !== 'empty_output' ||
+          isEmptyOutputRetry ||
+          newConsecutiveFailures >= 2;
+
+        if (shouldAbort) {
+          await this.abortBuild(buildId, failure);
+          return;
+        }
+
+        await emitLog(
+          buildId,
+          'system',
+          `Iteration #${iterationNumber} produced no tool calls — retrying once with a corrective nudge.`,
+          iteration.id,
+        );
+        this.scheduleNext(buildId, 1000);
+        return;
+      }
 
       // Run test suite
       await emitLog(buildId, 'system', 'Running tests...', iteration.id);
@@ -443,6 +514,27 @@ class Orchestrator {
       await emitLog(buildId, 'error', `Iteration error: ${err.message}`);
       this.scheduleNext(buildId, 30000);
     }
+  }
+
+  private async abortBuild(buildId: string, failure: FailureEnvelope): Promise<void> {
+    await db
+      .update(jkaiBuilds)
+      .set({
+        status: 'failed',
+        failure: failure as unknown as Record<string, unknown>,
+        updatedAt: new Date(),
+      })
+      .where(eq(jkaiBuilds.id, buildId));
+
+    await emitLog(
+      buildId,
+      'error',
+      `Build aborted: ${failure.kind} — ${failure.message}`,
+    );
+
+    this.activeBuildId = null;
+    if (this.loopTimer) clearTimeout(this.loopTimer);
+    this.loopTimer = null;
   }
 
   private async checkServeConfig(buildId: string): Promise<void> {

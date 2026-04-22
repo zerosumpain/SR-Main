@@ -1,0 +1,168 @@
+<script lang="ts">
+  import type { FailureEnvelope } from '$lib/jkai/types';
+
+  interface Props {
+    buildId: string;
+    failure: FailureEnvelope | null;
+    currentProvider: string;
+    currentModelId: string;
+    onContinued?: () => void;
+  }
+
+  let { buildId, failure, currentProvider, currentModelId, onContinued }: Props = $props();
+
+  const MODEL_OPTIONS = [
+    { provider: 'zai', modelId: 'glm-5.1', label: 'zai / glm-5.1' },
+    { provider: 'zai', modelId: 'glm-4.6', label: 'zai / glm-4.6' },
+    { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4.5', label: 'openrouter / claude-sonnet-4.5' },
+    { provider: 'openrouter', modelId: 'anthropic/claude-opus-4.7', label: 'openrouter / claude-opus-4.7' },
+  ];
+
+  let selectedKey = $state(`${currentProvider}::${currentModelId}`);
+  let improvementPrompt = $state('');
+  let submitting = $state(false);
+  let error = $state<string | null>(null);
+  let showDetails = $state(false);
+
+  const showForm = $derived(failure?.kind !== 'auth_failed');
+
+  const defaultPrompt = $derived(
+    `Continue where the last run left off — the previous attempt failed with: ${failure?.message ?? 'unknown'}`
+  );
+
+  async function submit() {
+    if (submitting) return;
+    submitting = true;
+    error = null;
+    try {
+      const [provider, modelId] = selectedKey.split('::');
+      const res = await fetch(`/api/jkai/builds/${buildId}/continue`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          prompt: improvementPrompt.trim() || defaultPrompt,
+          modelProvider: provider,
+          modelId,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      onContinued?.();
+    } catch (err: any) {
+      error = err.message ?? String(err);
+    } finally {
+      submitting = false;
+    }
+  }
+
+  function kindLabel(kind: string): string {
+    return kind.replace(/_/g, ' ');
+  }
+</script>
+
+{#if failure}
+  <div
+    class="mb-6 rounded border p-4"
+    style="border-color: #b94b4b; background: rgba(185, 75, 75, 0.06);"
+  >
+    <div class="flex items-start gap-3">
+      <span
+        class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded shrink-0"
+        style="font-family: var(--font-mono); background: #b94b4b; color: white;"
+      >
+        {kindLabel(failure.kind)}
+      </span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm" style="color: var(--text-primary);">{failure.message}</p>
+        <p class="text-xs mt-1" style="color: var(--text-ghost);">
+          Build aborted on {currentProvider} / {currentModelId}
+          {#if failure.lastEventAgeMs != null}
+            · idle {(failure.lastEventAgeMs / 1000).toFixed(0)}s before kill
+          {/if}
+          {#if failure.tokensBeforeStall != null}
+            · {failure.tokensBeforeStall} tokens before stall
+          {/if}
+          {#if failure.httpStatus != null}
+            · HTTP {failure.httpStatus}
+          {/if}
+        </p>
+        {#if failure.providerErrorCode || failure.stderrTail}
+          <button
+            type="button"
+            class="text-xs mt-2 underline"
+            style="color: var(--text-ghost);"
+            onclick={() => (showDetails = !showDetails)}
+          >
+            {showDetails ? 'Hide' : 'Show'} details
+          </button>
+          {#if showDetails}
+            <div class="mt-2 text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              {#if failure.providerErrorCode}
+                <div>providerErrorCode: {failure.providerErrorCode}</div>
+              {/if}
+              {#if failure.stderrTail}
+                <pre class="whitespace-pre-wrap mt-1 p-2 rounded" style="background: rgba(0,0,0,0.2); max-height: 200px; overflow: auto;">{failure.stderrTail}</pre>
+              {/if}
+            </div>
+          {/if}
+        {/if}
+      </div>
+    </div>
+
+    {#if !showForm}
+      <p class="text-xs mt-3 pl-[72px]" style="color: var(--text-ghost);">
+        Fix <code>keys.json</code> on the VPS and retry — continuing with a different model won't resolve an API key problem.
+      </p>
+    {:else}
+      <div class="mt-4 space-y-3">
+        <div>
+          <label for="failure-banner-model" class="block text-[10px] uppercase tracking-[0.2em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            Model
+          </label>
+          <select
+            id="failure-banner-model"
+            bind:value={selectedKey}
+            class="w-full rounded border px-2 py-1 text-sm"
+            style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
+          >
+            {#each MODEL_OPTIONS as opt}
+              <option value={`${opt.provider}::${opt.modelId}`}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div>
+          <label for="failure-banner-prompt" class="block text-[10px] uppercase tracking-[0.2em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+            Corrective prompt (optional)
+          </label>
+          <textarea
+            id="failure-banner-prompt"
+            bind:value={improvementPrompt}
+            placeholder={defaultPrompt}
+            rows="3"
+            class="w-full rounded border px-2 py-1 text-sm"
+            style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
+          ></textarea>
+        </div>
+
+        {#if error}
+          <p class="text-xs" style="color: #b94b4b;">{error}</p>
+        {/if}
+
+        <div class="flex justify-end">
+          <button
+            type="button"
+            onclick={submit}
+            disabled={submitting}
+            class="px-4 py-1.5 rounded text-[11px] uppercase tracking-wider border transition-colors"
+            style="border-color: var(--accent); color: var(--accent); opacity: {submitting ? 0.5 : 1};"
+          >
+            {submitting ? 'Continuing...' : 'Continue with selected model'}
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
+{/if}
