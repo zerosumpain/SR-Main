@@ -33,9 +33,11 @@ startWorkflowScheduler().catch((err) => {
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 startOrphanSweep();
 
-// Start the Gmail polling watcher
+// Start the Gmail polling watcher and orchestrator bridge
 import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
+import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';
 startGmailWatcher();
+registerGmailBridge();
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
@@ -46,6 +48,7 @@ function gracefulShutdown() {
   stopHealthScheduler();
   stopWorkflowScheduler();
   stopGmailWatcher();
+  unregisterGmailBridge();
   process.exit(0);
 }
 
