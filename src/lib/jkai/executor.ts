@@ -36,6 +36,7 @@ export async function executeIteration(
   iterationNumber: number,
   isStopped: () => boolean,
   systemPromptSuffix?: string,
+  deadlineRef?: { current: number },
 ): Promise<IterationResult> {
   const workdir = `/home/jkai/workspace/${build.id}/dev`;
 
@@ -73,6 +74,7 @@ export async function executeIteration(
     systemPrompt,
     userPrompt,
     isStopped,
+    deadlineRef,
   });
 
   const tailText = result.finalAssistantText || '';

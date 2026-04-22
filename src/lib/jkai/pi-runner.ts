@@ -111,6 +111,9 @@ export interface PiRunOptions {
   userPrompt: string;
   maxOutputTokens?: number;
   maxWallClockMs?: number;
+  /** Optional live-mutable deadline (Unix ms). If set, overrides maxWallClockMs
+   *  and allows the orchestrator to extend the deadline mid-run. */
+  deadlineRef?: { current: number };
   isStopped: () => boolean;
 }
 
@@ -122,8 +125,10 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     systemPrompt,
     userPrompt,
     maxWallClockMs = 30 * 60 * 1000,
+    deadlineRef,
     isStopped,
   } = opts;
+  const deadline = deadlineRef ?? { current: Date.now() + maxWallClockMs };
 
   const provider = (build.modelProvider ?? 'openrouter') as string;
   const modelId = build.modelId ?? 'anthropic/claude-sonnet-4.5';
@@ -188,18 +193,23 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     }
   }, 1000);
 
-  const wallClockTimer = setTimeout(() => {
-    try {
-      wallClockHit = true;
-      child.kill('SIGTERM');
-      emitLog(
-        build.id,
-        'system',
-        `Pi wall-clock timeout reached (${Math.round(maxWallClockMs / 1000)}s)`,
-        iteration.id,
-      );
-    } catch {}
-  }, maxWallClockMs);
+  // Poll the deadline (mutable) every 5s so user-initiated extensions via the
+  // orchestrator's extendDeadline() take effect mid-run.
+  const wallClockCheck = setInterval(() => {
+    if (Date.now() >= deadline.current) {
+      try {
+        wallClockHit = true;
+        child.kill('SIGTERM');
+        emitLog(
+          build.id,
+          'system',
+          `Pi wall-clock deadline reached`,
+          iteration.id,
+        );
+      } catch {}
+      clearInterval(wallClockCheck);
+    }
+  }, 5000);
 
   // Two-stage watchdog:
   //  - FIRST_EVENT_TIMEOUT_MS (240s) covers time-to-first-token, which can be
@@ -405,7 +415,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   clearInterval(stopTimer);
   clearInterval(idleCheck);
-  clearTimeout(wallClockTimer);
+  clearInterval(wallClockCheck);
 
   if (exitCode !== 0 && !errorMessage) {
     errorMessage = stderrBuf.slice(-2000) || `pi exited with code ${exitCode}`;

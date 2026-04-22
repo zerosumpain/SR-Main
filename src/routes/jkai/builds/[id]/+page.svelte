@@ -159,6 +159,7 @@
   let fullscreen = $state(false);
   let previewKey = $state(Date.now());
   let publishing = $state(false);
+  let extending = $state(false);
   let publishedUrl = $state<string | null>(build.publishedSlug ? `/projects/jkai/${build.publishedSlug}/` : null);
   let continuePrompt = $state('');
   let continuing = $state(false);
@@ -194,6 +195,26 @@
       }
     } catch (err) {
       console.error(`Failed to ${action} build:`, err);
+    }
+  }
+
+  async function extendDeadline() {
+    if (extending) return;
+    extending = true;
+    try {
+      const res = await fetch(`/api/jkai/builds/${build.id}/extend`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ minutes: 10 }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Extend failed:', body.error ?? res.status);
+      }
+    } catch (err) {
+      console.error('Extend failed:', err);
+    } finally {
+      extending = false;
     }
   }
 
@@ -301,6 +322,17 @@
         {/if}
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        {#if build.status === 'running'}
+          <button
+            onclick={extendDeadline}
+            disabled={extending}
+            class="px-3 py-1 rounded text-[11px] uppercase tracking-wider border transition-colors"
+            style="border-color: var(--accent); color: var(--accent); opacity: {extending ? 0.5 : 1};"
+            title="Give the current iteration more time before the wall-clock cap kills Pi"
+          >
+            {extending ? 'Extending...' : '+10 min'}
+          </button>
+        {/if}
         {#if build.status === 'completed' || build.status === 'paused'}
           <button
             onclick={publishProject}

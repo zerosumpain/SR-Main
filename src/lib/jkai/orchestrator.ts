@@ -68,6 +68,20 @@ class Orchestrator {
   private activeBuildId: string | null = null;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  // Mutable deadline for the currently-executing iteration's Pi process.
+  // The UI can push this back via extendDeadline() to grant more time.
+  private currentDeadline: { current: number } | null = null;
+
+  extendDeadline(buildId: string, additionalMs: number): number | null {
+    if (this.activeBuildId !== buildId || !this.currentDeadline) return null;
+    this.currentDeadline.current += additionalMs;
+    return this.currentDeadline.current;
+  }
+
+  getCurrentDeadline(buildId: string): number | null {
+    if (this.activeBuildId !== buildId || !this.currentDeadline) return null;
+    return this.currentDeadline.current;
+  }
 
   async startBuild(buildId: string): Promise<void> {
     if (this.activeBuildId) {
@@ -377,6 +391,9 @@ class Orchestrator {
         ? 'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.'
         : undefined;
 
+      const deadlineRef = { current: Date.now() + 30 * 60 * 1000 };
+      this.currentDeadline = deadlineRef;
+
       const result = await executeIteration(
         build,
         iteration,
@@ -385,7 +402,10 @@ class Orchestrator {
         iterationNumber,
         () => this.stopped,
         retryNudge,
+        deadlineRef,
       );
+
+      this.currentDeadline = null;
 
       const durationMs = Date.now() - startTime;
       const failure = result.failure;
@@ -409,7 +429,12 @@ class Orchestrator {
 
       // Build counters: failed iterations don't consume active-minutes budget
       // (per design: only successful work counts). Token spend still counts.
-      const newConsecutiveFailures = failure ? build.consecutiveFailures + 1 : 0;
+      // wall_clock_timeout doesn't bump consecutive_failures because Pi did
+      // useful work and just ran out of time — the next iteration will pick
+      // up the partial work in dev/ (live/ is empty so seedDevFromLive is a
+      // no-op, preserving whatever files iter N wrote).
+      const counts = failure && failure.kind !== 'wall_clock_timeout';
+      const newConsecutiveFailures = counts ? build.consecutiveFailures + 1 : failure ? build.consecutiveFailures : 0;
       await db
         .update(jkaiBuilds)
         .set({
@@ -426,26 +451,31 @@ class Orchestrator {
       // --- Abort paths ---
       //
       // 1. empty_output + already a retry → abort (we gave it one chance).
-      // 2. empty_output + first time     → schedule retry (the next iteration
-      //    will detect the lastIteration.status=failed/kind=empty_output and
-      //    inject the corrective nudge).
-      // 3. Any other failure kind        → abort immediately.
-      // 4. consecutive_failures >= 2     → safety net abort.
+      // 2. empty_output + first time     → schedule retry with corrective nudge.
+      // 3. wall_clock_timeout            → schedule next iteration (partial work
+      //    is preserved in dev/ since live is empty; Pi hit the clock, not a
+      //    real failure). max_iterations/maxTotalMinutes budget will still cap.
+      // 4. Any other failure kind        → abort immediately.
+      // 5. consecutive_failures >= 2     → safety net abort.
       if (failure) {
-        const shouldAbort =
-          failure.kind !== 'empty_output' ||
-          isEmptyOutputRetry ||
-          newConsecutiveFailures >= 2;
+        const canContinue =
+          (failure.kind === 'empty_output' && !isEmptyOutputRetry) ||
+          failure.kind === 'wall_clock_timeout';
+        const shouldAbort = !canContinue || newConsecutiveFailures >= 2;
 
         if (shouldAbort) {
           await this.abortBuild(buildId, failure);
           return;
         }
 
+        const continueMsg = failure.kind === 'wall_clock_timeout'
+          ? `Iteration #${iterationNumber} hit the wall-clock cap while still working — partial work preserved in dev/. Continuing with iteration #${iterationNumber + 1}.`
+          : `Iteration #${iterationNumber} produced no tool calls — retrying once with a corrective nudge.`;
+
         await emitLog(
           buildId,
           'system',
-          `Iteration #${iterationNumber} produced no tool calls — retrying once with a corrective nudge.`,
+          continueMsg,
           iteration.id,
         );
         this.scheduleNext(buildId, 1000);
