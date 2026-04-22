@@ -197,26 +197,35 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     } catch {}
   }, maxWallClockMs);
 
-  // Idle-watchdog: if pi emits nothing on stdout for this long, the upstream
-  // API connection has stalled. Surface as a `stalled` failure envelope so
-  // the orchestrator can abort and prompt the user to switch model.
-  const IDLE_TIMEOUT_MS = 90 * 1000;
+  // Two-stage watchdog:
+  //  - FIRST_EVENT_TIMEOUT_MS (240s) covers time-to-first-token, which can be
+  //    slow when upstream (zai) is under load but still recoverable.
+  //  - IDLE_TIMEOUT_MS (180s) applies once streaming has started; if the
+  //    stream goes quiet mid-flight for this long, the connection has stalled.
+  // A stream that never starts hits the first-event cap; one that starts and
+  // then dies hits the idle cap.
+  const FIRST_EVENT_TIMEOUT_MS = 240 * 1000;
+  const IDLE_TIMEOUT_MS = 180 * 1000;
+  const startedAt = Date.now();
   let lastOutputAt = Date.now();
+  let anyOutput = false;
   let stalled = false;
   let stalledAgeMs = 0;
   const idleCheck = setInterval(() => {
-    const age = Date.now() - lastOutputAt;
-    if (age > IDLE_TIMEOUT_MS) {
+    const now = Date.now();
+    const idleAge = now - lastOutputAt;
+    const sinceStart = now - startedAt;
+    const limit = anyOutput ? IDLE_TIMEOUT_MS : FIRST_EVENT_TIMEOUT_MS;
+    const age = anyOutput ? idleAge : sinceStart;
+    if (age > limit) {
       stalled = true;
       stalledAgeMs = age;
       try {
         child.kill('SIGTERM');
-        emitLog(
-          build.id,
-          'error',
-          `Pi idle for ${Math.round(IDLE_TIMEOUT_MS / 1000)}s with no stream events — likely a stalled upstream connection. Killed.`,
-          iteration.id,
-        );
+        const reason = anyOutput
+          ? `Pi idle for ${Math.round(IDLE_TIMEOUT_MS / 1000)}s mid-stream — upstream connection stalled.`
+          : `Pi produced no output in ${Math.round(FIRST_EVENT_TIMEOUT_MS / 1000)}s — upstream never responded.`;
+        emitLog(build.id, 'error', `${reason} Killed.`, iteration.id);
       } catch {}
     }
   }, 10000);
@@ -229,6 +238,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   child.stdout.on('data', (chunk: string) => {
     lastOutputAt = Date.now();
+    anyOutput = true;
     stdoutBuf += chunk;
     let nlIdx = stdoutBuf.indexOf('\n');
     while (nlIdx !== -1) {
@@ -458,7 +468,9 @@ function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
 
   if (i.stalled) {
     return base('stalled',
-      `Pi emitted no stream events for ${Math.round(i.stalledAgeMs / 1000)}s — upstream connection stalled.`,
+      i.tokensUsed > 0
+        ? `Pi stream went quiet for ${Math.round(i.stalledAgeMs / 1000)}s mid-flight — upstream connection stalled.`
+        : `Pi received no response from upstream within ${Math.round(i.stalledAgeMs / 1000)}s.`,
       i);
   }
 
