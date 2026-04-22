@@ -266,10 +266,13 @@ export class GmailService {
     const messageId = res.data.id ?? '';
     const threadId = res.data.threadId ?? '';
 
-    // Best-effort: retrieve the RFC822 Message-ID header from the sent message.
-    // This is optional — callers that need it can call fetchMessage separately.
-    // We skip it here to avoid extra API round-trips in the hot path.
-    const rfc822MessageId = '';
+    let rfc822MessageId = '';
+    try {
+      const fetched = await this.fetchMessage(account, messageId);
+      rfc822MessageId = fetched.headers.messageId ?? '';
+    } catch {
+      // best-effort; leave empty if the re-fetch fails
+    }
 
     return { messageId, threadId, rfc822MessageId };
   }

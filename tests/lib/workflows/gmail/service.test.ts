@@ -143,8 +143,27 @@ describe('GmailService.fetchMessage', () => {
 });
 
 describe('GmailService.sendMessage', () => {
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
   it('builds RFC822 message and sends', async () => {
     mockRequest.mockResolvedValueOnce({ data: { id: 'sent1', threadId: 't2' } });
+    mockRequest.mockResolvedValueOnce({
+      data: {
+        id: 'sent1',
+        threadId: 't2',
+        labelIds: [],
+        snippet: '',
+        historyId: '0',
+        internalDate: '0',
+        payload: {
+          headers: [{ name: 'Message-ID', value: '<rfc-id@x.com>' }],
+          mimeType: 'text/plain',
+          parts: [],
+        },
+      },
+    });
 
     const svc = new GmailService();
     const account = { id: 1, refreshTokenEnc: encryptToken('r'), accessTokenEnc: encryptToken('a'),
@@ -158,7 +177,7 @@ describe('GmailService.sendMessage', () => {
 
     expect(result.messageId).toBe('sent1');
     expect(result.threadId).toBe('t2');
-    const call = mockRequest.mock.calls.at(-1)![0];
+    const call = mockRequest.mock.calls[0][0];
     expect(call.requestBody.raw).toBeDefined();
     const decoded = Buffer.from(call.requestBody.raw, 'base64url').toString('utf8');
     expect(decoded).toContain('To: b@x.com');
@@ -168,6 +187,21 @@ describe('GmailService.sendMessage', () => {
 
   it('preserves In-Reply-To and References when threading', async () => {
     mockRequest.mockResolvedValueOnce({ data: { id: 's2', threadId: 't3' } });
+    mockRequest.mockResolvedValueOnce({
+      data: {
+        id: 's2',
+        threadId: 't3',
+        labelIds: [],
+        snippet: '',
+        historyId: '0',
+        internalDate: '0',
+        payload: {
+          headers: [{ name: 'Message-ID', value: '<rfc-id@x.com>' }],
+          mimeType: 'text/plain',
+          parts: [],
+        },
+      },
+    });
     const svc = new GmailService();
     const account = { id: 1, refreshTokenEnc: encryptToken('r'), accessTokenEnc: encryptToken('a'),
       accessTokenExpiresAt: new Date(Date.now() + 3600_000), email: 'me@x.com', scopes: '', status: 'active' } as any;
@@ -181,7 +215,7 @@ describe('GmailService.sendMessage', () => {
       threadId: 't3',
     });
 
-    const call = mockRequest.mock.calls.at(-1)![0];
+    const call = mockRequest.mock.calls[0][0];
     const decoded = Buffer.from(call.requestBody.raw, 'base64url').toString('utf8');
     expect(decoded).toContain('In-Reply-To: <orig@x.com>');
     expect(decoded).toContain('References: <orig@x.com>');
