@@ -34,6 +34,12 @@ import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
 import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
+import { gmailTriggerDef } from './nodes/gmail-trigger.def';
+import { gmailFetchDef } from './nodes/gmail-fetch.def';
+import { gmailSendDef } from './nodes/gmail-send.def';
+import { gmailReplyDef } from './nodes/gmail-reply.def';
+import { gmailLabelDef } from './nodes/gmail-label.def';
+import { gmailSearchDef } from './nodes/gmail-search.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
 import { intelWriteDef } from './nodes/intel-write.def';
 import type { NodeDefinition } from './types';
@@ -72,6 +78,12 @@ const builtInDefinitions: NodeDefinition[] = [
   webScrapeDef,
   stealthScrapeDef,
   stealthScrapeLlmDef,
+  gmailTriggerDef,
+  gmailFetchDef,
+  gmailSendDef,
+  gmailReplyDef,
+  gmailLabelDef,
+  gmailSearchDef,
   tavilySearchDef,
   intelWriteDef,
 ];
