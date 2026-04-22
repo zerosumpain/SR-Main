@@ -1,86 +1,75 @@
-import type { NodeExecutor, NodeResult } from '../types';
-import { interpolateTemplateStrict } from './template';
-import { runScrape } from '$lib/workflows/scraper/runner';
-import type { ScrapeJob } from '$lib/workflows/scraper/types';
+import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import { interpolateTemplate } from './template';
+import { extractLocal } from '$lib/deepdive/extract-local';
 
 export { webScrapeDef } from './web-scrape.def';
 
 export const webScrapeExecutor: NodeExecutor = {
   type: 'web-scrape',
 
-  async execute(input, config, context): Promise<NodeResult> {
-    const url = interpolateTemplateStrict((config.url as string) || '', input).result;
-    const profile = (config.profile as string) || 'default';
-    const waitFor = config.waitFor as ScrapeJob['waitFor'];
-    const extract = (config.extract as ScrapeJob['extract']) || [];
-    const pagination = config.pagination as ScrapeJob['pagination'] | undefined;
-    const credentialId = config.credentialId as number | undefined;
-    const pacing = config.pacing as ScrapeJob['pacing'] | undefined;
+  async execute(
+    input: Record<string, unknown>,
+    config: Record<string, unknown>,
+    _context: ExecutionContext,
+  ): Promise<NodeResult> {
+    const rawUrl = (config.url as string) || '';
+    const url = interpolateTemplate(rawUrl, input).trim();
 
-    const result = await runScrape({
-      url,
-      profile,
-      waitFor,
-      extract,
-      pagination,
-      credentialId,
-      pacing,
-      workflowRunId: context.runId,
-      onProgress: (ev) => {
-        context.emit({
-          type: 'scraper.progress',
-          runId: context.runId,
-          runLogId: 0,
-          stage: (ev.t as any) ?? 'page.done',
-          url: ev.url as string | undefined,
-          pageIndex: ev.pageIndex as number | undefined,
-          error: ev.error as string | undefined,
-          timestamp: new Date().toISOString(),
-        } as any);
-      },
-    });
+    if (!url) {
+      throw new Error('web-scrape: url is required (supports {{input.field}} templates)');
+    }
 
-    context.emit({
-      type: 'scraper.run.finished',
-      runId: context.runId,
-      runLogId: result.runLogId ?? 0,
-      success: result.success,
-      pagesLoaded: result.pages.length,
-      error: result.error,
-      timestamp: new Date().toISOString(),
-    } as any);
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error(`web-scrape: url must start with http:// or https:// (got "${url}")`);
+    }
+
+    const result = await extractLocal(url);
+
+    if (!result) {
+      return {
+        output: {
+          url,
+          success: false,
+          error: 'Failed to fetch or no readable content found',
+          title: null,
+          text: '',
+          length: 0,
+        },
+      };
+    }
+
+    const maxChars = Number(config.maxChars) || 0;
+    const text = maxChars > 0 ? result.content.slice(0, maxChars) : result.content;
 
     return {
       output: {
-        success: result.success,
-        pages: result.pages,
-        pageCount: result.pages.length,
-        error: result.error,
-        runLogId: result.runLogId,
+        url: result.url,
+        success: true,
+        title: result.title,
+        text,
+        length: text.length,
+        truncated: maxChars > 0 && result.content.length > maxChars,
       },
-      metadata: { _selectedHandle: 'output' },
     };
+  },
+
+  getInputSchema() {
+    return { type: 'object', description: 'Used for URL template interpolation (e.g. {{input.url}})' };
   },
 
   getOutputSchema() {
     return {
       type: 'object',
       properties: {
-        success: { type: 'boolean' },
-        pages: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              url: { type: 'string' },
-              fields: { type: 'object' },
-            },
-          },
-        },
-        pageCount: { type: 'number' },
-        error: { type: 'string' },
-        runLogId: { type: 'number' },
+        url: { type: 'string', description: 'The URL that was scraped' },
+        success: { type: 'boolean', description: 'Whether readable content was extracted' },
+        title: { type: 'string', description: 'Page title (nullable)' },
+        text: { type: 'string', description: 'Extracted readable text content' },
+        length: { type: 'number', description: 'Character count of text' },
+        truncated: { type: 'boolean', description: 'Whether text was truncated by maxChars' },
+        error: { type: 'string', description: 'Error message on failure' },
       },
     };
   },
 };
+
