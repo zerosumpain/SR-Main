@@ -141,10 +141,29 @@ export interface GmailAuthExpiredEvent extends BaseWorkflowEvent {
   error: string;
 }
 
+export interface ScraperProgressEvent extends BaseWorkflowEvent {
+  type: 'scraper.progress';
+  runLogId: number;
+  stage: 'nav' | 'page.done' | 'login.start' | 'login.done' | 'error';
+  url?: string;
+  pageIndex?: number;
+  error?: string;
+}
+
+export interface ScraperRunFinishedEvent extends BaseWorkflowEvent {
+  type: 'scraper.run.finished';
+  runLogId: number;
+  success: boolean;
+  pagesLoaded: number;
+  error?: string;
+}
+
 export type WorkflowEvent =
   | GenericWorkflowEvent
   | GmailMessageReceivedEvent
-  | GmailAuthExpiredEvent;
+  | GmailAuthExpiredEvent
+  | ScraperProgressEvent
+  | ScraperRunFinishedEvent;
 
 export type RunStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed';
 export type NodeExecutionStatus = 'pending' | 'running' | 'paused_breakpoint' | 'completed' | 'failed' | 'skipped' | 'blocked' | 'healing';
