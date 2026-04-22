@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
+import os from 'os';
 import { db } from '$lib/db';
 import { scraperRunLog } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -10,6 +11,21 @@ import { loadCredentialForRunner } from './credentials';
 import type { ScrapeJob, ScrapeResult } from './types';
 
 const RUNNER_SANDBOX_PATH = '/home/jkai/scraper-runtime/scrape.py';
+
+const HOMESERV_HOSTNAMES = ['homeserv'];
+
+function assertRunningOnHomeserv(): void {
+  if (process.env.NODE_ENV !== 'production') return; // allow in dev regardless of host
+  const host = os.hostname();
+  if (!HOMESERV_HOSTNAMES.includes(host)) {
+    throw new Error(
+      `Scraper refuses to run on host '${host}' in production. ` +
+      `Stealth scraping relies on homeserv's residential IP; running on the VPS ` +
+      `would expose a datacenter IP and defeat the purpose. ` +
+      `If you really need to run here, set SCRAPER_ALLOW_NON_HOMESERV=1.`,
+    );
+  }
+}
 
 function runnerSourcePath(): string {
   const here = fileURLToPath(new URL('./python/scrape.py', import.meta.url));
@@ -30,6 +46,7 @@ export interface RunScrapeOptions extends ScrapeJob {
 }
 
 export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
+  if (!process.env.SCRAPER_ALLOW_NON_HOMESERV) assertRunningOnHomeserv();
   await ensureSandboxRunning();
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
