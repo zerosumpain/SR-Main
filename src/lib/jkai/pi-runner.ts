@@ -174,7 +174,11 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // toolCallId → {name, args} captured from the most recent assistant message
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
-  const child = spawn('docker', dockerArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn('docker', dockerArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  // `docker exec -i` keeps the container's stdin attached to our pipe; if that
+  // pipe never closes, pi with `--mode json -p` waits indefinitely for EOF
+  // before emitting its first event. Using `stdio: 'ignore'` for stdin closes
+  // it at spawn time, so pi sees an EOF immediately and starts work.
 
   const stopTimer = setInterval(async () => {
     if (isStopped()) {
