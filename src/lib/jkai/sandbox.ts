@@ -1,10 +1,15 @@
 import { exec } from 'child_process';
+import { mkdirSync } from 'fs';
+import os from 'os';
+import { join } from 'path';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
 const CONTAINER_NAME = 'jkai-sandbox';
 const IMAGE_NAME = 'jkai-sandbox:latest';
+
+const SCRAPER_PROFILES_HOST = join(os.homedir(), '.openclaw', 'scraper-profiles');
 
 export interface SandboxStatus {
   running: boolean;
@@ -51,10 +56,13 @@ export async function ensureSandboxRunning(): Promise<void> {
 
   await execAsync(`docker rm -f ${CONTAINER_NAME} 2>/dev/null`).catch(() => {});
 
+  mkdirSync(SCRAPER_PROFILES_HOST, { recursive: true });
+
   await execAsync(
     `docker run -d --name ${CONTAINER_NAME} --restart unless-stopped ` +
     `--memory 2g --cpus 2 ` +
-    `--network bridge -v jkai-workspace:/home/jkai/workspace ${IMAGE_NAME}`,
+    `--network bridge -v jkai-workspace:/home/jkai/workspace ` +
+    `-v ${SCRAPER_PROFILES_HOST}:/home/jkai/scraper-profiles ${IMAGE_NAME}`,
   );
   clearContainerIpCache();
 

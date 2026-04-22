@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+# Switch Debian repos to HTTPS — the build network blocks outbound port 80.
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+ && sed -i 's|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -25,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libasound2 \
     libxshmfence1 \
+    libxfixes3 \
     fonts-liberation \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
@@ -39,9 +44,14 @@ RUN pip install --no-cache-dir \
     httpx \
     pyyaml \
     playwright \
+    playwright-stealth \
+    tenacity \
     lxml
 
-RUN playwright install chromium
+# Install Chromium to a shared path so both root and non-root users can use it.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN playwright install chromium \
+ && chmod -R a+rX /opt/playwright-browsers
 
 RUN npm install -g typescript tsx @mariozechner/pi-coding-agent
 
