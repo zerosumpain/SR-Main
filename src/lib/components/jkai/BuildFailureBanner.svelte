@@ -24,10 +24,21 @@
   let error = $state<string | null>(null);
   let showDetails = $state(false);
 
-  const showForm = $derived(failure?.kind !== 'auth_failed');
+  // Render even when failure is null — builds killed by a service restart
+  // (recoverOnStartup) are marked `failed` with no envelope, and the user
+  // still needs a continue path.
+  const effectiveFailure = $derived<FailureEnvelope>(
+    failure ?? {
+      kind: 'nonzero_exit',
+      message: 'Build was terminated without a structured failure signal. Most commonly this is a service restart mid-run.',
+      attempts: 1,
+    },
+  );
+
+  const showForm = $derived(effectiveFailure.kind !== 'auth_failed');
 
   const defaultPrompt = $derived(
-    `Continue where the last run left off — the previous attempt failed with: ${failure?.message ?? 'unknown'}`
+    `Continue where the last run left off — the previous attempt failed with: ${effectiveFailure.message}`
   );
 
   async function submit() {
@@ -62,9 +73,8 @@
   }
 </script>
 
-{#if failure}
-  <div
-    class="mb-6 rounded border p-4"
+<div
+  class="mb-6 rounded border p-4"
     style="border-color: #b94b4b; background: rgba(185, 75, 75, 0.06);"
   >
     <div class="flex items-start gap-3">
@@ -72,23 +82,23 @@
         class="text-[10px] uppercase tracking-[0.2em] px-2 py-1 rounded shrink-0"
         style="font-family: var(--font-mono); background: #b94b4b; color: white;"
       >
-        {kindLabel(failure.kind)}
+        {kindLabel(effectiveFailure.kind)}
       </span>
       <div class="flex-1 min-w-0">
-        <p class="text-sm" style="color: var(--text-primary);">{failure.message}</p>
+        <p class="text-sm" style="color: var(--text-primary);">{effectiveFailure.message}</p>
         <p class="text-xs mt-1" style="color: var(--text-ghost);">
           Build aborted on {currentProvider} / {currentModelId}
-          {#if failure.lastEventAgeMs != null}
-            · idle {(failure.lastEventAgeMs / 1000).toFixed(0)}s before kill
+          {#if effectiveFailure.lastEventAgeMs != null}
+            · idle {(effectiveFailure.lastEventAgeMs / 1000).toFixed(0)}s before kill
           {/if}
-          {#if failure.tokensBeforeStall != null}
-            · {failure.tokensBeforeStall} tokens before stall
+          {#if effectiveFailure.tokensBeforeStall != null}
+            · {effectiveFailure.tokensBeforeStall} tokens before stall
           {/if}
-          {#if failure.httpStatus != null}
-            · HTTP {failure.httpStatus}
+          {#if effectiveFailure.httpStatus != null}
+            · HTTP {effectiveFailure.httpStatus}
           {/if}
         </p>
-        {#if failure.providerErrorCode || failure.stderrTail}
+        {#if effectiveFailure.providerErrorCode || effectiveFailure.stderrTail}
           <button
             type="button"
             class="text-xs mt-2 underline"
@@ -99,11 +109,11 @@
           </button>
           {#if showDetails}
             <div class="mt-2 text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {#if failure.providerErrorCode}
-                <div>providerErrorCode: {failure.providerErrorCode}</div>
+              {#if effectiveFailure.providerErrorCode}
+                <div>providerErrorCode: {effectiveFailure.providerErrorCode}</div>
               {/if}
-              {#if failure.stderrTail}
-                <pre class="whitespace-pre-wrap mt-1 p-2 rounded" style="background: rgba(0,0,0,0.2); max-height: 200px; overflow: auto;">{failure.stderrTail}</pre>
+              {#if effectiveFailure.stderrTail}
+                <pre class="whitespace-pre-wrap mt-1 p-2 rounded" style="background: rgba(0,0,0,0.2); max-height: 200px; overflow: auto;">{effectiveFailure.stderrTail}</pre>
               {/if}
             </div>
           {/if}
@@ -165,4 +175,3 @@
       </div>
     {/if}
   </div>
-{/if}
