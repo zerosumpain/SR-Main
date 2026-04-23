@@ -117,7 +117,7 @@
       oninput={(e) => { model = (e.target as HTMLInputElement).value; emit(); }}
       placeholder="leave blank for the admin chat default" />
     <div class="ps-hint">
-      Empty uses whatever's configured in <code>/admin/models</code> (currently glm-4.6 on prod).
+      Empty uses whatever's configured in <code>/admin/models</code>.
       Slashed IDs (e.g. <code>anthropic/claude-3.5-sonnet</code>) route via OpenRouter.
     </div>
   </section>
