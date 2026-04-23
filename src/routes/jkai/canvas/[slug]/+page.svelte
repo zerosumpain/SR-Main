@@ -2103,9 +2103,15 @@
                     </div>
                   {/if}
                   {#if streamingReplies[n.id]}
-                    <div class="chat-msg-body chat-msg-streaming">
-                      <ChatMarkdown content={streamingReplies[n.id]} role="assistant" />
-                      <span class="chat-cursor">▊</span>
+                    <!-- In-flight: render plain text, no markdown. ChatMarkdown
+                         re-parses the entire accumulated reply on every state
+                         update (O(n²) over the full length), which with a fast
+                         stream pins the main thread and was blocking canvas
+                         pan/scroll mid-run. Final assistant reply (persisted
+                         after the run completes) is rendered through
+                         ChatMarkdown by the msgs loop above. -->
+                    <div class="chat-msg-body chat-msg-streaming chat-plain-stream">
+                      {streamingReplies[n.id]}<span class="chat-cursor">▊</span>
                     </div>
                   {:else if !(liveToolSteps[n.id] && liveToolSteps[n.id].length > 0)}
                     <div class="chat-msg-body ghost">⟳ thinking…</div>
@@ -4113,6 +4119,12 @@
   .chat-msg-pending .chat-msg-body {
     font-family: var(--font-mono);
     font-size: 11px;
+  }
+  .chat-plain-stream {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    line-height: 1.55;
   }
   .chat-cursor {
     display: inline-block;
