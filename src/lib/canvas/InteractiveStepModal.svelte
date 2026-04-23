@@ -34,16 +34,33 @@
 
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+  let vncWindow = $state<Window | null>(null);
 
   const showVnc = interaction.mode === 'vnc' || interaction.mode === 'both';
   const showForm = interaction.mode === 'confirm' || interaction.mode === 'both';
   const fields = interaction.configSnapshot.fields ?? [];
 
-  function iframeUrl(): string {
+  function vncTabUrl(): string {
     if (interaction.vncUrl) return interaction.vncUrl;
     if (!interaction.wsPort) return '';
     return `https://vnc.strangeramblings.com/${interaction.wsPort}/vnc.html?autoconnect=1&resize=scale`;
   }
+
+  function openVncTab() {
+    const url = vncTabUrl();
+    if (!url) return;
+    // Reuse the already-open tab if the user still has it, otherwise spawn a
+    // new one. Named target ('scraper-vnc') + per-interaction suffix so two
+    // in-flight interactions each get their own tab.
+    const target = `scraper-vnc-${interaction.id}`;
+    vncWindow = window.open(url, target, 'noopener');
+  }
+
+  // Auto-open the VNC tab when the modal first mounts for a vnc/both
+  // interaction. User solves there; comes back here to click Complete.
+  $effect(() => {
+    if (showVnc && vncTabUrl() && !vncWindow) openVncTab();
+  });
 
   async function handleComplete() {
     submitting = true;
@@ -81,26 +98,16 @@
   aria-modal="true"
   onkeydown={onKeydown}
 >
-  <div class="ism-panel" class:ism-panel-vnc={showVnc}>
+  <div class="ism-panel">
     <!-- Header -->
     <div class="ism-header">
       <span class="ism-prompt">{interaction.prompt}</span>
-      <div class="ism-header-actions">
-        {#if showVnc && interaction.wsPort}
-          <a
-            href={iframeUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="ism-btn"
-          >Open in new tab ↗</a>
-        {/if}
-        <button
-          class="ism-btn ism-btn-complete"
-          onclick={handleComplete}
-          disabled={submitting}
-        >{submitting ? '…' : 'Complete'}</button>
-        <button class="ism-btn" onclick={onClose}>Close</button>
-      </div>
+      <button
+        class="ism-btn ism-btn-complete"
+        onclick={handleComplete}
+        disabled={submitting}
+      >{submitting ? '…' : 'Complete'}</button>
+      <button class="ism-btn" onclick={onClose}>Close</button>
     </div>
 
     {#if submitError}
@@ -110,14 +117,16 @@
     <!-- Body -->
     <div class="ism-body">
       {#if showVnc}
-        <div class="ism-vnc-area">
-          {#if interaction.wsPort}
-            <iframe
-              src={iframeUrl()}
-              title="noVNC — interactive step"
-              class="ism-iframe"
-              allow="clipboard-read; clipboard-write"
-            ></iframe>
+        <div class="ism-vnc-instructions">
+          {#if vncTabUrl()}
+            <p class="ism-vnc-hint">
+              A browser tab has opened showing the CAPTCHA / login page.
+              Solve it there, then click <b>Complete</b> above to resume the scrape.
+              Cookies are saved to the "<code>{interaction.configSnapshot.profile ?? 'default'}</code>" profile so subsequent runs stay headless.
+            </p>
+            <button class="ism-btn ism-btn-wide" onclick={openVncTab}>
+              ↗ Re-open browser tab
+            </button>
           {:else}
             <div class="ism-vnc-expired">
               VNC session expired — please retry the run.
@@ -189,11 +198,6 @@
     overflow: hidden;
     width: min(calc(100vw - 2rem), 520px);
     max-height: calc(100vh - 3rem);
-  }
-
-  .ism-panel.ism-panel-vnc {
-    width: min(calc(100vw - 2rem), 1200px);
-    min-height: 70vh;
   }
 
   .ism-header {
@@ -278,22 +282,36 @@
     overflow: hidden;
   }
 
-  .ism-vnc-area {
-    flex: 1;
-    min-height: 0;
+  .ism-vnc-instructions {
     display: flex;
     flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
   }
 
-  .ism-iframe {
-    flex: 1;
-    width: 100%;
-    border: none;
-    min-height: 0;
+  .ism-vnc-hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .ism-vnc-hint code {
+    font-size: 10.5px;
+    background: var(--bg-section, #111);
+    padding: 1px 4px;
+    border-radius: 2px;
+    color: var(--accent, #c4570a);
+  }
+
+  .ism-btn-wide {
+    align-self: stretch;
+    justify-content: center;
+    padding: 8px 12px;
+    font-size: 10px;
   }
 
   .ism-vnc-expired {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -311,10 +329,6 @@
     overflow-y: auto;
     flex-shrink: 0;
     border-top: 1px solid var(--divider, #2a2a2a);
-  }
-
-  .ism-panel.ism-panel-vnc .ism-form {
-    max-height: 220px;
   }
 
   .ism-field {

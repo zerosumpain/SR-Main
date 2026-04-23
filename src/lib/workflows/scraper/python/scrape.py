@@ -200,6 +200,15 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
     profile = job["profile"]
     profile_dir = PROFILES_BASE / profile
     profile_dir.mkdir(parents=True, exist_ok=True)
+    # Clean stale singleton locks left by a crashed previous run — Playwright
+    # refuses to launch ("Failed to create ProcessSingleton") otherwise.
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"):
+        try:
+            (profile_dir / name).unlink()
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
     pacing = job.get("pacing", {"minMs": 800, "maxMs": 2500})
     viewport = job.get("viewport") or random.choice(DEFAULT_VIEWPORTS)
     user_agent = job.get("userAgent") or REALISTIC_UA

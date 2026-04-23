@@ -6,6 +6,14 @@ RUNTIME_DIR="/tmp/scraper-sessions/${PROFILE}-${DISPLAY_NUM}"
 mkdir -p "$RUNTIME_DIR"
 rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
 
+# Clean stale Chromium singleton locks. When a prior scrape/session crashed
+# without cleanup, these lockfiles stick around and Playwright refuses to
+# launch ("Failed to create a ProcessSingleton for your profile directory").
+PROFILE_DIR="/home/jkai/scraper-profiles/${PROFILE}"
+if [ -d "$PROFILE_DIR" ]; then
+  rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" "$PROFILE_DIR/lockfile" 2>/dev/null || true
+fi
+
 Xvfb ":${DISPLAY_NUM}" -screen 0 1400x900x24 -nolisten tcp -ac > "$RUNTIME_DIR/xvfb.log" 2>&1 &
 XVFB_PID=$!; echo "$XVFB_PID" > "$RUNTIME_DIR/xvfb.pid"
 

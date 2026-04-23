@@ -5599,10 +5599,12 @@
   }
 
   .awaiting-badge {
+    /* Centred on the node (not hovering above, where it was clipping
+       behind adjacent nodes). Sits on top of the node body via z-index. */
     position: absolute;
-    top: -13px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     background: #d97706;
     color: #000;
     font-family: var(--font-mono);
@@ -5610,18 +5612,18 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.16em;
-    padding: 4px 12px;
+    padding: 5px 14px;
     border-radius: 20px;
     white-space: nowrap;
     cursor: pointer;
     border: 2px solid #fff;
-    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.6);
+    box-shadow: 0 2px 12px rgba(217, 119, 6, 0.75);
     z-index: 20;
     animation: badge-pulse 1.2s ease-in-out infinite;
   }
   .awaiting-badge:hover {
     background: #f59e0b;
-    transform: translateX(-50%) scale(1.05);
+    transform: translate(-50%, -50%) scale(1.06);
   }
   @keyframes badge-pulse {
     0%, 100% { opacity: 1; }
