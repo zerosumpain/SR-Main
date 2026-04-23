@@ -154,6 +154,25 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'interactive-step',
+    label: 'Interactive Step',
+    kind: 'agent',
+    group: 'Trigger & Flow',
+    description: 'Pauses the workflow for a human to solve a CAPTCHA, log in, or confirm data. Resumes after the human completes it from the canvas.',
+    defaultConfig: {
+      mode: 'vnc',
+      profile: '',
+      url: '',
+      prompt: 'Please complete the required action',
+      fields: [],
+      timeoutMinutes: 60,
+    },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'sub-workflow',
     label: 'Sub-workflow',
     kind: 'output',

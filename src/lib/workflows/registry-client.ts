@@ -42,6 +42,7 @@ import { gmailLabelDef } from './nodes/gmail-label.def';
 import { gmailSearchDef } from './nodes/gmail-search.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
 import { intelWriteDef } from './nodes/intel-write.def';
+import { interactiveStepDef } from './nodes/interactive-step.def';
 import type { NodeDefinition } from './types';
 // Dynamic node definitions are loaded server-side only (in index.ts).
 // This file must stay client-safe — no Node.js imports (fs, path, etc).
@@ -86,6 +87,7 @@ const builtInDefinitions: NodeDefinition[] = [
   gmailSearchDef,
   tavilySearchDef,
   intelWriteDef,
+  interactiveStepDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;
