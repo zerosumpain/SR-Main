@@ -146,22 +146,43 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     htmlForLlm,
   ].filter(Boolean).join('\n');
 
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.2,
-    max_tokens: 1200,
-    response_format: { type: 'json_object' },
-  });
+  // Some OpenAI-compatible providers (older z.ai deployments) reject the
+  // response_format hint with 400. Try with, fall back without so the mapper
+  // survives on any provider the admin has configured.
+  async function callLlm(withJsonFormat: boolean) {
+    return await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 1200,
+      ...(withJsonFormat ? { response_format: { type: 'json_object' } } : {}),
+    });
+  }
+  let completion;
+  try {
+    completion = await callLlm(true);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/response_format|json_object|unsupported|400/i.test(msg)) {
+      emit({ t: 'map.llm.retry', reason: 'response_format unsupported', provider: model });
+      completion = await callLlm(false);
+    } else {
+      throw err;
+    }
+  }
   const raw = completion.choices[0]?.message?.content ?? '';
-  emit({ t: 'map.llm.response', bytes: raw.length });
+  emit({ t: 'map.llm.response', bytes: raw.length, model });
 
+  // Extract the first { … } block in case the provider returned prose around
+  // the JSON (common when response_format isn't honoured).
+  const match = raw.match(/\{[\s\S]*\}/);
+  const jsonStr = match ? match[0] : raw;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(jsonStr);
   } catch (err) {
     throw new Error(
       `Site-mapper LLM did not return valid JSON (model=${model}): ${err instanceof Error ? err.message : String(err)}. Raw: ${raw.slice(0, 300)}`,
