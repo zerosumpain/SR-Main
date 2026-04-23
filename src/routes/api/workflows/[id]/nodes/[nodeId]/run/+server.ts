@@ -99,9 +99,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
     edges: [],
   };
 
+  // Single-node Re-Run disables self-healing: healing fires another LLM
+  // diagnosis loop on node failure, which for LLM-driven nodes (site-mapper,
+  // llm-call, etc.) just burns 3×60s retrying the same thing. The user
+  // clicked Re-Run because they want to iterate — fast failure is a feature.
   runWorkflowAndPersist(definition, run.id, initialInput, {
     workflowId: params.id!,
     label: 'node-rerun',
+    selfHealing: false,
   });
 
   return json({ runId: run.id, nodeId: node.id, status: 'running' }, { status: 201 });

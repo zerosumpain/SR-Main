@@ -30,7 +30,11 @@ import {
 import { normalizeDomain } from './target-knowledge';
 import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
 
-const MAX_STEPS = 12;
+// Generous step cap — altcha + observe turns burn headroom quickly on
+// multi-step form sites (CS Jobs takes ~7 steps: goto, altcha, fill,
+// submit, refine-distance, re-submit, observe-results). 12 was the first
+// pass; 20 gives the agent room to recover from a wrong turn or two.
+const MAX_STEPS = 20;
 const MAX_INTERACTIVE_SUMMARY = 6500; // chars of observe summary sent to LLM
 
 export interface SiteMapperOptions {
