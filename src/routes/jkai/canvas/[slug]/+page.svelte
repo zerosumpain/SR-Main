@@ -431,8 +431,14 @@
       activeRunId = runId;
       pendingRun = { runId, chatNodeId: resolvedId ?? chatNodeId };
       subscribeToRun(runId);
-      await invalidateAll();
-      if (resolvedId) scrollChatToBottom(resolvedId);
+      // Fire-and-forget the page-data refresh so we pick up the user message
+      // the server just persisted, but don't block the main thread on it.
+      // `listCanvases` alone can run 30+ queries on an account with many
+      // canvases and will re-hydrate the whole Svelte tree on completion —
+      // awaiting it was visibly locking the canvas mid-send.
+      void invalidateAll().then(() => {
+        if (resolvedId) scrollChatToBottom(resolvedId);
+      });
     } catch (err) {
       runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
     }
@@ -562,6 +568,41 @@
     };
   }
 
+  // Per-run event batching. SSE can deliver many node transitions per tick
+  // (e.g. fast downstream nodes after a slow upstream one completes, or
+  // self-healing emitting a burst). Each write to liveStatus/liveData used
+  // to trigger a full recompute of viewNodes/byId/visibleEdges/activeEdgeIds,
+  // which for busy workflows pinned the main thread. We now accumulate into
+  // plain objects and flush once per 50ms — only viewNodes etc. recompute
+  // in the flush tick.
+  const pendingLiveStatus = new Map<string, 'running' | 'ok' | 'failed'>();
+  const pendingLiveData = new Map<string, Record<string, unknown>>();
+  let liveFlushHandle: ReturnType<typeof setTimeout> | null = null;
+  const LIVE_FLUSH_MS = 50;
+  function flushLive() {
+    liveFlushHandle = null;
+    if (pendingLiveStatus.size === 0 && pendingLiveData.size === 0) return;
+    if (pendingLiveStatus.size > 0) {
+      const next = { ...liveStatus };
+      for (const [id, status] of pendingLiveStatus) next[id] = status;
+      pendingLiveStatus.clear();
+      liveStatus = next;
+    }
+    if (pendingLiveData.size > 0) {
+      const next = { ...liveData };
+      for (const [id, patch] of pendingLiveData) {
+        next[id] = { ...next[id], ...patch };
+      }
+      pendingLiveData.clear();
+      liveData = next;
+    }
+  }
+  function scheduleLiveFlush() {
+    if (liveFlushHandle === null) {
+      liveFlushHandle = setTimeout(flushLive, LIVE_FLUSH_MS);
+    }
+  }
+
   function handleEvent(evt: {
     type: string;
     nodeId?: string;
@@ -569,34 +610,31 @@
     error?: string;
   }) {
     if (evt.type === 'node_started' && evt.nodeId) {
-      liveStatus = { ...liveStatus, [evt.nodeId]: 'running' };
+      pendingLiveStatus.set(evt.nodeId, 'running');
       if (evt.data && 'inputData' in evt.data) {
-        liveData = {
-          ...liveData,
-          [evt.nodeId]: { ...liveData[evt.nodeId], inputData: evt.data.inputData },
-        };
+        pendingLiveData.set(evt.nodeId, {
+          ...(pendingLiveData.get(evt.nodeId) ?? {}),
+          inputData: evt.data.inputData,
+        });
       }
+      scheduleLiveFlush();
     } else if (evt.type === 'node_completed' && evt.nodeId) {
-      liveStatus = { ...liveStatus, [evt.nodeId]: 'ok' };
+      pendingLiveStatus.set(evt.nodeId, 'ok');
       if (evt.data) {
-        liveData = {
-          ...liveData,
-          [evt.nodeId]: {
-            ...liveData[evt.nodeId],
-            inputData: (evt.data.inputData ?? liveData[evt.nodeId]?.inputData) as unknown,
-            outputData: (evt.data.outputData ?? evt.data.output ?? undefined) as unknown,
-          },
-        };
+        pendingLiveData.set(evt.nodeId, {
+          ...(pendingLiveData.get(evt.nodeId) ?? {}),
+          inputData: (evt.data.inputData ?? liveData[evt.nodeId]?.inputData) as unknown,
+          outputData: (evt.data.outputData ?? evt.data.output ?? undefined) as unknown,
+        });
       }
+      scheduleLiveFlush();
     } else if (evt.type === 'node_failed' && evt.nodeId) {
-      liveStatus = { ...liveStatus, [evt.nodeId]: 'failed' };
-      liveData = {
-        ...liveData,
-        [evt.nodeId]: {
-          ...liveData[evt.nodeId],
-          error: evt.error ?? (evt.data?.error as string) ?? null,
-        },
-      };
+      pendingLiveStatus.set(evt.nodeId, 'failed');
+      pendingLiveData.set(evt.nodeId, {
+        ...(pendingLiveData.get(evt.nodeId) ?? {}),
+        error: evt.error ?? (evt.data?.error as string) ?? null,
+      });
+      scheduleLiveFlush();
     } else if (evt.type === 'log' && evt.data) {
       const kind = evt.data.kind as string | undefined;
       const chatNodeId = (evt.data.chatNodeId as string | undefined) ?? null;
@@ -622,10 +660,14 @@
         }
       }
     } else if (evt.type === 'run_completed' || evt.type === 'run_completed_with_errors') {
+      if (liveFlushHandle !== null) { clearTimeout(liveFlushHandle); liveFlushHandle = null; }
+      flushLive();
       runMeta = { state: 'completed' };
       refreshKey += 1;
       finalizeChatReply();
     } else if (evt.type === 'run_failed') {
+      if (liveFlushHandle !== null) { clearTimeout(liveFlushHandle); liveFlushHandle = null; }
+      flushLive();
       runMeta = { state: 'failed', error: evt.error };
       refreshKey += 1;
       finalizeChatReply();

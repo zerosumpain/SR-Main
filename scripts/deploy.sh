@@ -29,11 +29,18 @@ rsync -avz \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/data/"
 
 echo "==> Syncing DB schema files..."
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/src/lib/constants"
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/src/lib/constants $VPS_DIR/src/lib/workflows/scraper/python"
 rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/db/schema.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/db/"
 rsync -avz -e "ssh -i $VPS_KEY" \
   drizzle.config.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/"
+
+echo "==> Syncing runtime-read files (python scraper, etc)..."
+# These files are read at runtime by absolute path relative to the repo root,
+# not bundled into build/. Without this sync prod hits ENOENT on scrape.
+rsync -avz -e "ssh -i $VPS_KEY" \
+  src/lib/workflows/scraper/python/ \
+  "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/workflows/scraper/python/"
 
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
