@@ -31,9 +31,15 @@
   const CHAT_NODE_W = 300;
   const CHAT_NODE_H = 360;
 
-  // Live run state — overlays the server-provided canvas snapshot
-  let liveStatus = $state<Record<string, NodeStatus>>({});
-  let liveData = $state<
+  // Live run state — overlays the server-provided canvas snapshot.
+  // $state.raw (not $state): we always replace these with whole new objects
+  // in flushLive (`liveStatus = {...liveStatus, ...patch}`), never mutate
+  // individual keys. Deep-proxying via $state creates a per-property source
+  // for every node and fires per-key reactivity on every spread — which on
+  // a 12-node canvas at 20 flushes/sec was grinding the main thread.
+  // $state.raw tracks the container reference only.
+  let liveStatus = $state.raw<Record<string, NodeStatus>>({});
+  let liveData = $state.raw<
     Record<string, { inputData?: unknown; outputData?: unknown; error?: string | null }>
   >({});
   let activeRunId = $state<string | null>(null);
@@ -593,7 +599,9 @@
   const pendingLiveStatus = new Map<string, 'running' | 'ok' | 'failed'>();
   const pendingLiveData = new Map<string, Record<string, unknown>>();
   let liveFlushHandle: ReturnType<typeof setTimeout> | null = null;
-  const LIVE_FLUSH_MS = 50;
+  // 250ms is plenty for visual status — fast enough to feel live, slow
+  // enough that viewNodes isn't re-derived 20x/sec.
+  const LIVE_FLUSH_MS = 250;
   function flushLive() {
     liveFlushHandle = null;
     if (pendingLiveStatus.size === 0 && pendingLiveData.size === 0) return;
@@ -700,17 +708,28 @@
     const pending = pendingRun;
     pendingRun = null;
     if (pending) {
-      try {
-        await fetch(`/api/workflows/${canvas.workflowId}/chat/respond`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId: pending.runId, chatNodeId: pending.chatNodeId }),
+      // Fire-and-forget the /respond POST AND the page-data refresh. Awaiting
+      // them used to chain onto run_completed, running the full server load
+      // (loadCanvas + listCanvases + node_executions fetch) synchronously on
+      // the main thread — which with the resulting re-hydration cascade was
+      // what locked the canvas for ~1s per run. Let the user interact
+      // immediately; the freshly-persisted assistant message and node
+      // outputs land whenever the RPC returns.
+      void fetch(`/api/workflows/${canvas.workflowId}/chat/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: pending.runId, chatNodeId: pending.chatNodeId }),
+      }).catch(() => { /* non-fatal */ }).finally(() => {
+        void invalidateAll().then(() => {
+          if (pending?.chatNodeId) scrollChatToBottom(pending.chatNodeId);
         });
-      } catch {
-        /* non-fatal */
-      }
+      });
+    } else {
+      // Pure Run (no chat-originated pendingRun): still need fresh
+      // node_executions from the server so the canvas shows the final
+      // outputs/errors — but fire-and-forget.
+      void invalidateAll();
     }
-    await invalidateAll();
     // Clear streaming state — the persisted message now owns the text.
     if (pending?.chatNodeId) {
       const next = { ...streamingReplies };
@@ -719,7 +738,6 @@
       const nextTools = { ...liveToolSteps };
       delete nextTools[pending.chatNodeId];
       liveToolSteps = nextTools;
-      scrollChatToBottom(pending.chatNodeId);
     }
   }
 
