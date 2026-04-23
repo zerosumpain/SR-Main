@@ -17,7 +17,7 @@
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
-  import ConfigDrawer from '$lib/canvas/ConfigDrawer.svelte';
+  import { getPanel } from '$lib/canvas/nodes/panels/registry';
 
   let { data } = $props();
   const canvas = $derived(data.canvas);
@@ -623,32 +623,6 @@
   let selectedId = $state<string | null>(null);
   const zoomPct = $derived(Math.round(zoom * 100));
 
-  // Config drawer — opened when a workflow action/scrape/etc node is single-clicked
-  let configDrawerNodeId = $state<string | null>(null);
-  const configDrawerNode = $derived(configDrawerNodeId ? byId[configDrawerNodeId] : null);
-
-  /** Node kinds that have their own embedded UI — don't open the config drawer for these. */
-  const DRAWER_EXCLUDED_KINDS = new Set(['chat', 'inspector', 'stats', 'intelligence', 'webpage']);
-
-  function openConfigDrawer(id: string) {
-    const n = byId[id];
-    if (!n || DRAWER_EXCLUDED_KINDS.has(n.kind)) return;
-    configDrawerNodeId = id;
-  }
-
-  function closeConfigDrawer() {
-    configDrawerNodeId = null;
-  }
-
-  function onDrawerSave(nodeId: string, newConfig: Record<string, unknown>) {
-    // Update in-memory canvas so the node reflects the new config immediately
-    const idx = data.canvas.nodes.findIndex((n) => n.id === nodeId);
-    if (idx !== -1) {
-      data.canvas.nodes[idx] = { ...data.canvas.nodes[idx], config: newConfig };
-      data.canvas.nodes = [...data.canvas.nodes];
-    }
-    closeConfigDrawer();
-  }
 
   let viewportEl: HTMLDivElement | undefined;
   let panStart = $state<{
@@ -729,7 +703,6 @@
     selectedId = null;
     menuForNodeId = null;
     edgeInspectorFor = null;
-    configDrawerNodeId = null;
     panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
@@ -852,9 +825,8 @@
       delete next[nodeId];
       nodePositions = next;
     } else {
-      // Click (no drag) → select + open config drawer for action nodes
+      // Click (no drag) → select only
       selectedId = n.id;
-      openConfigDrawer(n.id);
     }
   }
 
@@ -1669,7 +1641,6 @@
         selectedId = null;
         pipePickerOpen = false;
         edgeInspectorFor = null;
-        configDrawerNodeId = null;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
         // Let the chat textarea's own handler send the draft
         if (isTypingTarget(ev.target)) return;
@@ -3398,6 +3369,17 @@
                   </div>
                 </section>
               {/if}
+
+              <!-- Schema-driven config panel for scraper / gmail / interactive-step nodes -->
+              {#if ['stealth-scrape', 'stealth-scrape-llm', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'].includes(menuNode.type)}
+                {@const Panel = getPanel(menuNode.type)}
+                <div class="menu-config-section">
+                  <Panel
+                    config={configDraft}
+                    onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
+                  />
+                </div>
+              {/if}
             </div>
 
             <!-- Actions footer -->
@@ -3526,18 +3508,6 @@
       invalidateAll();
     }}
     onClose={() => { activeInteraction = null; }}
-  />
-{/if}
-
-{#if configDrawerNode}
-  <ConfigDrawer
-    nodeId={configDrawerNode.id}
-    nodeType={configDrawerNode.type}
-    nodeLabel={configDrawerNode.name}
-    config={(configDrawerNode.config as Record<string, unknown>) ?? {}}
-    workflowId={canvas.workflowId}
-    onSave={onDrawerSave}
-    onClose={closeConfigDrawer}
   />
 {/if}
 
@@ -4552,8 +4522,8 @@
   .nm-inline-body {
     display: flex;
     flex-direction: column;
-    max-height: 60vh;
-    overflow: auto;
+    max-height: 75vh;
+    overflow-y: auto;
   }
 
   .nm-hdr {
@@ -4668,6 +4638,11 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .menu-config-section {
+    border-top: 1px solid var(--divider);
+    padding-top: 10px;
+    overflow-y: auto;
   }
   .nm-sec {
     display: flex;
