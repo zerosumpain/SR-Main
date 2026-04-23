@@ -2022,17 +2022,31 @@
         {#each visibleEdges as e (e.id)}
           {@const isActive = activeEdgeIds.has(e.id)}
           {@const d = orthPath(byId[e.from], byId[e.to])}
-          <!-- Wide transparent hit target: single click selects, double click
-               opens the inspector. Selected + Delete/Backspace removes it. -->
+          <!-- Wide transparent hit target. Click the stroke to select the
+               edge (Delete/Backspace removes it); double-click opens the
+               full inspector. We capture on pointerdown (not onclick)
+               because the viewport's own pointerdown handler calls
+               setPointerCapture and would otherwise own the whole gesture
+               — meaning onclick on the SVG path never fires. -->
           <path
             class="edge-hit"
+            class:is-selected={selectedEdgeId === e.id}
             {d}
             stroke="transparent"
             stroke-width="14"
             fill="none"
             pointer-events="stroke"
-            onclick={(ev) => selectEdge(ev, e.id)}
-            ondblclick={(ev) => openEdgeInspector(ev, e.id)}
+            style="cursor: pointer;"
+            onpointerdown={(ev) => {
+              // Only left mouse button; don't intercept right-click / middle-click.
+              if (ev.button !== 0) return;
+              ev.stopPropagation();
+              selectEdge(ev as unknown as MouseEvent, e.id);
+            }}
+            ondblclick={(ev) => {
+              ev.stopPropagation();
+              openEdgeInspector(ev, e.id);
+            }}
           />
           <path
             class="edge-stroke"
