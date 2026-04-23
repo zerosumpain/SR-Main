@@ -227,10 +227,13 @@
   // marked.parse on the ENTIRE accumulated reply each token (O(n²) across a
   // long reply) and the canvas went unresponsive.
   //
-  // Now: token deltas accumulate in a plain Map and are flushed once per rAF
-  // into the reactive $state, so markdown is re-parsed at most ~60x/sec.
+  // Now: token deltas accumulate in a plain Map and are flushed every ~50ms
+  // into the reactive $state, so markdown is re-parsed at most ~20x/sec.
+  // setTimeout (not rAF) because rAF can be throttled during input/scroll
+  // jank — we'd end up with tokens queued but never rendered.
   const pendingStreamDeltas = new Map<string, string>();
-  let streamFlushHandle: number | null = null;
+  let streamFlushHandle: ReturnType<typeof setTimeout> | null = null;
+  const STREAM_FLUSH_MS = 50;
   function flushStreamDeltas() {
     streamFlushHandle = null;
     if (pendingStreamDeltas.size === 0) return;
@@ -250,7 +253,7 @@
       (pendingStreamDeltas.get(chatNodeId) ?? '') + delta,
     );
     if (streamFlushHandle === null) {
-      streamFlushHandle = requestAnimationFrame(flushStreamDeltas);
+      streamFlushHandle = setTimeout(flushStreamDeltas, STREAM_FLUSH_MS);
     }
   }
 
@@ -631,9 +634,9 @@
 
   async function finalizeChatReply() {
     // Flush any un-flushed token deltas so we don't lose the tail of the
-    // reply between the last rAF and the run terminal event.
+    // reply between the last timer tick and the run terminal event.
     if (streamFlushHandle !== null) {
-      cancelAnimationFrame(streamFlushHandle);
+      clearTimeout(streamFlushHandle);
       streamFlushHandle = null;
     }
     flushStreamDeltas();

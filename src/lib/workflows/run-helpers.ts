@@ -3,12 +3,15 @@ import { workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from './types';
-import { emitWorkflowEvent } from './events';
+import { emitWorkflowEvent, onWorkflowEvent } from './events';
 
-// Hard cap on a single workflow run. If engine.execute hasn't resolved by
-// this point we assume a node (typically an LLM call or external HTTP)
-// has hung, mark the run failed, and emit run_failed so any SSE client
-// subscribed to the run unfreezes instead of waiting on keepalives forever.
+// Idle timeout — if NO workflow events are emitted for this long we assume
+// the engine has hung silently inside a node (LLM call with no streaming,
+// external HTTP without a timeout, etc). Typical healthy chat runs emit
+// token/log events every few ms.
+const RUN_IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 min
+// Hard cap regardless of activity — a runaway tool-call loop that keeps
+// emitting tokens forever shouldn't lock the UI indefinitely.
 const RUN_HARD_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
 
 /**
@@ -33,18 +36,32 @@ export function runWorkflowAndPersist(
 ): void {
   const { workflowId, breakpoints, selfHealing = true, label = 'run' } = opts;
 
-  // Watchdog: if the engine hangs (e.g. a node's external call never
-  // resolves), time out the run, mark it failed, and broadcast
-  // run_failed so the SSE stream closes and clients stop spinning.
+  // Watchdog: the engine can hang silently inside a node (LLM call with
+  // no timeout, external HTTP that never returns, etc) with no activity
+  // on the event bus. We run BOTH:
+  //   - an idle watchdog that resets on every emitted event
+  //   - a hard cap as a last resort
+  // When either fires we mark the run failed and broadcast run_failed so
+  // SSE subscribers close out instead of spinning forever.
   let settled = false;
-  const watchdog = setTimeout(async () => {
+  let idleWatchdog: ReturnType<typeof setTimeout> | null = null;
+  const hardWatchdog = setTimeout(() => fire(
+    `Run exceeded max duration (${Math.round(RUN_HARD_TIMEOUT_MS / 1000)}s). A node likely hung — check logs and re-run.`,
+  ), RUN_HARD_TIMEOUT_MS);
+
+  function clearAllWatchdogs() {
+    clearTimeout(hardWatchdog);
+    if (idleWatchdog) clearTimeout(idleWatchdog);
+    idleWatchdog = null;
+    unsubscribeWatchdog?.();
+    unsubscribeWatchdog = null;
+  }
+
+  async function fire(message: string) {
     if (settled) return;
-    console.error(
-      `[${label}] run ${runId} exceeded ${RUN_HARD_TIMEOUT_MS}ms — forcing failure`,
-    );
-    const message = `Run exceeded max duration (${Math.round(
-      RUN_HARD_TIMEOUT_MS / 1000,
-    )}s). A node likely hung — check logs and re-run.`;
+    settled = true;
+    clearAllWatchdogs();
+    console.error(`[${label}] watchdog firing for run ${runId}: ${message}`);
     try {
       await db
         .update(workflowRuns)
@@ -59,13 +76,35 @@ export function runWorkflowAndPersist(
       type: 'run_failed',
       data: { error: message },
     });
-  }, RUN_HARD_TIMEOUT_MS);
+  }
+
+  function resetIdleWatchdog() {
+    if (idleWatchdog) clearTimeout(idleWatchdog);
+    idleWatchdog = setTimeout(
+      () => fire(
+        `Run idle for ${Math.round(RUN_IDLE_TIMEOUT_MS / 1000)}s with no events — assumed hung.`,
+      ),
+      RUN_IDLE_TIMEOUT_MS,
+    );
+  }
+
+  // Subscribe to the run's event bus; ANY event (node_started, token,
+  // tool_result, log, etc) counts as liveness and resets the idle timer.
+  let unsubscribeWatchdog: (() => void) | null = onWorkflowEvent(runId, (event) => {
+    if (event.type === 'run_completed' || event.type === 'run_completed_with_errors' || event.type === 'run_failed') {
+      settled = true;
+      clearAllWatchdogs();
+    } else {
+      resetIdleWatchdog();
+    }
+  });
+  resetIdleWatchdog();
 
   engine
     .execute(definition, runId, initialInput, breakpoints, workflowId, { selfHealing })
     .then(async (result) => {
       settled = true;
-      clearTimeout(watchdog);
+      clearAllWatchdogs();
       const healingHistory = result.healingHistory || [];
 
       try {
@@ -127,7 +166,7 @@ export function runWorkflowAndPersist(
     })
     .catch(async (err) => {
       settled = true;
-      clearTimeout(watchdog);
+      clearAllWatchdogs();
       console.error(`[${label}] workflow execution threw (runId=${runId})`, err);
       const message = err instanceof Error ? err.message : String(err);
       try {
