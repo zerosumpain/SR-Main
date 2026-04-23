@@ -19,20 +19,37 @@ import { scraperTargetKnowledge } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { normalizeDomain } from './target-knowledge';
 
+export type PlaybookStep =
+  | { type: 'goto'; url: string }
+  | { type: 'wait'; selector?: string; ms?: number; timeoutMs?: number }
+  | { type: 'click'; selector?: string; text?: string }
+  | { type: 'fill'; selector: string; value: string }
+  | { type: 'select'; selector: string; value: string }
+  | { type: 'submit'; formSelector?: string }
+  | { type: 'altcha' };
+
+/** v1: single URL template (legacy); v2: full step sequence the agent
+ *  recorded. v2 playbooks are replayed by the playbook runner via
+ *  site-mapper-agent.py. v1 playbooks still dispatch through the original
+ *  runScrape for backward compat. */
 export interface Playbook {
   /** Version marker — bump when the shape changes so old rows are obviously stale. */
-  version: 1;
+  version: 1 | 2;
   /** ISO timestamp set when the mapper created this playbook. */
   generatedAt: string;
   /** Human-readable description of what the playbook extracts (e.g. "data engineer job listings"). */
   goal: string;
-  /** URL template. Supports `{{var}}` substitution from the input vars map. */
-  urlTemplate: string;
-  /** Wait condition before extraction. Same shape as ScrapeJob['waitFor']. */
+  /** v1 ONLY: URL template with `{{var}}` substitution. */
+  urlTemplate?: string;
+  /** v1 ONLY: wait condition before extraction. */
   waitFor?: ScrapeJob['waitFor'];
-  /** Extraction rules — same shape as stealth-scrape node's extract array. */
+  /** v2 ONLY: ordered navigation sequence. Values in fill/goto support
+   *  `{{var}}` substitution from the input vars map. */
+  steps?: PlaybookStep[];
+  /** Extraction rules applied on the page after all steps run. Same shape
+   *  as stealth-scrape node's extract array. */
   extract: ExtractRule[];
-  /** Optional pagination spec — same shape as ScrapeJob['pagination']. */
+  /** Optional pagination spec (v1 only for now). */
   pagination?: ScrapeJob['pagination'];
   /** Acceptance test the mapper uses to validate a freshly-generated playbook,
    *  and that stealth-scrape uses post-run to decide if the playbook is still
@@ -47,8 +64,9 @@ export interface Playbook {
 
 /** Substitute `{{var}}` placeholders in a string from a vars map. Missing vars
  *  leave the placeholder intact so mis-wired inputs surface at the URL rather
- *  than silently fetching the wrong page. */
-function interpolateVars(template: string, vars: Record<string, string>): string {
+ *  than silently fetching the wrong page. Exported for the v2 runner which
+ *  interpolates URLs + fill values inside each step. */
+export function interpolateVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (match, key) => {
     if (Object.prototype.hasOwnProperty.call(vars, key)) return String(vars[key]);
     return match;
@@ -79,9 +97,20 @@ export interface RunPlaybookResult extends ScrapeResult {
  * playbook stale, re-run the mapper, or surface the failure.
  */
 export async function runPlaybook(opts: RunPlaybookOptions): Promise<RunPlaybookResult> {
-  const { playbook, vars = {}, profile = 'default', workflowRunId, onProgress } = opts;
-  const url = interpolateVars(playbook.urlTemplate, vars);
+  const { playbook } = opts;
+  // v2 playbooks have a full navigation step sequence — delegate to the
+  // agent-harness runner so clicks/fills/submits/altcha actually fire.
+  if (playbook.version === 2 && Array.isArray(playbook.steps) && playbook.steps.length > 0) {
+    const { runPlaybookV2 } = await import('./playbook-runner-v2');
+    return await runPlaybookV2(opts);
+  }
 
+  // v1: simple URL template + runScrape.
+  const { vars = {}, profile = 'default', workflowRunId, onProgress } = opts;
+  if (!playbook.urlTemplate) {
+    throw new Error('Playbook v1 is missing urlTemplate');
+  }
+  const url = interpolateVars(playbook.urlTemplate, vars);
   const result = await runScrape({
     url,
     profile,
@@ -91,7 +120,6 @@ export async function runPlaybook(opts: RunPlaybookOptions): Promise<RunPlaybook
     workflowRunId,
     onProgress,
   });
-
   const itemCount = countAcceptanceItems(result, playbook);
   return {
     ...result,
@@ -123,7 +151,7 @@ export async function loadPlaybookForUrl(url: string): Promise<Playbook | null> 
     .from(scraperTargetKnowledge)
     .where(eq(scraperTargetKnowledge.domain, domain));
   const pb = row?.playbook as Playbook | null | undefined;
-  if (!pb || pb.version !== 1) return null;
+  if (!pb || (pb.version !== 1 && pb.version !== 2)) return null;
   return pb;
 }
 

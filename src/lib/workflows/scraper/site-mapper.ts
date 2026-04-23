@@ -1,50 +1,49 @@
 /**
- * site-mapper.ts
+ * site-mapper.ts — agentic version.
  *
- * LLM-driven generator for scraper playbooks. Runs ONCE per domain (manually
- * or when a stealth-scrape run fails with acceptance-not-met), producing a
- * deterministic recipe that subsequent unattended runs use without another
- * LLM call.
+ * Runs ONCE per target site. Opens a persistent browser session via the
+ * Python agent harness, feeds observations to an LLM, and takes the minimum
+ * number of actions needed to reach the page that satisfies `goal`.
  *
- * v1 approach — single-shot:
- *   1. Scrape the seed URL once to get the landing HTML + resolved URL.
- *   2. Hand the HTML + goal + domain to an LLM, ask for a Playbook JSON.
- *   3. Validate by running the playbook in a fresh headless browser and
- *      checking the acceptance test.
- *   4. If valid, save to scraper_target_knowledge.playbook.
+ * LOOP:
+ *   1. Agent navigates to seedUrl (site root), observes, Altcha-auto-solve.
+ *   2. Send the observation + goal + transcript to the LLM. LLM emits a
+ *      single JSON `action` (goto/click/fill/submit/altcha/finalize/give_up).
+ *   3. Execute the action via the agent; record it in the transcript.
+ *   4. Repeat until the LLM emits `finalize` (with extract rules +
+ *      acceptance) or hits the step cap (MAX_STEPS).
+ *   5. Validate by replaying the recorded step sequence through
+ *      runPlaybookV2 and checking the acceptance test. Save either way.
  *
- * This skips click/fill step sequences for now. If a site needs form
- * submission beyond query-string params, the mapper will probably fail its
- * own acceptance check and surface the failure — a later v2 adds an
- * interactive agentic loop (tool-calling with click/fill/observe primitives).
+ * The LLM never picks up the phone — it sees only summarised observations,
+ * never raw HTML, so we stay well within context budgets and keep the LLM
+ * focused on the goal.
  */
 
-import { runScrape } from './runner';
+import { startAgent, type AgentHarness, type AgentObservation } from './agent-harness';
 import {
   runPlaybook,
   savePlaybook,
   type Playbook,
+  type PlaybookStep,
 } from './playbook';
 import { normalizeDomain } from './target-knowledge';
 import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
 
-const MAX_HTML_CHARS = 12000;
+const MAX_STEPS = 12;
+const MAX_INTERACTIVE_SUMMARY = 6500; // chars of observe summary sent to LLM
 
 export interface SiteMapperOptions {
-  /** URL the mapper navigates to for landing-page analysis. Usually the
-   *  search/form page of the target site. */
+  /** Root / landing URL of the target site (e.g. "https://example.com"). */
   seedUrl: string;
-  /** Natural-language description of what the scraper should extract
-   *  (e.g. "data engineer job listings with title, organisation, salary,
-   *  closing date, and link"). */
+  /** Plain-English description of the outcome the scraper should produce —
+   *  e.g. "search for data engineer jobs and return the first page of results
+   *  with title, organisation, salary, closing date, job URL". */
   goal: string;
-  /** Optional search query to substitute into the playbook's urlTemplate
-   *  during acceptance validation. If omitted, the LLM-generated urlTemplate
-   *  is assumed to be usable as-is. */
+  /** Optional — seeded as {{keyword}} during validation so the LLM can
+   *  produce a playbook that generalises per-run. */
   searchQuery?: string;
-  /** Profile to use for the initial observation + validation. */
   profile?: string;
-  /** Optional model override (anything resolveLLMClient accepts). */
   model?: string;
   workflowRunId?: string;
   onProgress?: (ev: Record<string, unknown>) => void;
@@ -53,154 +52,136 @@ export interface SiteMapperOptions {
 export interface SiteMapperResult {
   domain: string;
   playbook: Playbook;
-  /** True when the generated playbook passed its own acceptance test. */
   validated: boolean;
   itemCount: number;
   firstItemSample?: Record<string, unknown>;
-  /** Error message if validation failed — the playbook is still saved so
-   *  the user can inspect + edit it manually. */
+  transcript: Array<Record<string, unknown>>;
   error?: string;
 }
 
-const SYSTEM_PROMPT = `You are a scraper-playbook generator. Given the landing-page HTML of a target website and a description of what the user wants to extract, output a JSON playbook that future unattended scrapes will follow deterministically.
+const SYSTEM_PROMPT = `You are a scraping-agent pilot. You have control of a live headless browser. You will be fed the current page's URL, title, text snippet, and a list of interactive elements (forms, buttons, links) on each turn. Your job is to navigate MINIMALLY to reach the page that answers the user's goal, then emit a playbook.
 
 Rules:
-- Output ONLY a single JSON object. No markdown fences. No prose.
-- The JSON must match this TypeScript type:
-  interface Playbook {
-    version: 1;
-    generatedAt: string;   // ISO timestamp — you can set it to "generated"
-    goal: string;          // echo back the user goal
-    urlTemplate: string;   // prefer a direct results URL with query-string params; use {{keyword}} for the search term
-    waitFor?:
-      | { type: "networkidle" }
-      | { type: "selector"; selector: string; timeoutMs?: number }
-      | { type: "timeout"; ms: number };
-    extract: Array<{
-      field: string;        // output field name (camelCase)
-      selector: string;     // CSS selector
-      attr?: "text" | "html" | "href" | "src" | string;
-      multi?: boolean;      // true when the selector matches many items
-      trim?: boolean;
-    }>;
-    pagination?: { type: "next-link"; nextSelector: string; maxPages: number };
-    acceptance: { minItems: number; sampleField: string };  // which extract field to count, min items expected
-  }
-- Prefer a direct URL with query-string params (e.g. ?q={{keyword}}) over a form-submission flow — v1 does not execute form clicks.
-- For list/result pages, the primary extract rule should be \`multi: true\` over the item container selector (use attr:"html" so downstream nodes can parse the nested structure), and \`acceptance.sampleField\` should name that multi field with minItems >= 1.
-- Include additional per-item field rules alongside — but only if the selector reliably targets ONE item's child. When in doubt, emit the multi container only.
-- Be specific with selectors; avoid overly generic ones like \`div\` or \`a\`.`;
+- Output a SINGLE JSON object per turn. No prose, no markdown.
+- Valid JSON shapes:
+  { "action": "goto",   "url": "https://…", "note": "why" }
+  { "action": "click",  "selector": "…",   "note": "why" }
+  { "action": "fill",   "selector": "…", "value": "…", "note": "why" }
+  { "action": "select", "selector": "…", "value": "…", "note": "why" }
+  { "action": "submit", "formSelector": "form.search-form", "note": "why" }  // formSelector optional — omit to press Enter on the focused element
+  { "action": "altcha",  "note": "auto-solve altcha if the widget is present" }
+  { "action": "finalize", "playbook": { … }, "note": "we're on the page that contains the goal data" }
+  { "action": "give_up", "reason": "…" }
+- Prefer direct goto() with query-string params over form fill/submit when the site supports it — shorter playbooks are more robust.
+- Use fill({{keyword}}) for the search term so the playbook generalises per-run. Example: { "action":"fill", "selector":"input[name=q]", "value":"{{keyword}}" }.
+- Call altcha whenever you see an altcha-widget in the interactive list.
+- Finalize the moment you can see the target data on the page — do NOT click into individual detail pages unless the goal requires them.
+
+When you finalize, the playbook's "steps" array must be the minimum sequence of actions taken so far that reproduces reaching the results page. The playbook shape:
+{
+  "version": 2,
+  "generatedAt": "<iso timestamp — literal string 'generated'>",
+  "goal": "<echo the user goal>",
+  "steps": [ /* the action sequence (minus the finalize itself) — objects with { "type": "goto"|"click"|"fill"|"select"|"submit"|"altcha"|"wait", ... } */ ],
+  "extract": [
+    { "field": "items", "selector": "<css>", "attr": "html", "multi": true, "trim": true }
+    /* plus optional per-item field rules if you're confident; otherwise the items-html multi is enough, downstream stealth-scrape-llm can parse it */
+  ],
+  "acceptance": { "minItems": 1, "sampleField": "items" }
+}
+The step shapes inside "steps" use "type" (not "action"): { "type":"goto","url":"…" }, { "type":"click","selector":"…" }, etc.`;
 
 export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapperResult> {
   const domain = normalizeDomain(opts.seedUrl);
   const emit = (ev: Record<string, unknown>) => opts.onProgress?.(ev);
+  const transcript: Array<Record<string, unknown>> = [];
 
-  emit({ t: 'map.observe', url: opts.seedUrl });
-  // 1. Observe the landing page — a standard scrape with extract: "page"
-  //    gives us the full rendered HTML after Altcha auto-solve + any initial
-  //    redirects.
-  const landing = await runScrape({
-    url: opts.seedUrl,
-    profile: opts.profile ?? 'default',
-    waitFor: { type: 'networkidle' },
-    extract: [] as unknown as Array<Record<string, unknown>> as never,
-    workflowRunId: opts.workflowRunId,
-    onProgress: (e) => emit({ t: 'map.landing.progress', ...e }),
-  });
-  if (!landing.success || landing.pages.length === 0) {
-    throw new Error(
-      `Site-mapper could not load ${opts.seedUrl}: ${landing.error ?? 'unknown'}`,
-    );
-  }
-  // Re-fetch with html snapshot — runScrape with empty-array extract returns
-  // just {url, fields:{}}. Call again with "page" shorthand resolver (handled
-  // by scrape.py's resolve_extract) via a direct cast.
-  const htmlLanding = await runScrape({
-    url: opts.seedUrl,
-    profile: opts.profile ?? 'default',
-    waitFor: { type: 'networkidle' },
-    extract: 'page' as unknown as never,
-    workflowRunId: opts.workflowRunId,
-  });
-  const firstPage = htmlLanding.pages[0] as {
-    url?: string;
-    fields?: { html?: string; title?: string; url?: string };
-  } | undefined;
-  const fullHtml = firstPage?.fields?.html ?? '';
-  const landedUrl = firstPage?.fields?.url ?? firstPage?.url ?? opts.seedUrl;
-  const pageTitle = firstPage?.fields?.title ?? '';
+  const agent = await startAgent(opts.profile ?? 'default');
+  const recordedSteps: PlaybookStep[] = [];
+  let finalPlaybook: Playbook | null = null;
+  let giveUpReason: string | undefined;
 
-  const htmlForLlm = pruneHtmlForLlm(fullHtml).slice(0, MAX_HTML_CHARS);
-
-  // 2. Ask the LLM for a Playbook.
-  emit({ t: 'map.llm.request', bytes: htmlForLlm.length });
-  const { client, model } = await resolveLLMClient(opts.model);
-  const userPrompt = [
-    `Domain: ${domain}`,
-    `Landed URL: ${landedUrl}`,
-    `Page title: ${pageTitle}`,
-    `Goal: ${opts.goal}`,
-    opts.searchQuery ? `Search query (for urlTemplate substitution): ${opts.searchQuery}` : '',
-    '',
-    'Landing page HTML (pruned):',
-    htmlForLlm,
-  ].filter(Boolean).join('\n');
-
-  // Some OpenAI-compatible providers (older z.ai deployments) reject the
-  // response_format hint with 400. Try with, fall back without so the mapper
-  // survives on any provider the admin has configured.
-  async function callLlm(withJsonFormat: boolean) {
-    return await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 1200,
-      ...(withJsonFormat ? { response_format: { type: 'json_object' } } : {}),
-    });
-  }
-  let completion;
   try {
-    completion = await callLlm(true);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/response_format|json_object|unsupported|400/i.test(msg)) {
-      emit({ t: 'map.llm.retry', reason: 'response_format unsupported', provider: model });
-      completion = await callLlm(false);
-    } else {
-      throw err;
+    emit({ t: 'map.goto', url: opts.seedUrl });
+    const first = await agent.goto(opts.seedUrl);
+    recordedSteps.push({ type: 'goto', url: opts.seedUrl });
+    transcript.push({ type: 'goto', url: opts.seedUrl, result: first });
+
+    // Auto-altcha if the widget is on the landing page.
+    await agent.altcha().catch(() => ({ solved: false }));
+
+    const { client, model } = await resolveLLMClient(opts.model);
+    const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+    for (let turn = 0; turn < MAX_STEPS; turn++) {
+      const obs = await agent.observe();
+      const userMsg = buildUserMessage(opts.goal, opts.searchQuery, obs, turn);
+      emit({ t: 'map.observe', turn, url: obs.url });
+
+      const reply = await askLLM(client, model, history, userMsg);
+      history.push({ role: 'user', content: userMsg });
+      history.push({ role: 'assistant', content: reply });
+      transcript.push({ turn, observation: { url: obs.url, title: obs.title }, reply });
+
+      let action: Record<string, unknown>;
+      try {
+        action = extractJson(reply);
+      } catch (err) {
+        emit({ t: 'map.parse_error', turn, raw: reply.slice(0, 400), err: String(err) });
+        history.push({
+          role: 'user',
+          content: 'Your previous message was not valid JSON. Emit ONE JSON object matching the action schema and nothing else.',
+        });
+        continue;
+      }
+      emit({ t: 'map.action', turn, action });
+
+      const kind = action.action as string;
+      if (kind === 'finalize') {
+        finalPlaybook = coercePlaybook(action.playbook, opts.goal, recordedSteps);
+        break;
+      }
+      if (kind === 'give_up') {
+        giveUpReason = (action.reason as string) || 'llm gave up';
+        break;
+      }
+
+      // Execute the action via the agent, then record it into the step sequence.
+      try {
+        await executeAction(agent, action);
+        const step = actionToStep(action);
+        if (step) recordedSteps.push(step);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        emit({ t: 'map.action_error', turn, err: msg });
+        history.push({
+          role: 'user',
+          content: `That action failed: ${msg}\nTry a different approach or give_up.`,
+        });
+      }
     }
-  }
-  const raw = completion.choices[0]?.message?.content ?? '';
-  emit({ t: 'map.llm.response', bytes: raw.length, model });
 
-  // Extract the first { … } block in case the provider returned prose around
-  // the JSON (common when response_format isn't honoured).
-  const match = raw.match(/\{[\s\S]*\}/);
-  const jsonStr = match ? match[0] : raw;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (err) {
-    throw new Error(
-      `Site-mapper LLM did not return valid JSON (model=${model}): ${err instanceof Error ? err.message : String(err)}. Raw: ${raw.slice(0, 300)}`,
-    );
+    if (!finalPlaybook) {
+      throw new Error(
+        giveUpReason
+          ? `Site-mapper gave up: ${giveUpReason}`
+          : `Site-mapper hit ${MAX_STEPS} turns without finalizing.`,
+      );
+    }
+  } finally {
+    await agent.close();
   }
-  const playbook = coercePlaybook(parsed, opts.goal);
 
-  // 3. Validate — run the playbook in a fresh headless browser against the
-  //    supplied searchQuery (or no vars if none).
-  emit({ t: 'map.validate.start' });
+  // Validate via a fresh replay through runPlaybook (v2 path).
+  emit({ t: 'map.validate' });
   const vars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
   let validated = false;
   let itemCount = 0;
   let firstItemSample: Record<string, unknown> | undefined;
-  let validationError: string | undefined;
+  let error: string | undefined;
   try {
     const run = await runPlaybook({
-      playbook,
+      playbook: finalPlaybook,
       vars,
       profile: opts.profile ?? 'default',
       workflowRunId: opts.workflowRunId,
@@ -208,80 +189,217 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     });
     validated = run.acceptanceMet;
     itemCount = run.itemCount;
-    if (run.pages[0]) {
-      firstItemSample = (run.pages[0] as { fields?: Record<string, unknown> }).fields;
-    }
-    if (!run.success) {
-      validationError = run.error ?? 'scrape reported failure';
-    } else if (!validated) {
-      validationError = `acceptance test failed — expected at least ${playbook.acceptance.minItems} items in field "${playbook.acceptance.sampleField}", got ${itemCount}`;
-    }
+    if (run.pages[0]) firstItemSample = (run.pages[0] as { fields?: Record<string, unknown> }).fields;
+    if (!run.success) error = run.error ?? 'replay failed';
+    else if (!validated)
+      error = `acceptance not met — expected ≥${finalPlaybook.acceptance.minItems} items in "${finalPlaybook.acceptance.sampleField}", got ${itemCount}`;
   } catch (err) {
-    validationError = err instanceof Error ? err.message : String(err);
+    error = err instanceof Error ? err.message : String(err);
   }
 
-  // 4. Save. We save even when validation fails so the user can inspect + edit.
-  await savePlaybook(domain, playbook);
-  emit({ t: 'map.saved', domain, validated });
+  // Save either way so the user can inspect + tweak failing playbooks.
+  await savePlaybook(domain, finalPlaybook);
 
   return {
     domain,
-    playbook,
+    playbook: finalPlaybook,
     validated,
     itemCount,
     firstItemSample,
-    error: validationError,
+    transcript,
+    error,
   };
 }
 
-/** Prune HTML for LLM context: drop <script>, <style>, <svg>, <noscript>,
- *  comments, long class attribute soup. Keeps enough structure for the LLM
- *  to pick selectors. */
-function pruneHtmlForLlm(html: string): string {
-  if (!html) return '';
-  let out = html;
-  out = out.replace(/<!--[\s\S]*?-->/g, '');
-  out = out.replace(/<script[\s\S]*?<\/script>/gi, '');
-  out = out.replace(/<style[\s\S]*?<\/style>/gi, '');
-  out = out.replace(/<svg[\s\S]*?<\/svg>/gi, '<svg/>');
-  out = out.replace(/<noscript[\s\S]*?<\/noscript>/gi, '');
-  // Collapse excess whitespace
-  out = out.replace(/\s+/g, ' ');
-  return out;
+function buildUserMessage(
+  goal: string,
+  searchQuery: string | undefined,
+  obs: AgentObservation,
+  turn: number,
+): string {
+  const interactiveJson = JSON.stringify(obs.interactive, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);
+  return [
+    `Turn ${turn + 1} / ${MAX_STEPS}.`,
+    `User goal: ${goal}`,
+    searchQuery ? `Search query the playbook should parameterise on ({{keyword}}): "${searchQuery}"` : '',
+    `Current URL: ${obs.url}`,
+    `Current page title: ${obs.title}`,
+    '',
+    'Page text snippet:',
+    obs.text_snippet.slice(0, 1500),
+    '',
+    'Interactive elements (JSON):',
+    interactiveJson,
+  ].filter(Boolean).join('\n');
 }
 
-function coercePlaybook(value: unknown, goal: string): Playbook {
-  if (!value || typeof value !== 'object') {
-    throw new Error('LLM playbook output is not an object');
+async function askLLM(
+  client: ReturnType<typeof resolveLLMClient> extends Promise<infer T> ? T extends { client: infer C } ? C : never : never,
+  model: string,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  userMsg: string,
+): Promise<string> {
+  const messages = [
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    ...history,
+    { role: 'user' as const, content: userMsg },
+  ];
+  const resp = await (client as {
+    chat: { completions: { create: (args: unknown) => Promise<{ choices: Array<{ message: { content: string | null } }> }> } };
+  }).chat.completions.create({
+    model,
+    messages,
+    temperature: 0.2,
+    max_tokens: 800,
+  });
+  return resp.choices[0]?.message?.content ?? '';
+}
+
+function extractJson(raw: string): Record<string, unknown> {
+  const match = raw.match(/\{[\s\S]*\}/);
+  const str = match ? match[0] : raw;
+  return JSON.parse(str) as Record<string, unknown>;
+}
+
+async function executeAction(agent: AgentHarness, action: Record<string, unknown>): Promise<void> {
+  switch (action.action) {
+    case 'goto': {
+      if (typeof action.url !== 'string') throw new Error('goto requires url');
+      await agent.goto(action.url);
+      return;
+    }
+    case 'click': {
+      await agent.click({
+        selector: typeof action.selector === 'string' ? action.selector : undefined,
+        text: typeof action.text === 'string' ? action.text : undefined,
+      });
+      return;
+    }
+    case 'fill': {
+      if (typeof action.selector !== 'string' || typeof action.value !== 'string') {
+        throw new Error('fill requires selector + value');
+      }
+      await agent.fill(action.selector, action.value);
+      return;
+    }
+    case 'select': {
+      if (typeof action.selector !== 'string' || typeof action.value !== 'string') {
+        throw new Error('select requires selector + value');
+      }
+      await agent.select(action.selector, action.value);
+      return;
+    }
+    case 'submit': {
+      await agent.submit(typeof action.formSelector === 'string' ? action.formSelector : undefined);
+      return;
+    }
+    case 'altcha': {
+      await agent.altcha();
+      return;
+    }
+    case 'wait': {
+      await agent.wait({
+        selector: typeof action.selector === 'string' ? action.selector : undefined,
+        ms: typeof action.ms === 'number' ? action.ms : undefined,
+      });
+      return;
+    }
+    default:
+      throw new Error(`unknown action: ${JSON.stringify(action.action)}`);
   }
-  const v = value as Record<string, unknown>;
-  const urlTemplate = typeof v.urlTemplate === 'string' ? v.urlTemplate : '';
-  if (!urlTemplate) throw new Error('LLM playbook missing urlTemplate');
-  const extractRaw = Array.isArray(v.extract) ? v.extract : [];
+}
+
+function actionToStep(action: Record<string, unknown>): PlaybookStep | null {
+  switch (action.action) {
+    case 'goto':
+      return { type: 'goto', url: action.url as string };
+    case 'click':
+      return {
+        type: 'click',
+        selector: typeof action.selector === 'string' ? action.selector : undefined,
+        text: typeof action.text === 'string' ? action.text : undefined,
+      };
+    case 'fill':
+      return { type: 'fill', selector: action.selector as string, value: action.value as string };
+    case 'select':
+      return { type: 'select', selector: action.selector as string, value: action.value as string };
+    case 'submit':
+      return {
+        type: 'submit',
+        formSelector: typeof action.formSelector === 'string' ? action.formSelector : undefined,
+      };
+    case 'altcha':
+      return { type: 'altcha' };
+    case 'wait':
+      return {
+        type: 'wait',
+        selector: typeof action.selector === 'string' ? action.selector : undefined,
+        ms: typeof action.ms === 'number' ? action.ms : undefined,
+      };
+    default:
+      return null;
+  }
+}
+
+function coercePlaybook(v: unknown, goal: string, fallbackSteps: PlaybookStep[]): Playbook {
+  if (!v || typeof v !== 'object') throw new Error('LLM finalize had no playbook object');
+  const p = v as Record<string, unknown>;
+  const stepsRaw = Array.isArray(p.steps) ? p.steps : [];
+  const steps: PlaybookStep[] = stepsRaw
+    .map(coerceStep)
+    .filter((s): s is PlaybookStep => s !== null);
+  const effectiveSteps = steps.length > 0 ? steps : fallbackSteps;
+  const extractRaw = Array.isArray(p.extract) ? p.extract : [];
   if (extractRaw.length === 0) throw new Error('LLM playbook has no extract rules');
   const extract = extractRaw.map(coerceExtractRule);
-  const acceptance = (v.acceptance && typeof v.acceptance === 'object')
-    ? v.acceptance as { minItems?: number; sampleField?: string }
+  const accRaw = (p.acceptance && typeof p.acceptance === 'object')
+    ? p.acceptance as { minItems?: number; sampleField?: string }
     : {};
-  const sampleField = acceptance.sampleField ?? extract.find((r) => r.multi)?.field ?? extract[0].field;
-  const minItems = typeof acceptance.minItems === 'number' ? acceptance.minItems : 1;
+  const sampleField = accRaw.sampleField ?? extract.find((r) => r.multi)?.field ?? extract[0].field;
+  const minItems = typeof accRaw.minItems === 'number' ? accRaw.minItems : 1;
   return {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
-    goal: typeof v.goal === 'string' ? v.goal : goal,
-    urlTemplate,
-    waitFor: coerceWaitFor(v.waitFor),
+    goal: typeof p.goal === 'string' ? p.goal : goal,
+    steps: effectiveSteps,
     extract,
-    pagination: coercePagination(v.pagination),
     acceptance: { minItems, sampleField },
   };
+}
+
+function coerceStep(v: unknown): PlaybookStep | null {
+  if (!v || typeof v !== 'object') return null;
+  const s = v as Record<string, unknown>;
+  const t = s.type;
+  if (t === 'goto' && typeof s.url === 'string') return { type: 'goto', url: s.url };
+  if (t === 'click') return {
+    type: 'click',
+    selector: typeof s.selector === 'string' ? s.selector : undefined,
+    text: typeof s.text === 'string' ? s.text : undefined,
+  };
+  if (t === 'fill' && typeof s.selector === 'string' && typeof s.value === 'string') {
+    return { type: 'fill', selector: s.selector, value: s.value };
+  }
+  if (t === 'select' && typeof s.selector === 'string' && typeof s.value === 'string') {
+    return { type: 'select', selector: s.selector, value: s.value };
+  }
+  if (t === 'submit') {
+    return { type: 'submit', formSelector: typeof s.formSelector === 'string' ? s.formSelector : undefined };
+  }
+  if (t === 'altcha') return { type: 'altcha' };
+  if (t === 'wait') return {
+    type: 'wait',
+    selector: typeof s.selector === 'string' ? s.selector : undefined,
+    ms: typeof s.ms === 'number' ? s.ms : undefined,
+  };
+  return null;
 }
 
 function coerceExtractRule(v: unknown): Playbook['extract'][number] {
   if (!v || typeof v !== 'object') throw new Error('extract rule is not an object');
   const r = v as Record<string, unknown>;
-  if (typeof r.field !== 'string' || !r.field) throw new Error('extract rule missing field');
-  if (typeof r.selector !== 'string' || !r.selector) throw new Error('extract rule missing selector');
+  if (typeof r.field !== 'string') throw new Error('extract rule missing field');
+  if (typeof r.selector !== 'string') throw new Error('extract rule missing selector');
   return {
     field: r.field,
     selector: r.selector,
@@ -289,34 +407,4 @@ function coerceExtractRule(v: unknown): Playbook['extract'][number] {
     multi: !!r.multi,
     trim: r.trim === false ? false : true,
   };
-}
-
-function coerceWaitFor(v: unknown): Playbook['waitFor'] {
-  if (!v || typeof v !== 'object') return { type: 'networkidle' };
-  const r = v as Record<string, unknown>;
-  const t = r.type;
-  if (t === 'selector' && typeof r.selector === 'string') {
-    return {
-      type: 'selector',
-      selector: r.selector,
-      timeoutMs: typeof r.timeoutMs === 'number' ? r.timeoutMs : undefined,
-    };
-  }
-  if (t === 'timeout' && typeof r.ms === 'number') {
-    return { type: 'timeout', ms: r.ms };
-  }
-  return { type: 'networkidle' };
-}
-
-function coercePagination(v: unknown): Playbook['pagination'] {
-  if (!v || typeof v !== 'object') return undefined;
-  const r = v as Record<string, unknown>;
-  if (r.type === 'next-link' && typeof r.nextSelector === 'string') {
-    return {
-      type: 'next-link',
-      nextSelector: r.nextSelector,
-      maxPages: typeof r.maxPages === 'number' ? r.maxPages : 5,
-    };
-  }
-  return undefined;
 }
