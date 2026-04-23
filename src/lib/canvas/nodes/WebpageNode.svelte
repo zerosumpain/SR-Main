@@ -200,9 +200,12 @@
     };
   });
 
-  // Re-sync draft when upstream config.url changes (e.g. set by upstream node in Phase E).
+  // Re-sync draft when upstream config.url changes (e.g. set by upstream
+  // node in Phase E). Equality-guarded so every parent reactivity tick
+  // doesn't rewrite urlDraft to the same value and retrigger descendants.
   $effect(() => {
-    urlDraft = config.url ?? '';
+    const next = config.url ?? '';
+    if (next !== urlDraft) urlDraft = next;
   });
 </script>
 

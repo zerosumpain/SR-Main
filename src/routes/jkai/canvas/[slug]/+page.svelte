@@ -1000,13 +1000,24 @@
     renameRequested = true;
   }
 
+  // Re-hydrate draft state when the SELECTED node changes — not when its
+  // status overlay mutates. Without this gate, every SSE tick during a run
+  // recomputed byId → menuNode (new identity), this effect re-ran, and
+  // `configDraft = { ...menuNode.config }` installed a fresh object reference
+  // that cascaded through every Panel's prop→state sync effect. That chain
+  // is what surfaced as effect_update_depth_exceeded on Run.
+  let lastMenuForNodeId: string | null = null;
   $effect(() => {
-    if (menuNode) {
-      configDraft = { ...menuNode.config };
-      labelDraft = menuNode.name;
-      configDirty = false;
-      saveError = null;
+    if (!menuNode) {
+      lastMenuForNodeId = null;
+      return;
     }
+    if (menuForNodeId === lastMenuForNodeId) return;
+    lastMenuForNodeId = menuForNodeId;
+    configDraft = { ...menuNode.config };
+    labelDraft = menuNode.name;
+    configDirty = false;
+    saveError = null;
   });
 
   function setConfigField(key: string, value: unknown) {
@@ -1861,12 +1872,18 @@
     return () => stopInteractionPolling();
   });
 
-  // Hydrate pending explorations — mark running so ResearchResultNode opens its SSE stream.
+  // Hydrate pending explorations — mark running so ResearchResultNode opens
+  // its SSE stream. Explicit key-existence check instead of `??=`: the latter
+  // always performs an assignment, and Svelte 5 proxies can treat that as a
+  // mutation even when the value matches — which re-triggers this effect
+  // (it reads researchStatus[nodeId]) and caps out at effect_update_depth.
   $effect(() => {
     for (const nodeId of Object.keys(pendingExplorations)) {
       const node = canvas.nodes.find((n) => n.id === nodeId);
       if (node?.config?.completedReport) continue; // already done, just persisted
-      researchStatus[nodeId] ??= 'running';
+      if (!(nodeId in researchStatus)) {
+        researchStatus[nodeId] = 'running';
+      }
     }
   });
 </script>
