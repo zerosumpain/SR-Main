@@ -29,6 +29,7 @@ export interface AgentObservation {
   title: string;
   text_snippet: string;
   interactive: Array<Record<string, unknown>>;
+  content_groups: Array<Record<string, unknown>>;
 }
 
 export interface AgentHarness {
@@ -152,6 +153,7 @@ export async function startAgent(profile: string): Promise<AgentHarness> {
         title: r.title as string,
         text_snippet: r.text_snippet as string,
         interactive: r.interactive as Array<Record<string, unknown>>,
+        content_groups: (r.content_groups as Array<Record<string, unknown>>) ?? [],
       };
     },
     async extract(rules) {

@@ -122,6 +122,51 @@ async def observe(page) -> Dict[str, Any]:
     except Exception:
         pass
 
+    # Repeated-content clusters: for each CSS class that appears on 3+
+    # elements at the same DOM depth, sample one's text. This is how the
+    # LLM spots job-listing / card / row containers without seeing raw HTML,
+    # so it can pick correct extract selectors. Returned separately from
+    # `interactive` so the LLM doesn't confuse content with actions.
+    content_groups: List[Dict[str, Any]] = []
+    try:
+        content_groups = await page.evaluate(
+            """() => {
+              const byClass = new Map();
+              const all = Array.from(document.querySelectorAll('[class]'));
+              for (const el of all) {
+                if (!el.className || typeof el.className !== 'string') continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 50 || rect.height < 20) continue;
+                for (const cls of el.className.trim().split(/\\s+/)) {
+                  if (!cls || /[0-9a-f]{4,}$/i.test(cls) || cls.length < 3) continue;
+                  if (!byClass.has(cls)) byClass.set(cls, []);
+                  byClass.get(cls).push(el);
+                }
+              }
+              const out = [];
+              for (const [cls, els] of byClass) {
+                if (els.length < 3 || els.length > 60) continue;
+                // Skip classes whose elements are just text nodes (<span>, <a>)
+                // — more likely content rows are <li>, <tr>, <div>, <article>.
+                const tags = new Set(els.map(e => e.tagName.toLowerCase()));
+                const container = els.filter(e => ['li','tr','div','article','section'].includes(e.tagName.toLowerCase()));
+                if (container.length < 3) continue;
+                const sample = container[0];
+                out.push({
+                  selector: '.' + cls,
+                  count: els.length,
+                  tag: sample.tagName.toLowerCase(),
+                  sample_text: (sample.innerText || '').trim().slice(0, 240),
+                });
+              }
+              // Sort: more matches first, then shorter text snippets
+              // (row-shaped cards usually short)
+              return out.sort((a, b) => b.count - a.count).slice(0, 8);
+            }"""
+        )
+    except Exception as e:
+        content_groups = [{"error": str(e)}]
+
     # Interactive elements: forms (with their inputs + submits), standalone
     # buttons, top links. All enriched with a best-effort CSS selector.
     elements: List[Dict[str, Any]] = []
@@ -197,7 +242,13 @@ async def observe(page) -> Dict[str, Any]:
     except Exception as e:
         elements = [{"error": str(e)}]
 
-    return {"url": url, "title": title, "text_snippet": html_snippet, "interactive": elements}
+    return {
+        "url": url,
+        "title": title,
+        "text_snippet": html_snippet,
+        "interactive": elements,
+        "content_groups": content_groups,
+    }
 
 
 async def apply_extract_rules(page, rules: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -73,6 +73,7 @@ Rules:
     3. Stable ids (e.g. #search_form) WITHOUT random-looking suffixes
     4. tag + a meaningful class (e.g. button.search-submit)
   AVOID: ids with trailing hex suffixes like "#oselect_title_50f4" or random numeric tails — those are regenerated per session and will break the playbook on replay. If the observation only exposes an unstable id, look at the element's name/text/class and use that instead.
+- EXTRACT SELECTORS MUST COME FROM content_groups. Each observation includes a "content_groups" list — real repeated-element patterns detected on the live DOM with their selector, count, and sample text. When you finalize, pick your extract rule's selector from one of those. Do NOT guess selectors like "#search-results li" or ".job-list" — those rarely exist. If content_groups is empty, the page isn't a results page yet; navigate further before finalizing.
 - Valid JSON shapes:
   { "action": "goto",   "url": "https://…", "note": "why" }
   { "action": "click",  "selector": "…",   "note": "why" }
@@ -252,6 +253,7 @@ function buildUserMessage(
   turn: number,
 ): string {
   const interactiveJson = JSON.stringify(obs.interactive, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);
+  const contentGroupsJson = JSON.stringify(obs.content_groups, null, 0).slice(0, 2500);
   return [
     `Turn ${turn + 1} / ${MAX_STEPS}.`,
     `User goal: ${goal}`,
@@ -264,6 +266,9 @@ function buildUserMessage(
     '',
     'Interactive elements (JSON):',
     interactiveJson,
+    '',
+    'Repeated-content clusters on this page (use these to pick extract selectors when you finalize — these are the real classes used by list/card containers on the live DOM):',
+    contentGroupsJson,
   ].filter(Boolean).join('\n');
 }
 
