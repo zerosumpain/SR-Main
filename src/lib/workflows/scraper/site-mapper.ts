@@ -87,7 +87,7 @@ Rules:
 - Call altcha whenever you see an altcha-widget in the interactive list.
 - Finalize the moment you can see the target data on the page — do NOT click into individual detail pages unless the goal requires them.
 
-When you finalize, the playbook's "steps" array must be the minimum sequence of actions taken so far that reproduces reaching the results page. The playbook shape:
+When you finalize, the playbook's "steps" array must START WITH a { "type": "goto", "url": "…" } for the seedUrl (the replay starts from an empty browser — it has no idea what page to land on without this) and then contain the minimum sequence of subsequent actions that reach the results page. acceptance.minItems must be ≥ 1 — you're proving the playbook actually extracts data, so 0 is not acceptable. The playbook shape:
 {
   "version": 2,
   "generatedAt": "<iso timestamp — literal string 'generated'>",
@@ -355,10 +355,20 @@ function coercePlaybook(v: unknown, goal: string, fallbackSteps: PlaybookStep[])
   if (!v || typeof v !== 'object') throw new Error('LLM finalize had no playbook object');
   const p = v as Record<string, unknown>;
   const stepsRaw = Array.isArray(p.steps) ? p.steps : [];
-  const steps: PlaybookStep[] = stepsRaw
+  const llmSteps: PlaybookStep[] = stepsRaw
     .map(coerceStep)
     .filter((s): s is PlaybookStep => s !== null);
-  const effectiveSteps = steps.length > 0 ? steps : fallbackSteps;
+
+  // If the LLM's steps don't start with a goto, prepend the initial goto we
+  // recorded at the top of the agent loop. LLMs often forget the seedUrl
+  // navigation because from their perspective it was "already done" — but
+  // replay starts from an empty session, so the playbook MUST include it.
+  let effectiveSteps: PlaybookStep[] = llmSteps.length > 0 ? llmSteps : fallbackSteps;
+  if (effectiveSteps.length > 0 && effectiveSteps[0].type !== 'goto') {
+    const firstGoto = fallbackSteps.find((s) => s.type === 'goto');
+    if (firstGoto) effectiveSteps = [firstGoto, ...effectiveSteps];
+  }
+
   const extractRaw = Array.isArray(p.extract) ? p.extract : [];
   if (extractRaw.length === 0) throw new Error('LLM playbook has no extract rules');
   const extract = extractRaw.map(coerceExtractRule);
@@ -366,7 +376,11 @@ function coercePlaybook(v: unknown, goal: string, fallbackSteps: PlaybookStep[])
     ? p.acceptance as { minItems?: number; sampleField?: string }
     : {};
   const sampleField = accRaw.sampleField ?? extract.find((r) => r.multi)?.field ?? extract[0].field;
-  const minItems = typeof accRaw.minItems === 'number' ? accRaw.minItems : 1;
+  // Clamp minItems to ≥1 — LLMs sometimes write 0 to guarantee the
+  // acceptance test passes, which defeats the test. An extraction with
+  // zero matching items is never a useful successful scrape.
+  const requestedMin = typeof accRaw.minItems === 'number' ? accRaw.minItems : 1;
+  const minItems = Math.max(1, requestedMin);
   return {
     version: 2,
     generatedAt: new Date().toISOString(),
