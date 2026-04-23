@@ -118,6 +118,22 @@
     ),
   );
 
+  // Auto-open the VNC modal the first time a new pending interaction appears.
+  // We track which interaction ids we've already surfaced so closing the
+  // modal doesn't immediately re-open it. Primary UX path — the awaiting
+  // badge above the node is a backup for when the user has dismissed the
+  // modal and wants to re-open it.
+  let autoOpenedInteractionIds = new Set<number>();
+  $effect(() => {
+    for (const row of Object.values(pendingInteractions)) {
+      if (autoOpenedInteractionIds.has(row.id)) continue;
+      autoOpenedInteractionIds.add(row.id);
+      // Only auto-open if nothing else is already open — never hijack the
+      // user mid-interaction with another modal.
+      if (!activeInteraction) activeInteraction = row;
+    }
+  });
+
   async function fetchInteractions(runId: string) {
     try {
       const res = await fetch(`/api/workflows/runs/${runId}/interactions`);
@@ -2608,10 +2624,27 @@
             onpointermove={onNodePointerMove}
             onpointerup={(e) => onNodePointerUp(e, n)}
             onpointercancel={(e) => onNodePointerUp(e, n)}
-            ondblclick={(e) => openMenu(e, n.id)}
+            ondblclick={(e) => {
+              // If the node has a pending human interaction (e.g. scraper
+              // hit a CAPTCHA), double-click opens the VNC modal instead of
+              // the config inspector. The floating "Awaiting you" badge
+              // above the node is easy to miss, so this is the primary entry.
+              if (awaitingInteraction) {
+                e.stopPropagation();
+                activeInteraction = awaitingInteraction;
+              } else {
+                openMenu(e, n.id);
+              }
+            }}
             onkeydown={(e) => {
-              if (e.key === 'Enter') openMenu(e, n.id);
-              else if (e.key === ' ') selectNode(e, n.id);
+              if (e.key === 'Enter') {
+                if (awaitingInteraction) {
+                  e.stopPropagation();
+                  activeInteraction = awaitingInteraction;
+                } else {
+                  openMenu(e, n.id);
+                }
+              } else if (e.key === ' ') selectNode(e, n.id);
             }}
           >
             {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
@@ -2663,7 +2696,7 @@
                   activeInteraction = awaitingInteraction;
                 }}
                 title={awaitingInteraction.prompt}
-              >Awaiting you</button>
+              >▶ SOLVE</button>
             {/if}
             {#if n.status === 'failed' && (liveData[n.id]?.error || n.error)}
               {@const errText = (liveData[n.id]?.error ?? n.error) as string}
@@ -5567,26 +5600,28 @@
 
   .awaiting-badge {
     position: absolute;
-    top: -10px;
+    top: -13px;
     left: 50%;
     transform: translateX(-50%);
     background: #d97706;
     color: #000;
     font-family: var(--font-mono);
-    font-size: 8px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    padding: 2px 7px;
+    letter-spacing: 0.16em;
+    padding: 4px 12px;
     border-radius: 20px;
     white-space: nowrap;
     cursor: pointer;
-    border: none;
-    z-index: 10;
-    animation: badge-pulse 1.8s ease-in-out infinite;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.6);
+    z-index: 20;
+    animation: badge-pulse 1.2s ease-in-out infinite;
   }
   .awaiting-badge:hover {
     background: #f59e0b;
+    transform: translateX(-50%) scale(1.05);
   }
   @keyframes badge-pulse {
     0%, 100% { opacity: 1; }
