@@ -1315,8 +1315,37 @@
   }
 
   async function actReRun() {
+    // Single-node Re-Run. The inspector's Re-Run button runs ONLY the
+    // open node, not the whole canvas (use the toolbar Run for that).
+    // Scoped runs are much cheaper + safer for iterative work on one
+    // node — e.g. tweaking a site-mapper or stealth-scrape config.
+    const target = menuNode;
+    if (!target) return;
+    if (runMeta.state === 'running') return;
     closeMenu();
-    await runCanvas();
+    liveStatus = {};
+    liveData = {};
+    runMeta = { state: 'running' };
+    pendingRun = null;
+    try {
+      const res = await fetch(
+        `/api/workflows/${canvas.workflowId}/nodes/${target.id}/run`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: {} }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || body.message || `HTTP ${res.status}`);
+      }
+      const { runId } = await res.json();
+      activeRunId = runId;
+      subscribeToRun(runId);
+    } catch (err) {
+      runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   async function deleteNode(id: string, skipConfirm = false) {
@@ -3705,9 +3734,9 @@
                   class="nm-act"
                   onclick={actReRun}
                   disabled={runMeta.state === 'running'}
-                  title="Run the full workflow"
+                  title="Run ONLY this node (use the toolbar Run for the whole canvas)"
                 >
-                  <span class="nm-act-ic">↻</span>Re-run
+                  <span class="nm-act-ic">↻</span>Run this node
                 </button>
                 <button class="nm-act" onclick={actBranch} title="Clone this node">
                   <span class="nm-act-ic">⎇</span>Branch
