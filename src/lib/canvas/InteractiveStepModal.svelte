@@ -14,6 +14,7 @@
     prompt: string;
     configSnapshot: { url?: string; fields?: FieldDef[] };
     wsPort: number | null;
+    vncUrl: string | null;
   };
 
   type Props = {
@@ -39,8 +40,9 @@
   const fields = interaction.configSnapshot.fields ?? [];
 
   function iframeUrl(): string {
+    if (interaction.vncUrl) return interaction.vncUrl;
     if (!interaction.wsPort) return '';
-    return `${location.protocol}//${location.hostname}:${interaction.wsPort}/vnc.html?autoconnect=1&resize=scale`;
+    return `https://vnc.strangeramblings.com/${interaction.wsPort}/vnc.html?autoconnect=1&resize=scale`;
   }
 
   async function handleComplete() {

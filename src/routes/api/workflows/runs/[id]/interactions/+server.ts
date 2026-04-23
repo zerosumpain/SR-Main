@@ -14,9 +14,13 @@ export const GET: RequestHandler = async ({ params }) => {
   const sessions = new Map(listInteractiveSessions().map((s) => [s.id, s]));
 
   return json(
-    rows.map((r) => ({
-      ...r,
-      wsPort: r.vncSessionId ? (sessions.get(r.vncSessionId)?.wsPort ?? null) : null,
-    })),
+    rows.map((r) => {
+      const session = r.vncSessionId ? sessions.get(r.vncSessionId) : null;
+      return {
+        ...r,
+        wsPort: session?.wsPort ?? null,
+        vncUrl: session?.vncUrl ?? null,
+      };
+    }),
   );
 };

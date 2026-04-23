@@ -141,7 +141,7 @@
   });
 
   function iframeUrl(s: InteractiveSession): string {
-    return `${location.protocol}//${location.hostname}:${s.wsPort}${s.vncUrl}`;
+    return s.vncUrl;
   }
 
   async function launchSession() {

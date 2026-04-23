@@ -120,7 +120,7 @@ export async function startInteractiveSession(profile: string, url: string): Pro
   return {
     sessionId: id,
     wsPort,
-    vncUrl: `/vnc.html?autoconnect=1&resize=scale`,
+    vncUrl: `https://vnc.strangeramblings.com/${wsPort}/vnc.html?autoconnect=1&resize=scale`,
     expiresAt: new Date(session.expiresAt).toISOString(),
   };
 }
@@ -139,12 +139,13 @@ export async function stopInteractiveSession(id: string): Promise<void> {
 }
 
 export function listInteractiveSessions(): Array<{
-  id: string; profile: string; wsPort: number; startedAt: string; expiresAt: string; url: string;
+  id: string; profile: string; wsPort: number; vncUrl: string; startedAt: string; expiresAt: string; url: string;
 }> {
   return Array.from(sessions.values()).map(s => ({
     id: s.id,
     profile: s.profile,
     wsPort: s.wsPort,
+    vncUrl: `https://vnc.strangeramblings.com/${s.wsPort}/vnc.html?autoconnect=1&resize=scale`,
     url: s.url,
     startedAt: new Date(s.startedAt).toISOString(),
     expiresAt: new Date(s.expiresAt).toISOString(),
