@@ -105,6 +105,83 @@
     if (!d) return '—';
     return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
+
+  // ── Interactive sessions ──
+  type InteractiveSession = {
+    sessionId: string;
+    profile: string;
+    url: string;
+    wsPort: number;
+    vncUrl: string;
+    startedAt: string;
+    expiresAt: string;
+  };
+
+  let sessions = $state<InteractiveSession[]>([]);
+  let sessionProfile = $state('');
+  let sessionUrl = $state('');
+  let sessionLaunching = $state(false);
+  let sessionError = $state<string | null>(null);
+
+  // Modal state
+  let modal = $state<{ session: InteractiveSession } | null>(null);
+  let modalEnding = $state(false);
+
+  async function fetchSessions() {
+    try {
+      const res = await fetch('/api/scraper/interactive');
+      if (res.ok) sessions = await res.json();
+    } catch {}
+  }
+
+  $effect(() => {
+    fetchSessions();
+    const timer = setInterval(fetchSessions, 10_000);
+    return () => clearInterval(timer);
+  });
+
+  function iframeUrl(s: InteractiveSession): string {
+    return `${location.protocol}//${location.hostname}:${s.wsPort}${s.vncUrl}`;
+  }
+
+  async function launchSession() {
+    sessionError = null;
+    if (!sessionProfile.trim() || !sessionUrl.trim()) {
+      sessionError = 'Profile and Starting URL are required.';
+      return;
+    }
+    sessionLaunching = true;
+    try {
+      const res = await fetch('/api/scraper/interactive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: sessionProfile.trim(), url: sessionUrl.trim() }),
+      });
+      if (!res.ok) { sessionError = 'Launch failed: ' + res.status; return; }
+      const s: InteractiveSession = await res.json();
+      sessions = [s, ...sessions.filter(x => x.sessionId !== s.sessionId)];
+      modal = { session: s };
+    } catch (e: any) {
+      sessionError = e.message;
+    } finally {
+      sessionLaunching = false;
+    }
+  }
+
+  async function endSession(sessionId: string) {
+    modalEnding = true;
+    try {
+      await fetch(`/api/scraper/interactive/${sessionId}`, { method: 'DELETE' });
+      sessions = sessions.filter(s => s.sessionId !== sessionId);
+      if (modal?.session.sessionId === sessionId) modal = null;
+    } finally {
+      modalEnding = false;
+    }
+  }
+
+  function onModalKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') modal = null;
+  }
 </script>
 
 <div class="max-w-3xl mx-auto px-6 py-12">
@@ -217,6 +294,57 @@
     {/if}
   </section>
 
+  <!-- ── Interactive sessions ── -->
+  <section class="mb-10">
+    <p class="text-[9px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Interactive sessions</p>
+    <p class="text-[10px] mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+      Launch a session when a target site needs a human to solve a CAPTCHA / log in. Cookies and localStorage persist in the profile when the session ends, so subsequent headless scrapes ride the same logged-in session.
+    </p>
+
+    <!-- Launch form -->
+    <div class="rounded-xl border p-4 space-y-3 mb-4" style="background: var(--card-bg); border-color: var(--card-border);">
+      <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Launch session</p>
+      <div class="flex gap-2">
+        <input type="text" placeholder="Profile (e.g. civilservicejobs-gov-uk)" bind:value={sessionProfile}
+          class="flex-1 px-2 py-1 rounded text-[11px]"
+          style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono); outline: none;" />
+        <input type="text" placeholder="Starting URL" bind:value={sessionUrl}
+          class="flex-[2] px-2 py-1 rounded text-[11px]"
+          style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none; min-width: 0;" />
+      </div>
+      {#if sessionError}
+        <p class="text-[9px]" style="color: #8b3a1a; font-family: var(--font-mono);">{sessionError}</p>
+      {/if}
+      <button onclick={launchSession} disabled={sessionLaunching}
+        class="text-[10px] uppercase tracking-[0.15em] px-4 py-1.5 rounded disabled:opacity-50"
+        style="background: var(--accent); color: white; font-family: var(--font-mono);">
+        {sessionLaunching ? '…' : 'Launch interactive session'}
+      </button>
+    </div>
+
+    <!-- Active sessions list -->
+    {#if sessions.length === 0}
+      <p class="text-sm" style="color: var(--text-muted);">No active sessions.</p>
+    {:else}
+      <div class="rounded-xl border overflow-hidden" style="background: var(--card-bg); border-color: var(--card-border);">
+        {#each sessions as s, i}
+          <div class="flex items-center gap-3 px-4 py-2 text-[10px]" style="font-family: var(--font-mono); color: var(--text-secondary);{i > 0 ? ' border-top: 1px solid var(--divider);' : ''}">
+            <span style="color: var(--text-primary);">{s.profile}</span>
+            <span class="flex-1 truncate" style="color: var(--text-ghost);">{s.url}</span>
+            <span>{s.startedAt ? new Date(s.startedAt).toLocaleTimeString('en-GB') : '—'}</span>
+            <span style="color: #8b3a1a;">exp {s.expiresAt ? new Date(s.expiresAt).toLocaleTimeString('en-GB') : '—'}</span>
+            <button onclick={() => { modal = { session: s }; }}
+              class="px-2 py-0.5 rounded text-[9px] uppercase tracking-[0.1em]"
+              style="border: 1px solid var(--card-border); color: var(--text-secondary);">Open</button>
+            <button onclick={() => endSession(s.sessionId)}
+              class="px-2 py-0.5 rounded text-[9px] uppercase tracking-[0.1em]"
+              style="color: #8b3a1a; border: 1px solid #8b3a1a;">End</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
   <!-- ── Recent runs ── -->
   <section class="mb-10">
     <p class="text-[9px] uppercase tracking-[0.25em] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">Recent runs</p>
@@ -281,3 +409,49 @@
     </div>
   </section>
 </div>
+
+<!-- ── noVNC Modal ── -->
+{#if modal}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    role="dialog"
+    aria-modal="true"
+    onkeydown={onModalKeydown}
+    style="position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; background: rgba(0,0,0,0.65);"
+  >
+    <!-- Modal panel -->
+    <div
+      style="margin: auto; width: min(calc(100vw - 2rem), 1200px); display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 0.75rem; overflow: hidden; min-height: 70vh; max-height: calc(100vh - 3rem);"
+    >
+      <!-- Header bar -->
+      <div class="flex items-center gap-3 px-4 py-3" style="border-bottom: 1px solid var(--divider); flex-shrink: 0;">
+        <span class="text-[11px] font-medium flex-1" style="color: var(--text-primary); font-family: var(--font-mono);">{modal.session.profile}</span>
+        <a
+          href={iframeUrl(modal.session)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); color: var(--text-secondary); border: 1px solid var(--card-border);"
+        >Open in new tab ↗</a>
+        <button
+          onclick={() => endSession(modal!.session.sessionId)}
+          disabled={modalEnding}
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded disabled:opacity-50"
+          style="color: #8b3a1a; border: 1px solid #8b3a1a; font-family: var(--font-mono);"
+        >{modalEnding ? '…' : 'End session'}</button>
+        <button
+          onclick={() => { modal = null; }}
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="color: var(--text-secondary); border: 1px solid var(--card-border); font-family: var(--font-mono);"
+        >Close</button>
+      </div>
+      <!-- iframe -->
+      <iframe
+        src={iframeUrl(modal.session)}
+        title="noVNC — {modal.session.profile}"
+        style="flex: 1; width: 100%; border: none; min-height: 0;"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
+    </div>
+  </div>
+{/if}
