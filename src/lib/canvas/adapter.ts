@@ -460,6 +460,102 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
 
   // ————————————————————————— Integrations
   {
+    type: 'stealth-scrape',
+    label: 'Stealth Scrape',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Scrape a web page (or paginated set) using a stealth headless browser with a persistent profile. Residential IP via homeserv.',
+    defaultConfig: { url: '', profile: '', waitFor: { type: 'networkidle' }, extract: [] },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['url', 'text', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'stealth-scrape-llm',
+    label: 'Stealth Scrape (LLM Extract)',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Extracts structured fields from scraped HTML/text via an LLM. Use when CSS selectors are too brittle.',
+    defaultConfig: { sourcePath: '', schema: { type: 'object', properties: {} }, model: '', itemTextPath: '', instructions: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-trigger',
+    label: 'Gmail Trigger',
+    kind: 'trigger',
+    group: 'Integrations',
+    description: 'Fires when a new Gmail message matches a watched query.',
+    defaultConfig: { accountId: 0, watchId: null },
+    handles: {
+      inputs: [],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-fetch',
+    label: 'Gmail · Fetch Message',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Fetch a Gmail message by id, returning full headers + text/html bodies + attachment refs.',
+    defaultConfig: { messageId: '{{input.messageId}}', accountId: 0 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-send',
+    label: 'Gmail · Send Message',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Compose and send a new Gmail message. Supports template interpolation for recipient, subject, and body.',
+    defaultConfig: { accountId: 0, to: '', subject: '', bodyText: '', bodyHtml: '', cc: '', bcc: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-reply',
+    label: 'Gmail · Reply',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Send a reply to an existing Gmail thread, preserving In-Reply-To and References headers for proper threading.',
+    defaultConfig: { accountId: 0, to: '{{input.from}}', threadId: '{{input.threadId}}', inReplyTo: '{{input.rfc822MessageId}}', references: '', subject: '{{input.subject}}', bodyText: '', bodyHtml: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-label',
+    label: 'Gmail · Modify Labels',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Add or remove Gmail labels on a message. Common uses: archive (remove INBOX), mark read (remove UNREAD), star (add STARRED).',
+    defaultConfig: { accountId: 0, messageId: '{{input.messageId}}', add: [], remove: [] },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'gmail-search',
+    label: 'Gmail · Search Messages',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Search Gmail using a query string. Returns matching message ids, and optionally fetches full message content.',
+    defaultConfig: { accountId: 0, query: '', maxResults: 50, fetchFullMessages: false },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'whatsapp',
     label: 'WhatsApp · send',
     kind: 'output',
