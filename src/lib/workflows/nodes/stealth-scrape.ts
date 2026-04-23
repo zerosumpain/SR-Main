@@ -1,9 +1,20 @@
 import type { NodeExecutor, NodeResult } from '../types';
 import { interpolateTemplateStrict } from './template';
 import { runScrape } from '$lib/workflows/scraper/runner';
-import type { ScrapeJob } from '$lib/workflows/scraper/types';
+import type { ScrapeJob, ScrapeResult } from '$lib/workflows/scraper/types';
+import { createInteraction } from '$lib/workflows/engine-interactions';
+import {
+  startRemoteInteractiveSession,
+  stopRemoteInteractiveSession,
+} from '$lib/workflows/scraper/interactive-remote';
+import { db } from '$lib/db';
+import { workflowInteractions } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export { stealthScrapeDef } from './stealth-scrape.def';
+
+const INTERACTIVE_TIMEOUT_MINUTES = 15;
+const INTERACTIVE_POLL_INTERVAL_MS = 3_000;
 
 export const stealthScrapeExecutor: NodeExecutor = {
   type: 'stealth-scrape',
@@ -16,17 +27,12 @@ export const stealthScrapeExecutor: NodeExecutor = {
     const pagination = config.pagination as ScrapeJob['pagination'] | undefined;
     const credentialId = config.credentialId as number | undefined;
     const pacing = config.pacing as ScrapeJob['pacing'] | undefined;
+    const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId ?? '';
 
-    const result = await runScrape({
-      url,
-      profile,
-      waitFor,
-      extract,
-      pagination,
-      credentialId,
-      pacing,
+    const baseJob = {
+      url, profile, waitFor, extract, pagination, credentialId, pacing,
       workflowRunId: context.runId,
-      onProgress: (ev) => {
+      onProgress: (ev: Record<string, unknown>) => {
         context.emit({
           type: 'scraper.progress',
           runId: context.runId,
@@ -38,7 +44,82 @@ export const stealthScrapeExecutor: NodeExecutor = {
           timestamp: new Date().toISOString(),
         } as any);
       },
-    });
+    };
+
+    let result = await runScrape(baseJob);
+
+    // CAPTCHA / bot-wall / cookie-consent signal from the Python side.
+    // Spawn a headed session on the scraper host (homeserv) so the user can
+    // solve it through the canvas's noVNC modal. When they click Continue,
+    // the workflow_interactions row gets resolvedAt; we detect that here,
+    // stop the VNC session (freeing the profile dir), and retry the scrape
+    // — the now-seeded cookies should let the headless pass through.
+    if (result.needsInteractive && nodeId) {
+      const landingUrl = result.currentUrl || url;
+      const reason = result.challengeReason || 'captcha';
+      try {
+        const session = await startRemoteInteractiveSession(profile, landingUrl);
+        const interactionId = await createInteraction({
+          runId: context.runId,
+          nodeId,
+          mode: 'vnc',
+          prompt:
+            `Scraper hit a ${reason} on ${landingUrl}. ` +
+            `Solve it in the window above (click through any CAPTCHA / cookie consent / login wall), ` +
+            `then click Continue to retry the scrape — cookies will be saved to the "${profile}" profile for next time.`,
+          configSnapshot: {
+            url: landingUrl,
+            wsPort: session.wsPort,
+            vncUrl: session.vncUrl,
+            profile,
+            reason,
+          },
+          vncSessionId: session.sessionId,
+          timeoutMinutes: INTERACTIVE_TIMEOUT_MINUTES,
+        });
+
+        context.emit({
+          type: 'log',
+          runId: context.runId,
+          nodeId,
+          data: {
+            kind: 'scraper.awaiting_interactive',
+            interactionId,
+            reason,
+            url: landingUrl,
+          },
+          timestamp: new Date().toISOString(),
+        } as any);
+
+        await waitForInteractionResolution(interactionId, INTERACTIVE_TIMEOUT_MINUTES * 60 * 1000);
+        await stopRemoteInteractiveSession(session.sessionId);
+      } catch (err) {
+        return {
+          output: {
+            success: false,
+            pages: [],
+            pageCount: 0,
+            error: `Interactive fallback failed: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          metadata: { _selectedHandle: 'output' },
+        };
+      }
+
+      // Retry once. If the retry ALSO trips the challenge detector, treat it
+      // as a hard failure — the human solve didn't actually clear the wall,
+      // or the site serves a fresh challenge per session.
+      result = await runScrape(baseJob);
+      if (result.needsInteractive) {
+        result = {
+          ...result,
+          success: false,
+          error:
+            result.error ??
+            `Challenge re-appeared after interactive solve (${result.challengeReason ?? 'unknown'}). ` +
+            `The profile may not be persisting cookies, or the site serves a new challenge per session.`,
+        };
+      }
+    }
 
     context.emit({
       type: 'scraper.run.finished',
@@ -88,3 +169,31 @@ export const stealthScrapeExecutor: NodeExecutor = {
     };
   },
 };
+
+/**
+ * Block-poll `workflow_interactions` for the given id until `resolvedAt` is
+ * set (user clicked Continue) or the row is cancelled or we exceed the
+ * timeout. Returns the final interaction row; throws on timeout/cancel.
+ */
+async function waitForInteractionResolution(
+  interactionId: number,
+  maxWaitMs: number,
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    const [row] = await db
+      .select({
+        resolvedAt: workflowInteractions.resolvedAt,
+        cancelled: workflowInteractions.cancelled,
+      })
+      .from(workflowInteractions)
+      .where(eq(workflowInteractions.id, interactionId));
+    if (!row) throw new Error(`interaction ${interactionId} disappeared`);
+    if (row.cancelled) throw new Error(`interaction ${interactionId} was cancelled`);
+    if (row.resolvedAt) return;
+    await new Promise((r) => setTimeout(r, INTERACTIVE_POLL_INTERVAL_MS));
+  }
+  throw new Error(
+    `interaction ${interactionId} not resolved within ${Math.round(maxWaitMs / 1000)}s — human solve timed out`,
+  );
+}

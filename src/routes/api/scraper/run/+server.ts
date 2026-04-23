@@ -1,7 +1,6 @@
 import { json, error, type RequestHandler } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
-import os from 'os';
 import { runScrape } from '$lib/workflows/scraper/runner';
+import { assertScraperServiceRequest } from '$lib/workflows/scraper/service-auth';
 import type { ScrapeJob } from '$lib/workflows/scraper/types';
 
 /**
@@ -16,22 +15,7 @@ import type { ScrapeJob } from '$lib/workflows/scraper/types';
  *   the VPS and defeat the whole purpose.
  */
 export const POST: RequestHandler = async ({ request }) => {
-  if (os.hostname() !== 'homeserv' && !process.env.SCRAPER_ALLOW_NON_HOMESERV) {
-    throw error(
-      503,
-      `/api/scraper/run is only served from homeserv (host='${os.hostname()}'). ` +
-      `Running stealth scraping from the VPS defeats the residential-IP architecture.`,
-    );
-  }
-
-  const expected = env.SCRAPER_SERVICE_TOKEN;
-  if (expected) {
-    const auth = request.headers.get('authorization') ?? '';
-    const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (supplied !== expected) {
-      throw error(401, 'Invalid or missing SCRAPER_SERVICE_TOKEN');
-    }
-  }
+  assertScraperServiceRequest(request);
 
   const body = (await request.json().catch(() => ({}))) as Partial<ScrapeJob> & {
     workflowRunId?: string;

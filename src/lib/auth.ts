@@ -19,11 +19,12 @@ const PUBLIC_PATHS = [
   '/api/live-walk',
   '/projects',
   '/heart',
-  // Service-to-service endpoint for the stealth-scrape proxy. Auth is
-  // enforced by the handler itself via SCRAPER_SERVICE_TOKEN (Bearer
-  // header) — not Google OAuth, because the caller is the VPS workflow
-  // engine reaching homeserv over Tailscale, not a human.
+  // Service-to-service endpoints for the stealth-scrape + interactive-VNC
+  // proxy. Auth is enforced by each handler via SCRAPER_SERVICE_TOKEN
+  // (Bearer header) — not Google OAuth, because the caller is the VPS
+  // workflow engine reaching homeserv over Tailscale, not a human.
   '/api/scraper/run',
+  '/api/scraper/interactive',
 ];
 
 export function isPublicPath(pathname: string): boolean {

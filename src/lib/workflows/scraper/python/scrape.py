@@ -52,6 +52,33 @@ async def human_scroll(page, pacing: Dict[str, int]) -> None:
         await human_delay(pacing["minMs"], pacing["maxMs"])
 
 
+async def detect_challenge(page) -> Dict[str, Any] | None:
+    """Heuristic bot-wall / CAPTCHA / cookie-consent detection.
+    Returns { reason, selector } on hit, None when the page looks clear.
+
+    Signatures, in priority order:
+      - Altcha (civilservicejobs uses this): <altcha-widget> custom element
+      - Cloudflare: div#challenge-form, iframe[src*='challenges.cloudflare.com']
+      - hCaptcha / reCaptcha: iframe[src*='hcaptcha'], iframe[src*='recaptcha']
+      - Cookie consent walls blocking the DOM: common selectors + page text
+    """
+    checks = [
+        ("altcha", "altcha-widget, [data-altcha]"),
+        ("cloudflare", "iframe[src*='challenges.cloudflare.com'], div#challenge-form"),
+        ("hcaptcha", "iframe[src*='hcaptcha.com']"),
+        ("recaptcha", "iframe[src*='recaptcha'], iframe[title*='reCAPTCHA']"),
+        ("cookie-consent", "#onetrust-consent-sdk, #cookie-consent-banner, [aria-label*='cookie consent' i]:not(:has(*))"),
+        ("generic-challenge", "text=/verify\\s+you\\s+are\\s+human|please\\s+confirm\\s+you\\s+are\\s+not\\s+a\\s+robot|human\\s+verification/i"),
+    ]
+    for reason, sel in checks:
+        try:
+            if await page.locator(sel).count() > 0:
+                return {"reason": reason, "selector": sel}
+        except Exception:
+            continue
+    return None
+
+
 async def resolve_extract(page, extract: Any) -> Dict[str, Any]:
     """Normalise extract config. Accepts:
        - list of rule objects → apply rules
@@ -198,6 +225,24 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
             emit_progress({"t": "nav", "url": job["url"]})
             await page.goto(job["url"], wait_until="domcontentloaded")
             await wait_condition(page, job.get("waitFor", {"type": "networkidle"}))
+
+            # Bot-wall / CAPTCHA check BEFORE extraction. If tripped, return a
+            # structured signal that the Node-side executor will handle by
+            # opening a VNC session on the same profile, pausing for human
+            # solve, and retrying headlessly.
+            challenge = await detect_challenge(page)
+            if challenge is not None:
+                emit_progress({"t": "challenge", **challenge})
+                result = {
+                    "success": False,
+                    "pages": [],
+                    "needsInteractive": True,
+                    "challengeReason": challenge["reason"],
+                    "currentUrl": page.url,
+                }
+                await context.close()
+                return result
+
             await human_scroll(page, pacing)
 
             pages_collected = []

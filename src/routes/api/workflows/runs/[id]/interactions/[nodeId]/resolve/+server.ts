@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { workflowInteractions } from '$lib/db/schema';
+import { workflowInteractions, workflowRuns } from '$lib/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { resumeRun } from '$lib/workflows/engine-resume';
 
@@ -36,15 +36,28 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     })
     .where(eq(workflowInteractions.id, pending.id));
 
-  // Build the node's output for downstream consumption.
-  const nodeOutput = {
-    completed: true,
-    completedAt: new Date().toISOString(),
-    formValues,
-    durationMs: Date.now() - new Date(pending.openedAt).getTime(),
-  };
+  // Two classes of interactions exist:
+  //  1. interactive-step node paused the engine (run.status === 'awaiting_human').
+  //     We must call resumeRun to seed the paused node's output and continue.
+  //  2. stealth-scrape hit a CAPTCHA mid-run and is block-polling inline
+  //     (run.status === 'running'). We only need to flip resolvedAt — the
+  //     executor's poll picks it up, closes the VNC session, and retries the
+  //     scrape itself. Calling resumeRun here would throw because the run
+  //     isn't awaiting_human.
+  const [run] = await db
+    .select({ status: workflowRuns.status })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.id, runId));
 
-  await resumeRun(runId, { [nodeId]: nodeOutput });
+  if (run?.status === 'awaiting_human') {
+    const nodeOutput = {
+      completed: true,
+      completedAt: new Date().toISOString(),
+      formValues,
+      durationMs: Date.now() - new Date(pending.openedAt).getTime(),
+    };
+    await resumeRun(runId, { [nodeId]: nodeOutput });
+  }
 
   return json({ ok: true });
 };

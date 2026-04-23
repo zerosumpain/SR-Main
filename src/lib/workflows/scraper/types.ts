@@ -63,4 +63,12 @@ export interface ScrapeResult {
   screenshotPathInSandbox?: string;
   robotsBlocked?: boolean;
   runLogId?: number;
+  /** Set when the scraper hit a CAPTCHA / bot-wall / cookie-consent screen.
+   *  The stealth-scrape executor handles this by spawning a VNC session on
+   *  the same profile, pausing for human solve, then retrying. */
+  needsInteractive?: boolean;
+  challengeReason?: string;
+  /** URL the page was on when the challenge was detected — the VNC session
+   *  opens here so the human lands on the same challenge to solve. */
+  currentUrl?: string;
 }
