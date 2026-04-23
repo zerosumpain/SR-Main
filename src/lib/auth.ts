@@ -18,6 +18,12 @@ const PUBLIC_PATHS = [
   '/api/jkai/cors',
   '/api/live-walk',
   '/projects',
+  '/heart',
+  // Service-to-service endpoint for the stealth-scrape proxy. Auth is
+  // enforced by the handler itself via SCRAPER_SERVICE_TOKEN (Bearer
+  // header) — not Google OAuth, because the caller is the VPS workflow
+  // engine reaching homeserv over Tailscale, not a human.
+  '/api/scraper/run',
 ];
 
 export function isPublicPath(pathname: string): boolean {
