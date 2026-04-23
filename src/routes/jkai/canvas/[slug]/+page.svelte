@@ -14,6 +14,7 @@
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
+  import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
 
@@ -64,6 +65,55 @@
   let pendingExplorations = $state<
     Record<string, { engine: 'deep' | 'quick'; sessionId: string; status: string; streamUrl: string }>
   >(data.pendingExplorations ?? {});
+
+  // ——— Awaiting-human interaction state ———
+  type InteractionRow = {
+    id: number;
+    runId: string;
+    nodeId: string;
+    mode: 'vnc' | 'confirm' | 'both';
+    prompt: string;
+    configSnapshot: { url?: string; fields?: Array<{ name: string; type: string; label: string; defaultValue?: string }> };
+    vncSessionId: string | null;
+    wsPort: number | null;
+    resolvedAt: string | null;
+    cancelled: boolean;
+  };
+
+  let interactions = $state<InteractionRow[]>([]);
+  let activeInteraction = $state<InteractionRow | null>(null);
+  let interactionPollTimer = $state<ReturnType<typeof setInterval> | null>(null);
+
+  /** Pending (unresolved, not cancelled) interaction rows keyed by nodeId. */
+  const pendingInteractions = $derived<Record<string, InteractionRow>>(
+    Object.fromEntries(
+      interactions
+        .filter((r) => !r.resolvedAt && !r.cancelled)
+        .map((r) => [r.nodeId, r]),
+    ),
+  );
+
+  async function fetchInteractions(runId: string) {
+    try {
+      const res = await fetch(`/api/workflows/runs/${runId}/interactions`);
+      if (res.ok) interactions = await res.json();
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  function startInteractionPolling(runId: string) {
+    stopInteractionPolling();
+    fetchInteractions(runId);
+    interactionPollTimer = setInterval(() => fetchInteractions(runId), 3000);
+  }
+
+  function stopInteractionPolling() {
+    if (interactionPollTimer) {
+      clearInterval(interactionPollTimer);
+      interactionPollTimer = null;
+    }
+  }
 
   const MIN_CHAT_W = 220;
   const MIN_CHAT_H = 240;
@@ -1648,6 +1698,18 @@
     }
   });
 
+  // Poll for interactions whenever a run is awaiting_human or actively running
+  $effect(() => {
+    const rid = activeRunId ?? canvas.latestRunId;
+    const status = runMeta.state !== 'idle' ? runMeta.state : (canvas.runStatus ?? '');
+    if (rid && (status === 'running' || canvas.runStatus === 'awaiting_human')) {
+      startInteractionPolling(rid);
+    } else {
+      stopInteractionPolling();
+    }
+    return () => stopInteractionPolling();
+  });
+
   // Hydrate pending explorations — mark running so ResearchResultNode opens its SSE stream.
   $effect(() => {
     for (const nodeId of Object.keys(pendingExplorations)) {
@@ -2296,11 +2358,13 @@
             ></div>
           </div>
         {:else}
+          {@const awaitingInteraction = pendingInteractions[n.id] ?? null}
           <div
             class="wf-node"
             class:active={isRunning && n.status === 'running'}
             class:failed={isRunning && n.status === 'failed'}
             class:ok={isRunning && n.status === 'ok'}
+            class:awaiting-human={!!awaitingInteraction}
             class:is-selected={selectedId === n.id}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
             class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
@@ -2351,6 +2415,17 @@
               title="Drag to connect to another node"
               onpointerdown={(e) => onHandlePointerDown(e, n)}
             ></div>
+            {#if awaitingInteraction}
+              <button
+                class="awaiting-badge"
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  activeInteraction = awaitingInteraction;
+                }}
+                title={awaitingInteraction.prompt}
+              >Awaiting you</button>
+            {/if}
           </div>
         {/if}
       {/each}
@@ -3409,6 +3484,19 @@
   onPick={onPalettePick}
   onClose={closePalette}
 />
+
+{#if activeInteraction}
+  <InteractiveStepModal
+    interaction={activeInteraction}
+    onComplete={() => {
+      activeInteraction = null;
+      stopInteractionPolling();
+      interactions = [];
+      invalidateAll();
+    }}
+    onClose={() => { activeInteraction = null; }}
+  />
+{/if}
 
 <style>
   :root {
@@ -5006,5 +5094,46 @@
     0% { outline-color: var(--accent, #7a6cd4); outline-offset: 0; }
     50% { outline-color: var(--accent, #7a6cd4); outline-offset: 6px; }
     100% { outline-color: transparent; outline-offset: 3px; }
+  }
+
+  /* ——— Awaiting-human state ——— */
+  .wf-node.awaiting-human {
+    border-color: #d97706;
+    animation: awaiting-pulse 1.8s ease-in-out infinite;
+  }
+  .wf-node.awaiting-human::before {
+    background: #d97706;
+  }
+  @keyframes awaiting-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.5); }
+    50% { box-shadow: 0 0 0 5px rgba(217, 119, 6, 0); }
+  }
+
+  .awaiting-badge {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #d97706;
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    border: none;
+    z-index: 10;
+    animation: badge-pulse 1.8s ease-in-out infinite;
+  }
+  .awaiting-badge:hover {
+    background: #f59e0b;
+  }
+  @keyframes badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
   }
 </style>
