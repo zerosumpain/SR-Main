@@ -66,6 +66,12 @@ function getAllowedEmails(): string[] {
   return emails.split(',').map((e) => e.trim()).filter(Boolean);
 }
 
+// Cookie domain: in production, share across all *.strangeramblings.com
+// subdomains (main site + vnc.strangeramblings.com) so the VNC proxy can
+// validate the session via forward_auth. In dev we leave domain unset
+// (host-scoped cookie for localhost / homeserv).
+const COOKIE_DOMAIN = import.meta.env.PROD ? '.strangeramblings.com' : undefined;
+
 // Auth.js handler
 const { handle: authHandle } = SvelteKitAuth({
   providers: [
@@ -76,6 +82,34 @@ const { handle: authHandle } = SvelteKitAuth({
   ],
   secret: env.AUTH_SECRET,
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: import.meta.env.PROD,
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    callbackUrl: {
+      options: {
+        sameSite: 'lax',
+        path: '/',
+        secure: import.meta.env.PROD,
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    csrfToken: {
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: import.meta.env.PROD,
+        // csrfToken must NOT carry a domain attribute — must stay host-locked.
+      },
+    },
+  },
   callbacks: {
     async signIn({ user, profile }) {
       const allowed = getAllowedEmails();
