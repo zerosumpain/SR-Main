@@ -503,6 +503,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'site-mapper',
+    label: 'Site Mapper (LLM)',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'One-shot LLM that generates a reusable scraper playbook (url template + selectors + wait condition) for a new target domain. stealth-scrape then dispatches through the saved playbook automatically on every subsequent run — zero LLM cost on scheduled scrapes.',
+    defaultConfig: { seedUrl: '', goal: '', searchQuery: '', profile: 'default', model: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'gmail-trigger',
     label: 'Gmail Trigger',
     kind: 'trigger',
