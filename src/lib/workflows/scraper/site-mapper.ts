@@ -111,6 +111,12 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
   let finalPlaybook: Playbook | null = null;
   let giveUpReason: string | undefined;
 
+  // During the mapping loop we substitute {{keyword}} (etc.) with the real
+  // searchQuery so the site actually returns real results to observe. The
+  // playbook SAVES the pre-substitution template, so replay keeps the
+  // generalisable form.
+  const liveVars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
+
   try {
     emit({ t: 'map.goto', url: opts.seedUrl });
     const first = await agent.goto(opts.seedUrl);
@@ -158,7 +164,7 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
 
       // Execute the action via the agent, then record it into the step sequence.
       try {
-        await executeAction(agent, action);
+        await executeAction(agent, action, liveVars);
         const step = actionToStep(action);
         if (step) recordedSteps.push(step);
       } catch (err) {
@@ -289,17 +295,32 @@ function extractJson(raw: string): Record<string, unknown> {
   return JSON.parse(str) as Record<string, unknown>;
 }
 
-async function executeAction(agent: AgentHarness, action: Record<string, unknown>): Promise<void> {
+async function executeAction(
+  agent: AgentHarness,
+  action: Record<string, unknown>,
+  vars: Record<string, string>,
+): Promise<void> {
+  const sub = (s: string): string => {
+    // Replace {{var}} placeholders in the value the LLM is actively sending
+    // to the browser. The playbook records the ORIGINAL templated value
+    // (good — the playbook generalises per-run), but during the mapping
+    // loop we want to see real data so the page actually returns results
+    // — otherwise the LLM sees "0 Search results" for the literal
+    // "{{keyword}}" string and thrashes trying to fix it.
+    return s.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) =>
+      Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m,
+    );
+  };
   switch (action.action) {
     case 'goto': {
       if (typeof action.url !== 'string') throw new Error('goto requires url');
-      await agent.goto(action.url);
+      await agent.goto(sub(action.url));
       return;
     }
     case 'click': {
       await agent.click({
         selector: typeof action.selector === 'string' ? action.selector : undefined,
-        text: typeof action.text === 'string' ? action.text : undefined,
+        text: typeof action.text === 'string' ? sub(action.text) : undefined,
       });
       return;
     }
@@ -307,7 +328,7 @@ async function executeAction(agent: AgentHarness, action: Record<string, unknown
       if (typeof action.selector !== 'string' || typeof action.value !== 'string') {
         throw new Error('fill requires selector + value');
       }
-      await agent.fill(action.selector, action.value);
+      await agent.fill(action.selector, sub(action.value));
       return;
     }
     case 'select': {
