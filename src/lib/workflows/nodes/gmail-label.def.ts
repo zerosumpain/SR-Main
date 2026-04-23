@@ -31,4 +31,51 @@ export const gmailLabelDef: NodeDefinition = {
       },
     },
   },
+  llmDescription: 'Adds or removes Gmail system or custom labels on a message. Common patterns: archive (remove: ["INBOX"]), mark as read (remove: ["UNREAD"]), star (add: ["STARRED"]), tag with a custom label (add: ["Label_12345678"]). Custom label ids are not human-readable names — look them up via /admin/gmail. Use this after processing a trigger-fired email to keep the inbox tidy. Can add and remove labels in one call. Output: { success, messageId }.',
+  llmExamples: [
+    {
+      accountId: 1,
+      messageId: '{{trigger.output.messageId}}',
+      remove: ['INBOX', 'UNREAD'],
+    },
+    {
+      accountId: 1,
+      messageId: '{{trigger.output.messageId}}',
+      add: ['STARRED'],
+      remove: ['UNREAD'],
+    },
+    {
+      accountId: 1,
+      messageId: '{{input.messageId}}',
+      add: ['Label_processed'],
+      remove: ['INBOX'],
+    },
+  ],
+  basicConfig: [
+    {
+      key: 'accountId',
+      label: 'Gmail Account',
+      type: 'number',
+      description: 'The gmail_accounts row id.',
+    },
+    {
+      key: 'messageId',
+      label: 'Message ID',
+      type: 'template-textarea',
+      placeholder: '{{trigger.output.messageId}}',
+      description: 'Gmail message id to label. Typically from trigger or search output.',
+    },
+    {
+      key: 'add',
+      label: 'Labels to Add',
+      type: 'code',
+      description: 'Array of label ids to apply. System labels: "STARRED", "IMPORTANT". Custom label ids visible in /admin/gmail.',
+    },
+    {
+      key: 'remove',
+      label: 'Labels to Remove',
+      type: 'code',
+      description: 'Array of label ids to remove. Use ["INBOX"] to archive, ["UNREAD"] to mark as read.',
+    },
+  ],
 };
