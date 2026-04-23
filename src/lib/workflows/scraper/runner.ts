@@ -14,17 +14,8 @@ const RUNNER_SANDBOX_PATH = '/home/jkai/scraper-runtime/scrape.py';
 
 const HOMESERV_HOSTNAMES = ['homeserv'];
 
-function assertRunningOnHomeserv(): void {
-  if (process.env.NODE_ENV !== 'production') return; // allow in dev regardless of host
-  const host = os.hostname();
-  if (!HOMESERV_HOSTNAMES.includes(host)) {
-    throw new Error(
-      `Scraper refuses to run on host '${host}' in production. ` +
-      `Stealth scraping relies on homeserv's residential IP; running on the VPS ` +
-      `would expose a datacenter IP and defeat the purpose. ` +
-      `If you really need to run here, set SCRAPER_ALLOW_NON_HOMESERV=1.`,
-    );
-  }
+function isOnHomeserv(): boolean {
+  return HOMESERV_HOSTNAMES.includes(os.hostname());
 }
 
 function runnerSourcePath(): string {
@@ -46,7 +37,29 @@ export interface RunScrapeOptions extends ScrapeJob {
 }
 
 export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
-  if (!process.env.SCRAPER_ALLOW_NON_HOMESERV) assertRunningOnHomeserv();
+  // Residential-IP architecture: stealth scraping MUST run on homeserv (residential IP),
+  // NEVER the VPS (datacenter IP — would get bot-detected and potentially banned).
+  //
+  // - On homeserv: run locally via jkai-sandbox.
+  // - On VPS (or anywhere else): proxy the job to homeserv via SCRAPER_SERVICE_URL.
+  //   That URL points at homeserv's `/api/scraper/run` endpoint (reachable over
+  //   Tailscale, e.g. http://homeserv.tail668b8c.ts.net:5173).
+  // - Escape hatch: SCRAPER_ALLOW_NON_HOMESERV=1 forces local execution regardless
+  //   of host (dev / integration testing only).
+  if (!process.env.SCRAPER_ALLOW_NON_HOMESERV && !isOnHomeserv()) {
+    const proxyUrl = process.env.SCRAPER_SERVICE_URL;
+    if (!proxyUrl) {
+      throw new Error(
+        `stealth-scrape refuses to run on host '${os.hostname()}': ` +
+        `this is not homeserv and SCRAPER_SERVICE_URL is not configured. ` +
+        `Set SCRAPER_SERVICE_URL to homeserv's /api/scraper/run endpoint (over Tailscale), ` +
+        `or run this workflow on homeserv directly. Running here would expose a ` +
+        `datacenter IP and defeat the whole point of stealth scraping.`,
+      );
+    }
+    return await proxyScrapeToHomeserv(proxyUrl, opts);
+  }
+
   await ensureSandboxRunning();
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -137,4 +150,48 @@ export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
 
   result.runLogId = logRow.id;
   return result;
+}
+
+/**
+ * Proxy a scrape job to homeserv. Called from non-homeserv hosts (typically
+ * the VPS) so the actual headed Chromium work runs from homeserv's
+ * residential IP. Credentials, if requested, are looked up locally first
+ * then passed in the request body — homeserv's runner accepts a
+ * pre-resolved `_credential` and skips its own lookup.
+ */
+async function proxyScrapeToHomeserv(
+  proxyUrl: string,
+  opts: RunScrapeOptions,
+): Promise<ScrapeResult> {
+  const { credentialId, onProgress: _onProgress, workflowRunId, ...job } = opts;
+  const body: Record<string, unknown> = {
+    ...job,
+    profile: normalizeProfileName(opts.profile),
+    workflowRunId: workflowRunId ?? null,
+  };
+  if (credentialId) {
+    const cred = await loadCredentialForRunner(credentialId);
+    if (!cred) throw new Error(`credential ${credentialId} not found`);
+    body._credential = cred;
+  }
+
+  const token = process.env.SCRAPER_SERVICE_TOKEN;
+  const res = await fetch(proxyUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    return {
+      success: false,
+      pages: [],
+      error: `scraper proxy to ${proxyUrl} returned HTTP ${res.status}: ${text.slice(0, 500)}`,
+    };
+  }
+  const remoteResult = (await res.json().catch(() => ({}))) as ScrapeResult;
+  return remoteResult;
 }

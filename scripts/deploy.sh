@@ -42,27 +42,12 @@ rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/workflows/scraper/python/ \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/workflows/scraper/python/"
 
-echo "==> Syncing jkai-sandbox Dockerfile + rebuilding image if changed..."
-# Rebuild only when the Dockerfile differs from what's on prod, to avoid
-# the ~2-3 minute `pip install playwright` on every deploy. The container
-# is recreated on change — its only persistent mount is the jkai-workspace
-# volume which survives.
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/docker/jkai-sandbox"
-if ! rsync -e "ssh -i $VPS_KEY" --dry-run -c docker/jkai-sandbox/Dockerfile \
-     "$VPS_USER@$VPS_HOST:$VPS_DIR/docker/jkai-sandbox/Dockerfile" | grep -q '^Dockerfile'; then
-  echo "  Dockerfile unchanged, skipping sandbox rebuild"
-else
-  rsync -avz -e "ssh -i $VPS_KEY" docker/jkai-sandbox/Dockerfile \
-    "$VPS_USER@$VPS_HOST:$VPS_DIR/docker/jkai-sandbox/Dockerfile"
-  ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'SANDBOX'
-set -e
-cd /opt/strange-rambling-svelte/docker/jkai-sandbox
-docker build -t jkai-sandbox:latest .
-docker rm -f jkai-sandbox || true
-docker run -d --name jkai-sandbox --restart unless-stopped \
-  -v jkai-workspace:/home/jkai/workspace jkai-sandbox:latest
-SANDBOX
-fi
+# NOTE: the VPS is deliberately NOT running jkai-sandbox. Stealth scraping
+# requires a residential IP and must execute on homeserv. The VPS proxies
+# scrape requests to homeserv via SCRAPER_SERVICE_URL — see
+# `src/lib/workflows/scraper/runner.ts` and the `/api/scraper/run` endpoint.
+# If you see a jkai-sandbox container on the VPS, remove it:
+#   ssh johnk@VPS 'docker rm -f jkai-sandbox; docker image rm jkai-sandbox:latest'
 
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
