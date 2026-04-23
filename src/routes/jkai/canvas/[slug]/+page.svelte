@@ -1981,28 +1981,10 @@
               <span class="chat-node-label">{n.name}</span>
               <span class="chat-node-count">{msgs.length} msg</span>
               {#if isRunning && pendingRun?.chatNodeId === n.id}
-                {@const steps = liveToolSteps[n.id] ?? []}
-                {@const runningStep = steps.find((s) => s.status === 'running')?.tool}
-                {@const expanded = chatTraceExpanded[n.id] ?? true}
-                <button
-                  class="chat-node-working"
-                  class:is-expanded={expanded}
-                  title={expanded ? 'Hide live activity' : 'Show live activity'}
-                  onpointerdown={(e) => e.stopPropagation()}
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    toggleChatTrace(n.id);
-                  }}
-                >
+                <span class="chat-node-working" aria-label="Working">
                   <span class="chat-node-working-dot"></span>
-                  <span class="chat-node-working-text">
-                    {#if runningStep}{runningStep}{:else if streamingReplies[n.id]}streaming{:else}working{/if}
-                  </span>
-                  {#if steps.length > 0}
-                    <span class="chat-node-working-count">{steps.length}</span>
-                  {/if}
-                  <span class="chat-node-working-chev">{expanded ? '▾' : '▸'}</span>
-                </button>
+                  <span class="chat-node-working-text">working</span>
+                </span>
               {/if}
               <button
                 class="chat-node-act"
@@ -2063,7 +2045,7 @@
                   </div>
                 </div>
               {/each}
-              {#if isRunning && pendingRun?.chatNodeId === n.id && (chatTraceExpanded[n.id] ?? true)}
+              {#if isRunning && pendingRun?.chatNodeId === n.id}
                 <div class="chat-msg chat-msg-pending">
                   <div class="msg-meta">
                     <b>JKAI</b><span class="sr-sep">/</span>

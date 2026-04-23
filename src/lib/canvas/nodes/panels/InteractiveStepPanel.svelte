@@ -45,12 +45,23 @@
     emit();
   }
 
+  // Sync props → local state only when the incoming value differs. Without
+  // the equality guards, every `onChange` in this panel bounces through the
+  // parent (configDraft write) and back as a new `config` prop, this effect
+  // re-writes local $state to the SAME value, Svelte sees a write, the
+  // effect re-runs — and on panels with multiple fields that cascade became
+  // effect_update_depth_exceeded.
   $effect(() => {
-    mode = (config.mode as 'vnc' | 'confirm' | 'both') ?? 'confirm';
-    profile = (config.profile as string) ?? '';
-    stepUrl = (config.url as string) ?? '';
-    prompt = (config.prompt as string) ?? '';
-    timeoutMinutes = (config.timeoutMinutes as number) ?? 60;
+    const nextMode = (config.mode as 'vnc' | 'confirm' | 'both') ?? 'confirm';
+    if (nextMode !== mode) mode = nextMode;
+    const nextProfile = (config.profile as string) ?? '';
+    if (nextProfile !== profile) profile = nextProfile;
+    const nextUrl = (config.url as string) ?? '';
+    if (nextUrl !== stepUrl) stepUrl = nextUrl;
+    const nextPrompt = (config.prompt as string) ?? '';
+    if (nextPrompt !== prompt) prompt = nextPrompt;
+    const nextTimeout = (config.timeoutMinutes as number) ?? 60;
+    if (nextTimeout !== timeoutMinutes) timeoutMinutes = nextTimeout;
   });
 </script>
 

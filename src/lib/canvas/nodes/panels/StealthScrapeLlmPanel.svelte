@@ -45,17 +45,24 @@
     onChange(out);
   }
 
+  // Equality-guarded prop → state sync. Unguarded re-assigns trigger the
+  // effect to re-run on its own writes, which can cascade into
+  // effect_update_depth_exceeded when combined with other panels writing
+  // back through onChange.
   $effect(() => {
-    sourcePath = (config.sourcePath as string) ?? '';
-    itemTextPath = (config.itemTextPath as string) ?? '';
-    model = (config.model as string) ?? 'openai/gpt-4o-mini';
-    instructions = (config.instructions as string) ?? '';
+    const nextSourcePath = (config.sourcePath as string) ?? '';
+    if (nextSourcePath !== sourcePath) sourcePath = nextSourcePath;
+    const nextItemTextPath = (config.itemTextPath as string) ?? '';
+    if (nextItemTextPath !== itemTextPath) itemTextPath = nextItemTextPath;
+    const nextModel = (config.model as string) ?? 'openai/gpt-4o-mini';
+    if (nextModel !== model) model = nextModel;
+    const nextInstructions = (config.instructions as string) ?? '';
+    if (nextInstructions !== instructions) instructions = nextInstructions;
     const s = config.schema;
-    if (s && typeof s === 'object') {
-      schema = JSON.stringify(s, null, 2);
-    } else if (typeof s === 'string') {
-      schema = s;
-    }
+    let nextSchema = schema;
+    if (s && typeof s === 'object') nextSchema = JSON.stringify(s, null, 2);
+    else if (typeof s === 'string') nextSchema = s;
+    if (nextSchema !== schema) schema = nextSchema;
   });
 </script>
 

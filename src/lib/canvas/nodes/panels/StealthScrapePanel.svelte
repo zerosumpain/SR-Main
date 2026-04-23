@@ -82,10 +82,15 @@
     emit();
   }
 
-  // Re-sync local state when config prop is replaced (e.g. after external save/revert)
+  // Re-sync local state when config prop is replaced (e.g. after external
+  // save/revert). Equality-guarded so emit() → parent write → prop change →
+  // this effect doesn't bounce back a self-overwrite that re-triggers the
+  // effect and cascades into effect_update_depth_exceeded.
   $effect(() => {
-    url = (config.url as string) ?? '';
-    profile = (config.profile as string) ?? '';
+    const nextUrl = (config.url as string) ?? '';
+    if (nextUrl !== url) url = nextUrl;
+    const nextProfile = (config.profile as string) ?? '';
+    if (nextProfile !== profile) profile = nextProfile;
   });
 </script>
 

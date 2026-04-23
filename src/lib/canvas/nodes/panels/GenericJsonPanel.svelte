@@ -25,9 +25,14 @@
     }
   }
 
-  // Sync raw text when config is replaced from outside (e.g. revert)
+  // Sync raw text when config is replaced from outside (e.g. revert).
+  // Equality-guarded — without this, typing into the textarea triggers
+  // onBlur → onChange → config prop change → this effect writes raw
+  // back to (typically) the same string, and on deep configs that
+  // cascade adds up to effect_update_depth_exceeded.
   $effect(() => {
-    raw = JSON.stringify(config, null, 2);
+    const next = JSON.stringify(config, null, 2);
+    if (next !== raw) raw = next;
   });
 </script>
 
