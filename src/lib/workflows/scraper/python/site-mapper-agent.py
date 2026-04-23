@@ -98,6 +98,12 @@ async def try_altcha(page) -> bool:
     return False
 
 
+# Actions that wait for a DOM element (fill/click/select) default to this.
+# 8s was too aggressive during replay — cold render + altcha settle can
+# eat 10s+ on civilservicejobs-like pages.
+ACTION_TIMEOUT_MS = 30000
+
+
 async def observe(page) -> Dict[str, Any]:
     """Summarise the current page for the LLM — url/title, short text snippet,
     and a pruned list of interactive elements with stable selectors."""
@@ -122,12 +128,23 @@ async def observe(page) -> Dict[str, Any]:
     try:
         elements = await page.evaluate(
             """() => {
+              // Ids that look auto-generated per session (trailing hex/random
+              // suffix like "_50f4", "-abcd1234", etc.) are not stable — the
+              // mapper agent should avoid picking those because the replay will
+              // see a different id. Prefer [name=...], then tag+classname.
+              function looksUnstableId(id) {
+                return /[_-][0-9a-f]{4,}$/i.test(id) || /\\d{6,}$/.test(id);
+              }
               function bestSelector(el) {
                 if (!el || el.nodeType !== 1) return '';
-                if (el.id) return '#' + CSS.escape(el.id);
+                if (el.id && !looksUnstableId(el.id)) return '#' + CSS.escape(el.id);
                 const name = el.getAttribute('name');
                 if (name) return `${el.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`;
-                const cls = (el.className || '').trim().split(/\\s+/).filter(Boolean).slice(0, 2).map(c => '.' + CSS.escape(c)).join('');
+                const cls = (el.className || '').trim().split(/\\s+/).filter(Boolean).filter(c => !looksUnstableId(c)).slice(0, 2).map(c => '.' + CSS.escape(c)).join('');
+                // If we ended up with nothing stable, fall back to the unstable
+                // id rather than a bare tag name — something is better than a
+                // `div` selector that matches hundreds of elements.
+                if (!cls && el.id) return '#' + CSS.escape(el.id);
                 return `${el.tagName.toLowerCase()}${cls}`;
               }
               function visible(el) {
@@ -276,10 +293,18 @@ async def run_agent(profile: str) -> None:
                 elif cmd == "click":
                     sel = msg.get("selector") or ""
                     text = msg.get("text") or ""
+                    timeout = msg.get("timeoutMs", ACTION_TIMEOUT_MS)
                     if sel:
-                        await page.locator(sel).first.click(timeout=8000)
+                        # Explicit wait_for before click so we don't hit a
+                        # "not attached" race when the prior step triggers
+                        # an async re-render (post-altcha / post-submit).
+                        try:
+                            await page.wait_for_selector(sel, timeout=timeout, state="visible")
+                        except Exception:
+                            pass
+                        await page.locator(sel).first.click(timeout=timeout)
                     elif text:
-                        await page.get_by_text(text, exact=False).first.click(timeout=8000)
+                        await page.get_by_text(text, exact=False).first.click(timeout=timeout)
                     else:
                         raise Exception("click requires selector or text")
                     try:
@@ -288,10 +313,22 @@ async def run_agent(profile: str) -> None:
                         pass
                     sys.stdout.write(ok({"url": page.url, "title": await page.title()}))
                 elif cmd == "fill":
-                    await page.locator(msg["selector"]).first.fill(msg["value"], timeout=8000)
+                    sel = msg["selector"]
+                    timeout = msg.get("timeoutMs", ACTION_TIMEOUT_MS)
+                    try:
+                        await page.wait_for_selector(sel, timeout=timeout, state="visible")
+                    except Exception:
+                        pass
+                    await page.locator(sel).first.fill(msg["value"], timeout=timeout)
                     sys.stdout.write(ok({}))
                 elif cmd == "select":
-                    await page.locator(msg["selector"]).first.select_option(msg["value"], timeout=8000)
+                    sel = msg["selector"]
+                    timeout = msg.get("timeoutMs", ACTION_TIMEOUT_MS)
+                    try:
+                        await page.wait_for_selector(sel, timeout=timeout, state="attached")
+                    except Exception:
+                        pass
+                    await page.locator(sel).first.select_option(msg["value"], timeout=timeout)
                     sys.stdout.write(ok({}))
                 elif cmd == "submit":
                     form_sel = msg.get("formSelector")
@@ -316,6 +353,13 @@ async def run_agent(profile: str) -> None:
                     sys.stdout.write(ok({"url": page.url, "title": await page.title()}))
                 elif cmd == "altcha":
                     solved = await try_altcha(page)
+                    # After solve, the form may re-render or the page may
+                    # auto-submit. Give it a moment to settle so the next
+                    # fill/click doesn't race with post-altcha DOM updates.
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
                     sys.stdout.write(ok({"solved": solved}))
                 elif cmd == "observe":
                     sys.stdout.write(ok(await observe(page)))

@@ -63,6 +63,12 @@ const SYSTEM_PROMPT = `You are a scraping-agent pilot. You have control of a liv
 
 Rules:
 - Output a SINGLE JSON object per turn. No prose, no markdown.
+- SELECTOR STABILITY IS CRITICAL. The playbook runs again in a fresh browser session on schedule, so every selector you pick must match on ANY future session. Prefer, in order:
+    1. [name="..."] attribute (most stable on form inputs)
+    2. Text content via { "text": "..." } for clicks (not selectors)
+    3. Stable ids (e.g. #search_form) WITHOUT random-looking suffixes
+    4. tag + a meaningful class (e.g. button.search-submit)
+  AVOID: ids with trailing hex suffixes like "#oselect_title_50f4" or random numeric tails — those are regenerated per session and will break the playbook on replay. If the observation only exposes an unstable id, look at the element's name/text/class and use that instead.
 - Valid JSON shapes:
   { "action": "goto",   "url": "https://…", "note": "why" }
   { "action": "click",  "selector": "…",   "note": "why" }
