@@ -99,7 +99,15 @@
 
   let interactions = $state<InteractionRow[]>([]);
   let activeInteraction = $state<InteractionRow | null>(null);
-  let interactionPollTimer = $state<ReturnType<typeof setInterval> | null>(null);
+  // NOT $state: the timer handle is an internal implementation detail —
+  // nothing in the template/derived reads it. Making it reactive was the
+  // entire cause of effect_update_depth_exceeded on Run: the polling
+  // $effect reads runMeta/activeRunId/canvas.runStatus, calls
+  // startInteractionPolling → stopInteractionPolling which READS
+  // interactionPollTimer (adding it as an effect dep), then WRITES it.
+  // Svelte re-triggered the effect on every write, which called start/stop
+  // again, which wrote again — ~200 iterations before Svelte gave up.
+  let interactionPollTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Pending (unresolved, not cancelled) interaction rows keyed by nodeId. */
   const pendingInteractions = $derived<Record<string, InteractionRow>>(
