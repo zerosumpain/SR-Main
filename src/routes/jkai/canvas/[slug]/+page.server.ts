@@ -4,7 +4,6 @@ import {
   loadModelCatalogue,
   listCanvases,
   reapExpiredInteractions,
-  ensureCanvasWorkflow,
 } from '$lib/canvas/adapter.server';
 import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 import { db } from '$lib/db';
@@ -25,21 +24,23 @@ export type {
 } from '$lib/canvas/adapter';
 
 export const load: PageServerLoad = async ({ params }) => {
-  // Reap any zombie `awaiting_human` runs for this canvas BEFORE loading it,
-  // so the loaded snapshot sees the post-reap state (no stale latestRun
-  // pointing at an abandoned interactive step).
-  try {
-    const { workflowId } = await ensureCanvasWorkflow(params.slug);
-    await reapExpiredInteractions(workflowId);
-  } catch (err) {
-    console.error('[canvas] reapExpiredInteractions failed', err);
-  }
-
   const [canvas, modelCatalogue, allCanvases] = await Promise.all([
     loadCanvas(params.slug),
     loadModelCatalogue(),
     listCanvases(),
   ]);
+
+  // Reap any zombie `awaiting_human` runs for this canvas AFTER loading it
+  // (so we use the workflowId already looked up instead of triggering a
+  // side-effecting `ensureCanvasWorkflow` that would silently seed a blank
+  // canvas for any slug that doesn't exist). Fire-and-forget so page load
+  // time isn't paid by the user — the next refresh picks up the reaped state.
+  if (canvas?.workflowId) {
+    void reapExpiredInteractions(canvas.workflowId).catch((err) => {
+      console.error('[canvas] reapExpiredInteractions failed', err);
+    });
+  }
+
   // Strip this canvas from the peers list (used by the event-trigger picker)
   const peerCanvases = allCanvases.filter((c) => c.workflowId !== canvas.workflowId);
 

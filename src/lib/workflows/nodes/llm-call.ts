@@ -10,7 +10,7 @@ export const llmCallExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const { result: systemPrompt, missingPaths: sysMissing } = interpolateTemplateStrict((config.systemPrompt as string) || '', input);
     const { result: userPrompt, missingPaths: userMissing } = interpolateTemplateStrict((config.userPrompt as string) || '', input);
@@ -23,31 +23,75 @@ export const llmCallExecutor: NodeExecutor = {
 
     const { client, model } = await resolveLLMClient(config.model as string | undefined);
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-        { role: 'user' as const, content: userPrompt },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    });
+    // If this run originated from a canvas chat send, the /chat endpoint
+    // threads `_chatNodeId` through initialInput. Emit token deltas as
+    // `chat_stream` log events so the chat pane streams the reply live,
+    // even when the chat node is acting as a passthrough trigger.
+    const chatNodeId = typeof input._chatNodeId === 'string' ? input._chatNodeId : null;
+    const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId;
 
-    const content = response.choices[0]?.message?.content ?? '';
-    const usage = response.usage;
+    let content = '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    if (chatNodeId) {
+      const stream = await client.chat.completions.create({
+        model,
+        messages: [
+          ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+          { role: 'user' as const, content: userPrompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (typeof delta === 'string' && delta.length > 0) {
+          content += delta;
+          context.emit({
+            type: 'log',
+            runId: context.runId,
+            nodeId,
+            data: {
+              kind: 'chat_stream',
+              chatNodeId,
+              event: { type: 'token', delta },
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+        const u = chunk.usage;
+        if (u) {
+          promptTokens = u.prompt_tokens ?? promptTokens;
+          completionTokens = u.completion_tokens ?? completionTokens;
+        }
+      }
+    } else {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+          { role: 'user' as const, content: userPrompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      });
+      content = response.choices[0]?.message?.content ?? '';
+      promptTokens = response.usage?.prompt_tokens ?? 0;
+      completionTokens = response.usage?.completion_tokens ?? 0;
+    }
 
     return {
       output: {
         response: content,
-        usage: {
-          promptTokens: usage?.prompt_tokens ?? 0,
-          completionTokens: usage?.completion_tokens ?? 0,
-        },
+        usage: { promptTokens, completionTokens },
       },
       metadata: {
         model,
-        promptTokens: usage?.prompt_tokens ?? 0,
-        completionTokens: usage?.completion_tokens ?? 0,
+        promptTokens,
+        completionTokens,
       },
     };
   },
