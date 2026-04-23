@@ -215,8 +215,11 @@
   function scrollChatToBottom(chatNodeId: string) {
     const el = chatBodyEls[chatNodeId];
     if (!el) return;
+    // Instant, not smooth. Called every 50ms during streaming; compounded
+    // smooth-scroll animations were forcing layout on every frame and
+    // contributing to main-thread pressure during a run.
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      el.scrollTop = el.scrollHeight;
     });
   }
 
@@ -548,8 +551,19 @@
     }
   }
 
+  // Track the current SSE so we close it before opening a new one. Without
+  // this, a user who sends several messages accumulates open EventSources
+  // until the browser's per-origin connection cap (6 in Chrome) is hit —
+  // at which point subsequent subscribes silently stall and the run appears
+  // to freeze the UI.
+  let activeEventSource: EventSource | null = null;
   function subscribeToRun(runId: string) {
+    if (activeEventSource) {
+      try { activeEventSource.close(); } catch { /* no-op */ }
+      activeEventSource = null;
+    }
     const es = new EventSource(`/api/workflows/${canvas.workflowId}/runs/${runId}/stream`);
+    activeEventSource = es;
     es.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data) as {
@@ -565,6 +579,7 @@
     };
     es.onerror = () => {
       es.close();
+      if (activeEventSource === es) activeEventSource = null;
     };
   }
 
@@ -793,6 +808,7 @@
     if (e.button !== 0) return;
     if (isInteractiveTarget(e.target)) return;
     selectedId = null;
+    selectedEdgeId = null;
     // Intentionally do NOT clear menuForNodeId here — the inline config menu
     // only closes via its top-right Close button (or explicit Save / Delete).
     edgeInspectorFor = null;
@@ -1694,9 +1710,40 @@
     e.stopPropagation();
     menuForNodeId = null;
     edgeInspectorFor = edgeId;
+    selectedEdgeId = edgeId;
   }
   function closeEdgeInspector() {
     edgeInspectorFor = null;
+  }
+
+  // Single-click edge select (separate from the full inspector on dblclick).
+  // Re-uses edgeInspectorFor highlighting but without opening the inspector
+  // panel — Delete/Backspace then removes the selected edge.
+  let selectedEdgeId = $state<string | null>(null);
+  function selectEdge(e: MouseEvent, edgeId: string) {
+    e.stopPropagation();
+    selectedEdgeId = edgeId;
+    edgeInspectorFor = edgeId; // highlight via existing .selected styling
+    selectedId = null; // edges and nodes are mutually exclusive
+    menuForNodeId = null;
+  }
+  async function deleteEdge(edgeId: string) {
+    actionError = null;
+    try {
+      const res = await fetch(
+        `/api/workflows/${canvas.workflowId}/edges?id=${encodeURIComponent(edgeId)}`,
+        { method: 'DELETE' },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      if (selectedEdgeId === edgeId) selectedEdgeId = null;
+      if (edgeInspectorFor === edgeId) edgeInspectorFor = null;
+      await invalidateAll();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
@@ -1732,6 +1779,7 @@
       if (ev.key === 'Escape') {
         // Menu only closes via its Close button — don't dismiss it on Escape.
         selectedId = null;
+        selectedEdgeId = null;
         pipePickerOpen = false;
         edgeInspectorFor = null;
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
@@ -1739,6 +1787,14 @@
         if (isTypingTarget(ev.target)) return;
         ev.preventDefault();
         runCanvas();
+      } else if (
+        (ev.key === 'Delete' || ev.key === 'Backspace') &&
+        selectedEdgeId &&
+        !menuForNodeId &&
+        !isTypingTarget(ev.target)
+      ) {
+        ev.preventDefault();
+        deleteEdge(selectedEdgeId);
       } else if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         selectedId &&
@@ -1949,7 +2005,8 @@
         {#each visibleEdges as e (e.id)}
           {@const isActive = activeEdgeIds.has(e.id)}
           {@const d = orthPath(byId[e.from], byId[e.to])}
-          <!-- Wide transparent hit target for dbl-click -->
+          <!-- Wide transparent hit target: single click selects, double click
+               opens the inspector. Selected + Delete/Backspace removes it. -->
           <path
             class="edge-hit"
             {d}
@@ -1957,6 +2014,7 @@
             stroke-width="14"
             fill="none"
             pointer-events="stroke"
+            onclick={(ev) => selectEdge(ev, e.id)}
             ondblclick={(ev) => openEdgeInspector(ev, e.id)}
           />
           <path
@@ -2532,6 +2590,27 @@
                 }}
                 title={awaitingInteraction.prompt}
               >Awaiting you</button>
+            {/if}
+            {#if n.status === 'failed' && (liveData[n.id]?.error || n.error)}
+              {@const errText = (liveData[n.id]?.error ?? n.error) as string}
+              <div
+                class="wf-node-runinfo wf-node-runinfo-error"
+                title={errText}
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  openMenu(e, n.id);
+                }}
+                role="button"
+                tabindex="0"
+              >
+                <span class="wf-node-runinfo-label">error</span>
+                <span class="wf-node-runinfo-msg">{errText.slice(0, 80)}{errText.length > 80 ? '…' : ''}</span>
+              </div>
+            {:else if n.status === 'ok' && isRunning}
+              <div class="wf-node-runinfo wf-node-runinfo-ok">
+                <span class="wf-node-runinfo-label">ok</span>
+              </div>
             {/if}
           </div>
         {/if}
@@ -4865,6 +4944,57 @@
   }
   .nm-field pre.error-text {
     color: #c44;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  /* Run-info strip at the bottom of a wf-node */
+  .wf-node-runinfo {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -18px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .wf-node-runinfo-error {
+    color: #ffb4b4;
+  }
+  .wf-node-runinfo-error .wf-node-runinfo-label {
+    background: #c44;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+  }
+  .wf-node-runinfo-error .wf-node-runinfo-msg {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.85;
+  }
+  .wf-node-runinfo-error:hover .wf-node-runinfo-msg {
+    opacity: 1;
+  }
+  .wf-node-runinfo-ok .wf-node-runinfo-label {
+    color: #3a8a56;
+    background: rgba(58, 138, 86, 0.12);
+    padding: 1px 6px;
+    border-radius: 3px;
   }
   .nm-field-read {
     background: var(--bg-section);
