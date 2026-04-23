@@ -701,7 +701,8 @@
     if (e.button !== 0) return;
     if (isInteractiveTarget(e.target)) return;
     selectedId = null;
-    menuForNodeId = null;
+    // Intentionally do NOT clear menuForNodeId here — the inline config menu
+    // only closes via its top-right Close button (or explicit Save / Delete).
     edgeInspectorFor = null;
     panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -1637,7 +1638,7 @@
   $effect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === 'Escape') {
-        menuForNodeId = null;
+        // Menu only closes via its Close button — don't dismiss it on Escape.
         selectedId = null;
         pipePickerOpen = false;
         edgeInspectorFor = null;
