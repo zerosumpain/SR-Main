@@ -52,18 +52,99 @@ async def human_scroll(page, pacing: Dict[str, int]) -> None:
         await human_delay(pacing["minMs"], pacing["maxMs"])
 
 
+async def try_auto_solve_altcha(page, timeout_ms: int = 30000) -> bool:
+    """Altcha is proof-of-work — the widget runs SHA-512 iterations in JS on
+    page load and sets its response state once the puzzle is computed. It is
+    designed to be invisible to humans; headless Chromium executes the same
+    JS and can complete the PoW without any help. We just need to wait for
+    it to finish and, if the widget requires a click to start, deliver one.
+
+    Returns True if the widget reports verified / has a non-empty response
+    token, False if it doesn't complete in time (at which point the caller
+    can fall back to the interactive VNC flow for manual intervention).
+    """
+    widget = page.locator("altcha-widget").first
+    try:
+        if await widget.count() == 0:
+            return False
+    except Exception:
+        return False
+
+    async def is_verified() -> bool:
+        try:
+            handle = await widget.element_handle()
+            if not handle:
+                return False
+            return bool(
+                await page.evaluate(
+                    """(w) => {
+                      if (!w) return false;
+                      const state = w.getAttribute('data-state') || w.getAttribute('state');
+                      if (state === 'verified' || state === 'ok' || state === 'solved') return true;
+                      if (w.verified === true) return true;
+                      // Altcha usually writes its response into a hidden input or its own `value` prop.
+                      if (typeof w.value === 'string' && w.value.length > 20) return true;
+                      const form = w.closest('form');
+                      const input = form?.querySelector('input[name="altcha"], input[name*="altcha" i]');
+                      return !!(input && input.value && input.value.length > 20);
+                    }""",
+                    handle,
+                )
+            )
+        except Exception:
+            return False
+
+    # First pass: just wait — many deployments auto-start the PoW on load.
+    deadline = time.time() + (timeout_ms / 1000)
+    while time.time() < deadline:
+        if await is_verified():
+            return True
+        await asyncio.sleep(0.5)
+
+    # Second pass: click the widget in case it requires user activation,
+    # then wait again.
+    try:
+        await widget.click(timeout=2000)
+    except Exception:
+        pass
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        if await is_verified():
+            return True
+        await asyncio.sleep(0.5)
+
+    return False
+
+
+async def submit_altcha_form(page) -> bool:
+    """If the altcha widget sits inside a form, submit that form after PoW
+    completes so we navigate to the results page. Returns True on submit."""
+    try:
+        submit = page.locator(
+            "form:has(altcha-widget) input[type=submit], "
+            "form:has(altcha-widget) button[type=submit], "
+            "form:has(altcha-widget) button:not([type])"
+        ).first
+        if await submit.count() == 0:
+            return False
+        await submit.click(timeout=5000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 async def detect_challenge(page) -> Dict[str, Any] | None:
     """Heuristic bot-wall / CAPTCHA / cookie-consent detection.
     Returns { reason, selector } on hit, None when the page looks clear.
 
-    Signatures, in priority order:
-      - Altcha (civilservicejobs uses this): <altcha-widget> custom element
-      - Cloudflare: div#challenge-form, iframe[src*='challenges.cloudflare.com']
-      - hCaptcha / reCaptcha: iframe[src*='hcaptcha'], iframe[src*='recaptcha']
-      - Cookie consent walls blocking the DOM: common selectors + page text
+    Altcha is intentionally omitted here — it's proof-of-work, handled by
+    try_auto_solve_altcha() instead of by pausing for a human.
     """
     checks = [
-        ("altcha", "altcha-widget, [data-altcha]"),
         ("cloudflare", "iframe[src*='challenges.cloudflare.com'], div#challenge-form"),
         ("hcaptcha", "iframe[src*='hcaptcha.com']"),
         ("recaptcha", "iframe[src*='recaptcha'], iframe[title*='reCAPTCHA']"),
@@ -235,10 +316,26 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
             await page.goto(job["url"], wait_until="domcontentloaded")
             await wait_condition(page, job.get("waitFor", {"type": "networkidle"}))
 
+            # Altcha — proof-of-work, solvable headlessly. Let the widget's
+            # JS run to completion (or click it if it needs activation).
+            # After PoW, if the widget sits inside a form, submit that form
+            # so we navigate to the actual content page. Unattended-friendly
+            # — no human solve required for Altcha-protected sites.
+            if await page.locator("altcha-widget").count() > 0:
+                emit_progress({"t": "altcha.waiting"})
+                solved = await try_auto_solve_altcha(page)
+                emit_progress({"t": "altcha.result", "solved": solved})
+                if solved:
+                    submitted = await submit_altcha_form(page)
+                    emit_progress({"t": "altcha.submitted", "submitted": submitted})
+                    if submitted:
+                        await wait_condition(page, job.get("waitFor", {"type": "networkidle"}))
+
             # Bot-wall / CAPTCHA check BEFORE extraction. If tripped, return a
             # structured signal that the Node-side executor will handle by
             # opening a VNC session on the same profile, pausing for human
-            # solve, and retrying headlessly.
+            # solve, and retrying headlessly. Altcha is deliberately NOT
+            # listed in detect_challenge — it was handled above.
             challenge = await detect_challenge(page)
             if challenge is not None:
                 emit_progress({"t": "challenge", **challenge})
