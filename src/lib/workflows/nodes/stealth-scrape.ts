@@ -7,6 +7,7 @@ import {
   startRemoteInteractiveSession,
   stopRemoteInteractiveSession,
 } from '$lib/workflows/scraper/interactive-remote';
+import { loadPlaybookForUrl, runPlaybook } from '$lib/workflows/scraper/playbook';
 import { db } from '$lib/db';
 import { workflowInteractions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -29,22 +30,70 @@ export const stealthScrapeExecutor: NodeExecutor = {
     const pacing = config.pacing as ScrapeJob['pacing'] | undefined;
     const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId ?? '';
 
+    const emitProgress = (ev: Record<string, unknown>) => {
+      context.emit({
+        type: 'scraper.progress',
+        runId: context.runId,
+        runLogId: 0,
+        stage: (ev.t as any) ?? 'page.done',
+        url: ev.url as string | undefined,
+        pageIndex: ev.pageIndex as number | undefined,
+        error: ev.error as string | undefined,
+        timestamp: new Date().toISOString(),
+      } as any);
+    };
+
     const baseJob = {
       url, profile, waitFor, extract, pagination, credentialId, pacing,
       workflowRunId: context.runId,
-      onProgress: (ev: Record<string, unknown>) => {
-        context.emit({
-          type: 'scraper.progress',
-          runId: context.runId,
-          runLogId: 0,
-          stage: (ev.t as any) ?? 'page.done',
-          url: ev.url as string | undefined,
-          pageIndex: ev.pageIndex as number | undefined,
-          error: ev.error as string | undefined,
-          timestamp: new Date().toISOString(),
-        } as any);
-      },
+      onProgress: emitProgress,
     };
+
+    // Playbook dispatch: if the site-mapper has generated a playbook for
+    // this domain, use it — deterministic recipe beats re-deriving nav +
+    // selectors per run. The playbook's urlTemplate can consume
+    // {{input.keyword}} / {{input.<field>}} from the node's input map
+    // (stringified to be safe for URL substitution).
+    const playbook = await loadPlaybookForUrl(url);
+    if (playbook) {
+      const vars: Record<string, string> = {};
+      for (const [k, v] of Object.entries(input)) {
+        if (v == null) continue;
+        vars[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      }
+      if (!('keyword' in vars) && typeof input.searchTerm === 'string') {
+        vars.keyword = input.searchTerm;
+      }
+      const pb = await runPlaybook({
+        playbook,
+        vars,
+        profile,
+        workflowRunId: context.runId,
+        onProgress: emitProgress,
+      });
+      context.emit({
+        type: 'scraper.run.finished',
+        runId: context.runId,
+        runLogId: pb.runLogId ?? 0,
+        success: pb.success,
+        pagesLoaded: pb.pages.length,
+        error: pb.error,
+        timestamp: new Date().toISOString(),
+      } as any);
+      return {
+        output: {
+          success: pb.success,
+          pages: pb.pages,
+          pageCount: pb.pages.length,
+          error: pb.error,
+          runLogId: pb.runLogId,
+          viaPlaybook: true,
+          itemCount: pb.itemCount,
+          acceptanceMet: pb.acceptanceMet,
+        },
+        metadata: { _selectedHandle: 'output' },
+      };
+    }
 
     let result = await runScrape(baseJob);
 
