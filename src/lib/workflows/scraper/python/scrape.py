@@ -52,6 +52,26 @@ async def human_scroll(page, pacing: Dict[str, int]) -> None:
         await human_delay(pacing["minMs"], pacing["maxMs"])
 
 
+async def resolve_extract(page, extract: Any) -> Dict[str, Any]:
+    """Normalise extract config. Accepts:
+       - list of rule objects → apply rules
+       - 'page' / 'html' string → return full page html + text
+       - None / missing → {url, title, html} as a sensible default
+    LLM-generated configs often pass a string shorthand.
+    """
+    if isinstance(extract, list):
+        return await apply_extract_rules(page, extract)
+    html = await page.content()
+    title = await page.title()
+    if isinstance(extract, str) and extract in ('page', 'html'):
+        return {"html": html, "title": title, "url": page.url}
+    if isinstance(extract, str) and extract == 'text':
+        text = await page.evaluate("() => document.body.innerText")
+        return {"text": text, "title": title, "url": page.url}
+    # Default: return the page snapshot so downstream nodes have something to work with.
+    return {"html": html, "title": title, "url": page.url}
+
+
 async def apply_extract_rules(page, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for rule in rules:
@@ -89,7 +109,20 @@ async def apply_extract_rules(page, rules: List[Dict[str, Any]]) -> Dict[str, An
     return out
 
 
-async def wait_condition(page, wait_for: Dict[str, Any]) -> None:
+async def wait_condition(page, wait_for: Any) -> None:
+    # Accept three shapes so LLM-generated configs don't break the run:
+    #   - a number (ms to sleep)
+    #   - a string (CSS selector to wait for)
+    #   - a {type, ...} object (structured, the canonical form)
+    if isinstance(wait_for, (int, float)):
+        await asyncio.sleep(float(wait_for) / 1000)
+        return
+    if isinstance(wait_for, str):
+        await page.wait_for_selector(wait_for, timeout=20000)
+        return
+    if not isinstance(wait_for, dict):
+        await page.wait_for_load_state("networkidle", timeout=30000)
+        return
     t = wait_for.get("type", "networkidle")
     if t == "networkidle":
         await page.wait_for_load_state("networkidle", timeout=30000)
@@ -169,7 +202,7 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
 
             pages_collected = []
 
-            fields = await apply_extract_rules(page, job["extract"])
+            fields = await resolve_extract(page, job.get("extract"))
             pages_collected.append({"url": page.url, "fields": fields})
             emit_progress({"t": "page.done", "url": page.url, "pageIndex": 0})
 
@@ -185,7 +218,7 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
                         await next_loc.click()
                         await wait_condition(page, job.get("waitFor", {"type": "networkidle"}))
                         await human_scroll(page, pacing)
-                        fields = await apply_extract_rules(page, job["extract"])
+                        fields = await resolve_extract(page, job.get("extract"))
                         pages_collected.append({"url": page.url, "fields": fields})
                         emit_progress({"t": "page.done", "url": page.url, "pageIndex": i})
                 elif pag["type"] == "url-template":
@@ -194,7 +227,7 @@ async def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
                         await human_delay(pacing["minMs"], pacing["maxMs"])
                         await page.goto(target, wait_until="domcontentloaded")
                         await wait_condition(page, job.get("waitFor", {"type": "networkidle"}))
-                        fields = await apply_extract_rules(page, job["extract"])
+                        fields = await resolve_extract(page, job.get("extract"))
                         pages_collected.append({"url": page.url, "fields": fields})
                         emit_progress({"t": "page.done", "url": page.url, "pageIndex": i})
 
