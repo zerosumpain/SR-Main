@@ -62,6 +62,11 @@ export interface NodeResult {
   output: Record<string, unknown>;
   logs?: string[];
   metadata?: Record<string, unknown>;
+  /** When set, the engine halts the run and waits for human input. */
+  pause?: {
+    reason: 'awaiting_human';
+    interactionId: number;
+  };
 }
 
 export interface ExecutionContext {
@@ -165,7 +170,7 @@ export type WorkflowEvent =
   | ScraperProgressEvent
   | ScraperRunFinishedEvent;
 
-export type RunStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed';
+export type RunStatus = 'pending' | 'running' | 'paused' | 'awaiting_human' | 'completed' | 'completed_with_errors' | 'failed';
 export type NodeExecutionStatus = 'pending' | 'running' | 'paused_breakpoint' | 'completed' | 'failed' | 'skipped' | 'blocked' | 'healing';
 
 export interface HealingContext {

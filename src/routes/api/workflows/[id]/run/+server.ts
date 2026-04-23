@@ -68,11 +68,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
   engine.execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing }).then(async (result) => {
     const healingHistory = result.healingHistory || [];
 
+    // For awaiting_human: don't set completedAt; persist pausedAtNodeId instead.
+    const isPaused = result.status === 'awaiting_human';
     await db.update(workflowRuns).set({
       status: result.status,
-      completedAt: new Date(),
+      completedAt: isPaused ? undefined : new Date(),
       error: result.error || null,
       healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
+      ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
     }).where(eq(workflowRuns.id, run.id));
 
     // Emit workflow_completed event so event-triggered workflows can chain

@@ -32,13 +32,16 @@ export function runWorkflowAndPersist(
       const healingHistory = result.healingHistory || [];
 
       try {
+        // For awaiting_human: don't set completedAt; persist pausedAtNodeId instead.
+        const isPaused = result.status === 'awaiting_human';
         await db
           .update(workflowRuns)
           .set({
             status: result.status,
-            completedAt: new Date(),
+            completedAt: isPaused ? undefined : new Date(),
             error: result.error || null,
             healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
+            ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
           })
           .where(eq(workflowRuns.id, runId));
 

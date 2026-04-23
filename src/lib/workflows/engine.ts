@@ -13,6 +13,14 @@ import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events'
 import { diagnoseAndFix } from './orchestrator/healing';
 import type { HealingContext, UndoEntry, NodeDefinition } from './types';
 
+/** Thrown internally by the engine when a node returns a pause sentinel. */
+export class PauseForHumanSignal {
+  constructor(
+    public readonly nodeId: string,
+    public readonly interactionId: number,
+  ) {}
+}
+
 export interface EngineResult {
   status: RunStatus;
   nodeOutputs: Map<string, Record<string, unknown>>;
@@ -20,6 +28,8 @@ export interface EngineResult {
   nodeErrors: Map<string, string>;
   error?: string;
   healingHistory?: UndoEntry[];
+  /** Populated when the engine paused mid-run for human interaction. */
+  pausedAtNodeId?: string;
 }
 
 export class WorkflowEngine {
@@ -75,6 +85,22 @@ export class WorkflowEngine {
     }
   }
 
+  /**
+   * Resume a paused run by pre-seeding node outputs for already-completed
+   * nodes (including the resolved interactive-step node). The engine's
+   * topological walker will skip any node whose output is already present
+   * in nodeOutputs.
+   */
+  async executeWithPreSeededOutputs(
+    workflow: WorkflowDefinition,
+    runId: string,
+    preSeededOutputs: Record<string, Record<string, unknown>>,
+    workflowId?: string,
+    options?: { selfHealing?: boolean },
+  ): Promise<EngineResult> {
+    return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs);
+  }
+
   async execute(
     workflow: WorkflowDefinition,
     runId: string,
@@ -82,12 +108,20 @@ export class WorkflowEngine {
     breakpoints?: Set<string>,
     workflowId?: string,
     options?: { selfHealing?: boolean },
+    preSeededOutputs?: Record<string, Record<string, unknown>>,
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
     const skippedNodes = new Set<string>();
     const blockedEdgeIds = new Set<string>();
+
+    // Pre-seed node outputs for already-completed nodes (resume path).
+    if (preSeededOutputs) {
+      for (const [id, output] of Object.entries(preSeededOutputs)) {
+        nodeOutputs.set(id, output);
+      }
+    }
     const abortController = new AbortController();
     const healingHistory: UndoEntry[] = [];
 
@@ -119,6 +153,11 @@ export class WorkflowEngine {
           // If this node is skipped, emit event and skip execution
           if (skippedNodes.has(nodeId)) {
             emit('node_skipped', nodeId);
+            return;
+          }
+
+          // If this node's output was pre-seeded (resume path), skip re-execution.
+          if (nodeOutputs.has(nodeId)) {
             return;
           }
 
@@ -180,6 +219,12 @@ export class WorkflowEngine {
 
           try {
             const result: NodeResult = await executor.execute(mergedInput, nodeDef.config, context);
+
+            // Option A pause sentinel: node executor requests human interaction.
+            if (result.pause?.reason === 'awaiting_human') {
+              throw new PauseForHumanSignal(nodeId, result.pause.interactionId);
+            }
+
             nodeOutputs.set(nodeId, result.output);
             emit('node_completed', nodeId, result.output);
 
@@ -195,6 +240,9 @@ export class WorkflowEngine {
               }
             }
           } catch (err: unknown) {
+            // Let pause signals propagate immediately — do not heal them.
+            if (err instanceof PauseForHumanSignal) throw err;
+
             const message = err instanceof Error ? err.message : String(err);
             const selfHealing = options?.selfHealing !== false;
             console.log(`[healing] Node ${nodeId} (${nodeDef.type}) failed: ${message.slice(0, 100)}`);
@@ -390,6 +438,21 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, healingHistory };
     } catch (err: unknown) {
+      // Human-in-the-loop pause: the run halts cleanly (no failure).
+      if (err instanceof PauseForHumanSignal) {
+        emit('node_paused', err.nodeId, { interactionId: err.interactionId });
+        cleanupRunEmitter(runId);
+        this.activeBreakpoints.delete(runId);
+        return {
+          status: 'awaiting_human',
+          nodeOutputs,
+          nodeInputs,
+          nodeErrors,
+          healingHistory,
+          pausedAtNodeId: err.nodeId,
+        };
+      }
+
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
       cleanupRunEmitter(runId);

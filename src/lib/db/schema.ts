@@ -613,6 +613,7 @@ export const workflowRuns = pgTable('workflow_runs', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
   healingHistory: jsonb('healing_history').default(sql`'[]'::jsonb`),
+  pausedAtNodeId: text('paused_at_node_id'),
 });
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
@@ -1126,7 +1127,7 @@ export type GmailHistoryCursor = typeof gmailHistoryCursors.$inferSelect;
 
 export const workflowInteractions = pgTable('workflow_interactions', {
   id: serial('id').primaryKey(),
-  runId: integer('run_id').notNull(),           // references workflow_runs.id
+  runId: text('run_id').notNull(),              // references workflow_runs.id (text UUID)
   nodeId: text('node_id').notNull(),            // the workflow_nodes.node_id (string, per convention)
   mode: text('mode').notNull(),                 // 'vnc' | 'confirm' | 'both'
   prompt: text('prompt').notNull().default(''), // instruction shown to the human
