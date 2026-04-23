@@ -22,6 +22,7 @@ import './tools/ephemeral-tools';
 import './tools/media-write-document';
 import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
+import './tools/scraper';
 
 // --- Public API ---
 
@@ -77,6 +78,7 @@ export function getToolsetManifest(): Array<{
     memory: 'Persistent memory — save, recall, and forget facts about the user',
     visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Leaflet), and tables directly in the chat',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
+    scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({

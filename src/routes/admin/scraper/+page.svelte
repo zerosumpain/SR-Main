@@ -7,6 +7,47 @@
 
   let credentials = $state(data.credentials);
   let runs = $state(data.recentRuns);
+  let targetKnowledge = $state(data.targetKnowledge ?? []);
+
+  // ── Target Knowledge form state ──
+  let tkDomain = $state('');
+  let tkRequiresInteractive = $state(false);
+  let tkHint = $state('');
+  let tkNotes = $state('');
+  let tkBusy = $state(false);
+  let tkError = $state<string | null>(null);
+
+  async function addTargetKnowledge() {
+    tkError = null;
+    if (!tkDomain.trim()) { tkError = 'Domain is required.'; return; }
+    tkBusy = true;
+    try {
+      const res = await fetch('/api/scraper/target-knowledge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          domain: tkDomain.trim(),
+          requiresInteractive: tkRequiresInteractive,
+          interactiveHint: tkHint.trim() || undefined,
+          notes: tkNotes.trim() || undefined,
+          source: 'manual',
+        }),
+      });
+      if (!res.ok) { tkError = 'Save failed: ' + res.status; return; }
+      const list = await fetch('/api/scraper/target-knowledge').then(r => r.json());
+      targetKnowledge = list;
+      tkDomain = tkHint = tkNotes = '';
+      tkRequiresInteractive = false;
+    } finally {
+      tkBusy = false;
+    }
+  }
+
+  async function deleteTargetKnowledge(id: number) {
+    if (!confirm('Delete this knowledge row?')) return;
+    await fetch(`/api/scraper/target-knowledge?id=${id}`, { method: 'DELETE' });
+    targetKnowledge = targetKnowledge.filter((r: any) => r.id !== id);
+  }
   let profiles = $state<string[]>([]);
 
   let newDomain = $state('');
@@ -292,6 +333,80 @@
         {/each}
       </div>
     {/if}
+  </section>
+
+  <!-- ── Target Knowledge ── -->
+  <section class="mb-10">
+    <p class="text-[9px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Target knowledge</p>
+    <p class="text-[10px] mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+      Per-domain scraping intelligence used by the orchestrator when planning workflows. Auto-populated from failures; manually extend here.
+    </p>
+
+    {#if targetKnowledge.length === 0}
+      <p class="text-sm mb-4" style="color: var(--text-muted);">No knowledge rows yet.</p>
+    {:else}
+      <div class="rounded-xl border mb-6 overflow-x-auto" style="background: var(--card-bg); border-color: var(--card-border);">
+        <table class="w-full text-[10px]" style="font-family: var(--font-mono); color: var(--text-secondary);">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--divider);">
+              <th class="text-left px-4 py-2 font-normal" style="color: var(--text-ghost);">Domain</th>
+              <th class="text-left px-4 py-2 font-normal" style="color: var(--text-ghost);">Interactive</th>
+              <th class="text-left px-4 py-2 font-normal" style="color: var(--text-ghost);">Hint</th>
+              <th class="text-left px-4 py-2 font-normal" style="color: var(--text-ghost);">Source</th>
+              <th class="text-left px-4 py-2 font-normal" style="color: var(--text-ghost);">Updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each targetKnowledge as row}
+              <tr style="border-bottom: 1px solid var(--divider);">
+                <td class="px-4 py-2" style="color: var(--text-primary);">{row.domain}</td>
+                <td class="px-4 py-2" style="color: {row.requiresInteractive ? '#2d7a3a' : 'var(--text-ghost)'};">
+                  {row.requiresInteractive ? '✓' : '✗'}
+                </td>
+                <td class="px-4 py-2" style="color: var(--text-ghost);">{trunc(row.interactiveHint, 60)}</td>
+                <td class="px-4 py-2">{row.source}</td>
+                <td class="px-4 py-2">{formatDate(row.updatedAt)}</td>
+                <td class="px-4 py-2">
+                  <button
+                    onclick={() => deleteTargetKnowledge(row.id)}
+                    class="px-2 py-0.5 rounded text-[9px]"
+                    style="color: #8b3a1a; border: 1px solid #8b3a1a;">Delete</button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <!-- Add row form -->
+    <div class="rounded-xl border p-4 space-y-3" style="background: var(--card-bg); border-color: var(--card-border);">
+      <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Add knowledge row</p>
+      <div class="flex gap-2 items-center">
+        <input type="text" placeholder="Domain (e.g. example.gov.uk)" bind:value={tkDomain}
+          class="flex-1 px-2 py-1 rounded text-[11px]"
+          style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;" />
+        <label class="flex items-center gap-1 text-[10px] whitespace-nowrap" style="color: var(--text-secondary); font-family: var(--font-mono);">
+          <input type="checkbox" bind:checked={tkRequiresInteractive} />
+          Requires interactive
+        </label>
+      </div>
+      <input type="text" placeholder="Interactive hint (optional)" bind:value={tkHint}
+        class="w-full px-2 py-1 rounded text-[11px]"
+        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;" />
+      <textarea bind:value={tkNotes} rows="2" placeholder="Notes (optional)"
+        class="w-full px-2 py-1 rounded text-[10px] resize-none"
+        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono); outline: none;"></textarea>
+      {#if tkError}
+        <p class="text-[9px]" style="color: #8b3a1a; font-family: var(--font-mono);">{tkError}</p>
+      {/if}
+      <button onclick={addTargetKnowledge} disabled={tkBusy}
+        class="text-[10px] uppercase tracking-[0.15em] px-4 py-1.5 rounded disabled:opacity-50"
+        style="background: var(--accent); color: white; font-family: var(--font-mono);">
+        {tkBusy ? '…' : 'Save knowledge row'}
+      </button>
+    </div>
   </section>
 
   <!-- ── Interactive sessions ── -->

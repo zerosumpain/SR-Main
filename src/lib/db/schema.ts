@@ -1142,3 +1142,21 @@ export const workflowInteractions = pgTable('workflow_interactions', {
 });
 
 export type WorkflowInteraction = typeof workflowInteractions.$inferSelect;
+
+// ==========================================
+// Scraper — Target Knowledge Store
+// ==========================================
+
+export const scraperTargetKnowledge = pgTable('scraper_target_knowledge', {
+  id: serial('id').primaryKey(),
+  domain: text('domain').notNull().unique(),
+  requiresInteractive: boolean('requires_interactive').notNull().default(false),
+  interactiveHint: text('interactive_hint'),    // e.g. 'Altcha CAPTCHA + cookie consent'
+  knownSelectors: jsonb('known_selectors'),     // optional { field -> selector } map
+  notes: text('notes'),
+  source: text('source').notNull().default('manual'),  // 'manual' | 'auto-captcha-detected' | 'auto-failure'
+  lastVerifiedAt: timestamp('last_verified_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type ScraperTargetKnowledge = typeof scraperTargetKnowledge.$inferSelect;

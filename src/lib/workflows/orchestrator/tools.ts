@@ -155,7 +155,31 @@ function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 
 // --- Build OpenAI tools array ---
 
+export const scraperTargetKnowledgeLookupTool: OpenAIFunctionDef = {
+  type: 'function',
+  function: {
+    name: 'scraper_target_knowledge_lookup',
+    description:
+      'Look up what we know about one or more domains before planning a scraper workflow. ' +
+      'Returns knowledge including whether each domain requires an interactive-step upstream ' +
+      '(for CAPTCHAs, login walls, cookie consent), verified CSS selectors, and free-form notes. ' +
+      'ALWAYS call this before planning any stealth-scrape node for the given URLs.',
+    parameters: {
+      type: 'object',
+      properties: {
+        domains: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'URLs or hostnames to look up',
+        },
+      },
+      required: ['domains'],
+    },
+  },
+};
+
 export const openaiTools: OpenAIFunctionDef[] = [
+  scraperTargetKnowledgeLookupTool,
   zodToFunction('search_nodes', searchNodesSchema, 'Search the node registry for nodes matching a capability. ALWAYS call this before use_node to verify the node exists.'),
   zodToFunction('use_node', useNodeSchema, 'Add an existing node to the workflow. Requires a reason and at least one alternative considered.'),
   zodToFunction('create_node', createNodeSchema, 'Create a new reusable node type for a service integration that does not exist yet. Generates definition + executor code.'),

@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { scraperCredentials, scraperRunLog } from '$lib/db/schema';
+import { scraperCredentials, scraperRunLog, scraperTargetKnowledge } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 
 export const load: PageServerLoad = async () => {
@@ -13,5 +13,6 @@ export const load: PageServerLoad = async () => {
     createdAt: scraperCredentials.createdAt,
   }).from(scraperCredentials);
   const recent = await db.select().from(scraperRunLog).orderBy(desc(scraperRunLog.id)).limit(50);
-  return { credentials: creds, recentRuns: recent };
+  const targetKnowledge = await db.select().from(scraperTargetKnowledge).orderBy(desc(scraperTargetKnowledge.updatedAt));
+  return { credentials: creds, recentRuns: recent, targetKnowledge };
 };

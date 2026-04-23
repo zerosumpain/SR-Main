@@ -176,6 +176,27 @@ async function runToolLoop(
 
       onChunk?.(`${fnName}: ${JSON.stringify(fnArgs).slice(0, 100)}...\n`);
 
+      // --- Async tool: scraper_target_knowledge_lookup ---
+      if (fnName === 'scraper_target_knowledge_lookup') {
+        try {
+          const { lookupByDomains } = await import('$lib/workflows/scraper/target-knowledge');
+          const domains = Array.isArray(fnArgs.domains) ? fnArgs.domains as string[] : [];
+          const rows = await lookupByDomains(domains);
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ success: true, data: rows }),
+          });
+        } catch (err: any) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ success: false, error: err?.message ?? 'lookup failed' }),
+          });
+        }
+        continue;
+      }
+
       const result = processToolCall(draft, fnName, fnArgs, deps);
 
       if (result.askUser) {

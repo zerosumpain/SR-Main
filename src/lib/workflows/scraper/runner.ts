@@ -107,6 +107,34 @@ export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
     error: result.error ?? null,
   }).where(eq(scraperRunLog.id, logRow.id));
 
+  // Auto-learn: if the scrape failed with a wait_for_selector TimeoutError, the
+  // target domain likely requires an interactive upstream step (CAPTCHA / bot wall).
+  // Only upsert if there is no existing manual row — never overwrite user edits.
+  if (!result.success && result.error && /TimeoutError.*wait_for_selector|wait_for_selector.*TimeoutError/i.test(result.error)) {
+    try {
+      const { normalizeDomain, upsertKnowledge } = await import('./target-knowledge');
+      const { scraperTargetKnowledge } = await import('$lib/db/schema');
+      const { inArray } = await import('drizzle-orm');
+      const domain = normalizeDomain(opts.url);
+      const existing = await db.select({ id: scraperTargetKnowledge.id, source: scraperTargetKnowledge.source })
+        .from(scraperTargetKnowledge)
+        .where(inArray(scraperTargetKnowledge.domain, [domain]));
+      const hasManualRow = existing.some(r => r.source === 'manual');
+      if (!hasManualRow) {
+        await upsertKnowledge({
+          domain,
+          requiresInteractive: true,
+          interactiveHint:
+            'Suspected CAPTCHA or bot wall — first scrape timed out waiting for expected selector. Run an interactive-step upstream to set up the session.',
+          source: 'auto-failure',
+        });
+      }
+    } catch (autoErr) {
+      // Non-fatal — do not interrupt the caller
+      console.warn('[runner] auto-learn upsert failed:', autoErr instanceof Error ? autoErr.message : autoErr);
+    }
+  }
+
   result.runLogId = logRow.id;
   return result;
 }
