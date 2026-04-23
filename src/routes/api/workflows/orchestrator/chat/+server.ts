@@ -6,7 +6,8 @@ import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
-import { createJob, getJob, cancelJob, cancelAllRunning, cleanOldJobs, deleteJob, listJobs, publishJobEvent } from '$lib/workflows/chat/job-store';
+import { allocateCanvasName } from '$lib/canvas/adapter.server';
+import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
@@ -64,11 +65,15 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  // Cancel any stale running jobs before starting a new one
-  cancelAllRunning('Superseded by new request');
+  // Cancel any stale running jobs in THIS conversation/workflow before
+  // starting a new one. Previously this cancelled all in-flight jobs
+  // globally, which killed work in other canvases on concurrent requests.
+  if (workflowId || conversationId) {
+    cancelForScope({ workflowId, conversationId }, 'Superseded by new request');
+  }
   cleanOldJobs();
 
-  const { jobId, job } = createJob(message);
+  const { jobId, job } = createJob(message, { workflowId, conversationId });
   const { abortController } = job;
 
   // Run the orchestrator in the background
@@ -118,9 +123,10 @@ export const POST: RequestHandler = async ({ request }) => {
         if (followUp) {
           let resolvedWorkflowId = workflowId;
           if (!resolvedWorkflowId) {
+            const { name: canvasName } = await allocateCanvasName('new workflow');
             const [created] = await db.insert(workflows).values({
-              name: 'New Workflow (in progress)',
-              description: null,
+              name: canvasName,
+              description: 'New Workflow (in progress)',
             }).returning();
             resolvedWorkflowId = created.id;
           }
@@ -140,32 +146,42 @@ export const POST: RequestHandler = async ({ request }) => {
             await saveWorkflowFromGenerated(workflowId, workflow);
             job.result = { success: true, workflow, workflowId, thinking, message: workflow.explanation || 'Workflow updated.' };
           } else {
-            const [created] = await db.insert(workflows).values({
-              name: workflow.name || 'Generated Workflow',
-              description: workflow.description || null,
-            }).returning();
-
+            // Build the whole canvas atomically: a partial failure rolls back,
+            // so we never leave an orphaned workflow row that needs a naked
+            // delete (which would cascade-wipe any chat history attached to it).
+            const { name: canvasName, slug: canvasSlug } = await allocateCanvasName(
+              workflow.name || 'generated workflow',
+            );
+            let createdId: string;
             try {
-              await db.insert(workflowNodes).values(
-                workflow.nodes.map((n) => ({ id: n.id, workflowId: created.id, type: n.type, position: n.position, config: n.config, label: n.label })),
-              );
-              if (workflow.edges.length > 0) {
-                await db.insert(workflowEdges).values(
-                  workflow.edges.map((e) => ({ id: e.id, workflowId: created.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
+              createdId = await db.transaction(async (tx) => {
+                const [createdRow] = await tx.insert(workflows).values({
+                  name: canvasName,
+                  description: workflow.description || workflow.name || null,
+                }).returning();
+
+                await tx.insert(workflowNodes).values(
+                  workflow.nodes.map((n) => ({ id: n.id, workflowId: createdRow.id, type: n.type, position: n.position, config: n.config, label: n.label })),
                 );
-              }
+                if (workflow.edges.length > 0) {
+                  await tx.insert(workflowEdges).values(
+                    workflow.edges.map((e) => ({ id: e.id, workflowId: createdRow.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
+                  );
+                }
+
+                await tx.insert(orchestratorChats).values({ workflowId: createdRow.id, role: 'user', content: message });
+                await tx.insert(orchestratorChats).values({ workflowId: createdRow.id, role: 'assistant', content: workflow.explanation || 'Workflow created.', metadata: { workflowGenerated: true } });
+
+                return createdRow.id;
+              });
             } catch (dbErr: unknown) {
-              await db.delete(workflows).where(eq(workflows.id, created.id));
               const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
               job.result = { success: false, workflow: null, message: `Failed to save workflow nodes: ${dbMsg}` };
               job.status = 'done';
               return;
             }
 
-            await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'user', content: message });
-            await db.insert(orchestratorChats).values({ workflowId: created.id, role: 'assistant', content: workflow.explanation || 'Workflow created.', metadata: { workflowGenerated: true } });
-
-            job.result = { success: true, workflow, workflowId: created.id, redirectTo: `/jkai/canvas/${created.id}`, thinking, message: workflow.explanation || 'Workflow created.' };
+            job.result = { success: true, workflow, workflowId: createdId, redirectTo: `/jkai/canvas/${canvasSlug}`, thinking, message: workflow.explanation || 'Workflow created.' };
           }
         } else {
           job.result = { success: true, workflow: null, message: 'Could not generate a valid workflow. Try being more specific.' };

@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc } from 'drizzle-orm';
+import { allocateCanvasName } from '$lib/canvas/adapter.server';
 
 export const GET: RequestHandler = async () => {
   const rows = await db.select().from(workflows).orderBy(desc(workflows.createdAt));
@@ -17,9 +18,13 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'name is required' }, { status: 400 });
   }
 
+  // Every workflow must be addressable as a canvas. Coerce the supplied
+  // name into a unique `canvas:<slug>` so the canvas index lists it; the
+  // human-readable title is preserved in `description`.
+  const { name: canvasName } = await allocateCanvasName(name);
   const [workflow] = await db.insert(workflows).values({
-    name,
-    description: description || null,
+    name: canvasName,
+    description: description || name,
   }).returning();
 
   if (Array.isArray(nodes) && nodes.length > 0) {

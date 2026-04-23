@@ -48,6 +48,16 @@
   let liveToolSteps = $state<Record<string, Array<{ tool: string; status: string }>>>(
     {},
   );
+  // Per-chat-node: is the live "thinking / tool trace" panel expanded?
+  // Default to expanded when a run starts so the user immediately sees
+  // activity; the user can click the pill to collapse.
+  let chatTraceExpanded = $state<Record<string, boolean>>({});
+  function toggleChatTrace(chatNodeId: string) {
+    chatTraceExpanded = {
+      ...chatTraceExpanded,
+      [chatNodeId]: !(chatTraceExpanded[chatNodeId] ?? true),
+    };
+  }
   let chatSizes = $state<Record<string, { w: number; h: number }>>({});
   let chatResize = $state<{
     nodeId: string;
@@ -208,6 +218,40 @@
     requestAnimationFrame(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     });
+  }
+
+  // Token stream coalescing — keep markdown re-parsing off the per-token path.
+  //
+  // Before: every SSE token did `streamingReplies = { ...streamingReplies, [id]: prev + delta }`
+  // and called scrollChatToBottom. With a ~30 tok/s stream, ChatMarkdown re-ran
+  // marked.parse on the ENTIRE accumulated reply each token (O(n²) across a
+  // long reply) and the canvas went unresponsive.
+  //
+  // Now: token deltas accumulate in a plain Map and are flushed once per rAF
+  // into the reactive $state, so markdown is re-parsed at most ~60x/sec.
+  const pendingStreamDeltas = new Map<string, string>();
+  let streamFlushHandle: number | null = null;
+  function flushStreamDeltas() {
+    streamFlushHandle = null;
+    if (pendingStreamDeltas.size === 0) return;
+    const updates: Record<string, string> = { ...streamingReplies };
+    let needsScroll: string | null = null;
+    for (const [id, delta] of pendingStreamDeltas) {
+      updates[id] = (updates[id] ?? '') + delta;
+      if (pendingRun?.chatNodeId === id) needsScroll = id;
+    }
+    pendingStreamDeltas.clear();
+    streamingReplies = updates;
+    if (needsScroll) scrollChatToBottom(needsScroll);
+  }
+  function queueStreamDelta(chatNodeId: string, delta: string) {
+    pendingStreamDeltas.set(
+      chatNodeId,
+      (pendingStreamDeltas.get(chatNodeId) ?? '') + delta,
+    );
+    if (streamFlushHandle === null) {
+      streamFlushHandle = requestAnimationFrame(flushStreamDeltas);
+    }
   }
 
   // Merged view of each node: base canvas row + any live overlay
@@ -556,11 +600,7 @@
       if (kind === 'chat_stream' && chatNodeId) {
         const event = (evt.data.event as { type?: string; delta?: string }) ?? {};
         if (event.type === 'token' && typeof event.delta === 'string') {
-          streamingReplies = {
-            ...streamingReplies,
-            [chatNodeId]: (streamingReplies[chatNodeId] ?? '') + event.delta,
-          };
-          if (pendingRun?.chatNodeId === chatNodeId) scrollChatToBottom(chatNodeId);
+          queueStreamDelta(chatNodeId, event.delta);
         }
       } else if (kind === 'chat_tool' && chatNodeId) {
         const step = evt.data.step as { tool?: string; status?: string } | undefined;
@@ -590,6 +630,13 @@
   }
 
   async function finalizeChatReply() {
+    // Flush any un-flushed token deltas so we don't lose the tail of the
+    // reply between the last rAF and the run terminal event.
+    if (streamFlushHandle !== null) {
+      cancelAnimationFrame(streamFlushHandle);
+      streamFlushHandle = null;
+    }
+    flushStreamDeltas();
     const pending = pendingRun;
     pendingRun = null;
     if (pending) {
@@ -1930,6 +1977,30 @@
               <span class="sr-sep">/</span>
               <span class="chat-node-label">{n.name}</span>
               <span class="chat-node-count">{msgs.length} msg</span>
+              {#if isRunning && pendingRun?.chatNodeId === n.id}
+                {@const steps = liveToolSteps[n.id] ?? []}
+                {@const runningStep = steps.find((s) => s.status === 'running')?.tool}
+                {@const expanded = chatTraceExpanded[n.id] ?? true}
+                <button
+                  class="chat-node-working"
+                  class:is-expanded={expanded}
+                  title={expanded ? 'Hide live activity' : 'Show live activity'}
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleChatTrace(n.id);
+                  }}
+                >
+                  <span class="chat-node-working-dot"></span>
+                  <span class="chat-node-working-text">
+                    {#if runningStep}{runningStep}{:else if streamingReplies[n.id]}streaming{:else}working{/if}
+                  </span>
+                  {#if steps.length > 0}
+                    <span class="chat-node-working-count">{steps.length}</span>
+                  {/if}
+                  <span class="chat-node-working-chev">{expanded ? '▾' : '▸'}</span>
+                </button>
+              {/if}
               <button
                 class="chat-node-act"
                 title="Copy transcript"
@@ -1989,7 +2060,7 @@
                   </div>
                 </div>
               {/each}
-              {#if isRunning && pendingRun?.chatNodeId === n.id}
+              {#if isRunning && pendingRun?.chatNodeId === n.id && (chatTraceExpanded[n.id] ?? true)}
                 <div class="chat-msg chat-msg-pending">
                   <div class="msg-meta">
                     <b>JKAI</b><span class="sr-sep">/</span>
@@ -3801,6 +3872,57 @@
     margin-left: auto;
     color: rgba(237, 228, 212, 0.55);
     font-size: 9px;
+  }
+  .chat-node-working {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    padding: 2px 7px 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    color: rgba(170, 255, 210, 0.95);
+    background: rgba(64, 200, 140, 0.08);
+    border: 1px solid rgba(170, 255, 210, 0.45);
+    border-radius: 999px;
+    cursor: pointer;
+    max-width: 180px;
+    overflow: hidden;
+  }
+  .chat-node-working:hover {
+    background: rgba(64, 200, 140, 0.18);
+    border-color: rgba(170, 255, 210, 0.75);
+  }
+  .chat-node-working-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgb(120, 255, 180);
+    box-shadow: 0 0 6px rgba(120, 255, 180, 0.8);
+    animation: chat-working-pulse 1.1s ease-in-out infinite;
+    flex: 0 0 auto;
+  }
+  .chat-node-working-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-node-working-count {
+    padding: 0 4px;
+    border-radius: 4px;
+    background: rgba(170, 255, 210, 0.18);
+    color: rgba(230, 255, 240, 0.95);
+    font-size: 8px;
+  }
+  .chat-node-working-chev {
+    opacity: 0.7;
+    font-size: 10px;
+  }
+  @keyframes chat-working-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.85); }
   }
   .chat-node-act {
     font-family: var(--font-mono);

@@ -8,7 +8,7 @@ import {
   openrouterModels,
   orchestratorChats,
 } from '$lib/db/schema';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import { getSetting } from '$lib/server/models/settings';
 import { slugify as _slugify } from './slug';
@@ -159,6 +159,107 @@ function workflowNameFor(slug: string): string {
 }
 
 const SLUG_PREFIX = 'canvas:';
+
+/**
+ * Self-heal zombie `awaiting_human` runs for this workflow.
+ *
+ * An interactive-step node opens a `workflow_interactions` row with an
+ * `expires_at`. If the user never resolves the interaction (often because
+ * no VNC session was spawned) the run stays paused indefinitely with
+ * status `awaiting_human`, and the canvas page hydrates it as an active
+ * run that polls endlessly and blocks new work.
+ *
+ * This reaper runs on every canvas page load: any interaction whose
+ * `expires_at` is in the past and that has neither `resolved_at` nor
+ * `cancelled` gets marked cancelled, the owning run is marked failed,
+ * and we emit `run_failed` on the event bus so any still-connected SSE
+ * subscriber closes out.
+ */
+export async function reapExpiredInteractions(workflowId: string): Promise<number> {
+  const { lt, isNull } = await import('drizzle-orm');
+  const { workflowInteractions, workflowRuns } = await import('$lib/db/schema');
+  const { emitWorkflowEvent } = await import('$lib/workflows/events');
+
+  const expired = await db
+    .select({
+      id: workflowInteractions.id,
+      runId: workflowInteractions.runId,
+      nodeId: workflowInteractions.nodeId,
+    })
+    .from(workflowInteractions)
+    .innerJoin(workflowRuns, eq(workflowRuns.id, workflowInteractions.runId))
+    .where(
+      and(
+        eq(workflowRuns.workflowId, workflowId),
+        eq(workflowRuns.status, 'awaiting_human'),
+        eq(workflowInteractions.cancelled, false),
+        isNull(workflowInteractions.resolvedAt),
+        lt(workflowInteractions.expiresAt, new Date()),
+      ),
+    );
+
+  if (expired.length === 0) return 0;
+
+  const reapedRunIds = new Set<string>();
+  for (const row of expired) {
+    await db
+      .update(workflowInteractions)
+      .set({ cancelled: true, resolvedAt: new Date() })
+      .where(eq(workflowInteractions.id, row.id));
+    reapedRunIds.add(row.runId);
+  }
+
+  for (const runId of reapedRunIds) {
+    const message = 'Interactive step expired without user input — run aborted.';
+    await db
+      .update(workflowRuns)
+      .set({ status: 'failed', completedAt: new Date(), error: message })
+      .where(eq(workflowRuns.id, runId));
+    emitWorkflowEvent({
+      runId,
+      timestamp: new Date().toISOString(),
+      type: 'run_failed',
+      data: { error: message },
+    });
+  }
+
+  console.log(
+    `[canvas] reaped ${expired.length} expired interaction(s) across ${reapedRunIds.size} run(s) in workflow ${workflowId}`,
+  );
+  return reapedRunIds.size;
+}
+
+/**
+ * Allocate a unique `canvas:<slug>` name from a free-form seed (typically a
+ * user-supplied title or the orchestrator's generated workflow.name). This is
+ * the single place every non-canvas insert site must route through so that
+ * every workflow row is addressable as a canvas — the canvas index filters by
+ * the `canvas:` prefix, so any row missing it becomes invisible in the UI but
+ * still shows up to the LLM via `workflow_list` (which is how it ends up
+ * claiming a "workflow already exists" for something the user can't see).
+ *
+ * Clips the slug to 40 chars to keep URLs tidy, then appends `-2`, `-3`, ...
+ * on collision. Never throws — falls back to a uuid-derived slug if the seed
+ * slugifies to empty.
+ */
+export async function allocateCanvasName(seed: string): Promise<{ name: string; slug: string }> {
+  const raw = _slugify(seed);
+  const baseSlug = (raw || `canvas-${crypto.randomUUID().slice(0, 8)}`).slice(0, 40);
+  let slug = baseSlug;
+  let attempt = 1;
+  while (attempt < 100) {
+    const [clash] = await db
+      .select({ id: workflows.id })
+      .from(workflows)
+      .where(eq(workflows.name, workflowNameFor(slug)));
+    if (!clash) return { name: workflowNameFor(slug), slug };
+    attempt += 1;
+    slug = `${baseSlug}-${attempt}`;
+  }
+  // Astronomically unlikely — 100 collisions in a row — but fall back to uuid.
+  slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
+  return { name: workflowNameFor(slug), slug };
+}
 
 /** All canvases (workflows whose name starts with "canvas:"). */
 export async function listCanvases(): Promise<CanvasSummary[]> {

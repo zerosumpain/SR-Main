@@ -29,6 +29,9 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   }
   if (stream.closed) return;
   stream.buffer.push(event);
+  // Reset idle watchdog on any event from this job.
+  const job = jobs.get(jobId);
+  if (job) job.lastEventAt = Date.now();
   for (const sub of stream.subscribers) {
     try { sub(event); } catch { /* ignore broken subscriber */ }
   }
@@ -53,6 +56,11 @@ export function subscribeJob(jobId: string, handler: (event: JobEvent) => void):
   };
 }
 
+export interface JobScope {
+  workflowId?: string | null;
+  conversationId?: string | null;
+}
+
 export interface OrchestratorJob {
   status: 'running' | 'done' | 'error' | 'cancelled';
   progress: string[];
@@ -62,26 +70,70 @@ export interface OrchestratorJob {
   abortController: AbortController;
   startedAt: number;
   message: string;
+  scope: JobScope;
+  lastEventAt: number;
+  watchdog?: ReturnType<typeof setInterval>;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
 
-export function createJob(message: string): { jobId: string; job: OrchestratorJob } {
+// If no event for this long, the job is considered stuck and we publish a
+// terminal error so SSE subscribers stop waiting. Tuned to outlast a typical
+// long LLM generation but catch real hangs (e.g. provider that never returns).
+const IDLE_TIMEOUT_MS = 180_000; // 3 min idle
+const HARD_TIMEOUT_MS = 600_000; // 10 min total
+
+function startWatchdog(jobId: string, job: OrchestratorJob): void {
+  job.watchdog = setInterval(() => {
+    if (job.status !== 'running') {
+      if (job.watchdog) clearInterval(job.watchdog);
+      job.watchdog = undefined;
+      return;
+    }
+    const now = Date.now();
+    const idle = now - job.lastEventAt;
+    const elapsed = now - job.startedAt;
+    if (idle > IDLE_TIMEOUT_MS || elapsed > HARD_TIMEOUT_MS) {
+      const reason = elapsed > HARD_TIMEOUT_MS
+        ? `Job exceeded max duration (${Math.round(HARD_TIMEOUT_MS / 1000)}s)`
+        : `Job idle for ${Math.round(idle / 1000)}s — likely stuck`;
+      console.warn(`[orchestrator] Watchdog terminating job ${jobId}: ${reason}`);
+      job.abortController.abort();
+      job.status = 'error';
+      job.error = reason;
+      job.result = { success: false, error: reason };
+      if (job.watchdog) clearInterval(job.watchdog);
+      job.watchdog = undefined;
+      publishJobEvent(jobId, { type: 'error', message: reason });
+    }
+  }, 15_000);
+}
+
+export function createJob(message: string, scope: JobScope = {}): { jobId: string; job: OrchestratorJob } {
   const jobId = crypto.randomUUID();
+  const now = Date.now();
   const job: OrchestratorJob = {
     status: 'running',
     progress: [],
     toolSteps: [],
     abortController: new AbortController(),
-    startedAt: Date.now(),
+    startedAt: now,
     message: message.slice(0, 100),
+    scope: { workflowId: scope.workflowId ?? null, conversationId: scope.conversationId ?? null },
+    lastEventAt: now,
   };
   jobs.set(jobId, job);
+  startWatchdog(jobId, job);
   return { jobId, job };
 }
 
 export function getJob(jobId: string): OrchestratorJob | null {
   return jobs.get(jobId) ?? null;
+}
+
+export function touchJob(jobId: string): void {
+  const job = jobs.get(jobId);
+  if (job) job.lastEventAt = Date.now();
 }
 
 export function cancelJob(jobId: string): boolean {
@@ -91,9 +143,42 @@ export function cancelJob(jobId: string): boolean {
   job.status = 'cancelled';
   job.error = 'Cancelled by user';
   job.result = { success: false, error: 'Cancelled by user' };
+  if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+  publishJobEvent(jobId, { type: 'error', message: 'Cancelled by user' });
   return true;
 }
 
+function scopeMatches(job: OrchestratorJob, scope: JobScope): boolean {
+  if (scope.workflowId && job.scope.workflowId === scope.workflowId) return true;
+  if (scope.conversationId && job.scope.conversationId === scope.conversationId) return true;
+  return false;
+}
+
+/**
+ * Cancel only running jobs whose scope matches the given workflowId or
+ * conversationId. A new request within the same canvas/conversation
+ * supersedes its own prior in-flight job, but leaves other users' or
+ * other canvases' jobs alone.
+ */
+export function cancelForScope(scope: JobScope, reason: string): number {
+  if (!scope.workflowId && !scope.conversationId) return 0;
+  let cancelled = 0;
+  for (const [id, job] of jobs) {
+    if (job.status !== 'running') continue;
+    if (!scopeMatches(job, scope)) continue;
+    console.log(`[orchestrator] Cancelling job ${id} (scope match): ${reason}`);
+    job.abortController.abort();
+    job.status = 'cancelled';
+    job.error = reason;
+    job.result = { success: false, error: reason };
+    if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+    publishJobEvent(id, { type: 'error', message: reason });
+    cancelled += 1;
+  }
+  return cancelled;
+}
+
+/** Cancel every running job. Used only by the explicit admin DELETE with no jobId. */
 export function cancelAllRunning(reason: string): void {
   for (const [id, job] of jobs) {
     if (job.status === 'running') {
@@ -102,6 +187,8 @@ export function cancelAllRunning(reason: string): void {
       job.status = 'cancelled';
       job.error = reason;
       job.result = { success: false, error: reason };
+      if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+      publishJobEvent(id, { type: 'error', message: reason });
     }
   }
 }
@@ -110,13 +197,7 @@ export function cleanOldJobs(maxAgeMs = 300000): void {
   const now = Date.now();
   for (const [id, job] of jobs) {
     if (job.status !== 'running' && (maxAgeMs === 0 || now - job.startedAt > maxAgeMs)) {
-      jobs.delete(id);
-    }
-    if (job.status === 'running' && now - job.startedAt > 600000) {
-      job.abortController.abort();
-      job.status = 'error';
-      job.error = 'Job timed out (10 min limit)';
-      job.result = { success: false, error: job.error };
+      if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
       jobs.delete(id);
     }
   }

@@ -107,7 +107,61 @@ function detectSemanticGaps(node: WorkflowNodeDef): { field: string; issue: stri
     out.push({ field: 'userPrompt', issue: `${node.type} requires a userPrompt.`, severity: 'error' });
   }
 
+  if (node.type === 'interactive-step') {
+    const mode = cfg.mode;
+    const validModes = ['vnc', 'confirm', 'both'] as const;
+    if (typeof mode !== 'string' || !(validModes as readonly string[]).includes(mode)) {
+      out.push({
+        field: 'mode',
+        issue: `interactive-step mode must be one of "vnc", "confirm", "both" (got ${JSON.stringify(mode)}). For CAPTCHA/login: use "vnc" with profile + url. Without a valid mode the run will pause forever with no VNC session for the human to act on.`,
+        severity: 'error',
+      });
+    } else if (mode === 'vnc' || mode === 'both') {
+      if (!cfg.profile || typeof cfg.profile !== 'string') {
+        out.push({
+          field: 'profile',
+          issue: `interactive-step mode="${mode}" requires a "profile" matching the downstream stealth-scrape profile — otherwise no VNC session is launched and the run stalls with no way for the human to act.`,
+          severity: 'error',
+        });
+      }
+      if (!cfg.url || typeof cfg.url !== 'string') {
+        out.push({
+          field: 'url',
+          issue: `interactive-step mode="${mode}" requires a "url" — the landing/search page the headed browser opens on. Without it the noVNC session shows about:blank.`,
+          severity: 'error',
+        });
+      }
+    }
+  }
+
   return out;
+}
+
+/**
+ * Walk the configSchema's property enums and reject any value not in the
+ * declared enum. configSchema enums were informational until now; a bad
+ * value like `mode: "browse"` on interactive-step would silently slip
+ * through and leave the run paused with no VNC.
+ */
+function detectEnumViolations(
+  config: Record<string, unknown>,
+  def: NodeDefinition | undefined,
+): string[] {
+  const problems: string[] = [];
+  const props = def?.configSchema?.properties as Record<string, { enum?: unknown[] }> | undefined;
+  if (!props) return problems;
+  for (const [key, schema] of Object.entries(props)) {
+    const declaredEnum = schema?.enum;
+    if (!Array.isArray(declaredEnum) || declaredEnum.length === 0) continue;
+    if (!(key in config)) continue;
+    const value = config[key];
+    if (!declaredEnum.includes(value as never)) {
+      problems.push(
+        `Invalid value for "${key}": ${JSON.stringify(value)}. Must be one of: ${declaredEnum.map((v) => JSON.stringify(v)).join(', ')}.`,
+      );
+    }
+  }
+  return problems;
 }
 
 /**
@@ -149,6 +203,13 @@ export function validateNodeConfigPreSubmit(
     for (const msg of detectCodeExecuteIssues(config.code)) {
       errors.push(`code-execute: ${msg}`);
     }
+  }
+
+  // Enum enforcement — configSchema.properties[x].enum declares legal values.
+  // Without this, `interactive-step` with mode="browse" would slip through
+  // and leave runs paused with no VNC session.
+  for (const msg of detectEnumViolations(config, def)) {
+    errors.push(msg);
   }
 
   // Per-operation semantic gaps (errors only — warnings can wait for finalize)

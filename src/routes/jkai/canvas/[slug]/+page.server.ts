@@ -1,5 +1,11 @@
 import type { PageServerLoad } from './$types';
-import { loadCanvas, loadModelCatalogue, listCanvases } from '$lib/canvas/adapter.server';
+import {
+  loadCanvas,
+  loadModelCatalogue,
+  listCanvases,
+  reapExpiredInteractions,
+  ensureCanvasWorkflow,
+} from '$lib/canvas/adapter.server';
 import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 import { db } from '$lib/db';
 import { intelExplorations } from '$lib/db/schema';
@@ -19,6 +25,16 @@ export type {
 } from '$lib/canvas/adapter';
 
 export const load: PageServerLoad = async ({ params }) => {
+  // Reap any zombie `awaiting_human` runs for this canvas BEFORE loading it,
+  // so the loaded snapshot sees the post-reap state (no stale latestRun
+  // pointing at an abandoned interactive step).
+  try {
+    const { workflowId } = await ensureCanvasWorkflow(params.slug);
+    await reapExpiredInteractions(workflowId);
+  } catch (err) {
+    console.error('[canvas] reapExpiredInteractions failed', err);
+  }
+
   const [canvas, modelCatalogue, allCanvases] = await Promise.all([
     loadCanvas(params.slug),
     loadModelCatalogue(),

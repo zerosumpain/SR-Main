@@ -90,91 +90,93 @@ register({
       slug = `${baseSlug}-${attempt}`;
     }
 
-    const [created] = await db
-      .insert(workflows)
-      .values({
-        name: `canvas:${slug}`,
-        description: workflow.description || workflow.name || slug,
-        trigger: { type: 'manual' },
-      })
-      .returning();
-
+    // Atomic: if any insert fails, the whole canvas rolls back. Previously
+    // we created the workflow row then deleted it on error — which cascade-
+    // wiped every row referencing that id. A rolled-back transaction leaves
+    // no row to reference in the first place.
+    let created: { id: string };
     try {
-      // Ensure there is exactly one trigger node. If the generated workflow
-      // emits manual-trigger / cron-trigger / or no trigger, normalise to the
-      // canvas `trigger` node at (20,20).
-      const nodes = workflow.nodes.slice();
-      let triggerNodeId: string | null = null;
-      const legacyTriggerIdx = nodes.findIndex(
-        (n) => n.type === 'trigger' || n.type === 'manual-trigger',
-      );
-      if (legacyTriggerIdx >= 0) {
-        const existing = nodes[legacyTriggerIdx];
-        triggerNodeId = existing.id;
-        nodes[legacyTriggerIdx] = {
-          ...existing,
-          type: 'trigger',
-          label: existing.label || 'Trigger',
-          config: { kind: 'manual', ...(existing.config || {}) },
-          position: existing.position || { x: 20, y: 20 },
-        };
-      } else {
-        const newId = crypto.randomUUID();
-        triggerNodeId = newId;
-        nodes.unshift({
-          id: newId,
-          type: 'trigger',
-          label: 'Trigger',
-          config: { kind: 'manual' },
-          position: { x: 20, y: 20 },
-        });
-      }
+      created = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(workflows)
+          .values({
+            name: `canvas:${slug}`,
+            description: workflow.description || workflow.name || slug,
+            trigger: { type: 'manual' },
+          })
+          .returning();
 
-      await db.insert(workflowNodes).values(
-        nodes.map((n) => ({
-          id: n.id,
-          workflowId: created.id,
-          type: n.type,
-          position: n.position,
-          config: n.config,
-          label: n.label,
-        })),
-      );
-
-      const edges = workflow.edges.slice();
-
-      // If the trigger has no outgoing edges in the generated spec, wire it
-      // to whatever root node(s) were supposed to start the run.
-      const triggerHasOutgoing = edges.some((e) => e.sourceNodeId === triggerNodeId);
-      if (!triggerHasOutgoing) {
-        const roots = nodes.filter(
-          (n) => n.id !== triggerNodeId && !edges.some((e) => e.targetNodeId === n.id),
+        const nodes = workflow.nodes.slice();
+        let triggerNodeId: string | null = null;
+        const legacyTriggerIdx = nodes.findIndex(
+          (n) => n.type === 'trigger' || n.type === 'manual-trigger',
         );
-        for (const root of roots.slice(0, 1)) {
-          edges.push({
-            id: crypto.randomUUID(),
-            sourceNodeId: triggerNodeId,
-            targetNodeId: root.id,
-            sourceHandle: null,
-            targetHandle: null,
+        if (legacyTriggerIdx >= 0) {
+          const existing = nodes[legacyTriggerIdx];
+          triggerNodeId = existing.id;
+          nodes[legacyTriggerIdx] = {
+            ...existing,
+            type: 'trigger',
+            label: existing.label || 'Trigger',
+            config: { kind: 'manual', ...(existing.config || {}) },
+            position: existing.position || { x: 20, y: 20 },
+          };
+        } else {
+          const newId = crypto.randomUUID();
+          triggerNodeId = newId;
+          nodes.unshift({
+            id: newId,
+            type: 'trigger',
+            label: 'Trigger',
+            config: { kind: 'manual' },
+            position: { x: 20, y: 20 },
           });
         }
-      }
 
-      if (edges.length > 0) {
-        await db.insert(workflowEdges).values(
-          edges.map((e) => ({
-            id: e.id,
-            workflowId: created.id,
-            sourceNodeId: e.sourceNodeId,
-            targetNodeId: e.targetNodeId,
-            sourceHandle: e.sourceHandle || null,
-            targetHandle: e.targetHandle || null,
+        await tx.insert(workflowNodes).values(
+          nodes.map((n) => ({
+            id: n.id,
+            workflowId: row.id,
+            type: n.type,
+            position: n.position,
+            config: n.config,
+            label: n.label,
           })),
         );
-      }
+
+        const edges = workflow.edges.slice();
+        const triggerHasOutgoing = edges.some((e) => e.sourceNodeId === triggerNodeId);
+        if (!triggerHasOutgoing) {
+          const roots = nodes.filter(
+            (n) => n.id !== triggerNodeId && !edges.some((e) => e.targetNodeId === n.id),
+          );
+          for (const root of roots.slice(0, 1)) {
+            edges.push({
+              id: crypto.randomUUID(),
+              sourceNodeId: triggerNodeId,
+              targetNodeId: root.id,
+              sourceHandle: null,
+              targetHandle: null,
+            });
+          }
+        }
+
+        if (edges.length > 0) {
+          await tx.insert(workflowEdges).values(
+            edges.map((e) => ({
+              id: e.id,
+              workflowId: row.id,
+              sourceNodeId: e.sourceNodeId,
+              targetNodeId: e.targetNodeId,
+              sourceHandle: e.sourceHandle || null,
+              targetHandle: e.targetHandle || null,
+            })),
+          );
+        }
+
+        return { id: row.id };
+      });
     } catch (dbErr: unknown) {
-      await db.delete(workflows).where(eq(workflows.id, created.id));
       const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
       return { success: false, error: `Failed to save canvas: ${dbMsg}` };
     }
@@ -208,18 +210,36 @@ register({
 
 register({
   name: 'workflow_delete',
-  description: 'Delete a workflow by ID. Use when the user asks to remove or clean up a workflow.',
+  description:
+    'Permanently delete a workflow by ID. This CASCADES — all nodes, edges, run history, chat messages and audit log for the canvas are wiped and CANNOT be recovered. ' +
+    'Only call this when the user has explicitly asked to delete that specific workflow by name or id. ' +
+    'You MUST pass confirmName matching the workflow\'s exact current name so the user cannot be wiped out by a misinterpreted request. ' +
+    'If you are on a canvas and the user asks to "start over" or "clear", DO NOT delete — use workflow_remove_node / workflow_remove_edge instead.',
   parameters: {
     type: 'object',
-    properties: { id: { type: 'string', description: 'Workflow ID to delete' } },
-    required: ['id'],
+    properties: {
+      id: { type: 'string', description: 'Workflow ID to delete' },
+      confirmName: {
+        type: 'string',
+        description: 'Must exactly match the workflow\'s current `name` (e.g. "canvas:scraptest"). Safety check — call workflow_inspect first to read the name.',
+      },
+    },
+    required: ['id', 'confirmName'],
   },
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const [existing] = await db.select().from(workflows).where(eq(workflows.id, args.id as string)).limit(1);
+    const id = args.id as string;
+    const confirmName = args.confirmName as string;
+    const [existing] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
     if (!existing) return { success: false, error: 'Workflow not found' };
-    await db.delete(workflows).where(eq(workflows.id, args.id as string));
+    if (existing.name !== confirmName) {
+      return {
+        success: false,
+        error: `Refusing to delete: confirmName "${confirmName}" does not match workflow name "${existing.name}". Call workflow_inspect to read the exact name, confirm with the user, and retry.`,
+      };
+    }
+    await db.delete(workflows).where(eq(workflows.id, id));
     return { success: true, data: { deleted: true, name: existing.name } };
   },
 });

@@ -11,7 +11,17 @@ export const interactiveStepExecutor: NodeExecutor = {
   type: 'interactive-step',
 
   async execute(input, config, context): Promise<NodeResult> {
-    const mode = (config.mode as Mode) || 'vnc';
+    // Reject unknown modes up-front: a typo like "browse" used to slip
+    // through, skip the VNC branch, and then pause the run with an
+    // interaction record that had no session to connect to — a zombie.
+    const rawMode = config.mode;
+    const validModes: Mode[] = ['vnc', 'confirm', 'both'];
+    if (typeof rawMode !== 'string' || !(validModes as string[]).includes(rawMode)) {
+      throw new Error(
+        `interactive-step: mode must be one of ${validModes.join(', ')} (got ${JSON.stringify(rawMode)}). For CAPTCHA/login use mode="vnc" with profile + url.`,
+      );
+    }
+    const mode = rawMode as Mode;
     const prompt = (config.prompt as string) || 'Please complete the required action';
     const timeoutMinutes = (config.timeoutMinutes as number) || 60;
 
@@ -22,7 +32,17 @@ export const interactiveStepExecutor: NodeExecutor = {
       const profile = (config.profile as string) || '';
       if (!profile) throw new Error('interactive-step: profile is required for vnc / both mode');
       resolvedUrl = interpolateTemplateStrict((config.url as string) || '', input as Record<string, unknown>).result;
-      const session = await startInteractiveSession(profile, resolvedUrl || 'about:blank');
+      if (!resolvedUrl) {
+        throw new Error(
+          `interactive-step: url is required for mode="${mode}". Without a url the headed browser opens on about:blank and the human has no CAPTCHA to solve.`,
+        );
+      }
+      const session = await startInteractiveSession(profile, resolvedUrl);
+      if (!session?.sessionId) {
+        throw new Error(
+          `interactive-step: startInteractiveSession returned no sessionId for profile=${profile}. Refusing to pause without a VNC session the human can connect to.`,
+        );
+      }
       vncSessionId = session.sessionId;
     }
 
