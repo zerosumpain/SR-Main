@@ -1118,3 +1118,26 @@ export const gmailHistoryCursors = pgTable('gmail_history_cursors', {
 export type GmailAccount = typeof gmailAccounts.$inferSelect;
 export type GmailWatch = typeof gmailWatches.$inferSelect;
 export type GmailHistoryCursor = typeof gmailHistoryCursors.$inferSelect;
+
+// ---- Workflow interactions (human-in-the-loop) ----
+// A single pending or resolved interaction request, emitted by the engine
+// when a workflow reaches an `interactive-step` node. The workflow run's
+// status becomes 'awaiting_human' until this row's resolvedAt is set.
+
+export const workflowInteractions = pgTable('workflow_interactions', {
+  id: serial('id').primaryKey(),
+  runId: integer('run_id').notNull(),           // references workflow_runs.id
+  nodeId: text('node_id').notNull(),            // the workflow_nodes.node_id (string, per convention)
+  mode: text('mode').notNull(),                 // 'vnc' | 'confirm' | 'both'
+  prompt: text('prompt').notNull().default(''), // instruction shown to the human
+  configSnapshot: jsonb('config_snapshot').notNull(),  // full node config as seen at pause time (fields, profile, url, etc.)
+  vncSessionId: text('vnc_session_id'),         // populated when mode includes 'vnc'; references the in-memory session
+  openedAt: timestamp('opened_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  resolvedAt: timestamp('resolved_at'),
+  resolvedBy: text('resolved_by'),              // user email from session at resolve time
+  formValues: jsonb('form_values'),             // populated on resolve (for 'confirm' / 'both' modes)
+  cancelled: boolean('cancelled').notNull().default(false),
+});
+
+export type WorkflowInteraction = typeof workflowInteractions.$inferSelect;
