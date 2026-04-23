@@ -226,6 +226,13 @@
     return data.canvas.messagesByChat[chatNodeId] ?? [];
   }
 
+  function statusDotColour(s: string | null | undefined): 'red' | 'amber' | 'green' | null {
+    if (!s || s === 'idle' || s === 'pending') return null;
+    if (s === 'failed') return 'red';
+    if (s === 'running' || s === 'completed_with_errors' || s === 'partial' || s === 'warning') return 'amber';
+    return 'green';
+  }
+
   function scrollChatToBottom(chatNodeId: string) {
     const el = chatBodyEls[chatNodeId];
     if (!el) return;
@@ -2616,17 +2623,11 @@
             <!-- Last-run status square. Green = completed OK, amber =
                  partial / warnings / running, red = failed. Absent when
                  the node has never run (status === 'idle' or undefined). -->
-            {@const runStatus = (liveStatus[n.id] ?? n.status) as string | undefined}
-            {#if runStatus && runStatus !== 'idle' && runStatus !== 'pending'}
-              {@const colour = runStatus === 'failed'
-                ? 'red'
-                : runStatus === 'running' || runStatus === 'completed_with_errors' || runStatus === 'partial' || runStatus === 'warning'
-                  ? 'amber'
-                  : 'green'}
+            {#if statusDotColour(liveStatus[n.id] ?? n.status)}
               <div
-                class="wf-node-status-dot wf-node-status-{colour}"
-                title={`Last run: ${runStatus}`}
-                aria-label={`status ${runStatus}`}
+                class="wf-node-status-dot wf-node-status-{statusDotColour(liveStatus[n.id] ?? n.status)}"
+                title={`Last run: ${liveStatus[n.id] ?? n.status}`}
+                aria-label={`status ${liveStatus[n.id] ?? n.status}`}
               ></div>
             {/if}
             {#if n.kind === 'trigger'}
@@ -2804,9 +2805,8 @@
             <div class="nm-hdr">
               <div class="nm-hdr-row">
                 <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
-                {@const def = byNodeType(menuNode.type)}
-                <span class="nm-hdr-type" title={def?.description ?? ''}>
-                  {def?.label ?? menuNode.type}
+                <span class="nm-hdr-type" title={byNodeType(menuNode.type)?.description ?? ''}>
+                  {byNodeType(menuNode.type)?.label ?? menuNode.type}
                 </span>
                 <span class="nm-hdr-typecode">{menuNode.type}</span>
                 <span class="nm-hdr-id">#{menuNode.id.slice(0, 8)}</span>
