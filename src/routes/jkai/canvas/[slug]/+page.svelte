@@ -3684,7 +3684,7 @@
               {/if}
 
               <!-- Schema-driven config panel for scraper / gmail / interactive-step nodes -->
-              {#if ['stealth-scrape', 'stealth-scrape-llm', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'].includes(menuNode.type)}
+              {#if ['stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'].includes(menuNode.type)}
                 {@const Panel = getPanel(menuNode.type)}
                 <div class="menu-config-section">
                   <Panel

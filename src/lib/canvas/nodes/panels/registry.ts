@@ -2,6 +2,7 @@ import type { Component } from 'svelte';
 import StealthScrapePanel from './StealthScrapePanel.svelte';
 import StealthScrapeLlmPanel from './StealthScrapeLlmPanel.svelte';
 import InteractiveStepPanel from './InteractiveStepPanel.svelte';
+import SiteMapperPanel from './SiteMapperPanel.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 
 export type PanelProps = {
@@ -13,6 +14,7 @@ const panels: Record<string, Component<PanelProps>> = {
   'stealth-scrape': StealthScrapePanel,
   'stealth-scrape-llm': StealthScrapeLlmPanel,
   'interactive-step': InteractiveStepPanel,
+  'site-mapper': SiteMapperPanel,
 };
 
 export function getPanel(type: string): Component<PanelProps> {
