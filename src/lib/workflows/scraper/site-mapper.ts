@@ -171,15 +171,33 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
       }
     }
 
-    if (!finalPlaybook) {
-      throw new Error(
-        giveUpReason
-          ? `Site-mapper gave up: ${giveUpReason}`
-          : `Site-mapper hit ${MAX_STEPS} turns without finalizing.`,
-      );
-    }
   } finally {
     await agent.close();
+  }
+
+  // If the LLM didn't finalize, return a structured failure result WITH the
+  // transcript instead of throwing — the transcript is the only way to
+  // diagnose why the agent didn't reach the results page, and throwing
+  // would drop it on the floor (node_executions.output_data stays null on
+  // thrown executions).
+  if (!finalPlaybook) {
+    return {
+      domain,
+      playbook: {
+        version: 2,
+        generatedAt: new Date().toISOString(),
+        goal: opts.goal,
+        steps: recordedSteps,
+        extract: [],
+        acceptance: { minItems: 1, sampleField: 'items' },
+      },
+      validated: false,
+      itemCount: 0,
+      transcript,
+      error: giveUpReason
+        ? `LLM gave up: ${giveUpReason}`
+        : `LLM ran ${MAX_STEPS} turns without finalizing — see transcript below for each turn's action.`,
+    };
   }
 
   // Validate via a fresh replay through runPlaybook (v2 path).

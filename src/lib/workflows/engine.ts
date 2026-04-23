@@ -244,7 +244,15 @@ export class WorkflowEngine {
             if (err instanceof PauseForHumanSignal) throw err;
 
             const message = err instanceof Error ? err.message : String(err);
-            const selfHealing = options?.selfHealing !== false;
+            // Per-type opt-out: LLM-agent node types (site-mapper, llm-agent)
+            // never benefit from the healing loop because their failure mode
+            // is "LLM was confused", and healing's response is to ask another
+            // LLM call to diagnose — same dysfunction, just slower. List of
+            // types that skip healing entirely, regardless of the caller's
+            // selfHealing flag.
+            const HEALING_EXEMPT_TYPES = new Set(['site-mapper']);
+            const selfHealing =
+              options?.selfHealing !== false && !HEALING_EXEMPT_TYPES.has(nodeDef.type);
             console.log(`[healing] Node ${nodeId} (${nodeDef.type}) failed: ${message.slice(0, 100)}`);
 
             if (!selfHealing) {

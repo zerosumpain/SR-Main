@@ -41,6 +41,9 @@ export const siteMapperExecutor: NodeExecutor = {
         validated: result.validated,
         itemCount: result.itemCount,
         firstItemSample: result.firstItemSample,
+        // transcript is the per-turn observation + LLM action history —
+        // crucial when the agent didn't reach the target. Capped below.
+        transcript: result.transcript.slice(-20),
         error: result.error,
       },
       metadata: { _selectedHandle: 'output' },
