@@ -1,8 +1,20 @@
 import { readFileSync } from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { join } from 'path';
 import { ensureSandboxRunning, execInSandbox, writeFileInSandbox } from '$lib/jkai/sandbox';
 import { normalizeProfileName } from './profiles';
+
+function assertRunningOnHomeserv(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (process.env.SCRAPER_ALLOW_NON_HOMESERV) return;
+  const host = os.hostname();
+  if (host !== 'homeserv') {
+    throw new Error(
+      `Interactive sessions require homeserv (no jkai-sandbox or VNC port range on host '${host}').`,
+    );
+  }
+}
 
 const PORT_RANGE_START = 7900;
 const PORT_RANGE_END = 7909;     // inclusive — matches docker run -p 7900-7909:7900-7909
@@ -39,6 +51,7 @@ function runnerSource(relPath: string): string {
 }
 
 export async function startInteractiveSession(profile: string, url: string): Promise<InteractiveStartResult> {
+  assertRunningOnHomeserv();
   await ensureSandboxRunning();
 
   // Find a free slot (port + display).

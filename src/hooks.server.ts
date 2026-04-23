@@ -98,6 +98,24 @@ const { handle: authHandle } = SvelteKitAuth({
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
 
+  // Dev-only bypass for local-network admin access. The dev server runs on
+  // homeserv and is reachable only on the LAN; Google's OAuth rules refuse
+  // private-network redirect URIs so standard sign-in isn't available. Gate
+  // strictly on dev build AND a private RFC1918/loopback client.
+  if (import.meta.env.DEV) {
+    let clientAddr = '';
+    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
+    const isPrivate =
+      clientAddr === '127.0.0.1' ||
+      clientAddr === '::1' ||
+      clientAddr.startsWith('10.') ||
+      clientAddr.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(clientAddr);
+    if (isPrivate) {
+      return resolve(event);
+    }
+  }
+
   if (isPublicPath(pathname)) {
     return resolve(event);
   }
