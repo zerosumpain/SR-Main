@@ -8,7 +8,11 @@ export const dataStoreDef: NodeDefinition = {
   configSchema: {
     type: 'object',
     properties: {
-      operation: { type: 'string', description: "'get' or 'set'" },
+      operation: {
+        type: 'string',
+        enum: ['get', 'set'],
+        description: "'get' reads a stored value; 'set' writes one. NOT 'read' / 'write' — those are rejected at save time.",
+      },
       key: { type: 'string', description: 'Key name. Supports {{input.field}} templates.' },
       valuePath: {
         type: 'string',

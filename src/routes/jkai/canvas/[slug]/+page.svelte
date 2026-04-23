@@ -2613,6 +2613,22 @@
                 title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
               ></div>
             {/if}
+            <!-- Last-run status square. Green = completed OK, amber =
+                 partial / warnings / running, red = failed. Absent when
+                 the node has never run (status === 'idle' or undefined). -->
+            {@const runStatus = (liveStatus[n.id] ?? n.status) as string | undefined}
+            {#if runStatus && runStatus !== 'idle' && runStatus !== 'pending'}
+              {@const colour = runStatus === 'failed'
+                ? 'red'
+                : runStatus === 'running' || runStatus === 'completed_with_errors' || runStatus === 'partial' || runStatus === 'warning'
+                  ? 'amber'
+                  : 'green'}
+              <div
+                class="wf-node-status-dot wf-node-status-{colour}"
+                title={`Last run: ${runStatus}`}
+                aria-label={`status ${runStatus}`}
+              ></div>
+            {/if}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
               <div class="trig-stack">
@@ -2788,8 +2804,12 @@
             <div class="nm-hdr">
               <div class="nm-hdr-row">
                 <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
-                <span class="nm-hdr-kind">{menuNode.kind.toUpperCase()} NODE</span>
-                <span class="nm-hdr-id">#{menuNode.id}</span>
+                {@const def = byNodeType(menuNode.type)}
+                <span class="nm-hdr-type" title={def?.description ?? ''}>
+                  {def?.label ?? menuNode.type}
+                </span>
+                <span class="nm-hdr-typecode">{menuNode.type}</span>
+                <span class="nm-hdr-id">#{menuNode.id.slice(0, 8)}</span>
                 {#if menuNode.status === 'running'}
                   <span class="chip chip-accent chip-pill chip-live ms-auto">RUNNING</span>
                 {:else if menuNode.status === 'failed'}
@@ -3232,21 +3252,40 @@
                     {/if}
                   </div>
                 </section>
-                {#if menuNode.error}
-                  <section class="nm-sec nm-sec-error">
-                    <div class="nm-sec-hd"><span class="sr-label-tight error">ERROR</span></div>
+                <!-- Last run: always shown so the user gets a clear signal
+                     whether the node ran, completed, failed, or never executed
+                     — even when outputData is undefined (e.g. node that doesn't
+                     produce a payload). -->
+                <section class="nm-sec nm-sec-lastrun">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">LAST RUN</span>
+                    {#if menuNode.status === 'failed'}
+                      <span class="chip chip-pill chip-failed">FAILED</span>
+                    {:else if menuNode.status === 'running'}
+                      <span class="chip chip-pill chip-accent chip-live">RUNNING</span>
+                    {:else if menuNode.status === 'ok' || menuNode.status === 'completed'}
+                      <span class="chip chip-pill chip-ok">OK</span>
+                    {:else}
+                      <span class="chip chip-pill">NEVER RUN</span>
+                    {/if}
+                  </div>
+                  {#if menuNode.error}
                     <div class="nm-field nm-field-read">
+                      <div class="sr-label-tight error" style="margin-bottom:4px;">ERROR</div>
                       <pre class="error-text">{menuNode.error}</pre>
                     </div>
-                  </section>
-                {:else if menuNode.outputData !== undefined}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">OUTPUT DATA</span>
+                  {/if}
+                  {#if menuNode.outputData !== undefined}
+                    <div class="nm-field nm-field-read">
+                      <div class="sr-label-tight" style="margin-bottom:4px;">OUTPUT</div>
+                      <pre>{pretty(menuNode.outputData)}</pre>
                     </div>
-                    <div class="nm-field nm-field-read"><pre>{pretty(menuNode.outputData)}</pre></div>
-                  </section>
-                {/if}
+                  {:else if !menuNode.error}
+                    <div class="nm-field nm-field-read">
+                      <pre class="ghost">// no output produced by the last run{menuNode.status === 'ok' || menuNode.status === 'completed' ? ' (node completed without returning a payload)' : ''}</pre>
+                    </div>
+                  {/if}
+                </section>
               {:else if menuNode.kind === 'input'}
                 <section class="nm-sec">
                   <div class="nm-sec-hd"><span class="sr-label-tight">SOURCE</span></div>
@@ -4844,6 +4883,23 @@
     letter-spacing: 0.14em;
     color: var(--text-ghost);
   }
+  .nm-hdr-type {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .nm-hdr-typecode {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-ghost);
+    background: var(--bg-section);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+  }
   .nm-hdr-id {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -4863,6 +4919,16 @@
     background: #c44;
     color: var(--bg);
     border-color: #c44;
+  }
+  .chip-ok {
+    background: rgba(58, 138, 86, 0.15);
+    color: #3a8a56;
+    border-color: rgba(58, 138, 86, 0.45);
+  }
+  .nm-sec-lastrun .nm-sec-hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .nm-ctx {
@@ -5052,6 +5118,29 @@
     background: rgba(58, 138, 86, 0.12);
     padding: 1px 6px;
     border-radius: 3px;
+  }
+  /* Last-run status square in the top-right corner of every wf-node */
+  .wf-node-status-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .wf-node-status-green {
+    background: #3a8a56;
+    box-shadow: 0 0 4px rgba(58, 138, 86, 0.55);
+  }
+  .wf-node-status-amber {
+    background: #d97706;
+    box-shadow: 0 0 4px rgba(217, 119, 6, 0.55);
+  }
+  .wf-node-status-red {
+    background: #c44;
+    box-shadow: 0 0 4px rgba(204, 68, 68, 0.55);
   }
   .nm-field-read {
     background: var(--bg-section);

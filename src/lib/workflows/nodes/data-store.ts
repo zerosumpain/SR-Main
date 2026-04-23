@@ -48,7 +48,18 @@ export const dataStoreExecutor: NodeExecutor = {
     const workflowId = context.workflowId;
 
     if (!workflowId) {
-      return { output: { error: 'workflowId not available in context' } };
+      throw new Error('data-store: workflowId not available in context');
+    }
+    if (!key) {
+      throw new Error('data-store: key is required (supports {{input.field}} templates)');
+    }
+    if (operation !== 'get' && operation !== 'set') {
+      // Hard-fail so the run status = failed and the node's error column is
+      // populated. Previously silently returned { error: ... } which looked
+      // like "no output" to the user.
+      throw new Error(
+        `data-store: operation must be "get" or "set" (got ${JSON.stringify(operation)}). "read" and "write" are common LLM hallucinations — use "get"/"set".`,
+      );
     }
 
     if (operation === 'get') {

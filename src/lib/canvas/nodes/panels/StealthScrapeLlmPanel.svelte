@@ -11,7 +11,10 @@
       : (config.schema as string) ?? ''
   );
   let schemaError = $state<string | null>(null);
-  let model = $state((config.model as string) ?? 'openai/gpt-4o-mini');
+  // Empty → node's executor resolves the admin default at runtime.
+  // DO NOT hardcode a specific provider model here; that's how CS Jobs
+  // canvas ended up with everything pinned to gpt-4o-mini.
+  let model = $state((config.model as string) ?? '');
   let instructions = $state((config.instructions as string) ?? '');
 
   let schemaParsed = $state<Record<string, unknown> | null>(null);
@@ -54,7 +57,7 @@
     if (nextSourcePath !== sourcePath) sourcePath = nextSourcePath;
     const nextItemTextPath = (config.itemTextPath as string) ?? '';
     if (nextItemTextPath !== itemTextPath) itemTextPath = nextItemTextPath;
-    const nextModel = (config.model as string) ?? 'openai/gpt-4o-mini';
+    const nextModel = (config.model as string) ?? '';
     if (nextModel !== model) model = nextModel;
     const nextInstructions = (config.instructions as string) ?? '';
     if (nextInstructions !== instructions) instructions = nextInstructions;
