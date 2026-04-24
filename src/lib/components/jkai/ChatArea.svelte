@@ -6,6 +6,7 @@
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
+  import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import type { PlanPayload } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
@@ -60,6 +61,24 @@
     };
   }
 
+  interface SubAgentStep {
+    toolCallId: string;
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+    status: 'running' | 'done' | 'error';
+    summary?: string;
+    expanded?: boolean;
+  }
+  interface SubAgentState {
+    agentId: string;
+    task: string;
+    status: 'running' | 'done' | 'error';
+    summary?: string;
+    liveTokens: string;
+    toolSteps: SubAgentStep[];
+  }
+
   interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -106,6 +125,7 @@
   let currentJobId = $state<string | null>(null);
   let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
+  let subAgents = $state<Record<string, SubAgentState>>({});
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
   let jobEventSource: EventSource | null = null;
@@ -387,6 +407,13 @@
     });
   }
 
+  function toggleSubAgentStep(agentId: string, toolCallId: string) {
+    const a = subAgents[agentId];
+    if (!a) return;
+    const step = a.toolSteps.find((s) => s.toolCallId === toolCallId);
+    if (step) step.expanded = !step.expanded;
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading || !conversationId) return;
@@ -395,6 +422,7 @@
     loading = true;
     heartbeat = null;
     pendingPlan = null;
+    subAgents = {};
 
     const attachmentIds = pendingAttachments
       .filter(a => !a.uploading && !a.error && !a.incompatible)
@@ -575,6 +603,57 @@
             return;
           }
 
+          if (data.type === 'subagent_start') {
+            subAgents[data.agentId] = {
+              agentId: data.agentId,
+              task: data.task,
+              status: 'running',
+              liveTokens: '',
+              toolSteps: [],
+            };
+            heartbeat = null;
+            return;
+          }
+
+          if (data.type === 'subagent_event') {
+            const a = subAgents[data.agentId];
+            if (!a) return;
+            const ev = data.event;
+            if (ev.type === 'token') {
+              a.liveTokens += ev.delta;
+            } else if (ev.type === 'tool_start') {
+              a.toolSteps.push({
+                toolCallId: ev.toolCallId ?? crypto.randomUUID(),
+                tool: ev.tool,
+                args: ev.args ?? {},
+                status: 'running',
+              });
+            } else if (ev.type === 'tool_result') {
+              const callId = ev.toolCallId;
+              let idx = -1;
+              if (callId) idx = a.toolSteps.findIndex((s) => s.toolCallId === callId);
+              if (idx < 0) {
+                for (let i = a.toolSteps.length - 1; i >= 0; i--) {
+                  if (a.toolSteps[i].tool === ev.tool && a.toolSteps[i].status === 'running') { idx = i; break; }
+                }
+              }
+              if (idx >= 0) {
+                a.toolSteps[idx] = { ...a.toolSteps[idx], status: ev.status, result: ev.result, summary: ev.summary };
+              }
+            }
+            return;
+          }
+
+          if (data.type === 'subagent_done') {
+            const a = subAgents[data.agentId];
+            if (a) {
+              a.status = 'done';
+              a.summary = data.summary;
+              a.liveTokens = '';
+            }
+            return;
+          }
+
           if (data.type === 'done') {
             heartbeat = null;
             pendingPlan = null;
@@ -750,6 +829,9 @@
                     <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
                   </div>
                 {/if}
+                {#each Object.values(subAgents) as agent (agent.agentId)}
+                  <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
+                {/each}
                 <ul class="step-cards">
                   {#each msg.toolSteps as step, stepIndex}
                     {#if step.tool === 'status_update'}
@@ -823,6 +905,9 @@
                   <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
                 </div>
               {/if}
+              {#each Object.values(subAgents) as agent (agent.agentId)}
+                <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
+              {/each}
               <div class="mb-3 flex items-center gap-1 px-1 py-2">
                 <span class="typing-dot" style="background: var(--text-ghost);"></span>
                 <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.15s;"></span>
