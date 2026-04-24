@@ -101,6 +101,7 @@
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
+  let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
   let jobEventSource: EventSource | null = null;
@@ -396,6 +397,7 @@
 
     input = '';
     loading = true;
+    heartbeat = null;
 
     const attachmentIds = pendingAttachments
       .filter(a => !a.uploading && !a.error && !a.incompatible)
@@ -490,6 +492,7 @@
           if (data.type === 'connected') return;
 
           if (data.type === 'token') {
+            heartbeat = null;
             accumulatedContent += data.delta;
             messages = messages.map((m) =>
               m.id === progressId ? { ...m, content: accumulatedContent } : m,
@@ -499,6 +502,7 @@
           }
 
           if (data.type === 'tool_start') {
+            heartbeat = null;
             const newStep: ToolStep = {
               tool: data.tool,
               args: data.args || {},
@@ -513,6 +517,7 @@
           }
 
           if (data.type === 'tool_result') {
+            heartbeat = null;
             messages = messages.map((m) => {
               if (m.id !== progressId || !m.toolSteps) return m;
               // Find the most recent running step for this tool name and finalise it
@@ -532,6 +537,7 @@
           }
 
           if (data.type === 'status') {
+            heartbeat = null;
             // Mid-task working note — same UX as `/api/jkai/events` status_update
             const newMsg: Message = {
               id: crypto.randomUUID(),
@@ -553,7 +559,16 @@
             return;
           }
 
+          if (data.type === 'heartbeat') {
+            heartbeat = {
+              summary: data.summary,
+              elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
+            };
+            return;
+          }
+
           if (data.type === 'done') {
+            heartbeat = null;
             const result = (data.result || {}) as {
               message?: string;
               error?: string;
@@ -583,6 +598,7 @@
           }
 
           if (data.type === 'error') {
+            heartbeat = null;
             messages = messages.map((m) =>
               m.id === progressId
                 ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -608,6 +624,7 @@
 
     loading = false;
     currentJobId = null;
+    heartbeat = null;
     scrollToBottom();
   }
 
@@ -707,6 +724,13 @@
                     Cancel
                   </button>
                 </div>
+                {#if heartbeat}
+                  <div class="heartbeat-line" role="status" aria-live="polite">
+                    <span class="hb-dot"></span>
+                    <span class="hb-summary">{heartbeat.summary}</span>
+                    <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                  </div>
+                {/if}
                 <div class="px-3 py-2 space-y-1">
                   {#each msg.toolSteps as step, stepIndex}
                     {#if step.tool === 'status_update'}
@@ -754,6 +778,13 @@
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
+              {#if heartbeat}
+                <div class="heartbeat-line mb-3" role="status" aria-live="polite">
+                  <span class="hb-dot"></span>
+                  <span class="hb-summary">{heartbeat.summary}</span>
+                  <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                </div>
+              {/if}
               <div class="mb-3 flex items-center gap-1 px-1 py-2">
                 <span class="typing-dot" style="background: var(--text-ghost);"></span>
                 <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.15s;"></span>
@@ -966,5 +997,30 @@
   @keyframes typing-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
     30% { transform: translateY(-4px); opacity: 0.7; }
+  }
+
+  .heartbeat-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .heartbeat-line .hb-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: hb-pulse 1.4s ease-in-out infinite;
+  }
+  .heartbeat-line .hb-summary { flex: 1; }
+  .heartbeat-line .hb-elapsed { opacity: 0.7; font-variant-numeric: tabular-nums; }
+  @keyframes hb-pulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1.1);  }
   }
 </style>
