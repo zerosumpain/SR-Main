@@ -28,6 +28,7 @@
 
 import { startAgent, type AgentHarness, type AgentObservation } from './agent-harness';
 import {
+  decomposeSearchQuery,
   extractStepVarNames,
   runPlaybook,
   savePlaybook,
@@ -260,7 +261,16 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
 
     // ============ EXECUTE PHASE ============
     emit({ t: 'map.execute.start', steps: finalPlaybook.steps?.length ?? 0 });
-    const liveVars = decomposedForExecution(opts.searchQuery, finalPlaybook.requiredVars ?? []);
+    // Decompose the searchQuery into the declared requiredVars via the same
+    // LLM path the v2 playbook runner uses on subsequent runs. That gives us
+    // { keyword: "Analysts", location: "Darlington", distance: "20", ... }
+    // instead of stuffing the whole sentence into `keyword`.
+    const liveVars = await resolveExecutionVars(
+      opts.searchQuery,
+      finalPlaybook.requiredVars ?? [],
+      opts.model,
+    );
+    emit({ t: 'map.execute.vars', vars: Object.keys(liveVars) });
     try {
       await executePlaybookSteps(agent, finalPlaybook.steps ?? [], liveVars);
       const r = await agent.extract(finalPlaybook.extract as unknown as Array<Record<string, unknown>>);
@@ -500,43 +510,25 @@ function sub(value: string, vars: Record<string, string>): string {
   );
 }
 
-/** For the validation / first-run execute we need real values to fill in the
- *  form, not `{{keyword}}` literals. Since the executor runs inline with the
- *  user's searchQuery, decompose it once here. */
-function decomposedForExecution(
+/** Resolve real slot values for the first-run execute. Delegates to the
+ *  same `decomposeSearchQuery` the v2 playbook runner uses on later runs —
+ *  one shared LLM call that turns "Analysts near Darlington within 20 miles"
+ *  into { keyword: "Analysts", location: "Darlington", distance: "20" }. */
+async function resolveExecutionVars(
   searchQuery: string | undefined,
   requiredVars: PlaybookRequiredVar[],
-): Record<string, string> {
-  if (!searchQuery) return {};
-  // Lazy simple fallback: assign the whole searchQuery to `keyword` only.
-  // For the first-run validation this is fine because the planner will have
-  // structured the playbook so `keyword` carries the title; other vars
-  // (location/distance/salary) would need the full decomposition LLM call,
-  // which the v2 playbook runner already does during a real replay. Here
-  // (in-session first-run) we just let the query act as the keyword.
-  const out: Record<string, string> = { keyword: searchQuery };
-  // If the planner declared any other var AND the user's query contains a
-  // plausible literal for it (exact word match on hint keywords), grab it.
-  const lower = searchQuery.toLowerCase();
-  for (const v of requiredVars) {
-    if (v.name === 'keyword') continue;
-    const hintTokens = v.hint.toLowerCase().match(/[a-z]{3,}/g) ?? [];
-    // Heuristic: if the hint mentions "location" and the query mentions "in <word>",
-    // pull that word; similar for "distance" and numbers; for "salary" and
-    // numeric over 10k. Kept intentionally narrow — real decomposition lives
-    // in playbook.decomposeSearchQuery, which the v2 runner uses on later runs.
-    if (hintTokens.some((t) => ['location', 'city', 'town', 'postcode'].includes(t))) {
-      const m = searchQuery.match(/\bin\s+([A-Za-z][A-Za-z' -]{1,40})/i);
-      if (m) out[v.name] = m[1].trim();
-    } else if (hintTokens.some((t) => ['distance', 'radius', 'miles'].includes(t))) {
-      const m = lower.match(/(\d{1,3})\s*mi(les)?/);
-      if (m) out[v.name] = m[1];
-    } else if (hintTokens.some((t) => ['salary', 'pay', 'wage'].includes(t))) {
-      const m = lower.match(/(?:over|above|min|from)\s*£?\s*(\d{2,3})\s*k/);
-      if (m) out[v.name] = String(parseInt(m[1], 10) * 1000);
-    }
+  model: string | undefined,
+): Promise<Record<string, string>> {
+  if (!searchQuery || requiredVars.length === 0) {
+    return searchQuery ? { keyword: searchQuery } : {};
   }
-  return out;
+  const decomposed: Record<string, string> = await decomposeSearchQuery({ searchQuery, requiredVars, model }).catch(() => ({}));
+  // Last-resort fallback: if decomposition produced nothing for `keyword`,
+  // use the whole searchQuery so the scrape doesn't run with an empty form.
+  if (!decomposed.keyword && requiredVars.some((v) => v.name === 'keyword')) {
+    decomposed.keyword = searchQuery;
+  }
+  return decomposed;
 }
 
 /* -------------------- shared helpers -------------------- */
