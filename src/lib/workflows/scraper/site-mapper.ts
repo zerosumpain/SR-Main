@@ -97,6 +97,7 @@ Rules:
   Use any var names that make sense for THIS site. Record what concrete value you filled in each turn (the real live data so the site actually responds), but emit a \`var\` field on the fill/select action so the saved step uses the {{…}} placeholder. Example:
   { "action":"fill", "selector":"input[name=LOCATION]", "value":"Darlington", "var":"location", "note":"location slice of user query" }
 - If the user's searchQuery does NOT contain a value a field needs (e.g. they asked for "Analyst jobs" with no location), LEAVE THE FIELD BLANK — don't invent a value, and don't parameterise.
+- BEFORE FINALIZING, check whether the user's searchQuery mentions any slot you haven't filled (salary, distance, contract type, etc). The observation includes a "kind":"expandable" entry for each collapsed section on the page — they list the input names they will reveal when clicked ("reveals_inputs"). Also watch for hidden inputs tagged { "hidden": true, "reveal_via": { selector, text } } inside forms. If the user asked for a filter that only exists behind an "Advanced search" / "More filters" / "Show all" toggle, CLICK the toggle first (use its selector), re-observe, then fill the newly-visible input and record BOTH steps in the playbook. The saved replay will perform the click itself so future runs see the same expanded form.
 - Call altcha whenever you see an altcha-widget in the interactive list.
 - Finalize the moment you can see the target data on the page — do NOT click into individual detail pages unless the goal requires them.
 

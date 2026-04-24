@@ -196,13 +196,88 @@ async def observe(page) -> Dict[str, Any]:
                 const r = el.getBoundingClientRect();
                 return r.width > 0 && r.height > 0;
               }
+              function isHidden(el) {
+                if (!el) return true;
+                if (el.hasAttribute('hidden')) return true;
+                if (el.getAttribute('aria-hidden') === 'true') return true;
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 && r.height === 0) return true;
+                const cs = window.getComputedStyle(el);
+                if (cs.display === 'none' || cs.visibility === 'hidden') return true;
+                return false;
+              }
+              // Walk the ancestor chain looking for a collapsed container. A
+              // collapsed container is usually <details> (with no `open`), an
+              // element with aria-hidden=true, or a hidden block whose
+              // expander button references it via aria-controls / data-target.
+              function collapsedAncestor(el) {
+                let cur = el.parentElement;
+                while (cur && cur !== document.body) {
+                  if (cur.tagName === 'DETAILS' && !cur.hasAttribute('open')) return cur;
+                  if (cur.getAttribute('aria-hidden') === 'true') return cur;
+                  // Walk upwards until we find a hidden block — that's the
+                  // collapsed panel the user would have to expand to reveal
+                  // the input. Skip the element itself (isHidden === true for
+                  // the input is what brought us here).
+                  if (isHidden(cur)) return cur;
+                  cur = cur.parentElement;
+                }
+                return null;
+              }
+              // For a collapsed container, try to identify the toggle button
+              // that would expand it — so the LLM knows WHAT to click next.
+              function findToggleFor(container) {
+                if (!container) return null;
+                // <details> → its <summary>
+                if (container.tagName === 'DETAILS') {
+                  const s = container.querySelector(':scope > summary');
+                  if (s) return s;
+                }
+                // aria-controls="<id>" on any button/link in the document
+                const id = container.id;
+                if (id) {
+                  const btn = document.querySelector(
+                    `[aria-controls="${CSS.escape(id)}"], [data-target="#${CSS.escape(id)}"], [href="#${CSS.escape(id)}"]`
+                  );
+                  if (btn) return btn;
+                }
+                // Fallback: a sibling button preceding the container.
+                let sib = container.previousElementSibling;
+                while (sib) {
+                  if (sib.tagName === 'BUTTON' || sib.tagName === 'A') return sib;
+                  const inner = sib.querySelector?.('button, a');
+                  if (inner) return inner;
+                  sib = sib.previousElementSibling;
+                }
+                return null;
+              }
               const out = [];
+              const expandables = [];
+              const seenToggleSelectors = new Set();
               // Forms + their relevant descendants
               for (const form of Array.from(document.querySelectorAll('form'))) {
-                if (!visible(form)) continue;
+                // Show the form if it's visible OR if it contains inputs the
+                // user's query would need (we annotate hidden inputs rather
+                // than dropping them — the LLM needs to know the slot exists).
+                const allInputs = Array.from(form.querySelectorAll('input, textarea, select'));
+                if (allInputs.length === 0 && !visible(form)) continue;
                 const formSel = bestSelector(form) || 'form';
-                const inputs = Array.from(form.querySelectorAll('input, textarea, select'))
-                  .filter(visible).slice(0, 20).map(el => ({
+                const inputs = allInputs.slice(0, 40).map(el => {
+                  const hidden = isHidden(el);
+                  const collapsed = hidden ? collapsedAncestor(el) : null;
+                  const toggle = collapsed ? findToggleFor(collapsed) : null;
+                  const toggleSel = toggle ? bestSelector(toggle) : null;
+                  const toggleText = toggle ? (toggle.innerText || toggle.textContent || '').trim().slice(0, 60) : null;
+                  if (toggleSel && !seenToggleSelectors.has(toggleSel)) {
+                    seenToggleSelectors.add(toggleSel);
+                    expandables.push({
+                      text: toggleText || '(toggle)',
+                      selector: toggleSel,
+                      expanded: false,
+                      reveals_inputs: [],
+                    });
+                  }
+                  const rec = {
                     kind: el.tagName.toLowerCase(),
                     type: el.getAttribute('type') || '',
                     name: el.getAttribute('name') || '',
@@ -216,7 +291,16 @@ async def observe(page) -> Dict[str, Any]:
                       return '';
                     })(),
                     selector: bestSelector(el),
-                  }));
+                  };
+                  if (hidden) rec.hidden = true;
+                  if (toggleSel) {
+                    rec.reveal_via = { selector: toggleSel, text: toggleText };
+                    // Tag the expandable entry for the LLM's benefit.
+                    const exp = expandables.find(e => e.selector === toggleSel);
+                    if (exp && rec.name) exp.reveals_inputs.push(rec.name);
+                  }
+                  return rec;
+                });
                 const submits = Array.from(form.querySelectorAll('button, input[type=submit]'))
                   .filter(visible).slice(0, 4).map(el => ({
                     text: (el.innerText || el.value || '').trim().slice(0, 40),
@@ -236,6 +320,11 @@ async def observe(page) -> Dict[str, Any]:
                 }))
                 .filter(el => el.text.length > 0);
               out.push(...loose);
+              // Append expandables as a pseudo-kind so the LLM can see them
+              // inline alongside forms/buttons.
+              for (const exp of expandables) {
+                out.push({ kind: 'expandable', ...exp });
+              }
               return out;
             }"""
         )
