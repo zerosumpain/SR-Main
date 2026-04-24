@@ -170,10 +170,21 @@ export async function decomposeSearchQuery(opts: {
   try {
     const obj = JSON.parse(match[0]) as Record<string, unknown>;
     const out: Record<string, string> = {};
+    const queryNorm = searchQuery.trim().toLowerCase();
     for (const v of requiredVars) {
       const val = obj[v.name];
-      if (typeof val === 'string' && val.trim()) out[v.name] = val.trim();
-      else if (typeof val === 'number') out[v.name] = String(val);
+      let str = '';
+      if (typeof val === 'string') str = val.trim();
+      else if (typeof val === 'number') str = String(val);
+      if (!str) continue;
+      // Sanity reject: the LLM sometimes lazily echoes the whole searchQuery
+      // into one slot (especially `keyword`). Drop values that are too long
+      // for a typical form field, or that equal the whole query.
+      if (str.length > 40 || str.toLowerCase() === queryNorm) {
+        onDebug?.({ stage: 'decompose.rejected_lazy_value', slot: v.name, len: str.length });
+        continue;
+      }
+      out[v.name] = str;
     }
     onDebug?.({ stage: 'decompose.parsed', keys: Object.keys(out) });
     return out;
