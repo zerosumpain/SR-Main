@@ -271,8 +271,9 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
       opts.searchQuery,
       finalPlaybook.requiredVars ?? [],
       opts.model,
+      (ev) => emit({ t: 'map.decompose', ...ev }),
     );
-    emit({ t: 'map.execute.vars', vars: Object.keys(liveVars) });
+    emit({ t: 'map.execute.vars', vars: liveVars });
     try {
       await executePlaybookSteps(agent, finalPlaybook.steps ?? [], liveVars);
       const r = await agent.extract(finalPlaybook.extract as unknown as Array<Record<string, unknown>>);
@@ -542,17 +543,39 @@ async function resolveExecutionVars(
   searchQuery: string | undefined,
   requiredVars: PlaybookRequiredVar[],
   model: string | undefined,
+  onDebug?: (ev: Record<string, unknown>) => void,
 ): Promise<Record<string, string>> {
   if (!searchQuery || requiredVars.length === 0) {
-    return searchQuery ? { keyword: searchQuery } : {};
+    return searchQuery ? { keyword: firstMeaningfulToken(searchQuery) } : {};
   }
-  const decomposed: Record<string, string> = await decomposeSearchQuery({ searchQuery, requiredVars, model }).catch(() => ({}));
-  // Last-resort fallback: if decomposition produced nothing for `keyword`,
-  // use the whole searchQuery so the scrape doesn't run with an empty form.
+  const decomposed: Record<string, string> = await decomposeSearchQuery({
+    searchQuery, requiredVars, model, onDebug,
+  }).catch(() => ({}));
+  // Fallback for `keyword` only: extract the first significant noun-phrase
+  // (first word or two, stripped of stopwords/punctuation). NEVER drop the
+  // whole searchQuery into keyword — that's what caused every previous
+  // fill-timeout.
   if (!decomposed.keyword && requiredVars.some((v) => v.name === 'keyword')) {
-    decomposed.keyword = searchQuery;
+    decomposed.keyword = firstMeaningfulToken(searchQuery);
+    onDebug?.({ stage: 'decompose.keyword_fallback', value: decomposed.keyword });
   }
   return decomposed;
+}
+
+/** Extract a reasonable single-term keyword from a free-form query when
+ *  decomposition fails. Takes the first sequence of 1–3 Capitalised words,
+ *  else the first non-stopword token. */
+function firstMeaningfulToken(q: string): string {
+  const stop = new Set(['the','a','an','in','at','on','of','for','with','and','or','to','near','within','around','over','above','under','below','from','by']);
+  // First try: leading capitalised span ("Software Engineer", "Analysts")
+  const cap = q.match(/^\s*([A-Z][a-zA-Z-]+(?:\s+[A-Z][a-zA-Z-]+){0,2})/);
+  if (cap) return cap[1].trim();
+  // Fallback: first non-stopword word
+  for (const tok of q.split(/\s+/)) {
+    const clean = tok.replace(/[^a-zA-Z-]/g, '');
+    if (clean.length > 2 && !stop.has(clean.toLowerCase())) return clean;
+  }
+  return q.slice(0, 30).trim();
 }
 
 /* -------------------- shared helpers -------------------- */

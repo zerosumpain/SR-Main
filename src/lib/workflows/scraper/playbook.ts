@@ -121,33 +121,52 @@ export async function decomposeSearchQuery(opts: {
   searchQuery: string;
   requiredVars: PlaybookRequiredVar[];
   model?: string;
+  onDebug?: (ev: Record<string, unknown>) => void;
 }): Promise<Record<string, string>> {
-  const { searchQuery, requiredVars, model } = opts;
+  const { searchQuery, requiredVars, model, onDebug } = opts;
   if (!searchQuery.trim() || requiredVars.length === 0) return {};
   const { resolveLLMClient } = await import('$lib/workflows/nodes/llm-helpers');
   const { client, model: chosen } = await resolveLLMClient(model);
   const schema = requiredVars.map((v) => `  - ${v.name}: ${v.hint}`).join('\n');
+  const example = requiredVars
+    .map((v) => `"${v.name}": "<value or empty string>"`)
+    .join(', ');
   const prompt = [
-    `You will receive a free-form search query and a list of structured slots the target site expects.`,
-    `Extract each slot's value from the query. If a slot is not mentioned, set it to "" (empty string). Do NOT guess or invent values.`,
-    `Respond with a SINGLE JSON object: { "<slotName>": "<value>", ... }. No prose, no markdown.`,
+    `Extract structured slot values from a free-form search query.`,
     ``,
-    `Slots:`,
+    `Slots to extract (each is optional — leave blank as "" if not mentioned):`,
     schema,
+    ``,
+    `Rules:`,
+    `- The "keyword" slot should contain ONLY the job title, role, or primary search term (e.g. "Analyst", "Software Engineer"). Do NOT put the whole query in keyword.`,
+    `- Numeric slots (distance, salary, etc) must be plain numbers, no units, no commas.`,
+    `- If a slot is not mentioned, use "".`,
+    ``,
+    `Respond with ONE JSON object only, no prose, no markdown fences. Shape:`,
+    `{ ${example} }`,
     ``,
     `Query: ${searchQuery}`,
   ].join('\n');
-  const resp = await (client as {
-    chat: { completions: { create: (args: unknown) => Promise<{ choices: Array<{ message: { content: string | null } }> }> } };
-  }).chat.completions.create({
-    model: chosen,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0,
-    max_tokens: 300,
-  });
-  const raw = resp.choices[0]?.message?.content ?? '';
+  let raw = '';
+  try {
+    const resp = await (client as {
+      chat: { completions: { create: (args: unknown) => Promise<{ choices: Array<{ message: { content: string | null } }> }> } };
+    }).chat.completions.create({
+      model: chosen,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      max_tokens: 400,
+    });
+    raw = resp.choices[0]?.message?.content ?? '';
+  } catch (err) {
+    onDebug?.({ stage: 'decompose.llm_error', err: err instanceof Error ? err.message : String(err) });
+  }
+  onDebug?.({ stage: 'decompose.raw', raw: raw.slice(0, 500) });
   const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return {};
+  if (!match) {
+    onDebug?.({ stage: 'decompose.no_json' });
+    return {};
+  }
   try {
     const obj = JSON.parse(match[0]) as Record<string, unknown>;
     const out: Record<string, string> = {};
@@ -156,8 +175,10 @@ export async function decomposeSearchQuery(opts: {
       if (typeof val === 'string' && val.trim()) out[v.name] = val.trim();
       else if (typeof val === 'number') out[v.name] = String(val);
     }
+    onDebug?.({ stage: 'decompose.parsed', keys: Object.keys(out) });
     return out;
-  } catch {
+  } catch (err) {
+    onDebug?.({ stage: 'decompose.parse_error', err: err instanceof Error ? err.message : String(err) });
     return {};
   }
 }

@@ -37,7 +37,12 @@ export async function runPlaybookV2(opts: RunPlaybookOptions): Promise<RunPlaybo
   let decomposed: Record<string, string> = {};
   if (missing.length > 0 && searchQuery) {
     onProgress?.({ t: 'playbook.decompose.start', vars: missing.map((v) => v.name) });
-    decomposed = await decomposeSearchQuery({ searchQuery, requiredVars: missing, model }).catch(() => ({}));
+    decomposed = await decomposeSearchQuery({
+      searchQuery,
+      requiredVars: missing,
+      model,
+      onDebug: (ev) => onProgress?.({ t: 'playbook.decompose.debug', ...ev }),
+    }).catch(() => ({}));
     onProgress?.({ t: 'playbook.decompose.done', resolved: Object.keys(decomposed) });
   }
   // Apply fallbacks last for any slots still blank.
