@@ -7,8 +7,8 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
-import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent } from '$lib/workflows/chat/job-store';
-import type { OrchestratorJob } from '$lib/workflows/chat/job-store';
+import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
+import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -237,6 +237,7 @@ export const POST: RequestHandler = async ({ request }) => {
         const { response: responseText } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
           workflowId,
           conversationId,
+          jobId,
           onProgress,
           onToolProgress: (step) => {
             if (abortController.signal.aborted) return;
@@ -387,4 +388,49 @@ export const DELETE: RequestHandler = async ({ url }) => {
 
   const job = getJob(jobId);
   return json({ error: job ? 'Job not running' : 'Job not found' }, { status: job ? 400 : 404 });
+};
+
+// PATCH: resolve a pending user-input waiter (plan_ack / confirm_ack / clarify_ack).
+// The orchestrator coroutine registers waiters via createWaiter(jobId, key) and
+// suspends until the user sends their decision through this endpoint.
+export const PATCH: RequestHandler = async ({ request, url }) => {
+  const jobId = url.searchParams.get('jobId');
+  if (!jobId) return json({ error: 'jobId required' }, { status: 400 });
+  const job = getJob(jobId);
+  if (!job) return json({ error: 'job not found' }, { status: 404 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, { status: 400 });
+  }
+  if (!body || typeof body !== 'object' || !('type' in body)) {
+    return json({ error: 'body must include a type' }, { status: 400 });
+  }
+
+  const typed = body as
+    | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
+    | { type: 'confirm_ack'; confirmId: string; decision: 'approved' | 'rejected' }
+    | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> };
+
+  let key: string;
+  switch (typed.type) {
+    case 'plan_ack':     key = `plan:${typed.planId}`; break;
+    case 'confirm_ack':  key = `confirm:${typed.confirmId}`; break;
+    case 'clarify_ack':  key = `clarify:${typed.clarifyId}`; break;
+    default:             return json({ error: 'unknown ack type' }, { status: 400 });
+  }
+
+  const payload: unknown =
+    typed.type === 'plan_ack'     ? { decision: typed.decision, adjustment: typed.adjustment } :
+    typed.type === 'confirm_ack'  ? { decision: typed.decision } :
+    /* clarify_ack */               { answers: typed.answers };
+
+  const ok = respondToWaiter(jobId, key, payload);
+  if (!ok) return json({ error: 'no waiter registered for that key' }, { status: 404 });
+
+  // Echo the ack into the SSE stream so all subscribers see the user decision.
+  publishJobEvent(jobId, typed as JobEvent);
+  return json({ ok: true });
 };
