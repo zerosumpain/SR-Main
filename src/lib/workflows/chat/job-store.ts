@@ -6,11 +6,42 @@ export interface ToolProgressStep {
   status: 'running' | 'done' | 'error';
 }
 
+export interface PlanStep {
+  id: string;
+  title: string;
+  detail: string;
+  kind?: 'read' | 'write' | 'run' | 'external';
+}
+
+export interface PlanPayload {
+  steps: PlanStep[];
+  filesToTouch: Array<{ path: string; action: 'create' | 'modify' | 'delete' }>;
+  summary?: string;
+  estimatedSteps?: number;
+}
+
+export interface ClarifyQuestion {
+  id: string;
+  text: string;
+  kind?: 'freeform' | 'choice';
+  choices?: string[];
+}
+
 export type JobEvent =
   | { type: 'token'; delta: string }
-  | { type: 'tool_start'; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error' }
+  | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string }
+  | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }
+  | { type: 'heartbeat'; summary: string; elapsedMs: number; currentStep?: string }
+  | { type: 'plan'; planId: string; plan: PlanPayload }
+  | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
+  | { type: 'confirm'; confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> }
+  | { type: 'confirm_ack'; confirmId: string; decision: 'approved' | 'rejected' }
+  | { type: 'clarify'; clarifyId: string; questions: ClarifyQuestion[] }
+  | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> }
+  | { type: 'subagent_start'; agentId: string; parentStepId: string | null; task: string }
+  | { type: 'subagent_event'; agentId: string; event: JobEvent }
+  | { type: 'subagent_done'; agentId: string; summary: string; result: unknown }
   | { type: 'done'; result: Record<string, unknown> }
   | { type: 'error'; message: string };
 

@@ -9,7 +9,7 @@ export default defineConfig({
 		allowedHosts: ['homeserv.tail668b8c.ts.net', 'homeserv'],
 	},
 	test: {
-		include: ['tests/**/*.test.ts'],
+		include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
 		alias: {
 			'$lib': fileURLToPath(new URL('./src/lib', import.meta.url)),
 		},
