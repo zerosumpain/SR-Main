@@ -1,5 +1,7 @@
 <svelte:head><title>Files — Admin</title></svelte:head>
 <script lang="ts">
+  import { invalidateAll } from '$app/navigation';
+
   let { data } = $props();
 
   type FileRow = {
@@ -31,6 +33,60 @@
     permissions: { read: boolean; write: boolean; append: boolean; delete: boolean };
   } | null>(null);
   let editBusy = $state(false);
+
+  let busyId: string | null = $state(null);
+  let extractResult: { name: string; text: string; meta: unknown } | null = $state(null);
+  let convertModalFor: { id: string; name: string } | null = $state(null);
+  let convertSource: 'markdown' | 'text' | 'json' | 'csv' | 'xlsx' = $state('markdown');
+  let convertFormat: 'docx' | 'pdf' | 'html' | 'xlsx' | 'csv' = $state('pdf');
+
+  const EXTRACT_MIME_RE = /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|application\/msword|text\/markdown|text\/plain|text\/csv|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|application\/vnd\.ms-excel|audio\/.+|video\/.+)$/;
+
+  function canExtract(mimeType: string, name: string): boolean {
+    if (EXTRACT_MIME_RE.test(mimeType)) return true;
+    const lower = name.toLowerCase();
+    return lower.endsWith('.md') || lower.endsWith('.csv') || lower.endsWith('.pdf') || lower.endsWith('.docx') || lower.endsWith('.xlsx');
+  }
+
+  async function runExtract(file: { id: string; name: string }) {
+    busyId = file.id;
+    extractResult = null;
+    try {
+      const res = await fetch(`/api/files/${file.id}/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Extract failed: ${data.code ?? ''} ${data.error ?? 'unknown'}`);
+        return;
+      }
+      extractResult = { name: file.name, text: data.text.slice(0, 5000), meta: data.meta };
+      await invalidateAll();
+      await refresh();
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function runConvert() {
+    if (!convertModalFor) return;
+    busyId = convertModalFor.id;
+    try {
+      const res = await fetch(`/api/files/${convertModalFor.id}/convert`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source: convertSource, format: convertFormat }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Convert failed: ${data.code ?? ''} ${data.error ?? 'unknown'}`);
+        return;
+      }
+      convertModalFor = null;
+      await invalidateAll();
+      await refresh();
+    } finally {
+      busyId = null;
+    }
+  }
 
   function fmtSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -301,6 +357,14 @@
 
               <div class="file-actions">
                 <a href={`/api/files/${f.id}/download`} class="row-link">Download</a>
+                {#if canExtract(f.mimeType, f.name)}
+                  <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => runExtract(f)}>
+                    {busyId === f.id ? 'Extracting…' : 'Extract'}
+                  </button>
+                {/if}
+                <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => (convertModalFor = { id: f.id, name: f.name })}>
+                  Convert
+                </button>
                 <button type="button" class="row-link" onclick={() => startEdit(f)}>Edit</button>
                 <button type="button" class="row-link danger" onclick={() => deleteRow(f)}>Delete</button>
               </div>
@@ -310,6 +374,48 @@
       </div>
     {/if}
   </section>
+
+  {#if extractResult}
+    <section class="nm-sec" style="margin-top:1rem;">
+      <h3>Extracted from {extractResult.name}</h3>
+      <pre style="white-space:pre-wrap;max-height:280px;overflow:auto;">{extractResult.text}</pre>
+      <details>
+        <summary>Metadata</summary>
+        <pre>{JSON.stringify(extractResult.meta, null, 2)}</pre>
+      </details>
+      <button class="nm-save-btn" onclick={() => (extractResult = null)}>Close</button>
+    </section>
+  {/if}
+
+  {#if convertModalFor}
+    <section class="nm-sec" style="margin-top:1rem;">
+      <h3>Convert {convertModalFor.name}</h3>
+      <label>From
+        <select bind:value={convertSource} class="nm-text-input">
+          <option value="markdown">Markdown</option>
+          <option value="text">Plain text</option>
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+          <option value="xlsx">XLSX</option>
+        </select>
+      </label>
+      <label>To
+        <select bind:value={convertFormat} class="nm-text-input">
+          <option value="docx">DOCX</option>
+          <option value="pdf">PDF</option>
+          <option value="html">HTML</option>
+          <option value="xlsx">XLSX</option>
+          <option value="csv">CSV</option>
+        </select>
+      </label>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem;">
+        <button class="nm-save-btn" disabled={busyId === convertModalFor.id} onclick={runConvert}>
+          {busyId === convertModalFor.id ? 'Converting…' : 'Convert'}
+        </button>
+        <button class="row-link" onclick={() => (convertModalFor = null)}>Cancel</button>
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
