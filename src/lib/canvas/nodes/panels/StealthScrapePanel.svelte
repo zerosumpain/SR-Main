@@ -46,6 +46,53 @@
   let profiles = $state<string[]>([]);
   let credentials = $state<Array<{ id: number; domain: string; label: string }>>([]);
 
+  // Playbook status for this URL's domain — the node dispatches through
+  // this deterministically when present, and auto-maps on first run when
+  // absent. Fetched on mount + after any explicit refresh.
+  interface PlaybookMeta {
+    domain: string;
+    playbook: unknown | null;
+    playbookUpdatedAt: string | null;
+  }
+  let playbookMeta = $state<PlaybookMeta | null>(null);
+  let playbookLoading = $state(false);
+  let playbookExpanded = $state(false);
+  let playbookError = $state<string | null>(null);
+
+  async function refreshPlaybook() {
+    if (!url.trim()) {
+      playbookMeta = null;
+      return;
+    }
+    playbookLoading = true;
+    playbookError = null;
+    try {
+      const res = await fetch(`/api/scraper/playbook?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      playbookMeta = await res.json();
+    } catch (e) {
+      playbookError = e instanceof Error ? e.message : String(e);
+      playbookMeta = null;
+    } finally {
+      playbookLoading = false;
+    }
+  }
+
+  async function clearPlaybook() {
+    if (!url.trim()) return;
+    if (!confirm('Clear the saved playbook for this domain? The next run will auto-map the site from scratch (~3-5 min).')) return;
+    playbookLoading = true;
+    try {
+      const res = await fetch(`/api/scraper/playbook?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refreshPlaybook();
+    } catch (e) {
+      playbookError = e instanceof Error ? e.message : String(e);
+    } finally {
+      playbookLoading = false;
+    }
+  }
+
   onMount(async () => {
     try {
       const [pRes, cRes] = await Promise.all([
@@ -55,7 +102,32 @@
       if (pRes.ok) profiles = await pRes.json();
       if (cRes.ok) credentials = await cRes.json();
     } catch { /* non-fatal */ }
+    await refreshPlaybook();
   });
+
+  // Also refresh when the URL changes (user typed / pasted a new one).
+  let lastFetchedUrl = '';
+  $effect(() => {
+    if (url.trim() && url !== lastFetchedUrl) {
+      lastFetchedUrl = url;
+      void refreshPlaybook();
+    }
+  });
+
+  function hostOf(u: string): string {
+    try { return new URL(u).hostname; } catch { return u; }
+  }
+  function formatWhen(iso: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.round(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs} h ago`;
+    return d.toLocaleString();
+  }
 
   function buildConfig(): Record<string, unknown> {
     const wait: Record<string, unknown> = { type: waitType };
@@ -138,6 +210,53 @@
       Plain English, parameterises the site's search form. The LLM decides which form fields map to which words and builds a templated URL — future runs can override via input vars.
     </div>
   </section>
+
+  <!-- Playbook status -->
+  {#if url.trim()}
+    <section class="ps ps-playbook">
+      <div class="ps-hd">
+        <span class="ps-label">Playbook</span>
+        <span class="ps-meta">{hostOf(url)}</span>
+      </div>
+      {#if playbookLoading}
+        <div class="ps-hint">Loading…</div>
+      {:else if playbookError}
+        <div class="ps-hint ps-hint-error">Error: {playbookError}</div>
+      {:else if playbookMeta?.playbook}
+        {@const pb = playbookMeta.playbook as { version?: number; steps?: unknown[]; extract?: unknown[]; goal?: string }}
+        <div class="ps-playbook-status ps-playbook-status-saved">
+          <span class="ps-dot ps-dot-green"></span>
+          <span class="ps-playbook-summary">
+            <b>Saved</b>
+            · v{pb.version ?? '?'}
+            · {Array.isArray(pb.steps) ? pb.steps.length : 0} steps
+            · {Array.isArray(pb.extract) ? pb.extract.length : 0} extract rules
+            · {formatWhen(playbookMeta.playbookUpdatedAt)}
+          </span>
+        </div>
+        {#if pb.goal}
+          <div class="ps-hint ps-playbook-goal">Goal: {pb.goal}</div>
+        {/if}
+        <div class="ps-playbook-actions">
+          <button class="ps-link" onclick={() => (playbookExpanded = !playbookExpanded)}>
+            {playbookExpanded ? '▾ Hide JSON' : '▸ View JSON'}
+          </button>
+          <button class="ps-link ps-link-danger" onclick={clearPlaybook} disabled={playbookLoading}>
+            Clear &amp; re-map
+          </button>
+          <button class="ps-link" onclick={refreshPlaybook} disabled={playbookLoading}>Refresh</button>
+        </div>
+        {#if playbookExpanded}
+          <pre class="ps-playbook-json">{JSON.stringify(playbookMeta.playbook, null, 2)}</pre>
+        {/if}
+      {:else}
+        <div class="ps-playbook-status ps-playbook-status-empty">
+          <span class="ps-dot ps-dot-amber"></span>
+          <span>No playbook yet — first run will auto-map this site (if Goal is set).</span>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <!-- Profile -->
   <section class="ps">
@@ -351,6 +470,74 @@
   .ps-advanced-toggle:hover {
     border-color: var(--text-muted);
     color: var(--text-primary);
+  }
+  .ps-playbook {
+    background: var(--bg-section, #111);
+    border: 1px solid var(--card-border, #333);
+    border-radius: 3px;
+    padding: 8px 10px !important;
+    margin: 4px 0;
+  }
+  .ps-playbook-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+  }
+  .ps-playbook-summary b { font-weight: 600; color: var(--text-primary); }
+  .ps-playbook-goal {
+    font-style: italic;
+    margin-top: 4px;
+    opacity: 0.9;
+  }
+  .ps-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .ps-dot-green { background: #3a8a56; box-shadow: 0 0 4px rgba(58, 138, 86, 0.55); }
+  .ps-dot-amber { background: #d97706; box-shadow: 0 0 4px rgba(217, 119, 6, 0.55); }
+  .ps-playbook-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .ps-link {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    padding: 2px 0;
+    text-decoration: underline dotted;
+  }
+  .ps-link:hover:not(:disabled) { color: var(--accent, #c4570a); }
+  .ps-link:disabled { opacity: 0.4; cursor: default; }
+  .ps-link-danger { color: #c44; }
+  .ps-link-danger:hover:not(:disabled) { color: #ff6b6b; }
+  .ps-playbook-json {
+    margin-top: 8px;
+    max-height: 320px;
+    overflow: auto;
+    font-size: 10.5px;
+    line-height: 1.4;
+    padding: 8px;
+    background: var(--bg, #0d0d0d);
+    border: 1px solid var(--card-border, #333);
+    border-radius: 2px;
+    white-space: pre;
+    color: var(--text-primary);
+  }
+  .ps-hint-error {
+    color: #c44;
   }
   .ps-hint {
     font-family: var(--font-mono);
