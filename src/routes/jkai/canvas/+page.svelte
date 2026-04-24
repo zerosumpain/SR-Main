@@ -87,79 +87,108 @@
   {/snippet}
 </PageHeader>
 
-<div class="page">
-  <header class="page-head">
-    <p class="page-sub">
-      Spatial workspaces. Each canvas is one workflow, one conversation, any number of LLM /
-      parse / intel / agent nodes.
-    </p>
+<div class="wrap">
+  <header class="page-hdr">
+    <div>
+      <div class="kicker">JKAI</div>
+      <h1>Canvases</h1>
+      <p class="sub">
+        Spatial workspaces. Each canvas is one workflow, one conversation, any number of
+        <code>LLM</code> / <code>parse</code> / <code>intel</code> / <code>agent</code> nodes.
+      </p>
+    </div>
+    <a class="back-link" href="/jkai">← JKAI</a>
   </header>
 
-  <section class="stats">
-    <div class="stat">
-      <div class="stat-val">{stats.canvasCount}</div>
-      <div class="stat-lbl">canvases</div>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Overview</span>
     </div>
-    <div class="stat">
-      <div class="stat-val">{stats.nodeCount}</div>
-      <div class="stat-lbl">nodes</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">{stats.edgeCount}</div>
-      <div class="stat-lbl">edges</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">{stats.runs7d}</div>
-      <div class="stat-lbl">runs · 7d</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">{formatPct(stats.successRate7d)}</div>
-      <div class="stat-lbl">success · 7d</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val">{stats.canvasCount}</div>
+        <div class="stat-lbl">canvases</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">{stats.nodeCount}</div>
+        <div class="stat-lbl">nodes</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">{stats.edgeCount}</div>
+        <div class="stat-lbl">edges</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">{stats.runs7d}</div>
+        <div class="stat-lbl">runs · 7d</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">{formatPct(stats.successRate7d)}</div>
+        <div class="stat-lbl">success · 7d</div>
+      </div>
     </div>
   </section>
 
-  <section class="create">
-    <div class="sr-label">Create canvas</div>
-    <form class="create-form" onsubmit={createCanvas}>
-      <input
-        class="create-input"
-        type="text"
-        bind:value={titleDraft}
-        placeholder="Title (e.g. “Morning briefing”)"
-        aria-label="Canvas title"
-        disabled={busy}
-      />
-      <input
-        class="create-input slug-input"
-        type="text"
-        value={previewSlug}
-        oninput={(e) => {
-          slugDraft = (e.target as HTMLInputElement).value;
-          slugEdited = true;
-        }}
-        placeholder="slug"
-        aria-label="Canvas slug"
-        disabled={busy}
-      />
-      <button class="create-btn" type="submit" disabled={!previewSlug || busy}>
-        {busy ? 'creating…' : '+ canvas'}
-      </button>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Create canvas</span>
+    </div>
+    <form class="form" onsubmit={createCanvas}>
+      <div class="row">
+        <label class="field">
+          <span class="sr-label-tight">Title <em>— free text</em></span>
+          <input
+            type="text"
+            class="nm-text-input"
+            bind:value={titleDraft}
+            placeholder="Morning briefing"
+            disabled={busy}
+          />
+        </label>
+        <label class="field">
+          <span class="sr-label-tight">Slug <em>— url segment</em></span>
+          <input
+            type="text"
+            class="nm-text-input"
+            value={previewSlug}
+            oninput={(e) => {
+              slugDraft = (e.target as HTMLInputElement).value;
+              slugEdited = true;
+            }}
+            placeholder="morning-briefing"
+            disabled={busy}
+          />
+        </label>
+      </div>
+
+      {#if error}
+        <div class="err-line">⚠ {error}</div>
+      {/if}
+
+      <div class="form-actions">
+        <button type="submit" class="nm-save-btn" disabled={!previewSlug || busy}>
+          {busy ? 'Creating…' : '+ Canvas'}
+        </button>
+        <span class="hint">
+          url → <code>/jkai/canvas/{previewSlug || '<slug>'}</code>
+        </span>
+      </div>
     </form>
-    {#if error}
-      <div class="create-err">⚠ {error}</div>
-    {/if}
-    <div class="create-hint">
-      url → <code>/jkai/canvas/{previewSlug || '<slug>'}</code>
-    </div>
   </section>
 
-  <section class="list">
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Canvases</span>
+      <span class="nm-sec-meta">
+        {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
+      </span>
+    </div>
+
     {#if canvases.length === 0}
       <div class="empty">No canvases yet. Create one above.</div>
     {:else}
       <div class="grid">
         {#each canvases as c (c.workflowId)}
-          <article class="card">
+          <article class="canvas-card">
             <a class="card-link" href={`/jkai/canvas/${c.slug}`}>
               <div class="card-head">
                 <div class="card-title-block">
@@ -183,19 +212,24 @@
                       <span class="status-dot" data-status={c.latestRunStatus}></span>
                       {c.latestRunStatus}
                     {:else}
-                      —
+                      <span class="mini-muted">—</span>
                     {/if}
                   </span>
                   <span class="mini-lbl">last run</span>
                 </div>
               </div>
-              <div class="card-foot">last run {formatTime(c.latestRunAt)}</div>
+              <div class="card-foot">
+                <span>last run {formatTime(c.latestRunAt)}</span>
+              </div>
             </a>
             <button
-              class="card-del"
+              type="button"
+              class="row-link danger card-del"
               title="Delete canvas"
-              onclick={() => removeCanvas(c.slug, c.title)}>✕</button
+              onclick={() => removeCanvas(c.slug, c.title)}
             >
+              Delete
+            </button>
           </article>
         {/each}
       </div>
@@ -204,48 +238,110 @@
 </div>
 
 <style>
-  .page {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 48px 24px 80px;
+  .wrap {
+    max-width: 980px;
+    margin: 2rem auto 4rem;
+    padding: 0 1.5rem;
     color: var(--text-primary);
-  }
-  .page-head {
-    margin-bottom: 20px;
+    font-family: var(--font-body);
   }
   .idx-head-meta {
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-muted);
   }
-  .page-sub {
-    color: var(--text-muted);
-    font-size: 14px;
-    margin: 0;
-    max-width: 560px;
-    line-height: 1.55;
-  }
 
-  .sr-label {
+  .page-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--text-primary);
+  }
+  .kicker {
     font-family: var(--font-mono);
     font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+  }
+  .page-hdr h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--text-primary);
+  }
+  .sub {
+    margin: 0.6rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    max-width: 60ch;
+  }
+  .sub code, code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08rem 0.38rem;
+    border-radius: 2px;
+  }
+  .back-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  .nm-sec {
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 1rem 1.1rem 1.15rem;
+    margin-bottom: 1.25rem;
+  }
+  .nm-sec-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .sr-label-tight {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
     color: var(--text-muted);
-    margin-bottom: 8px;
+  }
+  .nm-sec-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    margin-left: auto;
   }
 
+  /* ——— Stats ——— */
   .stats {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 1px;
     background: var(--card-border);
     border: 1px solid var(--card-border);
-    margin-bottom: 24px;
   }
   .stat {
-    padding: 14px 16px;
-    background: var(--bg-section);
+    padding: 0.85rem 1rem;
+    background: var(--bg);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -265,117 +361,110 @@
     color: var(--text-muted);
   }
   @media (max-width: 640px) {
-    .stats {
-      grid-template-columns: repeat(2, 1fr);
-    }
+    .stats { grid-template-columns: repeat(2, 1fr); }
   }
 
-  .create {
-    padding: 16px;
-    border: 1px solid var(--card-border);
-    background: var(--bg-section);
-    margin-bottom: 24px;
-  }
-  .create-form {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-  }
-  .create-input {
-    flex: 1;
-    min-width: 0;
+  /* ——— Create form ——— */
+  .form { display: grid; gap: 0.9rem; }
+  .field { display: grid; gap: 0.35rem; min-width: 0; }
+  .field em { color: var(--text-ghost); font-style: normal; font-weight: 400; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+
+  .nm-text-input {
+    width: 100%;
     font-family: var(--font-mono);
-    font-size: 13px;
-    padding: 8px 10px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
+    font-size: 12px;
     color: var(--text-primary);
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    padding: 7px 10px;
     outline: none;
   }
-  .create-input:focus {
-    border-color: var(--accent);
-  }
-  .slug-input {
-    flex: 0 0 220px;
-    color: var(--text-muted);
-  }
-  .create-btn {
+  .nm-text-input:focus { border-color: var(--accent); background: var(--bg); }
+  .nm-text-input::placeholder { color: var(--text-ghost); }
+  .nm-text-input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .err-line {
     font-family: var(--font-mono);
     font-size: 11px;
+    color: #c44;
+    padding: 6px 8px;
+    background: rgba(196, 68, 68, 0.08);
+    border-left: 2px solid #c44;
+  }
+  .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-ghost);
+  }
+
+  .nm-save-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    padding: 8px 16px;
+    padding: 6px 14px;
     background: var(--accent);
     color: var(--bg);
     border: 1px solid var(--accent);
     cursor: pointer;
-    white-space: nowrap;
   }
-  .create-btn:hover:not(:disabled) {
-    background: var(--accent-hover, #a84808);
+  .nm-save-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
-  .create-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-  .create-err {
-    margin-top: 8px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: #c44;
-  }
-  .create-hint {
-    margin-top: 10px;
+  .nm-save-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  /* ——— Empty ——— */
+  .empty {
+    padding: 1.5rem;
+    text-align: center;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-ghost);
-  }
-  .create-hint code {
-    background: var(--bg);
-    padding: 1px 5px;
-    border: 1px solid var(--card-border);
-    color: var(--text-muted);
+    font-style: italic;
+    border: 1px dashed var(--card-border);
   }
 
+  /* ——— Canvas grid ——— */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 10px;
+    gap: 0.6rem;
   }
-  .empty {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--text-ghost);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    border: 1px dashed var(--card-border);
-  }
-  .card {
+  .canvas-card {
+    position: relative;
     display: flex;
-    align-items: stretch;
-    border: 1px solid var(--card-border);
+    flex-direction: column;
     background: var(--bg);
-    transition: border-color 0.12s;
-    min-height: 128px;
+    border: 1px solid var(--card-border);
+    min-height: 140px;
+    transition: border-color 80ms ease;
   }
-  .card:hover {
-    border-color: var(--text-muted);
-  }
+  .canvas-card:hover { border-color: var(--text-primary); }
+
   .card-link {
     flex: 1;
-    padding: 12px 14px;
+    padding: 0.85rem 1rem 0.75rem;
     color: var(--text-primary);
     text-decoration: none;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0.7rem;
     min-width: 0;
   }
   .card-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
+    gap: 0.6rem;
   }
   .card-title-block {
     display: flex;
@@ -385,8 +474,10 @@
     flex: 1;
   }
   .card-title {
+    font-family: var(--font-body);
     font-weight: 500;
-    font-size: 14px;
+    font-size: 13px;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -399,68 +490,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .card-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-top: auto;
-  }
-  .mini {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .mini-val {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--text-primary);
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .mini-lbl {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-ghost);
-  }
-  .card-foot {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-ghost);
-    display: inline-block;
-  }
-  .status-dot[data-status='completed'] {
-    background: #3a8a56;
-  }
-  .status-dot[data-status='failed'] {
-    background: #c44;
-  }
-  .status-dot[data-status='running'] {
-    background: var(--accent);
-  }
-  .status-dot[data-status='pending'] {
-    background: var(--text-muted);
-  }
 
   .trigger-pill {
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
     font-family: var(--font-mono);
     font-size: 9px;
-    padding: 2px 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(26, 16, 8, 0.04);
     border: 1px solid var(--card-border);
     color: var(--text-muted);
     flex-shrink: 0;
@@ -473,17 +513,81 @@
     border-color: var(--text-primary);
     color: var(--text-primary);
   }
-  .card-del {
-    padding: 0 12px;
-    background: transparent;
-    border: none;
-    border-left: 1px solid var(--card-border);
+
+  .card-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    margin-top: auto;
+  }
+  .mini {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .mini-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mini-muted { color: var(--text-ghost); }
+  .mini-lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     color: var(--text-ghost);
+  }
+  .card-foot {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    padding-top: 0.35rem;
+    border-top: 1px dashed var(--card-border);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-ghost);
+    display: inline-block;
+  }
+  .status-dot[data-status='completed'] { background: #3a8a56; }
+  .status-dot[data-status='failed'] { background: #c44; }
+  .status-dot[data-status='running'] { background: var(--accent); }
+  .status-dot[data-status='pending'] { background: var(--text-muted); }
+
+  /* Delete as discreet row-link in corner, matches /admin/files */
+  .row-link {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
     cursor: pointer;
-    font-size: 14px;
+    text-decoration: none;
   }
-  .card-del:hover {
-    background: rgba(196, 68, 68, 0.08);
-    color: #c44;
+  .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
+  .row-link.danger { color: #c44; }
+  .row-link.danger:hover { color: #a33; }
+  .card-del {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.85rem;
+    opacity: 0;
+    transition: opacity 120ms ease;
   }
+  .canvas-card:hover .card-del,
+  .card-del:focus-visible { opacity: 1; }
 </style>
