@@ -112,6 +112,8 @@ Exploration strategy:
 
 User's goal describes what content to extract. User's searchQuery describes the slots the form must express (keyword, location, distance, salary, contract type, etc). Your scout mission is to find a form that can express ALL of them.
 
+Altcha / CAPTCHA widgets: the harness automatically solves Altcha challenges at the start of every turn. This means altcha is NEVER a reason to give up. If the current observation mentions altcha text or a widget, it has already been (or will be) solved for you — ignore it and proceed with navigation. Do not emit "give_up" citing captcha/altcha.
+
 Hints on the observation shape:
   - "kind": "form" entries list inputs. Each input has name/type/label/selector. Hidden inputs are marked { "hidden": true, "reveal_via": { selector, text } } — click reveal_via.selector to expose them.
   - "kind": "expandable" entries are standalone toggles (summary/aria-expanded). Click them to reveal hidden filter sections.
@@ -402,7 +404,19 @@ function buildScoutMessage(
   turn: number,
   catalogue: Map<string, FormCatalogueEntry>,
 ): string {
-  const interactiveJson = JSON.stringify(obs.interactive, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);
+  // Hide altcha/captcha elements from the scout's view — they're handled
+  // by the harness and mentioning them in the observation leads the LLM
+  // to panic and give_up instead of navigating.
+  const scrubbed = obs.interactive.filter((e) => {
+    const sel = String((e as { selector?: string }).selector ?? '');
+    const text = String((e as { text?: string }).text ?? '');
+    const href = String((e as { href?: string }).href ?? '');
+    if (/altcha|captcha/i.test(sel)) return false;
+    if (/altcha|captcha/i.test(text)) return false;
+    if (/altcha|captcha/i.test(href)) return false;
+    return true;
+  });
+  const interactiveJson = JSON.stringify(scrubbed, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);
   const cataloguePreview = Array.from(catalogue.values()).map((e) => ({
     url: e.url,
     form: e.form_selector,
@@ -419,11 +433,21 @@ function buildScoutMessage(
     JSON.stringify(cataloguePreview, null, 0).slice(0, 2500),
     '',
     `Page text snippet:`,
-    obs.text_snippet.slice(0, 1200),
+    scrubTextSnippet(obs.text_snippet).slice(0, 1200),
     '',
-    `Interactive elements on current page:`,
+    `Interactive elements on current page (altcha/captcha widgets already filtered):`,
     interactiveJson,
   ].filter(Boolean).join('\n');
+}
+
+/** Strip altcha/captcha boilerplate out of the visible page text so the
+ *  scout doesn't see "Quick Check Needed" and infer a wall. Trims common
+ *  challenge-page copy while leaving the rest of the page untouched. */
+function scrubTextSnippet(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !/quick check needed|verify you are human|altcha|captcha|i'?m not a robot/i.test(line))
+    .join('\n');
 }
 
 async function executeScoutAction(agent: AgentHarness, action: Record<string, unknown>): Promise<void> {
