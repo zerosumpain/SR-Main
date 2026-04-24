@@ -52,6 +52,21 @@ export async function runPlaybookV2(opts: RunPlaybookOptions): Promise<RunPlaybo
       fallbacks[v.name] = v.fallback;
     }
   }
+  // Last-resort fallback: if `keyword` is STILL missing (decomposition
+  // returned empty AND no literal fallback), salvage a sensible value from
+  // the raw searchQuery. Without this the fill would send "{{keyword}}"
+  // verbatim and time out. Other slots are left unresolved — better to
+  // submit a partial form than to hallucinate a location.
+  if (
+    searchQuery
+    && inferred.some((v) => v.name === 'keyword')
+    && !callerVars.keyword
+    && !decomposed.keyword
+    && !fallbacks.keyword
+  ) {
+    fallbacks.keyword = firstMeaningfulToken(searchQuery);
+    onProgress?.({ t: 'playbook.decompose.keyword_fallback', value: fallbacks.keyword });
+  }
   const vars: Record<string, string> = { ...fallbacks, ...decomposed, ...callerVars };
 
   const seedUrl = firstGotoUrl(steps, vars) ?? '';
@@ -147,6 +162,19 @@ export async function runPlaybookV2(opts: RunPlaybookOptions): Promise<RunPlaybo
     acceptanceMet: itemCount >= playbook.acceptance.minItems,
     itemCount,
   };
+}
+
+/** Shared with site-mapper — extract a reasonable keyword token from a
+ *  free-form query when decomposition returns nothing. */
+function firstMeaningfulToken(q: string): string {
+  const stop = new Set(['the','a','an','in','at','on','of','for','with','and','or','to','near','within','around','over','above','under','below','from','by']);
+  const cap = q.match(/^\s*([A-Z][a-zA-Z-]+(?:\s+[A-Z][a-zA-Z-]+){0,2})/);
+  if (cap) return cap[1].trim();
+  for (const tok of q.split(/\s+/)) {
+    const clean = tok.replace(/[^a-zA-Z-]/g, '');
+    if (clean.length > 2 && !stop.has(clean.toLowerCase())) return clean;
+  }
+  return q.slice(0, 30).trim();
 }
 
 function firstGotoUrl(steps: PlaybookStep[], vars: Record<string, string>): string | null {
