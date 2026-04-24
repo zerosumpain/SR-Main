@@ -89,6 +89,11 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
 echo "==> Ensuring image upload directory exists..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/strange-rambling/static/images/blog && sudo chmod 755 /opt/strange-rambling/static/images/blog && sudo chown $VPS_USER:$VPS_USER /opt/strange-rambling/static/images/blog"
 
+echo "==> Ensuring workflow file-store directory exists..."
+# Default WORKFLOW_FILES_ROOT resolves to ~/.openclaw/workflow-files for the
+# service user. Pre-create it so the first upload doesn't fail with ENOENT.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p ~/.openclaw/workflow-files && chmod 700 ~/.openclaw/workflow-files"
+
 echo "==> Restarting service..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo systemctl restart $SERVICE"

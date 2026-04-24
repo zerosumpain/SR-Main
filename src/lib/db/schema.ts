@@ -1166,3 +1166,41 @@ export const scraperTargetKnowledge = pgTable('scraper_target_knowledge', {
 });
 
 export type ScraperTargetKnowledge = typeof scraperTargetKnowledge.$inferSelect;
+
+// ==========================================
+// Workflow Files (file store consumed by pipelines)
+// ==========================================
+//
+// One row per stored file. Files live on disk at `diskPath` (absolute path
+// inside WORKFLOW_FILES_ROOT). The `permissions` JSONB is a simple capability
+// map — the file-store node enforces it at runtime. Files are global, not
+// workflow-scoped, so the same file can be consumed by multiple workflows.
+
+export const workflowFiles = pgTable(
+  'workflow_files',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    name: text('name').notNull(),                    // display name (unique, used as key from nodes)
+    description: text('description'),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    diskPath: text('disk_path').notNull(),           // absolute path under WORKFLOW_FILES_ROOT
+    permissions: jsonb('permissions').notNull().default(sql`'{"read":true,"write":false,"append":false,"delete":false}'::jsonb`),
+    uploadedBy: text('uploaded_by'),                 // email of uploader, nullable for system-generated
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueName: uniqueIndex('workflow_files_name_idx').on(table.name),
+  }),
+);
+
+export type WorkflowFile = typeof workflowFiles.$inferSelect;
+export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
+
+export type WorkflowFilePermissions = {
+  read: boolean;
+  write: boolean;
+  append: boolean;
+  delete: boolean;
+};

@@ -2787,6 +2787,123 @@
               onpointerdown={(e) => onHandlePointerDown(e, n)}
             ></div>
           </div>
+        {:else if n.kind === 'postit'}
+          {@const psize = resizableSize(n)}
+          {@const ptext = ((n.config as Record<string, unknown>)?.text as string) ?? ''}
+          {@const pcolor = (((n.config as Record<string, unknown>)?.color as string) ?? 'yellow') as 'yellow' | 'pink' | 'blue' | 'green'}
+          <div
+            class="postit-node"
+            class:is-selected={selectedId === n.id}
+            class:flash={flashNodeId === n.id}
+            data-color={pcolor}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{psize.w}px"
+            style:height="{psize.h}px"
+            role="group"
+            aria-label="Post-it note"
+          >
+            <div
+              class="postit-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+            >
+              <span class="postit-pin"></span>
+              <span class="postit-title">NOTE</span>
+              {#if n.name && n.name !== 'postit'}<span class="postit-name">/ {n.name}</span>{/if}
+              <div class="postit-colors" onpointerdown={(e) => e.stopPropagation()}>
+                {#each ['yellow', 'pink', 'blue', 'green'] as c}
+                  <button
+                    type="button"
+                    class="postit-color-swatch"
+                    data-color={c}
+                    class:on={pcolor === c}
+                    aria-label={`Set colour ${c}`}
+                    onclick={() => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), color: c })}
+                  ></button>
+                {/each}
+              </div>
+            </div>
+            <textarea
+              class="postit-body"
+              value={ptext}
+              placeholder="Write a comment…"
+              onpointerdown={(e) => e.stopPropagation()}
+              oninput={(e) => {
+                const v = (e.currentTarget as HTMLTextAreaElement).value;
+                // Local mutation is fine — saveNodeConfig re-reads after save.
+                (n.config as Record<string, unknown>).text = v;
+              }}
+              onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), text: (e.currentTarget as HTMLTextAreaElement).value })}
+            ></textarea>
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+          </div>
+        {:else if n.kind === 'annotation'}
+          {@const asize = resizableSize(n)}
+          {@const acfg = (n.config as Record<string, unknown>) ?? {}}
+          {@const atext = (acfg.text as string) ?? ''}
+          {@const aborder = (acfg.borderColor as string) ?? '#3a7bd5'}
+          {@const abg = (acfg.backgroundColor as string) ?? '#3a7bd5'}
+          {@const aop = typeof acfg.opacity === 'number' ? (acfg.opacity as number) : 0.08}
+          <div
+            class="annotation-node"
+            class:is-selected={selectedId === n.id}
+            class:flash={flashNodeId === n.id}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{asize.w}px"
+            style:height="{asize.h}px"
+            style:border-color={aborder}
+            style:background-color={abg}
+            style:--ann-opacity={aop}
+            role="group"
+            aria-label="Annotation box"
+          >
+            <div
+              class="annotation-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit label"
+              style:background-color={aborder}
+            >
+              <input
+                type="text"
+                class="annotation-label-input"
+                value={atext}
+                placeholder="Label…"
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => e.stopPropagation()}
+                oninput={(e) => { (n.config as Record<string, unknown>).text = (e.currentTarget as HTMLInputElement).value; }}
+                onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), text: (e.currentTarget as HTMLInputElement).value })}
+              />
+            </div>
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+          </div>
         {:else if n.kind === 'stats'}
           {@const ssize = resizableSize(n)}
           <div
@@ -5850,6 +5967,127 @@
     color: var(--text-primary);
     border-color: var(--text-muted);
   }
+
+  /* ——— Post-it note (inert) ——— */
+  .postit-node {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    border-radius: 3px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2);
+    transform: rotate(-0.4deg);
+    transition: transform 80ms ease, box-shadow 80ms ease;
+    overflow: hidden;
+    z-index: 2;
+  }
+  .postit-node:hover { transform: rotate(0deg) translateY(-1px); }
+  .postit-node.is-selected { outline: 2px solid rgba(255, 255, 255, 0.55); outline-offset: 2px; }
+  .postit-node.flash { animation: wf-flash 300ms ease; }
+  .postit-node[data-color="yellow"] { background: linear-gradient(180deg, #f9e87a 0%, #f4de5a 100%); color: #3a2c00; }
+  .postit-node[data-color="pink"] { background: linear-gradient(180deg, #f7b6c9 0%, #f398b1 100%); color: #3a0012; }
+  .postit-node[data-color="blue"] { background: linear-gradient(180deg, #a9d1f5 0%, #8fbeee 100%); color: #082543; }
+  .postit-node[data-color="green"] { background: linear-gradient(180deg, #bfe5a6 0%, #a3d684 100%); color: #0f2e04; }
+  .postit-hdr {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    cursor: grab;
+    user-select: none;
+    background: rgba(0, 0, 0, 0.08);
+  }
+  .postit-hdr:active { cursor: grabbing; }
+  .postit-pin {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  }
+  .postit-title { font-weight: 600; }
+  .postit-name { opacity: 0.65; text-transform: none; font-size: 11px; letter-spacing: 0; }
+  .postit-colors { margin-left: auto; display: flex; gap: 4px; }
+  .postit-color-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    padding: 0;
+  }
+  .postit-color-swatch[data-color="yellow"] { background: #f4de5a; }
+  .postit-color-swatch[data-color="pink"] { background: #f398b1; }
+  .postit-color-swatch[data-color="blue"] { background: #8fbeee; }
+  .postit-color-swatch[data-color="green"] { background: #a3d684; }
+  .postit-color-swatch.on { outline: 2px solid rgba(0, 0, 0, 0.55); outline-offset: 1px; }
+  .postit-body {
+    flex: 1;
+    padding: 10px 12px 16px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font-family: 'Caveat', 'Marker Felt', 'Comic Sans MS', cursive;
+    font-size: 16px;
+    line-height: 1.35;
+    resize: none;
+    overflow: auto;
+  }
+  .postit-body::placeholder { color: rgba(0, 0, 0, 0.4); }
+
+  /* ——— Annotation box (inert) ——— */
+  .annotation-node {
+    position: absolute;
+    border: 2px dashed;
+    border-radius: 6px;
+    z-index: 0;
+    background-color: var(--bg-elev, #3a7bd5);
+    /* We separate background colour and its alpha so authors can pick any
+       colour via config and still see through to underlying nodes. */
+    --ann-opacity: 0.08;
+    background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
+  }
+  .annotation-node::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: inherit;
+    opacity: var(--ann-opacity);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .annotation-node.is-selected { outline: 2px solid rgba(255, 255, 255, 0.55); outline-offset: 2px; }
+  .annotation-node.flash { animation: wf-flash 300ms ease; }
+  .annotation-hdr {
+    position: absolute;
+    top: -14px;
+    left: 12px;
+    display: flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: grab;
+    user-select: none;
+    max-width: calc(100% - 24px);
+  }
+  .annotation-hdr:active { cursor: grabbing; }
+  .annotation-label-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    min-width: 80px;
+    max-width: 240px;
+  }
+  .annotation-label-input::placeholder { color: rgba(255, 255, 255, 0.55); }
 
   /* ——— Stats node ——— */
   .stats-node {

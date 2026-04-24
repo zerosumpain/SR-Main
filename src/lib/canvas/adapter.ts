@@ -12,7 +12,9 @@ export type NodeKind =
   | 'inspector'
   | 'stats'
   | 'intelligence'
-  | 'webpage';
+  | 'webpage'
+  | 'postit'
+  | 'annotation';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export type CanvasNode = {
@@ -76,6 +78,7 @@ export const CANVAS_NODE_GROUPS = [
   'Intel & Web',
   'Integrations',
   'Observability',
+  'Annotations',
 ] as const;
 
 /** Curated set of workflow node types offered in the canvas "+ node" picker. */
@@ -695,6 +698,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'file-store',
+    label: 'File store',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Read, write, append, delete, or list files managed at /admin/files. Permissions are enforced per file.',
+    defaultConfig: { operation: 'read', fileName: '', encoding: 'utf8' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
+  },
+  {
     type: 'inspector',
     label: 'Inspector · debug',
     kind: 'inspector',
@@ -744,6 +759,32 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       outputs: [],
     },
   },
+
+  // ————————————————————————— Annotations (inert, no data flow)
+  {
+    type: 'postit',
+    label: 'Post-it note',
+    kind: 'postit',
+    group: 'Annotations',
+    description: 'Sticky note for comments. Does not run, does not connect to other nodes.',
+    defaultConfig: { text: '', color: 'yellow', size: { w: 200, h: 160 } },
+    handles: { inputs: [], outputs: [] },
+  },
+  {
+    type: 'annotation',
+    label: 'Annotation box',
+    kind: 'annotation',
+    group: 'Annotations',
+    description: 'Transparent box to group or annotate a region of the canvas. Inert.',
+    defaultConfig: {
+      text: '',
+      borderColor: '#3a7bd5',
+      backgroundColor: '#3a7bd5',
+      opacity: 0.08,
+      size: { w: 320, h: 200 },
+    },
+    handles: { inputs: [], outputs: [] },
+  },
 ]);
 
 export function allTypes(): readonly NodeTypeOption[] {
@@ -767,6 +808,8 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'chat') return 'chat';
   if (type === 'inspector') return 'inspector';
   if (type === 'stats-summary' || type === 'stats-trends' || type === 'stats-per-node') return 'stats';
+  if (type === 'postit') return 'postit';
+  if (type === 'annotation') return 'annotation';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
   if (type === 'llm-agent') return 'agent';
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')

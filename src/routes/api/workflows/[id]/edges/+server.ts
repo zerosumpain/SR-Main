@@ -5,9 +5,7 @@ import { workflowEdges, workflowNodes } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import { recordAudit } from '$lib/canvas/audit';
 
-function isStatsType(type: string): boolean {
-  return type.startsWith('stats-');
-}
+import { isDisplayOnlyType } from '$lib/workflows/types';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
@@ -33,10 +31,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ error: 'Source or target node not in this workflow' }, { status: 404 });
   }
 
-  // Reject edges touching display-only stats nodes.
-  if (both.some((n) => isStatsType(n.type))) {
+  // Reject edges touching display-only nodes (stats, post-its, annotations).
+  if (both.some((n) => isDisplayOnlyType(n.type))) {
     return json(
-      { error: 'Stats nodes are display-only and cannot be connected.' },
+      { error: 'Display-only nodes (stats, post-its, annotations) cannot be connected.' },
       { status: 400 },
     );
   }

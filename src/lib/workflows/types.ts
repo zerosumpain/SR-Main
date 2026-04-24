@@ -251,8 +251,9 @@ export interface WorkflowEdgeDef {
 
 /**
  * Display-only node types never participate in the DAG: they exist only
- * for side-panel rendering on the canvas (stats, etc.).
+ * for side-panel rendering on the canvas (stats, post-it notes,
+ * annotation boxes, etc.).
  */
 export function isDisplayOnlyType(type: string): boolean {
-  return type.startsWith('stats-');
+  return type.startsWith('stats-') || type === 'postit' || type === 'annotation';
 }
