@@ -10,6 +10,9 @@
 
   --accent: #c4570a;        /* Burnt orange — punchy, not regal */
   --accent-hover: #a84808;
+  --accent-tint-08: rgba(196, 87, 10, 0.08);
+  --accent-tint-20: rgba(196, 87, 10, 0.2);
+  --accent-tint-35: rgba(196, 87, 10, 0.35);
   --bg: #ede4d4;            /* Warm cream, slightly darker */
   --bg-base: #ede4d4;       /* Alias of --bg for admin layout background */
   --bg-section: rgba(26, 16, 8, 0.04);  /* Subtle tinted sections */

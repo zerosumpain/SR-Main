@@ -4349,12 +4349,6 @@
 <svelte:window onkeydown={(e) => { if (runSummary && e.key === 'Escape') closeRunSummary(); }} />
 
 <style>
-  :root {
-    --accent-tint-08: rgba(196, 87, 10, 0.08);
-    --accent-tint-20: rgba(196, 87, 10, 0.2);
-    --accent-tint-35: rgba(196, 87, 10, 0.35);
-  }
-
   .page-shell {
     display: flex;
     flex-direction: column;
