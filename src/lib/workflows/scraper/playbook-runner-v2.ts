@@ -8,14 +8,47 @@
  */
 
 import { startAgent } from './agent-harness';
-import { interpolateVars, type Playbook, type PlaybookStep, type RunPlaybookOptions, type RunPlaybookResult } from './playbook';
+import {
+  decomposeSearchQuery,
+  extractStepVarNames,
+  interpolateVars,
+  type Playbook,
+  type PlaybookRequiredVar,
+  type PlaybookStep,
+  type RunPlaybookOptions,
+  type RunPlaybookResult,
+} from './playbook';
 import { db } from '$lib/db';
 import { scraperRunLog } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function runPlaybookV2(opts: RunPlaybookOptions): Promise<RunPlaybookResult> {
-  const { playbook, vars = {}, profile = 'default', workflowRunId, onProgress } = opts;
+  const { playbook, vars: callerVars = {}, searchQuery, profile = 'default', workflowRunId, onProgress, model } = opts;
   const steps: PlaybookStep[] = playbook.steps ?? [];
+
+  // Resolve vars: caller-supplied trump everything, then fill gaps via
+  // decomposition of searchQuery when the playbook declares requiredVars
+  // (or we can infer them from `{{…}}` placeholders in the steps).
+  const declared = playbook.requiredVars ?? [];
+  const inferred: PlaybookRequiredVar[] = declared.length === 0
+    ? extractStepVarNames(steps).map((name) => ({ name, hint: name }))
+    : declared;
+  const missing = inferred.filter((v) => !(v.name in callerVars) || !callerVars[v.name]);
+  let decomposed: Record<string, string> = {};
+  if (missing.length > 0 && searchQuery) {
+    onProgress?.({ t: 'playbook.decompose.start', vars: missing.map((v) => v.name) });
+    decomposed = await decomposeSearchQuery({ searchQuery, requiredVars: missing, model }).catch(() => ({}));
+    onProgress?.({ t: 'playbook.decompose.done', resolved: Object.keys(decomposed) });
+  }
+  // Apply fallbacks last for any slots still blank.
+  const fallbacks: Record<string, string> = {};
+  for (const v of inferred) {
+    if (v.fallback && !(v.name in callerVars) && !(v.name in decomposed)) {
+      fallbacks[v.name] = v.fallback;
+    }
+  }
+  const vars: Record<string, string> = { ...fallbacks, ...decomposed, ...callerVars };
+
   const seedUrl = firstGotoUrl(steps, vars) ?? '';
 
   const [logRow] = await db.insert(scraperRunLog).values({

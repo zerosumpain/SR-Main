@@ -84,6 +84,10 @@ export const stealthScrapeExecutor: NodeExecutor = {
       const pb = await runPlaybook({
         playbook,
         vars,
+        // Pass the raw searchQuery so the runner can decompose it into the
+        // playbook's requiredVars (keyword / location / distance / salaryMin
+        // etc). Caller-supplied `vars` still win — this only fills gaps.
+        searchQuery: searchQuery || undefined,
         profile,
         workflowRunId: context.runId,
         onProgress: emitProgress,

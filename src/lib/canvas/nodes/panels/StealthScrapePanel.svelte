@@ -223,7 +223,7 @@
       {:else if playbookError}
         <div class="ps-hint ps-hint-error">Error: {playbookError}</div>
       {:else if playbookMeta?.playbook}
-        {@const pb = playbookMeta.playbook as { version?: number; steps?: unknown[]; extract?: unknown[]; goal?: string }}
+        {@const pb = playbookMeta.playbook as { version?: number; steps?: unknown[]; extract?: unknown[]; goal?: string; requiredVars?: Array<{ name: string; hint: string }> }}
         <div class="ps-playbook-status ps-playbook-status-saved">
           <span class="ps-dot ps-dot-green"></span>
           <span class="ps-playbook-summary">
@@ -236,6 +236,11 @@
         </div>
         {#if pb.goal}
           <div class="ps-hint ps-playbook-goal">Goal: {pb.goal}</div>
+        {/if}
+        {#if Array.isArray(pb.requiredVars) && pb.requiredVars.length > 0}
+          <div class="ps-hint ps-playbook-vars">
+            Vars decomposed from Search Query: {pb.requiredVars.map((v) => v.name).join(', ')}
+          </div>
         {/if}
         <div class="ps-playbook-actions">
           <button class="ps-link" onclick={() => (playbookExpanded = !playbookExpanded)}>

@@ -22,9 +22,11 @@
 
 import { startAgent, type AgentHarness, type AgentObservation } from './agent-harness';
 import {
+  extractStepVarNames,
   runPlaybook,
   savePlaybook,
   type Playbook,
+  type PlaybookRequiredVar,
   type PlaybookStep,
 } from './playbook';
 import { normalizeDomain } from './target-knowledge';
@@ -87,23 +89,40 @@ Rules:
   { "action": "finalize", "playbook": { … }, "note": "we're on the page that contains the goal data" }
   { "action": "give_up", "reason": "…" }
 - Prefer direct goto() with query-string params over form fill/submit when the site supports it — shorter playbooks are more robust.
-- Use fill({{keyword}}) for the search term so the playbook generalises per-run. Example: { "action":"fill", "selector":"input[name=q]", "value":"{{keyword}}" }.
+- Parameterise form fields with NAMED VARS, not the whole user query. The user's searchQuery is a free-form sentence like "Analysts in the Darlington area within 20 miles over 60k". DO NOT stuff that whole sentence into one field — it will be rejected. Instead, for each field the site exposes, pick the smallest slice of the query that fits and wrap it in its own {{var}}. Typical vars:
+    - {{keyword}}   — job title / role / primary search term (e.g. "Analyst")
+    - {{location}}  — town, city, postcode (e.g. "Darlington")
+    - {{distance}} — search radius as a number (e.g. "20")
+    - {{salaryMin}} — minimum salary as a number (e.g. "60000")
+  Use any var names that make sense for THIS site. Record what concrete value you filled in each turn (the real live data so the site actually responds), but emit a \`var\` field on the fill/select action so the saved step uses the {{…}} placeholder. Example:
+  { "action":"fill", "selector":"input[name=LOCATION]", "value":"Darlington", "var":"location", "note":"location slice of user query" }
+- If the user's searchQuery does NOT contain a value a field needs (e.g. they asked for "Analyst jobs" with no location), LEAVE THE FIELD BLANK — don't invent a value, and don't parameterise.
 - Call altcha whenever you see an altcha-widget in the interactive list.
 - Finalize the moment you can see the target data on the page — do NOT click into individual detail pages unless the goal requires them.
 
-When you finalize, the playbook's "steps" array must START WITH a { "type": "goto", "url": "…" } for the seedUrl (the replay starts from an empty browser — it has no idea what page to land on without this) and then contain the minimum sequence of subsequent actions that reach the results page. acceptance.minItems must be ≥ 1 — you're proving the playbook actually extracts data, so 0 is not acceptable. The playbook shape:
+When you finalize, the playbook's "steps" array must START WITH a { "type": "goto", "url": "…" } for the seedUrl (the replay starts from an empty browser — it has no idea what page to land on without this) and then contain the minimum sequence of subsequent actions that reach the results page. acceptance.minItems must be ≥ 1 — you're proving the playbook actually extracts data, so 0 is not acceptable.
+
+In the saved steps, any fill/select value derived from a user var MUST use its {{var}} placeholder (NOT the concrete value you tested with). Also include a "requiredVars" array describing each var the playbook needs — the runtime uses the hints to decompose a new user's searchQuery on future runs.
+
+The playbook shape:
 {
   "version": 2,
   "generatedAt": "<iso timestamp — literal string 'generated'>",
   "goal": "<echo the user goal>",
-  "steps": [ /* the action sequence (minus the finalize itself) — objects with { "type": "goto"|"click"|"fill"|"select"|"submit"|"altcha"|"wait", ... } */ ],
+  "requiredVars": [
+    { "name": "keyword",   "hint": "job title / role keyword (e.g. 'Analyst', 'Software Engineer')" },
+    { "name": "location",  "hint": "town, city, or postcode where to search" },
+    { "name": "distance",  "hint": "search radius in miles as a number" },
+    { "name": "salaryMin", "hint": "minimum salary as a whole number, no commas" }
+  ],
+  "steps": [ /* the action sequence (minus the finalize itself) — objects with { "type": "goto"|"click"|"fill"|"select"|"submit"|"altcha"|"wait", ... }. Fill values must be "{{var}}" placeholders for any slot that came from the user's searchQuery */ ],
   "extract": [
     { "field": "items", "selector": "<css>", "attr": "html", "multi": true, "trim": true }
     /* plus optional per-item field rules if you're confident; otherwise the items-html multi is enough, downstream stealth-scrape-llm can parse it */
   ],
   "acceptance": { "minItems": 1, "sampleField": "items" }
 }
-The step shapes inside "steps" use "type" (not "action"): { "type":"goto","url":"…" }, { "type":"click","selector":"…" }, etc.`;
+The step shapes inside "steps" use "type" (not "action"): { "type":"goto","url":"…" }, { "type":"click","selector":"…" }, etc. Only list vars in requiredVars that you actually referenced in steps — don't include vars the site doesn't support.`;
 
 export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapperResult> {
   const domain = normalizeDomain(opts.seedUrl);
@@ -118,10 +137,11 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
   let inSessionUrl = '';
   let inSessionError: string | undefined;
 
-  // During the mapping loop we substitute {{keyword}} (etc.) with the real
-  // searchQuery so the site actually returns real results to observe. The
-  // playbook SAVES the pre-substitution template, so replay keeps the
-  // generalisable form.
+  // During the mapping loop the LLM fills with concrete values it picked from
+  // the user's searchQuery. We only need liveVars as a fallback for cases
+  // where the LLM pre-emptively emits a `{{var}}` value without tagging `var`
+  // — rare, but easy enough to handle. The playbook SAVES the {{…}} template
+  // via actionToStep's `var` handling, so replay keeps the generalisable form.
   const liveVars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
 
   try {
@@ -199,6 +219,10 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
       // Execute the action via the agent, then record it into the step sequence.
       try {
         await executeAction(agent, action, liveVars);
+        // When the LLM emitted a `var` name on a fill/select, the saved step
+        // uses `{{var}}` so replay can substitute a different user's value.
+        // When it omitted `var`, the concrete value is baked in — fine for
+        // static picks like "Submit" buttons or fixed filter options.
         const step = actionToStep(action);
         if (step) recordedSteps.push(step);
       } catch (err) {
@@ -433,6 +457,13 @@ async function executeAction(
 }
 
 function actionToStep(action: Record<string, unknown>): PlaybookStep | null {
+  // If the LLM tagged the action with a `var` name, the saved step uses the
+  // `{{var}}` placeholder so future runs can plug in a different value. The
+  // concrete `value` the LLM chose this turn only lives in the mapping
+  // session — it mustn't bake into the playbook.
+  const varName = typeof action.var === 'string' && action.var ? action.var : null;
+  const templatedValue = (): string =>
+    varName ? `{{${varName}}}` : String(action.value ?? '');
   switch (action.action) {
     case 'goto':
       return { type: 'goto', url: action.url as string };
@@ -443,9 +474,9 @@ function actionToStep(action: Record<string, unknown>): PlaybookStep | null {
         text: typeof action.text === 'string' ? action.text : undefined,
       };
     case 'fill':
-      return { type: 'fill', selector: action.selector as string, value: action.value as string };
+      return { type: 'fill', selector: action.selector as string, value: templatedValue() };
     case 'select':
-      return { type: 'select', selector: action.selector as string, value: action.value as string };
+      return { type: 'select', selector: action.selector as string, value: templatedValue() };
     case 'submit':
       return {
         type: 'submit',
@@ -464,7 +495,11 @@ function actionToStep(action: Record<string, unknown>): PlaybookStep | null {
   }
 }
 
-function coercePlaybook(v: unknown, goal: string, fallbackSteps: PlaybookStep[]): Playbook {
+function coercePlaybook(
+  v: unknown,
+  goal: string,
+  fallbackSteps: PlaybookStep[],
+): Playbook {
   if (!v || typeof v !== 'object') throw new Error('LLM finalize had no playbook object');
   const p = v as Record<string, unknown>;
   const stepsRaw = Array.isArray(p.steps) ? p.steps : [];
@@ -494,13 +529,43 @@ function coercePlaybook(v: unknown, goal: string, fallbackSteps: PlaybookStep[])
   // zero matching items is never a useful successful scrape.
   const requestedMin = typeof accRaw.minItems === 'number' ? accRaw.minItems : 1;
   const minItems = Math.max(1, requestedMin);
+
+  // Merge LLM-declared requiredVars with any `{{…}}` placeholders we can see
+  // in the final steps. The union is what replay needs to resolve. Hints
+  // from the LLM take priority; inferred-only vars get a bland hint.
+  const declaredRaw = Array.isArray(p.requiredVars) ? p.requiredVars : [];
+  const declared: PlaybookRequiredVar[] = declaredRaw
+    .map(coerceRequiredVar)
+    .filter((v): v is PlaybookRequiredVar => v !== null);
+  const usedInSteps = new Set(extractStepVarNames(effectiveSteps));
+  const byName = new Map<string, PlaybookRequiredVar>();
+  for (const v of declared) {
+    if (usedInSteps.has(v.name)) byName.set(v.name, v);
+  }
+  for (const name of usedInSteps) {
+    if (!byName.has(name)) byName.set(name, { name, hint: name });
+  }
+  const requiredVars = Array.from(byName.values());
+
   return {
     version: 2,
     generatedAt: new Date().toISOString(),
     goal: typeof p.goal === 'string' ? p.goal : goal,
     steps: effectiveSteps,
+    requiredVars: requiredVars.length > 0 ? requiredVars : undefined,
     extract,
     acceptance: { minItems, sampleField },
+  };
+}
+
+function coerceRequiredVar(v: unknown): PlaybookRequiredVar | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.name !== 'string' || !r.name) return null;
+  return {
+    name: r.name,
+    hint: typeof r.hint === 'string' && r.hint ? r.hint : r.name,
+    fallback: typeof r.fallback === 'string' ? r.fallback : undefined,
   };
 }
 
