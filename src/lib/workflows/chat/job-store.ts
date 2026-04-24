@@ -64,9 +64,12 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   }
   if (stream.closed) return;
   stream.buffer.push(event);
-  // Reset idle watchdog on any event from this job.
-  const job = jobs.get(jobId);
-  if (job) job.lastEventAt = Date.now();
+  // Reset idle watchdog on any non-heartbeat event. Heartbeats are
+  // informational and must not mask a genuinely stuck job.
+  if (event.type !== 'heartbeat') {
+    const job = jobs.get(jobId);
+    if (job) job.lastEventAt = Date.now();
+  }
   for (const sub of stream.subscribers) {
     try { sub(event); } catch { /* ignore broken subscriber */ }
   }
@@ -108,6 +111,9 @@ export interface OrchestratorJob {
   scope: JobScope;
   lastEventAt: number;
   watchdog?: ReturnType<typeof setInterval>;
+  currentStep?: string;       // short description updated by onProgress / tool_start for heartbeat summaries
+  lastHeartbeatAt: number;
+  heartbeat?: ReturnType<typeof setInterval>;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -123,6 +129,8 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     if (job.status !== 'running') {
       if (job.watchdog) clearInterval(job.watchdog);
       job.watchdog = undefined;
+      if (job.heartbeat) clearInterval(job.heartbeat);
+      job.heartbeat = undefined;
       return;
     }
     const now = Date.now();
@@ -139,10 +147,41 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
       job.result = { success: false, error: reason };
       if (job.watchdog) clearInterval(job.watchdog);
       job.watchdog = undefined;
+      if (job.heartbeat) clearInterval(job.heartbeat);
+      job.heartbeat = undefined;
       publishJobEvent(jobId, { type: 'error', message: reason });
       failAllWaiters(jobId, reason);
     }
   }, 15_000);
+}
+
+const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;   // check every 5s
+const HEARTBEAT_MIN_SILENCE_MS = 25_000;     // only emit after 25s of silence
+
+function startHeartbeat(jobId: string, job: OrchestratorJob): void {
+  job.heartbeat = setInterval(() => {
+    if (job.status !== 'running') {
+      if (job.heartbeat) clearInterval(job.heartbeat);
+      job.heartbeat = undefined;
+      return;
+    }
+    const now = Date.now();
+    const sinceEvent = now - job.lastEventAt;
+    const sinceHeartbeat = now - job.lastHeartbeatAt;
+    if (sinceEvent >= HEARTBEAT_MIN_SILENCE_MS && sinceHeartbeat >= HEARTBEAT_MIN_SILENCE_MS) {
+      const summary =
+        job.currentStep ??
+        job.progress[job.progress.length - 1] ??
+        'Still thinking...';
+      job.lastHeartbeatAt = now;
+      publishJobEvent(jobId, {
+        type: 'heartbeat',
+        summary: summary.trim().slice(0, 140),
+        elapsedMs: now - job.startedAt,
+        currentStep: job.currentStep,
+      });
+    }
+  }, HEARTBEAT_CHECK_INTERVAL_MS);
 }
 
 export function createJob(message: string, scope: JobScope = {}): { jobId: string; job: OrchestratorJob } {
@@ -157,9 +196,11 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     message: message.slice(0, 100),
     scope: { workflowId: scope.workflowId ?? null, conversationId: scope.conversationId ?? null },
     lastEventAt: now,
+    lastHeartbeatAt: now,
   };
   jobs.set(jobId, job);
   startWatchdog(jobId, job);
+  startHeartbeat(jobId, job);
   return { jobId, job };
 }
 
@@ -180,6 +221,7 @@ export function cancelJob(jobId: string): boolean {
   job.error = 'Cancelled by user';
   job.result = { success: false, error: 'Cancelled by user' };
   if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+  if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
   publishJobEvent(jobId, { type: 'error', message: 'Cancelled by user' });
   failAllWaiters(jobId, 'Cancelled by user');
   return true;
@@ -209,6 +251,7 @@ export function cancelForScope(scope: JobScope, reason: string): number {
     job.error = reason;
     job.result = { success: false, error: reason };
     if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+    if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
     publishJobEvent(id, { type: 'error', message: reason });
     failAllWaiters(id, reason);
     cancelled += 1;
@@ -226,6 +269,7 @@ export function cancelAllRunning(reason: string): void {
       job.error = reason;
       job.result = { success: false, error: reason };
       if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+      if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
       publishJobEvent(id, { type: 'error', message: reason });
       failAllWaiters(id, reason);
     }
@@ -237,6 +281,7 @@ export function cleanOldJobs(maxAgeMs = 300000): void {
   for (const [id, job] of jobs) {
     if (job.status !== 'running' && (maxAgeMs === 0 || now - job.startedAt > maxAgeMs)) {
       if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+      if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
       jobs.delete(id);
     }
   }

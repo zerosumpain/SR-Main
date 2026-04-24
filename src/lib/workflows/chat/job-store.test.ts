@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   publishJobEvent,
   subscribeJob,
@@ -57,5 +57,52 @@ describe('job-store resumeWith', () => {
   it('respondToWaiter returns false when no waiter is registered', () => {
     const { jobId } = createJob('test');
     expect(respondToWaiter(jobId, 'missing:key', { x: 1 })).toBe(false);
+  });
+});
+
+describe('heartbeat', () => {
+  it('emits a heartbeat event after 25s of silence', async () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId } = createJob('test');
+      const received: JobEvent[] = [];
+      subscribeJob(jobId, (e) => received.push(e));
+      vi.advanceTimersByTime(26_000);
+      expect(received.some((e) => e.type === 'heartbeat')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not emit heartbeat while tokens are flowing', async () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId } = createJob('test');
+      const received: JobEvent[] = [];
+      subscribeJob(jobId, (e) => received.push(e));
+      for (let i = 0; i < 5; i++) {
+        publishJobEvent(jobId, { type: 'token', delta: 'x' });
+        vi.advanceTimersByTime(10_000);
+      }
+      expect(received.filter((e) => e.type === 'heartbeat').length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('heartbeat event does not reset watchdog lastEventAt', () => {
+    // Verify semantic: heartbeats are informational — they must NOT mask a
+    // genuinely-stuck job from the idle-timeout watchdog.
+    vi.useFakeTimers();
+    try {
+      const { jobId, job } = createJob('test');
+      const before = job.lastEventAt;
+      vi.advanceTimersByTime(26_000);
+      // A heartbeat was emitted above; lastEventAt must still reflect
+      // the original createJob timestamp (+ 0, since no real event).
+      expect(job.lastEventAt).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -84,6 +84,7 @@ export const POST: RequestHandler = async ({ request }) => {
       if (abortController.signal.aborted) return;
       console.log(`[orchestrator] Job ${jobId} progress: ${text.trim()}`);
       job.progress.push(text);
+      job.currentStep = text.trim().slice(0, 140);
     }
 
     try {
@@ -243,6 +244,9 @@ export const POST: RequestHandler = async ({ request }) => {
               job.toolSteps[existing] = step;
             } else {
               job.toolSteps.push(step);
+            }
+            if (step.status === 'running') {
+              job.currentStep = `${step.tool}: running`;
             }
           },
           onStreamEvent: (event) => {
