@@ -46,6 +46,19 @@
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
     state: 'idle',
   });
+  let runStartedAt = $state<number | null>(null);
+  type RunSummary = {
+    state: 'completed' | 'completed_with_errors' | 'failed';
+    error?: string;
+    durationMs: number;
+    nodeCounts: { completed: number; failed: number; running: number; other: number; total: number };
+    failedNodes: Array<{ id: string; name: string; error: string | null }>;
+    toolCount: number;
+    tools: Array<{ tool: string; status: string }>;
+    reply: string | null;
+    runId: string | null;
+  };
+  let runSummary = $state<RunSummary | null>(null);
   // Per-chat-node composer draft, scroll refs, size overrides, active-run target
   let chatDrafts = $state<Record<string, string>>({});
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
@@ -239,7 +252,18 @@
   }
 
   function messagesFor(chatNodeId: string) {
-    return data.canvas.messagesByChat[chatNodeId] ?? [];
+    const raw = data.canvas.messagesByChat[chatNodeId] ?? [];
+    const seen = new Set<string>();
+    const out: typeof raw = [];
+    for (const m of raw) {
+      if (seen.has(m.id)) {
+        console.warn('[canvas] duplicate message id dropped', m.id, 'in chat', chatNodeId);
+        continue;
+      }
+      seen.add(m.id);
+      out.push(m);
+    }
+    return out;
   }
 
   function statusDotColour(s: string | null | undefined): 'red' | 'amber' | 'green' | null {
@@ -303,15 +327,27 @@
   let nodePositions = $state<Record<string, { x: number; y: number }>>({});
 
   const viewNodes = $derived<ViewNode[]>(
-    canvas.nodes.map((n) => ({
-      ...n,
-      status: liveStatus[n.id] ?? n.status,
-      inputData: liveData[n.id]?.inputData ?? n.inputData,
-      outputData: liveData[n.id]?.outputData ?? n.outputData,
-      error: liveData[n.id]?.error ?? n.error,
-      x: nodePositions[n.id]?.x ?? n.x,
-      y: nodePositions[n.id]?.y ?? n.y,
-    })),
+    (() => {
+      const seen = new Set<string>();
+      const out: ViewNode[] = [];
+      for (const n of canvas.nodes) {
+        if (seen.has(n.id)) {
+          console.warn('[canvas] duplicate node id dropped', n.id);
+          continue;
+        }
+        seen.add(n.id);
+        out.push({
+          ...n,
+          status: liveStatus[n.id] ?? n.status,
+          inputData: liveData[n.id]?.inputData ?? n.inputData,
+          outputData: liveData[n.id]?.outputData ?? n.outputData,
+          error: liveData[n.id]?.error ?? n.error,
+          x: nodePositions[n.id]?.x ?? n.x,
+          y: nodePositions[n.id]?.y ?? n.y,
+        });
+      }
+      return out;
+    })(),
   );
 
   const byId: Record<string, ViewNode> = $derived(
@@ -332,7 +368,22 @@
   let flashNodeId = $state<string | null>(null);
 
   // Guard against orphan edges whose endpoints no longer exist
-  const visibleEdges = $derived(canvas.edges.filter((e) => byId[e.from] && byId[e.to]));
+  const visibleEdges = $derived(
+    (() => {
+      const seen = new Set<string>();
+      const out: typeof canvas.edges = [];
+      for (const e of canvas.edges) {
+        if (!byId[e.from] || !byId[e.to]) continue;
+        if (seen.has(e.id)) {
+          console.warn('[canvas] duplicate edge id dropped', e.id);
+          continue;
+        }
+        seen.add(e.id);
+        out.push(e);
+      }
+      return out;
+    })(),
+  );
 
   const activeEdgeIds = $derived(
     new Set(
@@ -457,6 +508,8 @@
     liveStatus = {};
     liveData = {};
     runMeta = { state: 'running' };
+    runStartedAt = Date.now();
+    runSummary = null;
     try {
       const res = await fetch(`/api/workflows/${canvas.workflowId}/chat`, {
         method: 'POST',
@@ -569,6 +622,8 @@
     liveStatus = {};
     liveData = {};
     runMeta = { state: 'running' };
+    runStartedAt = Date.now();
+    runSummary = null;
     pendingRun = null;
     try {
       const res = await fetch(`/api/workflows/${canvas.workflowId}/run`, {
@@ -715,15 +770,63 @@
       if (liveFlushHandle !== null) { clearTimeout(liveFlushHandle); liveFlushHandle = null; }
       flushLive();
       runMeta = { state: 'completed' };
+      captureRunSummary(evt.type === 'run_completed_with_errors' ? 'completed_with_errors' : 'completed');
       refreshKey += 1;
       finalizeChatReply();
     } else if (evt.type === 'run_failed') {
       if (liveFlushHandle !== null) { clearTimeout(liveFlushHandle); liveFlushHandle = null; }
       flushLive();
       runMeta = { state: 'failed', error: evt.error };
+      captureRunSummary('failed', evt.error);
       refreshKey += 1;
       finalizeChatReply();
     }
+  }
+
+  function captureRunSummary(state: RunSummary['state'], error?: string) {
+    const durationMs = runStartedAt ? Date.now() - runStartedAt : 0;
+    const counts = { completed: 0, failed: 0, running: 0, other: 0, total: 0 };
+    const failedNodes: RunSummary['failedNodes'] = [];
+    for (const n of viewNodes) {
+      counts.total += 1;
+      if (n.status === 'completed') counts.completed += 1;
+      else if (n.status === 'failed') { counts.failed += 1; failedNodes.push({ id: n.id, name: n.name, error: n.error ?? null }); }
+      else if (n.status === 'running') counts.running += 1;
+      else counts.other += 1;
+    }
+    const tools: Array<{ tool: string; status: string }> = [];
+    for (const arr of Object.values(liveToolSteps)) {
+      for (const s of arr) tools.push({ tool: s.tool, status: s.status });
+    }
+    let reply: string | null = null;
+    if (pendingRun?.chatNodeId) {
+      const streamed = streamingReplies[pendingRun.chatNodeId];
+      if (streamed && streamed.trim()) reply = streamed;
+    }
+    runSummary = {
+      state,
+      error,
+      durationMs,
+      nodeCounts: counts,
+      failedNodes,
+      toolCount: tools.length,
+      tools,
+      reply,
+      runId: activeRunId,
+    };
+  }
+
+  function closeRunSummary() {
+    runSummary = null;
+  }
+
+  function formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    const s = ms / 1000;
+    if (s < 60) return `${s.toFixed(1)}s`;
+    const m = Math.floor(s / 60);
+    const rem = Math.round(s % 60);
+    return `${m}m ${rem}s`;
   }
 
   async function finalizeChatReply() {
@@ -1324,6 +1427,8 @@
     liveStatus = {};
     liveData = {};
     runMeta = { state: 'running' };
+    runStartedAt = Date.now();
+    runSummary = null;
     pendingRun = null;
     try {
       const res = await fetch(
@@ -1932,6 +2037,8 @@
     if (canvas.runStatus === 'running' && canvas.latestRunId && !activeRunId) {
       activeRunId = canvas.latestRunId;
       runMeta = { state: 'running' };
+      if (runStartedAt === null) runStartedAt = Date.now();
+      runSummary = null;
       subscribeToRun(canvas.latestRunId);
     }
   });
@@ -3851,6 +3958,98 @@
   />
 {/if}
 
+{#if runSummary}
+  <div
+    class="run-summary-backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="run-summary-title"
+    onclick={closeRunSummary}
+    onkeydown={(e) => { if (e.key === 'Escape') closeRunSummary(); }}
+  >
+    <div class="run-summary-card" onclick={(e) => e.stopPropagation()} role="document">
+      <div class="run-summary-head">
+        <span class="run-summary-icon run-summary-icon-{runSummary.state}" aria-hidden="true">
+          {#if runSummary.state === 'completed'}✓
+          {:else if runSummary.state === 'completed_with_errors'}⚠
+          {:else}✕
+          {/if}
+        </span>
+        <div class="run-summary-title" id="run-summary-title">
+          {#if runSummary.state === 'completed'}Run completed
+          {:else if runSummary.state === 'completed_with_errors'}Run completed with errors
+          {:else}Run failed
+          {/if}
+        </div>
+        <button class="run-summary-close" onclick={closeRunSummary} aria-label="Close">✕</button>
+      </div>
+
+      <div class="run-summary-stats">
+        <div class="run-summary-stat">
+          <span class="run-summary-stat-label">Duration</span>
+          <span class="run-summary-stat-value">{formatDuration(runSummary.durationMs)}</span>
+        </div>
+        <div class="run-summary-stat">
+          <span class="run-summary-stat-label">Nodes</span>
+          <span class="run-summary-stat-value">
+            {runSummary.nodeCounts.completed}/{runSummary.nodeCounts.total} completed
+            {#if runSummary.nodeCounts.failed > 0}
+              <span class="run-summary-failed"> · {runSummary.nodeCounts.failed} failed</span>
+            {/if}
+          </span>
+        </div>
+        <div class="run-summary-stat">
+          <span class="run-summary-stat-label">Tools used</span>
+          <span class="run-summary-stat-value">{runSummary.toolCount}</span>
+        </div>
+      </div>
+
+      {#if runSummary.error}
+        <div class="run-summary-section">
+          <div class="run-summary-section-title">Error</div>
+          <pre class="run-summary-error">{runSummary.error}</pre>
+        </div>
+      {/if}
+
+      {#if runSummary.failedNodes.length > 0}
+        <div class="run-summary-section">
+          <div class="run-summary-section-title">Failed nodes</div>
+          <ul class="run-summary-list">
+            {#each runSummary.failedNodes as fn (fn.id)}
+              <li>
+                <span class="run-summary-node-name">{fn.name}</span>
+                {#if fn.error}<span class="run-summary-node-err"> — {fn.error}</span>{/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+
+      {#if runSummary.tools.length > 0}
+        <div class="run-summary-section">
+          <div class="run-summary-section-title">Tool calls</div>
+          <div class="run-summary-tools">
+            {#each runSummary.tools as t, i (i)}
+              <span class="run-summary-tool run-summary-tool-{t.status}">{t.tool}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if runSummary.reply}
+        <div class="run-summary-section">
+          <div class="run-summary-section-title">Assistant reply</div>
+          <div class="run-summary-reply">{runSummary.reply}</div>
+        </div>
+      {/if}
+
+      <div class="run-summary-actions">
+        <button class="composer-pill" onclick={closeRunSummary}>Dismiss</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   :root {
     --accent-tint-08: rgba(196, 87, 10, 0.08);
@@ -5655,5 +5854,131 @@
   @keyframes badge-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.75; }
+  }
+
+  .run-summary-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    padding: 24px;
+  }
+  .run-summary-card {
+    background: var(--card-bg, #14181f);
+    color: var(--text-primary, #e6e6e6);
+    border: 1px solid var(--card-border, #2a2f3a);
+    border-radius: 10px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    width: min(560px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    padding: 18px 20px 16px;
+    font-family: var(--font-sans, system-ui, sans-serif);
+  }
+  .run-summary-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .run-summary-icon {
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .run-summary-icon-completed { background: color-mix(in srgb, #10b981 22%, transparent); color: #10b981; }
+  .run-summary-icon-completed_with_errors { background: color-mix(in srgb, #f59e0b 22%, transparent); color: #f59e0b; }
+  .run-summary-icon-failed { background: color-mix(in srgb, #ef4444 22%, transparent); color: #ef4444; }
+  .run-summary-title {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .run-summary-close {
+    background: transparent;
+    border: none;
+    color: var(--text-ghost, #8a8f98);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .run-summary-close:hover { background: color-mix(in srgb, var(--text-ghost, #8a8f98) 14%, transparent); color: var(--text-primary); }
+  .run-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .run-summary-stat {
+    background: color-mix(in srgb, var(--card-border, #2a2f3a) 40%, transparent);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .run-summary-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-ghost, #8a8f98); }
+  .run-summary-stat-value { font-size: 13px; font-weight: 500; }
+  .run-summary-failed { color: #ef4444; }
+  .run-summary-section { margin-top: 12px; }
+  .run-summary-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-ghost, #8a8f98); margin-bottom: 6px; }
+  .run-summary-error {
+    margin: 0;
+    background: color-mix(in srgb, #ef4444 10%, transparent);
+    border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
+    color: #fca5a5;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .run-summary-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .run-summary-node-name { font-weight: 500; }
+  .run-summary-node-err { color: var(--text-ghost, #8a8f98); }
+  .run-summary-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+  .run-summary-tool {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border, #2a2f3a) 55%, transparent);
+  }
+  .run-summary-tool-error { color: #fca5a5; background: color-mix(in srgb, #ef4444 18%, transparent); }
+  .run-summary-tool-running { color: #fcd34d; background: color-mix(in srgb, #f59e0b 18%, transparent); }
+  .run-summary-reply {
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: color-mix(in srgb, var(--card-border, #2a2f3a) 35%, transparent);
+    padding: 10px 12px;
+    border-radius: 6px;
+    max-height: 240px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .run-summary-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
   }
 </style>
