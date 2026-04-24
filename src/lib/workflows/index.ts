@@ -50,6 +50,7 @@ import { chatDef, chatExecutor } from './nodes/chat';
 import { triggerDef, triggerExecutor } from './nodes/trigger';
 import { inspectorDef, inspectorExecutor } from './nodes/inspector';
 import { fileStoreDef, fileStoreExecutor } from './nodes/file-store';
+import { fileExtractDef, fileExtractExecutor } from './nodes/file-extract';
 import { postitDef, postitExecutor } from './nodes/postit';
 import { annotationDef, annotationExecutor } from './nodes/annotation';
 import { getWhatsAppService } from './whatsapp/service';
@@ -121,6 +122,7 @@ registry.register(chatDef, chatExecutor);
 registry.register(triggerDef, triggerExecutor);
 registry.register(inspectorDef, inspectorExecutor);
 registry.register(fileStoreDef, fileStoreExecutor);
+registry.register(fileExtractDef, fileExtractExecutor);
 registry.register(postitDef, postitExecutor);
 registry.register(annotationDef, annotationExecutor);
 
