@@ -70,16 +70,16 @@ export const stealthScrapeExecutor: NodeExecutor = {
         },
         timestamp: new Date().toISOString(),
       } as any);
+      // Upstream-wired vars only. Do NOT pre-seed `keyword` from searchQuery
+      // here — the v2 playbook runner decomposes searchQuery into the
+      // playbook's declared requiredVars (keyword / location / distance /
+      // salaryMin) via decomposeSearchQuery(). Assigning the whole sentence
+      // to `keyword` here would bypass that and stuff it into a form field
+      // whole (the original timeout bug).
       const vars: Record<string, string> = {};
       for (const [k, v] of Object.entries(input)) {
         if (v == null) continue;
         vars[k] = typeof v === 'string' ? v : JSON.stringify(v);
-      }
-      // searchQuery on the node's config also feeds the {{keyword}} var so
-      // scheduled runs don't need wired input — config alone drives them.
-      if (!('keyword' in vars) && searchQuery) vars.keyword = searchQuery;
-      if (!('keyword' in vars) && typeof input.searchTerm === 'string') {
-        vars.keyword = input.searchTerm;
       }
       const pb = await runPlaybook({
         playbook,
