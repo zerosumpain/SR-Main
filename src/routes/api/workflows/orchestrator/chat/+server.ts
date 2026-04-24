@@ -238,9 +238,8 @@ export const POST: RequestHandler = async ({ request }) => {
           onProgress,
           onToolProgress: (step) => {
             if (abortController.signal.aborted) return;
-            // Update or append tool step
-            const existing = job.toolSteps.findIndex(s => s.tool === step.tool && s.status === 'running');
-            if (existing >= 0 && step.status !== 'running') {
+            const existing = job.toolSteps.findIndex((s) => s.toolCallId === step.toolCallId);
+            if (existing >= 0) {
               job.toolSteps[existing] = step;
             } else {
               job.toolSteps.push(step);

@@ -51,7 +51,7 @@
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
   // Live-streaming assistant reply per chat node (cleared when run settles)
   let streamingReplies = $state<Record<string, string>>({});
-  let liveToolSteps = $state<Record<string, Array<{ tool: string; status: string }>>>(
+  let liveToolSteps = $state<Record<string, Array<{ tool: string; toolCallId: string; status: string }>>>(
     {},
   );
   // Per-chat-node: is the live "thinking / tool trace" panel expanded?
@@ -698,17 +698,15 @@
           queueStreamDelta(chatNodeId, event.delta);
         }
       } else if (kind === 'chat_tool' && chatNodeId) {
-        const step = evt.data.step as { tool?: string; status?: string } | undefined;
-        if (step && step.tool) {
+        const step = evt.data.step as { tool?: string; toolCallId?: string; status?: string } | undefined;
+        if (step && step.tool && step.toolCallId) {
           const existing = liveToolSteps[chatNodeId] ?? [];
-          const idx = existing.findIndex(
-            (s) => s.tool === step.tool && s.status === 'running',
-          );
+          const idx = existing.findIndex((s) => s.toolCallId === step.toolCallId);
           const next = existing.slice();
-          if (idx >= 0 && step.status !== 'running') {
-            next[idx] = { tool: step.tool, status: step.status ?? 'done' };
+          if (idx >= 0) {
+            next[idx] = { tool: step.tool, toolCallId: step.toolCallId, status: step.status ?? 'done' };
           } else {
-            next.push({ tool: step.tool, status: step.status ?? 'running' });
+            next.push({ tool: step.tool, toolCallId: step.toolCallId, status: step.status ?? 'running' });
           }
           liveToolSteps = { ...liveToolSteps, [chatNodeId]: next };
         }
@@ -2262,7 +2260,7 @@
                   </div>
                   {#if liveToolSteps[n.id] && liveToolSteps[n.id].length > 0}
                     <div class="chat-tool-trace">
-                      {#each liveToolSteps[n.id] as step (step.tool + step.status)}
+                      {#each liveToolSteps[n.id] as step (step.toolCallId)}
                         <div class="chat-tool-step" class:running={step.status === 'running'}>
                           <span class="chat-tool-dot"></span>{step.tool}
                         </div>

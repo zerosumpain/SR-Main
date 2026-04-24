@@ -32,6 +32,7 @@ const MAX_TOOL_ROUNDS = 10;
 
 interface ToolProgress {
   tool: string;
+  toolCallId: string;
   args: Record<string, unknown>;
   result?: unknown;
   status: 'running' | 'done' | 'error';
@@ -144,7 +145,7 @@ async function runSingleToolCall(
     };
   }
 
-  onToolProgress?.({ tool: fnName, args: fnArgs, status: 'running' });
+  onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, status: 'running' });
   onProgress?.(`${fnName}: running\n`);
   onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs });
 
@@ -247,7 +248,7 @@ async function runSingleToolCall(
     ? { _truncated: true, preview: progressResultStr.slice(0, 2000) + '...' }
     : toolResult;
   const status: 'done' | 'error' = toolResult?.error ? 'error' : 'done';
-  onToolProgress?.({ tool: fnName, args: fnArgs, result: progressResult, status });
+  onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, result: progressResult, status });
   onProgress?.(`${fnName}: done\n`);
   onStreamEvent?.({ type: 'tool_result', tool: fnName, result: progressResult, status });
 

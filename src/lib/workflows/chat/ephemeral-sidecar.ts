@@ -15,6 +15,7 @@ type EphemeralSidecar = {
 export type StoredToolStep = {
   id?: string;
   tool: string;
+  toolCallId?: string;
   args?: Record<string, unknown>;
   status?: 'running' | 'done' | 'error';
   result?: { success?: boolean; data?: Record<string, unknown>; error?: string };

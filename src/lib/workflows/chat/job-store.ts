@@ -1,5 +1,6 @@
 export interface ToolProgressStep {
   tool: string;
+  toolCallId: string;
   args: Record<string, unknown>;
   result?: unknown;
   status: 'running' | 'done' | 'error';
