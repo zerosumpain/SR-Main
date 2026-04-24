@@ -12,6 +12,7 @@ import { runSiteMapper } from '$lib/workflows/scraper/site-mapper';
 import { runScript } from '$lib/workflows/scraper/script-runner';
 import { runScriptAuthor } from '$lib/workflows/scraper/script-author';
 import { readScript } from '$lib/workflows/scraper/script-store';
+import os from 'os';
 import { db } from '$lib/db';
 import { workflowInteractions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -56,113 +57,59 @@ export const stealthScrapeExecutor: NodeExecutor = {
     };
 
     // ===== script-scrape dispatch (preferred) =====
-    // If a saved Python scrape script exists for this profile, run it.
-    // Authored once by an LLM (script-author), executed deterministically
-    // forever after. The artifact is real Python code with full Playwright
-    // access — no declarative-playbook brittleness.
-    const existingScript = await readScript(profile);
-    if (existingScript) {
+    // Run the dispatcher on homeserv (residential IP, warm profile cookies).
+    // dispatchScriptScrape proxies to /api/scraper/script when called from the
+    // VPS; runs locally on homeserv. Returns { handled: false } when there's
+    // no saved script AND no goal — in which case we fall through to the
+    // legacy playbook / bare-scrape paths below.
+    const callerVars: Record<string, string> = {};
+    for (const [k, v] of Object.entries(input)) {
+      if (v == null) continue;
+      callerVars[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+    const dispatched = await dispatchScriptScrape({
+      profile,
+      seedUrl: url,
+      goal: goal || undefined,
+      searchQuery: searchQuery || undefined,
+      vars: callerVars,
+      workflowRunId: context.runId,
+    });
+    if (dispatched.handled) {
       context.emit({
         type: 'log', runId: context.runId, nodeId,
         data: {
-          kind: 'scraper.script.dispatch',
-          message: `Using saved scrape script "${profile}" (authored ${existingScript.meta.generatedAt})`,
-          declaredVars: existingScript.meta.declaredVars.map((v) => v.name),
+          kind: dispatched.via === 'script' ? 'scraper.script.dispatch' : 'scraper.script.author_done',
+          message: dispatched.via === 'script'
+            ? `Ran saved script for "${profile}" — ${dispatched.items.length} items.`
+            : `Authored script for "${profile}" — saved=${dispatched.success}, ${dispatched.items.length} items.`,
+          via: dispatched.via,
+          itemCount: dispatched.items.length,
+          error: dispatched.error,
         },
         timestamp: new Date().toISOString(),
       } as any);
-      const callerVars: Record<string, string> = {};
-      for (const [k, v] of Object.entries(input)) {
-        if (v == null) continue;
-        callerVars[k] = typeof v === 'string' ? v : JSON.stringify(v);
-      }
-      const r = await runScript({
-        profile,
-        searchQuery: searchQuery || undefined,
-        vars: callerVars,
-        workflowRunId: context.runId,
-        onProgress: (ev) => context.emit({
-          type: 'log', runId: context.runId, nodeId,
-          data: { kind: 'scraper.script', ...ev },
-          timestamp: new Date().toISOString(),
-        } as any),
-      });
       context.emit({
         type: 'scraper.run.finished',
         runId: context.runId,
         runLogId: 0,
-        success: r.success,
-        pagesLoaded: r.items.length > 0 ? 1 : 0,
-        error: r.error,
+        success: dispatched.success,
+        pagesLoaded: dispatched.items.length > 0 ? 1 : 0,
+        error: dispatched.error,
         timestamp: new Date().toISOString(),
       } as any);
       return {
         output: {
-          success: r.success,
-          items: r.items,
-          itemCount: r.items.length,
-          pages: r.items.length > 0
-            ? [{ url: r.landedUrl ?? url, fields: { items: r.items as unknown as string[] } }]
+          success: dispatched.success,
+          items: dispatched.items,
+          itemCount: dispatched.items.length,
+          pages: dispatched.items.length > 0
+            ? [{ url: dispatched.landedUrl ?? url, fields: { items: dispatched.items as unknown as string[] } }]
             : [],
-          pageCount: r.items.length > 0 ? 1 : 0,
-          error: r.error,
-          viaScript: true,
-        },
-        metadata: { _selectedHandle: 'output' },
-      };
-    }
-
-    // ===== first-time script authoring =====
-    // No saved script for this profile, but the user gave us a goal —
-    // kick off the LLM authoring loop. The LLM iteratively writes a
-    // Python scrape function, runs it inside the same warm Playwright
-    // session (cookies / altcha solves persist), saves when validated.
-    if (goal && !existingScript) {
-      context.emit({
-        type: 'log', runId: context.runId, nodeId,
-        data: {
-          kind: 'scraper.script.author_start',
-          message: `Authoring scrape script for ${profile} (first run, ~5–10 min). Subsequent runs replay the script in seconds.`,
-          seedUrl: url,
-          goal,
-        },
-        timestamp: new Date().toISOString(),
-      } as any);
-      const authored = await runScriptAuthor({
-        profile,
-        seedUrl: url,
-        goal,
-        searchQuery: searchQuery || undefined,
-        workflowRunId: context.runId,
-        onProgress: (ev) => context.emit({
-          type: 'log', runId: context.runId, nodeId,
-          data: { kind: 'scraper.script.author', ...ev },
-          timestamp: new Date().toISOString(),
-        } as any),
-      });
-      context.emit({
-        type: 'log', runId: context.runId, nodeId,
-        data: {
-          kind: 'scraper.script.author_done',
-          saved: authored.saved,
-          declaredVars: authored.declaredVars.map((v) => v.name),
-          itemCount: authored.sampleItems.length,
-          error: authored.error,
-        },
-        timestamp: new Date().toISOString(),
-      } as any);
-      return {
-        output: {
-          success: authored.saved,
-          items: authored.sampleItems,
-          itemCount: authored.sampleItems.length,
-          pages: authored.sampleItems.length > 0
-            ? [{ url, fields: { items: authored.sampleItems as unknown as string[] } }]
-            : [],
-          pageCount: authored.sampleItems.length > 0 ? 1 : 0,
-          error: authored.saved ? undefined : authored.error,
-          viaScriptAuthor: true,
-          script: authored.code,
+          pageCount: dispatched.items.length > 0 ? 1 : 0,
+          error: dispatched.error,
+          [dispatched.via === 'script' ? 'viaScript' : 'viaScriptAuthor']: true,
+          ...(dispatched.code ? { script: dispatched.code } : {}),
         },
         metadata: { _selectedHandle: 'output' },
       };
@@ -442,4 +389,104 @@ async function waitForInteractionResolution(
   throw new Error(
     `interaction ${interactionId} not resolved within ${Math.round(maxWaitMs / 1000)}s — human solve timed out`,
   );
+}
+
+interface ScriptDispatchInput {
+  profile: string;
+  seedUrl: string;
+  goal?: string;
+  searchQuery?: string;
+  vars: Record<string, string>;
+  workflowRunId: string;
+}
+
+interface ScriptDispatchOutput {
+  handled: boolean;
+  via: 'script' | 'script-author' | null;
+  success: boolean;
+  items: Array<Record<string, unknown>>;
+  error?: string;
+  landedUrl?: string;
+  code?: string;
+}
+
+/**
+ * Run the script-scrape dispatcher. On homeserv this calls runScript /
+ * runScriptAuthor directly; on the VPS (or any non-homeserv host) it POSTs
+ * to homeserv's /api/scraper/script proxy so the warm Playwright session
+ * + ~/.openclaw/scraper-scripts files stay local to the residential IP.
+ */
+async function dispatchScriptScrape(input: ScriptDispatchInput): Promise<ScriptDispatchOutput> {
+  if (process.env.SCRAPER_ALLOW_NON_HOMESERV || os.hostname() === 'homeserv') {
+    const existing = await readScript(input.profile);
+    if (existing) {
+      const r = await runScript({
+        profile: input.profile,
+        searchQuery: input.searchQuery,
+        vars: input.vars,
+        workflowRunId: input.workflowRunId,
+      });
+      return {
+        handled: true, via: 'script',
+        success: r.success, items: r.items,
+        error: r.error, landedUrl: r.landedUrl,
+      };
+    }
+    if (input.goal) {
+      const a = await runScriptAuthor({
+        profile: input.profile,
+        seedUrl: input.seedUrl,
+        goal: input.goal,
+        searchQuery: input.searchQuery,
+        workflowRunId: input.workflowRunId,
+      });
+      return {
+        handled: true, via: 'script-author',
+        success: a.saved, items: a.sampleItems,
+        error: a.error, code: a.code,
+      };
+    }
+    return { handled: false, via: null, success: false, items: [] };
+  }
+  // VPS path — proxy to homeserv.
+  const baseUrl = process.env.SCRAPER_SERVICE_URL;
+  if (!baseUrl) {
+    return {
+      handled: false, via: null, success: false, items: [],
+      error: `script-scrape needs SCRAPER_SERVICE_URL set on ${os.hostname()} so it can reach homeserv.`,
+    };
+  }
+  const proxyUrl = baseUrl.replace(/\/api\/scraper\/run\/?$/, '') + '/api/scraper/script';
+  const token = process.env.SCRAPER_SERVICE_TOKEN;
+  try {
+    const res = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        profile: input.profile,
+        seedUrl: input.seedUrl,
+        goal: input.goal,
+        searchQuery: input.searchQuery,
+        vars: input.vars,
+        workflowRunId: input.workflowRunId,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return {
+        handled: false, via: null, success: false, items: [],
+        error: `script-scrape proxy ${proxyUrl} returned HTTP ${res.status}: ${text.slice(0, 400)}`,
+      };
+    }
+    const body = (await res.json()) as ScriptDispatchOutput;
+    return body;
+  } catch (e) {
+    return {
+      handled: false, via: null, success: false, items: [],
+      error: `script-scrape proxy fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
 }
