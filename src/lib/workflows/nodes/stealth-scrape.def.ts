@@ -7,6 +7,8 @@ export const stealthScrapeDef: NodeDefinition = {
   description: 'Scrape a web page (or paginated set) using a stealth headless browser with a persistent profile. Residential IP via homeserv.',
   defaultConfig: {
     url: '',
+    goal: '',
+    searchQuery: '',
     profile: '',
     waitFor: { type: 'networkidle' },
     extract: [],
@@ -15,9 +17,11 @@ export const stealthScrapeDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'object', label: 'Scrape result' }],
   configSchema: {
     type: 'object',
-    required: ['url', 'profile', 'waitFor', 'extract'],
+    required: ['url', 'profile'],
     properties: {
-      url: { type: 'string', description: 'Starting URL (supports {{input.x}} templates)' },
+      url: { type: 'string', description: 'Starting URL (supports {{input.x}} templates). Can be the site root if goal + searchQuery are set — the node will auto-map the site on first run.' },
+      goal: { type: 'string', description: 'Plain-English description of what to extract per item (e.g. "the job title, organisation, salary and closing date of each listing"). When set, enables auto-mapping: if no playbook exists for this domain the node runs an LLM-driven agent once to work out the navigation, saves a playbook, then every subsequent run is deterministic.' },
+      searchQuery: { type: 'string', description: 'Plain-English filters / query the agent should apply during mapping (e.g. "jobs with analyst in the title, 20 miles from Darlington, over 60k"). Templates into {{keyword}} for future runs.' },
       profile: { type: 'string', description: 'Per-domain profile name, e.g. civilservicejobs-gov-uk' },
       waitFor: {
         type: 'object',

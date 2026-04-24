@@ -8,6 +8,7 @@ import {
   stopRemoteInteractiveSession,
 } from '$lib/workflows/scraper/interactive-remote';
 import { loadPlaybookForUrl, runPlaybook } from '$lib/workflows/scraper/playbook';
+import { runSiteMapper } from '$lib/workflows/scraper/site-mapper';
 import { db } from '$lib/db';
 import { workflowInteractions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -28,6 +29,8 @@ export const stealthScrapeExecutor: NodeExecutor = {
     const pagination = config.pagination as ScrapeJob['pagination'] | undefined;
     const credentialId = config.credentialId as number | undefined;
     const pacing = config.pacing as ScrapeJob['pacing'] | undefined;
+    const goal = ((config.goal as string) || '').trim();
+    const searchQuery = ((config.searchQuery as string) || '').trim();
     const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId ?? '';
 
     const emitProgress = (ev: Record<string, unknown>) => {
@@ -56,11 +59,25 @@ export const stealthScrapeExecutor: NodeExecutor = {
     // (stringified to be safe for URL substitution).
     const playbook = await loadPlaybookForUrl(url);
     if (playbook) {
+      context.emit({
+        type: 'log',
+        runId: context.runId,
+        nodeId,
+        data: {
+          kind: 'scraper.playbook_dispatch',
+          message: `Using saved playbook for ${new URL(url).hostname} (generated ${playbook.generatedAt})`,
+          playbookVersion: playbook.version,
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
       const vars: Record<string, string> = {};
       for (const [k, v] of Object.entries(input)) {
         if (v == null) continue;
         vars[k] = typeof v === 'string' ? v : JSON.stringify(v);
       }
+      // searchQuery on the node's config also feeds the {{keyword}} var so
+      // scheduled runs don't need wired input — config alone drives them.
+      if (!('keyword' in vars) && searchQuery) vars.keyword = searchQuery;
       if (!('keyword' in vars) && typeof input.searchTerm === 'string') {
         vars.keyword = input.searchTerm;
       }
@@ -90,6 +107,66 @@ export const stealthScrapeExecutor: NodeExecutor = {
           viaPlaybook: true,
           itemCount: pb.itemCount,
           acceptanceMet: pb.acceptanceMet,
+        },
+        metadata: { _selectedHandle: 'output' },
+      };
+    }
+
+    // Auto-map stage: no playbook exists for this domain AND the user
+    // provided a goal describing what to extract. Invoke the site-mapper
+    // inline — its agent loop navigates from the seed URL, finalizes with
+    // a playbook, and extracts from the SAME session (warm cookies, solved
+    // altcha) — so we get results on this very first run without a fragile
+    // fresh-session replay. The playbook is saved for all future runs.
+    if (goal && !playbook) {
+      context.emit({
+        type: 'log',
+        runId: context.runId,
+        nodeId,
+        data: {
+          kind: 'scraper.auto_map.start',
+          message: `No playbook for this site yet — mapping it now (first run only, ~3-5 min). Subsequent runs will replay deterministically.`,
+          seedUrl: url,
+          goal,
+          searchQuery: searchQuery || null,
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
+      const mapping = await runSiteMapper({
+        seedUrl: url,
+        goal,
+        searchQuery: searchQuery || undefined,
+        profile,
+        workflowRunId: context.runId,
+        onProgress: (ev) => emitProgress(ev as Record<string, unknown>),
+      });
+      context.emit({
+        type: 'log',
+        runId: context.runId,
+        nodeId,
+        data: {
+          kind: 'scraper.auto_map.done',
+          validated: mapping.validated,
+          itemCount: mapping.itemCount,
+          error: mapping.error,
+          message: mapping.validated
+            ? `Auto-mapped ${mapping.domain} — got ${mapping.itemCount} items. Playbook saved.`
+            : `Mapping completed but validation failed: ${mapping.error ?? 'unknown'}`,
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
+      return {
+        output: {
+          success: mapping.validated,
+          pages: mapping.firstItemSample
+            ? [{ url: mapping.landedUrl ?? url, fields: mapping.firstItemSample as Record<string, string | string[]> }]
+            : [],
+          pageCount: mapping.firstItemSample ? 1 : 0,
+          itemCount: mapping.itemCount,
+          error: mapping.validated ? undefined : mapping.error,
+          viaAutoMap: true,
+          playbook: mapping.playbook,
+          transcript: mapping.transcript.slice(-10),
         },
         metadata: { _selectedHandle: 'output' },
       };

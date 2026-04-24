@@ -59,6 +59,9 @@ export interface SiteMapperResult {
   validated: boolean;
   itemCount: number;
   firstItemSample?: Record<string, unknown>;
+  /** URL the agent session was on when it extracted — useful for the
+   *  stealth-scrape fold-in path which reports this back to the user. */
+  landedUrl?: string;
   transcript: Array<Record<string, unknown>>;
   error?: string;
 }
@@ -111,6 +114,9 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
   const recordedSteps: PlaybookStep[] = [];
   let finalPlaybook: Playbook | null = null;
   let giveUpReason: string | undefined;
+  let inSessionFields: Record<string, unknown> | undefined;
+  let inSessionUrl = '';
+  let inSessionError: string | undefined;
 
   // During the mapping loop we substitute {{keyword}} (etc.) with the real
   // searchQuery so the site actually returns real results to observe. The
@@ -173,6 +179,16 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
       const kind = action.action as string;
       if (kind === 'finalize') {
         finalPlaybook = coercePlaybook(action.playbook, opts.goal, recordedSteps);
+        // Extract DURING this session — cookies warm, altcha solved, profile
+        // primed. Avoids the fresh-session replay that was fragile.
+        try {
+          emit({ t: 'map.inSessionExtract' });
+          const r = await agent.extract(finalPlaybook.extract as unknown as Array<Record<string, unknown>>);
+          inSessionFields = r.fields;
+          inSessionUrl = (await agent.observe().catch(() => null))?.url ?? '';
+        } catch (err) {
+          inSessionError = err instanceof Error ? err.message : String(err);
+        }
         break;
       }
       if (kind === 'give_up') {
@@ -224,29 +240,46 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     };
   }
 
-  // Validate via a fresh replay through runPlaybook (v2 path).
-  emit({ t: 'map.validate' });
-  const vars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
+  // Prefer the in-session extract — it ran in the SAME browser where the
+  // LLM just landed on the target page (warm cookies, solved altcha, any
+  // session-scoped state intact). That's our ground-truth validation:
+  // if the mapper's session produced items, the playbook is confirmed
+  // capable of reaching them, and we can return those items as THIS
+  // scrape's output (first run is free — no separate replay needed).
   let validated = false;
   let itemCount = 0;
   let firstItemSample: Record<string, unknown> | undefined;
   let error: string | undefined;
-  try {
-    const run = await runPlaybook({
-      playbook: finalPlaybook,
-      vars,
-      profile: opts.profile ?? 'default',
-      workflowRunId: opts.workflowRunId,
-      onProgress: (e) => emit({ t: 'map.validate.progress', ...e }),
-    });
-    validated = run.acceptanceMet;
-    itemCount = run.itemCount;
-    if (run.pages[0]) firstItemSample = (run.pages[0] as { fields?: Record<string, unknown> }).fields;
-    if (!run.success) error = run.error ?? 'replay failed';
-    else if (!validated)
-      error = `acceptance not met — expected ≥${finalPlaybook.acceptance.minItems} items in "${finalPlaybook.acceptance.sampleField}", got ${itemCount}`;
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+
+  const inSessionCount = countFieldItems(inSessionFields, finalPlaybook.acceptance.sampleField);
+  if (inSessionFields && inSessionCount >= finalPlaybook.acceptance.minItems) {
+    validated = true;
+    itemCount = inSessionCount;
+    firstItemSample = inSessionFields;
+    emit({ t: 'map.validated', source: 'in-session', itemCount });
+  } else {
+    // In-session didn't find items (LLM's extract selector missed) — fall
+    // back to a fresh replay to give the playbook a second chance. If the
+    // replay also fails, surface the error honestly.
+    emit({ t: 'map.validate', source: 'replay', reason: inSessionError ?? `inSession items=${inSessionCount}` });
+    const vars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
+    try {
+      const run = await runPlaybook({
+        playbook: finalPlaybook,
+        vars,
+        profile: opts.profile ?? 'default',
+        workflowRunId: opts.workflowRunId,
+        onProgress: (e) => emit({ t: 'map.validate.progress', ...e }),
+      });
+      validated = run.acceptanceMet;
+      itemCount = run.itemCount;
+      if (run.pages[0]) firstItemSample = (run.pages[0] as { fields?: Record<string, unknown> }).fields;
+      if (!run.success) error = run.error ?? 'replay failed';
+      else if (!validated)
+        error = `acceptance not met — expected ≥${finalPlaybook.acceptance.minItems} items in "${finalPlaybook.acceptance.sampleField}", got ${itemCount}`;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
   }
 
   // Save either way so the user can inspect + tweak failing playbooks.
@@ -258,9 +291,19 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     validated,
     itemCount,
     firstItemSample,
+    landedUrl: inSessionUrl || undefined,
     transcript,
     error,
   };
+}
+
+/** Count items in a field value regardless of array/scalar shape. */
+function countFieldItems(fields: Record<string, unknown> | undefined, field: string): number {
+  if (!fields) return 0;
+  const v = fields[field];
+  if (Array.isArray(v)) return v.length;
+  if (v != null && v !== '') return 1;
+  return 0;
 }
 
 function buildUserMessage(

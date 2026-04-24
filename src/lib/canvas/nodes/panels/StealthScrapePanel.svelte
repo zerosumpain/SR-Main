@@ -7,6 +7,12 @@
   // Local draft — mirrored from config on mount and when config changes externally
   let url = $state((config.url as string) ?? '');
   let profile = $state((config.profile as string) ?? '');
+  // Plain-English fields that drive the auto-mapping pipeline on new domains.
+  // When these are set AND no playbook exists for the URL's domain yet, the
+  // node invokes an LLM agent to navigate and record the recipe on first run.
+  let goal = $state((config.goal as string) ?? '');
+  let searchQuery = $state((config.searchQuery as string) ?? '');
+  let advancedOpen = $state(false);
 
   type WaitConfig = { type: 'networkidle' } | { type: 'selector'; selector: string; timeoutMs: number } | { type: 'timeout'; ms: number };
   const waitCfg = (config.wait as WaitConfig | undefined) ?? { type: 'networkidle' };
@@ -66,7 +72,7 @@
     if (pagType === 'next-link') { pagination.selector = pagSelector; pagination.maxPages = pagMaxPages; }
     if (pagType === 'url-template') { pagination.template = pagTemplate; pagination.start = pagStart; pagination.maxPages = pagMaxPages; }
 
-    const out: Record<string, unknown> = { url, profile, wait, extractRules: rules, pagination };
+    const out: Record<string, unknown> = { url, profile, goal, searchQuery, wait, extractRules: rules, pagination };
     if (credentialId) out.credentialId = Number(credentialId);
     if (pacingMin != null) out.pacingMinMs = pacingMin;
     if (pacingMax != null) out.pacingMaxMs = pacingMax;
@@ -91,24 +97,51 @@
     if (nextUrl !== url) url = nextUrl;
     const nextProfile = (config.profile as string) ?? '';
     if (nextProfile !== profile) profile = nextProfile;
+    const nextGoal = (config.goal as string) ?? '';
+    if (nextGoal !== goal) goal = nextGoal;
+    const nextSQ = (config.searchQuery as string) ?? '';
+    if (nextSQ !== searchQuery) searchQuery = nextSQ;
   });
 </script>
 
 <div class="panel">
-  <!-- Target URL -->
+  <!-- Target site -->
   <section class="ps">
-    <div class="ps-hd">
-      <span class="ps-label">Target URL</span>
-    </div>
+    <div class="ps-hd"><span class="ps-label">Site URL</span></div>
     <input class="ps-input" type="text" value={url}
       oninput={(e) => { url = (e.target as HTMLInputElement).value; emit(); }}
-      placeholder="https://example.com/jobs" />
-    <div class="ps-hint">Supports <code>{'{{input.x}}'}</code> templates.</div>
+      placeholder="https://example.com" />
+    <div class="ps-hint">
+      Root URL of the target site. Supports <code>{'{{input.x}}'}</code> templates.
+      When <b>Goal</b> is set below, the node auto-maps the site on first run — you don't need to include search params here.
+    </div>
+  </section>
+
+  <!-- Goal -->
+  <section class="ps ps-highlight">
+    <div class="ps-hd"><span class="ps-label">What to extract (goal)</span></div>
+    <textarea class="ps-input ps-textarea" rows="3" value={goal}
+      oninput={(e) => { goal = (e.target as HTMLTextAreaElement).value; emit(); }}
+      placeholder="e.g. the job description and requirements for each job returned"></textarea>
+    <div class="ps-hint">
+      Plain English. Describe what each <em>item</em> in the result should contain. When set, the node auto-maps the site on first run (~3-5 min), saves a playbook, then every future run is fast + deterministic. Leave blank to run as a vanilla scrape using the extract rules under Advanced below.
+    </div>
+  </section>
+
+  <!-- Search query -->
+  <section class="ps ps-highlight">
+    <div class="ps-hd"><span class="ps-label">Search query / filters</span></div>
+    <textarea class="ps-input ps-textarea" rows="2" value={searchQuery}
+      oninput={(e) => { searchQuery = (e.target as HTMLTextAreaElement).value; emit(); }}
+      placeholder="e.g. jobs with analyst in the title, 20 miles from Darlington, over £60k salary"></textarea>
+    <div class="ps-hint">
+      Plain English, parameterises the site's search form. The LLM decides which form fields map to which words and builds a templated URL — future runs can override via input vars.
+    </div>
   </section>
 
   <!-- Profile -->
   <section class="ps">
-    <div class="ps-hd"><span class="ps-label">Profile</span></div>
+    <div class="ps-hd"><span class="ps-label">Profile name</span></div>
     <input class="ps-input" type="text" list="scrape-profiles" value={profile}
       oninput={(e) => { profile = (e.target as HTMLInputElement).value; emit(); }}
       placeholder="e.g. civilservicejobs-gov-uk" />
@@ -117,7 +150,17 @@
         <option value={p}>{p}</option>
       {/each}
     </datalist>
+    <div class="ps-hint">Stable identifier for this site. Cookies + solved CAPTCHAs persist under this name across runs.</div>
   </section>
+
+  <!-- Advanced disclosure -->
+  <section class="ps">
+    <button class="ps-advanced-toggle" onclick={() => { advancedOpen = !advancedOpen; }}>
+      {advancedOpen ? '▾' : '▸'} Advanced (wait condition, explicit extract rules, pagination, credentials)
+    </button>
+  </section>
+
+{#if advancedOpen}
 
   <!-- Wait for -->
   <section class="ps">
@@ -260,6 +303,7 @@
       </label>
     </div>
   </section>
+{/if}
 </div>
 
 <style>
@@ -278,6 +322,35 @@
     font-family: var(--font-mono);
     font-size: 9px;
     color: var(--text-ghost);
+  }
+  .ps-highlight {
+    border-left: 2px solid var(--accent, #c4570a);
+    padding-left: 10px;
+    margin-left: -10px;
+  }
+  .ps-textarea {
+    resize: vertical;
+    min-height: 54px;
+    font-family: var(--font-ui, inherit);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .ps-advanced-toggle {
+    background: transparent;
+    border: 1px dashed var(--card-border, #333);
+    color: var(--text-muted);
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .ps-advanced-toggle:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
   }
   .ps-hint {
     font-family: var(--font-mono);
