@@ -18,6 +18,7 @@
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
+  import CollapsibleOutput from '$lib/canvas/CollapsibleOutput.svelte';
 
   let { data } = $props();
 
@@ -2997,7 +2998,7 @@
               </div>
               <div class="nm-field nm-field-read">
                 {#if inspectorFrom.outputData !== undefined}
-                  <pre>{pretty(inspectorFrom.outputData)}</pre>
+                  <CollapsibleOutput text={pretty(inspectorFrom.outputData)} />
                 {:else if inspectorFrom.error}
                   <pre class="error-text">{inspectorFrom.error}</pre>
                 {:else}
@@ -3011,7 +3012,7 @@
               </div>
               <div class="nm-field nm-field-read">
                 {#if inspectorTo.inputData !== undefined}
-                  <pre>{pretty(inspectorTo.inputData)}</pre>
+                  <CollapsibleOutput text={pretty(inspectorTo.inputData)} />
                 {:else}
                   <pre class="ghost">// no run yet</pre>
                 {/if}
@@ -3433,7 +3434,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <pre>{pretty(menuNode.inputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
                     {:else}
                       <pre class="ghost">// no run yet — press ▶ Run to pipe data</pre>
                     {/if}
@@ -3449,7 +3450,7 @@
                     {#if menuNode.status === 'running'}
                       <pre class="ghost">// running…</pre>
                     {:else if menuNode.outputData !== undefined}
-                      <pre>{pretty(menuNode.outputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
                     {:else if menuNode.error}
                       <pre class="error-text">{menuNode.error}</pre>
                     {:else}
@@ -3517,7 +3518,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <pre>{pretty(menuNode.inputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -3549,7 +3550,7 @@
                   {#if menuNode.outputData !== undefined}
                     <div class="nm-field nm-field-read">
                       <div class="sr-label-tight" style="margin-bottom:4px;">OUTPUT</div>
-                      <pre>{pretty(menuNode.outputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
                     </div>
                   {:else if !menuNode.error}
                     <div class="nm-field nm-field-read">
@@ -3571,7 +3572,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <pre>{pretty(menuNode.outputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -3605,7 +3606,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <pre>{pretty(menuNode.inputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
                     {:else}
                       <pre class="ghost">// pending</pre>
                     {/if}
@@ -3615,7 +3616,7 @@
                   <div class="nm-sec-hd"><span class="sr-label-tight">OUTPUT DATA</span></div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <pre>{pretty(menuNode.outputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
                     {:else}
                       <pre class="ghost">// pending</pre>
                     {/if}
@@ -3645,7 +3646,7 @@
                     </div>
                     <div class="nm-field nm-field-read">
                       {#if menuNode.outputData !== undefined}
-                        <pre>{pretty(menuNode.outputData)}</pre>
+                        <CollapsibleOutput text={pretty(menuNode.outputData)} />
                       {:else}
                         <pre class="ghost">// no run yet</pre>
                       {/if}
@@ -3813,7 +3814,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <pre>{pretty(menuNode.inputData)}</pre>
+                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -3913,7 +3914,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <pre>{pretty((menuNode.outputData as any)?.intelFocus ?? menuNode.outputData)}</pre>
+                      <CollapsibleOutput text={pretty((menuNode.outputData as any)?.intelFocus ?? menuNode.outputData)} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -3922,7 +3923,7 @@
               {/if}
 
               <!-- Schema-driven config panel for scraper / gmail / interactive-step nodes -->
-              {#if ['stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'].includes(menuNode.type)}
+              {#if ['stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search', 'code-execute'].includes(menuNode.type)}
                 {@const Panel = getPanel(menuNode.type)}
                 <div class="menu-config-section">
                   <Panel
