@@ -5992,16 +5992,16 @@
     padding: 24px;
   }
   .run-summary-card {
-    background: var(--card-bg, #14181f);
-    color: var(--text-primary, #e6e6e6);
-    border: 1px solid var(--card-border, #2a2f3a);
+    background: #14181f;
+    color: #e6e6e6;
+    border: 1px solid #2a2f3a;
     border-radius: 10px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
     width: min(560px, 100%);
     max-height: calc(100vh - 48px);
     overflow: auto;
     padding: 18px 20px 16px;
-    font-family: var(--font-sans, system-ui, sans-serif);
+    font-family: system-ui, -apple-system, Segoe UI, sans-serif;
   }
   .run-summary-head {
     display: flex;
