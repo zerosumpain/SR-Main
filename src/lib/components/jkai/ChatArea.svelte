@@ -48,6 +48,7 @@
     args: Record<string, unknown>;
     result?: unknown;
     status: 'running' | 'done' | 'error';
+    summary?: string;
     expanded?: boolean;
     ephemeral?: {
       handlerCode: string;
@@ -529,7 +530,7 @@
               })();
               if (idx < 0) return m;
               const next = m.toolSteps.slice();
-              next[idx] = { ...next[idx], result: data.result, status: data.status };
+              next[idx] = { ...next[idx], result: data.result, status: data.status, summary: data.summary };
               return { ...m, toolSteps: next };
             });
             scrollToBottom();
@@ -731,50 +732,61 @@
                     <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
                   </div>
                 {/if}
-                <div class="px-3 py-2 space-y-1">
+                <ul class="step-cards">
                   {#each msg.toolSteps as step, stepIndex}
                     {#if step.tool === 'status_update'}
-                      <!-- Status updates render inline as plain prose -->
-                      <div class="ml-0 px-2 py-2 rounded text-[12px] leading-relaxed" style="background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-primary); border-left: 2px solid var(--accent);">
-                        <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--accent);">Status update</div>
-                        {(step.result as { message?: string })?.message ?? ''}
-                      </div>
+                      <li class="step-status-update-wrap">
+                        <!-- Status updates render inline as plain prose -->
+                        <div class="ml-0 px-2 py-2 rounded text-[12px] leading-relaxed" style="background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-primary); border-left: 2px solid var(--accent);">
+                          <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--accent);">Status update</div>
+                          {(step.result as { message?: string })?.message ?? ''}
+                        </div>
+                      </li>
                     {:else}
-                      <div>
-                        <button
-                          class="flex items-center gap-2 w-full text-left group"
-                          onclick={() => toggleStepExpanded(stepIndex)}
-                        >
-                          <span class="text-[10px] shrink-0 w-3 text-center" style="color: {step.status === 'running' ? 'var(--accent)' : step.status === 'error' ? '#ef4444' : 'var(--text-ghost)'};">
+                      <li class="step-card" data-status={step.status}>
+                        <header class="step-card-hdr">
+                          <span class="step-status" data-status={step.status} aria-label={step.status}>
                             {#if step.status === 'running'}
-                              <span class="inline-block animate-pulse">&#9679;</span>
+                              <span class="sc-dot"></span>
                             {:else if step.status === 'error'}
-                              &#10007;
+                              ✗
                             {:else}
-                              &#10003;
+                              ✓
                             {/if}
                           </span>
-                          <span
-                            class="text-[11px] flex-1"
-                            style="color: {step.status === 'running' ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono);"
-                          >
-                            {friendlyToolName(step.tool)}{#if Object.keys(step.args).length > 0}: {formatToolArgs(step.args)}{/if}
-                          </span>
-                          {#if step.result !== undefined}
-                            <span class="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity" style="color: var(--text-ghost);">
-                              {step.expanded ? 'collapse' : 'expand'}
-                            </span>
+                          <span class="step-tool">{friendlyToolName(step.tool)}</span>
+                          <span class="step-summary">{step.summary ?? (step.status === 'running' ? '…' : '')}</span>
+                          {#if step.result !== undefined || Object.keys(step.args).length > 0}
+                            <button
+                              type="button"
+                              class="step-toggle"
+                              onclick={() => toggleStepExpanded(stepIndex)}
+                              aria-expanded={step.expanded ? 'true' : 'false'}
+                            >
+                              {step.expanded ? 'hide' : 'details'}
+                            </button>
                           {/if}
-                        </button>
-                        {#if step.expanded && step.result !== undefined}
-                          <div class="ml-5 mt-1 mb-2 overflow-x-auto">
-                            <JsonBlock data={step.result} />
+                        </header>
+                        {#if step.expanded}
+                          <div class="step-card-body">
+                            {#if Object.keys(step.args).length > 0}
+                              <details open>
+                                <summary class="step-body-label">args</summary>
+                                <JsonBlock data={step.args} />
+                              </details>
+                            {/if}
+                            {#if step.result !== undefined}
+                              <details open>
+                                <summary class="step-body-label">result</summary>
+                                <JsonBlock data={step.result} />
+                              </details>
+                            {/if}
                           </div>
                         {/if}
-                      </div>
+                      </li>
                     {/if}
                   {/each}
-                </div>
+                </ul>
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
@@ -1022,5 +1034,92 @@
   @keyframes hb-pulse {
     0%, 100% { opacity: 0.25; transform: scale(0.85); }
     50%      { opacity: 1;    transform: scale(1.1);  }
+  }
+
+  .step-cards {
+    list-style: none;
+    margin: 0;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .step-card {
+    padding: 6px 10px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 3px;
+    transition: border-color 100ms ease;
+  }
+  .step-card[data-status="error"] {
+    border-color: rgba(196, 68, 68, 0.45);
+    background: rgba(196, 68, 68, 0.05);
+  }
+  .step-card[data-status="running"] {
+    border-color: var(--accent);
+  }
+  .step-card-hdr {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .step-status {
+    width: 14px;
+    text-align: center;
+    color: var(--text-ghost);
+  }
+  .step-status[data-status="running"] { color: var(--accent); }
+  .step-status[data-status="error"]   { color: #c44; }
+  .step-status[data-status="done"]    { color: #6a9f4b; }
+  .sc-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: hb-pulse 1.4s ease-in-out infinite;
+  }
+  .step-tool {
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+  .step-summary {
+    color: var(--text-secondary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .step-toggle {
+    background: transparent;
+    border: 0;
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .step-toggle:hover { color: var(--text-primary); }
+  .step-card-body {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .step-body-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    cursor: pointer;
+    padding: 2px 0;
+  }
+  .step-status-update-wrap {
+    list-style: none;
   }
 </style>

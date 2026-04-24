@@ -26,6 +26,7 @@ import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
+import { summarizeToolResult } from './tool-summary';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -250,7 +251,14 @@ async function runSingleToolCall(
   const status: 'done' | 'error' = toolResult?.error ? 'error' : 'done';
   onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, result: progressResult, status });
   onProgress?.(`${fnName}: done\n`);
-  onStreamEvent?.({ type: 'tool_result', tool: fnName, result: progressResult, status, toolCallId: toolCall.id });
+  onStreamEvent?.({
+    type: 'tool_result',
+    tool: fnName,
+    result: progressResult,
+    status,
+    toolCallId: toolCall.id,
+    summary: summarizeToolResult({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, result: progressResult, status }),
+  });
 
   // Truncate large tool results to avoid overwhelming the LLM context
   let resultStr = JSON.stringify(toolResult);
