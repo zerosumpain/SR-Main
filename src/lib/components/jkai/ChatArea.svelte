@@ -7,8 +7,9 @@
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
+  import ClarifyCard from '$lib/components/jkai/ClarifyCard.svelte';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
-  import type { PlanPayload } from '$lib/workflows/chat/job-store';
+  import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
@@ -127,6 +128,7 @@
   let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
+  let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
@@ -425,6 +427,7 @@
     heartbeat = null;
     pendingPlan = null;
     pendingConfirm = null;
+    pendingClarify = null;
     subAgents = {};
 
     const attachmentIds = pendingAttachments
@@ -622,6 +625,17 @@
             return;
           }
 
+          if (data.type === 'clarify') {
+            pendingClarify = { clarifyId: data.clarifyId, questions: data.questions };
+            heartbeat = null;
+            return;
+          }
+
+          if (data.type === 'clarify_ack') {
+            pendingClarify = null;
+            return;
+          }
+
           if (data.type === 'subagent_start') {
             subAgents[data.agentId] = {
               agentId: data.agentId,
@@ -677,6 +691,7 @@
             heartbeat = null;
             pendingPlan = null;
             pendingConfirm = null;
+            pendingClarify = null;
             const result = (data.result || {}) as {
               message?: string;
               error?: string;
@@ -709,6 +724,7 @@
             heartbeat = null;
             pendingPlan = null;
             pendingConfirm = null;
+            pendingClarify = null;
             messages = messages.map((m) =>
               m.id === progressId
                 ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -737,6 +753,7 @@
     heartbeat = null;
     pendingPlan = null;
     pendingConfirm = null;
+    pendingClarify = null;
     scrollToBottom();
   }
 
@@ -854,6 +871,14 @@
                     onresolve={() => { pendingConfirm = null; }}
                   />
                 {/if}
+                {#if pendingClarify}
+                  <ClarifyCard
+                    clarifyId={pendingClarify.clarifyId}
+                    questions={pendingClarify.questions}
+                    jobId={currentJobId ?? ''}
+                    onresolve={() => { pendingClarify = null; }}
+                  />
+                {/if}
                 {#if heartbeat}
                   <div class="heartbeat-line" role="status" aria-live="polite">
                     <span class="hb-dot"></span>
@@ -938,6 +963,14 @@
                   details={pendingConfirm.details}
                   jobId={currentJobId ?? ''}
                   onresolve={() => { pendingConfirm = null; }}
+                />
+              {/if}
+              {#if pendingClarify}
+                <ClarifyCard
+                  clarifyId={pendingClarify.clarifyId}
+                  questions={pendingClarify.questions}
+                  jobId={currentJobId ?? ''}
+                  onresolve={() => { pendingClarify = null; }}
                 />
               {/if}
               {#if heartbeat}

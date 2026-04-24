@@ -28,6 +28,7 @@ import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
 import { summarizeToolResult } from './tool-summary';
 import { extractPlan, awaitPlanApproval } from './plan-phase';
+import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 
 const MAX_HISTORY = 30;
 const MAX_TOOL_ROUNDS = 10;
@@ -452,7 +453,11 @@ export async function generalChat(
     ? `\n\n--- Plan phase ---\nIf the user's request will require more than one tool call OR any write/modify/delete action, FIRST emit a plan as a JSON block:\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval. For trivial single-read lookups (e.g. one web_search for a factual question, checking a single piece of intel) you may skip the plan and answer directly.`
     : '';
 
-  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${planSection}`;
+  const clarifySection = options.jobId && (options.subagentDepth ?? 0) === 0
+    ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
+    : '';
+
+  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -722,6 +727,31 @@ export async function generalChat(
           }))
         : undefined,
     };
+
+    // --- Clarify-phase interception (round 0 only, top-level jobs) ---
+    // Takes priority over plan interception: ask questions first, plan only
+    // once we know what we're doing.
+    if (round === 0 && options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<clarify>')) {
+      const extracted = extractClarify(msg.content);
+      if (extracted) {
+        msg.tool_calls = undefined;
+        msg.content = extracted.cleaned || '(clarify emitted)';
+
+        const { answers } = await awaitClarifyAnswers(options.jobId, extracted.questions);
+
+        // Feed answers back as a plain-text follow-up turn.
+        const answerLines = Object.entries(answers)
+          .map(([id, val]) => {
+            const q = extracted.questions.find((qq) => qq.id === id);
+            return q ? `${q.text} — ${val}` : `${id}: ${val}`;
+          })
+          .join('\n');
+
+        messages.push(msg);
+        messages.push({ role: 'user', content: `My answers:\n${answerLines}` });
+        continue;
+      }
+    }
 
     // --- Plan-phase interception (round 0 only, when job-scoped) ---
     if (round === 0 && options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
