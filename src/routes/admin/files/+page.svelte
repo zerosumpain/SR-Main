@@ -16,17 +16,20 @@
 
   let files = $state<FileRow[]>(data.files as FileRow[]);
 
-  // Upload form
   let fileInput: HTMLInputElement | null = $state(null);
   let uploadName = $state('');
   let uploadDesc = $state('');
   let uploadPerm = $state({ read: true, write: false, append: false, delete: false });
   let uploadBusy = $state(false);
   let uploadError = $state<string | null>(null);
+  let selectedFileName = $state('');
 
-  // Edit row
   let editingId = $state<string | null>(null);
-  let editDraft = $state<{ name: string; description: string; permissions: { read: boolean; write: boolean; append: boolean; delete: boolean } } | null>(null);
+  let editDraft = $state<{
+    name: string;
+    description: string;
+    permissions: { read: boolean; write: boolean; append: boolean; delete: boolean };
+  } | null>(null);
   let editBusy = $state(false);
 
   function fmtSize(n: number): string {
@@ -47,6 +50,11 @@
       const body = await res.json();
       files = body.files;
     }
+  }
+
+  function onFilePicked() {
+    const f = fileInput?.files?.[0];
+    selectedFileName = f ? f.name : '';
   }
 
   async function uploadFile(ev: SubmitEvent) {
@@ -72,6 +80,7 @@
       await refresh();
       uploadName = '';
       uploadDesc = '';
+      selectedFileName = '';
       if (el) el.value = '';
     } finally {
       uploadBusy = false;
@@ -134,146 +143,506 @@
 </script>
 
 <div class="wrap">
-  <header>
+  <header class="page-hdr">
     <div>
-      <h1>File Store</h1>
-      <p class="subtitle">Upload files for workflows to read, write, append, or delete via the <code>File Store</code> node. Permissions below gate every node operation.</p>
+      <div class="kicker">File Store</div>
+      <h1>Files consumed by workflows</h1>
+      <p class="sub">
+        Upload files the <code>File Store</code> canvas node can read, write, append, delete, or list.
+        Per-file permissions gate every node operation.
+      </p>
     </div>
-    <a class="link" href="/admin">← Admin</a>
+    <a class="back-link" href="/admin">← Admin</a>
   </header>
 
-  <section class="panel">
-    <h2>Upload a file</h2>
-    <form onsubmit={uploadFile}>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Upload</span>
+    </div>
+
+    <form class="form" onsubmit={uploadFile}>
       <label class="field">
-        <span>File</span>
-        <input type="file" bind:this={fileInput} required />
+        <span class="sr-label-tight">File</span>
+        <div class="file-picker">
+          <input
+            type="file"
+            bind:this={fileInput}
+            onchange={onFilePicked}
+            required
+            id="file-input"
+          />
+          <label for="file-input" class="file-btn">Choose file</label>
+          <span class="file-name">{selectedFileName || 'No file selected'}</span>
+        </div>
       </label>
-      <label class="field">
-        <span>Name <em>(optional; defaults to filename)</em></span>
-        <input type="text" bind:value={uploadName} placeholder="reports/daily.csv" />
-      </label>
-      <label class="field">
-        <span>Description <em>(optional)</em></span>
-        <input type="text" bind:value={uploadDesc} placeholder="What is this file for?" />
-      </label>
-      <fieldset class="perms">
-        <legend>Permissions</legend>
-        <label><input type="checkbox" bind:checked={uploadPerm.read} /> Read</label>
-        <label><input type="checkbox" bind:checked={uploadPerm.write} /> Write (overwrite)</label>
-        <label><input type="checkbox" bind:checked={uploadPerm.append} /> Append</label>
-        <label><input type="checkbox" bind:checked={uploadPerm.delete} /> Delete</label>
-      </fieldset>
-      {#if uploadError}<div class="err">{uploadError}</div>{/if}
-      <button type="submit" disabled={uploadBusy}>{uploadBusy ? 'Uploading…' : 'Upload'}</button>
+
+      <div class="row">
+        <label class="field">
+          <span class="sr-label-tight">Name <em>— optional, defaults to filename</em></span>
+          <input type="text" bind:value={uploadName} placeholder="reports/daily.csv" class="nm-text-input" />
+        </label>
+        <label class="field">
+          <span class="sr-label-tight">Description <em>— optional</em></span>
+          <input type="text" bind:value={uploadDesc} placeholder="What is this file for?" class="nm-text-input" />
+        </label>
+      </div>
+
+      <div class="field">
+        <span class="sr-label-tight">Permissions</span>
+        <div class="perm-row">
+          <label class="perm-toggle" class:on={uploadPerm.read}>
+            <input type="checkbox" bind:checked={uploadPerm.read} />
+            <span class="perm-code">R</span><span class="perm-name">Read</span>
+          </label>
+          <label class="perm-toggle" class:on={uploadPerm.write}>
+            <input type="checkbox" bind:checked={uploadPerm.write} />
+            <span class="perm-code">W</span><span class="perm-name">Write</span>
+          </label>
+          <label class="perm-toggle" class:on={uploadPerm.append}>
+            <input type="checkbox" bind:checked={uploadPerm.append} />
+            <span class="perm-code">A</span><span class="perm-name">Append</span>
+          </label>
+          <label class="perm-toggle" class:on={uploadPerm.delete}>
+            <input type="checkbox" bind:checked={uploadPerm.delete} />
+            <span class="perm-code">D</span><span class="perm-name">Delete</span>
+          </label>
+        </div>
+      </div>
+
+      {#if uploadError}
+        <div class="err-line">{uploadError}</div>
+      {/if}
+      <div class="form-actions">
+        <button type="submit" class="nm-save-btn" disabled={uploadBusy}>
+          {uploadBusy ? 'Uploading…' : 'Upload'}
+        </button>
+      </div>
     </form>
   </section>
 
-  <section class="panel">
-    <h2>Files ({files.length})</h2>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Files</span>
+      <span class="nm-sec-meta">{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+    </div>
+
     {#if files.length === 0}
-      <p class="muted">No files yet. Upload one above.</p>
+      <div class="empty">No files yet. Upload one above.</div>
     {:else}
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Size</th>
-            <th>Permissions</th>
-            <th>Updated</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each files as f (f.id)}
-            {#if editingId === f.id && editDraft}
-              <tr class="editing">
-                <td colspan="6">
-                  <div class="edit-grid">
-                    <label class="field">
-                      <span>Name</span>
-                      <input type="text" bind:value={editDraft.name} />
+      <div class="file-list">
+        {#each files as f (f.id)}
+          {#if editingId === f.id && editDraft}
+            <div class="file-card editing">
+              <div class="edit-grid">
+                <label class="field">
+                  <span class="sr-label-tight">Name</span>
+                  <input type="text" bind:value={editDraft.name} class="nm-text-input" />
+                </label>
+                <label class="field">
+                  <span class="sr-label-tight">Description</span>
+                  <input type="text" bind:value={editDraft.description} class="nm-text-input" />
+                </label>
+                <div class="field">
+                  <span class="sr-label-tight">Permissions</span>
+                  <div class="perm-row">
+                    <label class="perm-toggle" class:on={editDraft.permissions.read}>
+                      <input type="checkbox" bind:checked={editDraft.permissions.read} />
+                      <span class="perm-code">R</span><span class="perm-name">Read</span>
                     </label>
-                    <label class="field">
-                      <span>Description</span>
-                      <input type="text" bind:value={editDraft.description} />
+                    <label class="perm-toggle" class:on={editDraft.permissions.write}>
+                      <input type="checkbox" bind:checked={editDraft.permissions.write} />
+                      <span class="perm-code">W</span><span class="perm-name">Write</span>
                     </label>
-                    <fieldset class="perms">
-                      <legend>Permissions</legend>
-                      <label><input type="checkbox" bind:checked={editDraft.permissions.read} /> Read</label>
-                      <label><input type="checkbox" bind:checked={editDraft.permissions.write} /> Write</label>
-                      <label><input type="checkbox" bind:checked={editDraft.permissions.append} /> Append</label>
-                      <label><input type="checkbox" bind:checked={editDraft.permissions.delete} /> Delete</label>
-                    </fieldset>
-                    <div class="actions">
-                      <button type="button" onclick={saveEdit} disabled={editBusy}>{editBusy ? 'Saving…' : 'Save'}</button>
-                      <button type="button" class="ghost" onclick={cancelEdit}>Cancel</button>
-                    </div>
+                    <label class="perm-toggle" class:on={editDraft.permissions.append}>
+                      <input type="checkbox" bind:checked={editDraft.permissions.append} />
+                      <span class="perm-code">A</span><span class="perm-name">Append</span>
+                    </label>
+                    <label class="perm-toggle" class:on={editDraft.permissions.delete}>
+                      <input type="checkbox" bind:checked={editDraft.permissions.delete} />
+                      <span class="perm-code">D</span><span class="perm-name">Delete</span>
+                    </label>
                   </div>
-                </td>
-              </tr>
-            {:else}
-              <tr>
-                <td>
-                  <div class="name">{f.name}</div>
-                  {#if f.description}<div class="desc">{f.description}</div>{/if}
-                </td>
-                <td><code>{f.mimeType}</code></td>
-                <td>{fmtSize(f.sizeBytes)}</td>
-                <td>
-                  <span class="perm" class:on={f.permissions?.read !== false}>R</span>
-                  <span class="perm" class:on={!!f.permissions?.write}>W</span>
-                  <span class="perm" class:on={!!f.permissions?.append}>A</span>
-                  <span class="perm" class:on={!!f.permissions?.delete}>D</span>
-                </td>
-                <td class="when">{fmtDate(f.updatedAt)}</td>
-                <td class="actions">
-                  <a href={`/api/files/${f.id}/download`} class="link">Download</a>
-                  <button type="button" class="link" onclick={() => startEdit(f)}>Edit</button>
-                  <button type="button" class="link danger" onclick={() => deleteRow(f)}>Delete</button>
-                </td>
-              </tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
+                </div>
+                <div class="edit-actions">
+                  <button type="button" class="nm-save-btn" onclick={saveEdit} disabled={editBusy}>
+                    {editBusy ? 'Saving…' : 'Save'}
+                  </button>
+                  <button type="button" class="btn-ghost" onclick={cancelEdit}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          {:else}
+            <div class="file-card">
+              <div class="file-main">
+                <div class="file-title">
+                  <span class="file-name-text">{f.name}</span>
+                  <span class="file-mime"><code>{f.mimeType}</code></span>
+                </div>
+                {#if f.description}
+                  <div class="file-desc">{f.description}</div>
+                {/if}
+                <div class="file-meta">
+                  <span>{fmtSize(f.sizeBytes)}</span>
+                  <span class="dot">·</span>
+                  <span>Updated {fmtDate(f.updatedAt)}</span>
+                  {#if f.uploadedBy}
+                    <span class="dot">·</span>
+                    <span>by {f.uploadedBy}</span>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="file-perms">
+                <span class="perm-chip" class:on={f.permissions?.read !== false}>R</span>
+                <span class="perm-chip" class:on={!!f.permissions?.write}>W</span>
+                <span class="perm-chip" class:on={!!f.permissions?.append}>A</span>
+                <span class="perm-chip" class:on={!!f.permissions?.delete}>D</span>
+              </div>
+
+              <div class="file-actions">
+                <a href={`/api/files/${f.id}/download`} class="row-link">Download</a>
+                <button type="button" class="row-link" onclick={() => startEdit(f)}>Edit</button>
+                <button type="button" class="row-link danger" onclick={() => deleteRow(f)}>Delete</button>
+              </div>
+            </div>
+          {/if}
+        {/each}
+      </div>
     {/if}
   </section>
 </div>
 
 <style>
-  .wrap { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; color: var(--text, #e8e8e8); }
-  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; }
-  header h1 { margin: 0; font-size: 1.6rem; }
-  .subtitle { margin: 0.25rem 0 0; color: var(--muted, #8a8a8a); font-size: 0.9rem; max-width: 60ch; }
-  .panel { background: var(--panel, #151515); border: 1px solid var(--border, #2a2a2a); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem; }
-  .panel h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
-  form { display: grid; gap: 0.75rem; max-width: 540px; }
-  .field { display: grid; gap: 0.25rem; font-size: 0.85rem; }
-  .field span em { color: var(--muted, #8a8a8a); font-style: italic; font-weight: normal; }
-  .field input[type="text"], .field input[type="file"] { padding: 0.5rem 0.6rem; background: var(--input, #0f0f0f); border: 1px solid var(--border, #2a2a2a); border-radius: 4px; color: inherit; }
-  .perms { border: 1px solid var(--border, #2a2a2a); border-radius: 4px; padding: 0.5rem 0.75rem; display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.85rem; }
-  .perms legend { padding: 0 0.25rem; color: var(--muted, #8a8a8a); font-size: 0.8rem; }
-  .perms label { display: flex; align-items: center; gap: 0.25rem; }
-  button { padding: 0.5rem 1rem; background: var(--accent, #3a7bd5); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
-  button.ghost { background: transparent; border: 1px solid var(--border, #2a2a2a); color: inherit; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border, #2a2a2a); vertical-align: top; }
-  th { color: var(--muted, #8a8a8a); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  td.when { color: var(--muted, #8a8a8a); white-space: nowrap; font-size: 0.82rem; }
-  td .name { font-weight: 500; }
-  td .desc { color: var(--muted, #8a8a8a); font-size: 0.8rem; margin-top: 0.2rem; }
-  .perm { display: inline-block; width: 1.3em; text-align: center; margin-right: 0.15rem; border-radius: 3px; padding: 0.1rem 0.3rem; background: var(--input, #0f0f0f); color: var(--muted, #555); font-size: 0.75rem; font-weight: 600; }
-  .perm.on { background: var(--accent, #3a7bd5); color: white; }
-  .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  .link { color: var(--accent, #3a7bd5); text-decoration: none; background: none; border: none; cursor: pointer; padding: 0; font-size: 0.88rem; }
-  .link:hover { text-decoration: underline; }
-  .link.danger { color: #d0554a; }
-  .err { color: #d0554a; font-size: 0.85rem; }
-  .muted { color: var(--muted, #8a8a8a); }
-  .editing { background: var(--input, #0f0f0f); }
-  .edit-grid { display: grid; gap: 0.75rem; max-width: 640px; }
-  code { background: var(--input, #0f0f0f); padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.82rem; }
+  .wrap {
+    max-width: 980px;
+    margin: 2rem auto 4rem;
+    padding: 0 1.5rem;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+  }
+
+  .page-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--text-primary);
+  }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+  }
+  .page-hdr h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--text-primary);
+  }
+  .sub {
+    margin: 0.6rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    max-width: 60ch;
+  }
+  .sub code, code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08rem 0.38rem;
+    border-radius: 2px;
+  }
+  .back-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  /* ——— Sections — mirror the canvas `.nm-sec` pattern ——— */
+  .nm-sec {
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 1rem 1.1rem 1.15rem;
+    margin-bottom: 1.25rem;
+  }
+  .nm-sec-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .sr-label-tight {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+  .nm-sec-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    margin-left: auto;
+  }
+
+  /* ——— Form ——— */
+  .form { display: grid; gap: 0.9rem; }
+  .field { display: grid; gap: 0.35rem; min-width: 0; }
+  .field em { color: var(--text-ghost); font-style: normal; font-weight: 400; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+
+  .nm-text-input {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    padding: 7px 10px;
+    outline: none;
+  }
+  .nm-text-input:focus { border-color: var(--accent); background: var(--bg); }
+  .nm-text-input::placeholder { color: var(--text-ghost); }
+
+  .file-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    padding: 6px 8px 6px 6px;
+  }
+  .file-picker input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .file-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--text-primary);
+    color: var(--bg);
+    padding: 5px 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .file-btn:hover { background: var(--accent); }
+  .file-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ——— Permissions pills ——— */
+  .perm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .perm-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 5px 10px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+  }
+  .perm-toggle:hover { border-color: var(--text-primary); }
+  .perm-toggle input { appearance: none; -webkit-appearance: none; position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .perm-code {
+    display: inline-block;
+    width: 1em;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .perm-name {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .perm-toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  .perm-toggle.on .perm-code { color: var(--bg); }
+
+  .err-line {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #c44;
+    padding: 6px 8px;
+    background: rgba(196, 68, 68, 0.08);
+    border-left: 2px solid #c44;
+  }
+  .form-actions { display: flex; gap: 0.5rem; }
+
+  .nm-save-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 6px 14px;
+    background: var(--accent);
+    color: var(--bg);
+    border: 1px solid var(--accent);
+    cursor: pointer;
+  }
+  .nm-save-btn:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .nm-save-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-ghost {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+  }
+  .btn-ghost:hover { border-color: var(--text-primary); color: var(--text-primary); }
+
+  /* ——— File list ——— */
+  .empty {
+    padding: 1.5rem;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-ghost);
+    font-style: italic;
+    border: 1px dashed var(--card-border);
+  }
+  .file-list { display: grid; gap: 0.6rem; }
+  .file-card {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+  }
+  .file-card:hover { border-color: var(--text-primary); }
+  .file-card.editing {
+    grid-template-columns: 1fr;
+    background: var(--bg-section);
+    border-color: var(--accent);
+    padding: 1rem 1.1rem 1.15rem;
+  }
+  .file-main { min-width: 0; }
+  .file-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .file-name-text {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+  .file-mime { font-size: 10px; }
+  .file-desc {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+  }
+  .file-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .file-meta .dot { color: var(--text-ghost); }
+
+  .file-perms {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .perm-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    color: var(--text-ghost);
+  }
+  .perm-chip.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  .file-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    align-items: center;
+  }
+  .row-link {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
+  .row-link.danger { color: #c44; }
+  .row-link.danger:hover { color: #a33; }
+
+  .edit-grid { display: grid; gap: 0.9rem; }
+  .edit-actions { display: flex; gap: 0.5rem; }
+
+  @media (max-width: 640px) {
+    .file-card { grid-template-columns: 1fr; align-items: flex-start; }
+    .file-perms, .file-actions { justify-content: flex-start; }
+  }
 </style>

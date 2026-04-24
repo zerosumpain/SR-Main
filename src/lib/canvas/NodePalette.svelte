@@ -28,11 +28,15 @@
   let searchEl: HTMLInputElement | undefined = $state();
 
   const allCandidates: CandidateType[] = $derived(
-    allTypes().map((t) => ({
-      type: t.type,
-      handles: t.handles,
-      defaultWeight: t.defaultWeight ?? 0,
-    }))
+    allTypes()
+      // Annotation primitives (post-it, annotation box) live on the canvas
+      // toolbar, not in the DAG palette — they're inert decoration, not nodes.
+      .filter((t) => t.group !== 'Annotations')
+      .map((t) => ({
+        type: t.type,
+        handles: t.handles,
+        defaultWeight: t.defaultWeight ?? 0,
+      }))
   );
 
   const canvasHandles: NodeHandles[] = $derived(

@@ -2249,6 +2249,50 @@
       {/if}
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
+      <span class="sep-v"></span>
+      <button
+        class="composer-pill annotation-pill"
+        title="Add a post-it note"
+        aria-label="Add post-it note"
+        onclick={async () => {
+          const meta = byNodeType('postit');
+          if (!meta) return;
+          const placement = resolveOverlap(viewportCenterInWorld());
+          await addNode({
+            type: meta.type,
+            label: 'Note',
+            defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>) },
+            position: placement,
+          });
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="12" height="12" rx="1" fill="currentColor" opacity="0.85"/>
+          <path d="M10 2 L14 6 L14 2 Z" fill="var(--bg)" opacity="0.5"/>
+        </svg>
+        <span>Note</span>
+      </button>
+      <button
+        class="composer-pill annotation-pill"
+        title="Add an annotation box"
+        aria-label="Add annotation box"
+        onclick={async () => {
+          const meta = byNodeType('annotation');
+          if (!meta) return;
+          const placement = resolveOverlap(viewportCenterInWorld());
+          await addNode({
+            type: meta.type,
+            label: 'Group',
+            defaultConfig: { ...(meta.defaultConfig as Record<string, unknown>) },
+            position: placement,
+          });
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/>
+        </svg>
+        <span>Box</span>
+      </button>
     </div>
   </div>
 
