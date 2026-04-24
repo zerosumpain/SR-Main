@@ -24,7 +24,7 @@
   );
 
   let isUser = $derived(role === 'user');
-  let thinkingOpen = $state(false);
+  let thinkingOpen = $state(true);
   let hasThinking = $derived(showThinking && thinking && thinking.steps && thinking.steps.length > 0);
 </script>
 

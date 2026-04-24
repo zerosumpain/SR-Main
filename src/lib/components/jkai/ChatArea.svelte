@@ -97,7 +97,7 @@
   let messages = $state<Message[]>([]);
   let input = $state('');
   let loading = $state(false);
-  let showThinking = $state(false);
+  let showThinking = $state(true);
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
