@@ -154,6 +154,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/scraper/script is service-to-service when called on homeserv (the
+  // host that owns the scrape scripts) and user-authenticated when called on
+  // the VPS (the panel proxies through). Whitelist on homeserv only — its
+  // POST handler still enforces SCRAPER_SERVICE_TOKEN.
+  if (pathname.startsWith('/api/scraper/script')) {
+    const { hostname } = await import('os');
+    if (hostname() === 'homeserv' || process.env.SCRAPER_ALLOW_NON_HOMESERV) {
+      return resolve(event);
+    }
+  }
+
   // API routes return 401
   if (pathname.startsWith('/api/')) {
     const session = await event.locals.auth();
