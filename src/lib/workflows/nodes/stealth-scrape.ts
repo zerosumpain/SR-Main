@@ -9,6 +9,9 @@ import {
 } from '$lib/workflows/scraper/interactive-remote';
 import { loadPlaybookForUrl, runPlaybook } from '$lib/workflows/scraper/playbook';
 import { runSiteMapper } from '$lib/workflows/scraper/site-mapper';
+import { runScript } from '$lib/workflows/scraper/script-runner';
+import { runScriptAuthor } from '$lib/workflows/scraper/script-author';
+import { readScript } from '$lib/workflows/scraper/script-store';
 import { db } from '$lib/db';
 import { workflowInteractions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -51,6 +54,119 @@ export const stealthScrapeExecutor: NodeExecutor = {
       workflowRunId: context.runId,
       onProgress: emitProgress,
     };
+
+    // ===== script-scrape dispatch (preferred) =====
+    // If a saved Python scrape script exists for this profile, run it.
+    // Authored once by an LLM (script-author), executed deterministically
+    // forever after. The artifact is real Python code with full Playwright
+    // access — no declarative-playbook brittleness.
+    const existingScript = await readScript(profile);
+    if (existingScript) {
+      context.emit({
+        type: 'log', runId: context.runId, nodeId,
+        data: {
+          kind: 'scraper.script.dispatch',
+          message: `Using saved scrape script "${profile}" (authored ${existingScript.meta.generatedAt})`,
+          declaredVars: existingScript.meta.declaredVars.map((v) => v.name),
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
+      const callerVars: Record<string, string> = {};
+      for (const [k, v] of Object.entries(input)) {
+        if (v == null) continue;
+        callerVars[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      }
+      const r = await runScript({
+        profile,
+        searchQuery: searchQuery || undefined,
+        vars: callerVars,
+        workflowRunId: context.runId,
+        onProgress: (ev) => context.emit({
+          type: 'log', runId: context.runId, nodeId,
+          data: { kind: 'scraper.script', ...ev },
+          timestamp: new Date().toISOString(),
+        } as any),
+      });
+      context.emit({
+        type: 'scraper.run.finished',
+        runId: context.runId,
+        runLogId: 0,
+        success: r.success,
+        pagesLoaded: r.items.length > 0 ? 1 : 0,
+        error: r.error,
+        timestamp: new Date().toISOString(),
+      } as any);
+      return {
+        output: {
+          success: r.success,
+          items: r.items,
+          itemCount: r.items.length,
+          pages: r.items.length > 0
+            ? [{ url: r.landedUrl ?? url, fields: { items: r.items as unknown as string[] } }]
+            : [],
+          pageCount: r.items.length > 0 ? 1 : 0,
+          error: r.error,
+          viaScript: true,
+        },
+        metadata: { _selectedHandle: 'output' },
+      };
+    }
+
+    // ===== first-time script authoring =====
+    // No saved script for this profile, but the user gave us a goal —
+    // kick off the LLM authoring loop. The LLM iteratively writes a
+    // Python scrape function, runs it inside the same warm Playwright
+    // session (cookies / altcha solves persist), saves when validated.
+    if (goal && !existingScript) {
+      context.emit({
+        type: 'log', runId: context.runId, nodeId,
+        data: {
+          kind: 'scraper.script.author_start',
+          message: `Authoring scrape script for ${profile} (first run, ~5–10 min). Subsequent runs replay the script in seconds.`,
+          seedUrl: url,
+          goal,
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
+      const authored = await runScriptAuthor({
+        profile,
+        seedUrl: url,
+        goal,
+        searchQuery: searchQuery || undefined,
+        workflowRunId: context.runId,
+        onProgress: (ev) => context.emit({
+          type: 'log', runId: context.runId, nodeId,
+          data: { kind: 'scraper.script.author', ...ev },
+          timestamp: new Date().toISOString(),
+        } as any),
+      });
+      context.emit({
+        type: 'log', runId: context.runId, nodeId,
+        data: {
+          kind: 'scraper.script.author_done',
+          saved: authored.saved,
+          declaredVars: authored.declaredVars.map((v) => v.name),
+          itemCount: authored.sampleItems.length,
+          error: authored.error,
+        },
+        timestamp: new Date().toISOString(),
+      } as any);
+      return {
+        output: {
+          success: authored.saved,
+          items: authored.sampleItems,
+          itemCount: authored.sampleItems.length,
+          pages: authored.sampleItems.length > 0
+            ? [{ url, fields: { items: authored.sampleItems as unknown as string[] } }]
+            : [],
+          pageCount: authored.sampleItems.length > 0 ? 1 : 0,
+          error: authored.saved ? undefined : authored.error,
+          viaScriptAuthor: true,
+          script: authored.code,
+        },
+        metadata: { _selectedHandle: 'output' },
+      };
+    }
 
     // Playbook dispatch: if the site-mapper has generated a playbook for
     // this domain, use it — deterministic recipe beats re-deriving nav +

@@ -42,6 +42,17 @@ export interface AgentHarness {
   altcha(): Promise<{ solved: boolean }>;
   observe(): Promise<AgentObservation>;
   extract(rules: Array<Record<string, unknown>>): Promise<{ fields: Record<string, unknown> }>;
+  /** Run an LLM-authored scrape function inside the warm Playwright session.
+   *  `code` is the body of an `async def scrape(page, vars)` — the author
+   *  writes Playwright calls and returns a list of items. Returns the items
+   *  plus captured stdout/stderr/error so the authoring loop can iterate. */
+  execScript(code: string, vars: Record<string, unknown>, timeoutMs?: number): Promise<{
+    items: Array<Record<string, unknown>>;
+    stdout: string;
+    stderr: string;
+    error: string | null;
+    observed_url: string;
+  }>;
   close(): Promise<void>;
 }
 
@@ -159,6 +170,16 @@ export async function startAgent(profile: string): Promise<AgentHarness> {
     async extract(rules) {
       const r = await send({ cmd: 'extract', rules });
       return { fields: r.fields as Record<string, unknown> };
+    },
+    async execScript(code, vars, timeoutMs) {
+      const r = await send({ cmd: 'exec_script', code, vars }, timeoutMs ?? 120_000);
+      return {
+        items: (r.items as Array<Record<string, unknown>>) ?? [],
+        stdout: (r.stdout as string) ?? '',
+        stderr: (r.stderr as string) ?? '',
+        error: (r.error as string | null) ?? null,
+        observed_url: (r.observed_url as string) ?? '',
+      };
     },
     async close() {
       try { await send({ cmd: 'close' }, 5_000); } catch { /* process already gone */ }

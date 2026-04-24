@@ -19,7 +19,7 @@
 #   extract(rules)                     → { fields }  (same shape as apply_extract_rules)
 #   close()                            → { bye: true } then exits
 from __future__ import annotations
-import asyncio, json, sys, time
+import asyncio, contextlib, io, json, sys, textwrap, time, traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -536,6 +536,42 @@ async def run_agent(profile: str) -> None:
                 elif cmd == "extract":
                     rules = msg.get("rules") or []
                     sys.stdout.write(ok({"fields": await apply_extract_rules(page, rules)}))
+                elif cmd == "exec_script":
+                    # Run an LLM-authored Python scrape function inside the
+                    # warm Playwright session. The `code` parameter is the
+                    # body of an async function `scrape(page, vars)` — the
+                    # author writes vanilla Python with await page.* calls
+                    # and `return [...]` of items. We wrap, exec, await,
+                    # and report items + stdout/stderr/error back to the
+                    # caller. The page state persists across exec_script
+                    # calls (so the LLM can iterate without losing cookies
+                    # or solved captchas).
+                    code = msg.get("code") or ""
+                    vars_arg = msg.get("vars") or {}
+                    captured_stdout = io.StringIO()
+                    captured_stderr = io.StringIO()
+                    items: List[Any] = []
+                    err_str: Optional[str] = None
+                    try:
+                        body = textwrap.indent(code, "    ")
+                        wrapper = "async def __scrape(page, vars):\n" + (body if body.strip() else "    return []") + "\n"
+                        ns: Dict[str, Any] = {"asyncio": asyncio, "json": json}
+                        exec(wrapper, ns)  # noqa: S102 — sandboxed by docker
+                        with contextlib.redirect_stdout(captured_stdout), contextlib.redirect_stderr(captured_stderr):
+                            result = await ns["__scrape"](page, vars_arg)
+                        if isinstance(result, list):
+                            items = result
+                        elif result is not None:
+                            err_str = f"scrape returned {type(result).__name__}, expected list"
+                    except Exception as e:
+                        err_str = f"{type(e).__name__}: {e}\n{traceback.format_exc()[-2000:]}"
+                    sys.stdout.write(ok({
+                        "items": items,
+                        "stdout": captured_stdout.getvalue()[-4000:],
+                        "stderr": captured_stderr.getvalue()[-4000:],
+                        "error": err_str,
+                        "observed_url": page.url,
+                    }))
                 elif cmd == "close":
                     sys.stdout.write(ok({"bye": True}))
                     sys.stdout.flush()

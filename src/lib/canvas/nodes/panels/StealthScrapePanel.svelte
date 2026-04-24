@@ -59,6 +59,62 @@
   let playbookExpanded = $state(false);
   let playbookError = $state<string | null>(null);
 
+  // Script (preferred over playbook): if a saved Python scrape script
+  // exists for this profile, the node skips authoring and runs it
+  // deterministically.
+  interface ScriptMetaWire {
+    declaredVars: Array<{ name: string; hint: string }>;
+    goal: string;
+    seedUrl: string;
+    generatedAt: string;
+    lastSuccessAt: string | null;
+    runCount: number;
+    successCount: number;
+  }
+  interface ScriptStatus {
+    profile: string;
+    code: string | null;
+    meta: ScriptMetaWire | null;
+  }
+  let scriptStatus = $state<ScriptStatus | null>(null);
+  let scriptLoading = $state(false);
+  let scriptExpanded = $state(false);
+  let scriptError = $state<string | null>(null);
+
+  async function refreshScript() {
+    if (!profile.trim()) {
+      scriptStatus = null;
+      return;
+    }
+    scriptLoading = true;
+    scriptError = null;
+    try {
+      const res = await fetch(`/api/scraper/script?profile=${encodeURIComponent(profile)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      scriptStatus = await res.json();
+    } catch (e) {
+      scriptError = e instanceof Error ? e.message : String(e);
+      scriptStatus = null;
+    } finally {
+      scriptLoading = false;
+    }
+  }
+
+  async function clearScript() {
+    if (!profile.trim()) return;
+    if (!confirm('Delete the saved scrape script for this profile? The next run will re-author it from scratch (~5–10 min).')) return;
+    scriptLoading = true;
+    try {
+      const res = await fetch(`/api/scraper/script?profile=${encodeURIComponent(profile)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refreshScript();
+    } catch (e) {
+      scriptError = e instanceof Error ? e.message : String(e);
+    } finally {
+      scriptLoading = false;
+    }
+  }
+
   async function refreshPlaybook() {
     if (!url.trim()) {
       playbookMeta = null;
@@ -103,6 +159,16 @@
       if (cRes.ok) credentials = await cRes.json();
     } catch { /* non-fatal */ }
     await refreshPlaybook();
+    await refreshScript();
+  });
+
+  // Refresh script when profile changes.
+  let lastFetchedProfile = '';
+  $effect(() => {
+    if (profile.trim() && profile !== lastFetchedProfile) {
+      lastFetchedProfile = profile;
+      void refreshScript();
+    }
   });
 
   // Also refresh when the URL changes (user typed / pasted a new one).
@@ -211,7 +277,52 @@
     </div>
   </section>
 
-  <!-- Playbook status -->
+  <!-- Script status (LLM-authored Python scrape function — preferred over playbook) -->
+  {#if profile.trim()}
+    <section class="ps ps-playbook">
+      <div class="ps-hd">
+        <span class="ps-label">Script</span>
+        <span class="ps-meta">{profile}</span>
+      </div>
+      {#if scriptLoading}
+        <div class="ps-hint">Loading…</div>
+      {:else if scriptError}
+        <div class="ps-hint ps-hint-error">Error: {scriptError}</div>
+      {:else if scriptStatus?.code && scriptStatus.meta}
+        {@const m = scriptStatus.meta}
+        <div class="ps-playbook-status ps-playbook-status-saved">
+          <span class="ps-dot ps-dot-green"></span>
+          <span class="ps-playbook-summary">
+            <b>Saved</b>
+            · {scriptStatus.code.split('\n').length} lines
+            · vars: {m.declaredVars.map((v) => v.name).join(', ') || '(none)'}
+            · {m.successCount}/{m.runCount} runs ok
+            · {formatWhen(m.generatedAt)}
+          </span>
+        </div>
+        <div class="ps-hint ps-playbook-goal">Goal: {m.goal}</div>
+        <div class="ps-playbook-actions">
+          <button class="ps-link" onclick={() => (scriptExpanded = !scriptExpanded)}>
+            {scriptExpanded ? '▾ Hide code' : '▸ View code'}
+          </button>
+          <button class="ps-link ps-link-danger" onclick={clearScript} disabled={scriptLoading}>
+            Delete &amp; re-author
+          </button>
+          <button class="ps-link" onclick={refreshScript} disabled={scriptLoading}>Refresh</button>
+        </div>
+        {#if scriptExpanded}
+          <pre class="ps-playbook-json">{scriptStatus.code}</pre>
+        {/if}
+      {:else}
+        <div class="ps-playbook-status ps-playbook-status-empty">
+          <span class="ps-dot ps-dot-amber"></span>
+          <span>No script yet — first run will author one (~5–10 min) if Goal is set.</span>
+        </div>
+      {/if}
+    </section>
+  {/if}
+
+  <!-- Playbook status (legacy — replaced by Script above; kept while old playbooks exist) -->
   {#if url.trim()}
     <section class="ps ps-playbook">
       <div class="ps-hd">
