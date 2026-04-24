@@ -1,23 +1,29 @@
 /**
- * site-mapper.ts — agentic version.
+ * site-mapper.ts — three-phase agent (scout → plan → execute).
  *
- * Runs ONCE per target site. Opens a persistent browser session via the
- * Python agent harness, feeds observations to an LLM, and takes the minimum
- * number of actions needed to reach the page that satisfies `goal`.
+ * Runs ONCE per target site. Opens a persistent browser via the Python agent
+ * harness and works in three distinct phases:
  *
- * LOOP:
- *   1. Agent navigates to seedUrl (site root), observes, Altcha-auto-solve.
- *   2. Send the observation + goal + transcript to the LLM. LLM emits a
- *      single JSON `action` (goto/click/fill/submit/altcha/finalize/give_up).
- *   3. Execute the action via the agent; record it in the transcript.
- *   4. Repeat until the LLM emits `finalize` (with extract rules +
- *      acceptance) or hits the step cap (MAX_STEPS).
- *   5. Validate by replaying the recorded step sequence through
- *      runPlaybookV2 and checking the acceptance test. Save either way.
+ *   1. SCOUT (read-only, ~6-8 turns):
+ *        LLM can only goto / click nav links / observe — NO fills or submits.
+ *        Every page it visits is auto-catalogued: each form's selector +
+ *        slot list (including inputs hidden behind collapsed sections) is
+ *        recorded. Goal: build a map of candidate search surfaces.
  *
- * The LLM never picks up the phone — it sees only summarised observations,
- * never raw HTML, so we stay well within context budgets and keep the LLM
- * focused on the goal.
+ *   2. PLAN (single LLM call):
+ *        Input = the catalogue + user's goal + searchQuery.
+ *        The LLM must pick the form that covers the MOST slots the user's
+ *        query mentions (not just the first form that exists) and emit a
+ *        complete playbook: goto, reveal toggles, fills, submit, extract.
+ *
+ *   3. EXECUTE (deterministic):
+ *        Drive the warm browser session through the plan's steps. Extract
+ *        in-session so the first run is already a real scrape.
+ *
+ * Why three phases instead of one reactive loop: a reactive loop always
+ * finalizes on the first submittable form because that's the local maximum.
+ * A scout catalogues ALL forms first; the planner then picks the global
+ * maximum against the user's slot needs.
  */
 
 import { startAgent, type AgentHarness, type AgentObservation } from './agent-harness';
@@ -32,22 +38,13 @@ import {
 import { normalizeDomain } from './target-knowledge';
 import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
 
-// Generous step cap — altcha + observe turns burn headroom quickly on
-// multi-step form sites (CS Jobs takes ~7 steps: goto, altcha, fill,
-// submit, refine-distance, re-submit, observe-results). 12 was the first
-// pass; 20 gives the agent room to recover from a wrong turn or two.
-const MAX_STEPS = 20;
-const MAX_INTERACTIVE_SUMMARY = 6500; // chars of observe summary sent to LLM
+const SCOUT_MAX_TURNS = 8;
+const MAX_INTERACTIVE_SUMMARY = 5500;
+const MAX_CONTENT_GROUPS_SUMMARY = 2000;
 
 export interface SiteMapperOptions {
-  /** Root / landing URL of the target site (e.g. "https://example.com"). */
   seedUrl: string;
-  /** Plain-English description of the outcome the scraper should produce —
-   *  e.g. "search for data engineer jobs and return the first page of results
-   *  with title, organisation, salary, closing date, job URL". */
   goal: string;
-  /** Optional — seeded as {{keyword}} during validation so the LLM can
-   *  produce a playbook that generalises per-run. */
   searchQuery?: string;
   profile?: string;
   model?: string;
@@ -61,258 +58,257 @@ export interface SiteMapperResult {
   validated: boolean;
   itemCount: number;
   firstItemSample?: Record<string, unknown>;
-  /** URL the agent session was on when it extracted — useful for the
-   *  stealth-scrape fold-in path which reports this back to the user. */
   landedUrl?: string;
   transcript: Array<Record<string, unknown>>;
   error?: string;
 }
 
-const SYSTEM_PROMPT = `You are a scraping-agent pilot. You have control of a live headless browser. You will be fed the current page's URL, title, text snippet, and a list of interactive elements (forms, buttons, links) on each turn. Your job is to navigate MINIMALLY to reach the page that answers the user's goal, then emit a playbook.
+/** One catalogued search surface discovered during scout. */
+interface FormCatalogueEntry {
+  /** The URL the form was found on. */
+  url: string;
+  title: string;
+  /** Stable selector for the form element. */
+  form_selector: string;
+  /** Every input/textarea/select the scout saw — including those behind
+   *  collapsed panels (tagged with reveal_via so the planner knows what to
+   *  click first). */
+  slots: Array<{
+    name: string;
+    type: string;
+    label: string;
+    selector: string;
+    hidden: boolean;
+    reveal_via?: { selector: string; text: string | null };
+  }>;
+  /** Most likely submit target the scout saw. */
+  submit: { text: string; selector: string } | null;
+  /** Any expandable toggles visible on this page — useful context even if not
+   *  attached to a specific form. */
+  expandables: Array<{ text: string; selector: string }>;
+}
 
-Rules:
-- Output a SINGLE JSON object per turn. No prose, no markdown.
-- SELECTOR STABILITY IS CRITICAL. The playbook runs again in a fresh browser session on schedule, so every selector you pick must match on ANY future session. Prefer, in order:
-    1. [name="..."] attribute (most stable on form inputs)
-    2. Text content via { "text": "..." } for clicks (not selectors)
-    3. Stable ids (e.g. #search_form) WITHOUT random-looking suffixes
-    4. tag + a meaningful class (e.g. button.search-submit)
-  AVOID: ids with trailing hex suffixes like "#oselect_title_50f4" or random numeric tails — those are regenerated per session and will break the playbook on replay. If the observation only exposes an unstable id, look at the element's name/text/class and use that instead.
-- EXTRACT SELECTORS MUST COME FROM content_groups. Each observation includes a "content_groups" list — real repeated-element patterns detected on the live DOM with their selector, count, and sample text. When you finalize, pick your extract rule's selector from one of those. Do NOT guess selectors like "#search-results li" or ".job-list" — those rarely exist. If content_groups is empty, the page isn't a results page yet; navigate further before finalizing.
-- Valid JSON shapes:
+const SCOUT_SYSTEM_PROMPT = `You are a scraping-agent SCOUT. Your job is READ-ONLY exploration of a website to build a catalogue of the available search forms. You have a short turn budget. You do NOT fill fields, submit forms, or extract data in this phase — that happens later once we've picked the best form.
+
+Each turn you receive the current page's URL, title, a text snippet, and a list of interactive elements (forms, buttons, links, expandable sections).
+
+On every turn emit ONE JSON object. No prose, no markdown.
+
+Available actions:
   { "action": "goto",   "url": "https://…", "note": "why" }
-  { "action": "click",  "selector": "…",   "note": "why" }
-  { "action": "fill",   "selector": "…", "value": "…", "note": "why" }
-  { "action": "select", "selector": "…", "value": "…", "note": "why" }
-  { "action": "submit", "formSelector": "form.search-form", "note": "why" }  // formSelector optional — omit to press Enter on the focused element
-  { "action": "altcha",  "note": "auto-solve altcha if the widget is present" }
-  { "action": "finalize", "playbook": { … }, "note": "we're on the page that contains the goal data" }
+  { "action": "click",  "selector": "…", "note": "why" }          — follow a nav link or expand a section
+  { "action": "click",  "text": "Advanced search", "note": "…" }  — click by text when no stable selector
+  { "action": "altcha", "note": "if you see altcha-widget" }
+  { "action": "finalize_scout", "note": "why we're done exploring" }
   { "action": "give_up", "reason": "…" }
-- Prefer direct goto() with query-string params over form fill/submit when the site supports it — shorter playbooks are more robust.
-- Parameterise form fields with NAMED VARS, not the whole user query. The user's searchQuery is a free-form sentence like "Analysts in the Darlington area within 20 miles over 60k". DO NOT stuff that whole sentence into one field — it will be rejected. Instead, for each field the site exposes, pick the smallest slice of the query that fits and wrap it in its own {{var}}. Typical vars:
-    - {{keyword}}   — job title / role / primary search term (e.g. "Analyst")
-    - {{location}}  — town, city, postcode (e.g. "Darlington")
-    - {{distance}} — search radius as a number (e.g. "20")
-    - {{salaryMin}} — minimum salary as a number (e.g. "60000")
-  Use any var names that make sense for THIS site. Record what concrete value you filled in each turn (the real live data so the site actually responds), but emit a \`var\` field on the fill/select action so the saved step uses the {{…}} placeholder. Example:
-  { "action":"fill", "selector":"input[name=LOCATION]", "value":"Darlington", "var":"location", "note":"location slice of user query" }
-- If the user's searchQuery does NOT contain a value a field needs (e.g. they asked for "Analyst jobs" with no location), LEAVE THE FIELD BLANK — don't invent a value, and don't parameterise.
-- BEFORE FILLING ANYTHING, list every slot the user's searchQuery mentions (keyword, location, distance/radius, salary, contract type, seniority, etc). Then pick the search form that has the MOST of those slots — NOT the first form you can submit. Sites often have both:
-    * a simplified homepage/header search widget (2–3 inputs)
-    * a full search page (10+ inputs incl. salary, radius, contract type) reachable via a "Search jobs" / "Advanced search" / "All filters" link.
-  If the current page is the simple widget and the user's query mentions a slot it can't express, NAVIGATE to the full search page first (follow the relevant link, or goto a likely path like /jobs, /search, /csr/jobs.cgi). Only finalize after you've found a form that covers every slot the user asked for.
-- Once on the full-search page, the observation includes a "kind":"expandable" entry for each collapsed section (with "reveals_inputs" listing what will appear) plus hidden inputs tagged { "hidden": true, "reveal_via": { selector, text } }. If a slot the user needs lives behind such a toggle, CLICK the toggle, re-observe, then fill the newly-visible input and record BOTH steps in the playbook.
-- It's better to finalize a playbook that covers the full query (even if it takes 2–3 extra navigation steps) than to submit the simplest visible form and miss half the user's filters.
-- Call altcha whenever you see an altcha-widget in the interactive list.
-- Finalize the moment you can see the target data on the page — do NOT click into individual detail pages unless the goal requires them.
 
-When you finalize, the playbook's "steps" array must START WITH a { "type": "goto", "url": "…" } for the seedUrl (the replay starts from an empty browser — it has no idea what page to land on without this) and then contain the minimum sequence of subsequent actions that reach the results page. acceptance.minItems must be ≥ 1 — you're proving the playbook actually extracts data, so 0 is not acceptable.
+Exploration strategy:
+  1. On the seed URL, observe what forms are present. Note their slot coverage.
+  2. If the page only has a SIMPLE widget (e.g. 2 inputs), find + follow links like "Search jobs", "Advanced search", "All filters", "Browse", "Find a job" that likely lead to a fuller search form.
+  3. On any search page, CLICK expandable toggles ("Advanced search", "More filters", "Salary", etc) so their hidden inputs become visible — every visible input gets auto-catalogued.
+  4. The SYSTEM automatically catalogues every form + its inputs on every page you visit, including inputs you've revealed via clicks. You DO NOT need to "record" anything manually.
+  5. Finalize scout as soon as you've found a form that covers every slot the user's query mentions, OR you've exhausted plausible nav links.
 
-In the saved steps, any fill/select value derived from a user var MUST use its {{var}} placeholder (NOT the concrete value you tested with). Also include a "requiredVars" array describing each var the playbook needs — the runtime uses the hints to decompose a new user's searchQuery on future runs.
+User's goal describes what content to extract. User's searchQuery describes the slots the form must express (keyword, location, distance, salary, contract type, etc). Your scout mission is to find a form that can express ALL of them.
 
-The playbook shape:
+Hints on the observation shape:
+  - "kind": "form" entries list inputs. Each input has name/type/label/selector. Hidden inputs are marked { "hidden": true, "reveal_via": { selector, text } } — click reveal_via.selector to expose them.
+  - "kind": "expandable" entries are standalone toggles (summary/aria-expanded). Click them to reveal hidden filter sections.
+  - "kind": "a" or "button" entries with visible text are nav links / action buttons.`;
+
+const PLAN_SYSTEM_PROMPT = `You are a scraping-agent PLANNER. You are given:
+  - The user's goal (what to extract) and searchQuery (the slots to express).
+  - A catalogue of every search form discovered on the site, including each form's URL, selector, slot list (with hidden inputs and their reveal-via toggles), and likely submit.
+
+Your job: pick the SINGLE BEST form — the one that exposes the MOST slots the user's searchQuery mentions — and emit a complete playbook that drives through to its results page.
+
+Coverage scoring: enumerate the slots the user's searchQuery mentions (keyword, location, distance/radius, salaryMin, contractType, etc). Score each catalogue entry by how many of those slots it can express (including slots behind reveal_via toggles — those still count, we'll click the toggle first). Prefer the highest-scoring form even if it requires a few extra clicks.
+
+Output: a SINGLE JSON object, no prose, no markdown. Shape:
 {
   "version": 2,
-  "generatedAt": "<iso timestamp — literal string 'generated'>",
-  "goal": "<echo the user goal>",
+  "generatedAt": "generated",
+  "goal": "<echo user goal>",
   "requiredVars": [
-    { "name": "keyword",   "hint": "job title / role keyword (e.g. 'Analyst', 'Software Engineer')" },
-    { "name": "location",  "hint": "town, city, or postcode where to search" },
-    { "name": "distance",  "hint": "search radius in miles as a number" },
-    { "name": "salaryMin", "hint": "minimum salary as a whole number, no commas" }
+    { "name": "keyword",   "hint": "<short hint used to decompose future searchQueries>" },
+    { "name": "location",  "hint": "…" },
+    { "name": "distance",  "hint": "…" }
+    /* only include vars whose slot the chosen form actually exposes AND the user's query mentions */
   ],
-  "steps": [ /* the action sequence (minus the finalize itself) — objects with { "type": "goto"|"click"|"fill"|"select"|"submit"|"altcha"|"wait", ... }. Fill values must be "{{var}}" placeholders for any slot that came from the user's searchQuery */ ],
+  "steps": [
+    { "type": "goto", "url": "<form's page URL>" },
+    { "type": "altcha" },                                        /* omit if site has no altcha */
+    { "type": "click", "selector": "<toggle selector>" },        /* for each reveal_via toggle needed */
+    { "type": "fill", "selector": "input[name=\\"KEYWORDS\\"]", "value": "{{keyword}}" },
+    { "type": "fill", "selector": "input[name=\\"LOCATION\\"]", "value": "{{location}}" },
+    { "type": "select", "selector": "select[name=\\"distance\\"]", "value": "{{distance}}" },
+    { "type": "submit", "formSelector": "<form selector>" }
+  ],
   "extract": [
-    { "field": "items", "selector": "<css>", "attr": "html", "multi": true, "trim": true }
-    /* plus optional per-item field rules if you're confident; otherwise the items-html multi is enough, downstream stealth-scrape-llm can parse it */
+    { "field": "items", "selector": "<css from content_groups>", "attr": "html", "multi": true, "trim": true }
   ],
   "acceptance": { "minItems": 1, "sampleField": "items" }
 }
-The step shapes inside "steps" use "type" (not "action"): { "type":"goto","url":"…" }, { "type":"click","selector":"…" }, etc. Only list vars in requiredVars that you actually referenced in steps — don't include vars the site doesn't support.`;
+
+Rules:
+  - Fill values MUST be "{{var}}" placeholders, NEVER concrete values from the user's query — the playbook will be reused across different queries.
+  - The first step must be a goto to the chosen form's page.
+  - If a slot is hidden behind a reveal_via toggle, prepend a click step for that toggle BEFORE the fill.
+  - If a slot is an input[name] that matches a recognisable pattern (salary, salary_min, salaryFrom, salmin, etc), include it in requiredVars with an appropriate name and hint.
+  - Only include requiredVars that the chosen form actually exposes AND the user's query references. Don't invent slots.
+  - Extract selector MUST come from the catalogue's "content_groups" section on the results page if available; otherwise pick the most result-like repeated class you can see. Prefer short selectors.
+  - acceptance.minItems must be ≥ 1.`;
 
 export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapperResult> {
   const domain = normalizeDomain(opts.seedUrl);
   const emit = (ev: Record<string, unknown>) => opts.onProgress?.(ev);
   const transcript: Array<Record<string, unknown>> = [];
+  const catalogue = new Map<string, FormCatalogueEntry>();
+  const visitedUrls: string[] = [];
+  let resultsContentGroups: Array<Record<string, unknown>> = [];
 
   const agent = await startAgent(opts.profile ?? 'default');
-  const recordedSteps: PlaybookStep[] = [];
-  let finalPlaybook: Playbook | null = null;
-  let giveUpReason: string | undefined;
   let inSessionFields: Record<string, unknown> | undefined;
   let inSessionUrl = '';
   let inSessionError: string | undefined;
-
-  // During the mapping loop the LLM fills with concrete values it picked from
-  // the user's searchQuery. We only need liveVars as a fallback for cases
-  // where the LLM pre-emptively emits a `{{var}}` value without tagging `var`
-  // — rare, but easy enough to handle. The playbook SAVES the {{…}} template
-  // via actionToStep's `var` handling, so replay keeps the generalisable form.
-  const liveVars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
+  let finalPlaybook: Playbook | null = null;
+  let giveUpReason: string | undefined;
 
   try {
-    emit({ t: 'map.goto', url: opts.seedUrl });
-    const first = await agent.goto(opts.seedUrl);
-    recordedSteps.push({ type: 'goto', url: opts.seedUrl });
-    transcript.push({ type: 'goto', url: opts.seedUrl, result: first });
-
-    // Auto-altcha if the widget is on the landing page.
+    emit({ t: 'map.scout.goto', url: opts.seedUrl });
+    await agent.goto(opts.seedUrl);
+    visitedUrls.push(opts.seedUrl);
     await agent.altcha().catch(() => ({ solved: false }));
 
+    // ============ SCOUT PHASE ============
     const { client, model } = await resolveLLMClient(opts.model);
-    const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    const scoutHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
-    for (let turn = 0; turn < MAX_STEPS; turn++) {
+    for (let turn = 0; turn < SCOUT_MAX_TURNS; turn++) {
       const obs = await agent.observe();
-      const userMsg = buildUserMessage(opts.goal, opts.searchQuery, obs, turn);
-      emit({ t: 'map.observe', turn, url: obs.url });
-
-      let reply = await askLLM(client, model, history, userMsg);
-      // Empty replies usually mean the provider dropped the message
-      // (over-budget, rate-limited). Retry once with a shorter prompt that
-      // nudges the LLM to act or finalize now — don't waste a turn silently.
-      if (!reply.trim()) {
-        emit({ t: 'map.empty_reply', turn });
-        const nudge = `Your previous turn's response was empty. Based on the current observation above, emit ONE JSON action now. If content_groups shows repeated result rows and you are on the target page, finalize immediately with extract rules pointing at that selector. Don't reply with empty content.`;
-        reply = await askLLM(client, model, history, `${userMsg}\n\n${nudge}`);
+      recordFormsFromObservation(obs, catalogue);
+      // Stash the best content_groups we see in case we land on a results page.
+      if (Array.isArray(obs.content_groups) && obs.content_groups.length > 0) {
+        resultsContentGroups = obs.content_groups;
       }
-      history.push({ role: 'user', content: userMsg });
-      history.push({ role: 'assistant', content: reply });
-      transcript.push({ turn, observation: { url: obs.url, title: obs.title }, reply });
+      emit({ t: 'map.scout.observe', turn, url: obs.url, catalogueSize: catalogue.size });
 
-      if (!reply.trim()) {
-        emit({ t: 'map.empty_reply_again', turn });
-        history.push({
-          role: 'user',
-          content: 'CRITICAL: two empty responses in a row. If you are on a results page with content_groups populated, emit { "action": "finalize", "playbook": { ... } } now.',
-        });
-        continue;
-      }
+      const userMsg = buildScoutMessage(opts.goal, opts.searchQuery, obs, turn, catalogue);
+      const reply = await askLLM(client, model, SCOUT_SYSTEM_PROMPT, scoutHistory, userMsg);
+      scoutHistory.push({ role: 'user', content: userMsg });
+      scoutHistory.push({ role: 'assistant', content: reply });
+      transcript.push({ phase: 'scout', turn, url: obs.url, reply });
 
       let action: Record<string, unknown>;
       try {
         action = extractJson(reply);
-      } catch (err) {
-        emit({ t: 'map.parse_error', turn, raw: reply.slice(0, 400), err: String(err) });
-        history.push({
+      } catch {
+        emit({ t: 'map.scout.parse_error', turn, raw: reply.slice(0, 300) });
+        scoutHistory.push({
           role: 'user',
-          content: 'Your previous message was not valid JSON. Emit ONE JSON object matching the action schema and nothing else.',
+          content: 'Your previous message was not valid JSON. Emit exactly one JSON action object.',
         });
         continue;
       }
-      emit({ t: 'map.action', turn, action });
+      emit({ t: 'map.scout.action', turn, action });
 
       const kind = action.action as string;
-      if (kind === 'finalize') {
-        finalPlaybook = coercePlaybook(action.playbook, opts.goal, recordedSteps);
-        // Extract DURING this session — cookies warm, altcha solved, profile
-        // primed. Avoids the fresh-session replay that was fragile.
-        try {
-          emit({ t: 'map.inSessionExtract' });
-          const r = await agent.extract(finalPlaybook.extract as unknown as Array<Record<string, unknown>>);
-          inSessionFields = r.fields;
-          inSessionUrl = (await agent.observe().catch(() => null))?.url ?? '';
-        } catch (err) {
-          inSessionError = err instanceof Error ? err.message : String(err);
-        }
-        break;
-      }
+      if (kind === 'finalize_scout') break;
       if (kind === 'give_up') {
-        giveUpReason = (action.reason as string) || 'llm gave up';
+        giveUpReason = (action.reason as string) || 'scout gave up';
         break;
       }
-
-      // Execute the action via the agent, then record it into the step sequence.
       try {
-        await executeAction(agent, action, liveVars);
-        // When the LLM emitted a `var` name on a fill/select, the saved step
-        // uses `{{var}}` so replay can substitute a different user's value.
-        // When it omitted `var`, the concrete value is baked in — fine for
-        // static picks like "Submit" buttons or fixed filter options.
-        const step = actionToStep(action);
-        if (step) recordedSteps.push(step);
+        await executeScoutAction(agent, action);
+        const cur = await agent.observe().catch(() => null);
+        if (cur && !visitedUrls.includes(cur.url)) visitedUrls.push(cur.url);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        emit({ t: 'map.action_error', turn, err: msg });
-        history.push({
+        emit({ t: 'map.scout.action_error', turn, err: msg });
+        scoutHistory.push({
           role: 'user',
-          content: `That action failed: ${msg}\nTry a different approach or give_up.`,
+          content: `That action failed: ${msg}\nPick a different link/toggle, or finalize_scout if you have enough.`,
         });
       }
     }
 
+    if (catalogue.size === 0) {
+      // Scout saw zero forms — the site may be JS-heavy or a non-search
+      // surface. Fail out with the transcript for inspection.
+      return failureResult(domain, opts.goal, [], transcript,
+        giveUpReason ? `Scout gave up: ${giveUpReason}` : 'Scout found no forms to plan against.');
+    }
+
+    // ============ PLAN PHASE ============
+    emit({ t: 'map.plan.start', catalogueSize: catalogue.size });
+    const planMsg = buildPlanMessage(opts.goal, opts.searchQuery, catalogue, resultsContentGroups);
+    const planReply = await askLLM(client, model, PLAN_SYSTEM_PROMPT, [], planMsg);
+    transcript.push({ phase: 'plan', reply: planReply });
+    emit({ t: 'map.plan.reply', chars: planReply.length });
+
+    try {
+      finalPlaybook = coercePlaybook(extractJson(planReply), opts.goal);
+    } catch (err) {
+      return failureResult(domain, opts.goal, [], transcript,
+        `Planner failed to produce a valid playbook: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // ============ EXECUTE PHASE ============
+    emit({ t: 'map.execute.start', steps: finalPlaybook.steps?.length ?? 0 });
+    const liveVars = decomposedForExecution(opts.searchQuery, finalPlaybook.requiredVars ?? []);
+    try {
+      await executePlaybookSteps(agent, finalPlaybook.steps ?? [], liveVars);
+      const r = await agent.extract(finalPlaybook.extract as unknown as Array<Record<string, unknown>>);
+      inSessionFields = r.fields;
+      inSessionUrl = (await agent.observe().catch(() => null))?.url ?? '';
+      emit({ t: 'map.execute.done' });
+    } catch (err) {
+      inSessionError = err instanceof Error ? err.message : String(err);
+      emit({ t: 'map.execute.error', err: inSessionError });
+    }
   } finally {
     await agent.close();
   }
 
-  // If the LLM didn't finalize, return a structured failure result WITH the
-  // transcript instead of throwing — the transcript is the only way to
-  // diagnose why the agent didn't reach the results page, and throwing
-  // would drop it on the floor (node_executions.output_data stays null on
-  // thrown executions).
   if (!finalPlaybook) {
-    return {
-      domain,
-      playbook: {
-        version: 2,
-        generatedAt: new Date().toISOString(),
-        goal: opts.goal,
-        steps: recordedSteps,
-        extract: [],
-        acceptance: { minItems: 1, sampleField: 'items' },
-      },
-      validated: false,
-      itemCount: 0,
-      transcript,
-      error: giveUpReason
-        ? `LLM gave up: ${giveUpReason}`
-        : `LLM ran ${MAX_STEPS} turns without finalizing — see transcript below for each turn's action.`,
-    };
+    return failureResult(domain, opts.goal, [], transcript, giveUpReason ?? 'no playbook produced');
   }
 
-  // Prefer the in-session extract — it ran in the SAME browser where the
-  // LLM just landed on the target page (warm cookies, solved altcha, any
-  // session-scoped state intact). That's our ground-truth validation:
-  // if the mapper's session produced items, the playbook is confirmed
-  // capable of reaching them, and we can return those items as THIS
-  // scrape's output (first run is free — no separate replay needed).
+  // Validate: prefer in-session extract (warm session, solved altcha) over a
+  // fresh replay. If in-session missed, fall back to replay so we still get
+  // a verdict.
   let validated = false;
   let itemCount = 0;
   let firstItemSample: Record<string, unknown> | undefined;
   let error: string | undefined;
 
-  const inSessionCount = countFieldItems(inSessionFields, finalPlaybook.acceptance.sampleField);
+  const sampleField = finalPlaybook.acceptance.sampleField;
+  const inSessionCount = countFieldItems(inSessionFields, sampleField);
   if (inSessionFields && inSessionCount >= finalPlaybook.acceptance.minItems) {
     validated = true;
     itemCount = inSessionCount;
     firstItemSample = inSessionFields;
-    emit({ t: 'map.validated', source: 'in-session', itemCount });
   } else {
-    // In-session didn't find items (LLM's extract selector missed) — fall
-    // back to a fresh replay to give the playbook a second chance. If the
-    // replay also fails, surface the error honestly.
-    emit({ t: 'map.validate', source: 'replay', reason: inSessionError ?? `inSession items=${inSessionCount}` });
     const vars: Record<string, string> = opts.searchQuery ? { keyword: opts.searchQuery } : {};
     try {
       const run = await runPlaybook({
         playbook: finalPlaybook,
         vars,
+        searchQuery: opts.searchQuery,
         profile: opts.profile ?? 'default',
         workflowRunId: opts.workflowRunId,
-        onProgress: (e) => emit({ t: 'map.validate.progress', ...e }),
       });
       validated = run.acceptanceMet;
       itemCount = run.itemCount;
       if (run.pages[0]) firstItemSample = (run.pages[0] as { fields?: Record<string, unknown> }).fields;
       if (!run.success) error = run.error ?? 'replay failed';
       else if (!validated)
-        error = `acceptance not met — expected ≥${finalPlaybook.acceptance.minItems} items in "${finalPlaybook.acceptance.sampleField}", got ${itemCount}`;
+        error = `acceptance not met — expected ≥${finalPlaybook.acceptance.minItems} items in "${sampleField}", got ${itemCount}`;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
   }
 
-  // Save either way so the user can inspect + tweak failing playbooks.
   await savePlaybook(domain, finalPlaybook);
 
   return {
@@ -323,63 +319,225 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     firstItemSample,
     landedUrl: inSessionUrl || undefined,
     transcript,
-    error,
+    error: error ?? (inSessionError && !validated ? inSessionError : undefined),
   };
 }
 
-/** Count items in a field value regardless of array/scalar shape. */
-function countFieldItems(fields: Record<string, unknown> | undefined, field: string): number {
-  if (!fields) return 0;
-  const v = fields[field];
-  if (Array.isArray(v)) return v.length;
-  if (v != null && v !== '') return 1;
-  return 0;
+/* -------------------- scout helpers -------------------- */
+
+function recordFormsFromObservation(
+  obs: AgentObservation,
+  catalogue: Map<string, FormCatalogueEntry>,
+): void {
+  for (const entry of obs.interactive) {
+    if ((entry as { kind?: string }).kind !== 'form') continue;
+    const formSel = ((entry as { selector?: string }).selector) ?? 'form';
+    const key = `${obs.url}::${formSel}`;
+    const rawInputs = (entry as { inputs?: Array<Record<string, unknown>> }).inputs ?? [];
+    const rawSubmits = (entry as { submits?: Array<Record<string, unknown>> }).submits ?? [];
+    const slots = rawInputs
+      .map((i) => ({
+        name: String(i.name ?? ''),
+        type: String(i.type ?? i.kind ?? ''),
+        label: String(i.label ?? i.placeholder ?? ''),
+        selector: String(i.selector ?? ''),
+        hidden: i.hidden === true,
+        reveal_via: i.reveal_via as { selector: string; text: string | null } | undefined,
+      }))
+      .filter((s) => s.selector);
+    const submitRaw = rawSubmits[0] ?? null;
+    const submit = submitRaw
+      ? { text: String(submitRaw.text ?? ''), selector: String(submitRaw.selector ?? '') }
+      : null;
+    const expandables = obs.interactive
+      .filter((e) => (e as { kind?: string }).kind === 'expandable')
+      .map((e) => ({
+        text: String((e as { text?: string }).text ?? ''),
+        selector: String((e as { selector?: string }).selector ?? ''),
+      }));
+
+    // Merge: if we already catalogued this form, prefer the version with MORE
+    // slots (scout may have revealed new inputs by clicking a toggle).
+    const existing = catalogue.get(key);
+    if (!existing || slots.length > existing.slots.length) {
+      catalogue.set(key, {
+        url: obs.url,
+        title: obs.title,
+        form_selector: formSel,
+        slots,
+        submit,
+        expandables,
+      });
+    }
+  }
 }
 
-function buildUserMessage(
+function buildScoutMessage(
   goal: string,
   searchQuery: string | undefined,
   obs: AgentObservation,
   turn: number,
+  catalogue: Map<string, FormCatalogueEntry>,
 ): string {
   const interactiveJson = JSON.stringify(obs.interactive, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);
-  const contentGroupsJson = JSON.stringify(obs.content_groups, null, 0).slice(0, 2500);
+  const cataloguePreview = Array.from(catalogue.values()).map((e) => ({
+    url: e.url,
+    form: e.form_selector,
+    slots: e.slots.map((s) => ({ name: s.name, label: s.label, hidden: s.hidden || undefined })),
+  }));
   return [
-    `Turn ${turn + 1} / ${MAX_STEPS}.`,
+    `Scout turn ${turn + 1} / ${SCOUT_MAX_TURNS}.`,
     `User goal: ${goal}`,
-    searchQuery ? `Search query the playbook should parameterise on ({{keyword}}): "${searchQuery}"` : '',
+    searchQuery ? `User searchQuery (slots to express): "${searchQuery}"` : '',
     `Current URL: ${obs.url}`,
     `Current page title: ${obs.title}`,
     '',
-    'Page text snippet:',
-    obs.text_snippet.slice(0, 1500),
+    `Forms catalogued so far (${catalogue.size}):`,
+    JSON.stringify(cataloguePreview, null, 0).slice(0, 2500),
     '',
-    'Interactive elements (JSON):',
+    `Page text snippet:`,
+    obs.text_snippet.slice(0, 1200),
+    '',
+    `Interactive elements on current page:`,
     interactiveJson,
-    '',
-    'Repeated-content clusters on this page (use these to pick extract selectors when you finalize — these are the real classes used by list/card containers on the live DOM):',
-    contentGroupsJson,
   ].filter(Boolean).join('\n');
 }
 
-// Keep only the most recent N message pairs from history when calling the
-// LLM. Each observe payload is 5-10KB (interactive + content_groups);
-// unbounded history blows past z.ai's context window by turn ~12 and the
-// provider silently returns empty strings instead of erroring — which is
-// what stalled the last run for 10 turns. 4 pairs ≈ 8 messages ≈ 40-80KB,
-// comfortable for glm-5-turbo.
-const RECENT_HISTORY_PAIRS = 4;
+async function executeScoutAction(agent: AgentHarness, action: Record<string, unknown>): Promise<void> {
+  switch (action.action) {
+    case 'goto':
+      if (typeof action.url !== 'string') throw new Error('goto requires url');
+      await agent.goto(action.url);
+      return;
+    case 'click':
+      await agent.click({
+        selector: typeof action.selector === 'string' ? action.selector : undefined,
+        text: typeof action.text === 'string' ? action.text : undefined,
+      });
+      return;
+    case 'altcha':
+      await agent.altcha();
+      return;
+    default:
+      throw new Error(`scout cannot perform action "${String(action.action)}" — only goto/click/altcha allowed.`);
+  }
+}
+
+/* -------------------- plan helpers -------------------- */
+
+function buildPlanMessage(
+  goal: string,
+  searchQuery: string | undefined,
+  catalogue: Map<string, FormCatalogueEntry>,
+  contentGroups: Array<Record<string, unknown>>,
+): string {
+  const catalogueJson = JSON.stringify(Array.from(catalogue.values()), null, 0).slice(0, 12000);
+  const cgJson = JSON.stringify(contentGroups, null, 0).slice(0, MAX_CONTENT_GROUPS_SUMMARY);
+  return [
+    `User goal: ${goal}`,
+    searchQuery ? `User searchQuery: "${searchQuery}"` : '',
+    '',
+    `Catalogue of forms discovered during scout (${catalogue.size} entries):`,
+    catalogueJson,
+    '',
+    `Results-page content_groups candidates (last seen on any page — use for picking the extract selector):`,
+    cgJson,
+    '',
+    `Emit the final playbook JSON now. Remember: pick the form with the highest slot coverage against the user's searchQuery, parameterise fills with {{var}} placeholders, and include reveal_via click steps before filling hidden inputs.`,
+  ].filter(Boolean).join('\n');
+}
+
+/* -------------------- execute helpers -------------------- */
+
+async function executePlaybookSteps(
+  agent: AgentHarness,
+  steps: PlaybookStep[],
+  vars: Record<string, string>,
+): Promise<void> {
+  for (const step of steps) {
+    switch (step.type) {
+      case 'goto':
+        await agent.goto(sub(step.url, vars));
+        break;
+      case 'wait':
+        await agent.wait({ selector: step.selector, ms: step.ms, timeoutMs: step.timeoutMs });
+        break;
+      case 'click':
+        await agent.click({ selector: step.selector, text: step.text });
+        break;
+      case 'fill':
+        await agent.fill(step.selector, sub(step.value, vars));
+        break;
+      case 'select':
+        await agent.select(step.selector, sub(step.value, vars));
+        break;
+      case 'submit':
+        await agent.submit(step.formSelector);
+        break;
+      case 'altcha':
+        await agent.altcha();
+        break;
+    }
+  }
+}
+
+function sub(value: string, vars: Record<string, string>): string {
+  return value.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) =>
+    Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m,
+  );
+}
+
+/** For the validation / first-run execute we need real values to fill in the
+ *  form, not `{{keyword}}` literals. Since the executor runs inline with the
+ *  user's searchQuery, decompose it once here. */
+function decomposedForExecution(
+  searchQuery: string | undefined,
+  requiredVars: PlaybookRequiredVar[],
+): Record<string, string> {
+  if (!searchQuery) return {};
+  // Lazy simple fallback: assign the whole searchQuery to `keyword` only.
+  // For the first-run validation this is fine because the planner will have
+  // structured the playbook so `keyword` carries the title; other vars
+  // (location/distance/salary) would need the full decomposition LLM call,
+  // which the v2 playbook runner already does during a real replay. Here
+  // (in-session first-run) we just let the query act as the keyword.
+  const out: Record<string, string> = { keyword: searchQuery };
+  // If the planner declared any other var AND the user's query contains a
+  // plausible literal for it (exact word match on hint keywords), grab it.
+  const lower = searchQuery.toLowerCase();
+  for (const v of requiredVars) {
+    if (v.name === 'keyword') continue;
+    const hintTokens = v.hint.toLowerCase().match(/[a-z]{3,}/g) ?? [];
+    // Heuristic: if the hint mentions "location" and the query mentions "in <word>",
+    // pull that word; similar for "distance" and numbers; for "salary" and
+    // numeric over 10k. Kept intentionally narrow — real decomposition lives
+    // in playbook.decomposeSearchQuery, which the v2 runner uses on later runs.
+    if (hintTokens.some((t) => ['location', 'city', 'town', 'postcode'].includes(t))) {
+      const m = searchQuery.match(/\bin\s+([A-Za-z][A-Za-z' -]{1,40})/i);
+      if (m) out[v.name] = m[1].trim();
+    } else if (hintTokens.some((t) => ['distance', 'radius', 'miles'].includes(t))) {
+      const m = lower.match(/(\d{1,3})\s*mi(les)?/);
+      if (m) out[v.name] = m[1];
+    } else if (hintTokens.some((t) => ['salary', 'pay', 'wage'].includes(t))) {
+      const m = lower.match(/(?:over|above|min|from)\s*£?\s*(\d{2,3})\s*k/);
+      if (m) out[v.name] = String(parseInt(m[1], 10) * 1000);
+    }
+  }
+  return out;
+}
+
+/* -------------------- shared helpers -------------------- */
 
 async function askLLM(
   client: ReturnType<typeof resolveLLMClient> extends Promise<infer T> ? T extends { client: infer C } ? C : never : never,
   model: string,
+  systemPrompt: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
   userMsg: string,
 ): Promise<string> {
-  const tail = history.slice(-RECENT_HISTORY_PAIRS * 2);
   const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
-    ...tail,
+    { role: 'system' as const, content: systemPrompt },
+    ...history.slice(-8), // cap to last 4 pairs
     { role: 'user' as const, content: userMsg },
   ];
   const resp = await (client as {
@@ -388,7 +546,7 @@ async function askLLM(
     model,
     messages,
     temperature: 0.2,
-    max_tokens: 800,
+    max_tokens: 1600,
   });
   return resp.choices[0]?.message?.content ?? '';
 }
@@ -399,179 +557,76 @@ function extractJson(raw: string): Record<string, unknown> {
   return JSON.parse(str) as Record<string, unknown>;
 }
 
-async function executeAction(
-  agent: AgentHarness,
-  action: Record<string, unknown>,
-  vars: Record<string, string>,
-): Promise<void> {
-  const sub = (s: string): string => {
-    // Replace {{var}} placeholders in the value the LLM is actively sending
-    // to the browser. The playbook records the ORIGINAL templated value
-    // (good — the playbook generalises per-run), but during the mapping
-    // loop we want to see real data so the page actually returns results
-    // — otherwise the LLM sees "0 Search results" for the literal
-    // "{{keyword}}" string and thrashes trying to fix it.
-    return s.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (m, k) =>
-      Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m,
-    );
-  };
-  switch (action.action) {
-    case 'goto': {
-      if (typeof action.url !== 'string') throw new Error('goto requires url');
-      await agent.goto(sub(action.url));
-      return;
-    }
-    case 'click': {
-      await agent.click({
-        selector: typeof action.selector === 'string' ? action.selector : undefined,
-        text: typeof action.text === 'string' ? sub(action.text) : undefined,
-      });
-      return;
-    }
-    case 'fill': {
-      if (typeof action.selector !== 'string' || typeof action.value !== 'string') {
-        throw new Error('fill requires selector + value');
-      }
-      await agent.fill(action.selector, sub(action.value));
-      return;
-    }
-    case 'select': {
-      if (typeof action.selector !== 'string' || typeof action.value !== 'string') {
-        throw new Error('select requires selector + value');
-      }
-      await agent.select(action.selector, action.value);
-      return;
-    }
-    case 'submit': {
-      await agent.submit(typeof action.formSelector === 'string' ? action.formSelector : undefined);
-      return;
-    }
-    case 'altcha': {
-      await agent.altcha();
-      return;
-    }
-    case 'wait': {
-      await agent.wait({
-        selector: typeof action.selector === 'string' ? action.selector : undefined,
-        ms: typeof action.ms === 'number' ? action.ms : undefined,
-      });
-      return;
-    }
-    default:
-      throw new Error(`unknown action: ${JSON.stringify(action.action)}`);
-  }
+function countFieldItems(fields: Record<string, unknown> | undefined, field: string): number {
+  if (!fields) return 0;
+  const v = fields[field];
+  if (Array.isArray(v)) return v.length;
+  if (v != null && v !== '') return 1;
+  return 0;
 }
 
-function actionToStep(action: Record<string, unknown>): PlaybookStep | null {
-  // If the LLM tagged the action with a `var` name, the saved step uses the
-  // `{{var}}` placeholder so future runs can plug in a different value. The
-  // concrete `value` the LLM chose this turn only lives in the mapping
-  // session — it mustn't bake into the playbook.
-  const varName = typeof action.var === 'string' && action.var ? action.var : null;
-  const templatedValue = (): string =>
-    varName ? `{{${varName}}}` : String(action.value ?? '');
-  switch (action.action) {
-    case 'goto':
-      return { type: 'goto', url: action.url as string };
-    case 'click':
-      return {
-        type: 'click',
-        selector: typeof action.selector === 'string' ? action.selector : undefined,
-        text: typeof action.text === 'string' ? action.text : undefined,
-      };
-    case 'fill':
-      return { type: 'fill', selector: action.selector as string, value: templatedValue() };
-    case 'select':
-      return { type: 'select', selector: action.selector as string, value: templatedValue() };
-    case 'submit':
-      return {
-        type: 'submit',
-        formSelector: typeof action.formSelector === 'string' ? action.formSelector : undefined,
-      };
-    case 'altcha':
-      return { type: 'altcha' };
-    case 'wait':
-      return {
-        type: 'wait',
-        selector: typeof action.selector === 'string' ? action.selector : undefined,
-        ms: typeof action.ms === 'number' ? action.ms : undefined,
-      };
-    default:
-      return null;
-  }
-}
-
-function coercePlaybook(
-  v: unknown,
+function failureResult(
+  domain: string,
   goal: string,
-  fallbackSteps: PlaybookStep[],
-): Playbook {
-  if (!v || typeof v !== 'object') throw new Error('LLM finalize had no playbook object');
+  steps: PlaybookStep[],
+  transcript: Array<Record<string, unknown>>,
+  error: string,
+): SiteMapperResult {
+  return {
+    domain,
+    playbook: {
+      version: 2,
+      generatedAt: new Date().toISOString(),
+      goal,
+      steps,
+      extract: [],
+      acceptance: { minItems: 1, sampleField: 'items' },
+    },
+    validated: false,
+    itemCount: 0,
+    transcript,
+    error,
+  };
+}
+
+function coercePlaybook(v: unknown, goal: string): Playbook {
+  if (!v || typeof v !== 'object') throw new Error('planner returned no playbook object');
   const p = v as Record<string, unknown>;
   const stepsRaw = Array.isArray(p.steps) ? p.steps : [];
-  const llmSteps: PlaybookStep[] = stepsRaw
+  const steps: PlaybookStep[] = stepsRaw
     .map(coerceStep)
     .filter((s): s is PlaybookStep => s !== null);
-
-  // If the LLM's steps don't start with a goto, prepend the initial goto we
-  // recorded at the top of the agent loop. LLMs often forget the seedUrl
-  // navigation because from their perspective it was "already done" — but
-  // replay starts from an empty session, so the playbook MUST include it.
-  let effectiveSteps: PlaybookStep[] = llmSteps.length > 0 ? llmSteps : fallbackSteps;
-  if (effectiveSteps.length > 0 && effectiveSteps[0].type !== 'goto') {
-    const firstGoto = fallbackSteps.find((s) => s.type === 'goto');
-    if (firstGoto) effectiveSteps = [firstGoto, ...effectiveSteps];
-  }
+  if (steps.length === 0) throw new Error('planner produced no steps');
+  if (steps[0].type !== 'goto') throw new Error('first step must be a goto');
 
   const extractRaw = Array.isArray(p.extract) ? p.extract : [];
-  if (extractRaw.length === 0) throw new Error('LLM playbook has no extract rules');
+  if (extractRaw.length === 0) throw new Error('planner produced no extract rules');
   const extract = extractRaw.map(coerceExtractRule);
+
   const accRaw = (p.acceptance && typeof p.acceptance === 'object')
     ? p.acceptance as { minItems?: number; sampleField?: string }
     : {};
   const sampleField = accRaw.sampleField ?? extract.find((r) => r.multi)?.field ?? extract[0].field;
-  // Clamp minItems to ≥1 — LLMs sometimes write 0 to guarantee the
-  // acceptance test passes, which defeats the test. An extraction with
-  // zero matching items is never a useful successful scrape.
-  const requestedMin = typeof accRaw.minItems === 'number' ? accRaw.minItems : 1;
-  const minItems = Math.max(1, requestedMin);
+  const minItems = Math.max(1, typeof accRaw.minItems === 'number' ? accRaw.minItems : 1);
 
-  // Merge LLM-declared requiredVars with any `{{…}}` placeholders we can see
-  // in the final steps. The union is what replay needs to resolve. Hints
-  // from the LLM take priority; inferred-only vars get a bland hint.
   const declaredRaw = Array.isArray(p.requiredVars) ? p.requiredVars : [];
   const declared: PlaybookRequiredVar[] = declaredRaw
     .map(coerceRequiredVar)
     .filter((v): v is PlaybookRequiredVar => v !== null);
-  const usedInSteps = new Set(extractStepVarNames(effectiveSteps));
+  const usedInSteps = new Set(extractStepVarNames(steps));
   const byName = new Map<string, PlaybookRequiredVar>();
-  for (const v of declared) {
-    if (usedInSteps.has(v.name)) byName.set(v.name, v);
-  }
-  for (const name of usedInSteps) {
-    if (!byName.has(name)) byName.set(name, { name, hint: name });
-  }
+  for (const v of declared) if (usedInSteps.has(v.name)) byName.set(v.name, v);
+  for (const name of usedInSteps) if (!byName.has(name)) byName.set(name, { name, hint: name });
   const requiredVars = Array.from(byName.values());
 
   return {
     version: 2,
     generatedAt: new Date().toISOString(),
     goal: typeof p.goal === 'string' ? p.goal : goal,
-    steps: effectiveSteps,
+    steps,
     requiredVars: requiredVars.length > 0 ? requiredVars : undefined,
     extract,
     acceptance: { minItems, sampleField },
-  };
-}
-
-function coerceRequiredVar(v: unknown): PlaybookRequiredVar | null {
-  if (!v || typeof v !== 'object') return null;
-  const r = v as Record<string, unknown>;
-  if (typeof r.name !== 'string' || !r.name) return null;
-  return {
-    name: r.name,
-    hint: typeof r.hint === 'string' && r.hint ? r.hint : r.name,
-    fallback: typeof r.fallback === 'string' ? r.fallback : undefined,
   };
 }
 
@@ -614,5 +669,16 @@ function coerceExtractRule(v: unknown): Playbook['extract'][number] {
     attr: (typeof r.attr === 'string' ? r.attr : 'text') as Playbook['extract'][number]['attr'],
     multi: !!r.multi,
     trim: r.trim === false ? false : true,
+  };
+}
+
+function coerceRequiredVar(v: unknown): PlaybookRequiredVar | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.name !== 'string' || !r.name) return null;
+  return {
+    name: r.name,
+    hint: typeof r.hint === 'string' && r.hint ? r.hint : r.name,
+    fallback: typeof r.fallback === 'string' ? r.fallback : undefined,
   };
 }
