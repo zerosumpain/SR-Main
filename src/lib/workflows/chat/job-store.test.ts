@@ -29,3 +29,28 @@ describe('job-store event schema', () => {
     expect(received.length).toBe(events.length);
   });
 });
+
+describe('job-store resumeWith', () => {
+  it('suspends a waiter and resumes with payload', async () => {
+    const { createWaiter } = await import('./job-store');
+    const { jobId } = createJob('test');
+    const { awaitResponse, respond } = createWaiter<{ decision: string }>(jobId, 'plan:p1');
+    setTimeout(() => respond({ decision: 'approved' }), 10);
+    const result = await awaitResponse();
+    expect(result).toEqual({ decision: 'approved' });
+  });
+
+  it('rejects waiter when job is cancelled', async () => {
+    const { createWaiter, cancelJob } = await import('./job-store');
+    const { jobId } = createJob('test');
+    const { awaitResponse } = createWaiter<{ decision: string }>(jobId, 'plan:p2');
+    setTimeout(() => cancelJob(jobId), 10);
+    await expect(awaitResponse()).rejects.toThrow();
+  });
+
+  it('respondToWaiter returns false when no waiter is registered', async () => {
+    const { respondToWaiter } = await import('./job-store');
+    const { jobId } = createJob('test');
+    expect(respondToWaiter(jobId, 'missing:key', { x: 1 })).toBe(false);
+  });
+});

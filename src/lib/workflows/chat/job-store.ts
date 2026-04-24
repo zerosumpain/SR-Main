@@ -140,6 +140,7 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
       if (job.watchdog) clearInterval(job.watchdog);
       job.watchdog = undefined;
       publishJobEvent(jobId, { type: 'error', message: reason });
+      failAllWaiters(jobId, reason);
     }
   }, 15_000);
 }
@@ -180,6 +181,7 @@ export function cancelJob(jobId: string): boolean {
   job.result = { success: false, error: 'Cancelled by user' };
   if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
   publishJobEvent(jobId, { type: 'error', message: 'Cancelled by user' });
+  failAllWaiters(jobId, 'Cancelled by user');
   return true;
 }
 
@@ -208,6 +210,7 @@ export function cancelForScope(scope: JobScope, reason: string): number {
     job.result = { success: false, error: reason };
     if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
     publishJobEvent(id, { type: 'error', message: reason });
+    failAllWaiters(id, reason);
     cancelled += 1;
   }
   return cancelled;
@@ -224,6 +227,7 @@ export function cancelAllRunning(reason: string): void {
       job.result = { success: false, error: reason };
       if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
       publishJobEvent(id, { type: 'error', message: reason });
+      failAllWaiters(id, reason);
     }
   }
 }
@@ -258,4 +262,57 @@ export function listJobs(): Array<{
     progressCount: job.progress.length,
     elapsed: Date.now() - job.startedAt,
   }));
+}
+
+interface Waiter {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+}
+
+const waiters = new Map<string, Map<string, Waiter>>();
+
+export function createWaiter<T = unknown>(
+  jobId: string,
+  key: string,
+): { awaitResponse: () => Promise<T>; respond: (value: T) => void } {
+  let map = waiters.get(jobId);
+  if (!map) { map = new Map(); waiters.set(jobId, map); }
+  let waiter: Waiter | null = null;
+  const promise = new Promise<T>((resolve, reject) => {
+    waiter = { resolve: resolve as (v: unknown) => void, reject };
+  });
+  if (!waiter) throw new Error('waiter init failed');
+  map.set(key, waiter);
+  return {
+    awaitResponse: () => promise,
+    respond: (value: T) => {
+      const m = waiters.get(jobId); if (!m) return;
+      const w = m.get(key); if (!w) return;
+      m.delete(key);
+      w.resolve(value);
+    },
+  };
+}
+
+export function respondToWaiter(jobId: string, key: string, value: unknown): boolean {
+  const m = waiters.get(jobId); if (!m) return false;
+  const w = m.get(key); if (!w) return false;
+  m.delete(key);
+  w.resolve(value);
+  return true;
+}
+
+export function rejectWaiter(jobId: string, key: string, reason: string): void {
+  const m = waiters.get(jobId); if (!m) return;
+  const w = m.get(key); if (!w) return;
+  m.delete(key);
+  w.reject(new Error(reason));
+}
+
+// When a job ends (done / error / cancelled), reject every outstanding waiter
+// so coroutines that awaited on user input stop leaking.
+export function failAllWaiters(jobId: string, reason: string): void {
+  const m = waiters.get(jobId); if (!m) return;
+  for (const [, w] of m) w.reject(new Error(reason));
+  waiters.delete(jobId);
 }
