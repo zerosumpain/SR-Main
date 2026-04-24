@@ -414,7 +414,7 @@ interface ScriptDispatchOutput {
  * Run the script-scrape dispatcher. On homeserv this calls runScript /
  * runScriptAuthor directly; on the VPS (or any non-homeserv host) it POSTs
  * to homeserv's /api/scraper/script proxy so the warm Playwright session
- * + ~/.openclaw/scraper-scripts files stay local to the residential IP.
+ * + SCRIPT_DIR files stay local to the residential IP.
  */
 async function dispatchScriptScrape(input: ScriptDispatchInput): Promise<ScriptDispatchOutput> {
   if (process.env.SCRAPER_ALLOW_NON_HOMESERV || os.hostname() === 'homeserv') {

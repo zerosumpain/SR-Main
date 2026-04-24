@@ -242,9 +242,9 @@ export async function runScriptAuthor(opts: AuthorScriptOptions): Promise<Author
   // inspect what the LLM tried turn-by-turn.
   try {
     const { promises: fs } = await import('fs');
-    const { homedir } = await import('os');
+    const { SCRIPT_DIR } = await import('./script-store');
     const { join } = await import('path');
-    const dir = join(homedir(), '.openclaw', 'scraper-scripts');
+    const dir = SCRIPT_DIR;
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
       join(dir, `${opts.profile}.author-log.json`),

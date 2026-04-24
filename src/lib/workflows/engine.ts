@@ -228,12 +228,16 @@ export class WorkflowEngine {
             nodeOutputs.set(nodeId, result.output);
             emit('node_completed', nodeId, result.output);
 
-            // Handle conditional routing: if _selectedHandle is set, skip non-matching branches
+            // Handle conditional routing: if _selectedHandle is set, skip non-matching branches.
+            // Edges with no sourceHandle (null/undefined) accept any selectedHandle — this keeps
+            // single-output nodes (stealth-scrape, gmail-*, llm-agent) working when canvases
+            // store edges without a handle id, and only true branching nodes (conditional,
+            // validator, llm-router, error-handler) need explicit per-branch handle tagging.
             const selectedHandle = result.metadata?._selectedHandle as string | undefined;
             if (selectedHandle !== undefined) {
               const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
               for (const edge of outgoingEdges) {
-                if (edge.sourceHandle !== selectedHandle) {
+                if (edge.sourceHandle && edge.sourceHandle !== selectedHandle) {
                   blockedEdgeIds.add(edge.id);
                   this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
                 }
@@ -386,7 +390,7 @@ export class WorkflowEngine {
                   if (retryHandle !== undefined) {
                     const outEdges = graph.edgesBySource.get(nodeId) || [];
                     for (const edge of outEdges) {
-                      if (edge.sourceHandle !== retryHandle) {
+                      if (edge.sourceHandle && edge.sourceHandle !== retryHandle) {
                         blockedEdgeIds.add(edge.id);
                         this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
                       }

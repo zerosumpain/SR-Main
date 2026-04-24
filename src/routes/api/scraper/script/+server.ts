@@ -8,7 +8,7 @@
  *
  * Drives the StealthScrapePanel's "Script status" section, AND serves as the
  * VPS→homeserv proxy endpoint for script-scrape execution (so the warm
- * Playwright session + ~/.openclaw/scraper-scripts files stay on homeserv).
+ * Playwright session + SCRIPT_DIR files stay on homeserv).
  */
 import { json, error, type RequestHandler } from '@sveltejs/kit';
 import { readScript, deleteScript } from '$lib/workflows/scraper/script-store';

@@ -2,21 +2,26 @@
  * script-store.ts — persistence for LLM-authored scrape scripts.
  *
  * Each script is owned by a `profile` (per-domain identifier). On disk:
- *   ~/.openclaw/scraper-scripts/<profile>.py     — Python body for the
- *      `scrape(page, vars)` function the agent harness execs.
- *   ~/.openclaw/scraper-scripts/<profile>.meta.json — declared vars, goal,
- *      seed url, generated/last-success timestamps, basic run counters.
+ *   <SCRIPT_DIR>/<profile>.py     — Python body for the `scrape(page, vars)`
+ *      function the agent harness execs.
+ *   <SCRIPT_DIR>/<profile>.meta.json — declared vars, goal, seed url,
+ *      generated/last-success timestamps, basic run counters.
  *
  * The directory is host-mounted only — the sandbox container never reads
  * these files; the SvelteKit server loads the script body and ships it to
  * the harness via stdin (exec_script command). That keeps script auth
  * authoritative server-side and avoids needing a new bind-mount.
+ *
+ * Default path is `~/.strange-rambling/scraper-scripts/`. Override with
+ * `SCRAPER_SCRIPTS_DIR`.
  */
 import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-export const SCRIPT_DIR = join(homedir(), '.openclaw', 'scraper-scripts');
+export const SCRIPT_DIR =
+  process.env.SCRAPER_SCRIPTS_DIR ??
+  join(homedir(), '.strange-rambling', 'scraper-scripts');
 
 export interface ScriptMeta {
   profile: string;
