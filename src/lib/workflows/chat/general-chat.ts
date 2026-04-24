@@ -245,7 +245,18 @@ async function runSingleToolCall(
       }
     }
   } else if (isRegisteredTool(fnName)) {
-    toolResult = await executeSiteTool(fnName, fnArgs);
+    const { isDestructive, describeDestructiveAction, requireConfirmation } = await import('./confirmation-gate');
+    if (ctx.parentJobId && isDestructive(fnName)) {
+      const prompt = describeDestructiveAction(fnName, fnArgs);
+      const approved = await requireConfirmation(ctx.parentJobId, prompt, fnArgs, { destructive: true });
+      if (!approved) {
+        toolResult = { success: false, error: 'User declined the action.' };
+      } else {
+        toolResult = await executeSiteTool(fnName, fnArgs);
+      }
+    } else {
+      toolResult = await executeSiteTool(fnName, fnArgs);
+    }
   } else {
     toolResult = { error: `Unknown function: ${fnName}` };
   }

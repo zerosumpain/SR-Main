@@ -6,6 +6,7 @@
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
+  import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import type { PlanPayload } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
@@ -125,6 +126,7 @@
   let currentJobId = $state<string | null>(null);
   let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
+  let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
@@ -422,6 +424,7 @@
     loading = true;
     heartbeat = null;
     pendingPlan = null;
+    pendingConfirm = null;
     subAgents = {};
 
     const attachmentIds = pendingAttachments
@@ -603,6 +606,22 @@
             return;
           }
 
+          if (data.type === 'confirm') {
+            pendingConfirm = {
+              confirmId: data.confirmId,
+              prompt: data.prompt,
+              destructive: data.destructive,
+              details: data.details,
+            };
+            heartbeat = null;
+            return;
+          }
+
+          if (data.type === 'confirm_ack') {
+            pendingConfirm = null;
+            return;
+          }
+
           if (data.type === 'subagent_start') {
             subAgents[data.agentId] = {
               agentId: data.agentId,
@@ -657,6 +676,7 @@
           if (data.type === 'done') {
             heartbeat = null;
             pendingPlan = null;
+            pendingConfirm = null;
             const result = (data.result || {}) as {
               message?: string;
               error?: string;
@@ -688,6 +708,7 @@
           if (data.type === 'error') {
             heartbeat = null;
             pendingPlan = null;
+            pendingConfirm = null;
             messages = messages.map((m) =>
               m.id === progressId
                 ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -715,6 +736,7 @@
     currentJobId = null;
     heartbeat = null;
     pendingPlan = null;
+    pendingConfirm = null;
     scrollToBottom();
   }
 
@@ -822,6 +844,16 @@
                     onresolve={() => { pendingPlan = null; }}
                   />
                 {/if}
+                {#if pendingConfirm}
+                  <ConfirmBanner
+                    confirmId={pendingConfirm.confirmId}
+                    prompt={pendingConfirm.prompt}
+                    destructive={pendingConfirm.destructive}
+                    details={pendingConfirm.details}
+                    jobId={currentJobId ?? ''}
+                    onresolve={() => { pendingConfirm = null; }}
+                  />
+                {/if}
                 {#if heartbeat}
                   <div class="heartbeat-line" role="status" aria-live="polite">
                     <span class="hb-dot"></span>
@@ -896,6 +928,16 @@
                   plan={pendingPlan.plan}
                   jobId={currentJobId ?? ''}
                   onresolve={() => { pendingPlan = null; }}
+                />
+              {/if}
+              {#if pendingConfirm}
+                <ConfirmBanner
+                  confirmId={pendingConfirm.confirmId}
+                  prompt={pendingConfirm.prompt}
+                  destructive={pendingConfirm.destructive}
+                  details={pendingConfirm.details}
+                  jobId={currentJobId ?? ''}
+                  onresolve={() => { pendingConfirm = null; }}
                 />
               {/if}
               {#if heartbeat}
