@@ -372,35 +372,8 @@
   }
   .back-link:hover { text-decoration: underline; }
 
-  /* ——— Sections — mirror the canvas `.nm-sec` pattern ——— */
-  .nm-sec {
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
-    padding: 1rem 1.1rem 1.15rem;
-    margin-bottom: 1.25rem;
-  }
-  .nm-sec-hd {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.9rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--card-border);
-  }
-  .sr-label-tight {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-  }
-  .nm-sec-meta {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
-    margin-left: auto;
-  }
+  /* .nm-sec, .nm-sec-hd, .sr-label-tight, .nm-sec-meta now provided by
+   * $lib/styles/nm-tokens.css (canonical SR design language). */
 
   /* ——— Form ——— */
   .form { display: grid; gap: 0.9rem; }
@@ -409,18 +382,7 @@
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
   @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
 
-  .nm-text-input {
-    width: 100%;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-primary);
-    background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
-    padding: 7px 10px;
-    outline: none;
-  }
-  .nm-text-input:focus { border-color: var(--accent); background: var(--bg); }
-  .nm-text-input::placeholder { color: var(--text-ghost); }
+  /* .nm-text-input now provided by $lib/styles/nm-tokens.css. */
 
   .file-picker {
     display: flex;
@@ -505,19 +467,7 @@
   }
   .form-actions { display: flex; gap: 0.5rem; }
 
-  .nm-save-btn {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    padding: 6px 14px;
-    background: var(--accent);
-    color: var(--bg);
-    border: 1px solid var(--accent);
-    cursor: pointer;
-  }
-  .nm-save-btn:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-  .nm-save-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  /* .nm-save-btn now provided by $lib/styles/nm-tokens.css. */
 
   .btn-ghost {
     font-family: var(--font-mono);

@@ -1,8 +1,100 @@
-/* Canonical .nm-* design tokens extracted from /jkai/canvas.
- * Both /jkai/canvas and /jkai chat must reference these to stay in sync.
- * DO NOT fork these definitions back inside a scoped <style> block. */
+/* Canonical .nm-* design tokens for the SR design language.
+ *
+ * Source of truth for /jkai/canvas, /jkai chat, /admin/files, and any
+ * other surface that wants the same look. DO NOT fork these back into
+ * component-scoped <style> blocks.
+ *
+ * Baseline values mirror /admin/files (the design-language reference).
+ * Where a consumer needs a denser/flush variant (e.g. canvas inline
+ * inspector), scope an override using a parent selector, not a new
+ * class — the token name stays canonical.
+ */
 
-/* ——— Inline node menu (phase C) ——— */
+/* ——— Sections — bordered card with header rule ——— */
+.nm-sec {
+  background: var(--bg-section);
+  border: 1px solid var(--card-border);
+  padding: 1rem 1.1rem 1.15rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.nm-sec-error {
+  background: rgba(196, 68, 68, 0.06);
+  border: 1px solid rgba(196, 68, 68, 0.3);
+  padding: 6px 8px;
+}
+
+.nm-sec-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.sr-label-tight {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.sr-label-tight.error {
+  color: #c44;
+}
+
+.nm-sec-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  margin-left: auto;
+}
+
+/* ——— Text input ——— */
+.nm-text-input {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: rgba(26, 16, 8, 0.04);
+  border: 1px solid var(--card-border);
+  padding: 7px 10px;
+  outline: none;
+}
+.nm-text-input:focus {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+.nm-text-input::placeholder { color: var(--text-ghost); }
+
+/* ——— Save button — primary action ——— */
+.nm-save-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+}
+.nm-save-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.nm-save-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ——— Inline node menu (canvas inspector panel) ——— */
 .nm-inline {
   position: absolute;
   width: 420px;
@@ -38,45 +130,50 @@
   overflow-y: auto;
 }
 
+/* Inside a panel that already provides chrome (canvas inline inspector,
+ * edge inspector), sections are flush and inputs/buttons are denser. */
+.nm-inline .nm-sec,
+.edge-inspector-body .nm-sec {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-bottom: 0;
+  gap: 5px;
+}
+.nm-inline .nm-sec-hd,
+.edge-inspector-body .nm-sec-hd {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+  gap: 8px;
+}
+.nm-inline .sr-label-tight,
+.edge-inspector-body .sr-label-tight {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-ghost);
+}
+.nm-inline .nm-text-input {
+  font-size: 11px;
+  padding: 5px 8px;
+  background: var(--bg);
+}
+.nm-inline .nm-save-btn {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 3px 10px;
+}
+
 .nm-sec-lastrun .nm-sec-hd {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.nm-sec {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.nm-sec-error {
-  background: rgba(196, 68, 68, 0.06);
-  border: 1px solid rgba(196, 68, 68, 0.3);
-  padding: 6px 8px;
-}
-.nm-sec-hd {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.sr-label-tight {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-ghost);
-}
-.sr-label-tight.error {
-  color: #c44;
-}
-.nm-sec-meta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-ghost);
-}
-
+/* ——— Inline label input (editable titles) ——— */
 .nm-label-input {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
@@ -85,42 +182,9 @@
   border: 1px solid transparent;
   padding: 3px 6px;
   outline: none;
-  min-width: 0;
 }
 .nm-label-input:hover,
 .nm-label-input:focus {
   border-color: var(--card-border);
   background: var(--bg);
-}
-.nm-save-btn {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding: 3px 10px;
-  background: var(--accent);
-  color: var(--bg);
-  border: 1px solid var(--accent);
-  cursor: pointer;
-}
-.nm-save-btn:hover:not(:disabled) {
-  background: var(--accent-hover, #a84808);
-}
-.nm-save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.nm-text-input {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 5px 8px;
-  border: 1px solid var(--card-border);
-  background: var(--bg);
-  color: var(--text-primary);
-  outline: none;
-  min-width: 0;
-  width: 100%;
-}
-.nm-text-input:focus {
-  border-color: var(--accent);
 }
