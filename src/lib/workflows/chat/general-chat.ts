@@ -680,7 +680,10 @@ export async function generalChat(
         // emit both in the same turn with the prompt above, but belt and
         // braces.)
         msg.tool_calls = undefined;
-        msg.content = extracted.cleaned;
+        // Some OpenAI-compatible providers reject assistant messages with
+        // empty content + no tool_calls; substitute a marker when the only
+        // thing the model emitted was the plan block.
+        msg.content = extracted.cleaned || '(plan emitted)';
 
         const decision = await awaitPlanApproval(options.jobId, extracted.plan);
 
