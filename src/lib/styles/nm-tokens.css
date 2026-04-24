@@ -94,6 +94,31 @@
   cursor: not-allowed;
 }
 
+/* ——— Ghost button — secondary/tertiary action ——— */
+.nm-btn-ghost {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--card-border);
+  cursor: pointer;
+}
+.nm-btn-ghost:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+.nm-btn-ghost[data-active="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.nm-btn-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ——— Inline node menu (canvas inspector panel) ——— */
 .nm-inline {
   position: absolute;

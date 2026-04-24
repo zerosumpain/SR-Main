@@ -357,14 +357,6 @@
     }
   }
 
-  function formatToolArgs(args: Record<string, unknown>): string {
-    const parts = Object.entries(args).map(([k, v]) => {
-      const val = typeof v === 'string' ? v : JSON.stringify(v);
-      return `${k}=${val}`;
-    });
-    return parts.join(', ');
-  }
-
   function friendlyToolName(name: string): string {
     const labels: Record<string, string> = {
       activate_toolset: 'Loading toolset',
@@ -667,21 +659,23 @@
       {/if}
     </div>
     {#if conversationId}
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="chat-toolbar">
         {#if allToolCalls.length > 0}
           <button
+            type="button"
             onclick={() => { showToolDrawer = !showToolDrawer; }}
-            class="text-[10px] px-2 py-1 rounded border transition-colors"
-            style="border-color: {showToolDrawer ? 'var(--accent)' : 'var(--card-border)'}; color: {showToolDrawer ? 'var(--accent)' : 'var(--text-ghost)'};"
+            class="nm-btn-ghost"
+            data-active={showToolDrawer ? 'true' : 'false'}
             title="View all tool calls in this conversation"
           >
             Tool calls ({allToolCalls.length})
           </button>
         {/if}
         <button
+          type="button"
           onclick={() => { showThinking = !showThinking; }}
-          class="text-[10px] px-2 py-1 rounded border transition-colors"
-          style="border-color: {showThinking ? 'var(--accent)' : 'var(--card-border)'}; color: {showThinking ? 'var(--accent)' : 'var(--text-ghost)'};"
+          class="nm-btn-ghost"
+          data-active={showThinking ? 'true' : 'false'}
         >
           {showThinking ? 'Hide' : 'Show'} thinking
         </button>
@@ -711,16 +705,14 @@
           {#if msg.isProgress}
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
-              <div class="mb-3 rounded-lg border overflow-hidden" style="border-color: var(--accent); background: var(--card-bg);">
-                <div class="px-3 py-2 flex items-center gap-2" style="background: color-mix(in srgb, var(--accent) 10%, transparent);">
-                  <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent);"></span>
-                  <span class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--accent);">
-                    Working
-                  </span>
+              <div class="progress-bubble mb-3">
+                <div class="progress-bubble-hdr">
+                  <span class="working-dot" aria-hidden="true"></span>
+                  <span class="sr-label-tight working-label">Working</span>
                   <button
+                    type="button"
                     onclick={cancelJob}
-                    class="ml-auto text-[10px] px-2 py-0.5 rounded border transition-colors"
-                    style="border-color: var(--card-border); color: var(--text-ghost);"
+                    class="nm-btn-ghost cancel-btn"
                   >
                     Cancel
                   </button>
@@ -737,8 +729,8 @@
                     {#if step.tool === 'status_update'}
                       <li class="step-status-update-wrap">
                         <!-- Status updates render inline as plain prose -->
-                        <div class="ml-0 px-2 py-2 rounded text-[12px] leading-relaxed" style="background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-primary); border-left: 2px solid var(--accent);">
-                          <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--accent);">Status update</div>
+                        <div class="status-update-inline">
+                          <div class="sr-label-tight status-update-label">Status update</div>
                           {(step.result as { message?: string })?.message ?? ''}
                         </div>
                       </li>
@@ -806,13 +798,8 @@
           {:else if msg.source === 'status_update'}
             <!-- Mid-task working note — stylistically distinct from a real reply -->
             <div class="flex justify-start mb-3">
-              <div
-                class="max-w-[85%] pl-3 py-1 text-[12px] italic leading-relaxed"
-                style="color: var(--text-secondary); border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);"
-              >
-                <div class="text-[9px] not-italic uppercase tracking-wider mb-0.5" style="color: var(--accent); opacity: 0.85;">
-                  Working...
-                </div>
+              <div class="status-update-msg">
+                <div class="sr-label-tight status-update-label">Working...</div>
                 {msg.content}
               </div>
             </div>
@@ -897,16 +884,15 @@
             onpaste={onPaste}
             placeholder="Ask anything..."
             disabled={loading}
-            class="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm border resize-none"
-            style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); min-height: 44px; max-height: 160px;"
+            class="nm-text-input composer-textarea flex-1"
             rows="1"
           ></textarea>
           <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
           <button
+            type="button"
             onclick={send}
             disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
-            class="px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium transition-colors self-end"
-            style="background: var(--accent); color: white; opacity: {loading || !input.trim() ? 0.5 : 1};"
+            class="nm-save-btn composer-send self-end"
           >
             Send
           </button>
@@ -929,36 +915,37 @@
       class="absolute top-0 right-0 h-full z-30 flex flex-col border-l shadow-xl"
       style="width: min(420px, 90vw); background: var(--bg); border-color: var(--card-border);"
     >
-      <div class="px-4 py-3 border-b flex items-center justify-between" style="border-color: var(--card-border);">
-        <div>
-          <div class="text-[11px] uppercase tracking-wider" style="color: var(--accent);">Tool calls</div>
-          <div class="text-[10px]" style="color: var(--text-ghost);">{allToolCalls.length} total in this conversation</div>
+      <div class="drawer-hdr">
+        <div class="drawer-hdr-main">
+          <div class="sr-label-tight drawer-title">Tool calls</div>
+          <div class="drawer-subtitle">{allToolCalls.length} total in this conversation</div>
         </div>
         <button
+          type="button"
           onclick={() => { showToolDrawer = false; }}
-          class="text-[14px] w-6 h-6 rounded hover:opacity-80"
-          style="color: var(--text-ghost);"
+          class="drawer-close"
           aria-label="Close"
         >&times;</button>
       </div>
       <div class="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {#each allToolCalls as entry, i (i)}
-          <div class="rounded border" style="border-color: var(--card-border);">
+          <div class="drawer-item" data-status={entry.step.status}>
             <button
-              class="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:opacity-80"
+              type="button"
+              class="drawer-item-hdr w-full flex items-center gap-2 px-2 py-1.5 text-left hover:opacity-80"
               onclick={() => toggleDrawerItem(i)}
             >
-              <span class="text-[9px] font-mono shrink-0 w-5 text-right" style="color: var(--text-ghost);">#{i + 1}</span>
-              <span class="text-[10px] shrink-0" style="color: {entry.step.status === 'error' ? '#ef4444' : entry.step.status === 'running' ? 'var(--accent)' : 'var(--text-ghost)'};">
+              <span class="drawer-item-idx">#{i + 1}</span>
+              <span class="drawer-item-status" data-status={entry.step.status}>
                 {#if entry.step.status === 'running'}&#9679;
                 {:else if entry.step.status === 'error'}&#10007;
                 {:else}&#10003;
                 {/if}
               </span>
-              <span class="text-[11px] flex-1 truncate" style="color: var(--text-primary); font-family: var(--font-mono);">
+              <span class="drawer-item-name flex-1 truncate">
                 {friendlyToolName(entry.step.tool)}
               </span>
-              <span class="text-[9px] shrink-0" style="color: var(--text-ghost);">
+              <span class="drawer-item-toggle">
                 {expandedTools.has(i) ? '-' : '+'}
               </span>
             </button>
@@ -966,13 +953,13 @@
               <div class="px-2 pb-2 space-y-2">
                 {#if Object.keys(entry.step.args).length > 0}
                   <div>
-                    <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Args</div>
+                    <div class="sr-label-tight drawer-body-label">Args</div>
                     <JsonBlock data={entry.step.args} />
                   </div>
                 {/if}
                 {#if entry.step.result !== undefined}
                   <div>
-                    <div class="text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-ghost);">Result</div>
+                    <div class="sr-label-tight drawer-body-label">Result</div>
                     <JsonBlock data={entry.step.result} />
                   </div>
                 {/if}
@@ -981,7 +968,7 @@
           </div>
         {/each}
         {#if allToolCalls.length === 0}
-          <div class="text-[11px] text-center py-8" style="color: var(--text-ghost);">
+          <div class="drawer-empty">
             No tool calls yet.
           </div>
         {/if}
@@ -1052,8 +1039,8 @@
     transition: border-color 100ms ease;
   }
   .step-card[data-status="error"] {
-    border-color: rgba(196, 68, 68, 0.45);
-    background: rgba(196, 68, 68, 0.05);
+    border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+    background: color-mix(in srgb, var(--status-error) 8%, transparent);
   }
   .step-card[data-status="running"] {
     border-color: var(--accent);
@@ -1071,8 +1058,8 @@
     color: var(--text-ghost);
   }
   .step-status[data-status="running"] { color: var(--accent); }
-  .step-status[data-status="error"]   { color: #c44; }
-  .step-status[data-status="done"]    { color: #6a9f4b; }
+  .step-status[data-status="error"]   { color: var(--status-error); }
+  .step-status[data-status="done"]    { color: var(--status-success); }
   .sc-dot {
     display: inline-block;
     width: 6px;
@@ -1121,5 +1108,179 @@
   }
   .step-status-update-wrap {
     list-style: none;
+  }
+
+  /* Chat header toolbar — groups the ghost buttons on the right side */
+  .chat-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .chat-toolbar :global(.nm-btn-ghost) {
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+
+  /* Progress bubble — outer box for tool step cards */
+  .progress-bubble {
+    background: var(--card-bg);
+    border: 1px solid var(--accent);
+    overflow: hidden;
+  }
+  .progress-bubble-hdr {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--accent-tint-08);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .working-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: hb-pulse 1.4s ease-in-out infinite;
+  }
+  .working-label {
+    color: var(--accent);
+    letter-spacing: 0.14em;
+  }
+  .cancel-btn {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 9px;
+  }
+
+  /* Inline status-update block inside the step list */
+  .status-update-inline {
+    padding: 6px 10px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--text-primary);
+    border-left: 2px solid var(--accent);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .status-update-label {
+    color: var(--accent);
+    margin-bottom: 3px;
+    letter-spacing: 0.14em;
+  }
+
+  /* Mid-task working note (separate message, not inside the progress box) */
+  .status-update-msg {
+    max-width: 85%;
+    padding-left: 10px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    color: var(--text-secondary);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    font-size: 12px;
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .status-update-msg .status-update-label {
+    font-style: normal;
+    margin-bottom: 1px;
+  }
+
+  /* Composer textarea + send — scoped sizing on top of .nm-text-input / .nm-save-btn */
+  .composer-textarea {
+    font-family: var(--font-body);
+    font-size: 13px;
+    min-height: 44px;
+    max-height: 160px;
+    padding: 9px 12px;
+    resize: none;
+  }
+  .composer-send {
+    padding: 10px 16px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+  }
+
+  /* Tool call drawer */
+  .drawer-hdr {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .drawer-hdr-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .drawer-title {
+    color: var(--accent);
+    letter-spacing: 0.14em;
+  }
+  .drawer-subtitle {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+  .drawer-close {
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-ghost);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .drawer-close:hover { color: var(--text-primary); }
+
+  .drawer-item {
+    border: 1px solid var(--card-border);
+    background: rgba(26, 16, 8, 0.04);
+  }
+  .drawer-item[data-status="running"] { border-color: var(--accent); }
+  .drawer-item[data-status="error"]   { border-color: color-mix(in srgb, var(--status-error) 55%, transparent); }
+  .drawer-item-hdr {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .drawer-item-idx {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-ghost);
+    width: 20px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .drawer-item-status {
+    font-size: 10px;
+    flex-shrink: 0;
+    color: var(--text-ghost);
+  }
+  .drawer-item-status[data-status="running"] { color: var(--accent); }
+  .drawer-item-status[data-status="error"]   { color: var(--status-error); }
+  .drawer-item-status[data-status="done"]    { color: var(--status-success); }
+  .drawer-item-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+  }
+  .drawer-item-toggle {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .drawer-body-label {
+    margin-bottom: 3px;
+  }
+  .drawer-empty {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--text-ghost);
   }
 </style>

@@ -29,6 +29,10 @@
   --surface-elevated: #e8dece;
   --surface-overlay: rgba(26, 16, 8, 0.05);
 
+  /* Status colours — used by step cards, error/success hints */
+  --status-error: #c25b5b;
+  --status-success: #6ab88a;
+
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
