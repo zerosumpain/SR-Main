@@ -20,6 +20,35 @@
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
 
   let { data } = $props();
+
+  // Synchronous duplicate-key audit of the initial page payload. Runs BEFORE
+  // any keyed {#each} renders, so it lands in console even if a subsequent
+  // render crashes on each_key_duplicate.
+  if (typeof console !== 'undefined') {
+    const audit = (name: string, arr: unknown[] | undefined | null, keyFn: (x: any) => unknown) => {
+      if (!arr) return;
+      const seen = new Map<unknown, unknown>();
+      for (const item of arr) {
+        const k = keyFn(item);
+        if (k === undefined || k === null) {
+          console.warn('[canvas-dupe] null/undef key in', name, item);
+        } else if (seen.has(k)) {
+          console.error('[CANVAS-DUPE]', name, 'duplicate key', k, 'prev:', seen.get(k), 'curr:', item);
+        } else {
+          seen.set(k, item);
+        }
+      }
+    };
+    audit('data.canvas.nodes', data.canvas?.nodes, (n: any) => n.id);
+    audit('data.canvas.edges', data.canvas?.edges, (e: any) => e.id);
+    audit('data.peerCanvases', data.peerCanvases, (c: any) => c.workflowId);
+    if (data.canvas?.messagesByChat) {
+      for (const [cid, arr] of Object.entries(data.canvas.messagesByChat)) {
+        audit(`data.canvas.messagesByChat[${cid}]`, arr as any[], (m: any) => m.id);
+      }
+    }
+  }
+
   const canvas = $derived(data.canvas);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
 
@@ -258,7 +287,7 @@
     const out: typeof raw = [];
     for (const m of raw) {
       if (seen.has(m.id)) {
-        console.warn('[canvas] duplicate message id dropped', m.id, 'in chat', chatNodeId);
+        console.error('[CANVAS-DUPE-DROP] message id dropped', m.id, 'in chat', chatNodeId);
         continue;
       }
       seen.add(m.id);
@@ -333,7 +362,7 @@
       const out: ViewNode[] = [];
       for (const n of canvas.nodes) {
         if (seen.has(n.id)) {
-          console.warn('[canvas] duplicate node id dropped', n.id);
+          console.error('[CANVAS-DUPE-DROP] node id dropped', n.id);
           continue;
         }
         seen.add(n.id);
@@ -376,7 +405,7 @@
       for (const e of canvas.edges) {
         if (!byId[e.from] || !byId[e.to]) continue;
         if (seen.has(e.id)) {
-          console.warn('[canvas] duplicate edge id dropped', e.id);
+          console.error('[CANVAS-DUPE-DROP] edge id dropped', e.id);
           continue;
         }
         seen.add(e.id);
@@ -471,7 +500,21 @@
     intelligence: '#5dbea3',
   };
 
-  const peerCanvases = $derived(data.peerCanvases);
+  const peerCanvases = $derived(
+    (() => {
+      const seen = new Set<string>();
+      const out: typeof data.peerCanvases = [];
+      for (const c of data.peerCanvases) {
+        if (seen.has(c.workflowId)) {
+          console.warn('[canvas-dupe] peerCanvases duplicate workflowId dropped', c.workflowId);
+          continue;
+        }
+        seen.add(c.workflowId);
+        out.push(c);
+      }
+      return out;
+    })(),
+  );
 
   // Preset cron expressions exposed in the trigger menu
   const CRON_PRESETS = [
@@ -2078,7 +2121,7 @@
         const k = keyFn(item);
         if (seen.has(k)) {
           console.warn(
-            '[canvas-dupe]',
+            '[CANVAS-DUPE]',
             name,
             'has duplicate key',
             k,
@@ -3982,7 +4025,7 @@
       </div>
       <div class="minimap-body">
         <div class="minimap-chat"></div>
-        {#each canvas.nodes as n (n.id + '-m')}
+        {#each viewNodes as n (n.id + '-m')}
           <div
             class="minimap-node"
             style:left="{40 + (n.x - COL[0]) * 0.13}px"
