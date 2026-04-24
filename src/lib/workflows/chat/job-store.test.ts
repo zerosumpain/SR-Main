@@ -96,10 +96,13 @@ describe('heartbeat', () => {
     vi.useFakeTimers();
     try {
       const { jobId, job } = createJob('test');
+      const received: JobEvent[] = [];
+      subscribeJob(jobId, (e) => received.push(e));
       const before = job.lastEventAt;
       vi.advanceTimersByTime(26_000);
-      // A heartbeat was emitted above; lastEventAt must still reflect
-      // the original createJob timestamp (+ 0, since no real event).
+      // Assert heartbeat actually fired — otherwise the lastEventAt check
+      // below is vacuously true and we'd miss a broken heartbeat path.
+      expect(received.some((e) => e.type === 'heartbeat')).toBe(true);
       expect(job.lastEventAt).toBe(before);
     } finally {
       vi.useRealTimers();

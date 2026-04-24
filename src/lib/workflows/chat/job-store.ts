@@ -32,7 +32,7 @@ export type JobEvent =
   | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string }
   | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }
-  | { type: 'heartbeat'; summary: string; elapsedMs: number; currentStep?: string }
+  | { type: 'heartbeat'; summary: string; elapsedMs: number }
   | { type: 'plan'; planId: string; plan: PlanPayload }
   | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
   | { type: 'confirm'; confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> }
@@ -178,7 +178,6 @@ function startHeartbeat(jobId: string, job: OrchestratorJob): void {
         type: 'heartbeat',
         summary: summary.trim().slice(0, 140),
         elapsedMs: now - job.startedAt,
-        currentStep: job.currentStep,
       });
     }
   }, HEARTBEAT_CHECK_INTERVAL_MS);
@@ -288,7 +287,14 @@ export function cleanOldJobs(maxAgeMs = 300000): void {
 }
 
 export function deleteJob(jobId: string, delayMs = 30000): void {
-  setTimeout(() => jobs.delete(jobId), delayMs);
+  setTimeout(() => {
+    const job = jobs.get(jobId);
+    if (job) {
+      if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+      if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
+    }
+    jobs.delete(jobId);
+  }, delayMs);
 }
 
 export function listJobs(): Array<{

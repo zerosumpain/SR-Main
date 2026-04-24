@@ -179,6 +179,7 @@ export const POST: RequestHandler = async ({ request }) => {
               const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
               job.result = { success: false, workflow: null, message: `Failed to save workflow nodes: ${dbMsg}` };
               job.status = 'done';
+              publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
               return;
             }
 
@@ -246,7 +247,7 @@ export const POST: RequestHandler = async ({ request }) => {
               job.toolSteps.push(step);
             }
             if (step.status === 'running') {
-              job.currentStep = `${step.tool}: running`;
+              job.currentStep = `Running ${step.tool}…`;
             }
           },
           onStreamEvent: (event) => {
