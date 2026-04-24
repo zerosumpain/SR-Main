@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
   import { createBiomeStore } from '$lib/biome/store.svelte';
 

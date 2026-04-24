@@ -5375,34 +5375,8 @@
   }
 
   /* ——— Inline node menu (phase C) ——— */
-  .nm-inline {
-    position: absolute;
-    width: 420px;
-    background: var(--bg);
-    border: 1.5px solid var(--accent);
-    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
-    z-index: 40;
-    display: flex;
-    flex-direction: column;
-  }
-  .nm-inline-hdr {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--divider);
-    background: var(--accent-tint-08);
-  }
-  .nm-inline-hdr .wf-name {
-    position: static;
-    background: none;
-    border: none;
-    padding: 0;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    font-weight: 500;
-  }
+  /* .nm-inline, .nm-inline-hdr, .nm-inline-hdr .wf-name, .nm-inline-body
+   * moved to $lib/styles/nm-tokens.css */
   .mono12 {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -5412,12 +5386,6 @@
     width: 3px;
     height: 14px;
     flex-shrink: 0;
-  }
-  .nm-inline-body {
-    display: flex;
-    flex-direction: column;
-    max-height: 75vh;
-    overflow-y: auto;
   }
 
   .nm-hdr {
@@ -5482,11 +5450,7 @@
     color: #3a8a56;
     border-color: rgba(58, 138, 86, 0.45);
   }
-  .nm-sec-lastrun .nm-sec-hd {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  /* .nm-sec-lastrun .nm-sec-hd moved to $lib/styles/nm-tokens.css */
 
   .nm-ctx {
     display: grid;
@@ -5565,36 +5529,8 @@
     padding-top: 10px;
     overflow-y: auto;
   }
-  .nm-sec {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .nm-sec-error {
-    background: rgba(196, 68, 68, 0.06);
-    border: 1px solid rgba(196, 68, 68, 0.3);
-    padding: 6px 8px;
-  }
-  .nm-sec-hd {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .sr-label-tight {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-ghost);
-  }
-  .sr-label-tight.error {
-    color: #c44;
-  }
-  .nm-sec-meta {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
-  }
+  /* .nm-sec, .nm-sec-error, .nm-sec-hd, .sr-label-tight, .sr-label-tight.error,
+   * .nm-sec-meta moved to $lib/styles/nm-tokens.css */
   .nm-link {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -5931,58 +5867,11 @@
     margin-bottom: 0;
   }
 
-  .nm-label-input {
-    flex: 1;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-primary);
-    background: transparent;
-    border: 1px solid transparent;
-    padding: 3px 6px;
-    outline: none;
-    min-width: 0;
-  }
-  .nm-label-input:hover,
-  .nm-label-input:focus {
-    border-color: var(--card-border);
-    background: var(--bg);
-  }
-  .nm-save-btn {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 3px 10px;
-    background: var(--accent);
-    color: var(--bg);
-    border: 1px solid var(--accent);
-    cursor: pointer;
-  }
-  .nm-save-btn:hover:not(:disabled) {
-    background: var(--accent-hover, #a84808);
-  }
-  .nm-save-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  /* .nm-label-input (+:hover, :focus), .nm-save-btn (+:hover, :disabled),
+   * .nm-text-input (+:focus) moved to $lib/styles/nm-tokens.css */
   .nm-save-err {
     color: #c44;
     font-size: 14px;
-  }
-  .nm-text-input {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 5px 8px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    color: var(--text-primary);
-    outline: none;
-    min-width: 0;
-    width: 100%;
-  }
-  .nm-text-input:focus {
-    border-color: var(--accent);
   }
   .nm-field textarea {
     width: 100%;

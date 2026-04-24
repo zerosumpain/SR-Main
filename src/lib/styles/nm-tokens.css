@@ -1,0 +1,126 @@
+/* Canonical .nm-* design tokens extracted from /jkai/canvas.
+ * Both /jkai/canvas and /jkai chat must reference these to stay in sync.
+ * DO NOT fork these definitions back inside a scoped <style> block. */
+
+/* ——— Inline node menu (phase C) ——— */
+.nm-inline {
+  position: absolute;
+  width: 420px;
+  background: var(--bg);
+  border: 1.5px solid var(--accent);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+.nm-inline-hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--accent-tint-08);
+}
+.nm-inline-hdr .wf-name {
+  position: static;
+  background: none;
+  border: none;
+  padding: 0;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  font-weight: 500;
+}
+.nm-inline-body {
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.nm-sec-lastrun .nm-sec-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nm-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.nm-sec-error {
+  background: rgba(196, 68, 68, 0.06);
+  border: 1px solid rgba(196, 68, 68, 0.3);
+  padding: 6px 8px;
+}
+.nm-sec-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sr-label-tight {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-ghost);
+}
+.sr-label-tight.error {
+  color: #c44;
+}
+.nm-sec-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+}
+
+.nm-label-input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 6px;
+  outline: none;
+  min-width: 0;
+}
+.nm-label-input:hover,
+.nm-label-input:focus {
+  border-color: var(--card-border);
+  background: var(--bg);
+}
+.nm-save-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 3px 10px;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+}
+.nm-save-btn:hover:not(:disabled) {
+  background: var(--accent-hover, #a84808);
+}
+.nm-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.nm-text-input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+  color: var(--text-primary);
+  outline: none;
+  min-width: 0;
+  width: 100%;
+}
+.nm-text-input:focus {
+  border-color: var(--accent);
+}
