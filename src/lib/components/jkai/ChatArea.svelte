@@ -5,6 +5,8 @@
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
+  import PlanCard from '$lib/components/jkai/PlanCard.svelte';
+  import type { PlanPayload } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
@@ -103,6 +105,7 @@
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
   let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
+  let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let chatContainer: HTMLDivElement;
   let eventSource: EventSource | null = null;
   let jobEventSource: EventSource | null = null;
@@ -391,6 +394,7 @@
     input = '';
     loading = true;
     heartbeat = null;
+    pendingPlan = null;
 
     const attachmentIds = pendingAttachments
       .filter(a => !a.uploading && !a.error && !a.incompatible)
@@ -560,8 +564,20 @@
             return;
           }
 
+          if (data.type === 'plan') {
+            pendingPlan = { planId: data.planId, plan: data.plan };
+            heartbeat = null;
+            return;
+          }
+
+          if (data.type === 'plan_ack') {
+            pendingPlan = null;
+            return;
+          }
+
           if (data.type === 'done') {
             heartbeat = null;
+            pendingPlan = null;
             const result = (data.result || {}) as {
               message?: string;
               error?: string;
@@ -592,6 +608,7 @@
 
           if (data.type === 'error') {
             heartbeat = null;
+            pendingPlan = null;
             messages = messages.map((m) =>
               m.id === progressId
                 ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -618,6 +635,7 @@
     loading = false;
     currentJobId = null;
     heartbeat = null;
+    pendingPlan = null;
     scrollToBottom();
   }
 
@@ -717,6 +735,14 @@
                     Cancel
                   </button>
                 </div>
+                {#if pendingPlan}
+                  <PlanCard
+                    planId={pendingPlan.planId}
+                    plan={pendingPlan.plan}
+                    jobId={currentJobId ?? ''}
+                    onresolve={() => { pendingPlan = null; }}
+                  />
+                {/if}
                 {#if heartbeat}
                   <div class="heartbeat-line" role="status" aria-live="polite">
                     <span class="hb-dot"></span>
@@ -782,6 +808,14 @@
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
+              {#if pendingPlan}
+                <PlanCard
+                  planId={pendingPlan.planId}
+                  plan={pendingPlan.plan}
+                  jobId={currentJobId ?? ''}
+                  onresolve={() => { pendingPlan = null; }}
+                />
+              {/if}
               {#if heartbeat}
                 <div class="heartbeat-line mb-3" role="status" aria-live="polite">
                   <span class="hb-dot"></span>
