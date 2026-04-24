@@ -405,16 +405,15 @@ function buildScoutMessage(
   turn: number,
   catalogue: Map<string, FormCatalogueEntry>,
 ): string {
-  // Hide altcha/captcha elements from the scout's view — they're handled
-  // by the harness and mentioning them in the observation leads the LLM
-  // to panic and give_up instead of navigating.
+  // Hide only the altcha-widget and captcha-form themselves — not buttons
+  // inside them (e.g. "Continue" after solve, which the scout may still need
+  // to click). Being too aggressive here left the scout blind to the one
+  // button that would unblock it.
   const scrubbed = obs.interactive.filter((e) => {
+    const kind = String((e as { kind?: string }).kind ?? '');
     const sel = String((e as { selector?: string }).selector ?? '');
-    const text = String((e as { text?: string }).text ?? '');
-    const href = String((e as { href?: string }).href ?? '');
-    if (/altcha|captcha/i.test(sel)) return false;
-    if (/altcha|captcha/i.test(text)) return false;
-    if (/altcha|captcha/i.test(href)) return false;
+    if (kind === 'form' && /^#?(altcha|captcha)/i.test(sel)) return false;
+    if (/altcha-widget/i.test(sel)) return false;
     return true;
   });
   const interactiveJson = JSON.stringify(scrubbed, null, 0).slice(0, MAX_INTERACTIVE_SUMMARY);

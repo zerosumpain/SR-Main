@@ -53,6 +53,7 @@ async def try_altcha(page) -> bool:
             return False
     except Exception:
         return False
+    solved = False
     deadline = time.time() + 25
     while time.time() < deadline:
         try:
@@ -70,32 +71,61 @@ async def try_altcha(page) -> bool:
                 }""",
                 handle,
             ):
-                return True
+                solved = True
+                break
         except Exception:
             pass
         await asyncio.sleep(0.5)
-    # Try clicking to start the PoW if needed.
-    try:
-        await widget.click(timeout=2000)
-    except Exception:
-        pass
-    deadline = time.time() + 10
-    while time.time() < deadline:
+    if not solved:
+        # Try clicking to start the PoW if needed.
         try:
-            handle = await widget.element_handle()
-            if handle and await page.evaluate(
+            await widget.click(timeout=2000)
+        except Exception:
+            pass
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                handle = await widget.element_handle()
+                if handle and await page.evaluate(
+                    """(w) => {
+                      const form = w.closest('form');
+                      const input = form?.querySelector('input[name*="altcha" i]');
+                      return !!(input && input.value && input.value.length > 20);
+                    }""",
+                    handle,
+                ):
+                    solved = True
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+    if not solved:
+        return False
+    # After solve, many sites (CS Jobs included) require a click on a
+    # "Continue" / submit button on the challenge form to actually proceed.
+    # Auto-press the parent form's submit so the scout doesn't have to.
+    try:
+        handle = await widget.element_handle()
+        if handle:
+            await page.evaluate(
                 """(w) => {
                   const form = w.closest('form');
-                  const input = form?.querySelector('input[name*="altcha" i]');
-                  return !!(input && input.value && input.value.length > 20);
+                  if (!form) return false;
+                  const btn = form.querySelector('button[type="submit"], input[type="submit"], button');
+                  if (btn) { btn.click(); return true; }
+                  if (form.requestSubmit) { form.requestSubmit(); return true; }
+                  form.submit?.();
+                  return true;
                 }""",
                 handle,
-            ):
-                return True
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
-    return False
+            )
+            try:
+                await page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return True
 
 
 # Actions that wait for a DOM element (fill/click/select) default to this.
