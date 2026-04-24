@@ -108,7 +108,7 @@
         <div class="empty">No edits recorded yet</div>
       {:else}
         <ul>
-          {#each stats.data.recentEdits as e (e.at + e.entity + e.action)}
+          {#each stats.data.recentEdits as e, i (e.at + '|' + e.entity + '|' + e.action + '|' + i)}
             <li>
               <span class="when">{formatRelative(new Date(e.at))}</span>
               <span class="edit">{editLine(e)}</span>
