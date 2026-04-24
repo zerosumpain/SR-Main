@@ -36,3 +36,7 @@ data/whatsapp-auth/
 # Webframe service
 services/webframe/node_modules
 services/webframe/dist
+
+# Scraper scripts — homeserv-local runtime state (LLM-authored per-domain
+# scrape scripts + metadata). Never synced to the VPS; see script-store.ts.
+scraper-scripts/

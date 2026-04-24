@@ -12,16 +12,17 @@
  * the harness via stdin (exec_script command). That keeps script auth
  * authoritative server-side and avoids needing a new bind-mount.
  *
- * Default path is `~/.strange-rambling/scraper-scripts/`. Override with
- * `SCRAPER_SCRIPTS_DIR`.
+ * Default path is `<projectRoot>/scraper-scripts/` (resolved via
+ * `process.cwd()`, which is the strange_rambling_svelte repo root when the
+ * SvelteKit server is launched normally). Override with `SCRAPER_SCRIPTS_DIR`.
+ * The dir is gitignored and NOT rsynced by `scripts/deploy.sh`, so it stays
+ * homeserv-local where the warm Playwright session + residential IP live.
  */
 import { promises as fs } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 
 export const SCRIPT_DIR =
-  process.env.SCRAPER_SCRIPTS_DIR ??
-  join(homedir(), '.strange-rambling', 'scraper-scripts');
+  process.env.SCRAPER_SCRIPTS_DIR ?? join(process.cwd(), 'scraper-scripts');
 
 export interface ScriptMeta {
   profile: string;
