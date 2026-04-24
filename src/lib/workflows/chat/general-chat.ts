@@ -57,6 +57,13 @@ interface ChatOptions {
    * no intel section. null/undefined = fall back to useIntelContext.
    */
   intelContextOverride?: string | null;
+  /** When set (>= 1) the call is running as a sub-agent; disables plan phase
+      and nested agent_spawn to prevent runaway fan-out. */
+  subagentDepth?: number;
+  /** Optional tool-name whitelist. When set, only these tool names may be
+      executed via this chat. Tools outside the list are filtered from
+      activeTools at assembly time and agent_spawn is disabled. */
+  toolWhitelist?: string[];
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -127,6 +134,10 @@ interface RunToolContext {
   onProgress?: (text: string) => void;
   onStreamEvent?: (event: JobEvent) => void;
   conversationId?: string | null;
+  parentJobId?: string | null;
+  modelContext?: ModelContext;
+  subagentDepth?: number;
+  toolWhitelist?: string[];
 }
 
 async function runSingleToolCall(
@@ -213,6 +224,25 @@ async function runSingleToolCall(
       const deletedName = fnArgs.name as string;
       const idx = activeTools.findIndex((t: any) => t?.function?.name === deletedName);
       if (idx >= 0) activeTools.splice(idx, 1);
+    }
+  } else if (fnName === 'agent_spawn') {
+    const depth = ctx.subagentDepth ?? 0;
+    if (depth >= 1) {
+      toolResult = { error: 'Sub-agents cannot spawn further sub-agents.' };
+    } else if (!ctx.parentJobId || !ctx.modelContext) {
+      toolResult = { error: 'agent_spawn requires a job context.' };
+    } else if (ctx.toolWhitelist && !ctx.toolWhitelist.includes('agent_spawn')) {
+      toolResult = { error: 'agent_spawn is not in the current tool whitelist.' };
+    } else {
+      try {
+        const { runSubAgent } = await import('./sub-agent');
+        const agentArgs = fnArgs as unknown as { task: string; tools?: string[] };
+        const out = await runSubAgent(ctx.parentJobId, agentArgs, ctx.modelContext);
+        toolResult = { success: true, data: out };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toolResult = { success: false, error: msg };
+      }
     }
   } else if (isRegisteredTool(fnName)) {
     toolResult = await executeSiteTool(fnName, fnArgs);
@@ -407,7 +437,7 @@ export async function generalChat(
     graphSectionPromise,
     buildCanvasContextSection(options.workflowId),
   ]);
-  const planSection = options.jobId
+  const planSection = options.jobId && (options.subagentDepth ?? 0) === 0
     ? `\n\n--- Plan phase ---\nIf the user's request will require more than one tool call OR any write/modify/delete action, FIRST emit a plan as a JSON block:\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval. For trivial single-read lookups (e.g. one web_search for a factual question, checking a single piece of intel) you may skip the plan and answer directly.`
     : '';
 
@@ -444,6 +474,14 @@ export async function generalChat(
   // Always include meta-tools
   const activeTools: Array<any> = [...META_TOOL_DEFINITIONS];
   const activatedToolsets = new Set<string>();
+
+  // Include agent_spawn as a meta-tool available in all chats — but ONLY
+  // when this IS a top-level orchestrator call (not itself a sub-agent).
+  if ((options.subagentDepth ?? 0) === 0 && options.jobId) {
+    // Lazy import to keep sub-agent logic out of cold prompt assembly.
+    const { AGENT_SPAWN_SCHEMA } = await import('./sub-agent');
+    activeTools.push(AGENT_SPAWN_SCHEMA);
+  }
 
   // Keyword pre-classification: auto-activate likely toolsets
   const inferred = inferToolsets(userMessage);
@@ -554,7 +592,10 @@ export async function generalChat(
     // On the final round, drop tools to force a text response instead of
     // another tool call. Also inject a directive so the model summarises
     // using what it already gathered.
-    const tools = isFinalRound ? undefined : (activeTools.length > 0 ? activeTools : undefined);
+    const filteredActiveTools = options.toolWhitelist
+      ? activeTools.filter((t: any) => options.toolWhitelist!.includes(t?.function?.name))
+      : activeTools;
+    const tools = isFinalRound ? undefined : (filteredActiveTools.length > 0 ? filteredActiveTools : undefined);
     if (isFinalRound) {
       messages.push({
         role: 'user',
@@ -672,7 +713,7 @@ export async function generalChat(
     };
 
     // --- Plan-phase interception (round 0 only, when job-scoped) ---
-    if (round === 0 && options.jobId && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
+    if (round === 0 && options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
       const extracted = extractPlan(msg.content);
       if (extracted) {
         // Tool calls in the same turn as a plan would be premature — discard
@@ -737,6 +778,10 @@ export async function generalChat(
         onProgress,
         onStreamEvent: options.onStreamEvent,
         conversationId: options.conversationId,
+        parentJobId: options.jobId ?? null,
+        modelContext: options.modelContext,
+        subagentDepth: options.subagentDepth ?? 0,
+        toolWhitelist: options.toolWhitelist,
       })),
     );
     for (const { toolMessage } of toolOutcomes) {
