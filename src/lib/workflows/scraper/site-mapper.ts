@@ -185,6 +185,11 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
     const scoutHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
     for (let turn = 0; turn < SCOUT_MAX_TURNS; turn++) {
+      // Auto-solve Altcha on every page — forms sit behind the challenge
+      // and aren't rendered into the DOM until it clears. Without this,
+      // the catalogue records only the captcha form on gated pages and
+      // the planner has nothing real to pick from.
+      await agent.altcha().catch(() => ({ solved: false }));
       const obs = await agent.observe();
       recordFormsFromObservation(obs, catalogue);
       // Stash the best content_groups we see in case we land on a results page.
@@ -332,6 +337,10 @@ function recordFormsFromObservation(
   for (const entry of obs.interactive) {
     if ((entry as { kind?: string }).kind !== 'form') continue;
     const formSel = ((entry as { selector?: string }).selector) ?? 'form';
+    // Skip altcha-only forms and the captcha form entirely — they're never
+    // the scrape target, and if we catalogue them the planner may greedily
+    // pick their lone submit as the "easiest" path.
+    if (formSel === '#captcha-form' || /captcha|altcha/i.test(formSel)) continue;
     const key = `${obs.url}::${formSel}`;
     const rawInputs = (entry as { inputs?: Array<Record<string, unknown>> }).inputs ?? [];
     const rawSubmits = (entry as { submits?: Array<Record<string, unknown>> }).submits ?? [];
@@ -345,6 +354,10 @@ function recordFormsFromObservation(
         reveal_via: i.reveal_via as { selector: string; text: string | null } | undefined,
       }))
       .filter((s) => s.selector);
+    // A form whose only "slot" is an altcha hidden input is still a captcha
+    // form in disguise — skip if the whole slot list is junk.
+    const realSlots = slots.filter((s) => !/altcha|captcha/i.test(s.name));
+    if (realSlots.length === 0) continue;
     const submitRaw = rawSubmits[0] ?? null;
     const submit = submitRaw
       ? { text: String(submitRaw.text ?? ''), selector: String(submitRaw.selector ?? '') }
