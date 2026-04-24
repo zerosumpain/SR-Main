@@ -43,6 +43,33 @@ Your tools are organised into toolsets. Relevant toolsets are often pre-loaded b
 - After creating a workflow, always share the review link as a clickable markdown link.
 - Use workflow_list to check what exists before creating duplicates.
 
+## Web scraping
+The `stealth-scrape` node is a first-class pattern for anything that needs to read
+a live web page — job boards, listings, prices, schedules, data behind cookie walls.
+It runs a stealth-patched Playwright on homeserv's residential IP. Every scrape is
+driven by a **saved Python script** keyed to a stable per-domain `profile` (e.g.
+`civilservicejobs-gov-uk`). Scripts are small async functions; `page` (persistent
+context, cookies retained across runs) and `vars` (dict of strings) are in scope;
+they `return` a list of dicts that downstream nodes consume.
+
+**When designing a workflow that needs a scrape:**
+1. Call `scraper_script_list` to see if a script already exists for the target site.
+2. If yes — reuse its profile in the `stealth-scrape` node; the node dispatches through
+   the saved script automatically. If the user wants different data, call
+   `scraper_script_read` then `scraper_script_save` to edit it.
+3. If no — set `goal` + `searchQuery` on the `stealth-scrape` node and the first run
+   will author a script (the script-author agent browses the site, writes code, tests
+   it, saves it). Subsequent runs replay that script — fast + deterministic.
+4. After editing a script call `scraper_script_test` to verify it still extracts
+   before handing the canvas back to the user.
+
+**Typical scrape-driven canvas shape:**
+`trigger → (data-store get, stealth-scrape) → merge → transform (diff against stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set (record what was sent)`
+
+Keep transform expressions small — they run in-process, no sandbox, good for diff/filter.
+Keep LLM prompts lean: cap long descriptions to a few hundred chars before sending.
+Use `bodyHtml` (not `bodyText`) on `gmail-send` when the output contains links or lists.
+
 ## Visualising data in chat (Layer ladder)
 
 You have three ways to respond with multimedia. Always prefer the cheapest layer that fits.

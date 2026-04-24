@@ -68,6 +68,18 @@ export const workflowPatterns: WorkflowPattern[] = [
     edgePattern: 'Linear: fetch → parse → transform → validate → output.',
     examples: ['Fetch API data, extract fields, validate format, save to store', 'Pull health data, compute metrics, check thresholds, send alert'],
   },
+  {
+    name: 'Scrape-Diff-Notify',
+    description: 'Read a website with a saved stealth script, diff against previously-seen items, format new ones, notify the user, persist what was sent.',
+    trigger: 'When the user wants alerts for new listings/jobs/prices/posts on a site. Prefer this over http-request for any human-facing web page (it runs on a residential IP with cookies, handles JS, and has a reusable saved script).',
+    nodeSequence: ['trigger', 'data-store (get sent_ids)', 'stealth-scrape', 'merge', 'transform (diff)', 'llm-call (format HTML)', 'gmail-send / whatsapp (bodyHtml)', 'data-store (set sent_ids)'],
+    edgePattern: 'trigger → data-store-get; trigger → stealth-scrape. Both → merge → transform (newItems = items minus sent). transform → llm-call → gmail/whatsapp. transform → data-store-set (parallel edge carries the updated id list via valuePath).',
+    examples: [
+      'Email me new civil-service data engineer roles within 20 miles of Darlington',
+      'WhatsApp me when new listings appear on Rightmove for a saved search',
+      'Daily digest of new hackernews front-page items I haven\'t seen',
+    ],
+  },
 ];
 
 export function getPatternsForOrchestrator(): string {

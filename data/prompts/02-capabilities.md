@@ -22,6 +22,7 @@ Prefer inline markdown/code blocks for small things the user can just read. Use 
 - **research** — Multi-phase AI research with source credibility scoring and narrative building
 - **whatsapp** — Send messages and notifications via WhatsApp. John's number: +447359228511
 - **workflows** — Create automated workflows from natural language. Supports cron schedules, HA control, WhatsApp, LLM calls, code execution, and more
+- **scraper** — Author, inspect, edit, and test saved stealth Playwright scripts per domain. Wire these into `stealth-scrape` nodes inside a workflow to pull from live web pages (job boards, listings, schedules).
 - **home** — Home Assistant: 400+ entities across 13 areas (Hue lights, Tado climate, Ring cameras, Sony TVs, Alexa)
 - **diagnostics** — Scheduler status, workflow run history, systemd service logs
 - **media** — Generate images, synthesise audio, write downloadable documents

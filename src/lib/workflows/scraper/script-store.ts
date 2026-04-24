@@ -67,6 +67,26 @@ export async function writeScript(profile: string, code: string, meta: Omit<Scri
   ]);
 }
 
+/** List every saved script profile plus its meta. Used by the orchestrator's
+ * `scraper_script_list` tool — cheap: one readdir + one readFile per profile. */
+export async function listScripts(): Promise<ScriptMeta[]> {
+  try {
+    const entries = await fs.readdir(SCRIPT_DIR);
+    const profiles = entries
+      .filter((n) => n.endsWith('.meta.json'))
+      .map((n) => n.slice(0, -'.meta.json'.length));
+    const metas = await Promise.all(
+      profiles.map(async (p) => {
+        try {
+          const raw = await fs.readFile(join(SCRIPT_DIR, `${p}.meta.json`), 'utf8');
+          return JSON.parse(raw) as ScriptMeta;
+        } catch { return null; }
+      }),
+    );
+    return metas.filter((m): m is ScriptMeta => m !== null);
+  } catch { return []; }
+}
+
 export async function deleteScript(profile: string): Promise<boolean> {
   const codePath = join(SCRIPT_DIR, `${profile}.py`);
   const metaPath = join(SCRIPT_DIR, `${profile}.meta.json`);
