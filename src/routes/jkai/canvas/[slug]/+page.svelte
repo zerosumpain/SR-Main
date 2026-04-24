@@ -52,6 +52,7 @@
     error?: string;
     durationMs: number;
     nodeCounts: { completed: number; failed: number; running: number; other: number; total: number };
+    nodeList: Array<{ id: string; name: string; type: string; status: string; error: string | null; outputPreview: string | null }>;
     failedNodes: Array<{ id: string; name: string; error: string | null }>;
     toolCount: number;
     tools: Array<{ tool: string; status: string }>;
@@ -787,12 +788,28 @@
     const durationMs = runStartedAt ? Date.now() - runStartedAt : 0;
     const counts = { completed: 0, failed: 0, running: 0, other: 0, total: 0 };
     const failedNodes: RunSummary['failedNodes'] = [];
+    const nodeList: RunSummary['nodeList'] = [];
     for (const n of viewNodes) {
       counts.total += 1;
       if (n.status === 'completed') counts.completed += 1;
       else if (n.status === 'failed') { counts.failed += 1; failedNodes.push({ id: n.id, name: n.name, error: n.error ?? null }); }
       else if (n.status === 'running') counts.running += 1;
       else counts.other += 1;
+      let outputPreview: string | null = null;
+      if (n.outputData !== null && n.outputData !== undefined) {
+        try {
+          const s = typeof n.outputData === 'string' ? n.outputData : JSON.stringify(n.outputData);
+          outputPreview = s.length > 220 ? s.slice(0, 220) + '…' : s;
+        } catch { outputPreview = '[unserialisable]'; }
+      }
+      nodeList.push({
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        status: n.status ?? 'idle',
+        error: n.error ?? null,
+        outputPreview,
+      });
     }
     const tools: Array<{ tool: string; status: string }> = [];
     for (const arr of Object.values(liveToolSteps)) {
@@ -808,6 +825,7 @@
       error,
       durationMs,
       nodeCounts: counts,
+      nodeList,
       failedNodes,
       toolCount: tools.length,
       tools,
@@ -818,6 +836,13 @@
 
   function closeRunSummary() {
     runSummary = null;
+    // Belt and braces: if state propagation is frozen (e.g. prior reactivity
+    // error), still yank the modal out of the DOM so the user isn't trapped.
+    requestAnimationFrame(() => {
+      if (typeof document === 'undefined') return;
+      const el = document.getElementById('run-summary-root');
+      if (el && runSummary === null) el.remove();
+    });
   }
 
   function formatDuration(ms: number): string {
@@ -2040,6 +2065,42 @@
       if (runStartedAt === null) runStartedAt = Date.now();
       runSummary = null;
       subscribeToRun(canvas.latestRunId);
+    }
+  });
+
+  // Runtime duplicate-key detector — logs which keyed {#each} source contains
+  // collisions so we can root-cause the recurring each_key_duplicate error.
+  $effect(() => {
+    const check = (name: string, arr: unknown[] | undefined | null, keyFn: (x: any) => unknown) => {
+      if (!arr) return;
+      const seen = new Map<unknown, unknown>();
+      for (const item of arr) {
+        const k = keyFn(item);
+        if (seen.has(k)) {
+          console.warn(
+            '[canvas-dupe]',
+            name,
+            'has duplicate key',
+            k,
+            'prev:',
+            seen.get(k),
+            'curr:',
+            item,
+          );
+        } else {
+          seen.set(k, item);
+        }
+      }
+    };
+    check('viewNodes', viewNodes, (n) => n.id);
+    check('visibleEdges', visibleEdges, (e) => e.id);
+    check('canvas.nodes-raw', canvas.nodes, (n) => n.id);
+    check('canvas.nodes-minimap', canvas.nodes, (n) => n.id + '-m');
+    check('canvas.edges-raw', canvas.edges, (e) => e.id);
+    check('peerCanvases', peerCanvases, (c) => c.workflowId);
+    for (const cid of chatNodeIds) {
+      check(`messagesFor(${cid})`, data.canvas.messagesByChat[cid], (m) => m.id);
+      check(`liveToolSteps[${cid}]`, liveToolSteps[cid], (s) => s.toolCallId);
     }
   });
 
@@ -3960,6 +4021,7 @@
 
 {#if runSummary}
   <div
+    id="run-summary-root"
     class="run-summary-backdrop"
     role="dialog"
     aria-modal="true"
@@ -3981,7 +4043,12 @@
           {:else}Run failed
           {/if}
         </div>
-        <button class="run-summary-close" onclick={closeRunSummary} aria-label="Close">✕</button>
+        <button
+          class="run-summary-close"
+          onclick={closeRunSummary}
+          data-close-run-summary
+          aria-label="Close"
+        >✕</button>
       </div>
 
       <div class="run-summary-stats">
@@ -4011,19 +4078,31 @@
         </div>
       {/if}
 
-      {#if runSummary.failedNodes.length > 0}
-        <div class="run-summary-section">
-          <div class="run-summary-section-title">Failed nodes</div>
-          <ul class="run-summary-list">
-            {#each runSummary.failedNodes as fn (fn.id)}
-              <li>
-                <span class="run-summary-node-name">{fn.name}</span>
-                {#if fn.error}<span class="run-summary-node-err"> — {fn.error}</span>{/if}
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
+      <div class="run-summary-section">
+        <div class="run-summary-section-title">Nodes</div>
+        <ul class="run-summary-nodes">
+          {#each runSummary.nodeList as n (n.id)}
+            <li class="run-summary-node run-summary-node-{n.status}">
+              <span class="run-summary-node-status" title={n.status}>
+                {#if n.status === 'completed'}✓
+                {:else if n.status === 'failed'}✕
+                {:else if n.status === 'running'}◐
+                {:else}·
+                {/if}
+              </span>
+              <span class="run-summary-node-label">
+                <span class="run-summary-node-name">{n.name}</span>
+                <span class="run-summary-node-type">{n.type}</span>
+              </span>
+              {#if n.error}
+                <div class="run-summary-node-err-row">{n.error}</div>
+              {:else if n.outputPreview}
+                <div class="run-summary-node-out">{n.outputPreview}</div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
 
       {#if runSummary.tools.length > 0}
         <div class="run-summary-section">
@@ -4044,11 +4123,13 @@
       {/if}
 
       <div class="run-summary-actions">
-        <button class="composer-pill" onclick={closeRunSummary}>Dismiss</button>
+        <button class="composer-pill" onclick={closeRunSummary} data-close-run-summary>Dismiss</button>
       </div>
     </div>
   </div>
 {/if}
+
+<svelte:window onkeydown={(e) => { if (runSummary && e.key === 'Escape') closeRunSummary(); }} />
 
 <style>
   :root {
@@ -5953,7 +6034,58 @@
     flex-direction: column;
     gap: 4px;
   }
-  .run-summary-node-name { font-weight: 500; }
+  .run-summary-nodes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow: auto;
+  }
+  .run-summary-node {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 6px 8px;
+    align-items: start;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--card-border, #2a2f3a) 25%, transparent);
+    font-size: 12px;
+  }
+  .run-summary-node-completed .run-summary-node-status { color: #10b981; }
+  .run-summary-node-failed { background: color-mix(in srgb, #ef4444 14%, transparent); }
+  .run-summary-node-failed .run-summary-node-status { color: #ef4444; }
+  .run-summary-node-running .run-summary-node-status { color: #f59e0b; }
+  .run-summary-node-status {
+    font-size: 13px;
+    line-height: 1;
+    text-align: center;
+    margin-top: 1px;
+  }
+  .run-summary-node-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .run-summary-node-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run-summary-node-type { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; color: var(--text-ghost, #8a8f98); }
+  .run-summary-node-err-row {
+    grid-column: 2;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: #fca5a5;
+    margin-top: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .run-summary-node-out {
+    grid-column: 2;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 10.5px;
+    color: var(--text-ghost, #8a8f98);
+    margin-top: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    opacity: 0.85;
+  }
   .run-summary-node-err { color: var(--text-ghost, #8a8f98); }
   .run-summary-tools { display: flex; flex-wrap: wrap; gap: 4px; }
   .run-summary-tool {
