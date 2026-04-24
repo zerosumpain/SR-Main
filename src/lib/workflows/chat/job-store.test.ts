@@ -1,14 +1,22 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { publishJobEvent, subscribeJob, createJob, cleanOldJobs } from './job-store';
+import {
+  publishJobEvent,
+  subscribeJob,
+  createJob,
+  cleanOldJobs,
+  createWaiter,
+  cancelJob,
+  respondToWaiter,
+} from './job-store';
 import type { JobEvent } from './job-store';
 
+// Drain finished jobs + clear watchdog intervals after every test so Vitest's
+// handle tracker stays clean across the whole file.
+afterEach(() => {
+  cleanOldJobs(0);
+});
+
 describe('job-store event schema', () => {
-  afterEach(() => {
-    // Drain finished jobs + clear watchdog intervals so Vitest's handle tracker stays clean.
-    cleanOldJobs(0);
-  });
-
-
   it('accepts all new event variants without type error', () => {
     const { jobId } = createJob('test');
     const events: JobEvent[] = [
@@ -32,7 +40,6 @@ describe('job-store event schema', () => {
 
 describe('job-store resumeWith', () => {
   it('suspends a waiter and resumes with payload', async () => {
-    const { createWaiter } = await import('./job-store');
     const { jobId } = createJob('test');
     const { awaitResponse, respond } = createWaiter<{ decision: string }>(jobId, 'plan:p1');
     setTimeout(() => respond({ decision: 'approved' }), 10);
@@ -40,16 +47,14 @@ describe('job-store resumeWith', () => {
     expect(result).toEqual({ decision: 'approved' });
   });
 
-  it('rejects waiter when job is cancelled', async () => {
-    const { createWaiter, cancelJob } = await import('./job-store');
+  it('rejects waiter with the cancellation reason when job is cancelled', async () => {
     const { jobId } = createJob('test');
     const { awaitResponse } = createWaiter<{ decision: string }>(jobId, 'plan:p2');
     setTimeout(() => cancelJob(jobId), 10);
-    await expect(awaitResponse()).rejects.toThrow();
+    await expect(awaitResponse()).rejects.toThrow('Cancelled by user');
   });
 
-  it('respondToWaiter returns false when no waiter is registered', async () => {
-    const { respondToWaiter } = await import('./job-store');
+  it('respondToWaiter returns false when no waiter is registered', () => {
     const { jobId } = createJob('test');
     expect(respondToWaiter(jobId, 'missing:key', { x: 1 })).toBe(false);
   });

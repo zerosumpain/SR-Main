@@ -289,6 +289,7 @@ export function createWaiter<T = unknown>(
       const m = waiters.get(jobId); if (!m) return;
       const w = m.get(key); if (!w) return;
       m.delete(key);
+      if (m.size === 0) waiters.delete(jobId);
       w.resolve(value);
     },
   };
@@ -298,6 +299,7 @@ export function respondToWaiter(jobId: string, key: string, value: unknown): boo
   const m = waiters.get(jobId); if (!m) return false;
   const w = m.get(key); if (!w) return false;
   m.delete(key);
+  if (m.size === 0) waiters.delete(jobId);
   w.resolve(value);
   return true;
 }
@@ -306,6 +308,7 @@ export function rejectWaiter(jobId: string, key: string, reason: string): void {
   const m = waiters.get(jobId); if (!m) return;
   const w = m.get(key); if (!w) return;
   m.delete(key);
+  if (m.size === 0) waiters.delete(jobId);
   w.reject(new Error(reason));
 }
 
