@@ -767,7 +767,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     kind: 'postit',
     group: 'Annotations',
     description: 'Sticky note for comments. Does not run, does not connect to other nodes.',
-    defaultConfig: { text: '', color: 'yellow', size: { w: 200, h: 160 } },
+    defaultConfig: { title: '', text: '', color: 'yellow', size: { w: 220, h: 180 } },
     handles: { inputs: [], outputs: [] },
   },
   {
@@ -775,14 +775,8 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     label: 'Annotation box',
     kind: 'annotation',
     group: 'Annotations',
-    description: 'Transparent box to group or annotate a region of the canvas. Inert.',
-    defaultConfig: {
-      text: '',
-      borderColor: '#3a7bd5',
-      backgroundColor: '#3a7bd5',
-      opacity: 0.08,
-      size: { w: 320, h: 200 },
-    },
+    description: 'Transparent dashed box to group or annotate a region of the canvas. Inert.',
+    defaultConfig: { title: '', size: { w: 360, h: 220 } },
     handles: { inputs: [], outputs: [] },
   },
 ]);

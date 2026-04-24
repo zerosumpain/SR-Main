@@ -50,6 +50,8 @@ import { chatDef, chatExecutor } from './nodes/chat';
 import { triggerDef, triggerExecutor } from './nodes/trigger';
 import { inspectorDef, inspectorExecutor } from './nodes/inspector';
 import { fileStoreDef, fileStoreExecutor } from './nodes/file-store';
+import { postitDef, postitExecutor } from './nodes/postit';
+import { annotationDef, annotationExecutor } from './nodes/annotation';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -119,6 +121,8 @@ registry.register(chatDef, chatExecutor);
 registry.register(triggerDef, triggerExecutor);
 registry.register(inspectorDef, inspectorExecutor);
 registry.register(fileStoreDef, fileStoreExecutor);
+registry.register(postitDef, postitExecutor);
+registry.register(annotationDef, annotationExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();

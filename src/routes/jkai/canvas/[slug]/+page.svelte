@@ -2843,9 +2843,12 @@
           </div>
         {:else if n.kind === 'postit'}
           {@const psize = resizableSize(n)}
-          {@const ptext = ((n.config as Record<string, unknown>)?.text as string) ?? ''}
-          {@const pcolor = (((n.config as Record<string, unknown>)?.color as string) ?? 'yellow') as 'yellow' | 'pink' | 'blue' | 'green'}
+          {@const pcfg = (n.config as Record<string, unknown>) ?? {}}
+          {@const ptitle = (pcfg.title as string) ?? ''}
+          {@const ptext = (pcfg.text as string) ?? ''}
+          {@const pcolor = ((pcfg.color as string) ?? 'yellow') as 'yellow' | 'pink' | 'blue' | 'green'}
           {@const pTextPx = Math.max(12, Math.min(44, Math.round(Math.min(psize.w, psize.h) * 0.11)))}
+          {@const pTitlePx = Math.max(13, Math.min(24, Math.round(pTextPx * 0.85)))}
           <div
             class="postit-node"
             class:is-selected={selectedId === n.id}
@@ -2856,6 +2859,7 @@
             style:width="{psize.w}px"
             style:height="{psize.h}px"
             style:--postit-text-size="{pTextPx}px"
+            style:--postit-title-size="{pTitlePx}px"
             role="group"
             aria-label="Post-it note"
           >
@@ -2884,6 +2888,15 @@
                 {/each}
               </div>
             </div>
+            <input
+              class="postit-title-input"
+              type="text"
+              value={ptitle}
+              placeholder="Title…"
+              onpointerdown={(e) => e.stopPropagation()}
+              oninput={(e) => { (n.config as Record<string, unknown>).title = (e.currentTarget as HTMLInputElement).value; }}
+              onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), title: (e.currentTarget as HTMLInputElement).value })}
+            />
             <textarea
               class="postit-body"
               value={ptext}
@@ -2906,10 +2919,10 @@
           </div>
         {:else if n.kind === 'annotation'}
           {@const asize = resizableSize(n)}
-          <!-- Empty dotted box. The whole surface is the drag / select
-               target; click selects, Backspace/Delete removes. Resize
-               handle sits in the bottom-right corner like every other
-               node. Intentionally no fill, no label, no header. -->
+          {@const atitle = ((n.config as Record<string, unknown>)?.title as string) ?? ''}
+          <!-- Dashed rectangle with an optional title label sat on the
+               top edge. Click the body to select, drag to move,
+               Backspace/Delete removes. -->
           <div
             class="annotation-node"
             class:is-selected={selectedId === n.id}
@@ -2927,6 +2940,17 @@
             onpointerup={(e) => onNodePointerUp(e, n)}
             onpointercancel={(e) => onNodePointerUp(e, n)}
           >
+            <input
+              class="annotation-title-input"
+              class:has-value={!!atitle}
+              type="text"
+              value={atitle}
+              placeholder="Title"
+              onpointerdown={(e) => e.stopPropagation()}
+              onclick={(e) => e.stopPropagation()}
+              oninput={(e) => { (n.config as Record<string, unknown>).title = (e.currentTarget as HTMLInputElement).value; }}
+              onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), title: (e.currentTarget as HTMLInputElement).value })}
+            />
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -6057,10 +6081,25 @@
   .postit-color-swatch[data-color="blue"] { background: #8fbeee; }
   .postit-color-swatch[data-color="green"] { background: #a3d684; }
   .postit-color-swatch.on { outline: 2px solid rgba(0, 0, 0, 0.55); outline-offset: 1px; }
+  .postit-title-input {
+    flex: 0 0 auto;
+    width: 100%;
+    margin: 0;
+    padding: 4px 12px 2px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font-family: 'Caveat', 'Marker Felt', 'Comic Sans MS', cursive;
+    font-size: var(--postit-title-size, 18px);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .postit-title-input::placeholder { color: rgba(0, 0, 0, 0.35); font-weight: 500; }
   .postit-body {
     flex: 1;
     min-height: 0;
-    padding: 10px 14px 18px;
+    padding: 4px 14px 18px;
     background: transparent;
     border: none;
     outline: none;
@@ -6075,34 +6114,59 @@
   .postit-body::placeholder { color: rgba(0, 0, 0, 0.4); }
 
   /* ——— Annotation box (inert) ———
-     Intentionally bare: a faint dotted rectangle with no fill, no label,
-     no header. The whole surface is the drag/select target; the
-     bottom-right grip resizes. */
+     Dashed rectangle with an optional title label riding the top edge.
+     Whole surface is the drag / select target. */
   .annotation-node {
     position: absolute;
-    border: 1px dotted rgba(26, 16, 8, 0.28);
-    border-radius: 4px;
+    border: 2px dashed rgba(26, 16, 8, 0.38);
+    border-radius: 6px;
     background: transparent;
     cursor: grab;
     z-index: 0;
   }
-  .annotation-node:hover { border-color: rgba(26, 16, 8, 0.55); }
+  .annotation-node:hover { border-color: rgba(26, 16, 8, 0.6); }
   .annotation-node:active { cursor: grabbing; }
   .annotation-node.is-selected {
-    border-style: dashed;
     border-color: var(--accent);
     outline: 1px solid var(--accent);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
   .annotation-node.flash { animation: wf-flash 300ms ease; }
   .annotation-node .chat-node-resize {
-    /* The empty box has no content, so the resize grip needs to be
-       clearly visible on hover/selection — it's the only affordance. */
+    /* Empty body — grip needs to be clearly visible on hover/selection. */
     opacity: 0;
     transition: opacity 120ms ease;
   }
   .annotation-node:hover .chat-node-resize,
   .annotation-node.is-selected .chat-node-resize { opacity: 0.9; }
+  .annotation-title-input {
+    position: absolute;
+    top: -11px;
+    left: 14px;
+    max-width: calc(100% - 44px);
+    padding: 1px 8px;
+    background: var(--bg);
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .annotation-title-input.has-value,
+  .annotation-node:hover .annotation-title-input,
+  .annotation-node.is-selected .annotation-title-input,
+  .annotation-title-input:focus { opacity: 1; }
+  .annotation-title-input::placeholder {
+    color: var(--text-ghost);
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+  }
 
   /* ——— Stats node ——— */
   .stats-node {
