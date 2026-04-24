@@ -1,9 +1,9 @@
 import type { PageServerLoad } from './$types';
-import { listCanvases } from '$lib/canvas/adapter.server';
+import { listCanvases, listCanvasStats } from '$lib/canvas/adapter.server';
 
 export type { CanvasSummary } from '$lib/canvas/adapter';
 
 export const load: PageServerLoad = async () => {
-  const canvases = await listCanvases();
-  return { canvases };
+  const [canvases, stats] = await Promise.all([listCanvases(), listCanvasStats()]);
+  return { canvases, stats };
 };

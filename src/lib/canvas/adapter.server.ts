@@ -261,6 +261,55 @@ export async function allocateCanvasName(seed: string): Promise<{ name: string; 
   return { name: workflowNameFor(slug), slug };
 }
 
+export type CanvasStats = {
+  canvasCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  runs7d: number;
+  successRate7d: number | null;
+};
+
+/** Aggregate counts across all canvases (last 7 days for run stats). */
+export async function listCanvasStats(): Promise<CanvasStats> {
+  const { like, gte, inArray, sql: sqlTag } = await import('drizzle-orm');
+  const canvasRows = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(like(workflows.name, `${SLUG_PREFIX}%`));
+  const ids = canvasRows.map((r) => r.id);
+  if (ids.length === 0) {
+    return { canvasCount: 0, nodeCount: 0, edgeCount: 0, runs7d: 0, successRate7d: null };
+  }
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [nodeAgg] = await db
+    .select({ n: sqlTag<number>`count(*)::int` })
+    .from(workflowNodes)
+    .where(inArray(workflowNodes.workflowId, ids));
+  const [edgeAgg] = await db
+    .select({ n: sqlTag<number>`count(*)::int` })
+    .from(workflowEdges)
+    .where(inArray(workflowEdges.workflowId, ids));
+  const recentRuns = await db
+    .select({ status: workflowRuns.status })
+    .from(workflowRuns)
+    .where(
+      and(inArray(workflowRuns.workflowId, ids), gte(workflowRuns.startedAt, sevenDaysAgo)),
+    );
+  const runs7d = recentRuns.length;
+  const terminal = recentRuns.filter((r) => r.status === 'completed' || r.status === 'failed');
+  const successRate7d =
+    terminal.length === 0
+      ? null
+      : terminal.filter((r) => r.status === 'completed').length / terminal.length;
+  return {
+    canvasCount: ids.length,
+    nodeCount: nodeAgg?.n ?? 0,
+    edgeCount: edgeAgg?.n ?? 0,
+    runs7d,
+    successRate7d,
+  };
+}
+
 /** All canvases (workflows whose name starts with "canvas:"). */
 export async function listCanvases(): Promise<CanvasSummary[]> {
   const { like } = await import('drizzle-orm');
