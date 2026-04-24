@@ -248,8 +248,16 @@
     if (!chatResize || chatResize.pointerId !== e.pointerId) return;
     const dx = (e.clientX - chatResize.startClientX) / zoom;
     const dy = (e.clientY - chatResize.startClientY) / zoom;
-    const nw = Math.max(MIN_CHAT_W, Math.min(MAX_CHAT_W, Math.round((chatResize.startW + dx) / 20) * 20));
-    const nh = Math.max(MIN_CHAT_H, Math.min(MAX_CHAT_H, Math.round((chatResize.startH + dy) / 20) * 20));
+    // Kind-specific resize bounds. Inert items (post-its, annotations)
+    // can shrink well below the chat minimum so they can be tiny
+    // decoration or a tight margin-highlight box.
+    const node = byId[chatResize.nodeId];
+    const kind = node?.kind;
+    let minW = MIN_CHAT_W, minH = MIN_CHAT_H, maxW = MAX_CHAT_W, maxH = MAX_CHAT_H;
+    if (kind === 'postit') { minW = 80; minH = 60; maxW = 900; maxH = 900; }
+    else if (kind === 'annotation') { minW = 40; minH = 40; maxW = 2000; maxH = 2000; }
+    const nw = Math.max(minW, Math.min(maxW, Math.round((chatResize.startW + dx) / 10) * 10));
+    const nh = Math.max(minH, Math.min(maxH, Math.round((chatResize.startH + dy) / 10) * 10));
     chatSizes = { ...chatSizes, [chatResize.nodeId]: { w: nw, h: nh } };
   }
   async function onChatResizeUp(e: PointerEvent) {
