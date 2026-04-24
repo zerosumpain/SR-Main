@@ -40,6 +40,9 @@ export type JobEvent =
   | { type: 'clarify'; clarifyId: string; questions: ClarifyQuestion[] }
   | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> }
   | { type: 'subagent_start'; agentId: string; parentStepId: string | null; task: string }
+  // Recursive reference: consumers that narrow on `event.type` inside a `subagent_event`
+  // must do so non-generically to avoid TS instantiation-depth issues. The SSE path
+  // treats it as opaque JSON, which is safe.
   | { type: 'subagent_event'; agentId: string; event: JobEvent }
   | { type: 'subagent_done'; agentId: string; summary: string; result: unknown }
   | { type: 'done'; result: Record<string, unknown> }

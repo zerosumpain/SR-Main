@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { publishJobEvent, subscribeJob, createJob } from './job-store';
+import { describe, it, expect, afterEach } from 'vitest';
+import { publishJobEvent, subscribeJob, createJob, cleanOldJobs } from './job-store';
 import type { JobEvent } from './job-store';
 
 describe('job-store event schema', () => {
+  afterEach(() => {
+    // Drain finished jobs + clear watchdog intervals so Vitest's handle tracker stays clean.
+    cleanOldJobs(0);
+  });
+
+
   it('accepts all new event variants without type error', () => {
     const { jobId } = createJob('test');
     const events: JobEvent[] = [

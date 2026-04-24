@@ -147,7 +147,7 @@ async function runSingleToolCall(
 
   onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, status: 'running' });
   onProgress?.(`${fnName}: running\n`);
-  onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs });
+  onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs, toolCallId: toolCall.id });
 
   let toolResult: any;
 
@@ -250,7 +250,7 @@ async function runSingleToolCall(
   const status: 'done' | 'error' = toolResult?.error ? 'error' : 'done';
   onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, result: progressResult, status });
   onProgress?.(`${fnName}: done\n`);
-  onStreamEvent?.({ type: 'tool_result', tool: fnName, result: progressResult, status });
+  onStreamEvent?.({ type: 'tool_result', tool: fnName, result: progressResult, status, toolCallId: toolCall.id });
 
   // Truncate large tool results to avoid overwhelming the LLM context
   let resultStr = JSON.stringify(toolResult);
