@@ -71,7 +71,7 @@ CODE CONVENTIONS for try_script / save_script:
   - Always return a list of dicts: \`return [{"title": "...", "url": "...", ...}, ...]\`. Empty list on no results.
   - Wrap risky calls in try/except — if a selector might not exist, gracefully skip.
   - Use \`vars.get("keyword", "")\` not \`vars["keyword"]\` so missing slots don't KeyError.
-  - For Altcha: import nothing — the harness auto-solves Altcha BETWEEN tool calls. After your first goto, the next try_script call runs with Altcha already cleared. If a single try_script does goto + interact, add \`await asyncio.sleep(2)\` after goto to let the harness solve.
+  - Altcha / captcha: the harness auto-solves Altcha after every \`await page.goto(...)\`. You don't need to do anything special. If a submit (instead of a goto) triggers a fresh challenge, call \`await solve_altcha()\` — that helper is injected into your scope. Do NOT write your own altcha logic.
   - print() output IS captured and shown back to you in the next turn's try_script result. Use it to inspect page contents while iterating (\`print(await page.locator(".x").count())\`, \`print(html[:500])\` etc). Captured to ~3KB — keep prints small.
   - For listings/search-result pages: collect URLs of detail pages first, THEN loop over them with await page.goto(url) inside a try/except. Use the SAME page object — don't open new contexts.
   - Returning \`return []\` is treated as failure. Only return [] from the FINAL save_script when the page genuinely has zero results. While iterating, return whatever items you DO have and use prints to debug.

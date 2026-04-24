@@ -546,19 +546,50 @@ async def run_agent(profile: str) -> None:
                     # caller. The page state persists across exec_script
                     # calls (so the LLM can iterate without losing cookies
                     # or solved captchas).
+                    #
+                    # Altcha auto-handling: we patch page.goto via a proxy
+                    # so every navigation runs try_altcha once after the
+                    # target URL settles. The LLM's script can then fill
+                    # form fields immediately after a goto without seeing
+                    # the "Quick Check Needed" interstitial.
                     code = msg.get("code") or ""
                     vars_arg = msg.get("vars") or {}
                     captured_stdout = io.StringIO()
                     captured_stderr = io.StringIO()
                     items: List[Any] = []
                     err_str: Optional[str] = None
+
+                    class _GotoProxy:
+                        def __init__(self, p):
+                            self._p = p
+                        def __getattr__(self, name):
+                            return getattr(self._p, name)
+                        async def goto(self, *args, **kwargs):
+                            r = await self._p.goto(*args, **kwargs)
+                            try:
+                                await try_altcha(self._p)
+                                await self._p.wait_for_load_state("networkidle", timeout=5000)
+                            except Exception:
+                                pass
+                            return r
+                    scripted_page = _GotoProxy(page)
+
+                    # An explicit `solve_altcha()` helper the script can call
+                    # ad-hoc (e.g. after a submit that triggers a new challenge).
+                    async def _solve_altcha():
+                        try: await try_altcha(page)
+                        except Exception: pass
+
                     try:
                         body = textwrap.indent(code, "    ")
-                        wrapper = "async def __scrape(page, vars):\n" + (body if body.strip() else "    return []") + "\n"
+                        wrapper = "async def __scrape(page, vars, solve_altcha):\n" + (body if body.strip() else "    return []") + "\n"
                         ns: Dict[str, Any] = {"asyncio": asyncio, "json": json}
                         exec(wrapper, ns)  # noqa: S102 — sandboxed by docker
                         with contextlib.redirect_stdout(captured_stdout), contextlib.redirect_stderr(captured_stderr):
-                            result = await ns["__scrape"](page, vars_arg)
+                            # Pre-solve any altcha present from the previous
+                            # command so a goto to the same URL isn't wasted.
+                            await try_altcha(page)
+                            result = await ns["__scrape"](scripted_page, vars_arg, _solve_altcha)
                         if isinstance(result, list):
                             items = result
                         elif result is not None:
