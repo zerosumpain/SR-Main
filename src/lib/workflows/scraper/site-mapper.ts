@@ -135,10 +135,27 @@ export async function runSiteMapper(opts: SiteMapperOptions): Promise<SiteMapper
       const userMsg = buildUserMessage(opts.goal, opts.searchQuery, obs, turn);
       emit({ t: 'map.observe', turn, url: obs.url });
 
-      const reply = await askLLM(client, model, history, userMsg);
+      let reply = await askLLM(client, model, history, userMsg);
+      // Empty replies usually mean the provider dropped the message
+      // (over-budget, rate-limited). Retry once with a shorter prompt that
+      // nudges the LLM to act or finalize now — don't waste a turn silently.
+      if (!reply.trim()) {
+        emit({ t: 'map.empty_reply', turn });
+        const nudge = `Your previous turn's response was empty. Based on the current observation above, emit ONE JSON action now. If content_groups shows repeated result rows and you are on the target page, finalize immediately with extract rules pointing at that selector. Don't reply with empty content.`;
+        reply = await askLLM(client, model, history, `${userMsg}\n\n${nudge}`);
+      }
       history.push({ role: 'user', content: userMsg });
       history.push({ role: 'assistant', content: reply });
       transcript.push({ turn, observation: { url: obs.url, title: obs.title }, reply });
+
+      if (!reply.trim()) {
+        emit({ t: 'map.empty_reply_again', turn });
+        history.push({
+          role: 'user',
+          content: 'CRITICAL: two empty responses in a row. If you are on a results page with content_groups populated, emit { "action": "finalize", "playbook": { ... } } now.',
+        });
+        continue;
+      }
 
       let action: Record<string, unknown>;
       try {
@@ -272,15 +289,24 @@ function buildUserMessage(
   ].filter(Boolean).join('\n');
 }
 
+// Keep only the most recent N message pairs from history when calling the
+// LLM. Each observe payload is 5-10KB (interactive + content_groups);
+// unbounded history blows past z.ai's context window by turn ~12 and the
+// provider silently returns empty strings instead of erroring — which is
+// what stalled the last run for 10 turns. 4 pairs ≈ 8 messages ≈ 40-80KB,
+// comfortable for glm-5-turbo.
+const RECENT_HISTORY_PAIRS = 4;
+
 async function askLLM(
   client: ReturnType<typeof resolveLLMClient> extends Promise<infer T> ? T extends { client: infer C } ? C : never : never,
   model: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
   userMsg: string,
 ): Promise<string> {
+  const tail = history.slice(-RECENT_HISTORY_PAIRS * 2);
   const messages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
-    ...history,
+    ...tail,
     { role: 'user' as const, content: userMsg },
   ];
   const resp = await (client as {
