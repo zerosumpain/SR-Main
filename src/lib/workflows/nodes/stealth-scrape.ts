@@ -459,6 +459,11 @@ async function dispatchScriptScrape(input: ScriptDispatchInput): Promise<ScriptD
   const proxyUrl = baseUrl.replace(/\/api\/scraper\/run\/?$/, '') + '/api/scraper/script';
   const token = process.env.SCRAPER_SERVICE_TOKEN;
   try {
+    // Author loop can take 5-10 min on first-run sites. Default undici body
+    // timeout (~5 min) gave up halfway, the VPS fell back to the legacy
+    // playbook and recorded its error — even though homeserv was still busy
+    // and eventually saved the script. 20-min ceiling here covers worst
+    // case while still bounded.
     const res = await fetch(proxyUrl, {
       method: 'POST',
       headers: {
@@ -473,6 +478,7 @@ async function dispatchScriptScrape(input: ScriptDispatchInput): Promise<ScriptD
         vars: input.vars,
         workflowRunId: input.workflowRunId,
       }),
+      signal: AbortSignal.timeout(20 * 60 * 1000),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');

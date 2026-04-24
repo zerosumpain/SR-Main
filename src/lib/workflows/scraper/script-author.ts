@@ -72,7 +72,9 @@ CODE CONVENTIONS for try_script / save_script:
   - Wrap risky calls in try/except — if a selector might not exist, gracefully skip.
   - Use \`vars.get("keyword", "")\` not \`vars["keyword"]\` so missing slots don't KeyError.
   - For Altcha: import nothing — the harness auto-solves Altcha BETWEEN tool calls. After your first goto, the next try_script call runs with Altcha already cleared. If a single try_script does goto + interact, add \`await asyncio.sleep(2)\` after goto to let the harness solve.
-  - Don't print huge things — captured stdout is truncated to 4KB. \`print(len(items))\` is fine.
+  - print() output IS captured and shown back to you in the next turn's try_script result. Use it to inspect page contents while iterating (\`print(await page.locator(".x").count())\`, \`print(html[:500])\` etc). Captured to ~3KB — keep prints small.
+  - For listings/search-result pages: collect URLs of detail pages first, THEN loop over them with await page.goto(url) inside a try/except. Use the SAME page object — don't open new contexts.
+  - Returning \`return []\` is treated as failure. Only return [] from the FINAL save_script when the page genuinely has zero results. While iterating, return whatever items you DO have and use prints to debug.
 
 STRATEGY:
   1. view_page on the seed URL. Look at interactive elements + content groups in the observation. Note input names, form selectors, content classes.
@@ -140,6 +142,7 @@ export async function runScriptAuthor(opts: AuthorScriptOptions): Promise<Author
 
       const tool = action.tool as string;
       emit({ t: 'author.action', turn, tool });
+      console.log(`[script-author ${opts.profile}] turn ${turn + 1}/${MAX_TURNS} → ${tool}`);
 
       if (tool === 'view_page') {
         const url = typeof action.url === 'string' ? action.url : null;
@@ -172,6 +175,8 @@ export async function runScriptAuthor(opts: AuthorScriptOptions): Promise<Author
           // Solve any altcha that appeared during the script run.
           await agent.altcha().catch(() => ({ solved: false }));
           emit({ t: 'author.try_result', turn, items: r.items.length, error: r.error });
+          console.log(`[script-author ${opts.profile}] try → items=${r.items.length} error=${r.error ?? 'none'} url=${r.observed_url}`);
+          if (r.stderr) console.log(`[script-author ${opts.profile}] stderr (last 500): ${r.stderr.slice(-500)}`);
           history.push({
             role: 'user',
             content: formatTryResult(r),
@@ -232,6 +237,29 @@ export async function runScriptAuthor(opts: AuthorScriptOptions): Promise<Author
     await agent.close();
   }
 
+  // Always dump the full transcript to disk for post-mortem debugging,
+  // regardless of save outcome. Successful or failed, the file lets us
+  // inspect what the LLM tried turn-by-turn.
+  try {
+    const { promises: fs } = await import('fs');
+    const { homedir } = await import('os');
+    const { join } = await import('path');
+    const dir = join(homedir(), '.openclaw', 'scraper-scripts');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      join(dir, `${opts.profile}.author-log.json`),
+      JSON.stringify({
+        savedOk: saveOk,
+        savedCode,
+        savedDeclaredVars,
+        sampleItemsCount: sampleItems.length,
+        giveUp,
+        transcript,
+      }, null, 2),
+      'utf8',
+    );
+  } catch { /* non-fatal */ }
+
   return {
     saved: saveOk,
     code: savedCode,
@@ -267,6 +295,7 @@ function formatTryResult(r: { items: Array<Record<string, unknown>>; stdout: str
     `items: ${r.items.length}`,
     r.error ? `error: ${r.error}` : `error: none`,
     `final url: ${r.observed_url}`,
+    r.stdout ? `stdout (last 3000 chars — your print() output):\n${r.stdout.slice(-3000)}` : '',
     r.stderr ? `stderr (last 2000 chars):\n${r.stderr.slice(-2000)}` : '',
     `first items (max 3):\n${itemPreview}`,
   ].filter(Boolean).join('\n');
