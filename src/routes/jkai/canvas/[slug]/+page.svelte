@@ -218,6 +218,8 @@
       stats: { w: 420, h: 360 },
       intelligence: { w: 340, h: 420 },
       webpage: { w: 720, h: 480 },
+      postit: { w: 220, h: 180 },
+      annotation: { w: 360, h: 220 },
     };
     const { w: defaultW, h: defaultH } = defaults[n.kind] ?? { w: NODE_W, h: NODE_H };
     return {
@@ -2835,6 +2837,7 @@
           {@const psize = resizableSize(n)}
           {@const ptext = ((n.config as Record<string, unknown>)?.text as string) ?? ''}
           {@const pcolor = (((n.config as Record<string, unknown>)?.color as string) ?? 'yellow') as 'yellow' | 'pink' | 'blue' | 'green'}
+          {@const pTextPx = Math.max(12, Math.min(44, Math.round(Math.min(psize.w, psize.h) * 0.11)))}
           <div
             class="postit-node"
             class:is-selected={selectedId === n.id}
@@ -2844,6 +2847,7 @@
             style:top="{n.y}px"
             style:width="{psize.w}px"
             style:height="{psize.h}px"
+            style:--postit-text-size="{pTextPx}px"
             role="group"
             aria-label="Post-it note"
           >
@@ -2859,8 +2863,6 @@
               title="Drag to move · double-click to edit label"
             >
               <span class="postit-pin"></span>
-              <span class="postit-title">NOTE</span>
-              {#if n.name && n.name !== 'postit'}<span class="postit-name">/ {n.name}</span>{/if}
               <div class="postit-colors" onpointerdown={(e) => e.stopPropagation()}>
                 {#each ['yellow', 'pink', 'blue', 'green'] as c}
                   <button
@@ -2881,7 +2883,6 @@
               onpointerdown={(e) => e.stopPropagation()}
               oninput={(e) => {
                 const v = (e.currentTarget as HTMLTextAreaElement).value;
-                // Local mutation is fine — saveNodeConfig re-reads after save.
                 (n.config as Record<string, unknown>).text = v;
               }}
               onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), text: (e.currentTarget as HTMLTextAreaElement).value })}
@@ -2897,11 +2898,10 @@
           </div>
         {:else if n.kind === 'annotation'}
           {@const asize = resizableSize(n)}
-          {@const acfg = (n.config as Record<string, unknown>) ?? {}}
-          {@const atext = (acfg.text as string) ?? ''}
-          {@const aborder = (acfg.borderColor as string) ?? '#3a7bd5'}
-          {@const abg = (acfg.backgroundColor as string) ?? '#3a7bd5'}
-          {@const aop = typeof acfg.opacity === 'number' ? (acfg.opacity as number) : 0.08}
+          <!-- Empty dotted box. The whole surface is the drag / select
+               target; click selects, Backspace/Delete removes. Resize
+               handle sits in the bottom-right corner like every other
+               node. Intentionally no fill, no label, no header. -->
           <div
             class="annotation-node"
             class:is-selected={selectedId === n.id}
@@ -2910,35 +2910,15 @@
             style:top="{n.y}px"
             style:width="{asize.w}px"
             style:height="{asize.h}px"
-            style:border-color={aborder}
-            style:background-color={abg}
-            style:--ann-opacity={aop}
-            role="group"
-            aria-label="Annotation box"
+            role="button"
+            tabindex="0"
+            aria-label="Annotation box — click to select, Delete to remove"
+            title="Drag to move · click then Delete to remove"
+            onpointerdown={(e) => onNodePointerDown(e, n)}
+            onpointermove={onNodePointerMove}
+            onpointerup={(e) => onNodePointerUp(e, n)}
+            onpointercancel={(e) => onNodePointerUp(e, n)}
           >
-            <div
-              class="annotation-hdr"
-              onpointerdown={(e) => onNodePointerDown(e, n)}
-              onpointermove={onNodePointerMove}
-              onpointerup={(e) => onNodePointerUp(e, n)}
-              onpointercancel={(e) => onNodePointerUp(e, n)}
-              ondblclick={(e) => openMenu(e, n.id)}
-              role="button"
-              tabindex="0"
-              title="Drag to move · double-click to edit label"
-              style:background-color={aborder}
-            >
-              <input
-                type="text"
-                class="annotation-label-input"
-                value={atext}
-                placeholder="Label…"
-                onpointerdown={(e) => e.stopPropagation()}
-                onclick={(e) => e.stopPropagation()}
-                oninput={(e) => { (n.config as Record<string, unknown>).text = (e.currentTarget as HTMLInputElement).value; }}
-                onblur={(e) => saveNodeConfig(n.id, { ...(n.config as Record<string, unknown>), text: (e.currentTarget as HTMLInputElement).value })}
-              />
-            </div>
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -6071,67 +6051,50 @@
   .postit-color-swatch.on { outline: 2px solid rgba(0, 0, 0, 0.55); outline-offset: 1px; }
   .postit-body {
     flex: 1;
-    padding: 10px 12px 16px;
+    min-height: 0;
+    padding: 10px 14px 18px;
     background: transparent;
     border: none;
     outline: none;
     color: inherit;
     font-family: 'Caveat', 'Marker Felt', 'Comic Sans MS', cursive;
-    font-size: 16px;
-    line-height: 1.35;
+    font-size: var(--postit-text-size, 16px);
+    line-height: 1.25;
     resize: none;
     overflow: auto;
+    word-break: break-word;
   }
   .postit-body::placeholder { color: rgba(0, 0, 0, 0.4); }
 
-  /* ——— Annotation box (inert) ——— */
+  /* ——— Annotation box (inert) ———
+     Intentionally bare: a faint dotted rectangle with no fill, no label,
+     no header. The whole surface is the drag/select target; the
+     bottom-right grip resizes. */
   .annotation-node {
     position: absolute;
-    border: 2px dashed;
-    border-radius: 6px;
-    z-index: 0;
-    background-color: var(--bg-elev, #3a7bd5);
-    /* We separate background colour and its alpha so authors can pick any
-       colour via config and still see through to underlying nodes. */
-    --ann-opacity: 0.08;
-    background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
-  }
-  .annotation-node::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-color: inherit;
-    opacity: var(--ann-opacity);
-    border-radius: inherit;
-    pointer-events: none;
-  }
-  .annotation-node.is-selected { outline: 2px solid rgba(255, 255, 255, 0.55); outline-offset: 2px; }
-  .annotation-node.flash { animation: wf-flash 300ms ease; }
-  .annotation-hdr {
-    position: absolute;
-    top: -14px;
-    left: 12px;
-    display: flex;
-    align-items: center;
-    padding: 2px 8px;
+    border: 1px dotted rgba(26, 16, 8, 0.28);
     border-radius: 4px;
-    cursor: grab;
-    user-select: none;
-    max-width: calc(100% - 24px);
-  }
-  .annotation-hdr:active { cursor: grabbing; }
-  .annotation-label-input {
     background: transparent;
-    border: none;
-    outline: none;
-    color: #fff;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    min-width: 80px;
-    max-width: 240px;
+    cursor: grab;
+    z-index: 0;
   }
-  .annotation-label-input::placeholder { color: rgba(255, 255, 255, 0.55); }
+  .annotation-node:hover { border-color: rgba(26, 16, 8, 0.55); }
+  .annotation-node:active { cursor: grabbing; }
+  .annotation-node.is-selected {
+    border-style: dashed;
+    border-color: var(--accent);
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .annotation-node.flash { animation: wf-flash 300ms ease; }
+  .annotation-node .chat-node-resize {
+    /* The empty box has no content, so the resize grip needs to be
+       clearly visible on hover/selection — it's the only affordance. */
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .annotation-node:hover .chat-node-resize,
+  .annotation-node.is-selected .chat-node-resize { opacity: 0.9; }
 
   /* ——— Stats node ——— */
   .stats-node {
