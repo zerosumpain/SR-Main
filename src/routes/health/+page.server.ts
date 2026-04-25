@@ -1,19 +1,35 @@
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ fetch }) => {
-  const [readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats] =
-    await Promise.all([
-      fetch('/api/health/readiness').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/sparklines').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/training-load').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/sleep-analysis').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/timeline?limit=10').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/body-signals').then((r) => r.json()).catch(() => null),
-      fetch('/api/health/stats').then((r) => r.json()).catch(() => null),
-    ]);
+  const fetchJson = (path: string) =>
+    fetch(path).then((r) => (r.ok ? r.json() : null)).catch(() => null);
 
-  // Fetch sync state for staleness indicator
-  const syncState = await fetch('/api/health/sync-state').then((r) => r.json()).catch(() => null);
+  const [
+    readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats,
+    autonomic, sleepRegularity, circadian, recoveryDebt, acwr, monotony, vo2max, polarised,
+  ] = await Promise.all([
+    fetchJson('/api/health/readiness'),
+    fetchJson('/api/health/sparklines'),
+    fetchJson('/api/health/training-load'),
+    fetchJson('/api/health/sleep-analysis'),
+    fetchJson('/api/health/timeline?limit=10'),
+    fetchJson('/api/health/body-signals'),
+    fetchJson('/api/health/stats'),
+    fetchJson('/api/health/autonomic'),
+    fetchJson('/api/health/sleep-regularity'),
+    fetchJson('/api/health/circadian'),
+    fetchJson('/api/health/recovery-debt'),
+    fetchJson('/api/health/acwr'),
+    fetchJson('/api/health/monotony'),
+    fetchJson('/api/health/vo2max'),
+    fetchJson('/api/health/polarised'),
+  ]);
 
-  return { readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats, syncState, loadedAt: new Date().toISOString() };
+  const syncState = await fetchJson('/api/health/sync-state');
+
+  return {
+    readiness, sparklines, trainingLoad, sleepAnalysis, timeline, bodySignals, stats,
+    autonomic, sleepRegularity, circadian, recoveryDebt, acwr, monotony, vo2max, polarised,
+    syncState, loadedAt: new Date().toISOString(),
+  };
 };
