@@ -7,7 +7,7 @@ import {
 } from '$lib/canvas/adapter.server';
 import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 import { db } from '$lib/db';
-import { intelExplorations } from '$lib/db/schema';
+import { intelExplorations, workflowNodes, conversations, workflows } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 
 export type {
@@ -23,7 +23,19 @@ export type {
   CanvasSummary,
 } from '$lib/canvas/adapter';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, url }) => {
+  // Optional carry-through: `?conv=<id>` is appended by the /jkai chat hub
+  // when the user follows a canvas link, so the conversation thread can
+  // ride along onto the destination canvas's first chat node.
+  const carryConvId = url.searchParams.get('conv');
+  if (carryConvId) {
+    try {
+      await pinConversationToCanvasChat(params.slug, carryConvId);
+    } catch (err) {
+      console.error('[canvas] pinConversationToCanvasChat failed', err);
+    }
+  }
+
   const [canvas, modelCatalogue, allCanvases] = await Promise.all([
     loadCanvas(params.slug),
     loadModelCatalogue(),
@@ -76,3 +88,43 @@ export const load: PageServerLoad = async ({ params }) => {
 
   return { canvas, modelCatalogue, nodeTypes: CANVAS_NODE_TYPES, peerCanvases, pendingExplorations };
 };
+
+/**
+ * Pin a /jkai conversation onto the canvas's first chat node so the
+ * conversation thread "follows" the user when they click a canvas link
+ * from the chat hub. Idempotent: re-running with the same conversation is
+ * a no-op; pinning a different conversation overwrites the previous pin.
+ */
+async function pinConversationToCanvasChat(slug: string, conversationId: string) {
+  // Cheap existence check — silently skip on bad ids so a stray ?conv=foo
+  // can't 500 the page load.
+  const [conv] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+  if (!conv) return;
+
+  // Slug → workflowId via the `canvas:<slug>` workflow.name convention
+  // (kept in sync with adapter.server's `workflowNameFor`).
+  const [wf] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(eq(workflows.name, `canvas:${slug}`))
+    .limit(1);
+  if (!wf) return;
+
+  const chatNodes = await db
+    .select()
+    .from(workflowNodes)
+    .where(and(eq(workflowNodes.workflowId, wf.id), eq(workflowNodes.type, 'chat')));
+  if (chatNodes.length === 0) return;
+
+  const target = chatNodes[0];
+  const cfg = (target.config as Record<string, unknown> | null) ?? {};
+  if (cfg.conversationId === conversationId) return; // already pinned, idempotent
+  await db
+    .update(workflowNodes)
+    .set({ config: { ...cfg, conversationId } })
+    .where(eq(workflowNodes.id, target.id));
+}

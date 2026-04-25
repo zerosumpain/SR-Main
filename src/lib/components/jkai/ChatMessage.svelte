@@ -9,18 +9,41 @@
     metadata,
     thinking,
     showThinking = false,
+    conversationId = null,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: { workflowGenerated?: boolean };
     thinking?: OrchestratorThinking;
     showThinking?: boolean;
+    conversationId?: string | null;
   } = $props();
 
   const marked = new Marked({ gfm: true, breaks: true });
 
+  /**
+   * Append `?conv=<conversationId>` to any /jkai/canvas/<slug> link in the
+   * rendered HTML so the conversation thread can follow the user when
+   * they click through. Skips links that already carry a conv param,
+   * preserves any existing query string and fragment, and is a no-op when
+   * we don't have an active conversation id.
+   */
+  function injectConvParam(html: string, convId: string | null): string {
+    if (!convId) return html;
+    return html.replace(
+      /href="([^"]*\/jkai\/canvas\/[^"#?]+)((?:\?[^"#]*)?)((?:#[^"]*)?)"/g,
+      (_match, base: string, query: string, hash: string) => {
+        if (query && /[?&]conv=/.test(query)) return `href="${base}${query}${hash}"`;
+        const sep = query ? '&' : '?';
+        return `href="${base}${query}${sep}conv=${encodeURIComponent(convId)}${hash}"`;
+      },
+    );
+  }
+
   let renderedContent = $derived(
-    role === 'assistant' ? marked.parse(content) as string : ''
+    role === 'assistant'
+      ? injectConvParam(marked.parse(content) as string, conversationId)
+      : ''
   );
 
   let isUser = $derived(role === 'user');

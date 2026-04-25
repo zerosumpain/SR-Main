@@ -8,7 +8,7 @@ import {
   openrouterModels,
   orchestratorChats,
 } from '$lib/db/schema';
-import { eq, desc, asc, and } from 'drizzle-orm';
+import { eq, desc, asc, and, or, inArray } from 'drizzle-orm';
 import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import { getSetting } from '$lib/server/models/settings';
 import { slugify as _slugify } from './slug';
@@ -576,12 +576,22 @@ export async function loadCanvas(slug: string): Promise<Canvas> {
     }
   }
 
-  // Pull messages for this workflow (covers legacy rows without a
-  // conversationId) AND any rows linked only by conversationId.
+  // Pull messages for this workflow AND any rows whose conversationId is
+  // pinned onto one of this canvas's chat nodes (e.g. a jkai conversation
+  // that was forwarded onto the canvas via ?conv=). The OR-clause is what
+  // lets a /jkai conversation thread "follow" the user onto the canvas.
+  const pinnedConversationIds = Object.values(conversationIdByNode);
   const msgRows = await db
     .select()
     .from(orchestratorChats)
-    .where(eq(orchestratorChats.workflowId, workflowId))
+    .where(
+      pinnedConversationIds.length > 0
+        ? or(
+            eq(orchestratorChats.workflowId, workflowId),
+            inArray(orchestratorChats.conversationId, pinnedConversationIds),
+          )
+        : eq(orchestratorChats.workflowId, workflowId),
+    )
     .orderBy(desc(orchestratorChats.createdAt))
     .limit(400);
 

@@ -1032,6 +1032,7 @@
                 metadata={msg.metadata}
                 thinking={msg.thinking}
                 {showThinking}
+                {conversationId}
               />
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />

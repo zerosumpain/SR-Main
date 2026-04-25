@@ -81,15 +81,25 @@
     state: 'completed' | 'completed_with_errors' | 'failed';
     error?: string;
     durationMs: number;
-    nodeCounts: { completed: number; failed: number; running: number; other: number; total: number };
-    nodeList: Array<{ id: string; name: string; type: string; status: string; error: string | null; outputPreview: string | null }>;
+    nodeCounts: {
+      completed: number;
+      failed: number;
+      running: number;
+      skipped: number;
+      ranTotal: number;
+    };
+    nodeList: Array<{ id: string; name: string; type: string; status: NodeStatus; error: string | null; outputPreview: string | null }>;
     failedNodes: Array<{ id: string; name: string; error: string | null }>;
     toolCount: number;
     tools: Array<{ tool: string; status: string }>;
     reply: string | null;
     runId: string | null;
+    plain: { overall: string; perNode: Record<string, string> } | null;
+    plainState: 'idle' | 'loading' | 'ready' | 'failed';
   };
   let runSummary = $state<RunSummary | null>(null);
+  // Inert canvas decorations that should never count toward run totals.
+  const INERT_NODE_KINDS = new Set(['postit', 'annotation']);
   // Per-chat-node composer draft, scroll refs, size overrides, active-run target
   let chatDrafts = $state<Record<string, string>>({});
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
@@ -840,15 +850,28 @@
 
   function captureRunSummary(state: RunSummary['state'], error?: string) {
     const durationMs = runStartedAt ? Date.now() - runStartedAt : 0;
-    const counts = { completed: 0, failed: 0, running: 0, other: 0, total: 0 };
+    const counts = { completed: 0, failed: 0, running: 0, skipped: 0, ranTotal: 0 };
     const failedNodes: RunSummary['failedNodes'] = [];
     const nodeList: RunSummary['nodeList'] = [];
     for (const n of viewNodes) {
-      counts.total += 1;
-      if (n.status === 'completed') counts.completed += 1;
-      else if (n.status === 'failed') { counts.failed += 1; failedNodes.push({ id: n.id, name: n.name, error: n.error ?? null }); }
-      else if (n.status === 'running') counts.running += 1;
-      else counts.other += 1;
+      // Inert canvas decorations (post-its, annotations) never run and must
+      // not pollute the totals reported in the modal.
+      if (INERT_NODE_KINDS.has(n.kind)) continue;
+      const status: NodeStatus = n.status ?? 'idle';
+      if (status === 'ok') {
+        counts.completed += 1;
+        counts.ranTotal += 1;
+      } else if (status === 'failed') {
+        counts.failed += 1;
+        counts.ranTotal += 1;
+        failedNodes.push({ id: n.id, name: n.name, error: n.error ?? null });
+      } else if (status === 'running') {
+        counts.running += 1;
+        counts.ranTotal += 1;
+      } else {
+        // idle / undefined / anything else → never executed in this run
+        counts.skipped += 1;
+      }
       let outputPreview: string | null = null;
       if (n.outputData !== null && n.outputData !== undefined) {
         try {
@@ -860,7 +883,7 @@
         id: n.id,
         name: n.name,
         type: n.type,
-        status: n.status ?? 'idle',
+        status,
         error: n.error ?? null,
         outputPreview,
       });
@@ -885,7 +908,50 @@
       tools,
       reply,
       runId: activeRunId,
+      plain: null,
+      plainState: 'idle',
     };
+    void requestPlainSummary();
+  }
+
+  async function requestPlainSummary() {
+    const snap = runSummary;
+    if (!snap) return;
+    if (snap.nodeList.length === 0) {
+      runSummary = { ...snap, plainState: 'ready', plain: { overall: '', perNode: {} } };
+      return;
+    }
+    runSummary = { ...snap, plainState: 'loading' };
+    try {
+      const res = await fetch(`/api/canvas/${canvas.slug}/run-summary`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          state: snap.state,
+          durationMs: snap.durationMs,
+          runError: snap.error ?? null,
+          nodes: snap.nodeList,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { overall?: string; perNode?: Record<string, string> };
+      // Re-resolve from current state so a user dismissing the modal cancels the update.
+      const cur = runSummary;
+      if (!cur || cur.runId !== snap.runId) return;
+      runSummary = {
+        ...cur,
+        plainState: 'ready',
+        plain: {
+          overall: data.overall ?? '',
+          perNode: data.perNode ?? {},
+        },
+      };
+    } catch (err) {
+      console.error('[canvas] run-summary failed', err);
+      const cur = runSummary;
+      if (!cur || cur.runId !== snap.runId) return;
+      runSummary = { ...cur, plainState: 'failed' };
+    }
   }
 
   function closeRunSummary() {
@@ -4276,9 +4342,12 @@
         <div class="run-summary-stat">
           <span class="run-summary-stat-label">Nodes</span>
           <span class="run-summary-stat-value">
-            {runSummary.nodeCounts.completed}/{runSummary.nodeCounts.total} completed
+            {runSummary.nodeCounts.completed}/{runSummary.nodeCounts.ranTotal} completed
             {#if runSummary.nodeCounts.failed > 0}
               <span class="run-summary-failed"> · {runSummary.nodeCounts.failed} failed</span>
+            {/if}
+            {#if runSummary.nodeCounts.skipped > 0}
+              <span class="run-summary-skipped"> · {runSummary.nodeCounts.skipped} skipped</span>
             {/if}
           </span>
         </div>
@@ -4296,12 +4365,23 @@
       {/if}
 
       <div class="run-summary-section">
+        <div class="run-summary-section-title">In plain English</div>
+        {#if runSummary.plainState === 'loading'}
+          <div class="run-summary-plain-loading">Summarising…</div>
+        {:else if runSummary.plainState === 'failed'}
+          <div class="run-summary-plain-failed">Couldn't generate a plain-English summary.</div>
+        {:else if runSummary.plain?.overall}
+          <div class="run-summary-plain-overall">{runSummary.plain.overall}</div>
+        {/if}
+      </div>
+
+      <div class="run-summary-section">
         <div class="run-summary-section-title">Nodes</div>
         <ul class="run-summary-nodes">
           {#each runSummary.nodeList as n (n.id)}
             <li class="run-summary-node run-summary-node-{n.status}">
               <span class="run-summary-node-status" title={n.status}>
-                {#if n.status === 'completed'}✓
+                {#if n.status === 'ok'}✓
                 {:else if n.status === 'failed'}✕
                 {:else if n.status === 'running'}◐
                 {:else}·
@@ -4311,7 +4391,11 @@
                 <span class="run-summary-node-name">{n.name}</span>
                 <span class="run-summary-node-type">{n.type}</span>
               </span>
-              {#if n.error}
+              {#if runSummary.plain?.perNode?.[n.id]}
+                <div class="run-summary-node-plain">{runSummary.plain.perNode[n.id]}</div>
+              {:else if runSummary.plainState === 'loading'}
+                <div class="run-summary-node-plain ghost">Summarising…</div>
+              {:else if n.error}
                 <div class="run-summary-node-err-row">{n.error}</div>
               {:else if n.outputPreview}
                 <div class="run-summary-node-out">{n.outputPreview}</div>
@@ -6254,6 +6338,29 @@
   .run-summary-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
   .run-summary-stat-value { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .run-summary-failed { color: #c44; }
+  .run-summary-skipped { color: var(--text-muted); }
+  .run-summary-plain-overall {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-primary);
+    background: var(--bg-section);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+  .run-summary-plain-loading,
+  .run-summary-plain-failed {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .run-summary-node-plain {
+    grid-column: 2 / -1;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    margin-top: 4px;
+  }
+  .run-summary-node-plain.ghost { color: var(--text-muted); font-style: italic; }
   .run-summary-section { margin-top: 12px; }
   .run-summary-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px; }
   .run-summary-error {
@@ -6299,7 +6406,8 @@
     color: var(--text-primary);
     font-size: 12px;
   }
-  .run-summary-node-completed .run-summary-node-status { color: var(--accent); }
+  .run-summary-node-completed .run-summary-node-status,
+  .run-summary-node-ok .run-summary-node-status { color: var(--accent); }
   .run-summary-node-failed { background: rgba(196, 68, 68, 0.1); }
   .run-summary-node-failed .run-summary-node-status { color: #c44; }
   .run-summary-node-running .run-summary-node-status { color: var(--accent); }
