@@ -1,64 +1,46 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Spline } from 'layerchart';
-  import { scaleTime, scaleLinear } from 'd3-scale';
-  import { curveMonotoneX } from 'd3-shape';
+  import MiniSparkline from './MiniSparkline.svelte';
 
   let { sparklines }: { sparklines: any[] } = $props();
 
-  function parseSparkline(s: any) {
-    return s.values.map((v: any) => ({
-      date: new Date(v.date),
-      value: v.value,
-    }));
-  }
-
   const labels: Record<string, string> = {
-    recovery: 'Recovery',
-    sleep: 'Sleep',
-    heart_rate: 'Heart Rate',
-    strain: 'Strain',
+    recovery: 'Recovery', sleep: 'Sleep', heart_rate: 'Heart Rate', strain: 'Strain',
   };
+  const units: Record<string, string> = { recovery: '%', sleep: '%', heart_rate: 'bpm', strain: '' };
 
-  const units: Record<string, string> = {
-    recovery: '%',
-    sleep: '%',
-    heart_rate: 'bpm',
-    strain: '',
-  };
+  function points(s: any) {
+    return s.values.map((v: any) => ({ date: new Date(v.date), value: v.value }));
+  }
 </script>
 
-<section class="max-w-3xl mx-auto px-6 sm:px-8">
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-    {#each sparklines || [] as sparkline}
-      <div class="backdrop-blur-md border rounded-xl p-4" style="background: var(--card-bg); border-color: var(--card-border);">
-        <p class="text-[9px] uppercase tracking-[0.2em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          {labels[sparkline.metric] || sparkline.metric}
-        </p>
-        <p class="text-lg font-light" style="color: var(--text-primary);">
-          {Math.round(sparkline.current)}<span class="text-xs ml-1" style="color: var(--text-ghost);">{units[sparkline.metric] || ''}</span>
-        </p>
-        <div class="h-[40px] mt-2">
-          {#if sparkline.values.length > 1}
-            <Chart
-              data={parseSparkline(sparkline)}
-              x="date"
-              xScale={scaleTime()}
-              y="value"
-              yScale={scaleLinear()}
-              yNice={true}
-              padding={{ top: 2, bottom: 2, left: 0, right: 0 }}
-            >
-              <Svg>
-                <Area fill="var(--accent)" fillOpacity={0.1} curve={curveMonotoneX} />
-                <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
-              </Svg>
-            </Chart>
-          {/if}
+<section class="ss">
+  <div class="ss-grid">
+    {#each sparklines || [] as s}
+      <div class="ss-cell nm-sec">
+        <div class="ss-hd"><span class="sr-label-tight">{labels[s.metric] || s.metric}</span></div>
+        <div class="ss-val">
+          {Math.round(s.current)}<span class="ss-unit">{units[s.metric] || ''}</span>
         </div>
-        <p class="text-[9px] mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          {sparkline.trend === 'up' ? '↑' : sparkline.trend === 'down' ? '↓' : '→'} 7d
-        </p>
+        <div class="ss-spark"><MiniSparkline points={points(s)} /></div>
+        <div class="ss-trend">
+          {s.trend === 'up' ? '↑' : s.trend === 'down' ? '↓' : '→'} 7d
+        </div>
       </div>
     {/each}
   </div>
 </section>
+
+<style>
+  .ss { padding: 0 1.5rem; max-width: 1200px; margin: 0 auto; }
+  .ss-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; }
+  .ss-cell { padding: 0.85rem 1rem 0.75rem; gap: 0; }
+  .ss-hd { margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--card-border); }
+  .ss-val {
+    font-family: var(--font-display); font-size: 26px; font-weight: 300;
+    color: var(--text-primary); line-height: 1;
+  }
+  .ss-unit { font-size: 11px; color: var(--text-ghost); margin-left: 4px; }
+  .ss-spark { margin-top: 6px; }
+  .ss-trend { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); margin-top: 6px; }
+  @media (max-width: 768px) { .ss-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
