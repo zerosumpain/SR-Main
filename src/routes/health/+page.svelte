@@ -11,7 +11,6 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SlidePanel from '$lib/components/SlidePanel.svelte';
   import HealthMasthead from '$lib/components/health/HealthMasthead.svelte';
-  import HealthSectionNav from '$lib/components/health/HealthSectionNav.svelte';
   import ReadinessHero from '$lib/components/health/ReadinessHero.svelte';
   import SparklineStrip from '$lib/components/health/SparklineStrip.svelte';
   import WeeklyStats from '$lib/components/health/WeeklyStats.svelte';
@@ -55,7 +54,7 @@
 
   function openEvidence(focusId?: string) {
     panelType = 'evidence';
-    panelTitle = 'Evidence & Methodology';
+    panelTitle = 'Evidence & methodology';
     panelData = null;
     evidenceFocusId = focusId ?? null;
     panelOpen = true;
@@ -80,326 +79,482 @@
     panelType = null;
     evidenceFocusId = null;
   }
+
+  // Stats helpers for inline display
+  function fmtKm(m?: number): string { return m ? (m / 1000).toFixed(1) : '0'; }
+  function fmtDur(s?: number): string {
+    if (!s) return '0m';
+    const h = Math.floor(s / 3600); const m = Math.round((s % 3600) / 60);
+    return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+  }
 </script>
 
 <PageHeader title="HEALTH" />
 
-<HealthMasthead onopenEvidence={() => openEvidence()} />
+<div class="hp">
+  <HealthMasthead onopenEvidence={() => openEvidence()} />
 
-<section id="readiness">
-  <ReadinessHero readiness={data.readiness} onopenDetail={() => openPanel('readiness', 'Readiness', data.readiness)} />
-  <SparklineStrip sparklines={data.sparklines || []} />
-</section>
+  <div class="hp-wrap">
 
-<HealthSectionNav />
+    <ReadinessHero
+      readiness={data.readiness}
+      onopenDetail={() => openPanel('readiness', 'Readiness', data.readiness)}
+    />
 
-<div class="hp-wrap">
-  <section id="autonomic" class="hp-group">
-    <h2 class="hp-h">Autonomic</h2>
-    <AutonomicBalance data={data.autonomic} onopenDetail={() => openPanel('autonomic', 'Autonomic Balance', data.autonomic)} onopenEvidence={openEvidence} />
-  </section>
+    <SparklineStrip sparklines={data.sparklines || []} />
 
-  <section id="sleep" class="hp-group">
-    <h2 class="hp-h">Sleep</h2>
-    <button class="hp-card-btn" onclick={() => openPanel('sleep', 'Sleep Analysis', data.sleepAnalysis)}>
-      <SleepBreakdown sleepAnalysis={data.sleepAnalysis} />
-    </button>
-    <SleepRegularityIndex data={data.sleepRegularity} onopenDetail={() => openPanel('sri', 'Sleep Regularity Index', data.sleepRegularity)} onopenEvidence={openEvidence} />
-    <CircadianAlignment data={data.circadian} onopenDetail={() => openPanel('circadian', 'Circadian Alignment', data.circadian)} onopenEvidence={openEvidence} />
-    <RecoveryDebt data={data.recoveryDebt} onopenDetail={() => openPanel('recovery-debt', 'Recovery Debt', data.recoveryDebt)} onopenEvidence={openEvidence} />
-  </section>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Autonomic</span>
+        <span class="nm-sec-meta">HRV / RHR vs personal baseline</span>
+      </div>
+      <div class="rows">
+        <AutonomicBalance
+          data={data.autonomic}
+          onopenDetail={() => openPanel('autonomic', 'Autonomic Balance', data.autonomic)}
+          onopenEvidence={openEvidence}
+        />
+      </div>
+    </section>
 
-  <section id="training" class="hp-group">
-    <h2 class="hp-h">Training</h2>
-    <button class="hp-card-btn" onclick={() => openPanel('stats', 'This Week', data.stats)}>
-      <WeeklyStats stats={data.stats} />
-    </button>
-    <ACWRInjuryRisk data={data.acwr} onopenDetail={() => openPanel('acwr', 'ACWR — Injury Risk', data.acwr)} onopenEvidence={openEvidence} />
-    <TrainingMonotony data={data.monotony} onopenDetail={() => openPanel('monotony', 'Training Monotony', data.monotony)} onopenEvidence={openEvidence} />
-    <VO2MaxTrend data={data.vo2max} onopenDetail={() => openPanel('vo2max', 'VO₂max Trend', data.vo2max)} onopenEvidence={openEvidence} />
-    <PolarisedDistribution data={data.polarised} onopenDetail={() => openPanel('polarised', 'Polarised Distribution', data.polarised)} onopenEvidence={openEvidence} />
-  </section>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Sleep</span>
+        <span class="nm-sec-meta">last night · 14d trend</span>
+      </div>
+      <div class="rows">
+        <SleepBreakdown
+          sleepAnalysis={data.sleepAnalysis}
+          onopenDetail={() => openPanel('sleep', 'Sleep analysis', data.sleepAnalysis)}
+          onopenEvidence={openEvidence}
+        />
+        <SleepRegularityIndex
+          data={data.sleepRegularity}
+          onopenDetail={() => openPanel('sri', 'Sleep Regularity Index', data.sleepRegularity)}
+          onopenEvidence={openEvidence}
+        />
+        <CircadianAlignment
+          data={data.circadian}
+          onopenDetail={() => openPanel('circadian', 'Circadian Alignment', data.circadian)}
+          onopenEvidence={openEvidence}
+        />
+        <RecoveryDebt
+          data={data.recoveryDebt}
+          onopenDetail={() => openPanel('recovery-debt', 'Recovery Debt', data.recoveryDebt)}
+          onopenEvidence={openEvidence}
+        />
+      </div>
+    </section>
 
-  <section id="body" class="hp-group">
-    <h2 class="hp-h">Body</h2>
-    <button class="hp-card-btn" onclick={() => openPanel('signals', 'Body Signals', data.bodySignals)}>
-      <BodySignals signals={data.bodySignals} />
-    </button>
-  </section>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Training</span>
+        {#if data.stats?.weekly}
+          <span class="nm-sec-meta">
+            {data.stats.weekly.activities} activities ·
+            {fmtKm(data.stats.weekly.totalDistance)}km ·
+            {fmtDur(data.stats.weekly.totalDuration)}
+          </span>
+        {/if}
+      </div>
+      <WeeklyStats
+        stats={data.stats}
+        onopenDetail={() => openPanel('stats', 'This week', data.stats)}
+      />
+      <div class="rows">
+        <ACWRInjuryRisk
+          data={data.acwr}
+          onopenDetail={() => openPanel('acwr', 'ACWR — Injury Risk', data.acwr)}
+          onopenEvidence={openEvidence}
+        />
+        <TrainingMonotony
+          data={data.monotony}
+          onopenDetail={() => openPanel('monotony', 'Training Monotony', data.monotony)}
+          onopenEvidence={openEvidence}
+        />
+        <VO2MaxTrend
+          data={data.vo2max}
+          onopenDetail={() => openPanel('vo2max', 'VO₂max trend', data.vo2max)}
+          onopenEvidence={openEvidence}
+        />
+        <PolarisedDistribution
+          data={data.polarised}
+          onopenDetail={() => openPanel('polarised', 'Intensity distribution', data.polarised)}
+          onopenEvidence={openEvidence}
+        />
+      </div>
+    </section>
 
-  <section id="activities" class="hp-group">
-    <h2 class="hp-h">Activities</h2>
-    <ActivityTimeline timeline={data.timeline} onselect={openActivityDetail} />
-  </section>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Body signals</span>
+        <span class="nm-sec-meta">7d averages · normal-range bars</span>
+      </div>
+      <div class="rows">
+        <BodySignals
+          signals={data.bodySignals}
+          onopenDetail={() => openPanel('signals', 'Body signals', data.bodySignals)}
+        />
+      </div>
+    </section>
+
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Recent activity</span>
+        <span class="nm-sec-meta">{data.timeline?.events?.length ?? 0} events</span>
+      </div>
+      <div class="rows">
+        <ActivityTimeline timeline={data.timeline} onselect={openActivityDetail} />
+      </div>
+    </section>
+
+    <footer class="hp-footer">
+      <div class="hp-sync">
+        {#if data.syncState?.length}
+          {#each data.syncState as sync}
+            {@const lastSync = sync.lastSyncAt || sync.last_sync_at}
+            {@const ago = lastSync ? Math.round((Date.now() / 1000 - lastSync) / 60) : null}
+            {@const isStale = ago !== null && ago > 120}
+            <span class="hp-sync-row" class:stale={isStale}>
+              {sync.service}:
+              {#if ago !== null}
+                {ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`}
+                {#if sync.status === 'error' || sync.status === 'syncing'}
+                  · {sync.status}
+                {/if}
+              {:else}
+                never
+              {/if}
+            </span>
+          {/each}
+        {/if}
+      </div>
+      <div class="hp-links">
+        <a href="/" class="hp-link">Home</a>
+        <a href="/admin" class="hp-link">Admin</a>
+      </div>
+    </footer>
+  </div>
 </div>
 
-<footer class="hp-footer">
-  <div class="hp-sync">
-    {#if data.syncState?.length}
-      {#each data.syncState as sync}
-        {@const lastSync = sync.lastSyncAt || sync.last_sync_at}
-        {@const ago = lastSync ? Math.round((Date.now() / 1000 - lastSync) / 60) : null}
-        {@const isStale = ago !== null && ago > 120}
-        <span class="hp-sync-row" class:stale={isStale}>
-          {sync.service}:
-          {#if ago !== null}
-            {ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`}
-            {#if sync.status === 'error' || sync.status === 'syncing'}
-              · {sync.status}
-            {/if}
-          {:else}
-            never
-          {/if}
-        </span>
-      {/each}
-    {/if}
-  </div>
-  <div class="hp-links">
-    <a href="/" class="hp-link">Home</a>
-    <a href="/admin" class="hp-link">Admin</a>
-  </div>
-</footer>
-
 <SlidePanel open={panelOpen} onclose={closePanel} title={panelTitle}>
-  {#if panelType === 'evidence'}
-    <EvidencePanel focusId={evidenceFocusId} />
-  {:else if panelType === 'activity'}
-    {#if loadingActivity}
-      <p class="hp-loading">Loading activity…</p>
-    {:else if panelData}
-      <ActivityDetail activity={panelData} />
-    {:else}
-      <p class="hp-loading">Activity not found.</p>
-    {/if}
-  {:else if panelType === 'readiness' && panelData}
-    {@const factorMeta = {
-      recovery: { desc: 'Whoop recovery score. Measures how prepared your body is for strain based on HRV, resting heart rate, and sleep.', goodMin: 67, unit: '' },
-      hrvTrend: { desc: 'Heart rate variability trend over 7 days. Higher HRV generally indicates better cardiovascular fitness and recovery.', goodMin: 60, unit: '' },
-      sleepQuality: { desc: 'Sleep performance percentage from Whoop.', goodMin: 70, unit: '%' },
-      loadBalance: { desc: 'Acute-to-chronic workload ratio. Optimal range is 0.8–1.3.', goodMin: 80, unit: '' },
-    } as Record<string, any>}
-    <section class="nm-sec">
-      <div class="nm-sec-hd"><span class="sr-label-tight">Readiness · {Math.round(panelData.score)}</span></div>
-      <p class="hp-detail-recom">{panelData.recommendation}</p>
-    </section>
-    <section class="nm-sec">
-      <div class="nm-sec-hd"><span class="sr-label-tight">Composite factors</span></div>
+  <div class="hp-panel">
+    {#if panelType === 'evidence'}
+      <EvidencePanel focusId={evidenceFocusId} />
+
+    {:else if panelType === 'activity'}
+      {#if loadingActivity}
+        <p class="hp-loading">Loading activity…</p>
+      {:else if panelData}
+        <ActivityDetail activity={panelData} />
+      {:else}
+        <p class="hp-loading">Activity not found.</p>
+      {/if}
+
+    {:else if panelType === 'readiness' && panelData}
+      {@const factorMeta = {
+        recovery: { desc: 'Whoop recovery score. Measures how prepared your body is for strain based on HRV, resting heart rate, and sleep.', goodMin: 67, unit: '' },
+        hrvTrend: { desc: 'Heart rate variability trend over 7 days. Higher HRV generally indicates better recovery.', goodMin: 60, unit: '' },
+        sleepQuality: { desc: 'Sleep performance percentage from Whoop.', goodMin: 70, unit: '%' },
+        loadBalance: { desc: 'Acute-to-chronic workload ratio. Optimal range is 0.8–1.3.', goodMin: 80, unit: '' },
+      } as Record<string, any>}
+
+      <div class="p-hero">
+        <span class="p-num">{Math.round(panelData.score)}</span>
+        <span class="p-num-lbl">{panelData.label?.toLowerCase?.() ?? ''}</span>
+      </div>
+      <p class="p-recom">{panelData.recommendation}</p>
+
+      <div class="p-rule">Composite factors</div>
       {#each Object.entries(panelData.factors) as [key, factor]}
         {@const meta = factorMeta[key] || { desc: '', goodMin: 50, unit: '' }}
         {@const val = Math.round((factor as any).value)}
-        <div class="hp-factor">
-          <div class="hp-factor-row">
-            <span class="sr-label-tight">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-            <span class="hp-factor-val" class:good={val >= meta.goodMin}>
-              {#if key === 'hrvTrend' && (factor as any).raw != null}
-                {Math.round((factor as any).raw)} ms
-              {:else}
-                {val}{meta.unit}
-              {/if}
+        {@const isHrv = key === 'hrvTrend' && (factor as any).raw != null}
+        {@const good = val >= meta.goodMin}
+        <div class="p-row">
+          <div class="p-row-line">
+            <span class="p-row-key">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+            <span class="p-row-val" class:good>
+              {#if isHrv}{Math.round((factor as any).raw)} ms{:else}{val}{meta.unit}{/if}
             </span>
           </div>
-          <div class="hp-bar"><div class="hp-bar-fill" class:good={val >= meta.goodMin} style="width:{Math.min(100, val)}%;"></div></div>
-          <p class="hp-factor-desc">{meta.desc}</p>
+          <span class="p-bar"><span class="p-bar-fill" class:good style="width:{Math.min(100, val)}%;"></span></span>
+          <p class="p-desc">{meta.desc}</p>
         </div>
       {/each}
-    </section>
 
-  {:else if panelType === 'sleep' && panelData}
-    {#if panelData.latest}
-      {@const hrs = panelData.latest.totalDuration / 3600000}
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Last night</span></div>
-        <div class="hp-factor-row" style="margin-bottom: 4px;">
-          <span style="font-size: 22px; font-weight: 300; color: var(--text-primary); font-family: var(--font-display);">{hrs.toFixed(1)}</span>
-          <span class="hp-signal-unit">hours</span>
+    {:else if panelType === 'sleep' && panelData}
+      {#if panelData.latest}
+        {@const hrs = panelData.latest.totalDuration / 3600000}
+        <div class="p-hero">
+          <span class="p-num">{hrs.toFixed(1)}</span>
+          <span class="p-num-lbl">hours · {Math.round(panelData.latest.performance)}% perf</span>
         </div>
-        <p class="hp-detail-recom">
-          {hrs >= 7.5 ? 'Within the recommended 7–9 hour range.' : hrs >= 6 ? 'Below the recommended 7–9 hours. Aim for more.' : 'Significantly below recommended sleep. Recovery will be impacted.'}
+        <p class="p-recom">
+          {hrs >= 7.5 ? 'Within the recommended 7–9 hour range.'
+            : hrs >= 6 ? 'Below the recommended 7–9 hours. Aim for more.'
+            : 'Significantly below recommended sleep. Recovery will be impacted.'}
         </p>
-      </section>
 
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Sleep stages</span></div>
+        <div class="p-rule">Sleep stages</div>
         {#each [
-          { label: 'Light Sleep', pct: panelData.latest.lightPercent, color: '#b8a88c', desc: 'Body temperature drops, muscles relax. Important for memory consolidation and motor learning.', ideal: '40–60%' },
-          { label: 'Deep Sleep', pct: panelData.latest.deepPercent, color: '#8b6914', desc: 'Growth hormone release, tissue repair, immune function. The most physically restorative stage.', ideal: '15–25%' },
-          { label: 'REM Sleep', pct: panelData.latest.remPercent, color: 'var(--accent)', desc: 'Brain processes emotions and consolidates memories. Increases in later sleep cycles — cutting sleep short reduces REM.', ideal: '20–25%' },
-          { label: 'Awake', pct: panelData.latest.awakePercent, color: 'var(--text-whisper)', desc: 'Brief awakenings are normal. Excessive wake time reduces sleep efficiency.', ideal: '<10%' },
+          { label: 'Light',  pct: panelData.latest.lightPercent, color: 'var(--accent-tint-35)', desc: 'Body temperature drops, muscles relax. Memory consolidation, motor learning.', ideal: '40–60%' },
+          { label: 'Deep',   pct: panelData.latest.deepPercent,  color: 'var(--accent)',          desc: 'Growth hormone release, tissue repair, immune function. Most physically restorative.', ideal: '15–25%' },
+          { label: 'REM',    pct: panelData.latest.remPercent,   color: 'var(--text-secondary)',  desc: 'Brain processes emotions and consolidates memories. Increases in later cycles.', ideal: '20–25%' },
+          { label: 'Awake',  pct: panelData.latest.awakePercent, color: 'var(--text-ghost)',      desc: 'Brief awakenings are normal. Excessive wake time reduces sleep efficiency.', ideal: '<10%' },
         ] as stage}
-          <div class="hp-factor">
-            <div class="hp-factor-row">
-              <span class="sr-label-tight">{stage.label}</span>
-              <span class="hp-factor-val" style="color: {stage.color};">{stage.pct}%</span>
+          <div class="p-row">
+            <div class="p-row-line">
+              <span class="p-row-key">{stage.label}</span>
+              <span class="p-row-val" style="color:{stage.color};">{stage.pct}%</span>
             </div>
-            <div class="hp-stage-bar"><div class="hp-stage-bar-fill" style="width:{stage.pct}%; background:{stage.color};"></div></div>
-            <p class="hp-factor-desc">{stage.desc} <span style="color: var(--text-whisper);">Ideal: {stage.ideal}</span></p>
+            <span class="p-bar"><span class="p-bar-fill" style="width:{stage.pct}%; background:{stage.color};"></span></span>
+            <p class="p-desc">{stage.desc} <span class="p-desc-meta">Ideal {stage.ideal}.</span></p>
           </div>
         {/each}
-      </section>
 
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Metrics</span></div>
+        <div class="p-rule">Last-night metrics</div>
         {#each [
-          { label: 'Performance', value: panelData.latest.performance, desc: 'How much sleep you got relative to what your body needed. Accounts for sleep debt, recent strain, and baseline need.', good: 85 },
-          { label: 'Consistency', value: panelData.latest.consistency, desc: 'How regular your sleep schedule is. Consistent bed and wake times improve circadian rhythm and sleep quality.', good: 75 },
-          { label: 'Efficiency', value: panelData.latest.efficiency, desc: 'Percentage of time in bed actually spent asleep. Higher efficiency means less time lying awake.', good: 85 },
-        ] as metric}
-          <div class="hp-factor">
-            <div class="hp-factor-row">
-              <span class="sr-label-tight">{metric.label}</span>
-              <span class="hp-factor-val" class:good={metric.value >= metric.good}>{Math.round(metric.value)}%</span>
+          { label: 'Performance', value: panelData.latest.performance, desc: 'How much sleep you got vs your need. Accounts for debt, recent strain, baseline.', good: 85 },
+          { label: 'Consistency', value: panelData.latest.consistency, desc: 'How regular your bed/wake times are. Drives circadian alignment.', good: 75 },
+          { label: 'Efficiency',  value: panelData.latest.efficiency,  desc: 'Time in bed actually asleep. Higher = less time lying awake.', good: 85 },
+        ] as m}
+          {@const good = m.value >= m.good}
+          <div class="p-row">
+            <div class="p-row-line">
+              <span class="p-row-key">{m.label}</span>
+              <span class="p-row-val" class:good>{Math.round(m.value)}%</span>
             </div>
-            <div class="hp-bar"><div class="hp-bar-fill" class:good={metric.value >= metric.good} style="width:{metric.value}%;"></div></div>
-            <p class="hp-factor-desc">{metric.desc}</p>
+            <span class="p-bar"><span class="p-bar-fill" class:good style="width:{m.value}%;"></span></span>
+            <p class="p-desc">{m.desc}</p>
           </div>
         {/each}
-      </section>
-    {/if}
+      {/if}
 
-    {#if panelData.trend?.length}
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Recent nights</span></div>
+      {#if panelData.trend?.length}
+        <div class="p-rule">Recent nights</div>
         {#each panelData.trend as night}
           {@const nightHrs = night.duration / 3600000}
-          <div class="hp-trend-row">
-            <span>{night.date}</span>
-            <span style="color: {nightHrs >= 7 ? 'var(--text-secondary)' : 'var(--text-ghost)'};">{nightHrs.toFixed(1)}h · {Math.round(night.performance)}%</span>
+          <div class="p-line">
+            <span class="p-line-k">{night.date}</span>
+            <span class="p-line-v">{nightHrs.toFixed(1)}h · {Math.round(night.performance)}%</span>
           </div>
         {/each}
-      </section>
-    {/if}
+      {/if}
 
-  {:else if panelType === 'signals' && panelData}
-    {@const signalMeta = {
-      heart_rate: { label: 'Heart Rate', desc: 'Average heart rate from Apple Health. Resting rate is measured separately — this includes active periods.', normalLow: 60, normalHigh: 100, context: 'A normal resting heart rate for adults is 60–100 bpm. Athletes often have lower resting rates (40–60 bpm).' },
-      heart_rate_variability: { label: 'HRV', desc: 'Heart rate variability — the variation in time between heartbeats. Higher is generally better, indicating your nervous system is adaptable.', normalLow: 20, normalHigh: 80, context: 'HRV varies hugely by age and fitness. Your personal baseline matters more than population norms. Track your own trend.' },
-      resting_heart_rate: { label: 'Resting HR', desc: 'Heart rate at rest, typically measured during sleep. A key indicator of cardiovascular fitness and recovery.', normalLow: 40, normalHigh: 70, context: 'Lower resting HR generally indicates better fitness. A sudden increase may signal illness, stress, or poor recovery.' },
-      oxygen_saturation: { label: 'SpO₂', desc: 'Blood oxygen saturation. The percentage of haemoglobin carrying oxygen. Measured via pulse oximetry.', normalLow: 95, normalHigh: 100, context: 'Normal is 95–100%. Below 95% may indicate respiratory issues. Altitude also affects readings.' },
-      respiratory_rate: { label: 'Respiratory Rate', desc: 'Breaths per minute, typically measured during sleep. Reflects respiratory and cardiovascular health.', normalLow: 12, normalHigh: 20, context: 'Normal adult range is 12–20 breaths/min at rest. Elevated rates can indicate stress, illness, or poor fitness.' },
-    } as Record<string, any>}
-    {#each panelData as signal}
-      {@const meta = signalMeta[signal.metric] || { label: signal.metric, desc: '', normalLow: 0, normalHigh: 100, context: '' }}
-      {@const inRange = signal.current >= meta.normalLow && signal.current <= meta.normalHigh}
-      {@const range = meta.normalHigh - meta.normalLow}
-      {@const extendedLow = meta.normalLow - range * 0.3}
-      {@const extendedHigh = meta.normalHigh + range * 0.3}
-      {@const totalRange = extendedHigh - extendedLow}
-      {@const normalStart = ((meta.normalLow - extendedLow) / totalRange) * 100}
-      {@const normalWidth = (range / totalRange) * 100}
-      {@const markerPos = Math.min(100, Math.max(0, ((signal.current - extendedLow) / totalRange) * 100))}
-      <section class="nm-sec">
-        <div class="nm-sec-hd" style="display: flex; justify-content: space-between; align-items: baseline;">
-          <span class="sr-label-tight">{meta.label}</span>
-          <span style="font-size: 10px; color: var(--text-ghost);">{signal.trend === 'up' ? '↑' : signal.trend === 'down' ? '↓' : '→'}</span>
+    {:else if panelType === 'signals' && panelData}
+      {@const signalMeta = {
+        heart_rate: { label: 'Heart rate', desc: 'Average heart rate from Apple Health. Includes active periods.', normalLow: 60, normalHigh: 100, context: 'Normal resting HR for adults: 60–100 bpm. Athletes often 40–60.' },
+        heart_rate_variability: { label: 'HRV', desc: 'Variation in time between heartbeats. Higher = more adaptable nervous system.', normalLow: 20, normalHigh: 80, context: 'HRV varies by age and fitness. Personal baseline matters more than population norms.' },
+        resting_heart_rate: { label: 'Resting HR', desc: 'Heart rate at rest, typically measured during sleep.', normalLow: 40, normalHigh: 70, context: 'Lower = better fitness. Sudden increase may signal illness, stress, poor recovery.' },
+        oxygen_saturation: { label: 'SpO₂', desc: 'Blood oxygen saturation. Pulse-oximetry-derived.', normalLow: 95, normalHigh: 100, context: 'Normal 95–100%. Below 95% may indicate respiratory issues. Altitude affects readings.' },
+        respiratory_rate: { label: 'Respiratory rate', desc: 'Breaths per minute, typically measured during sleep.', normalLow: 12, normalHigh: 20, context: 'Normal 12–20/min at rest. Elevated rates can indicate stress, illness, or poor fitness.' },
+      } as Record<string, any>}
+      {#each panelData as signal}
+        {@const meta = signalMeta[signal.metric] || { label: signal.metric, desc: '', normalLow: 0, normalHigh: 100, context: '' }}
+        {@const inRange = signal.current >= meta.normalLow && signal.current <= meta.normalHigh}
+        {@const range = meta.normalHigh - meta.normalLow}
+        {@const ext = range * 0.2}
+        {@const total = range + ext * 2}
+        {@const bandStart = (ext / total) * 100}
+        {@const bandWidth = (range / total) * 100}
+        {@const markerPos = Math.min(100, Math.max(0, ((signal.current - (meta.normalLow - ext)) / total) * 100))}
+        <div class="p-rule">{meta.label}</div>
+        <div class="p-row">
+          <div class="p-hero p-hero-inline">
+            <span class="p-num">{Math.round(signal.current)}</span>
+            <span class="p-num-lbl">{signal.unit}</span>
+            <span class="p-trend">{signal.trend === 'up' ? '↑' : signal.trend === 'down' ? '↓' : '→'} 7d avg {Math.round(signal.average7d)}</span>
+          </div>
+          <span class="p-rangebar">
+            <span class="p-rangeband" style="left:{bandStart}%; width:{bandWidth}%;"></span>
+            <span class="p-rangemarker" class:bad={!inRange} style="left:{markerPos}%;"></span>
+          </span>
+          <div class="p-rangeaxis">
+            <span>{meta.normalLow}</span>
+            <span>normal range</span>
+            <span>{meta.normalHigh}</span>
+          </div>
+          <p class="p-desc">{meta.desc}</p>
+          <p class="p-desc p-desc-meta">{meta.context}</p>
         </div>
-        <div style="margin-bottom: 6px;">
-          <span class="hp-signal-val">{Math.round(signal.current)}</span>
-          <span class="hp-signal-unit"> {signal.unit}</span>
-        </div>
-        <div class="hp-range-bar">
-          <div class="hp-range-band" style="left:{normalStart}%; width:{normalWidth}%;"></div>
-          <div class="hp-range-marker" class:bad={!inRange} style="left:{markerPos}%;"></div>
-        </div>
-        <div class="hp-range-axis">
-          <span>{meta.normalLow}</span>
-          <span>normal range</span>
-          <span>{meta.normalHigh}</span>
-        </div>
-        <div class="hp-trend-row" style="margin-top: 6px;">
-          <span>7-day avg: {Math.round(signal.average7d)} {signal.unit}</span>
-          <span>Δ {signal.current > signal.average7d ? '+' : ''}{Math.round(signal.current - signal.average7d)} {signal.unit}</span>
-        </div>
-        <p class="hp-factor-desc" style="margin-top: 8px;">{meta.desc}</p>
-        <p class="hp-factor-desc" style="color: var(--text-whisper);">{meta.context}</p>
-      </section>
-    {/each}
+      {/each}
 
-  {:else if panelType === 'stats' && panelData}
-    <section class="nm-sec">
-      <p class="hp-detail-recom">Summary of your last 7 days of activity from Strava and Whoop.</p>
-    </section>
+    {:else if panelType === 'stats' && panelData}
+      <p class="p-recom">Summary of your last 7 days from Strava and Whoop.</p>
 
-    {#if panelData.weekly}
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Weekly overview</span></div>
+      {#if panelData.weekly}
+        <div class="p-rule">Weekly</div>
         {#each [
-          { label: 'Activities', value: panelData.weekly.activities, unit: '', desc: 'Total recorded activities from Strava' },
-          { label: 'Distance', value: (panelData.weekly.totalDistance / 1000).toFixed(1), unit: 'km', desc: 'Combined distance across all activities' },
-          { label: 'Duration', value: Math.round(panelData.weekly.totalDuration / 60), unit: 'min', desc: 'Total moving time' },
-          { label: 'Elevation', value: Math.round(panelData.weekly.totalElevation), unit: 'm', desc: 'Total elevation gained' },
-          { label: 'Avg Recovery', value: panelData.weekly.avgRecovery, unit: '%', desc: 'Mean Whoop recovery score. Above 67% is green.' },
-          { label: 'Avg Sleep', value: panelData.weekly.avgSleep, unit: '%', desc: "Mean sleep performance. Above 85% means you're meeting your sleep need." },
+          { label: 'Activities',  value: panelData.weekly.activities, unit: '' },
+          { label: 'Distance',    value: (panelData.weekly.totalDistance / 1000).toFixed(1), unit: 'km' },
+          { label: 'Duration',    value: Math.round(panelData.weekly.totalDuration / 60), unit: 'min' },
+          { label: 'Elevation',   value: Math.round(panelData.weekly.totalElevation), unit: 'm' },
+          { label: 'Avg recovery', value: panelData.weekly.avgRecovery, unit: '%' },
+          { label: 'Avg sleep',    value: panelData.weekly.avgSleep, unit: '%' },
         ] as stat}
-          <div class="hp-factor">
-            <div class="hp-factor-row">
-              <span class="sr-label-tight">{stat.label}</span>
-              <span class="hp-factor-val">{stat.value} {stat.unit}</span>
-            </div>
-            <p class="hp-factor-desc">{stat.desc}</p>
+          <div class="p-line">
+            <span class="p-line-k">{stat.label}</span>
+            <span class="p-line-v">{stat.value} {stat.unit}</span>
           </div>
         {/each}
-      </section>
-    {/if}
+      {/if}
 
-    {#if panelData.personalRecords?.length}
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Personal records</span></div>
-        <p class="hp-detail-recom" style="margin-bottom: 6px;">All-time bests from your Strava history.</p>
+      {#if panelData.personalRecords?.length}
+        <div class="p-rule">Personal records</div>
         {#each panelData.personalRecords as pr}
-          <div class="hp-factor">
-            <div class="hp-factor-row">
-              <span class="sr-label-tight">{pr.label}</span>
-              <span class="hp-factor-val" style="color: var(--accent);">{pr.value} {pr.unit}</span>
-            </div>
-            <p class="hp-factor-desc">{pr.date}</p>
+          <div class="p-line">
+            <span class="p-line-k">{pr.label} <span class="p-line-meta">· {pr.date}</span></span>
+            <span class="p-line-v" style="color: var(--accent);">{pr.value} {pr.unit}</span>
           </div>
         {/each}
-      </section>
+      {/if}
     {/if}
-  {/if}
+  </div>
 </SlidePanel>
 
 <style>
-  .hp-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem 1.5rem 2rem; display: flex; flex-direction: column; gap: 2rem; }
-  .hp-group { display: flex; flex-direction: column; gap: 0.75rem; scroll-margin-top: 60px; }
-  .hp-h {
-    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.18em; color: var(--accent); margin: 0 0 0.25rem;
-    padding-bottom: 0.5rem; border-bottom: 2px solid var(--text-primary);
+  .hp { background: var(--bg); }
+  .hp-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
   }
-  .hp-card-btn { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; }
+  .rows { display: flex; flex-direction: column; }
+
   .hp-footer {
-    max-width: 1200px; margin: 0 auto; padding: 1.5rem;
-    display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between;
-    border-top: 2px solid var(--text-primary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 0 0.5rem;
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--card-border);
   }
   .hp-sync { display: flex; flex-wrap: wrap; gap: 0.75rem; font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
-  .hp-sync-row.stale { color: #c4570a; }
+  .hp-sync-row.stale { color: var(--accent); }
   .hp-links { display: flex; gap: 1rem; }
   .hp-link {
     font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
     letter-spacing: 0.12em; color: var(--accent); text-decoration: none;
   }
-  .hp-link:hover { text-decoration: underline; }
-  .hp-loading { font-family: var(--font-mono); font-size: 12px; color: var(--text-ghost); padding: 2rem 0; text-align: center; }
-  .hp-detail-recom { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
-  .hp-factor { display: flex; flex-direction: column; gap: 4px; padding: 0.5rem 0; border-bottom: 1px dotted var(--card-border); }
-  .hp-factor:last-child { border-bottom: 0; }
-  .hp-factor-row { display: flex; justify-content: space-between; align-items: center; }
-  .hp-factor-val { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
-  .hp-factor-val.good { color: var(--accent); }
-  .hp-factor-desc { margin: 4px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-ghost); }
-  .hp-bar { height: 2px; background: var(--card-border); }
-  .hp-bar-fill { height: 2px; background: var(--text-ghost); }
-  .hp-bar-fill.good { background: var(--accent); }
-  .hp-stage-bar { height: 2px; background: var(--card-border); margin-top: 4px; }
-  .hp-stage-bar-fill { height: 2px; }
-  .hp-signal-val { font-size: 22px; font-weight: 300; color: var(--text-primary); font-family: var(--font-display); }
-  .hp-signal-unit { font-size: 11px; color: var(--text-ghost); }
-  .hp-range-bar { position: relative; height: 2px; background: var(--card-border); }
-  .hp-range-band { position: absolute; height: 2px; background: var(--accent); opacity: 0.25; }
-  .hp-range-marker { position: absolute; width: 8px; height: 8px; top: -3px; transform: translateX(-50%); background: var(--accent); }
-  .hp-range-marker.bad { background: #c44; }
-  .hp-range-axis { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); margin-top: 4px; }
-  .hp-trend-row { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); padding: 2px 0; }
+  .hp-link:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* ========================================================
+     Slide-over panel content — flush, definition-list style.
+     SlidePanel provides 20px padding around .hp-panel.
+  ======================================================== */
+  .hp-panel { display: flex; flex-direction: column; gap: 0; }
+
+  .hp-loading {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-ghost); padding: 2rem 0; text-align: center;
+  }
+
+  .p-hero {
+    display: flex; align-items: baseline; gap: 0.6rem;
+    padding: 0.4rem 0 0.6rem;
+  }
+  .p-hero-inline { padding: 0.2rem 0; flex-wrap: wrap; }
+  .p-num {
+    font-family: var(--font-display); font-size: 40px; font-weight: 200;
+    line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;
+  }
+  .p-num-lbl {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+  }
+  .p-trend {
+    margin-left: auto;
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost);
+  }
+
+  .p-recom {
+    margin: 0 0 0.75rem;
+    font-size: 12px; line-height: 1.55; color: var(--text-secondary);
+  }
+
+  .p-rule {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    padding: 0.6rem 0 0.4rem;
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--card-border);
+  }
+  .p-rule:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+
+  .p-row {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 0.45rem 0;
+    border-bottom: 1px dotted var(--card-border);
+  }
+  .p-row:last-child { border-bottom: 0; }
+  .p-row-line {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 0.5rem;
+  }
+  .p-row-key {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: capitalize; letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .p-row-val {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .p-row-val.good { color: var(--accent); }
+  .p-bar { display: block; height: 2px; background: var(--card-border); }
+  .p-bar-fill { display: block; height: 2px; background: var(--text-ghost); }
+  .p-bar-fill.good { background: var(--accent); }
+  .p-desc {
+    margin: 4px 0 0;
+    font-size: 11px; line-height: 1.5; color: var(--text-ghost);
+  }
+  .p-desc-meta { color: var(--text-whisper); }
+
+  .p-rangebar {
+    display: block; position: relative;
+    height: 2px; background: var(--card-border);
+    margin-top: 4px;
+  }
+  .p-rangeband {
+    position: absolute; top: 0; height: 2px;
+    background: var(--accent); opacity: 0.3;
+  }
+  .p-rangemarker {
+    position: absolute; top: -2px;
+    width: 1px; height: 6px;
+    background: var(--text-primary);
+    transform: translateX(-0.5px);
+  }
+  .p-rangemarker.bad { background: var(--status-error); }
+  .p-rangeaxis {
+    display: flex; justify-content: space-between;
+    margin-top: 4px;
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost);
+  }
+
+  .p-line {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dotted var(--card-border);
+    font-family: var(--font-mono);
+  }
+  .p-line:last-child { border-bottom: 0; }
+  .p-line-k { font-size: 11px; color: var(--text-muted); }
+  .p-line-v { font-size: 12px; color: var(--text-primary); }
+  .p-line-meta { color: var(--text-ghost); font-size: 10px; }
+
+  @media (max-width: 640px) {
+    .hp-wrap { padding: 0 1rem 2rem; gap: 1rem; }
+    .p-num { font-size: 32px; }
+  }
 </style>

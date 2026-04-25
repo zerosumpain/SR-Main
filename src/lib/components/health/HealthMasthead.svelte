@@ -6,15 +6,15 @@
 <header class="hm">
   <div class="hm-left">
     <div class="hm-kicker">DAILY · {today}</div>
-    <h1 class="hm-title">HEALTH</h1>
+    <h1 class="hm-title">Health</h1>
     <p class="hm-sub">
-      Live readiness, autonomic balance, training load, sleep quality, body signals — derived
-      from Whoop, Apple Health, and Strava and contextualised against current health research.
+      Readiness, autonomic balance, training load, sleep, body signals — derived from Whoop,
+      Apple Health and Strava and contextualised against current research.
     </p>
   </div>
   <div class="hm-right">
     <button type="button" class="hm-evidence" onclick={() => onopenEvidence?.()}>
-      [ Evidence &amp; Methodology ]
+      Evidence &amp; methodology →
     </button>
   </div>
 </header>
@@ -25,9 +25,9 @@
     justify-content: space-between;
     align-items: flex-end;
     gap: 1.5rem;
-    padding: 1.5rem 1.5rem 1rem;
+    padding: 1.5rem 0 1rem;
     border-bottom: 2px solid var(--text-primary);
-    margin: 0 auto 1.25rem;
+    margin: 1.25rem auto 1.25rem;
     max-width: 1200px;
   }
   .hm-kicker {
@@ -36,12 +36,12 @@
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--accent);
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.35rem;
   }
   .hm-title {
     margin: 0;
     font-family: var(--font-display);
-    font-size: 2.25rem;
+    font-size: 2rem;
     font-weight: 900;
     line-height: 1.05;
     color: var(--text-primary);
@@ -65,9 +65,9 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  .hm-evidence:hover { text-decoration: underline; }
+  .hm-evidence:hover { color: var(--accent-hover); text-decoration: underline; }
   @media (max-width: 640px) {
-    .hm { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
-    .hm-title { font-size: 1.75rem; }
+    .hm { flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1rem 0 0.75rem; }
+    .hm-title { font-size: 1.6rem; }
   }
 </style>

@@ -1,54 +1,39 @@
 <script lang="ts">
-  import MetricCard from './MetricCard.svelte';
+  import MetricRow from './MetricRow.svelte';
 
   let {
     data, onopenDetail, onopenEvidence,
   }: { data: any; onopenDetail?: () => void; onopenEvidence?: (id: string) => void } = $props();
 
   const insufficient = $derived(!data || data.sufficiency === 'insufficient');
-
-  function fmtMid(min: number): string {
-    const h = Math.floor(min / 60);
-    const m = Math.round(min % 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
+  const drift = $derived(data?.value?.driftHours ?? 0);
+  const flag = $derived(data?.value?.flag ?? 'aligned');
+  const tone = $derived.by(() => flag === 'aligned' ? 'good' as const : Math.abs(drift) > 1.5 ? 'bad' as const : 'warn' as const);
+  const label = $derived.by(() => flag === 'aligned' ? 'Aligned' : flag === 'drift-late' ? 'Phase delayed' : 'Phase advanced');
+  const barWidth = $derived(Math.min(100, Math.abs(drift) / 3 * 50));
 </script>
 
-<MetricCard
-  label="Circadian Alignment"
+<MetricRow
+  name="Circadian Alignment"
   evidenceId="circadian-alignment"
   {onopenDetail}
   {onopenEvidence}
   {insufficient}
+  statusTone={tone}
 >
-  {#if data}
-    <div class="ca-grid">
-      <div>
-        <div class="ca-label">7d midpoint</div>
-        <div class="ca-val">{fmtMid(data.value.recentMidpointMin)}</div>
-      </div>
-      <div>
-        <div class="ca-label">Baseline midpoint</div>
-        <div class="ca-val">{fmtMid(data.value.baselineMidpointMin)}</div>
-      </div>
-      <div>
-        <div class="ca-label">Drift</div>
-        <div class="ca-val ca-{data.value.flag}">
-          {data.value.driftHours > 0 ? '+' : ''}{data.value.driftHours.toFixed(1)} h
-        </div>
-      </div>
-    </div>
-  {/if}
-</MetricCard>
+  {#snippet value()}{drift > 0 ? '+' : ''}{drift.toFixed(1)}<span class="unit">h</span>{/snippet}
+  {#snippet status()}{label}{/snippet}
+  {#snippet bar()}
+    <span class="bar">
+      <span class="bar-mid"></span>
+      <span class="bar-fill" style="left:{drift >= 0 ? 50 : 50 - barWidth}%; width:{barWidth}%; background:{tone === 'good' ? 'var(--accent)' : tone === 'bad' ? 'var(--status-error)' : 'var(--text-muted)'};"></span>
+    </span>
+  {/snippet}
+</MetricRow>
 
 <style>
-  .ca-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
-  .ca-label {
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--text-ghost);
-  }
-  .ca-val { font-size: 22px; font-weight: 300; color: var(--text-primary); margin-top: 4px; font-family: var(--font-mono); }
-  .ca-val.ca-drift-late, .ca-val.ca-drift-early { color: #c44; }
-  .ca-val.ca-aligned { color: var(--accent); }
-  @media (max-width: 480px) { .ca-grid { grid-template-columns: 1fr 1fr; } }
+  .unit { font-size: 10px; color: var(--text-ghost); margin-left: 1px; }
+  .bar { display: block; height: 2px; background: var(--card-border); position: relative; }
+  .bar-fill { position: absolute; top: 0; height: 2px; }
+  .bar-mid { position: absolute; left: 50%; top: -2px; width: 1px; height: 6px; background: var(--text-ghost); }
 </style>

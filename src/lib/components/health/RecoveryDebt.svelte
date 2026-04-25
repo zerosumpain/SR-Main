@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MetricCard from './MetricCard.svelte';
+  import MetricRow from './MetricRow.svelte';
   import MiniSparkline from './MiniSparkline.svelte';
 
   let {
@@ -7,43 +7,31 @@
   }: { data: any; onopenDetail?: () => void; onopenEvidence?: (id: string) => void } = $props();
 
   const insufficient = $derived(!data || data.sufficiency === 'insufficient');
+  const debt = $derived(data?.value?.sleepDebtMin ?? 0);
+  const overdrawn = $derived(!!data?.value?.overdrawn);
+  const tone = $derived.by(() => overdrawn ? 'bad' as const : debt > 120 ? 'warn' as const : 'good' as const);
+  const label = $derived.by(() => overdrawn ? 'Overdrawn' : debt > 120 ? 'Building' : 'Cleared');
   const points = $derived.by(() => (data?.value?.series ?? []).map((p: any) => ({ date: new Date(p.date), value: p.debt })));
 </script>
 
-<MetricCard
-  label="Recovery Debt"
+<MetricRow
+  name="Recovery Debt"
   evidenceId="recovery-debt"
   {onopenDetail}
   {onopenEvidence}
   {insufficient}
+  statusTone={tone}
 >
-  {#if data}
-    <div class="rd-row">
-      <div class="rd-cell">
-        <div class="rd-label">Sleep debt 14d</div>
-        <div class="rd-val" class:rd-overdrawn={data.value.overdrawn}>
-          {Math.round(data.value.sleepDebtMin)} min
-        </div>
-      </div>
-      <div class="rd-cell">
-        <div class="rd-label">Strain / Recovery</div>
-        <div class="rd-val">
-          {data.value.strainRecoveryBalance.toFixed(1)}
-        </div>
-      </div>
-      <div class="rd-cell rd-spark">
-        <div class="rd-label">Cumulative debt</div>
-        <MiniSparkline points={points} height={28} color={data.value.overdrawn ? '#c44' : 'var(--accent)'} />
-      </div>
-    </div>
-  {/if}
-</MetricCard>
+  {#snippet value()}{Math.round(debt)}<span class="unit">m</span>{/snippet}
+  {#snippet status()}{label}{/snippet}
+  {#snippet bar()}
+    <span class="spark">
+      <MiniSparkline points={points} height={18} color={overdrawn ? 'var(--status-error)' : 'var(--text-muted)'} />
+    </span>
+  {/snippet}
+</MetricRow>
 
 <style>
-  .rd-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 1.25rem; align-items: center; }
-  .rd-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .rd-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); }
-  .rd-val { font-size: 22px; font-weight: 300; color: var(--text-primary); font-family: var(--font-mono); }
-  .rd-val.rd-overdrawn { color: #c44; }
-  @media (max-width: 480px) { .rd-row { grid-template-columns: 1fr 1fr; } .rd-spark { grid-column: 1 / -1; } }
+  .unit { font-size: 10px; color: var(--text-ghost); margin-left: 1px; }
+  .spark { display: block; }
 </style>

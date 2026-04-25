@@ -1,5 +1,8 @@
 <script lang="ts">
-  let { stats }: { stats: any } = $props();
+  let {
+    stats,
+    onopenDetail,
+  }: { stats: any; onopenDetail?: () => void } = $props();
 
   function formatDistance(m: number): string {
     return (m / 1000).toFixed(1);
@@ -7,69 +10,72 @@
   function formatDuration(s: number): string {
     const h = Math.floor(s / 3600);
     const m = Math.round((s % 3600) / 60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
   }
 </script>
 
-<section class="nm-sec weekly-wrap">
-  <div class="nm-sec-hd">
-    <span class="sr-label-tight">This Week</span>
-  </div>
-
-  {#if stats?.weekly}
-    <div class="border" style="background: var(--card-bg); border-color: var(--card-border);">
-      <div class="grid grid-cols-3 gap-4 p-6">
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Activities</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.activities}</p>
-        </div>
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Distance</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{formatDistance(stats.weekly.totalDistance)} <span class="text-xs" style="color: var(--text-ghost);">km</span></p>
-        </div>
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Duration</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{formatDuration(stats.weekly.totalDuration)}</p>
-        </div>
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Elevation</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{Math.round(stats.weekly.totalElevation)} <span class="text-xs" style="color: var(--text-ghost);">m</span></p>
-        </div>
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Avg Recovery</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.avgRecovery}%</p>
-        </div>
-        <div>
-          <p class="sr-label-tight" style="color: var(--text-ghost);">Avg Sleep</p>
-          <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.avgSleep}%</p>
-        </div>
-      </div>
+{#if stats?.weekly}
+  <button type="button" class="strip" onclick={() => onopenDetail?.()}>
+    <div class="cell">
+      <span class="lbl">Activities</span>
+      <span class="val">{stats.weekly.activities}</span>
     </div>
-
-    {#if stats.personalRecords?.length}
-      <div class="nm-sec-hd" style="margin-top: 2rem;">
-        <span class="sr-label-tight">Personal Records</span>
-      </div>
-      <div class="space-y-2">
-        {#each stats.personalRecords as pr}
-          <div class="flex justify-between items-center py-2" style="border-bottom: 1px solid var(--card-border);">
-            <span class="text-sm" style="color: var(--text-secondary);">{pr.label}</span>
-            <span class="text-sm font-light" style="color: var(--text-primary); font-family: var(--font-mono);">
-              {pr.value} {pr.unit}
-            </span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  {:else}
-    <p class="text-sm" style="color: var(--text-ghost);">No activity data yet.</p>
-  {/if}
-</section>
+    <div class="cell">
+      <span class="lbl">Distance</span>
+      <span class="val">{formatDistance(stats.weekly.totalDistance)}<span class="u">km</span></span>
+    </div>
+    <div class="cell">
+      <span class="lbl">Duration</span>
+      <span class="val">{formatDuration(stats.weekly.totalDuration)}</span>
+    </div>
+    <div class="cell">
+      <span class="lbl">Elevation</span>
+      <span class="val">{Math.round(stats.weekly.totalElevation)}<span class="u">m</span></span>
+    </div>
+  </button>
+{/if}
 
 <style>
-  .weekly-wrap {
-    padding: 0 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    width: 100%;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--card-border);
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+  }
+  .strip:hover { background: var(--surface-overlay); }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0.6rem 0.85rem;
+    border-right: 1px solid var(--divider);
+    min-width: 0;
+  }
+  .cell:last-child { border-right: 0; }
+  .lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .val {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .u { font-size: 10px; color: var(--text-ghost); margin-left: 2px; }
+  @media (max-width: 640px) {
+    .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cell:nth-child(2n) { border-right: 0; }
   }
 </style>

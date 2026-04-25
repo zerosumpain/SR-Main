@@ -1,56 +1,39 @@
 <script lang="ts">
-  import MetricCard from './MetricCard.svelte';
+  import MetricRow from './MetricRow.svelte';
 
   let {
     data, onopenDetail, onopenEvidence,
   }: { data: any; onopenDetail?: () => void; onopenEvidence?: (id: string) => void } = $props();
 
   const insufficient = $derived(!data || data.sufficiency === 'insufficient');
-  const band = $derived.by(() => {
-    if (!data) return 'low';
-    const v = data.value;
-    return v >= 87 ? 'regular' : v >= 70 ? 'mid' : 'irregular';
-  });
+  const v = $derived(data?.value ?? 0);
+  const tone = $derived.by(() => v >= 87 ? 'good' as const : v >= 70 ? 'warn' as const : 'bad' as const);
+  const label = $derived.by(() => v >= 87 ? 'Regular' : v >= 70 ? 'Mid' : 'Irregular');
 </script>
 
-<MetricCard
-  label="Sleep Regularity Index"
+<MetricRow
+  name="Sleep Regularity (SRI)"
   evidenceId="sri"
   {onopenDetail}
   {onopenEvidence}
   {insufficient}
+  statusTone={tone}
 >
-  {#if data}
-    <div class="sri-row">
-      <div class="sri-score">{Math.round(data.value)}</div>
-      <div class="sri-rest">
-        <div class="sri-band sri-{band}">
-          {band === 'regular' ? 'Regular' : band === 'mid' ? 'Moderately regular' : 'Irregular'}
-        </div>
-        <div class="sri-bar">
-          <div class="sri-bar-fill" style="width: {Math.min(100, Math.max(0, data.value))}%;"></div>
-          <div class="sri-bar-tick" style="left: 70%;" title="moderately regular"></div>
-          <div class="sri-bar-tick" style="left: 87%;" title="regular"></div>
-        </div>
-        <p class="sri-note">Phillips 2017. Higher = more consistent sleep/wake schedule.</p>
-      </div>
-    </div>
-  {/if}
-</MetricCard>
+  {#snippet value()}{Math.round(v)}{/snippet}
+  {#snippet status()}{label}{/snippet}
+  {#snippet bar()}
+    <span class="bar">
+      <span class="bar-fill" style="width:{Math.min(100, Math.max(0, v))}%;"></span>
+      <span class="bar-tick" style="left:70%;"></span>
+      <span class="bar-tick" style="left:87%;"></span>
+    </span>
+  {/snippet}
+</MetricRow>
 
 <style>
-  .sri-row { display: grid; grid-template-columns: auto 1fr; gap: 1.5rem; align-items: center; }
-  .sri-score { font-size: 56px; font-weight: 200; color: var(--accent); line-height: 1; font-family: var(--font-display); }
-  .sri-rest { display: flex; flex-direction: column; gap: 0.4rem; }
-  .sri-band {
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+  .bar { display: block; height: 2px; background: var(--card-border); position: relative; }
+  .bar-fill { display: block; height: 2px; background: var(--accent); }
+  .bar-tick {
+    position: absolute; top: -2px; width: 1px; height: 6px; background: var(--text-ghost);
   }
-  .sri-band.sri-regular { color: var(--accent); }
-  .sri-band.sri-mid { color: var(--text-secondary); }
-  .sri-band.sri-irregular { color: #c44; }
-  .sri-bar { position: relative; height: 2px; background: var(--card-border); }
-  .sri-bar-fill { height: 2px; background: var(--accent); }
-  .sri-bar-tick { position: absolute; top: -2px; width: 1px; height: 6px; background: var(--text-ghost); }
-  .sri-note { margin: 0; font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
-  @media (max-width: 480px) { .sri-row { grid-template-columns: 1fr; } .sri-score { font-size: 44px; } }
 </style>

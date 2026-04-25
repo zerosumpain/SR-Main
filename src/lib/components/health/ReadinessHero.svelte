@@ -5,99 +5,106 @@
   }: { readiness: any; onopenDetail?: () => void } = $props();
 
   const factors = $derived(readiness?.factors ?? {});
+
+  function fmtKey(k: string): string {
+    return k.replace(/([A-Z])/g, ' $1').trim();
+  }
 </script>
 
-<section class="rh">
-  <div class="rh-inner">
+<section class="nm-sec rh">
+  <div class="nm-sec-hd">
+    <span class="sr-label-tight">Readiness</span>
     {#if readiness}
-      <button type="button" class="rh-left" onclick={() => onopenDetail?.()} title="Open readiness detail">
-        <div class="rh-kicker">Readiness</div>
+      <span class="nm-sec-meta">{readiness.label?.toLowerCase?.() ?? ''}</span>
+    {/if}
+    {#if readiness && onopenDetail}
+      <button type="button" class="row-link" onclick={() => onopenDetail?.()}>Detail</button>
+    {/if}
+  </div>
+
+  {#if readiness}
+    <div class="rh-body">
+      <div class="rh-score-block">
         <div class="rh-score">{Math.round(readiness.score)}</div>
-        <div class="rh-label">{readiness.label}</div>
         <p class="rh-recom">{readiness.recommendation}</p>
-      </button>
-      <div class="rh-right">
-        <div class="rh-rk">Composite factors</div>
+      </div>
+      <ul class="rh-factors">
         {#each Object.entries(factors) as [key, factor]}
           {@const f = factor as any}
           {@const val = Math.round(f.value ?? 0)}
-          <div class="rh-frow">
-            <span class="rh-fkey">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+          {@const isHrv = key === 'hrvTrend' && f.raw != null}
+          <li class="rh-frow">
+            <span class="rh-fkey">{fmtKey(key)}</span>
             <span class="rh-fval">
-              {#if key === 'hrvTrend' && f.raw != null}
-                {Math.round(f.raw)} <span class="rh-unit">ms</span>
-              {:else}
-                {val}
-              {/if}
+              {#if isHrv}{Math.round(f.raw)}<span class="rh-unit">ms</span>{:else}{val}{/if}
             </span>
-          </div>
-          <div class="rh-fbar"><div class="rh-fbar-fill" style="width: {Math.min(100, Math.max(0, val))}%;"></div></div>
+            <span class="rh-fbar"><span class="rh-fbar-fill" style="width:{Math.min(100, Math.max(0, val))}%;"></span></span>
+          </li>
         {/each}
-      </div>
-    {:else}
-      <p class="rh-empty">No readiness data available.</p>
-    {/if}
-  </div>
+      </ul>
+    </div>
+  {:else}
+    <p class="rh-empty">No readiness data available.</p>
+  {/if}
 </section>
 
 <style>
-  .rh { padding: 1.5rem 1.5rem 2rem; max-width: 1200px; margin: 0 auto; }
-  .rh-inner {
+  .rh { padding: 0.9rem 1.1rem 1rem; }
+  .rh-body {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    gap: 2.5rem;
-    border: 1px solid var(--card-border);
-    background: var(--bg-section);
-    padding: 2rem 2rem 2rem;
+    grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: center;
   }
-  .rh-left {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-    background: none;
-    border: 0;
-    padding: 0;
-    cursor: pointer;
-    color: inherit;
-  }
-  .rh-kicker {
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
-    letter-spacing: 0.18em; color: var(--accent);
-  }
+  .rh-score-block { display: flex; flex-direction: column; gap: 0.4rem; }
   .rh-score {
-    font-family: var(--font-display); font-size: 120px; font-weight: 200;
-    line-height: 0.95; color: var(--accent); margin-top: 0.25rem;
-  }
-  .rh-label {
-    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.18em; color: var(--text-secondary); margin-top: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 56px;
+    font-weight: 200;
+    line-height: 1;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
   }
   .rh-recom {
-    margin: 1rem 0 0; font-size: 13px; line-height: 1.55;
-    color: var(--text-secondary); max-width: 38ch;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-muted);
+    max-width: 32ch;
   }
-  .rh-right { display: flex; flex-direction: column; gap: 6px; }
-  .rh-rk {
-    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
-    letter-spacing: 0.12em; color: var(--text-ghost); margin-bottom: 6px;
-  }
+  .rh-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .rh-frow {
-    display: flex; justify-content: space-between;
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+    display: grid;
+    grid-template-columns: 1fr auto 120px;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .rh-fkey {
+    color: var(--text-muted);
     text-transform: capitalize;
+    letter-spacing: 0.05em;
   }
-  .rh-fkey { color: var(--text-secondary); }
-  .rh-fval { color: var(--text-primary); }
-  .rh-unit { color: var(--text-ghost); font-size: 10px; }
-  .rh-fbar { height: 2px; background: var(--card-border); margin-bottom: 6px; }
-  .rh-fbar-fill { height: 2px; background: var(--accent); }
+  .rh-fval { color: var(--text-primary); text-align: right; }
+  .rh-unit { color: var(--text-ghost); font-size: 9px; margin-left: 2px; }
+  .rh-fbar { display: block; height: 2px; background: var(--card-border); position: relative; }
+  .rh-fbar-fill { display: block; height: 2px; background: var(--accent); }
   .rh-empty {
-    font-family: var(--font-mono); font-size: 12px; color: var(--text-ghost);
-    text-align: center; padding: 3rem 0;
+    margin: 0; font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-ghost); font-style: italic;
   }
-  @media (max-width: 768px) {
-    .rh-inner { grid-template-columns: 1fr; padding: 1.25rem; gap: 1.5rem; }
-    .rh-score { font-size: 80px; }
+
+  .row-link {
+    margin-left: auto;
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+  }
+  .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .rh-body { grid-template-columns: 1fr; gap: 0.9rem; }
+    .rh-frow { grid-template-columns: 1fr auto 80px; }
   }
 </style>
