@@ -1,7 +1,15 @@
 export type StatsEndpoint = 'summary' | 'trends' | 'per-node';
 
+export interface StatsWindow {
+  preset: string;
+  from: string;
+  to: string;
+  granularity: 'hour' | 'day' | 'week';
+}
+
 export interface StatsState<T> {
   data: T | null;
+  window: StatsWindow | null;
   loading: boolean;
   error: string | null;
 }
@@ -12,7 +20,7 @@ export function useStats<T>(
   period: () => string,
   refreshKey: () => number = () => 0,
 ) {
-  let state = $state<StatsState<T>>({ data: null, loading: true, error: null });
+  let state = $state<StatsState<T>>({ data: null, window: null, loading: true, error: null });
   let abortController: AbortController | null = null;
 
   async function load() {
@@ -31,6 +39,7 @@ export function useStats<T>(
       }
       const json = await res.json();
       state.data = json.data as T;
+      state.window = (json.window as StatsWindow) ?? null;
     } catch (err) {
       if ((err as { name?: string }).name === 'AbortError') return;
       state.error = err instanceof Error ? err.message : String(err);
@@ -49,6 +58,9 @@ export function useStats<T>(
   return {
     get data() {
       return state.data;
+    },
+    get window() {
+      return state.window;
     },
     get loading() {
       return state.loading;

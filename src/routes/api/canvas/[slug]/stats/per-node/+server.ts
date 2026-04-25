@@ -64,6 +64,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
     failed: number;
     avg_ms: number | null;
     p95_ms: number | null;
+    min_ms: number | null;
+    max_ms: number | null;
+    total_ms: number | null;
+    last_run_at: Date | null;
   }>(sql`
     SELECT
       ne.node_id AS node_id,
@@ -74,7 +78,14 @@ export const GET: RequestHandler = async ({ params, url }) => {
         FILTER (WHERE ne.completed_at IS NOT NULL) AS avg_ms,
       percentile_cont(0.95) WITHIN GROUP (
         ORDER BY EXTRACT(EPOCH FROM (ne.completed_at - ne.started_at)) * 1000
-      ) FILTER (WHERE ne.completed_at IS NOT NULL) AS p95_ms
+      ) FILTER (WHERE ne.completed_at IS NOT NULL) AS p95_ms,
+      MIN(EXTRACT(EPOCH FROM (ne.completed_at - ne.started_at)) * 1000)
+        FILTER (WHERE ne.completed_at IS NOT NULL) AS min_ms,
+      MAX(EXTRACT(EPOCH FROM (ne.completed_at - ne.started_at)) * 1000)
+        FILTER (WHERE ne.completed_at IS NOT NULL) AS max_ms,
+      SUM(EXTRACT(EPOCH FROM (ne.completed_at - ne.started_at)) * 1000)
+        FILTER (WHERE ne.completed_at IS NOT NULL) AS total_ms,
+      MAX(ne.completed_at) AS last_run_at
     FROM node_executions ne
     INNER JOIN workflow_runs wr ON wr.id = ne.run_id
     WHERE wr.workflow_id = ${wf.id}
@@ -114,6 +125,8 @@ export const GET: RequestHandler = async ({ params, url }) => {
   const result = nodes.map((n) => {
     const agg = aggByNodeId.get(n.id);
     const err = errByNodeId.get(n.id);
+    const numOrNull = (v: number | null | undefined) =>
+      v !== null && v !== undefined ? Math.round(Number(v)) : null;
     return {
       nodeId: n.id,
       label: n.label,
@@ -121,8 +134,12 @@ export const GET: RequestHandler = async ({ params, url }) => {
       runs: agg ? Number(agg.runs) : 0,
       success: agg ? Number(agg.success) : 0,
       failed: agg ? Number(agg.failed) : 0,
-      avgMs: agg?.avg_ms !== null && agg?.avg_ms !== undefined ? Math.round(Number(agg.avg_ms)) : null,
-      p95Ms: agg?.p95_ms !== null && agg?.p95_ms !== undefined ? Math.round(Number(agg.p95_ms)) : null,
+      avgMs: numOrNull(agg?.avg_ms),
+      p95Ms: numOrNull(agg?.p95_ms),
+      minMs: numOrNull(agg?.min_ms),
+      maxMs: numOrNull(agg?.max_ms),
+      totalMs: numOrNull(agg?.total_ms),
+      lastRunAt: agg?.last_run_at ? new Date(agg.last_run_at).toISOString() : null,
       lastError: err
         ? { at: new Date(err.completed_at).toISOString(), message: err.error }
         : null,
