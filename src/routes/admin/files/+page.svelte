@@ -19,12 +19,17 @@
   let files = $state<FileRow[]>(data.files as FileRow[]);
 
   let fileInput: HTMLInputElement | null = $state(null);
+  let folderInput: HTMLInputElement | null = $state(null);
   let uploadName = $state('');
   let uploadDesc = $state('');
   let uploadPerm = $state({ read: true, write: false, append: false, delete: false });
   let uploadBusy = $state(false);
   let uploadError = $state<string | null>(null);
   let selectedFileName = $state('');
+  let pickedFiles = $state<File[]>([]);
+  let isFolderPick = $state(false);
+  let uploadProgress = $state<{ done: number; total: number; current: string } | null>(null);
+  let uploadFailures = $state<{ name: string; error: string }[]>([]);
 
   let editingId = $state<string | null>(null);
   let editDraft = $state<{
@@ -109,37 +114,90 @@
   }
 
   function onFilePicked() {
-    const f = fileInput?.files?.[0];
-    selectedFileName = f ? f.name : '';
+    const list = fileInput?.files;
+    if (!list || list.length === 0) {
+      pickedFiles = [];
+      isFolderPick = false;
+      selectedFileName = '';
+      return;
+    }
+    pickedFiles = Array.from(list);
+    isFolderPick = false;
+    selectedFileName = pickedFiles[0].name;
+    if (folderInput) folderInput.value = '';
+  }
+
+  function onFolderPicked() {
+    const list = folderInput?.files;
+    if (!list || list.length === 0) {
+      pickedFiles = [];
+      isFolderPick = false;
+      selectedFileName = '';
+      return;
+    }
+    pickedFiles = Array.from(list);
+    isFolderPick = true;
+    const root = (pickedFiles[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/')[0] ?? '';
+    selectedFileName = root ? `${root}/  (${pickedFiles.length} files)` : `${pickedFiles.length} files`;
+    if (fileInput) fileInput.value = '';
+  }
+
+  function clearPicked() {
+    pickedFiles = [];
+    isFolderPick = false;
+    selectedFileName = '';
+    if (fileInput) fileInput.value = '';
+    if (folderInput) folderInput.value = '';
+  }
+
+  async function uploadOne(f: File, name: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('name', name);
+    if (uploadDesc.trim()) fd.append('description', uploadDesc.trim());
+    fd.append('permissions', JSON.stringify(uploadPerm));
+    const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const msg = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      return { ok: false, error: msg.error || `Upload failed (${res.status})` };
+    }
+    return { ok: true };
   }
 
   async function uploadFile(ev: SubmitEvent) {
     ev.preventDefault();
     uploadError = null;
-    const el = fileInput;
-    const f = el?.files?.[0];
-    if (!f) { uploadError = 'Select a file first.'; return; }
+    uploadFailures = [];
+    if (pickedFiles.length === 0) { uploadError = 'Select a file or folder first.'; return; }
     uploadBusy = true;
+    uploadProgress = { done: 0, total: pickedFiles.length, current: '' };
     try {
-      const fd = new FormData();
-      fd.append('file', f);
-      if (uploadName.trim()) fd.append('name', uploadName.trim());
-      if (uploadDesc.trim()) fd.append('description', uploadDesc.trim());
-      fd.append('permissions', JSON.stringify(uploadPerm));
-
-      const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const msg = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        uploadError = msg.error || `Upload failed (${res.status})`;
-        return;
+      for (let i = 0; i < pickedFiles.length; i++) {
+        const f = pickedFiles[i];
+        const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || '';
+        let name: string;
+        if (isFolderPick) {
+          name = rel || f.name;
+        } else if (pickedFiles.length === 1) {
+          name = uploadName.trim() || f.name;
+        } else {
+          name = f.name;
+        }
+        uploadProgress = { done: i, total: pickedFiles.length, current: name };
+        const result = await uploadOne(f, name);
+        if (!result.ok) uploadFailures = [...uploadFailures, { name, error: result.error }];
       }
+      uploadProgress = { done: pickedFiles.length, total: pickedFiles.length, current: '' };
       await refresh();
       uploadName = '';
       uploadDesc = '';
-      selectedFileName = '';
-      if (el) el.value = '';
+      clearPicked();
+      if (uploadFailures.length > 0) {
+        uploadError = `${uploadFailures.length} of ${pickedFiles.length || uploadProgress.total} failed.`;
+      }
     } finally {
       uploadBusy = false;
+      setTimeout(() => { if (!uploadBusy) uploadProgress = null; }, 1500);
     }
   }
 
@@ -217,25 +275,48 @@
     </div>
 
     <form class="form" onsubmit={uploadFile}>
-      <label class="field">
-        <span class="sr-label-tight">File</span>
+      <div class="field">
+        <span class="sr-label-tight">File or Folder</span>
         <div class="file-picker">
           <input
             type="file"
             bind:this={fileInput}
             onchange={onFilePicked}
-            required
             id="file-input"
+            multiple
           />
-          <label for="file-input" class="file-btn">Choose file</label>
+          <label for="file-input" class="file-btn">Choose files</label>
+          <input
+            type="file"
+            bind:this={folderInput}
+            onchange={onFolderPicked}
+            id="folder-input"
+            multiple
+            {...({ webkitdirectory: 'true', directory: 'true', mozdirectory: 'true' } as Record<string, string>)}
+          />
+          <label for="folder-input" class="file-btn">Choose folder</label>
           <span class="file-name">{selectedFileName || 'No file selected'}</span>
+          {#if pickedFiles.length > 0}
+            <button type="button" class="file-clear" onclick={clearPicked} title="Clear selection">×</button>
+          {/if}
         </div>
-      </label>
+        {#if isFolderPick && pickedFiles.length > 0}
+          <span class="picker-hint">Files will be uploaded preserving folder paths.</span>
+        {/if}
+      </div>
 
       <div class="row">
         <label class="field">
-          <span class="sr-label-tight">Name <em>— optional, defaults to filename</em></span>
-          <input type="text" bind:value={uploadName} placeholder="reports/daily.csv" class="nm-text-input" />
+          <span class="sr-label-tight">
+            Name <em>— optional, defaults to filename{pickedFiles.length > 1 ? ' (ignored for multi-file uploads)' : ''}</em>
+          </span>
+          <input
+            type="text"
+            bind:value={uploadName}
+            placeholder="reports/daily.csv"
+            class="nm-text-input"
+            disabled={pickedFiles.length > 1}
+          />
         </label>
         <label class="field">
           <span class="sr-label-tight">Description <em>— optional</em></span>
@@ -265,12 +346,31 @@
         </div>
       </div>
 
+      {#if uploadProgress && uploadProgress.total > 0}
+        <div class="progress-line">
+          <div class="progress-bar" style="width: {(uploadProgress.done / uploadProgress.total) * 100}%"></div>
+          <span class="progress-text">
+            {uploadProgress.done}/{uploadProgress.total}
+            {#if uploadProgress.current} — {uploadProgress.current}{/if}
+          </span>
+        </div>
+      {/if}
       {#if uploadError}
         <div class="err-line">{uploadError}</div>
       {/if}
+      {#if uploadFailures.length > 0}
+        <details class="fail-list">
+          <summary>{uploadFailures.length} failed</summary>
+          <ul>
+            {#each uploadFailures as fail}
+              <li><code>{fail.name}</code> — {fail.error}</li>
+            {/each}
+          </ul>
+        </details>
+      {/if}
       <div class="form-actions">
-        <button type="submit" class="nm-save-btn" disabled={uploadBusy}>
-          {uploadBusy ? 'Uploading…' : 'Upload'}
+        <button type="submit" class="nm-save-btn" disabled={uploadBusy || pickedFiles.length === 0}>
+          {uploadBusy ? 'Uploading…' : pickedFiles.length > 1 ? `Upload ${pickedFiles.length} files` : 'Upload'}
         </button>
       </div>
     </form>
@@ -525,7 +625,67 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
   }
+  .file-clear {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .file-clear:hover { border-color: var(--text-primary); color: var(--text-primary); }
+  .picker-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    margin-top: 2px;
+  }
+  .progress-line {
+    position: relative;
+    height: 22px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+    overflow: hidden;
+  }
+  .progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background: var(--accent);
+    transition: width 120ms ease;
+  }
+  .progress-text {
+    position: relative;
+    z-index: 1;
+    display: block;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    mix-blend-mode: difference;
+  }
+  .fail-list {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #c44;
+    padding: 6px 8px;
+    background: rgba(196, 68, 68, 0.06);
+    border-left: 2px solid #c44;
+  }
+  .fail-list summary { cursor: pointer; }
+  .fail-list ul { margin: 6px 0 0 1.2rem; padding: 0; }
+  .fail-list code { font-size: 11px; }
 
   /* ——— Permissions pills ——— */
   .perm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
