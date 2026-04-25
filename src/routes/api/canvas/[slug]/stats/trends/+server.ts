@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowRuns } from '$lib/db/schema';
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { resolvePeriod, type Granularity } from '$lib/canvas/stats/resolvePeriod';
 
 function canvasWorkflowName(slug: string): string {
@@ -123,6 +123,42 @@ export const GET: RequestHandler = async ({ params, url }) => {
     };
   });
 
+  // Recent individual runs — used to render a chronological timeline
+  // that stays readable even when bucket counts are sparse (1–2 runs in
+  // the whole window doesn't render usefully as bar chart).
+  const recentRunRows = await db
+    .select({
+      id: workflowRuns.id,
+      status: workflowRuns.status,
+      startedAt: workflowRuns.startedAt,
+      completedAt: workflowRuns.completedAt,
+      healingHistory: workflowRuns.healingHistory,
+    })
+    .from(workflowRuns)
+    .where(
+      and(
+        eq(workflowRuns.workflowId, wf.id),
+        gte(workflowRuns.startedAt, period.from),
+        lt(workflowRuns.startedAt, period.to),
+      ),
+    )
+    .orderBy(desc(workflowRuns.startedAt))
+    .limit(40);
+
+  const recentRuns = recentRunRows
+    .filter((r) => r.startedAt)
+    .map((r) => ({
+      id: r.id,
+      status: r.status,
+      healing:
+        Array.isArray(r.healingHistory) && (r.healingHistory as unknown[]).length > 0,
+      startedAt: r.startedAt!.toISOString(),
+      durationMs:
+        r.startedAt && r.completedAt
+          ? r.completedAt.getTime() - r.startedAt.getTime()
+          : null,
+    }));
+
   return json({
     window: {
       preset: period.preset,
@@ -130,6 +166,6 @@ export const GET: RequestHandler = async ({ params, url }) => {
       to: period.to.toISOString(),
       granularity: period.granularity,
     },
-    data: { buckets },
+    data: { buckets, recentRuns },
   });
 };

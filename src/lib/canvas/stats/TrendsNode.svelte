@@ -1,8 +1,17 @@
 <script lang="ts">
-  import { Chart, Svg, Bars, Spline, Axis } from 'layerchart';
-  import { scaleBand, scaleLinear } from 'd3-scale';
+  import { Chart, Svg, Area, Spline } from 'layerchart';
+  import { scaleTime, scaleLinear } from 'd3-scale';
+  import { curveMonotoneX } from 'd3-shape';
   import { useStats } from './useStats.svelte';
-  import { formatDurationMs, formatPercent } from './format';
+  import { formatDurationMs, formatPercent, formatRelative } from './format';
+
+  interface RecentRun {
+    id: string;
+    status: string;
+    healing: boolean;
+    startedAt: string;
+    durationMs: number | null;
+  }
 
   interface TrendsData {
     buckets: Array<{
@@ -10,6 +19,7 @@
       runs: { success: number; failed: number; healing: number };
       durationMs: { p50: number | null; p95: number | null; avg: number | null };
     }>;
+    recentRuns: RecentRun[];
   }
 
   interface Props {
@@ -26,62 +36,16 @@
     () => refreshKey,
   );
 
-  /** Pick a label format that matches the actual API granularity. */
-  function bucketLabel(t: Date, granularity: 'hour' | 'day' | 'week' | undefined): string {
-    if (granularity === 'hour') {
-      return `${String(t.getUTCHours()).padStart(2, '0')}:00`;
-    }
-    return `${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
-  }
-
-  const granularity = $derived(stats.window?.granularity);
-
-  const runsSeries = $derived(
-    stats.data?.buckets.map((b) => {
-      const s = b.runs.success;
-      const f = b.runs.failed;
-      const h = b.runs.healing;
-      return {
-        t: new Date(b.t),
-        label: bucketLabel(new Date(b.t), granularity),
-        total: s + f + h,
-        success: s,
-        successY0: 0,
-        successY1: s,
-        failed: f,
-        failedY0: s,
-        failedY1: s + f,
-        healing: h,
-        healingY0: s + f,
-        healingY1: s + f + h,
-      };
-    }) ?? [],
-  );
-
-  const durationSeries = $derived(
-    stats.data?.buckets.map((b) => ({
-      t: new Date(b.t),
-      label: bucketLabel(new Date(b.t), granularity),
-      p50: b.durationMs.p50 ?? null,
-      p95: b.durationMs.p95 ?? null,
-      avg: b.durationMs.avg ?? null,
-    })) ?? [],
-  );
-
-  const hasRuns = $derived(runsSeries.some((r) => r.total > 0));
-  const hasDuration = $derived(
-    durationSeries.some((d) => d.p50 !== null || d.p95 !== null || d.avg !== null),
-  );
-
-  // Aggregate KPIs across the window so the user sees a quick summary even
-  // before they parse the chart bars.
+  /** Window-wide aggregates, computed from buckets. */
   const kpis = $derived.by(() => {
     let runs = 0,
       success = 0,
       failed = 0,
       healing = 0,
       avgWeightedSum = 0,
-      avgWeightedCount = 0;
+      avgWeightedCount = 0,
+      minMs: number | null = null,
+      maxMs: number | null = null;
     for (const b of stats.data?.buckets ?? []) {
       const total = b.runs.success + b.runs.failed + b.runs.healing;
       runs += total;
@@ -89,25 +53,52 @@
       failed += b.runs.failed;
       healing += b.runs.healing;
       if (b.durationMs.avg !== null) {
-        // We don't have per-bucket run counts attributable to the avg
-        // (avg is over completed runs only), so weight by total runs as
-        // a reasonable proxy.
         avgWeightedSum += b.durationMs.avg * total;
         avgWeightedCount += total;
+        if (minMs === null || b.durationMs.avg < minMs) minMs = b.durationMs.avg;
+        if (maxMs === null || b.durationMs.avg > maxMs) maxMs = b.durationMs.avg;
       }
     }
     const avg = avgWeightedCount > 0 ? avgWeightedSum / avgWeightedCount : null;
-    return { runs, success, failed, healing, avg };
+    return { runs, success, failed, healing, avg, minMs, maxMs };
   });
+
+  // Sparkline series: average duration per bucket, oldest → newest. We
+  // only render this when there are enough non-null points to look like
+  // a meaningful curve rather than a stray dot.
+  const durationSparkline = $derived(
+    (stats.data?.buckets ?? [])
+      .filter((b) => b.durationMs.avg !== null)
+      .map((b) => ({ t: new Date(b.t), v: b.durationMs.avg as number })),
+  );
+
+  // Run-volume sparkline: total runs per bucket, oldest → newest. Same
+  // gating as duration — needs at least a few points to read.
+  const volumeSparkline = $derived(
+    (stats.data?.buckets ?? []).map((b) => ({
+      t: new Date(b.t),
+      v: b.runs.success + b.runs.failed + b.runs.healing,
+    })),
+  );
+
+  const recentRuns = $derived(stats.data?.recentRuns ?? []);
+  // Render the timeline oldest → newest so the most recent run is on the
+  // right (matches the way users read time-series charts).
+  const timelineRuns = $derived([...recentRuns].reverse());
+
+  const showVolumeChart = $derived(
+    volumeSparkline.filter((p) => p.v > 0).length >= 4,
+  );
+  const showDurationChart = $derived(durationSparkline.length >= 4);
 </script>
 
 <div class="stats-node stats-trends">
-  <header>
-    <span class="title">Stats · trends</span>
-    {#if granularity}
-      <span class="gran">{granularity}-buckets</span>
+  <header class="hd">
+    <span class="title">Trends</span>
+    {#if stats.window?.granularity}
+      <span class="gran">{stats.window.granularity}-buckets</span>
     {/if}
-    <button class="refresh" onclick={() => stats.refresh()} title="Refresh">⟳</button>
+    <button class="refresh" onclick={() => stats.refresh()} aria-label="Refresh">⟳</button>
   </header>
 
   {#if stats.error}
@@ -115,85 +106,119 @@
   {:else if stats.loading && !stats.data}
     <div class="skel">Loading…</div>
   {:else if stats.data}
+    <!-- ——— KPI strip ——— -->
     <div class="kpis">
-      <div class="kpi"><span class="v">{kpis.runs}</span><span class="l">runs</span></div>
-      <div class="kpi"><span class="v ok">{kpis.success}</span><span class="l">success</span></div>
-      <div class="kpi"><span class="v fail">{kpis.failed}</span><span class="l">failed</span></div>
       <div class="kpi">
-        <span class="v">{kpis.runs ? formatPercent(kpis.success / kpis.runs) : '—'}</span>
-        <span class="l">rate</span>
+        <span class="kpi-l">Runs</span>
+        <span class="kpi-v">{kpis.runs}</span>
       </div>
-      <div class="kpi"><span class="v">{formatDurationMs(kpis.avg)}</span><span class="l">avg</span></div>
+      <div class="kpi">
+        <span class="kpi-l">Success</span>
+        <span class="kpi-v ok">{kpis.success}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-l">Failed</span>
+        <span class="kpi-v fail">{kpis.failed}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-l">Rate</span>
+        <span class="kpi-v">
+          {kpis.runs ? formatPercent(kpis.success / kpis.runs) : '—'}
+        </span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-l">Avg time</span>
+        <span class="kpi-v">{formatDurationMs(kpis.avg)}</span>
+      </div>
     </div>
 
-    <section class="chart-block" class:empty={!hasRuns}>
-      <h4>Runs over time</h4>
-      <div class="chart-host">
-        {#if hasRuns}
-          <Chart
-            data={runsSeries}
-            x="label"
-            xScale={scaleBand().padding(0.2)}
-            y="total"
-            yScale={scaleLinear()}
-            yNice
-            padding={{ top: 8, right: 8, bottom: 22, left: 32 }}
-          >
-            <Svg>
-              <Axis placement="left" rule grid ticks={3} />
-              <Axis placement="bottom" rule ticks={Math.min(8, runsSeries.length)} />
-              <Bars y="successY0" y1="successY1" fill="#3a8a56" strokeWidth={0} />
-              <Bars y="failedY0" y1="failedY1" fill="#c44" strokeWidth={0} />
-              <Bars y="healingY0" y1="healingY1" fill="#ffcf40" strokeWidth={0} />
-            </Svg>
-          </Chart>
-        {:else}
-          <div class="empty-msg">No runs in this window</div>
-        {/if}
-      </div>
-      <div class="legend">
-        <span class="swatch" style="background: #3a8a56"></span><span>success</span>
-        <span class="swatch" style="background: #c44"></span><span>failed</span>
-        <span class="swatch" style="background: #ffcf40"></span><span>healing</span>
-      </div>
-    </section>
-
-    {#if hasDuration}
-      <section class="chart-block">
-        <h4>Run duration</h4>
-        <div class="chart-host">
-          <Chart
-            data={durationSeries}
-            x="label"
-            xScale={scaleBand().padding(0.2)}
-            y={(d: { p50: number | null; p95: number | null; avg: number | null }) =>
-              Math.max(d.p95 ?? 0, d.avg ?? 0, d.p50 ?? 0)}
-            yScale={scaleLinear()}
-            yNice
-            padding={{ top: 8, right: 8, bottom: 22, left: 48 }}
-          >
-            <Svg>
-              <Axis
-                placement="left"
-                rule
-                grid
-                ticks={3}
-                format={(v: number) => formatDurationMs(v)}
-              />
-              <Axis placement="bottom" rule ticks={Math.min(8, durationSeries.length)} />
-              <Spline y="avg" stroke="var(--accent, #7a6cd4)" strokeWidth={1.5} />
-              <Spline y="p50" stroke="#3a8a56" strokeWidth={1.25} />
-              <Spline y="p95" stroke="#c44" strokeWidth={1.25} strokeDasharray="4 3" />
-            </Svg>
-          </Chart>
+    <!-- ——— Run timeline (always renders something useful) ——— -->
+    <section class="block">
+      <h4>Recent runs</h4>
+      {#if timelineRuns.length === 0}
+        <div class="empty-msg">No runs in this window</div>
+      {:else}
+        <div class="timeline" role="list">
+          {#each timelineRuns as r (r.id)}
+            <div
+              role="listitem"
+              class="tick s-{r.status}"
+              class:healing={r.healing}
+              title={`${r.status}${r.healing ? ' · healed' : ''}\n${formatDurationMs(r.durationMs)} · ${formatRelative(new Date(r.startedAt))}`}
+            ></div>
+          {/each}
         </div>
         <div class="legend">
-          <span class="swatch" style="background: var(--accent, #7a6cd4)"></span><span>avg</span>
-          <span class="swatch" style="background: #3a8a56"></span><span>p50</span>
-          <span class="swatch dashed" style="background: #c44"></span><span>p95</span>
+          <span class="swatch s-completed"></span><span>success</span>
+          <span class="swatch s-failed"></span><span>failed</span>
+          <span class="swatch s-running"></span><span>running</span>
+          <span class="swatch healing"></span><span>healed</span>
+        </div>
+      {/if}
+    </section>
+
+    <!-- ——— Run volume sparkline (only when we have enough buckets) ——— -->
+    {#if showVolumeChart}
+      <section class="block">
+        <h4>Run volume</h4>
+        <div class="chart-host">
+          <Chart
+            data={volumeSparkline}
+            x="t"
+            xScale={scaleTime()}
+            y="v"
+            yScale={scaleLinear()}
+            yNice
+            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+          >
+            <Svg>
+              <Area fill="var(--accent)" fillOpacity={0.15} curve={curveMonotoneX} />
+              <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+            </Svg>
+          </Chart>
         </div>
       </section>
     {/if}
+
+    <!-- ——— Duration sparkline OR fallback KPIs ——— -->
+    <section class="block">
+      <h4>Duration</h4>
+      {#if showDurationChart}
+        <div class="chart-host">
+          <Chart
+            data={durationSparkline}
+            x="t"
+            xScale={scaleTime()}
+            y="v"
+            yScale={scaleLinear()}
+            yNice
+            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+          >
+            <Svg>
+              <Area fill="var(--accent)" fillOpacity={0.1} curve={curveMonotoneX} />
+              <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+            </Svg>
+          </Chart>
+        </div>
+      {:else if kpis.avg !== null}
+        <div class="dur-kpis">
+          <div class="dur-kpi">
+            <span class="kpi-l">Min</span>
+            <span class="kpi-v">{formatDurationMs(kpis.minMs)}</span>
+          </div>
+          <div class="dur-kpi">
+            <span class="kpi-l">Avg</span>
+            <span class="kpi-v">{formatDurationMs(kpis.avg)}</span>
+          </div>
+          <div class="dur-kpi">
+            <span class="kpi-l">Max</span>
+            <span class="kpi-v">{formatDurationMs(kpis.maxMs)}</span>
+          </div>
+        </div>
+      {:else}
+        <div class="empty-msg">No duration data</div>
+      {/if}
+    </section>
   {/if}
 </div>
 
@@ -203,123 +228,189 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    padding: 10px;
-    gap: 6px;
-    background: var(--bg-card, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-    border-radius: 8px;
-    font: 11px / 1.4 ui-monospace, Menlo, monospace;
-    color: var(--text-primary, #e6e6e6);
-    overflow: hidden;
+    padding: 12px 14px 10px;
+    gap: 12px;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    overflow: auto;
   }
-  header {
+  .hd {
     display: flex;
     align-items: center;
     gap: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--divider);
   }
-  .title { font-weight: 600; font-size: 12px; }
-  .gran {
-    color: var(--text-muted, #888);
-    font-size: 9px;
+  .title {
+    font-size: 11px;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+  }
+  .gran {
+    font-size: 9px;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
   .refresh {
     margin-left: auto;
-    background: transparent; border: none; color: var(--text-muted, #888);
-    cursor: pointer; font-size: 14px; padding: 0 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 6px;
+    border-radius: 2px;
   }
-  .refresh:hover { color: var(--text-primary, #e6e6e6); }
+  .refresh:hover {
+    color: var(--text-primary);
+    border-color: var(--card-border);
+  }
+
+  /* ——— KPI strip ——— */
   .kpis {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
+    gap: 6px;
     flex: 0 0 auto;
   }
   .kpi {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 4px;
-    padding: 4px 0;
+    gap: 2px;
+    padding: 6px 8px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
   }
-  .kpi .v { font-size: 13px; font-weight: 600; }
-  .kpi .v.ok { color: #3a8a56; }
-  .kpi .v.fail { color: #c44; }
-  .kpi .l {
-    color: var(--text-muted, #888);
+  .kpi-l {
     font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
   }
-  .chart-block {
+  .kpi-v {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .kpi-v.ok { color: var(--accent); }
+  .kpi-v.fail { color: #b53b3b; }
+
+  /* ——— Block sections ——— */
+  .block {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    flex: 1 1 0;
-    min-height: 140px;
-  }
-  .chart-block.empty {
+    gap: 6px;
     flex: 0 0 auto;
-    min-height: 60px;
   }
-  .chart-block h4 {
-    font-size: 10px;
+  .block h4 {
+    font-size: 9px;
     margin: 0;
-    color: var(--text-muted, #888);
+    color: var(--text-ghost);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.12em;
+    font-weight: 500;
   }
-  /*
-   * The chart-host needs an absolute height anchor so layerchart's <Chart>
-   * receives a non-zero clientHeight on first render — without it the chart
-   * collapses to ~50% of the available space because the surrounding flex
-   * column hadn't laid out before the chart measured itself.
-   */
-  .chart-host {
-    position: relative;
-    flex: 1 1 0;
-    min-height: 110px;
+
+  /* ——— Run timeline ——— */
+  .timeline {
+    display: flex;
+    align-items: stretch;
+    gap: 3px;
+    padding: 6px 8px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    min-height: 28px;
+    overflow-x: auto;
   }
+  .tick {
+    width: 10px;
+    height: 16px;
+    background: var(--text-ghost);
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+  .tick.s-completed { background: var(--accent); }
+  .tick.s-failed { background: #b53b3b; }
+  .tick.s-running { background: var(--accent-hover); opacity: 0.7; }
+  .tick.healing {
+    background: repeating-linear-gradient(
+      45deg,
+      var(--accent) 0 3px,
+      var(--accent-tint-35) 3px 6px
+    );
+  }
+
   .legend {
     display: flex;
     align-items: center;
     gap: 4px;
     font-size: 9px;
-    color: var(--text-muted, #888);
-    padding: 0 4px 2px;
-    flex-wrap: wrap;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
   .legend .swatch {
     display: inline-block;
     width: 8px;
     height: 8px;
-    border-radius: 2px;
+    border-radius: 1px;
+    background: var(--text-ghost);
   }
-  .legend .swatch.dashed {
+  .legend .swatch.s-completed { background: var(--accent); }
+  .legend .swatch.s-failed { background: #b53b3b; }
+  .legend .swatch.s-running { background: var(--accent-hover); opacity: 0.7; }
+  .legend .swatch.healing {
     background: repeating-linear-gradient(
-      90deg,
-      currentColor 0 3px,
-      transparent 3px 6px
-    ) !important;
+      45deg,
+      var(--accent) 0 2px,
+      var(--accent-tint-35) 2px 4px
+    );
   }
   .legend span + span { margin-right: 6px; }
+
+  /* ——— Sparklines ——— */
+  .chart-host {
+    position: relative;
+    height: 56px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 4px 8px;
+  }
+
+  /* ——— Duration fallback KPIs ——— */
+  .dur-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .dur-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+  }
+
   .error-strip {
-    color: #c44;
+    color: #b53b3b;
     font-size: 10px;
-    padding: 4px;
-    border: 1px solid #c44;
-    border-radius: 4px;
+    padding: 6px 8px;
+    border: 1px solid rgba(181, 59, 59, 0.4);
+    background: rgba(181, 59, 59, 0.06);
   }
   .skel,
   .empty-msg {
-    color: var(--text-muted, #888);
+    color: var(--text-ghost);
     font-style: italic;
     font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
+    padding: 8px;
+    text-align: center;
   }
 </style>
