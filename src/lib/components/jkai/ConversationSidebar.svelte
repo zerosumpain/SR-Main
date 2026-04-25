@@ -228,6 +228,13 @@
 
     <!-- Footer actions -->
     <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
+      <a
+        href="/jkai/research"
+        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"
+        style="border-color: var(--card-border); color: var(--accent);"
+      >
+        <span>🔎</span> Research
+      </a>
       <div
         class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border"
         style="border-color: var(--card-border);"
