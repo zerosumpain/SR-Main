@@ -35,6 +35,7 @@
     { href: '/', label: 'Home' },
     { href: '/jkai', label: 'Chat' },
     { href: '/jkai/intel', label: 'Intel' },
+    { href: '/jkai/research', label: 'Research' },
     { href: '/jkai/builds', label: 'Builds' },
     { href: '/jkai/prompts', label: 'Prompts' },
     { href: '/jkai/canvas', label: 'Canvases' },
@@ -43,6 +44,7 @@
   const DEEPDIVE_ITEMS: NavItem[] = [
     { href: '/', label: 'Home' },
     { href: '/projects', label: 'Projects' },
+    { href: '/jkai/research', label: 'Research' },
     { href: '/deepdive', label: 'Deep Dive' },
     { href: '/quickanswer', label: 'Quick' },
   ];
