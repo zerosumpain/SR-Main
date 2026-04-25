@@ -26,7 +26,7 @@ import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
-import { summarizeToolResult } from './tool-summary';
+import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractPlan, awaitPlanApproval } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 
@@ -160,9 +160,10 @@ async function runSingleToolCall(
     };
   }
 
+  const runningSummary = summarizeRunningTool(fnName, fnArgs);
   onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, status: 'running' });
-  onProgress?.(`${fnName}: running\n`);
-  onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs, toolCallId: toolCall.id });
+  onProgress?.(`${fnName}: running${runningSummary ? ` — ${runningSummary}` : ''}\n`);
+  onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs, toolCallId: toolCall.id, summary: runningSummary || undefined });
 
   let toolResult: any;
 
@@ -304,10 +305,13 @@ async function runSingleToolCall(
     summary: summarizeToolResult({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, result: progressResult, status }),
   });
 
-  // Truncate large tool results to avoid overwhelming the LLM context
+  // Truncate large tool results to avoid overwhelming the LLM context.
+  // 32KB strikes a balance: workflow_inspect / workflow_list_node_types /
+  // file_read are typically 10-25KB and need to be seen whole; truly
+  // pathological results still get clipped.
   let resultStr = JSON.stringify(toolResult);
-  if (resultStr.length > 8000) {
-    resultStr = resultStr.slice(0, 8000) + '... [truncated — result too large for chat context]';
+  if (resultStr.length > 32000) {
+    resultStr = resultStr.slice(0, 32000) + '... [truncated — result too large for chat context]';
   }
   return {
     toolMessage: {

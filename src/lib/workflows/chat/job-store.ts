@@ -29,7 +29,7 @@ export interface ClarifyQuestion {
 
 export type JobEvent =
   | { type: 'token'; delta: string }
-  | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string }
+  | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string; summary?: string }
   | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }
   | { type: 'heartbeat'; summary: string; elapsedMs: number }

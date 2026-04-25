@@ -538,6 +538,7 @@
               tool: data.tool,
               args: data.args || {},
               status: 'running',
+              summary: data.summary,
             };
             messages = messages.map((m) => {
               if (m.id !== progressId) return m;
@@ -660,6 +661,7 @@
                 tool: ev.tool,
                 args: ev.args ?? {},
                 status: 'running',
+                summary: ev.summary,
               });
             } else if (ev.type === 'tool_result') {
               const callId = ev.toolCallId;
