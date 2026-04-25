@@ -12,6 +12,7 @@ import {
 import { eq, isNull, desc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
+import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
@@ -549,11 +550,40 @@ export async function generalChat(
     activatedToolsets.add('visualise');
   }
 
-  const { client, model } = await getLLMClient(options.modelContext);
+  const baseCtx = options.modelContext;
+  // Smarter / larger-context model used for plan/clarify rounds and any
+  // turn whose prompt has grown past the threshold. Sub-agent calls and
+  // canvas-bound calls stay on the base model — those are tactical, not
+  // strategic. Returns null when the operator has disabled the split.
+  const isOrchestrator = (options.subagentDepth ?? 0) === 0 && !!options.jobId && !options.workflowId;
+  const thinkingCtx: ModelContext | null = isOrchestrator ? await resolveThinkingModel() : null;
+  const THINKING_PROMPT_CHAR_THRESHOLD = 160_000; // ~40k tokens (4 chars/token)
+
   let responseText = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+
+    // --- Per-turn model selection ---
+    // Use the thinking-tier model (e.g. glm-5.1) for "decision" turns: the
+    // first round (plan / clarify decision), turns resuming after a plan
+    // adjustment or clarify answers (the LLM is re-deciding scope), and
+    // any turn where the prompt has grown past the large-context bar.
+    // Tactical execution rounds stay on the cheaper / faster base model.
+    const promptChars = messages.reduce(
+      (n, m) => n + (typeof m.content === 'string' ? m.content.length : 0),
+      0,
+    );
+    const lastMsg = messages[messages.length - 1];
+    const lastUserText = lastMsg?.role === 'user' && typeof lastMsg.content === 'string' ? lastMsg.content : '';
+    const useThinking = !!thinkingCtx && (
+      round === 0
+      || lastUserText.startsWith('Adjust the plan:')
+      || lastUserText.startsWith('My answers:')
+      || promptChars > THINKING_PROMPT_CHAR_THRESHOLD
+    );
+    const turnCtx = useThinking && thinkingCtx ? thinkingCtx : baseCtx;
+    const { client, model } = await getLLMClient(turnCtx);
 
     // Halfway through available rounds: get a plain-English status update so
     // the user can see progress. Separate call with no tools, doesn't count

@@ -48,6 +48,25 @@ export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<Mod
   return v ?? { provider: 'zai', modelId: 'glm-4.6' };
 }
 
+/**
+ * Orchestrator-only: a smarter / larger-context model used for "thinking"
+ * turns — plan emission, clarify emission, plan revision, clarify-answer
+ * resumption, and any turn where the prompt has grown past the large-
+ * context threshold. Returns null if the operator has explicitly disabled
+ * the split (set the setting to `{ disabled: true }`).
+ */
+export async function resolveThinkingModel(): Promise<ModelContext | null> {
+  const v = await getSetting<ModelContext | { modelId?: string; disabled?: boolean } | null>(
+    'jkai.builder.thinking_model',
+  );
+  if (v && typeof v === 'object' && 'disabled' in v && v.disabled) return null;
+  if (v && typeof v === 'object' && 'provider' in v && 'modelId' in v) return v as ModelContext;
+  if (v && typeof v === 'object' && 'modelId' in v && typeof v.modelId === 'string') {
+    return { provider: 'zai', modelId: v.modelId };
+  }
+  return { provider: 'zai', modelId: 'glm-5.1' };
+}
+
 /** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */
 export async function resolveChatAltOpenRouterModel(): Promise<ModelContext | null> {
   const v = await getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model');
