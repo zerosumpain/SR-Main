@@ -728,10 +728,12 @@ export async function generalChat(
         : undefined,
     };
 
-    // --- Clarify-phase interception (round 0 only, top-level jobs) ---
+    // --- Clarify-phase interception (every round — the LLM may emit
+    // follow-up <clarify> blocks after the user answers, and those must also
+    // route to ClarifyCard, not the raw chat bubble). Top-level jobs only.
     // Takes priority over plan interception: ask questions first, plan only
     // once we know what we're doing.
-    if (round === 0 && options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<clarify>')) {
+    if (options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<clarify>')) {
       const extracted = extractClarify(msg.content);
       if (extracted) {
         msg.tool_calls = undefined;
