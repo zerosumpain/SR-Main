@@ -21,16 +21,16 @@
   }
 </script>
 
-<section class="max-w-lg mx-auto px-6 sm:px-8">
-  <h2 class="text-[10px] uppercase tracking-[0.3em] mb-6" style="color: var(--text-ghost); font-family: var(--font-mono);">
-    Recent Activity
-  </h2>
+<section class="nm-sec timeline-wrap">
+  <div class="nm-sec-hd">
+    <span class="sr-label-tight">Recent Activity</span>
+  </div>
 
   {#if timeline?.events?.length}
     <div class="space-y-3">
       {#each timeline.events as event}
         <button
-          class="w-full text-left backdrop-blur-md border rounded-xl p-4 transition-colors {event.type === 'strava_activity' ? 'cursor-pointer hover:border-[var(--accent)]' : ''}"
+          class="w-full text-left border p-4 transition-colors {event.type === 'strava_activity' ? 'cursor-pointer hover:border-[var(--accent)]' : ''}"
           style="background: var(--card-bg); border-color: var(--card-border);"
           onclick={() => handleClick(event)}
           disabled={event.type !== 'strava_activity'}
@@ -39,12 +39,12 @@
             <span class="text-lg">{typeIcons[event.type] || '📊'}</span>
             <div class="flex-1">
               <p class="text-sm font-normal" style="color: var(--text-primary);">{event.title}</p>
-              <p class="text-[10px] mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+              <p class="sr-label-tight mt-1" style="color: var(--text-ghost);">
                 {formatDate(event.date)}
               </p>
               <div class="flex gap-3 mt-2">
                 {#each Object.entries(event.summary) as [key, value]}
-                  <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+                  <span class="sr-label-tight" style="color: var(--text-ghost);">
                     {key}: <span style="color: var(--text-secondary);">{value as string}</span>
                   </span>
                 {/each}
@@ -61,3 +61,11 @@
     <p class="text-sm" style="color: var(--text-ghost);">No activity data yet.</p>
   {/if}
 </section>
+
+<style>
+  .timeline-wrap {
+    padding: 0 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>

@@ -79,7 +79,7 @@
 
     <!-- Route Map -->
     {#if svgData}
-      <div class="rounded-xl overflow-hidden border p-4" style="border-color: var(--card-border); background: var(--card-bg);">
+      <div class="overflow-hidden border p-4" style="border-color: var(--card-border); background: var(--card-bg);">
         <svg
           viewBox={svgData.viewBox}
           class="w-full"
@@ -106,8 +106,8 @@
         { label: 'Pace', value: formatPace(activity.averageSpeed), desc: 'Average pace per kilometre' },
         { label: 'Elevation', value: activity.totalElevationGain ? `${Math.round(activity.totalElevationGain)}m` : '—', desc: 'Total elevation gained' },
       ] as metric}
-        <div class="p-3 rounded-lg" style="background: var(--card-bg);">
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">{metric.label}</p>
+        <div class="p-3" style="background: var(--card-bg);">
+          <p class="sr-label-tight" style="color: var(--text-ghost);">{metric.label}</p>
           <p class="text-lg font-light mt-0.5" style="color: var(--text-primary);">{metric.value}</p>
           <p class="text-[9px] mt-0.5" style="color: var(--text-whisper);">{metric.desc}</p>
         </div>
@@ -120,14 +120,14 @@
         <p class="text-[10px] uppercase tracking-[0.2em] mb-3" style="color: var(--text-ghost); font-family: var(--font-mono);">Heart Rate</p>
         <div class="grid grid-cols-2 gap-3">
           {#if activity.averageHeartrate}
-            <div class="p-3 rounded-lg" style="background: var(--card-bg);">
-              <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Average</p>
+            <div class="p-3" style="background: var(--card-bg);">
+              <p class="sr-label-tight" style="color: var(--text-ghost);">Average</p>
               <p class="text-lg font-light mt-0.5" style="color: var(--text-primary);">{Math.round(activity.averageHeartrate)} <span class="text-xs" style="color: var(--text-ghost);">bpm</span></p>
             </div>
           {/if}
           {#if activity.maxHeartrate}
-            <div class="p-3 rounded-lg" style="background: var(--card-bg);">
-              <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Max</p>
+            <div class="p-3" style="background: var(--card-bg);">
+              <p class="sr-label-tight" style="color: var(--text-ghost);">Max</p>
               <p class="text-lg font-light mt-0.5" style="color: var(--text-primary);">{Math.round(activity.maxHeartrate)} <span class="text-xs" style="color: var(--text-ghost);">bpm</span></p>
             </div>
           {/if}

@@ -10,23 +10,23 @@
   };
 </script>
 
-<section class="max-w-lg mx-auto px-6 sm:px-8">
-  <h2 class="text-[10px] uppercase tracking-[0.3em] mb-6" style="color: var(--text-ghost); font-family: var(--font-mono);">
-    Body Signals
-  </h2>
+<section class="nm-sec signals-wrap">
+  <div class="nm-sec-hd">
+    <span class="sr-label-tight">Body Signals</span>
+  </div>
 
   {#if signals?.length}
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       {#each signals as signal}
-        <div class="backdrop-blur-md border rounded-xl p-4" style="background: var(--card-bg); border-color: var(--card-border);">
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        <div class="border p-4" style="background: var(--card-bg); border-color: var(--card-border);">
+          <p class="sr-label-tight" style="color: var(--text-ghost);">
             {labels[signal.metric] || signal.metric}
           </p>
           <p class="text-xl font-light mt-1" style="color: var(--text-primary);">
             {Math.round(signal.current)}
             <span class="text-xs" style="color: var(--text-ghost);">{signal.unit}</span>
           </p>
-          <p class="text-[9px] mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          <p class="sr-label-tight mt-1" style="color: var(--text-ghost);">
             {signal.trend === 'up' ? '↑' : signal.trend === 'down' ? '↓' : '→'} avg {Math.round(signal.average7d)} {signal.unit}
           </p>
         </div>
@@ -36,3 +36,11 @@
     <p class="text-sm" style="color: var(--text-ghost);">No body signal data yet.</p>
   {/if}
 </section>
+
+<style>
+  .signals-wrap {
+    padding: 0 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>

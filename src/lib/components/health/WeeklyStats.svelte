@@ -11,45 +11,45 @@
   }
 </script>
 
-<section class="max-w-lg mx-auto px-6 sm:px-8">
-  <h2 class="text-[10px] uppercase tracking-[0.3em] mb-6" style="color: var(--text-ghost); font-family: var(--font-mono);">
-    This Week
-  </h2>
+<section class="nm-sec weekly-wrap">
+  <div class="nm-sec-hd">
+    <span class="sr-label-tight">This Week</span>
+  </div>
 
   {#if stats?.weekly}
-    <div class="backdrop-blur-md border rounded-xl p-6" style="background: var(--card-bg); border-color: var(--card-border);">
-      <div class="grid grid-cols-3 gap-4">
+    <div class="border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="grid grid-cols-3 gap-4 p-6">
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Activities</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Activities</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.activities}</p>
         </div>
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Distance</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Distance</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{formatDistance(stats.weekly.totalDistance)} <span class="text-xs" style="color: var(--text-ghost);">km</span></p>
         </div>
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Duration</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Duration</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{formatDuration(stats.weekly.totalDuration)}</p>
         </div>
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Elevation</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Elevation</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{Math.round(stats.weekly.totalElevation)} <span class="text-xs" style="color: var(--text-ghost);">m</span></p>
         </div>
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Avg Recovery</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Avg Recovery</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.avgRecovery}%</p>
         </div>
         <div>
-          <p class="text-[9px] uppercase tracking-[0.2em]" style="color: var(--text-ghost); font-family: var(--font-mono);">Avg Sleep</p>
+          <p class="sr-label-tight" style="color: var(--text-ghost);">Avg Sleep</p>
           <p class="text-xl font-light" style="color: var(--text-primary);">{stats.weekly.avgSleep}%</p>
         </div>
       </div>
     </div>
 
     {#if stats.personalRecords?.length}
-      <h3 class="text-[10px] uppercase tracking-[0.3em] mt-8 mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Personal Records
-      </h3>
+      <div class="nm-sec-hd" style="margin-top: 2rem;">
+        <span class="sr-label-tight">Personal Records</span>
+      </div>
       <div class="space-y-2">
         {#each stats.personalRecords as pr}
           <div class="flex justify-between items-center py-2" style="border-bottom: 1px solid var(--card-border);">
@@ -65,3 +65,11 @@
     <p class="text-sm" style="color: var(--text-ghost);">No activity data yet.</p>
   {/if}
 </section>
+
+<style>
+  .weekly-wrap {
+    padding: 0 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>
