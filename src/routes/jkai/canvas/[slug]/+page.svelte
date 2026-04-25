@@ -567,6 +567,56 @@
   const runningCount = $derived(viewNodes.filter((n) => n.status === 'running').length);
   const isRunning = $derived(runMeta.state === 'running');
 
+  // Minimap geometry — fits all node bounds + the current visible viewport
+  // into the 146×60 minimap-body, then projects nodes and the viewport frame
+  // into that space so the frame tracks pan/zoom in real time.
+  const MINIMAP_BODY_W = 146;
+  const MINIMAP_BODY_H = 60;
+  const MINIMAP_PAD = 4;
+  const minimap = $derived.by(() => {
+    if (viewNodes.length === 0 || viewportW === 0 || viewportH === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of viewNodes) {
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      const r = n.x + nodeW(n);
+      const b = n.y + nodeH(n);
+      if (r > maxX) maxX = r;
+      if (b > maxY) maxY = b;
+    }
+    const viewLeft = -panX / zoom;
+    const viewTop = -panY / zoom;
+    const viewRight = (viewportW - panX) / zoom;
+    const viewBottom = (viewportH - panY) / zoom;
+    if (viewLeft < minX) minX = viewLeft;
+    if (viewTop < minY) minY = viewTop;
+    if (viewRight > maxX) maxX = viewRight;
+    if (viewBottom > maxY) maxY = viewBottom;
+    const worldW = Math.max(1, maxX - minX);
+    const worldH = Math.max(1, maxY - minY);
+    const innerW = MINIMAP_BODY_W - MINIMAP_PAD * 2;
+    const innerH = MINIMAP_BODY_H - MINIMAP_PAD * 2;
+    const scale = Math.min(innerW / worldW, innerH / worldH);
+    const offsetX = MINIMAP_PAD + (innerW - worldW * scale) / 2;
+    const offsetY = MINIMAP_PAD + (innerH - worldH * scale) / 2;
+    return {
+      scale,
+      offsetX,
+      offsetY,
+      minX,
+      minY,
+      frame: {
+        x: offsetX + (viewLeft - minX) * scale,
+        y: offsetY + (viewTop - minY) * scale,
+        w: Math.max(2, (viewRight - viewLeft) * scale),
+        h: Math.max(2, (viewBottom - viewTop) * scale),
+      },
+    };
+  });
+
   // ——— Chat + run lifecycle ———
   async function sendMessageFrom(chatNodeId: string | null, text: string) {
     if (runMeta.state === 'running' || !text.trim()) return;
@@ -1027,6 +1077,8 @@
 
 
   let viewportEl: HTMLDivElement | undefined;
+  let viewportW = $state(0);
+  let viewportH = $state(0);
   let panStart = $state<{
     x: number;
     y: number;
@@ -2377,6 +2429,8 @@
     class="viewport"
     class:panning={panStart !== null}
     bind:this={viewportEl}
+    bind:clientWidth={viewportW}
+    bind:clientHeight={viewportH}
     role="application"
     aria-label="Canvas graph"
     style:--grid-offset-x="{panX}px"
@@ -4261,19 +4315,29 @@
     <!-- Minimap -->
     <div class="minimap">
       <div class="minimap-head">
-        <span>MINIMAP</span><span>100%</span>
+        <span>MINIMAP</span><span>{zoomPct}%</span>
       </div>
       <div class="minimap-body">
-        <div class="minimap-chat"></div>
-        {#each viewNodes as n (n.id + '-m')}
+        {#if minimap}
+          {#each viewNodes as n (n.id + '-m')}
+            <div
+              class="minimap-node"
+              class:minimap-node-chat={n.kind === 'chat'}
+              style:left="{minimap.offsetX + (n.x - minimap.minX) * minimap.scale}px"
+              style:top="{minimap.offsetY + (n.y - minimap.minY) * minimap.scale}px"
+              style:width="{Math.max(2, nodeW(n) * minimap.scale)}px"
+              style:height="{Math.max(2, nodeH(n) * minimap.scale)}px"
+              style:background={n.kind === 'chat' ? 'var(--text-primary)' : KIND_COLOR[n.kind]}
+            ></div>
+          {/each}
           <div
-            class="minimap-node"
-            style:left="{40 + (n.x - COL[0]) * 0.13}px"
-            style:top="{8 + (n.y - 120) * 0.18}px"
-            style:background={KIND_COLOR[n.kind]}
+            class="minimap-frame"
+            style:left="{minimap.frame.x}px"
+            style:top="{minimap.frame.y}px"
+            style:width="{minimap.frame.w}px"
+            style:height="{minimap.frame.h}px"
           ></div>
-        {/each}
-        <div class="minimap-frame"></div>
+        {/if}
       </div>
     </div>
   </div>
@@ -5354,24 +5418,15 @@
     background: var(--bg-section);
     border: 1px solid var(--divider);
   }
-  .minimap-chat {
-    position: absolute;
-    left: 6px;
-    top: 4px;
-    width: 28px;
-    height: 24px;
-    background: var(--text-primary);
-  }
   .minimap-node {
     position: absolute;
-    width: 14px;
-    height: 6px;
   }
   .minimap-frame {
     position: absolute;
-    inset: 0;
     border: 1.5px solid var(--accent);
+    background: var(--accent-tint-08, transparent);
     pointer-events: none;
+    transition: left 60ms linear, top 60ms linear, width 60ms linear, height 60ms linear;
   }
 
   /* ——— Edge inspector ——— */
