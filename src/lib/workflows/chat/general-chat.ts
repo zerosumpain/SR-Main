@@ -753,8 +753,10 @@ export async function generalChat(
       }
     }
 
-    // --- Plan-phase interception (round 0 only, when job-scoped) ---
-    if (round === 0 && options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
+    // --- Plan-phase interception (every round — the LLM may emit a revised
+    // plan after an "adjusted" decision, and that revision must also go
+    // through PlanCard, not the raw chat bubble). Top-level jobs only. ---
+    if (options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
       const extracted = extractPlan(msg.content);
       if (extracted) {
         // Tool calls in the same turn as a plan would be premature — discard
