@@ -120,9 +120,10 @@ export const whoopWorkouts = pgTable('whoop_workouts', {
   startDateLocal: text('start_date_local').notNull(), // ISO string
   timezone: text('timezone').notNull(),
 
-  // Sport mapping
-  sportId: integer('sport_id').notNull(),
-  sportName: text('sport_name'), // Derived from sportId
+  // Sport mapping (Whoop v2 dropped numeric sport_id for many activities;
+  // sport_name is now the authoritative label)
+  sportId: integer('sport_id'),
+  sportName: text('sport_name'),
 
   // Core metrics
   strain: doublePrecision('strain').notNull(),
@@ -248,6 +249,29 @@ export const healthSyncState = pgTable('health_sync_state', {
 });
 
 export type HealthSyncState = typeof healthSyncState.$inferSelect;
+
+// ==========================================
+// Health Dashboard - Sync Jobs (range-aware backfill)
+// ==========================================
+
+export const healthSyncJobs = pgTable('health_sync_jobs', {
+  id: text('id').primaryKey(), // uuid
+  service: text('service').notNull(), // 'strava' | 'whoop' | 'all'
+  mode: text('mode').notNull().default('backfill'), // 'incremental' | 'backfill'
+  rangeStart: integer('range_start'), // unix seconds, null = unbounded
+  rangeEnd: integer('range_end'),
+  status: text('status').notNull().default('queued'), // queued | running | success | error | cancelled
+  recordsSynced: integer('records_synced').notNull().default(0),
+  pagesDone: integer('pages_done').notNull().default(0),
+  totalPagesEstimate: integer('total_pages_estimate'),
+  currentStep: text('current_step'), // 'whoop:workouts', 'whoop:sleep', 'strava:page-3', etc.
+  startedAt: integer('started_at').notNull(),
+  finishedAt: integer('finished_at'),
+  errorMessage: text('error_message'),
+  cancelRequested: boolean('cancel_requested').notNull().default(false),
+});
+
+export type HealthSyncJob = typeof healthSyncJobs.$inferSelect;
 
 // ==========================================
 // Health Dashboard - Apple Health Metrics

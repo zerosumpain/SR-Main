@@ -79,12 +79,15 @@ export async function refreshStravaToken(refreshToken: string): Promise<StravaTo
 export async function getStravaActivities(
   accessToken: string,
   page = 1,
-  perPage = 50
+  perPage = 50,
+  options: { after?: number; before?: number } = {}
 ): Promise<StravaActivity[]> {
   const params = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
   });
+  if (options.after) params.set('after', String(options.after));
+  if (options.before) params.set('before', String(options.before));
   const res = await fetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

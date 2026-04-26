@@ -69,7 +69,8 @@ async function updateSyncState(
 // Sport ID mapping (Whoop)
 // ==========================================
 
-function getSportName(sportId: number): string {
+function getSportName(sportId: number | undefined | null): string {
+  if (sportId == null) return 'Other';
   const sportNames: Record<number, string> = {
     0: 'Running',
     1: 'Cycling',
@@ -106,12 +107,18 @@ export async function syncStravaActivities(options: SyncOptions = {}): Promise<S
 
     await updateSyncState('strava', 'syncing');
 
-    const maxPages = options.fullBackfill ? (options.maxPages ?? 20) : 1;
+    const maxPages = options.fullBackfill ? (options.maxPages ?? 200) : 1;
     const perPage = 50;
+    const after = options.start ? Math.floor(new Date(options.start).getTime() / 1000) : undefined;
+    const before = options.end ? Math.floor(new Date(options.end).getTime() / 1000) : undefined;
 
     for (let page = 1; page <= maxPages; page++) {
+      if (options.signal?.aborted) {
+        errors.push('Cancelled');
+        break;
+      }
       try {
-        const activities = await getStravaActivities(accessToken, page, perPage);
+        const activities = await getStravaActivities(accessToken, page, perPage, { after, before });
 
         if (activities.length === 0) break;
 
@@ -179,6 +186,8 @@ export async function syncStravaActivities(options: SyncOptions = {}): Promise<S
           }
         }
 
+        options.onProgress?.({ step: `strava:page-${page}`, recordsSynced, pagesDone: page });
+
         if (activities.length < perPage) break;
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -239,10 +248,21 @@ export async function syncWhoopWorkouts(options: SyncOptions = {}): Promise<Sync
       };
     }
 
-    const limit = options.fullBackfill ? 100 : 20;
-    const workouts = await getWhoopWorkouts(accessToken, { limit });
+    const isBackfill = options.fullBackfill || options.start || options.end;
+    const fetchOpts = {
+      limit: isBackfill ? undefined : 20,
+      start: options.start,
+      end: options.end,
+      maxPages: 400,
+    };
+    const workouts = await getWhoopWorkouts(accessToken, fetchOpts);
+    options.onProgress?.({ step: 'whoop:workouts:fetched', recordsSynced: 0, pagesDone: 0 });
 
     for (const workout of workouts) {
+      if (options.signal?.aborted) {
+        errors.push('Cancelled');
+        break;
+      }
       if (workout.score_state !== 'SCORED') continue;
 
       try {
@@ -254,8 +274,8 @@ export async function syncWhoopWorkouts(options: SyncOptions = {}): Promise<Sync
           endDate: Math.floor(new Date(workout.end).getTime() / 1000),
           startDateLocal: workout.start,
           timezone: workout.timezone_offset,
-          sportId: workout.sport_id,
-          sportName: getSportName(workout.sport_id),
+          sportId: workout.sport_id ?? null,
+          sportName: workout.sport_name ?? getSportName(workout.sport_id),
           strain: workout.score?.strain ?? 0,
           averageHeartrate: workout.score?.average_heart_rate ?? 0,
           maxHeartrate: workout.score?.max_heart_rate ?? 0,
@@ -294,6 +314,7 @@ export async function syncWhoopWorkouts(options: SyncOptions = {}): Promise<Sync
           });
 
         recordsSynced++;
+        if (recordsSynced % 5 === 0) options.onProgress?.({ step: 'whoop:workouts', recordsSynced, pagesDone: 0 });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         errors.push(`Failed to sync workout ${workout.id}: ${msg}`);
@@ -334,10 +355,21 @@ export async function syncWhoopSleep(options: SyncOptions = {}): Promise<SyncRes
       };
     }
 
-    const limit = options.fullBackfill ? 100 : 20;
-    const sleeps = await getWhoopSleeps(accessToken, { limit });
+    const isBackfill = options.fullBackfill || options.start || options.end;
+    const fetchOpts = {
+      limit: isBackfill ? undefined : 20,
+      start: options.start,
+      end: options.end,
+      maxPages: 400,
+    };
+    const sleeps = await getWhoopSleeps(accessToken, fetchOpts);
+    options.onProgress?.({ step: 'whoop:sleep:fetched', recordsSynced: 0, pagesDone: 0 });
 
     for (const sleep of sleeps) {
+      if (options.signal?.aborted) {
+        errors.push('Cancelled');
+        break;
+      }
       if (sleep.score_state !== 'SCORED') continue;
 
       try {
@@ -391,6 +423,7 @@ export async function syncWhoopSleep(options: SyncOptions = {}): Promise<SyncRes
           });
 
         recordsSynced++;
+        if (recordsSynced % 5 === 0) options.onProgress?.({ step: 'whoop:sleep', recordsSynced, pagesDone: 0 });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         errors.push(`Failed to sync sleep ${sleep.id}: ${msg}`);
@@ -431,10 +464,21 @@ export async function syncWhoopRecovery(options: SyncOptions = {}): Promise<Sync
       };
     }
 
-    const limit = options.fullBackfill ? 100 : 20;
-    const recoveries = await getWhoopRecoveries(accessToken, { limit });
+    const isBackfill = options.fullBackfill || options.start || options.end;
+    const fetchOpts = {
+      limit: isBackfill ? undefined : 20,
+      start: options.start,
+      end: options.end,
+      maxPages: 400,
+    };
+    const recoveries = await getWhoopRecoveries(accessToken, fetchOpts);
+    options.onProgress?.({ step: 'whoop:recovery:fetched', recordsSynced: 0, pagesDone: 0 });
 
     for (const recovery of recoveries) {
+      if (options.signal?.aborted) {
+        errors.push('Cancelled');
+        break;
+      }
       if (recovery.score_state !== 'SCORED') continue;
 
       try {
@@ -469,6 +513,7 @@ export async function syncWhoopRecovery(options: SyncOptions = {}): Promise<Sync
           });
 
         recordsSynced++;
+        if (recordsSynced % 5 === 0) options.onProgress?.({ step: 'whoop:recovery', recordsSynced, pagesDone: 0 });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         errors.push(`Failed to sync recovery ${recovery.cycle_id}: ${msg}`);
@@ -509,10 +554,21 @@ export async function syncWhoopCycles(options: SyncOptions = {}): Promise<SyncRe
       };
     }
 
-    const limit = options.fullBackfill ? 100 : 20;
-    const cycles = await getWhoopCycles(accessToken, { limit });
+    const isBackfill = options.fullBackfill || options.start || options.end;
+    const fetchOpts = {
+      limit: isBackfill ? undefined : 20,
+      start: options.start,
+      end: options.end,
+      maxPages: 400,
+    };
+    const cycles = await getWhoopCycles(accessToken, fetchOpts);
+    options.onProgress?.({ step: 'whoop:cycles:fetched', recordsSynced: 0, pagesDone: 0 });
 
     for (const cycle of cycles) {
+      if (options.signal?.aborted) {
+        errors.push('Cancelled');
+        break;
+      }
       if (cycle.score_state !== 'SCORED') continue;
 
       try {
@@ -545,6 +601,7 @@ export async function syncWhoopCycles(options: SyncOptions = {}): Promise<SyncRe
           });
 
         recordsSynced++;
+        if (recordsSynced % 5 === 0) options.onProgress?.({ step: 'whoop:cycles', recordsSynced, pagesDone: 0 });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         errors.push(`Failed to sync cycle ${cycle.id}: ${msg}`);

@@ -1,6 +1,7 @@
 import { hasToken } from '$lib/health/tokens';
 import { db } from '$lib/db';
-import { healthSyncState } from '$lib/db/schema';
+import { healthSyncState, healthSyncJobs } from '$lib/db/schema';
+import { desc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -9,7 +10,10 @@ export const load: PageServerLoad = async ({ url }) => {
     hasToken('whoop'),
   ]);
 
-  const syncStates = await db.select().from(healthSyncState);
+  const [syncStates, recentJobs] = await Promise.all([
+    db.select().from(healthSyncState),
+    db.select().from(healthSyncJobs).orderBy(desc(healthSyncJobs.startedAt)).limit(10),
+  ]);
   const connected = url.searchParams.get('connected');
 
   return {
@@ -20,7 +24,9 @@ export const load: PageServerLoad = async ({ url }) => {
       status: s.status,
       lastSyncAt: s.lastSyncAt,
       recordsSynced: s.recordsSynced,
+      errorMessage: s.errorMessage,
     })),
+    recentJobs,
     justConnected: connected,
   };
 };

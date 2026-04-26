@@ -2,6 +2,17 @@ export interface SyncOptions {
   fullBackfill?: boolean;
   maxPages?: number;
   startDate?: Date;
+  // Range-aware backfill (ISO 8601 strings for the underlying APIs)
+  start?: string;
+  end?: string;
+  // Per-record progress callback. Total is undefined when unknown (paginated APIs).
+  onProgress?: (info: {
+    step: string;
+    recordsSynced: number;
+    pagesDone: number;
+  }) => void;
+  // Cancellation
+  signal?: AbortSignal;
 }
 
 export interface SyncResult {

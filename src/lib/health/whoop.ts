@@ -73,14 +73,15 @@ export interface WhoopSleep {
 }
 
 export interface WhoopWorkout {
-  id: number;
+  id: string | number; // v2 API returns UUID strings; older payloads were numeric
   user_id: number;
   created_at: string;
   updated_at: string;
   start: string;
   end: string;
   timezone_offset: string;
-  sport_id: number;
+  sport_id?: number; // v2 API often omits this
+  sport_name?: string; // v2 API authoritative label
   score_state: 'SCORED' | 'PENDING_SCORE' | 'UNSCORABLE';
   score: {
     strain: number;

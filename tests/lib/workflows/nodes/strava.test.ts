@@ -136,6 +136,6 @@ describe('stravaDef', () => {
   });
 
   it('has default config', () => {
-    expect(stravaDef.defaultConfig?.operation).toBe('list_activities');
+    expect(stravaDef.defaultConfig?.operation).toBe('get_summary');
   });
 });
