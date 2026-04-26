@@ -98,7 +98,7 @@
 
 <div class="h-detail-grid">
   <!-- Recovery -->
-  <div class="h-card span-3">
+  <div class="h-card span-4">
     <div class="h-card-head">
       <p class="h-card-name">RECOVERY · TODAY</p>
       <span class="h-card-tag {recoveryTagClass}">{recoveryTag}</span>
@@ -124,7 +124,7 @@
   </div>
 
   <!-- Strain -->
-  <div class="h-card span-3">
+  <div class="h-card span-4">
     <div class="h-card-head">
       <p class="h-card-name">STRAIN · YESTERDAY</p>
       <span class="h-card-tag {strainTagClass}">{strainTag}</span>
