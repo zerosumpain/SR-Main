@@ -3,7 +3,7 @@ import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
 import { listWorkspaceFiles } from './sandbox';
-import { emitLog } from './log-emitter';
+import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
 
@@ -129,10 +129,20 @@ export async function planBuild(
 
     bestPlan = proposal;
     await emitLog(buildId, 'text', proposal, planIteration.id);
+    // Persist the round-1 draft into iter 0's plan column AND emit a live
+    // event so the PlanEditor in the UI updates as drafts land — without
+    // this the user only sees the plan after round 3 finishes (or never,
+    // if the planner crashes mid-flight).
     await db
       .update(jkaiIterations)
-      .set({ messages: debateMessages, tokensUsed: totalTokens })
+      .set({ plan: proposal, messages: debateMessages, tokensUsed: totalTokens })
       .where(eq(jkaiIterations.id, planIteration.id));
+    emitLive(buildId, {
+      type: 'plan_proposed',
+      iterationId: planIteration.id,
+      streamId: `${planIteration.id}:plan`,
+      full: proposal,
+    });
 
     // --- Round 2: Critic ---
     checkDeadline('Critic review');
@@ -205,6 +215,12 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
     debateMessages.push({ role: 'assistant', content: finalPlan });
 
     await emitLog(buildId, 'text', finalPlan, planIteration.id);
+    emitLive(buildId, {
+      type: 'plan_proposed',
+      iterationId: planIteration.id,
+      streamId: `${planIteration.id}:plan`,
+      full: finalPlan,
+    });
 
     // --- Store results ---
     const durationMs = Date.now() - startMs;

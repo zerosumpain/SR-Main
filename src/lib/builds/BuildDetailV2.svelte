@@ -191,7 +191,7 @@
   </div>
 
   {#if build.planStatus === 'pending' && build.status !== 'running'}
-    <PlanEditor plan={iter0?.plan ?? feed.proposedPlan ?? ''} buildId={build.id} onAfter={refresh} />
+    <PlanEditor plan={feed.proposedPlan ?? iter0?.plan ?? ''} buildId={build.id} onAfter={refresh} />
   {:else if build.status === 'awaiting_iter_approval'}
     <IterApproval buildId={build.id} onAfter={refresh} />
   {/if}

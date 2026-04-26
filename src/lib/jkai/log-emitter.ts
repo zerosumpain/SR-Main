@@ -49,11 +49,18 @@ export async function emitLog(
 // never collide with persisted log IDs and are not replayed on reconnect.
 
 export interface LiveEvent {
-  type: 'stream_text' | 'stream_thinking' | 'stream_tool_start' | 'stream_tool_delta' | 'stream_tool_end' | 'stream_turn_end';
+  type:
+    | 'stream_text'
+    | 'stream_thinking'
+    | 'stream_tool_start'
+    | 'stream_tool_delta'
+    | 'stream_tool_end'
+    | 'stream_turn_end'
+    | 'plan_proposed';
   iterationId: string | null;
   streamId: string; // stable within one streaming segment
   delta?: string;   // incremental content for text / thinking / tool-delta
-  full?: string;    // full snapshot at end of segment
+  full?: string;    // full snapshot at end of segment (plan body for plan_proposed)
   toolName?: string; // tool_start / tool_end
 }
 

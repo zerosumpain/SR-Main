@@ -12,9 +12,22 @@
   } = $props();
 
   let body = $state(plan);
+  let userTouched = $state(false);
   let preview = $state(false);
   let saving = $state(false);
   let lastError = $state<string | null>(null);
+  let lastSyncedPlan = $state(plan);
+
+  // Re-sync from the prop whenever the upstream plan changes (e.g. the
+  // planner just emitted a fresh draft via plan_proposed) — but only if
+  // the user hasn't started editing locally, so we don't clobber their
+  // work mid-typing.
+  $effect(() => {
+    if (plan !== lastSyncedPlan) {
+      lastSyncedPlan = plan;
+      if (!userTouched) body = plan;
+    }
+  });
 
   async function call(action: string, extra: Record<string, unknown> = {}) {
     saving = true;
@@ -66,7 +79,16 @@
   {#if preview}
     <div class="preview"><ChatMarkdown content={body} role="assistant" /></div>
   {:else}
-    <textarea class="nm-text-input" rows="20" placeholder="Plan markdown will appear here once generated. You can also paste your own plan and click Approve & Start." bind:value={body}></textarea>
+    <textarea
+      class="nm-text-input"
+      rows="20"
+      placeholder="Plan markdown will appear here once generated. You can also paste your own plan and click Approve & Start."
+      value={body}
+      oninput={(e) => {
+        body = (e.currentTarget as HTMLTextAreaElement).value;
+        userTouched = true;
+      }}
+    ></textarea>
   {/if}
 
   <div class="actions">
