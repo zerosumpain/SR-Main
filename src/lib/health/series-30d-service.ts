@@ -302,12 +302,16 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   const cycleByDate = new Map<string, (typeof cycleRows)[number]>();
   for (const c of cycleRows) cycleByDate.set(isoDate(c.startDate), c);
 
+  // apple_health_metrics.value is stored as value * 100 (per ingest endpoint).
+  // Divide by 100 before aggregating so pulse-grid normalisation lands in
+  // its expected 0–16k range rather than 0–1.6M.
   const stepsByDate = new Map<string, number>();
   for (const r of stepRows) {
     if (r.date == null || r.value == null) continue;
     const key = isoDate(r.date);
-    stepsByDate.set(key, (stepsByDate.get(key) ?? 0) + r.value);
+    stepsByDate.set(key, (stepsByDate.get(key) ?? 0) + r.value / 100);
   }
+  for (const [k, v] of stepsByDate) stepsByDate.set(k, Math.round(v));
 
   const series: HealthDay[] = [];
   let lastWeight = 0;

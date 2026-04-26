@@ -60,6 +60,22 @@
   const labels = $derived(series.map((d) => dayLabel(d.date)));
   const lastIndex = $derived(series.length - 1);
 
+  // Per-row peak day index (post-normalisation, so the brightest cell wins).
+  // Ties resolve to the most recent occurrence.
+  function peakIndex(row: Row): number {
+    let best = -Infinity;
+    let idx = 0;
+    for (let i = 0; i < series.length; i++) {
+      const v = row.f(series[i]);
+      if (v >= best) {
+        best = v;
+        idx = i;
+      }
+    }
+    return idx;
+  }
+  const peaks = $derived(rows.map((r) => peakIndex(r)));
+
   let tip = $state<{ x: number; y: number; label: string; val: string; metric: string } | null>(null);
   let wrap: HTMLDivElement | null = $state(null);
 
@@ -83,7 +99,7 @@
 </script>
 
 <div class="h-pulsegrid-wrap" bind:this={wrap}>
-  {#each rows as row (row.key)}
+  {#each rows as row, rowIdx (row.key)}
     <div class="h-pg-rowlabel">
       <p class="h-pg-row-name">{row.name}</p>
       <p class="h-pg-row-meta">{row.meta}</p>
@@ -92,13 +108,17 @@
       {#each series as d, i (i)}
         {@const v = row.f(d)}
         {@const isToday = i === lastIndex}
+        {@const isPeak = i === peaks[rowIdx]}
         {@const display = row.display(d)}
         <button
           type="button"
           class="h-pg-cell"
           class:today={isToday}
+          class:peak={isPeak && !isToday}
           style="--c: {ramp(v)}"
-          aria-label="{labels[i].mon} {labels[i].dom} · {row.name} {display}"
+          aria-label="{labels[i].mon} {labels[i].dom} · {row.name} {display}{isPeak
+            ? ' · row peak'
+            : ''}"
           onmouseenter={(e) => showTip(e, row.name, display, i)}
           onmouseleave={hideTip}
           onfocus={(e) => showTip(e, row.name, display, i)}
@@ -130,17 +150,38 @@
   .h-pulsegrid-wrap {
     position: relative;
     display: grid;
-    grid-template-columns: 110px 1fr;
+    grid-template-columns: 110px minmax(0, 1fr);
     gap: 0;
     border: 2px solid var(--card-border);
     background: rgba(26, 16, 8, 0.03);
+    width: 100%;
+    max-width: 100%;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .h-pulsegrid-wrap {
-      grid-template-columns: 80px 1fr;
+      grid-template-columns: 76px minmax(0, 1fr);
     }
     .h-pg-row-meta {
       display: none;
+    }
+    .h-pg-rowlabel {
+      padding: 8px 8px;
+    }
+    .h-pg-row-name {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+    }
+  }
+  @media (max-width: 520px) {
+    .h-pulsegrid-wrap {
+      grid-template-columns: 56px minmax(0, 1fr);
+    }
+    .h-pg-rowlabel {
+      padding: 6px 6px;
+    }
+    .h-pg-row-name {
+      font-size: 8px;
+      letter-spacing: 0.05em;
     }
   }
   .h-pg-rowlabel {
@@ -175,9 +216,10 @@
   }
   .h-pg-row {
     display: grid;
-    grid-template-columns: repeat(30, 1fr);
+    grid-template-columns: repeat(30, minmax(0, 1fr));
     gap: 0;
     border-bottom: 1px solid var(--divider);
+    min-width: 0;
   }
   .h-pg-row:last-of-type {
     border-bottom: none;
@@ -218,11 +260,19 @@
     border: 2px solid var(--text-primary);
     pointer-events: none;
   }
+  .h-pg-cell.peak::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid var(--accent);
+    pointer-events: none;
+  }
   .h-pg-axis {
     display: grid;
-    grid-template-columns: repeat(30, 1fr);
+    grid-template-columns: repeat(30, minmax(0, 1fr));
     border-top: 1px solid var(--divider);
     background: rgba(26, 16, 8, 0.02);
+    min-width: 0;
   }
   .h-pg-axis-cell {
     font-family: var(--font-mono);

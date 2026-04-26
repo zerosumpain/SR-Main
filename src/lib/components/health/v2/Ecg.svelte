@@ -42,9 +42,25 @@
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
   let raf: number | undefined;
-  let bpmInterval: ReturnType<typeof setInterval> | undefined;
+  let liveInterval: ReturnType<typeof setInterval> | undefined;
+
+  // Pull the same live-HR source the homepage biome uses.
+  // Falls back to the prop value if the call fails or returns no pulse.
+  async function refreshLiveHr() {
+    try {
+      const res = await fetch('/api/biome/state');
+      if (!res.ok) return;
+      const state = (await res.json()) as { pulse?: number; sources?: { heartRate?: boolean } };
+      if (state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0) {
+        bpm = Math.max(40, Math.min(220, Math.round(state.pulse)));
+      }
+    } catch {
+      // ignore — keep last bpm
+    }
+  }
 
   onMount(() => {
+    refreshLiveHr();
     if (prefersReducedMotion()) {
       phase = 1;
       return;
@@ -53,17 +69,17 @@
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      phase = phase + dt * 1.18;
+      // 8 beats per sweep, so cycles/sec = bpm / 60 / beats. Pace the trace with the live heart rate.
+      const cyclesPerSec = Math.max(0.2, bpm / 60 / beats);
+      phase = phase + dt * cyclesPerSec;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    const baseBpm = rhr;
-    bpmInterval = setInterval(() => {
-      bpm = Math.max(58, Math.min(72, baseBpm + Math.round((Math.random() - 0.5) * 4)));
-    }, 1500);
+    // Poll the same cadence the homepage biome uses (60s is plenty for a slow-moving RHR signal).
+    liveInterval = setInterval(refreshLiveHr, 60_000);
     return () => {
       if (raf !== undefined) cancelAnimationFrame(raf);
-      if (bpmInterval) clearInterval(bpmInterval);
+      if (liveInterval) clearInterval(liveInterval);
     };
   });
 
