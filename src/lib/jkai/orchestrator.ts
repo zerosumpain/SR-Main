@@ -121,6 +121,33 @@ class Orchestrator {
     await emitLog(buildId, 'system', 'Build paused');
   }
 
+  /**
+   * Pure restart from the last good iteration. Use after a service restart
+   * killed the in-flight pi process and `recoverOnStartup` marked the build
+   * `failed` — no new instructions, no re-planning, just clear the failure
+   * flag and schedule the next iteration. The dev/ workspace still has
+   * whatever pi wrote before it was killed.
+   */
+  async restartBuild(buildId: string): Promise<void> {
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+    await failOrphanedIterations(buildId);
+    await db
+      .update(jkaiBuilds)
+      .set({
+        status: 'running',
+        failure: null,
+        consecutiveFailures: 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(buildId, 'system', 'Build restarted — picking up from last good iteration.');
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    this.scheduleNext(buildId);
+  }
+
   async resumeBuild(buildId: string): Promise<void> {
     if (this.activeBuildId) {
       throw new Error(`Build ${this.activeBuildId} is already active`);

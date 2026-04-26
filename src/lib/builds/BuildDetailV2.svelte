@@ -5,6 +5,7 @@
   import FilesTimeline from './FilesTimeline.svelte';
   import PlanEditor from './PlanEditor.svelte';
   import IterApproval from './IterApproval.svelte';
+  import FailureRecovery from './FailureRecovery.svelte';
   import PreviewPanel from './PreviewPanel.svelte';
   import BuildSidebar from './BuildSidebar.svelte';
   import ModeSwitcher from './ModeSwitcher.svelte';
@@ -214,13 +215,20 @@
     {/if}
   </div>
 
+  {#if build.status === 'failed'}
+    <FailureRecovery
+      buildId={build.id}
+      failureKind={build.failure?.kind ?? null}
+      onAfter={refresh}
+    />
+  {/if}
   {#if build.status === 'running' && build.planStatus === 'pending'}
     <section class="nm-sec planning-banner">
       <header class="nm-sec-hd"><span class="sr-label-tight">Planning…</span></header>
       <p class="dim">The proposer/critic debate is running. The first draft normally lands in 30-60s and revisions in another 30-60s. The plan editor will open as soon as the planner finishes — you'll be asked to approve, re-plan, or skip before any code is written.</p>
     </section>
   {/if}
-  {#if build.planStatus === 'pending' && build.status !== 'running'}
+  {#if build.planStatus === 'pending' && build.status !== 'running' && build.status !== 'failed'}
     <PlanEditor plan={feed.proposedPlan ?? iter0?.plan ?? ''} buildId={build.id} onAfter={refresh} />
   {:else if build.status === 'awaiting_iter_approval'}
     <IterApproval buildId={build.id} onAfter={refresh} />
