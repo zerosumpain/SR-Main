@@ -1,5 +1,13 @@
 import { buildSystemPrompt, buildIterationContext } from './prompt';
-import { listWorkspaceFiles, allocatePort, ensureSandboxRunning, ensureWorkspace } from './sandbox';
+import {
+  listWorkspaceFiles,
+  allocatePort,
+  ensureSandboxRunning,
+  ensureWorkspace,
+  syncDesignAssets,
+  syncJkaiExtension,
+} from './sandbox';
+import { signBridgeToken } from './tool-bridge';
 import { emitLog } from './log-emitter';
 import type { ActionRecord, FailureEnvelope } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
@@ -48,7 +56,45 @@ export async function executeIteration(
   const assignedPort = await allocatePort(build.id);
 
   let systemPrompt = buildSystemPrompt(build.id, assignedPort);
+  const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
+  if (enforceDesign) {
+    systemPrompt += `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+  }
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
+
+  // Sync design assets + jkai-tools extension into the sandbox before each run.
+  // Updates land here so the agent always sees the latest tokens.
+  const skillDirs: string[] = [];
+  const extensions: string[] = [];
+  const extraEnv: Record<string, string> = {};
+  if (enforceDesign) {
+    try {
+      const dsPath = await syncDesignAssets(build.id);
+      skillDirs.push(dsPath);
+    } catch (err) {
+      await emitLog(
+        build.id,
+        'system',
+        `Design assets sync failed (continuing without): ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  }
+  try {
+    const extPath = await syncJkaiExtension(build.id);
+    extensions.push(extPath);
+    extraEnv.JKAI_API_URL = process.env.JKAI_API_URL ?? 'http://host.docker.internal:5173';
+    extraEnv.JKAI_BRIDGE_TOKEN = signBridgeToken(build.id);
+  } catch (err) {
+    await emitLog(
+      build.id,
+      'system',
+      `JKAI tools extension sync failed (continuing without): ${(err as Error).message}`,
+      iteration.id,
+    );
+  }
+  const thinkingLevel = (build as JkaiBuild & { thinkingLevel?: string }).thinkingLevel || undefined;
+
   const fileList = await listWorkspaceFiles(build.id);
   const contextMessages = buildIterationContext(
     build.prompt,
@@ -75,6 +121,10 @@ export async function executeIteration(
     userPrompt,
     isStopped,
     deadlineRef,
+    extensions,
+    skillDirs,
+    thinkingLevel,
+    extraEnv,
   });
 
   const tailText = result.finalAssistantText || '';

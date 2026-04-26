@@ -286,10 +286,105 @@ class Orchestrator {
     if (buildRecord && !this.stopped) {
       await planBuild(buildId, buildRecord.prompt);
     }
+    if (this.stopped) return;
 
-    if (!this.stopped) {
-      this.scheduleNext(buildId);
+    // Plan-approval gate: when planStatus === 'pending', park the build
+    // awaiting human approval instead of auto-scheduling iteration #1.
+    const [refreshed] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (refreshed?.planStatus === 'pending') {
+      await db
+        .update(jkaiBuilds)
+        .set({ status: 'awaiting_plan_approval', updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, buildId));
+      await emitLog(
+        buildId,
+        'system',
+        'Plan ready — awaiting approval before iterations begin.',
+      );
+      this.activeBuildId = null;
+      return;
     }
+
+    this.scheduleNext(buildId);
+  }
+
+  // --- Plan gate API (called from /api/jkai/builds/[id]/plan) ---
+
+  async approvePlan(buildId: string): Promise<void> {
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (!build) throw new Error('build not found');
+    if (build.status !== 'awaiting_plan_approval') {
+      // Idempotent: silently no-op so a double-click doesn't error.
+      return;
+    }
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+
+    const [iter0] = await db
+      .select()
+      .from(jkaiIterations)
+      .where(and(eq(jkaiIterations.buildId, buildId), eq(jkaiIterations.number, 0)))
+      .limit(1);
+    const { parsePlanMilestones } = await import('./plan-parse');
+    const milestones = parsePlanMilestones(iter0?.plan ?? null);
+
+    await db
+      .update(jkaiBuilds)
+      .set({
+        status: 'running',
+        planStatus: 'approved',
+        milestones,
+        updatedAt: new Date(),
+      })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(buildId, 'system', `Plan approved — starting iterations (${milestones.length} milestones).`);
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    this.scheduleNext(buildId);
+  }
+
+  async skipPlan(buildId: string): Promise<void> {
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+    await db
+      .update(jkaiBuilds)
+      .set({ status: 'running', planStatus: 'skipped', updatedAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(buildId, 'system', 'Plan skipped — proceeding without milestone tracking.');
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    this.scheduleNext(buildId);
+  }
+
+  async replan(buildId: string, revisedPrompt?: string): Promise<void> {
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+    await db
+      .delete(jkaiIterations)
+      .where(and(eq(jkaiIterations.buildId, buildId), eq(jkaiIterations.number, 0)));
+    if (revisedPrompt && revisedPrompt.trim()) {
+      await db
+        .update(jkaiBuilds)
+        .set({ prompt: revisedPrompt.trim(), updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, buildId));
+    }
+    await db
+      .update(jkaiBuilds)
+      .set({ status: 'running', planStatus: 'pending', updatedAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId));
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    await this.initAndPlan(buildId);
+  }
+
+  async editPlan(buildId: string, plan: string): Promise<void> {
+    await db
+      .update(jkaiIterations)
+      .set({ plan })
+      .where(and(eq(jkaiIterations.buildId, buildId), eq(jkaiIterations.number, 0)));
   }
 
   // --- Private: Loop ---
@@ -480,6 +575,63 @@ class Orchestrator {
         );
         this.scheduleNext(buildId, 1000);
         return;
+      }
+
+      // Run design-system linter (when enabled). If it finds issues, mark the
+      // iteration failed so promotion is skipped and the next iteration's user
+      // prompt receives the findings as required fixes.
+      if ((build as any).enforceDesignSystem) {
+        try {
+          const { listDevFiles, readDevFile } = await import('./sandbox');
+          const { lintDesignSystem } = await import('./design-lint');
+          const targetExts = ['.css', '.svelte', '.html', '.tsx', '.jsx', '.vue'];
+          const all = await listDevFiles(buildId);
+          const files: Record<string, string> = {};
+          for (const f of all) {
+            if (!targetExts.some((e) => f.path.endsWith(e))) continue;
+            if (f.size > 200_000) continue;
+            files[f.path] = await readDevFile(buildId, f.path);
+          }
+          const { findings } = lintDesignSystem(files);
+          if (findings.length > 0) {
+            const summary = findings
+              .slice(0, 30)
+              .map((f) => `${f.path}:${f.line} [${f.rule}] ${f.message}`)
+              .join('\n');
+            await emitLog(
+              buildId,
+              'lint',
+              `Design-system violations:\n${summary}`,
+              iteration.id,
+            );
+            await db
+              .update(jkaiIterations)
+              .set({
+                status: 'failed',
+                failure: {
+                  kind: 'design_lint',
+                  message: `${findings.length} design-system violations`,
+                  attempts: 1,
+                } as unknown as Record<string, unknown>,
+              })
+              .where(eq(jkaiIterations.id, iteration.id));
+            await emitLog(
+              buildId,
+              'system',
+              `Iteration #${iterationNumber} rejected by design-system linter (${findings.length} findings) — feedback included in next iteration.`,
+              iteration.id,
+            );
+            this.scheduleNext(buildId, 1000);
+            return;
+          }
+        } catch (err: any) {
+          await emitLog(
+            buildId,
+            'system',
+            `Design lint skipped due to error: ${err.message}`,
+            iteration.id,
+          );
+        }
       }
 
       // Run test suite

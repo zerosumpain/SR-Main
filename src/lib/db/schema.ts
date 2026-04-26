@@ -507,6 +507,12 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
   failure: jsonb('failure'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
+  planStatus: text('plan_status').notNull().default('approved'),
+  milestones: jsonb('milestones').$type<Array<{ id: string; title: string; done: boolean; iter?: number }>>().notNull().default(sql`'[]'::jsonb`),
+  requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),
+  thinkingLevel: text('thinking_level').notNull().default('medium'),
+  enabledToolsets: jsonb('enabled_toolsets').$type<string[]>().notNull().default(sql`'["all"]'::jsonb`),
 });
 
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;

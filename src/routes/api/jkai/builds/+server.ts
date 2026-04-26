@@ -14,7 +14,17 @@ export const GET: RequestHandler = async () => {
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { prompt, title, budgetConfig, modelProvider, modelId } = body;
+  const {
+    prompt,
+    title,
+    budgetConfig,
+    modelProvider,
+    modelId,
+    enforceDesignSystem,
+    planFirst,
+    thinkingLevel,
+    enabledToolsets,
+  } = body;
   if (!prompt || typeof prompt !== 'string') {
     return json({ error: 'prompt is required' }, { status: 400 });
   }
@@ -52,14 +62,25 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  const [build] = await db.insert(jkaiBuilds).values({
+  const insert: Record<string, unknown> = {
     title: title || null,
     prompt,
     budgetConfig: { ...DEFAULT_BUDGET, ...(budgetConfig || {}) },
     modelProvider: ctx.provider,
     modelId: ctx.modelId,
     priceSnapshot,
-  }).returning();
+  };
+  if (typeof enforceDesignSystem === 'boolean') insert.enforceDesignSystem = enforceDesignSystem;
+  if (typeof planFirst === 'boolean') insert.planStatus = planFirst ? 'pending' : 'approved';
+  if (typeof thinkingLevel === 'string') {
+    const allowed = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+    if (allowed.has(thinkingLevel)) insert.thinkingLevel = thinkingLevel;
+  }
+  if (Array.isArray(enabledToolsets) && enabledToolsets.every((s) => typeof s === 'string') && enabledToolsets.length > 0) {
+    insert.enabledToolsets = enabledToolsets;
+  }
+
+  const [build] = await db.insert(jkaiBuilds).values(insert as any).returning();
 
   try {
     await orchestrator.startBuild(build.id);

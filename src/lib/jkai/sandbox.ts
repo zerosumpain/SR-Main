@@ -181,6 +181,66 @@ export async function listWorkspaceFiles(buildId: string): Promise<string> {
   return result.exitCode === 0 ? result.stdout.trim() : '';
 }
 
+// --- Mount helpers (design system + jkai-tools extension) ---
+
+export async function syncDesignAssets(buildId: string): Promise<string> {
+  const { buildDesignAssets } = await import('./design-assets');
+  const dest = `/home/jkai/workspace/${buildId}/design-system`;
+  await execInSandbox(`mkdir -p ${dest}/examples`);
+  const assets = await buildDesignAssets(process.cwd());
+  for (const [rel, body] of Object.entries(assets)) {
+    await writeFileInSandbox(`${dest}/${rel}`, body);
+  }
+  return dest;
+}
+
+export async function syncJkaiExtension(buildId: string): Promise<string> {
+  const { readFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const dest = `/home/jkai/workspace/${buildId}/extensions/jkai-tools`;
+  await execInSandbox(`mkdir -p ${dest}`);
+  const src = await readFile(
+    join(process.cwd(), 'static/jkai-extensions/jkai-tools.js'),
+    'utf-8',
+  );
+  await writeFileInSandbox(`${dest}/index.js`, src);
+  return `${dest}/index.js`;
+}
+
+// --- Read-only file inspection (Watch pane) ---
+
+export async function listDevFiles(
+  buildId: string,
+): Promise<Array<{ path: string; size: number; mtime: number }>> {
+  const root = `/home/jkai/workspace/${buildId}/dev`;
+  const result = await execInSandbox(
+    `find ${root} -maxdepth 6 -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -printf '%P\\t%s\\t%T@\\n' 2>/dev/null | head -500`,
+    10000,
+  );
+  if (result.exitCode !== 0) return [];
+  return result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [p, sz, mt] = line.split('\t');
+      return {
+        path: p ?? '',
+        size: parseInt(sz || '0', 10),
+        mtime: Math.floor(parseFloat(mt || '0')),
+      };
+    })
+    .filter((f) => f.path);
+}
+
+export async function readDevFile(buildId: string, relPath: string): Promise<string> {
+  const safe = relPath.replace(/\.\./g, '').replace(/^\/+/, '');
+  const result = await execInSandbox(
+    `cat /home/jkai/workspace/${buildId}/dev/${safe}`,
+    10000,
+  );
+  return result.exitCode === 0 ? result.stdout : '';
+}
+
 // --- Port Allocation ---
 
 const PORT_RANGE_START = 8000;

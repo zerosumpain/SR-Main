@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
+import { env as publicEnv } from '$env/dynamic/public';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -25,5 +26,7 @@ export const load: PageServerLoad = async ({ params }) => {
     .orderBy(desc(jkaiLogs.id))
     .limit(200);
 
-  return { build, iterations, logs: logs.reverse() };
+  const flagOn = publicEnv.PUBLIC_BUILDS_V2 === 'true';
+
+  return { build, iterations, logs: logs.reverse(), flagOn };
 };

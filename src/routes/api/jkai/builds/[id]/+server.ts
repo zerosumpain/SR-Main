@@ -12,6 +12,43 @@ export const GET: RequestHandler = async ({ params }) => {
   return json({ ...build, iterations });
 };
 
+const PATCHABLE_FIELDS = new Set([
+  'enforceDesignSystem',
+  'thinkingLevel',
+  'requireIterationApproval',
+  'enabledToolsets',
+  'modelProvider',
+  'modelId',
+]);
+
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
+  if (!build) return json({ error: 'Not found' }, { status: 404 });
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return json({ error: 'invalid body' }, { status: 400 });
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  for (const [k, v] of Object.entries(body)) {
+    if (!PATCHABLE_FIELDS.has(k)) continue;
+    if (k === 'thinkingLevel' && typeof v === 'string') {
+      const allowed = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+      if (!allowed.has(v)) continue;
+      updates[k] = v;
+    } else if (k === 'enabledToolsets' && Array.isArray(v)) {
+      updates[k] = v.filter((s) => typeof s === 'string');
+    } else if (k === 'enforceDesignSystem' || k === 'requireIterationApproval') {
+      updates[k] = Boolean(v);
+    } else if ((k === 'modelProvider' || k === 'modelId') && typeof v === 'string' && v.length > 0) {
+      updates[k] = v;
+    }
+  }
+
+  if (Object.keys(updates).length === 1) return json({ ok: true, noop: true });
+
+  await db.update(jkaiBuilds).set(updates).where(eq(jkaiBuilds.id, params.id));
+  return json({ ok: true });
+};
+
 export const DELETE: RequestHandler = async ({ params }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build) return json({ error: 'Not found' }, { status: 404 });

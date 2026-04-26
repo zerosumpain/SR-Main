@@ -14,6 +14,9 @@
   let submitting = $state(false);
   let error = $state('');
   let builderModel = $state<ModelContext>({ ...data.defaultBuilderModel });
+  let enforceDesignSystem = $state(true);
+  let planFirst = $state(true);
+  let thinkingLevel = $state<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
 
   async function submit() {
     if (!prompt.trim()) return;
@@ -35,6 +38,9 @@
           budgetConfig,
           modelProvider: builderModel.provider,
           modelId: builderModel.modelId,
+          enforceDesignSystem,
+          planFirst,
+          thinkingLevel,
         }),
       });
 
@@ -113,6 +119,26 @@
 
     <div class="mb-6">
       <ModelPicker bind:value={builderModel} label="Model" />
+    </div>
+
+    <div class="mb-6 p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <h2 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Strategy</h2>
+      <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
+        <input type="checkbox" bind:checked={enforceDesignSystem} />
+        Enforce site design system (recommended)
+      </label>
+      <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
+        <input type="checkbox" bind:checked={planFirst} />
+        Require plan approval before iterations begin (recommended)
+      </label>
+      <label class="block text-xs mb-1" style="color: var(--text-ghost);">Thinking level</label>
+      <select bind:value={thinkingLevel}
+        class="w-full rounded border px-2 py-1 text-sm"
+        style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);">
+        {#each ['off','minimal','low','medium','high','xhigh'] as lv}
+          <option value={lv}>{lv}</option>
+        {/each}
+      </select>
     </div>
 
     {#if error}

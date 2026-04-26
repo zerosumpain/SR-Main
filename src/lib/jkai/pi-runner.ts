@@ -115,6 +115,16 @@ export interface PiRunOptions {
    *  and allows the orchestrator to extend the deadline mid-run. */
   deadlineRef?: { current: number };
   isStopped: () => boolean;
+  /** Paths inside the sandbox to load as pi extensions (`-e <path>`).
+   *  When unset, falls back to `--no-extensions`. */
+  extensions?: string[];
+  /** Paths inside the sandbox to load as pi skills (`--skill <path>`).
+   *  When unset, falls back to `--no-skills`. */
+  skillDirs?: string[];
+  /** Pi thinking level: off | minimal | low | medium | high | xhigh. */
+  thinkingLevel?: string;
+  /** Extra env vars to inject into the sandbox container for this run. */
+  extraEnv?: Record<string, string>;
 }
 
 export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
@@ -134,21 +144,37 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const modelId = build.modelId ?? 'anthropic/claude-sonnet-4.5';
   const { envVar, value: apiKey } = await resolveApiKey(provider);
 
-  const piCmd = [
+  const piParts = [
     'pi',
     '--mode', 'json',
     '--no-session',
-    '--no-extensions',
-    '--no-skills',
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
     '--tools', 'read,bash,edit,write,grep,find,ls',
-    '--provider', provider,
-    '--model', sh(modelId),
-    '--append-system-prompt', sh(systemPrompt),
-    '-p', sh(userPrompt),
-  ].join(' ');
+  ];
+  if (opts.extensions && opts.extensions.length > 0) {
+    for (const e of opts.extensions) {
+      piParts.push('--extension', sh(e));
+    }
+  } else {
+    piParts.push('--no-extensions');
+  }
+  if (opts.skillDirs && opts.skillDirs.length > 0) {
+    for (const s of opts.skillDirs) {
+      piParts.push('--skill', sh(s));
+    }
+  } else {
+    piParts.push('--no-skills');
+  }
+  if (opts.thinkingLevel) {
+    piParts.push('--thinking', opts.thinkingLevel);
+  }
+  piParts.push('--provider', provider);
+  piParts.push('--model', sh(modelId));
+  piParts.push('--append-system-prompt', sh(systemPrompt));
+  piParts.push('-p', sh(userPrompt));
+  const piCmd = piParts.join(' ');
 
   const dockerArgs = [
     'exec',
@@ -157,9 +183,13 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     '-e', `${envVar}=${apiKey}`,
     '-e', 'PI_OFFLINE=1',
     '-e', 'PI_TELEMETRY=0',
-    CONTAINER_NAME,
-    'bash', '-c', piCmd,
   ];
+  for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
+    if (typeof v === 'string') {
+      dockerArgs.push('-e', `${k}=${v}`);
+    }
+  }
+  dockerArgs.push(CONTAINER_NAME, 'bash', '-c', piCmd);
 
   await emitLog(
     build.id,
