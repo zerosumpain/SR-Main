@@ -97,6 +97,7 @@ export function subscribeJob(jobId: string, handler: (event: JobEvent) => void):
 export interface JobScope {
   workflowId?: string | null;
   conversationId?: string | null;
+  chatNodeId?: string | null;
 }
 
 export interface OrchestratorJob {
@@ -114,6 +115,10 @@ export interface OrchestratorJob {
   currentStep?: string;       // short description updated by onProgress / tool_start for heartbeat summaries
   lastHeartbeatAt: number;
   heartbeat?: ReturnType<typeof setInterval>;
+  // Aggregated assistant tokens. The orchestrator endpoint appends each
+  // streamed `token` event's delta here so a user-initiated cancel can
+  // persist what was streamed so far instead of throwing it away.
+  partialResponse: string;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -193,9 +198,14 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     abortController: new AbortController(),
     startedAt: now,
     message: message.slice(0, 100),
-    scope: { workflowId: scope.workflowId ?? null, conversationId: scope.conversationId ?? null },
+    scope: {
+      workflowId: scope.workflowId ?? null,
+      conversationId: scope.conversationId ?? null,
+      chatNodeId: scope.chatNodeId ?? null,
+    },
     lastEventAt: now,
     lastHeartbeatAt: now,
+    partialResponse: '',
   };
   jobs.set(jobId, job);
   startWatchdog(jobId, job);

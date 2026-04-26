@@ -103,8 +103,17 @@
   // Per-chat-node composer draft, scroll refs, size overrides, active-run target
   let chatDrafts = $state<Record<string, string>>({});
   let chatBodyEls: Record<string, HTMLDivElement | undefined> = {};
-  // Live-streaming assistant reply per chat node (cleared when run settles)
+  // Live-streaming assistant reply per chat node (cleared when stream settles)
   let streamingReplies = $state<Record<string, string>>({});
+  // Per-chat-node: currently receiving an LLM stream from the orchestrator?
+  // Distinct from `runMeta.state` — chat is decoupled from workflow runs.
+  let streamingFor = $state<Record<string, boolean>>({});
+  // Per-chat-node: orchestrator job id of the in-flight chat (so the
+  // user-facing stop button can DELETE the right job).
+  let chatJobs = $state<Record<string, string | null>>({});
+  // Active chat EventSource per chat node (so we can close it on cancel /
+  // navigation without leaking).
+  const chatEventSources = new Map<string, EventSource>();
   let liveToolSteps = $state<Record<string, Array<{ tool: string; toolCallId: string; status: string }>>>(
     {},
   );
@@ -356,7 +365,7 @@
     let needsScroll: string | null = null;
     for (const [id, delta] of pendingStreamDeltas) {
       updates[id] = (updates[id] ?? '') + delta;
-      if (pendingRun?.chatNodeId === id) needsScroll = id;
+      if (streamingFor[id]) needsScroll = id;
     }
     pendingStreamDeltas.clear();
     streamingReplies = updates;
@@ -617,39 +626,102 @@
     };
   });
 
-  // ——— Chat + run lifecycle ———
+  // ——— Chat lifecycle (decoupled from workflow runs) ———
+  // Sending a message hits the orchestrator chat endpoint. The orchestrator
+  // already injects canvas context (workflow nodes/edges via
+  // buildCanvasContextSection) and loads prior chat history by
+  // conversationId, so the assistant knows which canvas it's on and what
+  // was said before. Workflow runs (Run button) stay independent.
   async function sendMessageFrom(chatNodeId: string | null, text: string) {
-    if (runMeta.state === 'running' || !text.trim()) return;
-    liveStatus = {};
-    liveData = {};
-    runMeta = { state: 'running' };
-    runStartedAt = Date.now();
-    runSummary = null;
+    if (!text.trim() || !chatNodeId) return;
+    if (streamingFor[chatNodeId]) return;
+    streamingFor = { ...streamingFor, [chatNodeId]: true };
+    streamingReplies = { ...streamingReplies, [chatNodeId]: '' };
     try {
-      const res = await fetch(`/api/workflows/${canvas.workflowId}/chat`, {
+      const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, chatNodeId }),
+        body: JSON.stringify({
+          message: text,
+          workflowId: canvas.workflowId,
+          chatNodeId,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      const { runId, chatNodeId: resolvedId } = await res.json();
-      activeRunId = runId;
-      pendingRun = { runId, chatNodeId: resolvedId ?? chatNodeId };
-      subscribeToRun(runId);
-      // Fire-and-forget the page-data refresh so we pick up the user message
-      // the server just persisted, but don't block the main thread on it.
-      // `listCanvases` alone can run 30+ queries on an account with many
-      // canvases and will re-hydrate the whole Svelte tree on completion —
-      // awaiting it was visibly locking the canvas mid-send.
-      void invalidateAll().then(() => {
-        if (resolvedId) scrollChatToBottom(resolvedId);
-      });
+      const { jobId } = (await res.json()) as { jobId: string };
+      chatJobs = { ...chatJobs, [chatNodeId]: jobId };
+      subscribeToChat(jobId, chatNodeId);
+      // Fire-and-forget refresh so the just-persisted user message renders.
+      void invalidateAll().then(() => scrollChatToBottom(chatNodeId));
     } catch (err) {
-      runMeta = { state: 'failed', error: err instanceof Error ? err.message : String(err) };
+      streamingFor = { ...streamingFor, [chatNodeId]: false };
+      const next = { ...streamingReplies };
+      delete next[chatNodeId];
+      streamingReplies = next;
+      actionError = err instanceof Error ? err.message : String(err);
     }
+  }
+
+  function subscribeToChat(jobId: string, chatNodeId: string) {
+    const existing = chatEventSources.get(chatNodeId);
+    if (existing) {
+      try { existing.close(); } catch { /* no-op */ }
+      chatEventSources.delete(chatNodeId);
+    }
+    const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
+    chatEventSources.set(chatNodeId, es);
+    es.onmessage = (evt) => {
+      let data: { type?: string; delta?: string } = {};
+      try { data = JSON.parse(evt.data); } catch { return; }
+      if (data.type === 'token' && typeof data.delta === 'string') {
+        queueStreamDelta(chatNodeId, data.delta);
+      } else if (data.type === 'done' || data.type === 'error') {
+        es.close();
+        if (chatEventSources.get(chatNodeId) === es) chatEventSources.delete(chatNodeId);
+        finalizeChatStream(chatNodeId);
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      if (chatEventSources.get(chatNodeId) === es) chatEventSources.delete(chatNodeId);
+      finalizeChatStream(chatNodeId);
+    };
+  }
+
+  function finalizeChatStream(chatNodeId: string) {
+    if (streamFlushHandle !== null) {
+      clearTimeout(streamFlushHandle);
+      streamFlushHandle = null;
+    }
+    flushStreamDeltas();
+    streamingFor = { ...streamingFor, [chatNodeId]: false };
+    chatJobs = { ...chatJobs, [chatNodeId]: null };
+    // Reload to pick up the persisted assistant message; only then drop
+    // the local stream buffer so the UI doesn't flicker empty in between.
+    void invalidateAll().then(() => {
+      const next = { ...streamingReplies };
+      delete next[chatNodeId];
+      streamingReplies = next;
+      scrollChatToBottom(chatNodeId);
+    });
+  }
+
+  async function cancelChat(chatNodeId: string) {
+    const jobId = chatJobs[chatNodeId];
+    if (!jobId) {
+      finalizeChatStream(chatNodeId);
+      return;
+    }
+    try {
+      await fetch(`/api/workflows/orchestrator/chat?jobId=${jobId}`, { method: 'DELETE' });
+    } catch {
+      /* SSE will still terminate via error; no-op */
+    }
+    // The SSE 'error' event will trigger finalizeChatStream; if it doesn't
+    // arrive (e.g. network drop) the EventSource onerror handler does.
   }
 
   function formatChatTranscript(chatNodeId: string): string {
@@ -2536,7 +2608,7 @@
           <div
             class="chat-node"
             class:is-selected={selectedId === n.id}
-            class:active={isRunning && pendingRun?.chatNodeId === n.id}
+            class:active={streamingFor[n.id]}
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
             class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             style:left="{n.x}px"
@@ -2573,7 +2645,7 @@
               <span class="sr-sep">/</span>
               <span class="chat-node-label">{n.name}</span>
               <span class="chat-node-count">{msgs.length} msg</span>
-              {#if isRunning && pendingRun?.chatNodeId === n.id}
+              {#if streamingFor[n.id]}
                 <span class="chat-node-working" aria-label="Working">
                   <span class="chat-node-working-dot"></span>
                   <span class="chat-node-working-text">working</span>
@@ -2610,7 +2682,7 @@
               bind:this={chatBodyEls[n.id]}
               onpointerdown={(e) => e.stopPropagation()}
             >
-              {#if msgs.length === 0 && !(isRunning && pendingRun?.chatNodeId === n.id)}
+              {#if msgs.length === 0 && !streamingFor[n.id]}
                 <div class="chat-empty">
                   <div class="sr-label-tight">EMPTY · send to kick off the canvas</div>
                 </div>
@@ -2638,7 +2710,7 @@
                   </div>
                 </div>
               {/each}
-              {#if isRunning && pendingRun?.chatNodeId === n.id}
+              {#if streamingFor[n.id]}
                 <div class="chat-msg chat-msg-pending">
                   <div class="msg-meta">
                     <b>JKAI</b><span class="sr-sep">/</span>
@@ -2703,15 +2775,23 @@
               ></textarea>
               <div class="chat-composer-foot">
                 <span class="mono10 muted">
-                  {#if isRunning && pendingRun?.chatNodeId === n.id}running…{:else}⏎ send · ⇧⏎ newline{/if}
+                  {#if streamingFor[n.id]}thinking…{:else}⏎ send · ⇧⏎ newline{/if}
                 </span>
-                <button
-                  class="composer-pill run-btn"
-                  onclick={() => sendFromChat(n.id)}
-                  disabled={runMeta.state === 'running' || !(chatDrafts[n.id] ?? '').trim()}
-                >
-                  SEND
-                </button>
+                {#if streamingFor[n.id]}
+                  <button
+                    class="composer-pill stop-btn"
+                    onclick={() => cancelChat(n.id)}
+                    title="Stop the reply (keeps what was streamed so far)"
+                  >■ stop</button>
+                {:else}
+                  <button
+                    class="composer-pill run-btn"
+                    onclick={() => sendFromChat(n.id)}
+                    disabled={!(chatDrafts[n.id] ?? '').trim()}
+                  >
+                    SEND
+                  </button>
+                {/if}
               </div>
             </div>
           </div>

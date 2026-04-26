@@ -5,7 +5,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
@@ -19,7 +19,7 @@ const MAX_MESSAGE_LEN = 20_000;
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId, attachmentIds, useIntelContext } = body as {
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId } = body as {
     message: string;
     workflowId?: string;
     mode?: string;
@@ -28,7 +28,41 @@ export const POST: RequestHandler = async ({ request }) => {
     conversationId?: string;
     attachmentIds?: string[];
     useIntelContext?: boolean;
+    chatNodeId?: string;
   };
+
+  // Canvas chat: when a chat node is the source, ensure it has a pinned
+  // conversation so prior messages on this canvas reload correctly. Each
+  // chat node owns its own thread (mirrors the legacy /api/workflows/[id]/chat
+  // behaviour we are replacing).
+  let conversationId: string | undefined = rawConversationId;
+  if (chatNodeId && workflowId && !conversationId) {
+    const [chatNode] = await db.select().from(workflowNodes)
+      .where(and(eq(workflowNodes.id, chatNodeId), eq(workflowNodes.workflowId, workflowId)))
+      .limit(1);
+    const cfg = (chatNode?.config as Record<string, unknown> | null) ?? {};
+    const pinned = typeof cfg.conversationId === 'string' ? cfg.conversationId : null;
+    if (pinned) {
+      const [exists] = await db.select().from(conversations)
+        .where(eq(conversations.id, pinned)).limit(1);
+      if (exists) conversationId = pinned;
+    }
+    if (!conversationId) {
+      const defaultCtx = await resolveDefaultModel('chat');
+      const [conv] = await db.insert(conversations).values({
+        title: message.slice(0, 50),
+        source: 'web',
+        modelProvider: defaultCtx.provider,
+        modelId: defaultCtx.modelId,
+      }).returning();
+      conversationId = conv.id;
+      if (chatNode) {
+        await db.update(workflowNodes)
+          .set({ config: { ...cfg, conversationId } })
+          .where(and(eq(workflowNodes.id, chatNodeId), eq(workflowNodes.workflowId, workflowId)));
+      }
+    }
+  }
 
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
@@ -73,7 +107,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
   cleanOldJobs();
 
-  const { jobId, job } = createJob(message, { workflowId, conversationId });
+  const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
   // Run the orchestrator in the background
@@ -194,12 +228,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
         // Persist the user message FIRST so any mid-flight status updates
         // inserted by generalChat land after it in chronological order.
+        const userMetadata = chatNodeId ? { chatNodeId } : undefined;
         let insertedUserMsg: { id: string } | null = null;
         if (conversationId) {
-          const [m] = await db.insert(orchestratorChats).values({ conversationId, role: 'user', content: message }).returning({ id: orchestratorChats.id });
+          const [m] = await db.insert(orchestratorChats).values({ conversationId, workflowId: workflowId ?? null, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
           insertedUserMsg = m;
         } else if (workflowId) {
-          const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message }).returning({ id: orchestratorChats.id });
+          const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
           insertedUserMsg = m;
         }
 
@@ -253,6 +288,12 @@ export const POST: RequestHandler = async ({ request }) => {
           },
           onStreamEvent: (event) => {
             if (abortController.signal.aborted) return;
+            // Aggregate streamed tokens so a user-initiated cancel can
+            // persist what was streamed so far (otherwise the partial reply
+            // visible in the UI vanishes the moment the stream is cut).
+            if (event.type === 'token' && typeof event.delta === 'string') {
+              job.partialResponse += event.delta;
+            }
             publishJobEvent(jobId, event);
           },
           modelContext,
@@ -266,11 +307,14 @@ export const POST: RequestHandler = async ({ request }) => {
         // tool-call drawer survives page reloads. User message was already
         // saved above.
         const cleanedToolSteps = job.toolSteps.map((s) => extractEphemeralSidecar(s));
-        const assistantMetadata = cleanedToolSteps.length > 0 ? { toolSteps: cleanedToolSteps } : undefined;
+        const assistantMetaParts: Record<string, unknown> = {};
+        if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
+        if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
+        const assistantMetadata = Object.keys(assistantMetaParts).length > 0 ? assistantMetaParts : undefined;
         let assistantMsgId: string | null = null;
         if (conversationId) {
           const [ins] = await db.insert(orchestratorChats).values({
-            conversationId, role: 'assistant', content: responseText, metadata: assistantMetadata,
+            conversationId, workflowId: workflowId ?? null, role: 'assistant', content: responseText, metadata: assistantMetadata,
           }).returning({ id: orchestratorChats.id });
           assistantMsgId = ins.id;
 
@@ -329,6 +373,27 @@ export const POST: RequestHandler = async ({ request }) => {
       publishJobEvent(jobId, { type: 'done', result: (job.result ?? {}) as Record<string, unknown> });
     } catch (err: unknown) {
       if (job.status === 'cancelled') {
+        // User-initiated cancel: persist whatever was streamed so far so
+        // the partial reply doesn't disappear from the chat. Supersession
+        // (cancelForScope) gets a different reason and is skipped — the
+        // replacing job will produce its own assistant message.
+        const isUserCancel = job.error === 'Cancelled by user';
+        const partial = job.partialResponse?.trim();
+        if (isUserCancel && partial && (conversationId || workflowId)) {
+          try {
+            const cancelMeta: Record<string, unknown> = { cancelled: true };
+            if (chatNodeId) cancelMeta.chatNodeId = chatNodeId;
+            await db.insert(orchestratorChats).values({
+              conversationId: conversationId ?? null,
+              workflowId: workflowId ?? null,
+              role: 'assistant',
+              content: job.partialResponse,
+              metadata: cancelMeta,
+            });
+          } catch (persistErr) {
+            console.error('[orchestrator] failed to persist cancelled partial:', persistErr instanceof Error ? persistErr.message : persistErr);
+          }
+        }
         publishJobEvent(jobId, { type: 'error', message: job.error ?? 'Cancelled' });
         return;
       }
