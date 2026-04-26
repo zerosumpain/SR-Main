@@ -22,7 +22,6 @@
   const hrvSeries = $derived(series.map((d) => d.hrv));
   const strainSeries = $derived(series.map((d) => d.strain));
   const rhrSeries = $derived(series.map((d) => d.rhr));
-  const weightSeries = $derived(series.map((d) => d.weight));
 
   const recAvg7 = $derived(
     Math.round(series.slice(-7).reduce((a, b) => a + b.rec, 0) / 7),
@@ -84,39 +83,6 @@
     const m = mins - h * 60;
     return `${h}:${m.toString().padStart(2, '0')}`;
   }
-
-  // Weight scatter
-  const W = 280;
-  const HC = 110;
-  const validWeight = $derived(weightSeries.some((w) => w > 0));
-  const wLo = $derived(validWeight ? Math.min(...weightSeries.filter((w) => w > 0)) - 0.3 : 0);
-  const wHi = $derived(validWeight ? Math.max(...weightSeries.filter((w) => w > 0)) + 0.3 : 1);
-  const wRange = $derived(wHi - wLo || 1);
-  const wPoints = $derived(
-    weightSeries.map((v, i) => [
-      (i / (weightSeries.length - 1)) * (W - 16) + 8,
-      HC - 14 - ((v - wLo) / wRange) * (HC - 28),
-    ]),
-  );
-  const wRegression = $derived(linearReg(weightSeries));
-  function linearReg(data: number[]): { slope: number; intercept: number } {
-    const n = data.length;
-    const xs = data.map((_, i) => i);
-    const mx = xs.reduce((a, b) => a + b, 0) / n;
-    const my = data.reduce((a, b) => a + b, 0) / n;
-    const num = xs.reduce((s, x, i) => s + (x - mx) * (data[i] - my), 0);
-    const den = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
-    const slope = den === 0 ? 0 : num / den;
-    return { slope, intercept: my - slope * mx };
-  }
-  function lineY(x: number, lo: number, range: number, slope: number, intercept: number): number {
-    return HC - 14 - ((slope * x + intercept - lo) / range) * (HC - 28);
-  }
-  const wLineY0 = $derived(lineY(0, wLo, wRange, wRegression.slope, wRegression.intercept));
-  const wLineYN = $derived(
-    lineY(weightSeries.length - 1, wLo, wRange, wRegression.slope, wRegression.intercept),
-  );
-  const weightDelta = $derived(today.weight && series[0].weight ? +(today.weight - series[0].weight).toFixed(1) : 0);
 
   // Activity rings — driven by Apple Health (Move kcal / Exercise min / Stand hours)
   const stepsToday = $derived(today.steps);
@@ -282,40 +248,6 @@
         </p>
       </div>
     </div>
-  </div>
-
-  <!-- Weight -->
-  <div class="h-card span-6 tinted">
-    <div class="h-card-head">
-      <p class="h-card-name">WEIGHT · 30D</p>
-      <span class="h-card-tag" class:good={weightDelta < 0} class:bad={weightDelta > 0} class:flat={weightDelta === 0}>
-        {weightDelta === 0 ? '— kg' : `${weightDelta < 0 ? '↓' : '↑'} ${Math.abs(weightDelta).toFixed(1)} kg`}
-      </span>
-    </div>
-    <p class="h-card-value">
-      {today.weight ? today.weight.toFixed(1) : '—'}<span class="h-card-unit"> kg</span>
-    </p>
-    {#if validWeight}
-      <svg class="h-scatter-svg" viewBox="0 0 {W} {HC}" preserveAspectRatio="none">
-        <path class="h-scatter-line" d="M8,{wLineY0.toFixed(1)} L{(W - 8).toFixed(1)},{wLineYN.toFixed(1)}" />
-        {#each wPoints as p, i (i)}
-          {@const isLast = i === wPoints.length - 1}
-          <circle
-            class="h-scatter-point"
-            cx={p[0]}
-            cy={p[1]}
-            r={isLast ? 3.5 : 2}
-            opacity={isLast ? 1 : 0.55}
-          />
-        {/each}
-      </svg>
-      <p class="h-card-foot">
-        Trend <em>{wRegression.slope >= 0 ? '+' : '−'}{Math.abs(wRegression.slope).toFixed(2)} kg/day</em>.
-        Daily noise is ±0.6 kg — ignore the spikes.
-      </p>
-    {:else}
-      <p class="h-card-foot">No weight data in this window.</p>
-    {/if}
   </div>
 
   <!-- Workouts -->
@@ -533,21 +465,6 @@
   .h-sleep-legend-sw {
     width: 8px;
     height: 8px;
-  }
-
-  .h-scatter-svg {
-    width: 100%;
-    height: 110px;
-    display: block;
-  }
-  .h-scatter-point {
-    fill: var(--accent);
-  }
-  .h-scatter-line {
-    stroke: rgba(26, 16, 8, 0.5);
-    stroke-width: 1;
-    stroke-dasharray: 3 3;
-    fill: none;
   }
 
   .h-workout-list {

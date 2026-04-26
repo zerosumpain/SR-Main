@@ -12,7 +12,6 @@ type Stats = {
   sleepToday: number;
   sleepAvg7: number;
   hardestDay: { day: string; strain: number } | null;
-  weightDelta: number | null;
   stepsToday: number;
 };
 
@@ -35,11 +34,6 @@ function buildStats(series: HealthDay[], rhrBaseline: number): Stats {
   const hardest = last7Strain.length
     ? [...last7Strain].sort((a, b) => b.strain - a.strain)[0]
     : null;
-  const validWeight = series.filter((d) => d.weight > 0);
-  const weightDelta =
-    validWeight.length >= 2
-      ? +(validWeight[validWeight.length - 1].weight - validWeight[0].weight).toFixed(1)
-      : null;
 
   return {
     recToday: today.rec,
@@ -51,7 +45,6 @@ function buildStats(series: HealthDay[], rhrBaseline: number): Stats {
     sleepToday: +today.slept.toFixed(1),
     sleepAvg7: +avg(last7.map((d) => d.slept)).toFixed(1),
     hardestDay: hardest ? { day: dayName(hardest.date), strain: +hardest.strain.toFixed(1) } : null,
-    weightDelta,
     stepsToday: today.steps,
   };
 }
@@ -94,10 +87,6 @@ function templated(stats: Stats): string {
   parts.push(
     `Week's average recovery sits at <em>${stats.recAvg7}%</em> and today is still <em>${recBand}</em>.`,
   );
-  if (stats.weightDelta != null && Math.abs(stats.weightDelta) > 0.3) {
-    const dir = stats.weightDelta < 0 ? '−' : '+';
-    parts.push(`Weight's moved <em>${dir}${Math.abs(stats.weightDelta).toFixed(1)} kg</em> over the window.`);
-  }
   parts.push(stats.recToday < 50 ? `The sandwich is earned.` : `Plenty of rope left.`);
   return parts.join(' ');
 }
