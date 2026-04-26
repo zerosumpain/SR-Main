@@ -1,50 +1,29 @@
-import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeDefinition, NodeResult } from '../types';
 
+// Merge is intentionally one-mode: it deep-merges every upstream input into
+// a single object. Field-picking used to live here behind a `strategy: pick`
+// toggle, but it overlapped with `transform` and consistently confused the
+// orchestrator. If you need a subset of fields, use `transform` with
+// `return { field1: input.field1, field2: input.field2 };`.
 export const mergeExecutor: NodeExecutor = {
   type: 'merge',
-  async execute(input, config, _context): Promise<NodeResult> {
-    const strategy = (config.strategy as string) || 'deep-merge';
-    if (strategy === 'pick') {
-      const fields = ((config.fields as string) || '').split(',').map(f => f.trim()).filter(Boolean);
-      const output: Record<string, unknown> = {};
-      for (const field of fields) { if (field in input) output[field] = input[field]; }
-      return { output };
-    }
+  async execute(input, _config, _context): Promise<NodeResult> {
     return { output: { ...input } };
   },
   getInputSchema() { return { type: 'object', description: 'Merged data from all upstream nodes' }; },
-  getOutputSchema() { return { type: 'object', description: 'Merged output according to strategy' }; },
+  getOutputSchema() { return { type: 'object', description: 'Shallow combination of every upstream output' }; },
 };
 
 export const mergeDef: NodeDefinition = {
-  type: 'merge', label: 'Merge', category: 'control',
-  description: 'Explicitly merge data from multiple upstream nodes. Strategies: deep-merge (default), pick specific fields.',
-  configSchema: { type: 'object', properties: {
-    strategy: { type: 'string', description: "'deep-merge' or 'pick'" },
-    fields: { type: 'string', description: 'Comma-separated field names to pick' },
-  }},
-  defaultConfig: { strategy: 'deep-merge', fields: '' },
+  type: 'merge',
+  label: 'Merge',
+  category: 'control',
+  description: 'Combine the outputs of every upstream node into a single object. Use after parallel branches converge.',
+  configSchema: { type: 'object', properties: {} },
+  defaultConfig: {},
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Merged' }],
-  basicConfig: [
-    {
-      key: 'strategy',
-      label: 'Strategy',
-      type: 'dropdown',
-      description: 'How to combine data from upstream nodes',
-      options: [
-        { value: 'deep-merge', label: 'Deep merge (combine all fields)' },
-        { value: 'pick', label: 'Pick (select specific fields)' },
-      ],
-    },
-    {
-      key: 'fields',
-      label: 'Fields',
-      type: 'template-textarea',
-      placeholder: 'response, status',
-      description: 'Comma-separated field names',
-      visibleWhen: { key: 'strategy', equals: 'pick' },
-    },
-  ],
-  llmDescription: 'Use after parallel branches converge to control how upstream data is combined.',
+  basicConfig: [],
+  llmDescription: 'Use after parallel branches converge to combine all upstream outputs into one object. Has no config — it always merges. To select a subset of fields, follow with a `transform` node.',
+  llmExamples: [{}],
 };

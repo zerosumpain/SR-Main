@@ -43,7 +43,12 @@ export const dataStoreExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     context: ExecutionContext,
   ): Promise<NodeResult> {
-    const operation = (config.operation as string) || 'get';
+    const rawOp = ((config.operation as string) || 'get').toLowerCase().trim();
+    // Absorb the two LLM hallucinations that bite most often instead of
+    // hard-failing the run: read→get, write→set. Saving still validates
+    // against the canonical enum so the node config in storage stays clean,
+    // but a stray "read"/"write" at execute time runs as you'd expect.
+    const operation = rawOp === 'read' ? 'get' : rawOp === 'write' ? 'set' : rawOp;
     const key = interpolateTemplate((config.key as string) || '', input);
     const workflowId = context.workflowId;
 
@@ -54,11 +59,8 @@ export const dataStoreExecutor: NodeExecutor = {
       throw new Error('data-store: key is required (supports {{input.field}} templates)');
     }
     if (operation !== 'get' && operation !== 'set') {
-      // Hard-fail so the run status = failed and the node's error column is
-      // populated. Previously silently returned { error: ... } which looked
-      // like "no output" to the user.
       throw new Error(
-        `data-store: operation must be "get" or "set" (got ${JSON.stringify(operation)}). "read" and "write" are common LLM hallucinations — use "get"/"set".`,
+        `data-store: operation must be "get" or "set" (got ${JSON.stringify(rawOp)}).`,
       );
     }
 

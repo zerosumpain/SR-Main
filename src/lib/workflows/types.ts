@@ -56,6 +56,13 @@ export interface NodeDefinition {
   llmDescription?: string;
   /** Example configs for the orchestrator */
   llmExamples?: Record<string, unknown>[];
+  /**
+   * Hide from orchestrator grounding and the admin /tools listing.
+   * Stays registered + executable so existing canvases keep running, but
+   * the LLM never sees it — used when a multi-mode legacy node has been
+   * superseded by per-operation splits.
+   */
+  hidden?: boolean;
 }
 
 export interface NodeResult {

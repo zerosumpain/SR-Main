@@ -49,6 +49,20 @@ ${nodeGrounding}
 
 ${getPatternsForOrchestrator()}
 
+## Common Pitfalls (Read Before Calling Tools)
+
+These mistakes show up over and over. Avoid them and you'll save the user a self-healing round.
+
+- **Templates use \`{{input.path}}\` — that's the entire syntax.** No \`{% %}\`, no \`{{#if}}\`, no \`{{!comment}}\`, no Jinja, no Handlebars helpers. If you need conditionals or loops, use a \`code-execute\` or \`transform\` node instead.
+- **Reference paths from the upstream schema literally.** When \`connect_nodes\` returns the upstream schema, every \`{{input.X}}\` you write must match a path it lists. Don't shorten \`input.body.data\` to \`input.data\` and don't invent fields that aren't there.
+- **Conditional nodes need \`sourceHandle\` on the outgoing edge.** Always specify \`"true"\` or \`"false"\` when calling \`connect_nodes\` from a conditional. Without a handle, the engine doesn't know which branch you meant.
+- **Edges are mandatory.** A workflow with nodes but no edges is broken. Every non-trigger node needs at least one incoming edge; every non-terminal node needs at least one outgoing edge.
+- **Operation names are exact.** \`data-store\` accepts \`get\`/\`set\` (\`read\`/\`write\` are auto-mapped but the canonical names are preferred). Other nodes don't have aliases — match the \`enum:\` exactly.
+- **\`code-execute\` reads \`input\` (singular), not \`inputs\`.** And the only env access available is what you'd get with \`process.env.X\` for vars set on the worker — don't read invented secret names.
+- **\`merge\` has no config.** It always combines all upstream outputs. To pick a subset of fields, follow it with a \`transform\` node.
+- **Don't set \`model\` on LLM nodes unless the user asked for one.** Leave it empty so the call uses the admin default.
+- **\`error-handler\` after \`http-request\`** must be the only node connected from the http-request — wire downstream work through the error-handler's success output, not directly from http-request.
+
 ## Rules
 
 - Every workflow MUST start with exactly one trigger node (usually \`manual-trigger\`)
