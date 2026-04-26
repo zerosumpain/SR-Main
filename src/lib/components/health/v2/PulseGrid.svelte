@@ -275,16 +275,16 @@
   .h-pg-cell.today::after {
     content: '';
     position: absolute;
-    inset: 0;
-    border: 2px solid var(--text-primary);
+    inset: 2px;
+    background: rgba(237, 228, 212, 0.55);
+    mix-blend-mode: screen;
     pointer-events: none;
   }
   .h-pg-cell.peak::after {
     content: '';
     position: absolute;
     inset: 0;
-    border: 2px solid var(--accent);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+    border: 2.5px solid var(--text-primary);
     pointer-events: none;
   }
   .h-pg-axis {
