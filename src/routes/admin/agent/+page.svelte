@@ -1,11 +1,15 @@
-<svelte:head><title>Agent Dashboard — Strange Ramblings</title></svelte:head>
+<svelte:head><title>Agent Dashboard — Admin</title></svelte:head>
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getContext } from 'svelte';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
+  const adminToken = getContext<string>('adminToken');
+  const t = adminToken ? `?token=${adminToken}` : '';
 
-  // Live activity feed via SSE
   let liveEvents = $state(data.recentActivity.map(e => ({
     id: e.id,
     eventType: e.eventType,
@@ -14,14 +18,11 @@
     createdAt: e.createdAt?.toISOString?.() ?? new Date().toISOString(),
   })));
   let connected = $state(false);
-  let feedEl: HTMLElement;
 
   onMount(() => {
     const evtSource = new EventSource('/api/agent/activity/stream');
-
     evtSource.onopen = () => { connected = true; };
     evtSource.onerror = () => { connected = false; };
-
     evtSource.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
@@ -30,39 +31,25 @@
         }
       } catch {}
     };
-
     return () => evtSource.close();
   });
 
   const activeTasks = $derived(data.tasks.filter(t => t.status === 'active' || t.status === 'planning'));
   const completedTasks = $derived(data.tasks.filter(t => t.status === 'completed'));
-  const failedTasks = $derived(data.tasks.filter(t => t.status === 'failed'));
-
-  function statusBadge(status: string): string {
-    const colors: Record<string, string> = {
-      pending: '#666',
-      planning: '#b08d3e',
-      active: '#3d8b3d',
-      paused: '#666',
-      completed: '#2d6b2d',
-      failed: '#8b3a3a',
-    };
-    return colors[status] ?? '#666';
-  }
 
   function eventIcon(type: string): string {
     const icons: Record<string, string> = {
       task_created: '+',
       step_started: '>',
-      tool_started: '...',
-      tool_completed: 'ok',
-      message_in: '<-',
-      message_out: '->',
+      tool_started: '·',
+      tool_completed: '✓',
+      message_in: '←',
+      message_out: '→',
       decision: '?',
       error: '!',
       research_progress: '~',
     };
-    return icons[type] ?? '*';
+    return icons[type] ?? '•';
   }
 
   function timeAgo(dateStr: string): string {
@@ -77,111 +64,162 @@
   }
 </script>
 
-<div class="max-w-4xl mx-auto px-6 py-12">
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-10">
-    <a href="/admin" class="back-link back-link--xs">Admin</a>
-    <h1 class="text-lg font-light tracking-wide" style="color: var(--text-primary);">
-      Agent Dashboard
-    </h1>
-    <span class="text-[10px] uppercase tracking-wider" style="color: {connected ? '#3d8b3d' : '#8b3a3a'}; font-family: var(--font-mono);">
-      {connected ? 'live' : 'offline'}
-    </span>
+<PageWrap width="wide">
+  <PageHeader
+    kicker="Agent"
+    title="JKAI Dashboard"
+    sub="Live activity stream, active tasks, daily spend. Drill into Tasks / Actions / Costs / Config from the sidebar."
+  >
+    {#snippet actions()}
+      <span class="nm-pill" data-state={connected ? 'connected' : 'error'}>
+        {connected ? 'live' : 'offline'}
+      </span>
+    {/snippet}
+  </PageHeader>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-card-label">Active Tasks</div>
+      <div class="stat-card-value">{activeTasks.length}</div>
+      <div class="stat-card-meta"><a class="nm-link-btn" href={`/admin/agent/tasks${t}`}>View all →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Completed</div>
+      <div class="stat-card-value">{completedTasks.length}</div>
+      <div class="stat-card-meta">to date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Today's Cost</div>
+      <div class="stat-card-value">${(data.todayCosts?.totalCost ?? 0).toFixed(4)}</div>
+      <div class="stat-card-meta"><a class="nm-link-btn" href={`/admin/agent/costs${t}`}>Costs →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Actions Today</div>
+      <div class="stat-card-value">{data.todayCosts?.actionCount ?? 0}</div>
+      <div class="stat-card-meta"><a class="nm-link-btn" href={`/admin/agent/actions${t}`}>Action log →</a></div>
+    </div>
   </div>
 
-  <!-- Stats Row -->
-  <div class="grid grid-cols-4 gap-4 mb-10">
-    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-      <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Active Tasks</div>
-      <div class="text-2xl font-light" style="color: var(--text-primary);">{activeTasks.length}</div>
-    </div>
-    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-      <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Completed</div>
-      <div class="text-2xl font-light" style="color: var(--text-primary);">{completedTasks.length}</div>
-    </div>
-    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-      <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Today's Cost</div>
-      <div class="text-2xl font-light" style="color: var(--text-primary);">${(data.todayCosts?.totalCost ?? 0).toFixed(4)}</div>
-    </div>
-    <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-      <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">Actions Today</div>
-      <div class="text-2xl font-light" style="color: var(--text-primary);">{data.todayCosts?.actionCount ?? 0}</div>
-    </div>
-  </div>
+  <div class="agent-grid">
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Active Tasks</span>
+        <span class="nm-sec-meta">{activeTasks.length}</span>
+      </div>
 
-  <!-- Navigation -->
-  <div class="flex gap-4 mb-8">
-    <a href="/admin/agent/tasks" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
-      Tasks
-    </a>
-    <a href="/admin/agent/actions" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
-      Action Log
-    </a>
-    <a href="/admin/agent/costs" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
-      Costs
-    </a>
-    <a href="/admin/agent/config" class="text-xs tracking-wider px-3 py-1.5 rounded" style="color: var(--text-secondary); background: var(--card-bg); font-family: var(--font-mono);">
-      Config
-    </a>
-  </div>
-
-  <!-- Active Tasks -->
-  {#if activeTasks.length > 0}
-    <div class="mb-10">
-      <h2 class="text-[11px] uppercase tracking-[0.2em] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Active Tasks
-      </h2>
-      <div class="space-y-3">
-        {#each activeTasks as task}
-          <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-sm" style="color: var(--text-primary);">{task.title}</span>
-              <span class="text-[10px] px-2 py-0.5 rounded" style="background: {statusBadge(task.status)}22; color: {statusBadge(task.status)}; font-family: var(--font-mono);">
-                {task.status}
-              </span>
-            </div>
-            {#if task.description}
-              <p class="text-xs mb-2" style="color: var(--text-ghost);">{task.description.slice(0, 200)}</p>
-            {/if}
-            {#if Array.isArray(task.steps) && task.steps.length > 0}
-              <div class="flex gap-1 mt-2">
-                {#each task.steps as step, i}
-                  <div
-                    class="h-1.5 rounded-full flex-1"
-                    style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) ? '#b08d3e' : 'var(--card-border)'};"
-                  ></div>
-                {/each}
+      {#if activeTasks.length === 0}
+        <div class="nm-empty">No active tasks. Send a message via OpenClaw to spin one up.</div>
+      {:else}
+        <div class="task-list">
+          {#each activeTasks as task}
+            <div class="task-card">
+              <div class="task-head">
+                <span class="task-title">{task.title}</span>
+                <span class="nm-pill" data-state={task.status}>{task.status}</span>
               </div>
-            {/if}
+              {#if task.description}
+                <p class="task-desc">{task.description.slice(0, 220)}</p>
+              {/if}
+              {#if Array.isArray(task.steps) && task.steps.length > 0}
+                <div class="step-bar">
+                  {#each task.steps as _, i}
+                    <div
+                      class="step-seg"
+                      data-state={i < (task.currentStep ?? 0) ? 'done' : i === (task.currentStep ?? 0) ? 'current' : 'pending'}
+                    ></div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Activity Feed</span>
+        <span class="nm-sec-meta">last 100</span>
+      </div>
+
+      <div class="feed">
+        {#each liveEvents as event}
+          <div class="feed-row">
+            <span class="feed-icon">{eventIcon(event.eventType)}</span>
+            <span class="feed-summary">{event.summary}</span>
+            <span class="feed-time">{timeAgo(event.createdAt)}</span>
           </div>
+        {:else}
+          <div class="nm-empty">No activity yet. Send a message through OpenClaw to see it here.</div>
         {/each}
       </div>
-    </div>
-  {/if}
-
-  <!-- Live Activity Feed -->
-  <div>
-    <h2 class="text-[11px] uppercase tracking-[0.2em] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      Activity Feed
-    </h2>
-    <div bind:this={feedEl} class="space-y-1 max-h-[500px] overflow-y-auto" style="scrollbar-width: thin;">
-      {#each liveEvents as event}
-        <div class="flex items-start gap-3 py-2 px-3 rounded" style="background: var(--card-bg);">
-          <span class="text-[10px] shrink-0 w-6 text-center rounded" style="color: var(--text-ghost); font-family: var(--font-mono); background: var(--card-bg);">
-            {eventIcon(event.eventType)}
-          </span>
-          <span class="text-xs flex-1" style="color: var(--text-secondary);">
-            {event.summary}
-          </span>
-          <span class="text-[10px] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-            {timeAgo(event.createdAt)}
-          </span>
-        </div>
-      {:else}
-        <p class="text-xs py-8 text-center" style="color: var(--text-ghost);">
-          No activity yet. Send a message through OpenClaw to see it here.
-        </p>
-      {/each}
-    </div>
+    </section>
   </div>
-</div>
+</PageWrap>
+
+<style>
+  .agent-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr);
+  }
+  .agent-grid :global(.nm-sec) { margin-bottom: 0; }
+  @media (max-width: 880px) {
+    .agent-grid { grid-template-columns: 1fr; }
+  }
+
+  .task-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .task-card {
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    padding: 0.7rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .task-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
+  .task-title {
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .task-desc {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .step-bar { display: flex; gap: 3px; }
+  .step-seg { flex: 1; height: 3px; background: var(--card-border); }
+  .step-seg[data-state="done"] { background: #2d7a3a; }
+  .step-seg[data-state="current"] { background: var(--accent); }
+
+  .feed {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 540px;
+    overflow-y: auto;
+  }
+  .feed-row {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg);
+    font-size: 0.82rem;
+  }
+  .feed-row + .feed-row { border-top: 1px solid var(--divider); }
+  .feed-icon {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .feed-summary { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+</style>

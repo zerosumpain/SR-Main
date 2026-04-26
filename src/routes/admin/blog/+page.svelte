@@ -2,6 +2,8 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -15,21 +17,15 @@
   let draftCount = $derived(data.posts.filter((p) => p.status === 'draft').length);
   let publishedCount = $derived(data.posts.filter((p) => p.status === 'published').length);
 
-  let filteredPosts = $derived(() => {
+  let filteredPosts = $derived.by(() => {
     let posts = [...data.posts];
-
-    // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       posts = posts.filter((p) => p.title.toLowerCase().includes(q));
     }
-
-    // Filter by status
     if (statusFilter !== 'all') {
       posts = posts.filter((p) => p.status === statusFilter);
     }
-
-    // Sort
     if (sortBy === 'title') {
       posts.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sortBy === 'updatedAt') {
@@ -45,7 +41,6 @@
         return db - da;
       });
     }
-
     return posts;
   });
 
@@ -74,189 +69,162 @@
     }
   }
 
-  function formatDate(d: Date | string | null): string {
+  function fmtDate(d: Date | string | null): string {
     if (!d) return '—';
-    const date = d instanceof Date ? d : new Date(d);
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 </script>
 
-<div class="max-w-2xl mx-auto px-6 py-12">
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-10">
-    <a href="/admin?token={adminToken}" class="back-link back-link--xs">Admin</a>
-    <h1
-      class="text-[10px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
-    >
-      Blog Posts
-    </h1>
-  </div>
+<PageWrap>
+  <PageHeader
+    kicker="Content"
+    title="Blog Posts"
+    sub="Drafts, published posts, and tags. Create a new post inline; click any row to edit."
+  />
 
-  <!-- New post -->
-  <div class="mb-8 flex gap-2">
-    <input
-      type="text"
-      bind:value={newTitle}
-      placeholder="New post title…"
-      onkeydown={(e) => e.key === 'Enter' && createPost()}
-      class="flex-1 px-3 py-2 rounded-lg text-sm"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;"
-    />
-    <button
-      onclick={createPost}
-      disabled={creating || !newTitle.trim()}
-      class="text-[10px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-      style="background: var(--accent); color: white; font-family: var(--font-mono);"
-    >
-      {creating ? '…' : 'Create'}
-    </button>
-  </div>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">New post</span>
+    </div>
+    <div class="create-row">
+      <input
+        type="text"
+        bind:value={newTitle}
+        placeholder="Title (slug auto-generated)…"
+        onkeydown={(e) => e.key === 'Enter' && createPost()}
+        class="nm-text-input"
+      />
+      <button
+        class="nm-save-btn"
+        onclick={createPost}
+        disabled={creating || !newTitle.trim()}
+      >{creating ? '…' : 'Create draft'}</button>
+    </div>
+  </section>
 
-  <!-- Search, filters, sort -->
-  <div class="mb-6">
-    <!-- Search -->
-    <input
-      type="text"
-      bind:value={searchQuery}
-      placeholder="Search posts…"
-      class="w-full px-3 py-2 rounded-lg text-sm mb-4"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;"
-    />
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Posts</span>
+      <span class="nm-sec-meta">{filteredPosts.length} / {data.posts.length}</span>
+    </div>
 
-    <!-- Tabs + Sort row -->
-    <div class="flex items-center justify-between gap-4">
-      <div class="flex items-center gap-1">
-        <button
-          class="tab-btn"
-          class:active={statusFilter === 'all'}
-          onclick={() => (statusFilter = 'all')}
-        >
-          All <span class="tab-count">{data.posts.length}</span>
+    <div class="filter-row">
+      <input
+        type="text"
+        bind:value={searchQuery}
+        placeholder="Search by title…"
+        class="nm-text-input"
+      />
+      <div class="nm-tabs">
+        <button class="nm-tab" class:active={statusFilter === 'all'} onclick={() => (statusFilter = 'all')}>
+          All <span class="nm-tab-count">{data.posts.length}</span>
         </button>
-        <button
-          class="tab-btn"
-          class:active={statusFilter === 'draft'}
-          onclick={() => (statusFilter = 'draft')}
-        >
-          Draft <span class="tab-count">{draftCount}</span>
+        <button class="nm-tab" class:active={statusFilter === 'draft'} onclick={() => (statusFilter = 'draft')}>
+          Draft <span class="nm-tab-count">{draftCount}</span>
         </button>
-        <button
-          class="tab-btn"
-          class:active={statusFilter === 'published'}
-          onclick={() => (statusFilter = 'published')}
-        >
-          Published <span class="tab-count">{publishedCount}</span>
+        <button class="nm-tab" class:active={statusFilter === 'published'} onclick={() => (statusFilter = 'published')}>
+          Published <span class="nm-tab-count">{publishedCount}</span>
         </button>
       </div>
-
-      <select
-        bind:value={sortBy}
-        class="sort-select"
-      >
+      <select class="nm-select" bind:value={sortBy}>
         <option value="updatedAt">Last updated</option>
         <option value="createdAt">Created</option>
         <option value="title">Title</option>
       </select>
     </div>
-  </div>
 
-  <!-- Posts list -->
-  <div>
-    {#if filteredPosts().length === 0}
-      <p class="text-sm py-8" style="color: var(--text-muted);">No posts found.</p>
+    {#if filteredPosts.length === 0}
+      <div class="nm-empty">No posts match.</div>
     {:else}
-      {#each filteredPosts() as post}
-        <a
-          href="/admin/blog/{post.id}?token={adminToken}"
-          class="block py-4 group transition-colors hover:bg-[rgba(196,87,10,0.04)]"
-          style="border-bottom: 1px solid var(--divider);"
-        >
-          <div class="flex justify-between items-baseline gap-4">
-            <div class="flex items-baseline gap-3">
-              {#if post.coverImageUrl}
-                <img
-                  src={post.coverImageUrl}
-                  alt=""
-                  class="shrink-0 rounded"
-                  style="width: 28px; height: 28px; object-fit: cover;"
-                />
+      <div class="post-list">
+        {#each filteredPosts as post (post.id)}
+          <a class="post-row" href={`/admin/blog/${post.id}?token=${adminToken}`}>
+            {#if post.coverImageUrl}
+              <img class="cover" src={post.coverImageUrl} alt="" />
+            {:else}
+              <div class="cover cover-placeholder"></div>
+            {/if}
+            <div class="post-main">
+              <span class="post-title">{post.title}</span>
+              {#if post.excerpt}
+                <span class="post-excerpt">{post.excerpt.slice(0, 140)}{post.excerpt.length > 140 ? '…' : ''}</span>
               {/if}
-              <span
-                class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded shrink-0"
-                style="font-family: var(--font-mono); background: {post.status === 'published'
-                  ? 'rgba(var(--accent-rgb, 120,80,40), 0.15)'
-                  : 'rgba(0,0,0,0.06)'}; color: {post.status === 'published'
-                  ? 'var(--accent)'
-                  : 'var(--text-ghost)'};"
-              >
-                {post.status}
-              </span>
-              <span
-                class="text-sm font-medium group-hover:text-[var(--accent)] transition-colors"
-                style="color: var(--text-primary);"
-              >
-                {post.title}
-              </span>
             </div>
-            <span class="label shrink-0" style="font-size: 10px;">
-              {formatDate(post.updatedAt)}
-            </span>
-          </div>
-        </a>
-      {/each}
+            <span class="nm-pill" data-state={post.status}>{post.status}</span>
+            <span class="post-date">{fmtDate(post.updatedAt)}</span>
+          </a>
+        {/each}
+      </div>
     {/if}
-  </div>
-</div>
+  </section>
+</PageWrap>
 
 <style>
-  .tab-btn {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-ghost);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  .create-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
   }
-
-  .tab-btn:hover {
-    color: var(--text-secondary);
+  .filter-row {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 0.8rem;
   }
+  .filter-row .nm-text-input { flex: 1; min-width: 200px; }
+  .filter-row .nm-tabs { margin-bottom: 0; border-bottom: 0; }
 
-  .tab-btn.active {
-    background: rgba(196, 87, 10, 0.12);
-    color: var(--accent);
-    border-color: var(--accent);
+  .post-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--divider);
   }
-
-  .tab-count {
-    font-size: 9px;
-    opacity: 0.7;
-    margin-left: 2px;
+  .post-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--divider);
+    text-decoration: none;
+    color: inherit;
+    transition: background 120ms ease;
   }
-
-  .sort-select {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 4px 8px;
-    border-radius: 4px;
+  .post-row:hover { background: var(--accent-tint-08); }
+  .cover {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
     border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    color: var(--text-secondary);
-    cursor: pointer;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    padding-right: 24px;
+  }
+  .cover-placeholder {
+    background: var(--bg-section);
+  }
+  .post-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .post-title {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .post-excerpt {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .post-date {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    letter-spacing: 0.06em;
+  }
+
+  @media (max-width: 640px) {
+    .post-row {
+      grid-template-columns: 36px 1fr auto;
+    }
+    .post-date { display: none; }
   }
 </style>

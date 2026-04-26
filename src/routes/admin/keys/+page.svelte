@@ -2,6 +2,8 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import type { PageData } from './$types';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data }: { data: PageData } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -28,7 +30,6 @@
     try {
       const pending: Promise<Response>[] = [];
 
-      // Z.AI, Tavily, ElevenLabs, embedding model → keys.json
       const fileBody: Record<string, string> = { zaiBaseUrl, zaiModel, embeddingModel };
       if (zaiApiKey) fileBody.zaiApiKey = zaiApiKey;
       if (tavilyApiKey) fileBody.tavilyApiKey = tavilyApiKey;
@@ -39,7 +40,6 @@
         body: JSON.stringify(fileBody),
       }));
 
-      // OpenRouter → DB (app_settings.openrouter.api_key) via the models settings endpoint
       if (openrouterApiKey) {
         pending.push(fetch(`/api/admin/models/settings?token=${adminToken}`, {
           method: 'POST',
@@ -52,7 +52,7 @@
       const allOk = results.every((r) => r.ok);
 
       if (allOk) {
-        saveMsg = 'Saved — reload to see status';
+        saveMsg = 'Saved — reload to refresh status badges';
         zaiApiKey = '';
         tavilyApiKey = '';
         openrouterApiKey = '';
@@ -72,7 +72,7 @@
     try {
       const res = await fetch(`/api/admin/deepdive/test-zai?token=${adminToken}`, { method: 'POST' });
       const result = await res.json();
-      if (result.success) { zaiTest = 'pass'; }
+      if (result.success) zaiTest = 'pass';
       else { zaiTest = 'fail'; zaiTestError = result.error ?? 'Unknown error'; }
     } catch (e: any) {
       zaiTest = 'fail';
@@ -86,213 +86,141 @@
     try {
       const res = await fetch(`/api/admin/deepdive/test-tavily?token=${adminToken}`, { method: 'POST' });
       const result = await res.json();
-      if (result.success) { tavilyTest = 'pass'; }
+      if (result.success) tavilyTest = 'pass';
       else { tavilyTest = 'fail'; tavilyTestError = result.error ?? 'Unknown error'; }
     } catch (e: any) {
       tavilyTest = 'fail';
       tavilyTestError = e.message ?? 'Network error';
     }
   }
-
-  function statusLabel(configured: boolean): string {
-    return configured ? '(configured)' : '(not set)';
-  }
 </script>
 
-<div class="max-w-2xl mx-auto px-6 py-12">
-  <div class="flex items-center justify-between mb-10">
-    <a href="/admin?token={adminToken}" class="back-link back-link--xs">Admin</a>
-    <h1
-      class="text-[10px] uppercase tracking-[0.3em]"
-      style="color: var(--text-ghost); font-family: var(--font-mono);"
-    >
-      API Keys
-    </h1>
-  </div>
+<PageWrap>
+  <PageHeader
+    kicker="AI Config"
+    title="API Keys"
+    sub="One place to update Z.AI, OpenRouter, ElevenLabs, and Tavily credentials. Use the in-page test buttons to verify before saving."
+  >
+    {#snippet actions()}
+      {#if saveMsg}<span class="save-msg">{saveMsg}</span>{/if}
+      <button class="nm-save-btn" onclick={saveKeys} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+    {/snippet}
+  </PageHeader>
 
-  <div class="space-y-6">
-    <!-- Z.AI -->
-    <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-      <p class="text-[10px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Z.AI (LLM Provider)
-      </p>
-      <p class="text-[9px] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Primary chat model. Used by /jkai orchestrator and deep-dive research.
-      </p>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
-            API Key {statusLabel(data.keys.zaiConfigured)}
-          </label>
-          <input
-            type="password"
-            bind:value={zaiApiKey}
-            placeholder={data.keys.zaiConfigured ? '********' : 'Enter API key'}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">Base URL</label>
-          <input
-            type="text"
-            bind:value={zaiBaseUrl}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">Model</label>
-          <input
-            type="text"
-            bind:value={zaiModel}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-
-        <div class="flex items-center gap-3">
-          <button
-            onclick={testZai}
-            disabled={zaiTest === 'testing'}
-            class="text-[10px] uppercase tracking-[0.2em] px-3 py-2 rounded-lg transition-colors"
-            style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          >
-            {zaiTest === 'testing' ? 'Testing...' : 'Test connection'}
-          </button>
-          {#if zaiTest === 'pass'}
-            <span style="color: #2d7d46; font-family: var(--font-mono);" class="text-sm">Pass</span>
-          {:else if zaiTest === 'fail'}
-            <span style="color: #8b3a1a; font-family: var(--font-mono);" class="text-xs">{zaiTestError}</span>
-          {/if}
-        </div>
-      </div>
+  <!-- Z.AI -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Z.AI · LLM provider</span>
+      <span class="nm-pill" data-state={data.keys.zaiConfigured ? 'connected' : 'disconnected'}>
+        {data.keys.zaiConfigured ? 'Configured' : 'Not set'}
+      </span>
     </div>
+    <p class="muted">Primary chat model. Used by /jkai orchestrator and deep-dive research.</p>
 
-    <!-- OpenRouter -->
-    <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-      <p class="text-[10px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        OpenRouter
-      </p>
-      <p class="text-[9px] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Alternate chat models, embeddings (pgvector fact dedup), and image generation (FLUX).
-      </p>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
-            API Key {statusLabel(data.keys.openrouterConfigured)}
-            {#if data.keys.openrouterConfigured}
-              <span class="ml-1 text-[9px] opacity-70">[stored in {(data.keys as any).openrouterSource}]</span>
-            {/if}
-          </label>
-          <input
-            type="password"
-            bind:value={openrouterApiKey}
-            placeholder={data.keys.openrouterConfigured ? '********' : 'Enter API key'}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-          <p class="text-[9px] mt-1 opacity-60" style="color: var(--text-ghost); font-family: var(--font-mono);">
-            Saves to app_settings table (primary). Takes effect immediately.
-            Pick models + browse catalogue at <a href="/admin/models?token={adminToken}" class="underline">/admin/models</a>.
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">Embedding Model</label>
-          <input
-            type="text"
-            bind:value={embeddingModel}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-      </div>
+    <div class="nm-form-row">
+      <label class="nm-field">
+        <span class="sr-label-tight">API Key</span>
+        <input class="nm-text-input" type="password" bind:value={zaiApiKey}
+          placeholder={data.keys.zaiConfigured ? '********' : 'Enter API key'} />
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Base URL</span>
+        <input class="nm-text-input" type="text" bind:value={zaiBaseUrl} />
+      </label>
     </div>
-
-    <!-- ElevenLabs -->
-    <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-      <p class="text-[10px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        ElevenLabs (Text-to-Speech)
-      </p>
-      <p class="text-[9px] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Used by the <code>generate_audio_tts</code> tool in /jkai. Voice/model tuned via <code>JKAI_TTS_VOICE</code> / <code>JKAI_TTS_MODEL</code> env vars.
-      </p>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
-            API Key {statusLabel(data.keys.elevenlabsConfigured)}
-          </label>
-          <input
-            type="password"
-            bind:value={elevenlabsApiKey}
-            placeholder={data.keys.elevenlabsConfigured ? '********' : 'Enter API key'}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Tavily -->
-    <div class="p-5 rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-      <p class="text-[10px] uppercase tracking-[0.25em] mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Tavily (Web Search)
-      </p>
-      <p class="text-[9px] mb-4" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Used by deep-dive research tools.
-      </p>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs mb-1" style="color: var(--text-muted); font-family: var(--font-mono);">
-            API Key {statusLabel(data.keys.tavilyConfigured)}
-          </label>
-          <input
-            type="password"
-            bind:value={tavilyApiKey}
-            placeholder={data.keys.tavilyConfigured ? '********' : 'Enter API key'}
-            class="w-full px-3 py-2 rounded-lg text-sm"
-            style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          />
-        </div>
-
-        <div class="flex items-center gap-3">
-          <button
-            onclick={testTavily}
-            disabled={tavilyTest === 'testing'}
-            class="text-[10px] uppercase tracking-[0.2em] px-3 py-2 rounded-lg transition-colors"
-            style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
-          >
-            {tavilyTest === 'testing' ? 'Testing...' : 'Test connection'}
-          </button>
-          {#if tavilyTest === 'pass'}
-            <span style="color: #2d7d46; font-family: var(--font-mono);" class="text-sm">Pass</span>
-          {:else if tavilyTest === 'fail'}
-            <span style="color: #8b3a1a; font-family: var(--font-mono);" class="text-xs">{tavilyTestError}</span>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Save button -->
-    <div class="flex items-center gap-3 justify-end">
-      {#if saveMsg}
-        <span class="text-xs" style="color: var(--text-ghost); font-family: var(--font-mono);">{saveMsg}</span>
-      {/if}
-      <button
-        onclick={saveKeys}
-        disabled={saving}
-        class="text-[10px] uppercase tracking-[0.2em] px-5 py-3 rounded-lg transition-colors disabled:opacity-50"
-        style="background: var(--accent); color: white; font-family: var(--font-mono);"
-      >
-        {saving ? 'Saving...' : 'Save'}
+    <label class="nm-field">
+      <span class="sr-label-tight">Model</span>
+      <input class="nm-text-input" type="text" bind:value={zaiModel} />
+    </label>
+    <div class="test-row">
+      <button class="nm-btn-ghost" onclick={testZai} disabled={zaiTest === 'testing'}>
+        {zaiTest === 'testing' ? 'Testing…' : 'Test connection'}
       </button>
+      {#if zaiTest === 'pass'}<span class="result-ok">Pass</span>
+      {:else if zaiTest === 'fail'}<span class="result-bad">{zaiTestError}</span>
+      {/if}
     </div>
-  </div>
-</div>
+  </section>
+
+  <!-- OpenRouter -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">OpenRouter</span>
+      <span class="nm-pill" data-state={data.keys.openrouterConfigured ? 'connected' : 'disconnected'}>
+        {data.keys.openrouterConfigured ? `Configured · ${(data.keys as any).openrouterSource}` : 'Not set'}
+      </span>
+    </div>
+    <p class="muted">Alternate chat models, embeddings (pgvector fact dedup), and image generation (FLUX). Pick models + browse catalogue at <a class="link" href={`/admin/models?token=${adminToken}`}>/admin/models</a>.</p>
+
+    <div class="nm-form-row">
+      <label class="nm-field">
+        <span class="sr-label-tight">API Key</span>
+        <input class="nm-text-input" type="password" bind:value={openrouterApiKey}
+          placeholder={data.keys.openrouterConfigured ? '********' : 'Enter API key'} />
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Embedding model</span>
+        <input class="nm-text-input" type="text" bind:value={embeddingModel} />
+      </label>
+    </div>
+  </section>
+
+  <!-- ElevenLabs -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">ElevenLabs · TTS</span>
+      <span class="nm-pill" data-state={data.keys.elevenlabsConfigured ? 'connected' : 'disconnected'}>
+        {data.keys.elevenlabsConfigured ? 'Configured' : 'Not set'}
+      </span>
+    </div>
+    <p class="muted">Used by the <code>generate_audio_tts</code> tool in /jkai. Voice/model tuned via <code>JKAI_TTS_VOICE</code> / <code>JKAI_TTS_MODEL</code> env vars.</p>
+
+    <label class="nm-field">
+      <span class="sr-label-tight">API Key</span>
+      <input class="nm-text-input" type="password" bind:value={elevenlabsApiKey}
+        placeholder={data.keys.elevenlabsConfigured ? '********' : 'Enter API key'} />
+    </label>
+  </section>
+
+  <!-- Tavily -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Tavily · Web search</span>
+      <span class="nm-pill" data-state={data.keys.tavilyConfigured ? 'connected' : 'disconnected'}>
+        {data.keys.tavilyConfigured ? 'Configured' : 'Not set'}
+      </span>
+    </div>
+    <p class="muted">Used by deep-dive research tools.</p>
+
+    <label class="nm-field">
+      <span class="sr-label-tight">API Key</span>
+      <input class="nm-text-input" type="password" bind:value={tavilyApiKey}
+        placeholder={data.keys.tavilyConfigured ? '********' : 'Enter API key'} />
+    </label>
+    <div class="test-row">
+      <button class="nm-btn-ghost" onclick={testTavily} disabled={tavilyTest === 'testing'}>
+        {tavilyTest === 'testing' ? 'Testing…' : 'Test connection'}
+      </button>
+      {#if tavilyTest === 'pass'}<span class="result-ok">Pass</span>
+      {:else if tavilyTest === 'fail'}<span class="result-bad">{tavilyTestError}</span>
+      {/if}
+    </div>
+  </section>
+</PageWrap>
+
+<style>
+  .muted { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+  .muted code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08rem 0.38rem;
+    border-radius: 2px;
+  }
+  .link { color: var(--accent); text-decoration: underline; }
+  .test-row { display: flex; gap: 0.7rem; align-items: center; }
+  .result-ok { font-family: var(--font-mono); font-size: 11px; color: #2d7a3a; }
+  .result-bad { font-family: var(--font-mono); font-size: 11px; color: #c44; }
+  .save-msg { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+</style>

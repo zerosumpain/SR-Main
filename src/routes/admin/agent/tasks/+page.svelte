@@ -1,5 +1,7 @@
-<svelte:head><title>Agent Tasks — Strange Ramblings</title></svelte:head>
+<svelte:head><title>Agent Tasks — Admin</title></svelte:head>
 <script lang="ts">
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -14,106 +16,142 @@
 
   let expandedId = $state<string | null>(null);
 
-  function statusColor(status: string): string {
-    const colors: Record<string, string> = {
-      pending: '#666', planning: '#b08d3e', active: '#3d8b3d',
-      paused: '#666', completed: '#2d6b2d', failed: '#8b3a3a',
-    };
-    return colors[status] ?? '#666';
-  }
-
-  function formatDate(d: Date | string | null): string {
+  function fmtDate(d: Date | string | null): string {
     if (!d) return '—';
     return new Date(d).toLocaleString();
   }
 </script>
 
-<div class="max-w-4xl mx-auto px-6 py-12">
-  <div class="flex items-center justify-between mb-10">
-    <a href="/admin/agent" class="back-link back-link--xs">Dashboard</a>
-    <h1 class="text-lg font-light tracking-wide" style="color: var(--text-primary);">Tasks</h1>
-    <span></span>
-  </div>
-
-  {#each Object.entries(groups) as [status, tasks]}
-    {#if tasks.length > 0}
-      <div class="mb-8">
-        <h2 class="text-[11px] uppercase tracking-[0.2em] mb-3 flex items-center gap-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          <span class="w-2 h-2 rounded-full" style="background: {statusColor(status)};"></span>
-          {status} ({tasks.length})
-        </h2>
-        <div class="space-y-2">
-          {#each tasks as task}
-            <button
-              class="w-full text-left p-4 rounded-lg transition-colors"
-              style="background: var(--card-bg); border: 1px solid var(--card-border);"
-              onclick={() => expandedId = expandedId === task.id ? null : task.id}
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-sm" style="color: var(--text-primary);">{task.title}</span>
-                <div class="flex items-center gap-3">
-                  {#if task.originChannel}
-                    <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                      {task.originChannel}
-                    </span>
-                  {/if}
-                  <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                    {formatDate(task.createdAt)}
-                  </span>
-                </div>
-              </div>
-
-              {#if Array.isArray(task.steps) && task.steps.length > 0}
-                <div class="flex gap-1 mt-3">
-                  {#each task.steps as _, i}
-                    <div
-                      class="h-1 rounded-full flex-1"
-                      style="background: {i < (task.currentStep ?? 0) ? '#3d8b3d' : i === (task.currentStep ?? 0) && task.status === 'active' ? '#b08d3e' : 'var(--card-border)'};"
-                    ></div>
-                  {/each}
-                </div>
-              {/if}
-
-              {#if expandedId === task.id}
-                <div class="mt-4 pt-4" style="border-top: 1px solid var(--card-border);">
-                  {#if task.description}
-                    <p class="text-xs mb-3" style="color: var(--text-secondary);">{task.description}</p>
-                  {/if}
-                  {#if Array.isArray(task.steps) && task.steps.length > 0}
-                    <div class="space-y-1">
-                      {#each task.steps as step, i}
-                        {@const s = step as { label: string; status: string }}
-                        <div class="flex items-center gap-2 text-xs" style="color: var(--text-ghost);">
-                          <span style="color: {i < (task.currentStep ?? 0) ? '#3d8b3d' : 'var(--text-ghost)'};">
-                            {i < (task.currentStep ?? 0) ? 'done' : i === (task.currentStep ?? 0) ? '>' : ' '}
-                          </span>
-                          <span>{s.label ?? String(step)}</span>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if task.result}
-                    <div class="mt-3 p-2 rounded text-xs" style="background: var(--card-bg); color: var(--text-secondary);">
-                      <span class="text-[10px] uppercase" style="color: var(--text-ghost);">Result:</span>
-                      <p class="mt-1">{task.result}</p>
-                    </div>
-                  {/if}
-                  <div class="mt-3 text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                    ID: {task.id}
-                    {#if task.completedAt} | Completed: {formatDate(task.completedAt)}{/if}
-                  </div>
-                </div>
-              {/if}
-            </button>
-          {/each}
-        </div>
-      </div>
-    {/if}
-  {/each}
+<PageWrap width="wide">
+  <PageHeader
+    kicker="Agent"
+    title="Tasks"
+    sub="Pending, planning, active, completed, paused, failed — every task the agent has been asked to run."
+  />
 
   {#if data.tasks.length === 0}
-    <p class="text-center py-12 text-sm" style="color: var(--text-ghost);">
-      No tasks yet. Use /research or /tasks via OpenClaw to create one.
-    </p>
+    <div class="nm-empty">No tasks yet. Use /research or /tasks via OpenClaw to create one.</div>
+  {:else}
+    {#each Object.entries(groups) as [status, tasks]}
+      {#if tasks.length > 0}
+        <section class="nm-sec">
+          <div class="nm-sec-hd">
+            <span class="sr-label-tight">{status}</span>
+            <span class="nm-pill" data-state={status}>{tasks.length}</span>
+          </div>
+          <div class="task-list">
+            {#each tasks as task}
+              <div class="task-card">
+                <button class="task-head" onclick={() => expandedId = expandedId === task.id ? null : task.id}>
+                  <span class="caret">{expandedId === task.id ? '▾' : '▸'}</span>
+                  <span class="task-title">{task.title}</span>
+                  {#if task.originChannel}
+                    <span class="nm-pill">{task.originChannel}</span>
+                  {/if}
+                  <span class="task-date">{fmtDate(task.createdAt)}</span>
+                </button>
+
+                {#if Array.isArray(task.steps) && task.steps.length > 0}
+                  <div class="step-bar">
+                    {#each task.steps as _, i}
+                      <div class="step-seg" data-state={i < (task.currentStep ?? 0) ? 'done' : i === (task.currentStep ?? 0) && task.status === 'active' ? 'current' : 'pending'}></div>
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if expandedId === task.id}
+                  <div class="task-body">
+                    {#if task.description}<p class="task-desc">{task.description}</p>{/if}
+                    {#if Array.isArray(task.steps) && task.steps.length > 0}
+                      <ol class="step-list">
+                        {#each task.steps as step, i}
+                          {@const s = step as { label: string; status: string }}
+                          <li data-state={i < (task.currentStep ?? 0) ? 'done' : i === (task.currentStep ?? 0) ? 'current' : 'pending'}>
+                            {s.label ?? String(step)}
+                          </li>
+                        {/each}
+                      </ol>
+                    {/if}
+                    {#if task.result}
+                      <div class="result">
+                        <span class="sr-label-tight">Result</span>
+                        <p>{task.result}</p>
+                      </div>
+                    {/if}
+                    <div class="meta-line">
+                      <span>id: {task.id.slice(0, 12)}…</span>
+                      {#if task.completedAt}<span>completed {fmtDate(task.completedAt)}</span>{/if}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    {/each}
   {/if}
-</div>
+</PageWrap>
+
+<style>
+  .task-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .task-card {
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .task-head {
+    display: flex; align-items: center; gap: 0.6rem;
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+  }
+  .caret { font-size: 9px; color: var(--text-ghost); width: 0.8rem; }
+  .task-title { font-size: 0.92rem; color: var(--text-primary); font-weight: 500; flex: 1; }
+  .task-date {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+  .step-bar { display: flex; gap: 2px; }
+  .step-seg { flex: 1; height: 2px; background: var(--card-border); }
+  .step-seg[data-state="done"] { background: #2d7a3a; }
+  .step-seg[data-state="current"] { background: var(--accent); }
+
+  .task-body { padding-top: 0.4rem; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 0.55rem; }
+  .task-desc { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+  .step-list {
+    margin: 0;
+    padding-left: 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .step-list li[data-state="done"] { color: #2d7a3a; }
+  .step-list li[data-state="current"] { color: var(--accent); }
+  .step-list li[data-state="pending"] { color: var(--text-ghost); }
+
+  .result {
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    padding: 0.55rem 0.7rem;
+  }
+  .result p { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--text-secondary); }
+  .meta-line {
+    display: flex;
+    gap: 1rem;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+</style>

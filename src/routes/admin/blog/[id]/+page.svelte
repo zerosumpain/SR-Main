@@ -3,6 +3,8 @@
   import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -25,7 +27,6 @@
 
   const isMarkdown = data.post.contentFormat === 'markdown';
 
-  // Track if content has been modified
   let dirty = $derived(
     title !== data.post.title ||
     slug !== data.post.slug ||
@@ -46,34 +47,18 @@
     saving = true;
     errorMsg = null;
     try {
-      const tagList = tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-
-      const payload = {
-        title,
-        slug,
-        excerpt,
-        content,
-        tags: tagList,
-        coverImageUrl,
-        ...overrides,
-      };
-
+      const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
+      const payload = { title, slug, excerpt, content, tags: tagList, coverImageUrl, ...overrides };
       const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         errorMsg = body.error ?? `Error ${res.status}`;
         return;
       }
-
-      // Update local data reference
       data.post.title = title;
       data.post.slug = slug;
       data.post.excerpt = excerpt;
@@ -84,7 +69,6 @@
         data.post.previewToken = overrides.previewToken as string;
         previewToken = overrides.previewToken as string;
       }
-
       saved = true;
       setTimeout(() => (saved = false), 2000);
     } finally {
@@ -101,16 +85,8 @@
     const formData = new FormData();
     formData.append('file', file);
     formData.append('postId', String(data.post.id));
-
-    const res = await fetch(`/api/admin/blog/upload-image?token=${adminToken}`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Upload failed: ${res.status}`);
-    }
-
+    const res = await fetch(`/api/admin/blog/upload-image?token=${adminToken}`, { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     const body = await res.json();
     return body.url;
   }
@@ -186,7 +162,6 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // Only handle Ctrl+S for HTML mode — MarkdownEditor handles its own shortcuts
     if (!isMarkdown && (e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
       save();
@@ -196,210 +171,150 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="max-w-3xl mx-auto px-6 py-12">
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-8">
-    <a href="/admin/blog?token={adminToken}" class="back-link back-link--xs">All Posts</a>
-    <div class="flex items-center gap-3">
-      <span
-        class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
-        style="font-family: var(--font-mono); background: {status === 'published'
-          ? 'rgba(var(--accent-rgb, 120,80,40), 0.15)'
-          : 'rgba(0,0,0,0.06)'}; color: {status === 'published'
-          ? 'var(--accent)'
-          : 'var(--text-ghost)'};"
-      >
-        {status}
-      </span>
-      {#if saved}
-        <span
-          class="text-[10px] uppercase tracking-[0.2em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >Saved</span>
-      {/if}
-    </div>
-  </div>
-
-  {#if errorMsg}
-    <div
-      class="mb-6 p-3 rounded-lg text-sm"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);"
-    >
-      {errorMsg}
-    </div>
-  {/if}
-
-  <!-- Title -->
-  <input
-    type="text"
-    bind:value={title}
-    placeholder="Post title"
-    class="w-full mb-4 text-2xl font-bold bg-transparent outline-none"
-    style="color: var(--text-primary); font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.01em;"
-  />
-
-  <!-- Slug -->
-  <div class="flex items-center gap-2 mb-4">
-    <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      Slug
-    </span>
-    <input
-      type="text"
-      bind:value={slug}
-      class="flex-1 px-2 py-1 text-xs rounded bg-transparent"
-      style="border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); outline: none;"
-    />
-    <button
-      onclick={() => (slug = slugify(title))}
-      class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
-      style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
-    >
-      Auto
-    </button>
-  </div>
-
-  <!-- Excerpt -->
-  <textarea
-    bind:value={excerpt}
-    placeholder="Brief excerpt…"
-    rows="2"
-    class="w-full mb-4 px-3 py-2 text-sm rounded-lg resize-none"
-    style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-body); outline: none;"
-  ></textarea>
-
-  <!-- Tags -->
-  <div class="flex items-center gap-2 mb-6">
-    <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      Tags
-    </span>
-    <input
-      type="text"
-      bind:value={tags}
-      placeholder="tag1, tag2, …"
-      class="flex-1 px-2 py-1 text-xs rounded bg-transparent"
-      style="border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); outline: none;"
-    />
-  </div>
-
-  <!-- Cover image -->
-  <div class="mb-6">
-    <div class="flex items-center gap-2 mb-2">
-      <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        Cover Image
-      </span>
-      <button
-        onclick={uploadCoverImage}
-        disabled={coverUploading}
-        class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded disabled:opacity-50"
-        style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
-      >
-        {coverUploading ? 'Uploading…' : 'Upload'}
-      </button>
-      {#if coverImageUrl}
-        <button
-          onclick={removeCoverImage}
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
-          style="color: #8b3a1a; font-family: var(--font-mono); border: 1px solid rgba(139,58,26,0.2);"
-        >
-          Remove
-        </button>
-      {/if}
-    </div>
-    {#if coverImageUrl}
-      <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--card-border); max-width: 320px;">
-        <img src={coverImageUrl} alt="Cover" class="w-full h-auto block" />
-      </div>
-    {/if}
-  </div>
-
-  <!-- Preview link -->
-  <div class="flex items-center gap-3 mb-6">
-    <span class="text-[10px] uppercase tracking-[0.2em] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      Preview
-    </span>
-    <button
-      onclick={copyPreviewLink}
-      class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
-      style="color: var(--text-secondary); font-family: var(--font-mono); border: 1px solid var(--card-border);"
-    >
-      {previewCopied ? 'Copied!' : 'Copy Preview Link'}
-    </button>
-    <button
-      onclick={regeneratePreviewToken}
-      class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded"
-      style="color: var(--text-ghost); font-family: var(--font-mono); border: 1px solid var(--card-border);"
-    >
-      Regenerate
-    </button>
-  </div>
-
-  <hr class="rule mb-6" />
-
-  <!-- Content editor -->
-  {#if isMarkdown}
-    <MarkdownEditor
-      {content}
-      onSave={saveContent}
-      onAutoSave={saveContent}
-      {uploadImage}
-    />
-  {:else}
-    <textarea
-      bind:value={content}
-      placeholder="Write your post content here… (HTML supported)"
-      rows="24"
-      class="w-full px-4 py-3 text-sm rounded-lg resize-y leading-relaxed"
-      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); outline: none; min-height: 400px;"
-    ></textarea>
-  {/if}
-
-  <!-- Actions -->
-  <div class="flex items-center justify-between mt-6">
-    <button
-      onclick={deletePost}
-      disabled={deleting}
-      class="text-[10px] uppercase tracking-[0.2em] px-3 py-2 rounded-lg transition-colors"
-      style="color: #8b3a1a; font-family: var(--font-mono); border: 1px solid rgba(139,58,26,0.2);"
-    >
-      {deleting ? '…' : 'Delete'}
-    </button>
-
-    <div class="flex gap-3">
-      <button
-        onclick={togglePublish}
-        disabled={saving}
-        class="text-[10px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-        style="font-family: var(--font-mono); border: 1px solid var(--card-border); color: var(--text-secondary);"
-      >
+<PageWrap>
+  <PageHeader
+    kicker="Blog"
+    title={title || 'Untitled draft'}
+    crumbs={[{ label: 'Blog', href: `/admin/blog?token=${adminToken}` }, { label: 'Edit' }]}
+  >
+    {#snippet actions()}
+      <span class="nm-pill" data-state={status}>{status}</span>
+      {#if saved}<span class="saved-flag">Saved</span>{/if}
+      <button class="nm-btn-ghost" onclick={togglePublish} disabled={saving}>
         {status === 'published' ? 'Unpublish' : 'Publish'}
       </button>
-
       {#if !isMarkdown}
-        <button
-          onclick={() => save()}
-          disabled={saving || !dirty}
-          class="text-[10px] uppercase tracking-[0.2em] px-5 py-2 rounded-lg transition-colors disabled:opacity-50"
-          style="background: var(--accent); color: white; font-family: var(--font-mono);"
-        >
+        <button class="nm-save-btn" onclick={() => save()} disabled={saving || !dirty}>
           {saving ? 'Saving…' : 'Save'}
         </button>
       {/if}
+    {/snippet}
+  </PageHeader>
+
+  {#if errorMsg}
+    <div class="banner banner-error">{errorMsg}</div>
+  {/if}
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd"><span class="sr-label-tight">Metadata</span></div>
+    <label class="nm-field">
+      <span class="sr-label-tight">Title</span>
+      <input class="nm-text-input title-input" type="text" bind:value={title} placeholder="Post title" />
+    </label>
+    <div class="nm-form-row">
+      <label class="nm-field">
+        <span class="sr-label-tight">Slug</span>
+        <div class="slug-row">
+          <input class="nm-text-input" type="text" bind:value={slug} />
+          <button class="nm-btn-ghost" onclick={() => (slug = slugify(title))}>Auto</button>
+        </div>
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Tags</span>
+        <input class="nm-text-input" type="text" bind:value={tags} placeholder="tag1, tag2, …" />
+      </label>
     </div>
+    <label class="nm-field">
+      <span class="sr-label-tight">Excerpt</span>
+      <textarea class="nm-textarea" rows="2" bind:value={excerpt} placeholder="Brief excerpt…"></textarea>
+    </label>
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Cover image</span>
+      <span style="margin-left: auto; display: flex; gap: 0.5rem;">
+        <button class="nm-btn-ghost" onclick={uploadCoverImage} disabled={coverUploading}>{coverUploading ? 'Uploading…' : 'Upload'}</button>
+        {#if coverImageUrl}
+          <button class="nm-link-btn danger" onclick={removeCoverImage}>Remove</button>
+        {/if}
+      </span>
+    </div>
+    {#if coverImageUrl}
+      <img class="cover" src={coverImageUrl} alt="Cover" />
+    {:else}
+      <div class="nm-empty">No cover image.</div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Preview link</span>
+      <span style="margin-left: auto; display: flex; gap: 0.5rem;">
+        <button class="nm-btn-ghost" onclick={copyPreviewLink}>{previewCopied ? 'Copied!' : 'Copy link'}</button>
+        <button class="nm-btn-ghost" onclick={regeneratePreviewToken}>Regenerate</button>
+      </span>
+    </div>
+    <p class="muted">Share <code>/blog/preview/{previewToken}</code> to let someone read the draft without an admin session.</p>
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Content · {isMarkdown ? 'Markdown' : 'HTML'}</span>
+    </div>
+    {#if isMarkdown}
+      <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
+    {:else}
+      <textarea
+        class="nm-textarea content-area"
+        rows="24"
+        bind:value={content}
+        placeholder="Write your post content here… (HTML supported)"
+      ></textarea>
+    {/if}
+  </section>
+
+  <div class="bottom-row">
+    <button class="nm-link-btn danger" onclick={deletePost} disabled={deleting}>
+      {deleting ? '…' : 'Delete post'}
+    </button>
   </div>
 
-  <!-- Preview for HTML posts only -->
   {#if !isMarkdown && content}
-    <div class="mt-10">
-      <p class="label mb-4">Preview</p>
-      <hr class="rule mb-6" />
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Preview</span>
+      </div>
       <div class="prose">
         {@html content}
       </div>
-    </div>
+    </section>
   {/if}
-</div>
+</PageWrap>
 
 <style>
+  .saved-flag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #2d7a3a;
+  }
+  .title-input {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+  }
+  .slug-row { display: flex; gap: 0.4rem; }
+  .slug-row .nm-text-input { flex: 1; }
+  .cover {
+    max-width: 320px;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--card-border);
+  }
+  .muted { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+  .muted code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08rem 0.38rem;
+  }
+  .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: 12px; }
+  .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
+
   .prose :global(h1),
   .prose :global(h2),
   .prose :global(h3) {

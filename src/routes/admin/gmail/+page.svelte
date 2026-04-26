@@ -1,10 +1,10 @@
 <svelte:head><title>Gmail — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
   import { page } from '$app/stores';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let accounts = $state(data.accounts);
   let watchesByAccount = $state<Record<number, any[]>>(
@@ -94,113 +94,72 @@
     }
   }
 
-  function statusColor(status: string) {
-    if (status === 'active') return '#2d7a3a';
-    if (status === 'auth_expired') return '#8b3a1a';
-    return 'var(--text-ghost)';
-  }
-
-  function formatDate(d: Date | string | null): string {
+  function fmtDate(d: Date | string | null): string {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 </script>
 
-<div class="max-w-2xl mx-auto px-6 py-12">
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-8">
-    <a href="/admin?token={adminToken}" class="back-link back-link--xs">Admin</a>
-    <h1 class="text-[10px] uppercase tracking-[0.3em]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-      Gmail
-    </h1>
-    <a
-      href="/api/gmail/connect"
-      class="text-[10px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg"
-      style="background: var(--accent); color: white; font-family: var(--font-mono);"
-    >
-      Connect account
-    </a>
-  </div>
+<PageWrap>
+  <PageHeader
+    kicker="Channels"
+    title="Gmail"
+    sub="Multi-account inbox watches. The polling watcher fires workflows whose start node matches a watch query."
+  >
+    {#snippet actions()}
+      <a class="nm-save-btn" href="/api/gmail/connect">Connect account</a>
+    {/snippet}
+  </PageHeader>
 
-  <!-- Query-string banners -->
   {#if connected}
-    <div class="mb-4 p-3 rounded-lg text-[10px]" style="background: rgba(45,122,58,0.1); border: 1px solid #2d7a3a; color: #2d7a3a; font-family: var(--font-mono);">
-      Connected: {connected}
-    </div>
+    <div class="banner banner-success">Connected: {connected}</div>
   {/if}
   {#if errorCode}
-    <div class="mb-4 p-3 rounded-lg text-[10px]" style="background: rgba(139,58,26,0.1); border: 1px solid #8b3a1a; color: #8b3a1a; font-family: var(--font-mono);">
-      Error: {errorCode}
-    </div>
+    <div class="banner banner-error">Error: {errorCode}</div>
   {/if}
 
-  <!-- Accounts -->
   {#if accounts.length === 0}
-    <p class="text-sm py-8" style="color: var(--text-muted);">No Gmail accounts connected.</p>
+    <div class="nm-empty">No Gmail accounts connected. Click <strong>Connect account</strong> to start the OAuth flow.</div>
   {:else}
-    <div class="space-y-3">
+    <div class="account-list">
       {#each accounts as account}
         {@const isOpen = openAccountId === account.id}
-        <div class="rounded-xl border" style="background: var(--card-bg); border-color: var(--card-border);">
-          <!-- Account row -->
-          <div class="flex items-center gap-3 p-4 cursor-pointer" role="button" tabindex="0"
-            onclick={() => toggleAccount(account.id)}
-            onkeydown={(e) => e.key === 'Enter' && toggleAccount(account.id)}>
-            <span class="flex-1 text-sm font-medium" style="color: var(--text-primary);">{account.email}</span>
-            <span class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded" style="font-family: var(--font-mono); color: {statusColor(account.status)}; border: 1px solid {statusColor(account.status)};">
-              {account.status}
-            </span>
-            <span class="text-[9px]" style="color: var(--text-ghost); font-family: var(--font-mono);">{formatDate(account.createdAt)}</span>
-            <button
-              onclick={(e) => { e.stopPropagation(); disconnect(account.id); }}
-              disabled={busy[`disc-${account.id}`]}
-              class="text-[9px] uppercase tracking-[0.15em] px-2 py-1 rounded transition-colors disabled:opacity-50"
-              style="font-family: var(--font-mono); color: #8b3a1a; border: 1px solid #8b3a1a;"
-            >
+        <section class="nm-sec account-card" class:open={isOpen}>
+          <div class="account-row">
+            <button class="account-summary" onclick={() => toggleAccount(account.id)}>
+              <span class="caret">{isOpen ? '▾' : '▸'}</span>
+              <span class="account-email">{account.email}</span>
+              <span class="nm-pill" data-state={account.status}>{account.status}</span>
+              <span class="account-date">since {fmtDate(account.createdAt)}</span>
+            </button>
+            <button class="nm-link-btn danger" onclick={() => disconnect(account.id)} disabled={busy[`disc-${account.id}`]}>
               {busy[`disc-${account.id}`] ? '…' : 'Disconnect'}
             </button>
           </div>
 
           {#if account.lastError}
-            <div class="px-4 pb-2 text-[9px]" style="color: #8b3a1a; font-family: var(--font-mono);">
-              Error: {account.lastError}
-            </div>
+            <div class="banner banner-error">{account.lastError}</div>
           {/if}
 
-          <!-- Expanded panel -->
           {#if isOpen}
-            <div class="border-t px-4 pb-4 pt-3 space-y-4" style="border-color: var(--card-border);">
-              <!-- Watches table -->
-              <div>
-                <p class="text-[9px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Watches</p>
+            <div class="account-body">
+              <!-- Watches -->
+              <div class="account-section">
+                <span class="sr-label-tight">Watches</span>
                 {#if (watchesByAccount[account.id] ?? []).length === 0}
-                  <p class="text-[10px]" style="color: var(--text-muted);">No watches yet.</p>
+                  <div class="nm-empty">No watches yet.</div>
                 {:else}
-                  <table class="w-full text-[10px]" style="font-family: var(--font-mono); color: var(--text-secondary);">
+                  <table class="nm-table">
                     <thead>
-                      <tr style="border-bottom: 1px solid var(--divider);">
-                        <th class="text-left py-1 pr-3 font-normal" style="color: var(--text-ghost);">Label</th>
-                        <th class="text-left py-1 pr-3 font-normal" style="color: var(--text-ghost);">Query</th>
-                        <th class="text-left py-1 pr-3 font-normal" style="color: var(--text-ghost);">On</th>
-                        <th></th>
-                      </tr>
+                      <tr><th>Label</th><th>Query</th><th>Enabled</th><th></th></tr>
                     </thead>
                     <tbody>
                       {#each watchesByAccount[account.id] as w}
-                        <tr style="border-bottom: 1px solid var(--divider);">
-                          <td class="py-1 pr-3">{w.label}</td>
-                          <td class="py-1 pr-3 font-mono" style="color: var(--text-ghost);">{w.query}</td>
-                          <td class="py-1 pr-3">{w.enabled ? 'yes' : 'no'}</td>
-                          <td class="py-1">
-                            <button
-                              onclick={() => deleteWatch(account.id, w.id)}
-                              disabled={busy[`del-watch-${w.id}`]}
-                              class="px-2 py-0.5 rounded disabled:opacity-50"
-                              style="color: #8b3a1a; border: 1px solid #8b3a1a;"
-                            >
-                              {busy[`del-watch-${w.id}`] ? '…' : 'Delete'}
-                            </button>
-                          </td>
+                        <tr>
+                          <td>{w.label}</td>
+                          <td><code>{w.query}</code></td>
+                          <td>{w.enabled ? 'yes' : 'no'}</td>
+                          <td><button class="nm-link-btn danger" onclick={() => deleteWatch(account.id, w.id)} disabled={busy[`del-watch-${w.id}`]}>{busy[`del-watch-${w.id}`] ? '…' : 'Delete'}</button></td>
                         </tr>
                       {/each}
                     </tbody>
@@ -208,78 +167,99 @@
                 {/if}
               </div>
 
-              <!-- Add watch form -->
-              <div>
-                <p class="text-[9px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Add watch</p>
-                <div class="flex gap-2 mb-1">
-                  <input
-                    type="text"
-                    placeholder="Label"
-                    bind:value={newLabel[account.id]}
-                    class="flex-1 px-2 py-1 rounded text-[11px]"
-                    style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Query"
-                    bind:value={newQuery[account.id]}
-                    class="flex-2 px-2 py-1 rounded text-[11px]"
-                    style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none; min-width: 0; flex: 2;"
-                  />
-                  <button
-                    onclick={() => addWatch(account.id)}
-                    disabled={busy[`add-${account.id}`]}
-                    class="text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded disabled:opacity-50"
-                    style="background: var(--accent); color: white; font-family: var(--font-mono);"
-                  >
+              <!-- Add watch -->
+              <div class="account-section">
+                <span class="sr-label-tight">Add watch</span>
+                <div class="add-watch-row">
+                  <input class="nm-text-input" type="text" placeholder="Label" bind:value={newLabel[account.id]} />
+                  <input class="nm-text-input" type="text" placeholder="Query (e.g. newer_than:1d from:someone@x.com)" bind:value={newQuery[account.id]} />
+                  <button class="nm-save-btn" onclick={() => addWatch(account.id)} disabled={busy[`add-${account.id}`]}>
                     {busy[`add-${account.id}`] ? '…' : 'Add'}
                   </button>
                 </div>
-                <p class="text-[9px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                  e.g. newer_than:1d from:someone@example.com
-                </p>
               </div>
 
               <!-- Test fetch -->
-              <div>
-                <p class="text-[9px] uppercase tracking-[0.2em] mb-2" style="color: var(--text-ghost); font-family: var(--font-mono);">Test fetch</p>
-                <div class="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    placeholder="Query"
-                    bind:value={testQuery[account.id]}
-                    class="flex-1 px-2 py-1 rounded text-[11px]"
-                    style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body); outline: none;"
-                  />
-                  <button
-                    onclick={() => runTest(account.id)}
-                    disabled={busy[`test-${account.id}`]}
-                    class="text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded disabled:opacity-50"
-                    style="border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono);"
-                  >
+              <div class="account-section">
+                <span class="sr-label-tight">Test fetch</span>
+                <div class="add-watch-row">
+                  <input class="nm-text-input" type="text" placeholder="Gmail search query" bind:value={testQuery[account.id]} />
+                  <button class="nm-btn-ghost" onclick={() => runTest(account.id)} disabled={busy[`test-${account.id}`]}>
                     {busy[`test-${account.id}`] ? '…' : 'Run test'}
                   </button>
                 </div>
                 {#if testResult[account.id] !== undefined && testResult[account.id] !== null}
                   {@const r = testResult[account.id]!}
-                  <div class="p-3 rounded text-[10px] space-y-1" style="background: rgba(0,0,0,0.04); border: 1px solid var(--divider); font-family: var(--font-mono); color: var(--text-secondary);">
-                    <div>Count: {r.count}</div>
+                  <div class="test-result">
+                    <div>Count: <strong>{r.count}</strong></div>
                     {#if r.sample}
                       <div>Subject: {r.sample.headers?.subject ?? '—'}</div>
                       <div>From: {r.sample.headers?.from ?? '—'}</div>
                       {#if r.sample.bodyText}
-                        <div class="pt-1" style="color: var(--text-ghost); white-space: pre-wrap;">{r.sample.bodyText.slice(0, 200)}</div>
+                        <pre class="sample-body">{r.sample.bodyText.slice(0, 280)}</pre>
                       {/if}
                     {:else}
-                      <div>No sample.</div>
+                      <div class="muted">No sample.</div>
                     {/if}
                   </div>
                 {/if}
               </div>
             </div>
           {/if}
-        </div>
+        </section>
       {/each}
     </div>
   {/if}
-</div>
+</PageWrap>
+
+<style>
+  .account-list { display: flex; flex-direction: column; gap: 0.6rem; }
+  .account-card { margin-bottom: 0; }
+  .account-row { display: flex; align-items: center; gap: 0.6rem; }
+  .account-summary {
+    flex: 1;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: inherit;
+  }
+  .caret { font-size: 9px; color: var(--text-ghost); width: 0.8rem; }
+  .account-email { font-size: 0.95rem; color: var(--text-primary); font-weight: 500; }
+  .account-date { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); margin-left: auto; }
+  .account-body { display: flex; flex-direction: column; gap: 0.9rem; padding-top: 0.6rem; }
+  .account-section { display: flex; flex-direction: column; gap: 0.4rem; }
+  .add-watch-row {
+    display: grid;
+    grid-template-columns: 200px 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  @media (max-width: 600px) {
+    .add-watch-row { grid-template-columns: 1fr; }
+  }
+  .test-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.5rem 0.7rem;
+    background: var(--bg);
+    border: 1px solid var(--divider);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .sample-body { margin: 0.4rem 0 0; white-space: pre-wrap; color: var(--text-ghost); }
+  .muted { color: var(--text-ghost); }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08rem 0.38rem;
+  }
+</style>

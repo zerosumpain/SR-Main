@@ -1,9 +1,11 @@
 <script lang="ts">
   import '../../app.css';
+  import '$lib/styles/nm-tokens.css';
+  import './admin.css';
   import { onMount, setContext } from 'svelte';
   import { createBiomeStore } from '$lib/biome/store.svelte';
-
   import { page } from '$app/stores';
+  import AdminShell from '$lib/components/admin/AdminShell.svelte';
 
   let { children } = $props();
 
@@ -22,8 +24,23 @@
       store.stopPolling();
     };
   });
+
+  // The login page renders standalone (no shell, no token).
+  const isLogin = $derived($page.url.pathname === '/admin/login');
 </script>
 
-<div class="relative min-h-screen" style="background: var(--bg-base);">
-  {@render children()}
-</div>
+{#if isLogin}
+  <div class="login-frame" style="background: var(--bg-base);">
+    {@render children()}
+  </div>
+{:else}
+  <AdminShell>
+    {@render children()}
+  </AdminShell>
+{/if}
+
+<style>
+  .login-frame {
+    min-height: 100vh;
+  }
+</style>

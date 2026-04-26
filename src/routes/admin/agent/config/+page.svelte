@@ -1,11 +1,13 @@
-<svelte:head><title>Agent Config — Strange Ramblings</title></svelte:head>
+<svelte:head><title>Agent Config — Admin</title></svelte:head>
 <script lang="ts">
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
   let activeTab = $state<'prompt' | 'memory' | 'cron'>('prompt');
 
-  // System Prompt
+  // System prompt
   let systemPrompt = $state(data.systemPrompt);
   let promptSaving = $state(false);
   let promptSaved = $state(false);
@@ -37,101 +39,62 @@
     setTimeout(() => memorySaved = false, 2000);
   }
 
-  // Cron/Pulse placeholder
+  // Cron / pulse (placeholder; UI preserved from previous implementation)
   let cronJobs = $state<Array<{ id: string; schedule: string; task: string; enabled: boolean; lastRun?: string }>>([]);
 </script>
 
-<div class="max-w-4xl mx-auto px-6 py-12">
-  <div class="flex items-center justify-between mb-10">
-    <a href="/admin/agent" class="back-link back-link--xs">Dashboard</a>
-    <h1 class="text-lg font-light tracking-wide" style="color: var(--text-primary);">Agent Config</h1>
-    <span></span>
+<PageWrap width="wide">
+  <PageHeader
+    kicker="Agent"
+    title="Config"
+    sub="System prompt injected into every agent conversation, persistent memory, and scheduled cron / pulse tasks."
+  />
+
+  <div class="nm-tabs">
+    <button class="nm-tab" class:active={activeTab === 'prompt'} onclick={() => (activeTab = 'prompt')}>System prompt</button>
+    <button class="nm-tab" class:active={activeTab === 'memory'} onclick={() => (activeTab = 'memory')}>Memory</button>
+    <button class="nm-tab" class:active={activeTab === 'cron'} onclick={() => (activeTab = 'cron')}>Cron / Pulse <span class="nm-tab-count">{cronJobs.length}</span></button>
   </div>
 
-  <!-- Tabs -->
-  <div class="flex gap-2 mb-8">
-    {#each [['prompt', 'System Prompt'], ['memory', 'Memory'], ['cron', 'Cron / Pulse']] as [id, label]}
-      <button
-        class="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
-        style="background: {activeTab === id ? 'var(--card-border)' : 'var(--card-bg)'}; color: {activeTab === id ? 'var(--text-primary)' : 'var(--text-ghost)'}; font-family: var(--font-mono); border: 1px solid {activeTab === id ? 'var(--card-border)' : 'transparent'};"
-        onclick={() => activeTab = id as 'prompt' | 'memory' | 'cron'}
-      >{label}</button>
-    {/each}
-  </div>
-
-  <!-- System Prompt -->
   {#if activeTab === 'prompt'}
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <p class="text-xs" style="color: var(--text-ghost);">
-          This prompt is injected into every agent conversation. It defines how the agent thinks and behaves.
-        </p>
-        <div class="flex items-center gap-2">
-          {#if promptSaved}
-            <span class="text-[10px] uppercase" style="color: #3d8b3d; font-family: var(--font-mono);">Saved</span>
-          {/if}
-          <button
-            class="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded"
-            style="background: var(--accent); color: white; font-family: var(--font-mono);"
-            onclick={savePrompt}
-            disabled={promptSaving}
-          >{promptSaving ? 'Saving...' : 'Save'}</button>
-        </div>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">System prompt</span>
+        <span class="nm-sec-meta">{systemPrompt.length} chars · effective next conversation</span>
+        <span style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+          {#if promptSaved}<span class="nm-pill" data-state="success">Saved</span>{/if}
+          <button class="nm-save-btn" onclick={savePrompt} disabled={promptSaving}>{promptSaving ? 'Saving…' : 'Save'}</button>
+        </span>
       </div>
-      <textarea
-        bind:value={systemPrompt}
-        class="w-full rounded-lg p-4 text-sm leading-relaxed resize-y"
-        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
-        spellcheck="false"
-      ></textarea>
-      <p class="text-[10px] mt-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        {systemPrompt.length} characters | Changes take effect on next conversation
-      </p>
-    </div>
+      <textarea class="nm-textarea code-area" rows="20" bind:value={systemPrompt} spellcheck="false"></textarea>
+    </section>
   {/if}
 
-  <!-- Memory -->
   {#if activeTab === 'memory'}
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <p class="text-xs" style="color: var(--text-ghost);">
-          Long-term memory that persists across conversations. The agent can read this to recall past context, preferences, and facts.
-        </p>
-        <div class="flex items-center gap-2">
-          {#if memorySaved}
-            <span class="text-[10px] uppercase" style="color: #3d8b3d; font-family: var(--font-mono);">Saved</span>
-          {/if}
-          <button
-            class="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded"
-            style="background: var(--accent); color: white; font-family: var(--font-mono);"
-            onclick={saveMemory}
-            disabled={memorySaving}
-          >{memorySaving ? 'Saving...' : 'Save'}</button>
-        </div>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Persistent memory</span>
+        <span class="nm-sec-meta">{memory.length} chars · read at the start of each conversation</span>
+        <span style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+          {#if memorySaved}<span class="nm-pill" data-state="success">Saved</span>{/if}
+          <button class="nm-save-btn" onclick={saveMemory} disabled={memorySaving}>{memorySaving ? 'Saving…' : 'Save'}</button>
+        </span>
       </div>
-      <textarea
-        bind:value={memory}
-        class="w-full rounded-lg p-4 text-sm leading-relaxed resize-y"
-        style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 400px; tab-size: 2;"
-        placeholder="Add facts, preferences, and context the agent should remember across conversations..."
+      <textarea class="nm-textarea code-area" rows="20" bind:value={memory}
+        placeholder="Add facts, preferences, and context the agent should remember across conversations…"
         spellcheck="false"
       ></textarea>
-      <p class="text-[10px] mt-2" style="color: var(--text-ghost); font-family: var(--font-mono);">
-        {memory.length} characters | The agent reads this at the start of each conversation
-      </p>
-    </div>
+    </section>
   {/if}
 
-  <!-- Cron / Pulse -->
   {#if activeTab === 'cron'}
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <p class="text-xs" style="color: var(--text-ghost);">
-          Scheduled tasks and pulse checks. These run automatically on a schedule.
-        </p>
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Scheduled jobs</span>
+        <span class="nm-sec-meta">{cronJobs.length}</span>
         <button
-          class="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded"
-          style="background: var(--accent); color: white; font-family: var(--font-mono);"
+          class="nm-save-btn"
+          style="margin-left: auto;"
           onclick={() => {
             cronJobs = [...cronJobs, {
               id: `cron-${Date.now()}`,
@@ -140,61 +103,64 @@
               enabled: false,
             }];
           }}
-        >+ New Job</button>
+        >+ New job</button>
       </div>
 
       {#if cronJobs.length === 0}
-        <div class="text-center py-16">
-          <p class="text-sm mb-2" style="color: var(--text-ghost);">No scheduled jobs yet.</p>
-          <p class="text-xs" style="color: var(--text-ghost);">
-            Create a cron job to have the agent run tasks on a schedule — research updates, status checks, reports.
-          </p>
-        </div>
+        <div class="nm-empty">No scheduled jobs yet. Create one to have the agent run tasks on a schedule — research updates, status checks, reports.</div>
       {:else}
-        <div class="space-y-3">
+        <div class="cron-list">
           {#each cronJobs as job}
-            <div class="p-4 rounded-lg" style="background: var(--card-bg); border: 1px solid var(--card-border);">
-              <div class="flex items-center gap-3 mb-3">
+            <div class="cron-card">
+              <div class="cron-head">
                 <button
-                  class="w-8 h-4 rounded-full relative transition-colors"
-                  style="background: {job.enabled ? 'var(--accent)' : 'var(--card-border)'};"
+                  class="nm-toggle"
+                  role="switch"
+                  aria-checked={job.enabled}
                   onclick={() => job.enabled = !job.enabled}
-                  aria-label="Toggle job"
-                >
-                  <span
-                    class="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform"
-                    style="left: {job.enabled ? '16px' : '2px'};"
-                  ></span>
-                </button>
-                <input
-                  type="text"
-                  bind:value={job.schedule}
-                  placeholder="0 9 * * *"
-                  class="px-2 py-1 rounded text-xs w-32"
-                  style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono);"
-                />
-                <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">cron</span>
-                <button
-                  class="ml-auto text-[10px] uppercase"
-                  style="color: #8b3a3a; font-family: var(--font-mono);"
-                  onclick={() => cronJobs = cronJobs.filter(j => j.id !== job.id)}
-                >Remove</button>
+                ></button>
+                <input class="nm-text-input cron-schedule" type="text" placeholder="0 9 * * *" bind:value={job.schedule} />
+                <span class="cron-tag">cron</span>
+                <button class="nm-link-btn danger" onclick={() => cronJobs = cronJobs.filter(j => j.id !== job.id)}>Remove</button>
               </div>
-              <textarea
-                bind:value={job.task}
+              <textarea class="nm-textarea" rows="3" bind:value={job.task}
                 placeholder="What should the agent do? e.g. 'Check competitor pricing and report changes'"
-                class="w-full rounded p-3 text-xs resize-y"
-                style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); font-family: var(--font-mono); min-height: 60px;"
               ></textarea>
               {#if job.lastRun}
-                <p class="text-[10px] mt-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                  Last run: {job.lastRun}
-                </p>
+                <p class="cron-foot">last run {job.lastRun}</p>
               {/if}
             </div>
           {/each}
         </div>
       {/if}
-    </div>
+    </section>
   {/if}
-</div>
+</PageWrap>
+
+<style>
+  .code-area { min-height: 420px; tab-size: 2; line-height: 1.55; }
+  .cron-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .cron-card {
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    padding: 0.7rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cron-head { display: flex; align-items: center; gap: 0.6rem; }
+  .cron-schedule { width: 160px; flex-shrink: 0; }
+  .cron-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--text-ghost);
+  }
+  .cron-foot {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+</style>

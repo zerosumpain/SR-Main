@@ -1,25 +1,23 @@
 <script lang="ts">
-  import { getContext } from 'svelte';
   import ModelDefaultsPanel from '$lib/components/admin/ModelDefaultsPanel.svelte';
   import OpenRouterConfigPanel from '$lib/components/admin/OpenRouterConfigPanel.svelte';
   import OpenRouterModelBrowser from '$lib/components/admin/OpenRouterModelBrowser.svelte';
+  import PageWrap from '$lib/components/admin/PageWrap.svelte';
+  import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 </script>
 
-<svelte:head><title>Admin — LLM Models</title></svelte:head>
+<svelte:head><title>LLM Models — Admin</title></svelte:head>
 
-<div class="max-w-4xl mx-auto px-4 py-8">
-  <a href="/admin?token={adminToken}" class="back-link back-link--xs mb-4">Admin</a>
-  <header class="mb-6">
-    <h1 class="text-2xl mb-1" style="color: var(--text-primary); font-family: var(--font-display);">LLM Models</h1>
-    <p class="text-sm" style="color: var(--text-ghost);">
-      Choose the models jkai uses. Chat has a default GLM model and an optional OpenRouter alternate — the in-chat toggle flips between them.
-    </p>
-  </header>
+<PageWrap width="wide">
+  <PageHeader
+    kicker="AI Config"
+    title="LLM Models"
+    sub="Choose the models jkai uses. Chat has a default GLM model and an optional OpenRouter alternate — the in-chat toggle flips between them."
+  />
 
-  <div class="flex flex-col gap-4">
+  <div class="model-stack">
     <ModelDefaultsPanel chat={data.chat} builder={data.builder} />
     <OpenRouterConfigPanel
       configured={data.openrouterKey.configured}
@@ -32,4 +30,8 @@
       builderModelId={data.builder.provider === 'openrouter' ? data.builder.modelId : null}
     />
   </div>
-</div>
+</PageWrap>
+
+<style>
+  .model-stack { display: flex; flex-direction: column; gap: 1rem; }
+</style>
