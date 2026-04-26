@@ -524,19 +524,79 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   let correlations = await getCorrelations();
   if (correlations.length === 0) correlations = STATIC_CORRELATIONS;
 
-  // Activity rings (today only): sum live readings from Apple Health.
-  // Targets are sane defaults — Apple Watch users can override these in iOS,
-  // but we don't have that signal yet so we use the platform defaults.
+  // Activity rings (today only). Apple Activity metrics (active_energy /
+  // apple_exercise_time / apple_stand_hour) aren't being ingested yet, so
+  // derive the same shape from data we already have:
+  //   - Move kcal: Apple active_energy if present, else Whoop daily
+  //     kilojoule * 0.239006 (kJ → kcal).
+  //   - Exercise minutes: Apple apple_exercise_time if present, else sum
+  //     of zone-2-and-up durations across today's Whoop workouts (Apple
+  //     defines exercise as MET ≥ 3, ≈ Whoop zone 2+).
+  //   - Stand hours: Apple apple_stand_hour if present, else count of
+  //     distinct hours today with at least one Apple heart_rate reading
+  //     (proxy for "watch worn and moving").
   let moveKcal = 0;
   let exerciseMin = 0;
   let standHours = 0;
+  let appleMoveSeen = false;
+  let appleExerciseSeen = false;
+  let appleStandSeen = false;
   for (const r of ringRows) {
     if (r.value == null) continue;
     const v = r.value / 100;
-    if (r.metric === 'active_energy') moveKcal += v;
-    else if (r.metric === 'apple_exercise_time') exerciseMin += v;
-    else if (r.metric === 'apple_stand_hour') standHours += v > 0 ? 1 : 0;
+    if (r.metric === 'active_energy') {
+      moveKcal += v;
+      appleMoveSeen = true;
+    } else if (r.metric === 'apple_exercise_time') {
+      exerciseMin += v;
+      appleExerciseSeen = true;
+    } else if (r.metric === 'apple_stand_hour') {
+      standHours += v > 0 ? 1 : 0;
+      appleStandSeen = true;
+    }
   }
+
+  if (!appleMoveSeen) {
+    // Sum today's Whoop kilojoule. whoopCycles row keyed by ISO date
+    // already loaded above.
+    const todayCycle = cycleByDate.get(isoDate(todayStart));
+    if (todayCycle) moveKcal = todayCycle.kilojoule * 0.239006;
+  }
+
+  if (!appleExerciseSeen) {
+    const todayWorkouts = await db
+      .select({
+        zoneTwo: whoopWorkouts.zoneTwo,
+        zoneThree: whoopWorkouts.zoneThree,
+        zoneFour: whoopWorkouts.zoneFour,
+        zoneFive: whoopWorkouts.zoneFive,
+      })
+      .from(whoopWorkouts)
+      .where(gte(whoopWorkouts.startDate, todayStart));
+    const ms = todayWorkouts.reduce(
+      (s, w) => s + (w.zoneTwo ?? 0) + (w.zoneThree ?? 0) + (w.zoneFour ?? 0) + (w.zoneFive ?? 0),
+      0,
+    );
+    exerciseMin = ms / 60000;
+  }
+
+  if (!appleStandSeen) {
+    const hourRows = await db
+      .select({ date: appleHealthMetrics.date })
+      .from(appleHealthMetrics)
+      .where(
+        and(
+          gte(appleHealthMetrics.date, todayStart),
+          eq(appleHealthMetrics.metricName, 'heart_rate'),
+        ),
+      );
+    const distinctHours = new Set<number>();
+    for (const r of hourRows) {
+      if (r.date != null) distinctHours.add(Math.floor(r.date / 3600));
+    }
+    standHours = distinctHours.size;
+  }
+
   const rings: ActivityRings = {
     moveKcal: Math.round(moveKcal),
     moveTarget: 600,
@@ -545,7 +605,6 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     standHours: Math.min(12, Math.round(standHours)),
     standTarget: 12,
   };
-  // Mock ring values when no real data is available so the card looks alive.
   if (!hasRealData && rings.moveKcal === 0 && rings.exerciseMin === 0 && rings.standHours === 0) {
     rings.moveKcal = 192;
     rings.exerciseMin = 5;

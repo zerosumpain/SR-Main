@@ -165,6 +165,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
+  // Public API routes — read-only, used by public pages.
+  const PUBLIC_API_PATHS = ['/api/biome/state'];
+  if (PUBLIC_API_PATHS.some((p) => pathname === p)) {
+    return resolve(event);
+  }
+
   // API routes return 401
   if (pathname.startsWith('/api/')) {
     const session = await event.locals.auth();
@@ -197,6 +203,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       }
     }
 
+    return resolve(event);
+  }
+
+  // Public page routes — no auth required.
+  const PUBLIC_PATHS = ['/health'];
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return resolve(event);
   }
 
