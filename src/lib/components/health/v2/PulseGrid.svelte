@@ -60,17 +60,18 @@
   const labels = $derived(series.map((d) => dayLabel(d.date)));
   const lastIndex = $derived(series.length - 1);
 
-  // Per-row peak day index. row.f returns "good direction" normalised, so
-  // max-of-normalised = best day (lowest RHR, highest strain, etc).
-  // Strict > so the first occurrence wins ties (otherwise today would
-  // hoard every clamped-1.0 tie and the highlight collapses onto its column).
-  // Skip cells with no data (raw value 0) so empty days don't win by default.
+  // Per-row peak day index over the rolling window EXCLUDING today.
+  // Today is always shown with its own marker; the peak callout is the
+  // best previous day in the window. row.f returns "good direction"
+  // normalised, so max-of-normalised = best day (lowest RHR, highest
+  // strain, etc). Strict > picks the first occurrence on ties. Days
+  // with no raw data are skipped so empty cells don't win by default.
   function peakIndex(row: Row): number {
     let best = -Infinity;
     let idx = -1;
-    for (let i = 0; i < series.length; i++) {
+    const upto = series.length - 1; // exclude today (last index)
+    for (let i = 0; i < upto; i++) {
       const d = series[i];
-      // Detect "no data" using the raw value relevant to each row.
       const raw =
         row.key === 'rec'
           ? d.rec
@@ -282,7 +283,8 @@
     content: '';
     position: absolute;
     inset: 0;
-    border: 1.5px solid var(--accent);
+    border: 2px solid var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
     pointer-events: none;
   }
   .h-pg-axis {

@@ -116,7 +116,8 @@ export async function getNarrative(
     return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text: hit.text };
   }
 
-  let text: string;
+  const fallback = templated(stats);
+  let text = '';
   try {
     const ctx = await resolveDefaultModel('chat');
     const { client, model } = await getLLMClient(ctx);
@@ -133,19 +134,21 @@ export async function getNarrative(
       }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('llm timeout')), 8000)),
     ]);
-    const out = completion.choices?.[0]?.message?.content?.trim();
-    if (!out) throw new Error('empty completion');
+    const out = completion.choices?.[0]?.message?.content?.trim() ?? '';
     text = out;
-  } catch {
-    // Network / config / quota failure — fall back to templated narrative.
-    text = templated(stats);
+  } catch (err) {
+    console.warn('[health/narrative] LLM call failed, using templated fallback:', (err as Error).message);
   }
 
-  // Trim accidental wrapping quotes the model sometimes adds.
-  text = text.replace(/^"+|"+$/g, '').trim();
+  // Strip wrapping quotes and any stray markdown fences the model sometimes adds.
+  text = text.replace(/^"+|"+$/g, '').replace(/^```[a-z]*\n?|\n?```$/g, '').trim();
+
+  // If the LLM returned nothing usable, fall back to the templated narrative.
+  if (!text || text.length < 12) text = fallback;
+  // Belt-and-braces: templated should never be empty, but if it somehow is, ship something.
+  if (!text) text = `Recovery's at <em>${stats.recToday}%</em>. Body's reporting in.`;
 
   cache.set(key, { key, text, expiresAt: now + CACHE_TTL_MS });
-  // Bound cache size
   if (cache.size > RESERVED_KEYS) {
     const oldestKey = [...cache.keys()][0];
     cache.delete(oldestKey);
