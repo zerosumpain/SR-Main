@@ -1,7 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import TinkerEditor from './TinkerEditor.svelte';
 
-  let { buildId }: { buildId: string } = $props();
+  let {
+    buildId,
+    mode = 'watch',
+    status = 'running',
+  }: {
+    buildId: string;
+    mode?: 'watch' | 'tinker';
+    status?: string;
+  } = $props();
 
   type FileEntry = { path: string; size: number; mtime: number };
 
@@ -48,7 +57,7 @@
 
 <section class="nm-sec watch">
   <header class="nm-sec-hd">
-    <span class="sr-label-tight">Sandbox files (read-only)</span>
+    <span class="sr-label-tight">{mode === 'tinker' ? 'Sandbox files (tinker)' : 'Sandbox files (read-only)'}</span>
     <button class="row-link" onclick={refresh} type="button">↻ refresh</button>
   </header>
   {#if error}
@@ -75,7 +84,21 @@
         {/each}
       {/if}
     </ul>
-    <pre class="viewer">{loadingFile ? 'loading…' : openContent || (openPath ? '' : 'Select a file to view its contents.')}</pre>
+    <div class="viewer-wrap">
+      {#if mode === 'tinker' && openPath}
+        {#key openPath}
+          <TinkerEditor
+            buildId={buildId}
+            path={openPath}
+            status={status}
+            content={openContent}
+            onSaved={refresh}
+          />
+        {/key}
+      {:else}
+        <pre class="viewer">{loadingFile ? 'loading…' : openContent || (openPath ? '' : 'Select a file to view its contents.')}</pre>
+      {/if}
+    </div>
   </div>
 </section>
 
@@ -114,6 +137,9 @@
   }
   .tree-row.active code {
     color: var(--accent);
+  }
+  .viewer-wrap {
+    min-width: 0;
   }
   .viewer {
     font-family: var(--font-mono);

@@ -387,6 +387,52 @@ class Orchestrator {
       .where(and(eq(jkaiIterations.buildId, buildId), eq(jkaiIterations.number, 0)));
   }
 
+  // --- Iteration-approval API (Phase 2) ---
+
+  async approveIteration(buildId: string): Promise<void> {
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (!build) throw new Error('build not found');
+    if (build.status !== 'awaiting_iter_approval') return;
+    await db
+      .update(jkaiBuilds)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(buildId, 'system', 'Iteration approved — continuing.');
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    this.scheduleNext(buildId);
+  }
+
+  async rejectIteration(buildId: string, notes: string): Promise<void> {
+    if (this.activeBuildId && this.activeBuildId !== buildId) {
+      throw new Error(`another build is active: ${this.activeBuildId}`);
+    }
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (!build) throw new Error('build not found');
+    if (build.status !== 'awaiting_iter_approval') return;
+    const trimmed = (notes ?? '').trim();
+    const combinedPrompt = trimmed
+      ? `${build.prompt}\n\n--- Iteration rejected ---\n${trimmed}`
+      : build.prompt;
+    await db
+      .update(jkaiBuilds)
+      .set({ status: 'running', prompt: combinedPrompt, updatedAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(
+      buildId,
+      'system',
+      trimmed
+        ? `Iteration rejected with notes: ${trimmed.slice(0, 200)}`
+        : 'Iteration rejected — continuing without notes.',
+    );
+    this.activeBuildId = buildId;
+    this.stopped = false;
+    this.scheduleNext(buildId);
+  }
+
   // --- Private: Loop ---
 
   private scheduleNext(buildId: string, delayMs = 0): void {
@@ -689,6 +735,24 @@ class Orchestrator {
           this.activeBuildId = null;
           return;
         }
+      }
+
+      // Per-iteration approval gate (Phase 2): when the build opted in, pause
+      // here and wait for the user to approve or reject before scheduling the
+      // next iteration.
+      if ((build as any).requireIterationApproval) {
+        await db
+          .update(jkaiBuilds)
+          .set({ status: 'awaiting_iter_approval', updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, buildId));
+        await emitLog(
+          buildId,
+          'system',
+          `Iteration #${iterationNumber} complete — awaiting approval before iter #${iterationNumber + 1}.`,
+          iteration.id,
+        );
+        this.activeBuildId = null;
+        return;
       }
 
       this.scheduleNext(buildId, 1000);

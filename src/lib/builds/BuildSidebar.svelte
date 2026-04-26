@@ -1,5 +1,6 @@
 <script lang="ts">
   import MilestoneList from './MilestoneList.svelte';
+  import SandboxControls from './SandboxControls.svelte';
 
   type Build = {
     id: string;
@@ -103,6 +104,8 @@
   </section>
 
   <MilestoneList milestones={build.milestones ?? []} />
+
+  <SandboxControls buildId={build.id} status={build.status} />
 </aside>
 
 <style>

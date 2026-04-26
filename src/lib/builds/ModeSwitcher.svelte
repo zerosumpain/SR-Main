@@ -3,10 +3,10 @@
     mode?: 'watch' | 'tinker' | 'drive';
   } = $props();
 
-  const MODES: Array<{ key: 'watch' | 'tinker' | 'drive'; label: string; enabled: boolean }> = [
+  const MODES: Array<{ key: 'watch' | 'tinker' | 'drive'; label: string; enabled: boolean; tip?: string }> = [
     { key: 'watch', label: 'Watch', enabled: true },
-    { key: 'tinker', label: 'Tinker', enabled: false },
-    { key: 'drive', label: 'Drive', enabled: false },
+    { key: 'tinker', label: 'Tinker', enabled: true, tip: 'Edit files in the sandbox (pause the build first)' },
+    { key: 'drive', label: 'Drive', enabled: false, tip: 'Coming in Phase 3 — pi RPC take-over' },
   ];
 </script>
 
@@ -16,7 +16,7 @@
       class="seg-btn"
       class:active={mode === m.key}
       disabled={!m.enabled}
-      title={m.enabled ? '' : 'Coming soon — Phase 2'}
+      title={m.tip ?? ''}
       onclick={() => {
         if (m.enabled) mode = m.key;
       }}

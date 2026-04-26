@@ -241,6 +241,27 @@ export async function readDevFile(buildId: string, relPath: string): Promise<str
   return result.exitCode === 0 ? result.stdout : '';
 }
 
+export async function writeDevFile(buildId: string, relPath: string, content: string): Promise<void> {
+  const safe = relPath.replace(/\.\./g, '').replace(/^\/+/, '');
+  if (!safe) throw new Error('relPath required');
+  await writeFileInSandbox(`/home/jkai/workspace/${buildId}/dev/${safe}`, content);
+}
+
+export async function resetWorkspace(buildId: string): Promise<void> {
+  const dir = `/home/jkai/workspace/${buildId}/dev`;
+  await execInSandbox(`rm -rf ${dir} && mkdir -p ${dir}`);
+}
+
+export async function snapshotNow(buildId: string): Promise<number> {
+  const all = await listSnapshots(buildId);
+  // Out-of-band slot: highest existing slot + 1000 so it doesn't collide with
+  // future iteration numbers.
+  const highest = all.length > 0 ? Math.max(...all) : 0;
+  const next = highest + 1000;
+  await snapshotIteration(buildId, next);
+  return next;
+}
+
 // --- Port Allocation ---
 
 const PORT_RANGE_START = 8000;

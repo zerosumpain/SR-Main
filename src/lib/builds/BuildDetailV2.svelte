@@ -4,6 +4,7 @@
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
   import PlanEditor from './PlanEditor.svelte';
+  import IterApproval from './IterApproval.svelte';
   import BuildSidebar from './BuildSidebar.svelte';
   import ModeSwitcher from './ModeSwitcher.svelte';
   import WatchPane from './WatchPane.svelte';
@@ -161,17 +162,19 @@
 
   {#if build.status === 'awaiting_plan_approval'}
     <PlanEditor plan={iter0?.plan ?? feed.proposedPlan ?? ''} buildId={build.id} onAfter={refresh} />
+  {:else if build.status === 'awaiting_iter_approval'}
+    <IterApproval buildId={build.id} onAfter={refresh} />
   {/if}
 
   <div class="layout">
     <main class="main">
-      {#if mode === 'watch'}
+      {#if mode === 'watch' || mode === 'tinker'}
         <Activity feed={feed} />
         <FilesTimeline changes={fileTimeline} />
-        <WatchPane buildId={build.id} />
+        <WatchPane buildId={build.id} mode={mode} status={build.status} />
       {:else}
         <section class="nm-sec">
-          <p class="dim">{mode} mode coming in Phase 2 — interactive editor + terminal will land here.</p>
+          <p class="dim">{mode} mode coming in Phase 3 — pi RPC drive-mode take-over will land here.</p>
         </section>
       {/if}
     </main>
