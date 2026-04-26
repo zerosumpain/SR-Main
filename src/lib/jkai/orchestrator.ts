@@ -313,8 +313,8 @@ class Orchestrator {
   async approvePlan(buildId: string): Promise<void> {
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!build) throw new Error('build not found');
-    if (build.status !== 'awaiting_plan_approval') {
-      // Idempotent: silently no-op so a double-click doesn't error.
+    if (build.planStatus !== 'pending') {
+      // Idempotent: silently no-op (double-click, already approved/skipped).
       return;
     }
     if (this.activeBuildId && this.activeBuildId !== buildId) {
@@ -329,12 +329,15 @@ class Orchestrator {
     const { parsePlanMilestones } = await import('./plan-parse');
     const milestones = parsePlanMilestones(iter0?.plan ?? null);
 
+    await failOrphanedIterations(buildId);
     await db
       .update(jkaiBuilds)
       .set({
         status: 'running',
         planStatus: 'approved',
         milestones,
+        failure: null,
+        consecutiveFailures: 0,
         updatedAt: new Date(),
       })
       .where(eq(jkaiBuilds.id, buildId));
@@ -348,9 +351,16 @@ class Orchestrator {
     if (this.activeBuildId && this.activeBuildId !== buildId) {
       throw new Error(`another build is active: ${this.activeBuildId}`);
     }
+    await failOrphanedIterations(buildId);
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', planStatus: 'skipped', updatedAt: new Date() })
+      .set({
+        status: 'running',
+        planStatus: 'skipped',
+        failure: null,
+        consecutiveFailures: 0,
+        updatedAt: new Date(),
+      })
       .where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', 'Plan skipped — proceeding without milestone tracking.');
     this.activeBuildId = buildId;
@@ -362,9 +372,10 @@ class Orchestrator {
     if (this.activeBuildId && this.activeBuildId !== buildId) {
       throw new Error(`another build is active: ${this.activeBuildId}`);
     }
+    await failOrphanedIterations(buildId);
     await db
       .delete(jkaiIterations)
-      .where(and(eq(jkaiIterations.buildId, buildId), eq(jkaiIterations.number, 0)));
+      .where(eq(jkaiIterations.buildId, buildId));
     if (revisedPrompt && revisedPrompt.trim()) {
       await db
         .update(jkaiBuilds)
@@ -373,10 +384,18 @@ class Orchestrator {
     }
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', planStatus: 'pending', updatedAt: new Date() })
+      .set({
+        status: 'running',
+        planStatus: 'pending',
+        failure: null,
+        consecutiveFailures: 0,
+        iterationsCompleted: 0,
+        updatedAt: new Date(),
+      })
       .where(eq(jkaiBuilds.id, buildId));
     this.activeBuildId = buildId;
     this.stopped = false;
+    await emitLog(buildId, 'system', 'Re-planning — wiping previous iterations and starting fresh.');
     await this.initAndPlan(buildId);
   }
 

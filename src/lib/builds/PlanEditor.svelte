@@ -53,16 +53,20 @@
 
 <section class="nm-sec planner">
   <header class="nm-sec-hd">
-    <span class="sr-label-tight">Plan — awaiting approval</span>
+    <span class="sr-label-tight">{body.trim() ? 'Plan — awaiting approval' : 'Plan — none generated yet'}</span>
     <button class="row-link toggle" onclick={() => (preview = !preview)} type="button">
       {preview ? 'Edit' : 'Preview'}
     </button>
   </header>
 
+  {#if !body.trim()}
+    <p class="dim">No plan was generated. The planner may have failed mid-flight (e.g. a service restart). Click <strong>Re-plan</strong> to generate a fresh plan, or <strong>Skip & Code Now</strong> to proceed without one.</p>
+  {/if}
+
   {#if preview}
     <div class="preview"><ChatMarkdown content={body} role="assistant" /></div>
   {:else}
-    <textarea class="nm-text-input" rows="20" bind:value={body}></textarea>
+    <textarea class="nm-text-input" rows="20" placeholder="Plan markdown will appear here once generated. You can also paste your own plan and click Approve & Start." bind:value={body}></textarea>
   {/if}
 
   <div class="actions">
@@ -105,6 +109,11 @@
     display: flex;
     gap: 0.6rem;
     margin-top: 0.8rem;
+  }
+  .dim {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0 0 0.6rem;
   }
   .err {
     color: var(--status-error);
