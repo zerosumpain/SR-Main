@@ -280,11 +280,18 @@
     mix-blend-mode: screen;
     pointer-events: none;
   }
+  .h-pg-cell.peak {
+    z-index: 2;
+  }
   .h-pg-cell.peak::after {
     content: '';
     position: absolute;
-    inset: 0;
-    border: 2.5px solid var(--text-primary);
+    inset: -2px;
+    border: 3px solid var(--text-primary);
+    box-shadow:
+      inset 0 0 0 1.5px var(--bg),
+      0 0 0 1px rgba(26, 16, 8, 0.45),
+      0 4px 10px rgba(26, 16, 8, 0.25);
     pointer-events: none;
   }
   .h-pg-axis {
