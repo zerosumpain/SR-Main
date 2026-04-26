@@ -15,12 +15,23 @@
   let { data }: { data: any } = $props();
 
   let build = $state(data.build);
-  const iterations = $derived(data.iterations as any[]);
+  let iterations = $state<any[]>(data.iterations as any[]);
   let events = $state<FeedEvent[]>(
     (data.logs as Array<{ id: number; type: string; content: string; iterationId: string | null }>).map(
       (l) => ({ kind: 'log', id: l.id, type: l.type, content: l.content, iterationId: l.iterationId }),
     ),
   );
+
+  // When the SvelteKit page-data store updates (after invalidateAll() refresh),
+  // sync the local $state copies so derived values pick up the new plan/iters.
+  // We only react to identity changes — typing in the plan editor is local
+  // state, not page-data, so this won't clobber it.
+  $effect(() => {
+    if (data.build && data.build.id === build.id) {
+      build = { ...build, ...data.build };
+      if (Array.isArray(data.iterations)) iterations = data.iterations;
+    }
+  });
   let mode = $state<'watch' | 'tinker' | 'drive'>('watch');
   let publishing = $state(false);
   let unpublishing = $state(false);
@@ -82,12 +93,25 @@
     pollTimer = setInterval(async () => {
       try {
         const r = await fetch(`/api/jkai/builds/${build.id}`);
-        if (r.ok) {
-          const fresh = await r.json();
-          build = { ...build, ...fresh };
+        if (!r.ok) return;
+        const fresh = await r.json();
+        const prevStatus = build.status;
+        // The endpoint returns { ...build, iterations } — split them so the
+        // build $state and iterations $state both stay current. Without this,
+        // iter 0's saved plan never reaches the PlanEditor on the second
+        // poll after planning completes.
+        const { iterations: freshIters, ...freshBuild } = fresh ?? {};
+        build = { ...build, ...freshBuild };
+        if (Array.isArray(freshIters)) iterations = freshIters;
+
+        // When status changes (e.g. running → awaiting_plan_approval), pull
+        // a full server-side reload so logs and any parked-state UI lights
+        // up immediately.
+        if (prevStatus !== build.status) {
+          await invalidateAll();
         }
       } catch {
-        // ignore
+        // ignore — next tick will retry
       }
     }, 10000);
   });
@@ -190,6 +214,12 @@
     {/if}
   </div>
 
+  {#if build.status === 'running' && build.planStatus === 'pending'}
+    <section class="nm-sec planning-banner">
+      <header class="nm-sec-hd"><span class="sr-label-tight">Planning…</span></header>
+      <p class="dim">The proposer/critic debate is running. The first draft normally lands in 30-60s and revisions in another 30-60s. The plan editor will open as soon as the planner finishes — you'll be asked to approve, re-plan, or skip before any code is written.</p>
+    </section>
+  {/if}
   {#if build.planStatus === 'pending' && build.status !== 'running'}
     <PlanEditor plan={feed.proposedPlan ?? iter0?.plan ?? ''} buildId={build.id} onAfter={refresh} />
   {:else if build.status === 'awaiting_iter_approval'}
@@ -282,6 +312,9 @@
     background: var(--accent);
     color: var(--bg);
     border-color: var(--accent);
+  }
+  .planning-banner {
+    border-left: 3px solid var(--accent);
   }
   .layout {
     display: grid;
