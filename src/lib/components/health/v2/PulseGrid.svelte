@@ -60,14 +60,32 @@
   const labels = $derived(series.map((d) => dayLabel(d.date)));
   const lastIndex = $derived(series.length - 1);
 
-  // Per-row peak day index (post-normalisation, so the brightest cell wins).
-  // Ties resolve to the most recent occurrence.
+  // Per-row peak day index. row.f returns "good direction" normalised, so
+  // max-of-normalised = best day (lowest RHR, highest strain, etc).
+  // Strict > so the first occurrence wins ties (otherwise today would
+  // hoard every clamped-1.0 tie and the highlight collapses onto its column).
+  // Skip cells with no data (raw value 0) so empty days don't win by default.
   function peakIndex(row: Row): number {
     let best = -Infinity;
-    let idx = 0;
+    let idx = -1;
     for (let i = 0; i < series.length; i++) {
-      const v = row.f(series[i]);
-      if (v >= best) {
+      const d = series[i];
+      // Detect "no data" using the raw value relevant to each row.
+      const raw =
+        row.key === 'rec'
+          ? d.rec
+          : row.key === 'hrv'
+            ? d.hrv
+            : row.key === 'rhr'
+              ? d.rhr
+              : row.key === 'slept'
+                ? d.slept
+                : row.key === 'strain'
+                  ? d.strain
+                  : d.steps;
+      if (raw <= 0) continue;
+      const v = row.f(d);
+      if (v > best) {
         best = v;
         idx = i;
       }
@@ -108,7 +126,7 @@
       {#each series as d, i (i)}
         {@const v = row.f(d)}
         {@const isToday = i === lastIndex}
-        {@const isPeak = i === peaks[rowIdx]}
+        {@const isPeak = peaks[rowIdx] === i && peaks[rowIdx] !== -1}
         {@const display = row.display(d)}
         <button
           type="button"

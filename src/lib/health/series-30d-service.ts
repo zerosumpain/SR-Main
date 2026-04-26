@@ -64,6 +64,14 @@ export type HealthSeriesData = {
 
 const DAYS = 30;
 
+// Whoop strain is a 0–21 score. Some historical rows landed in the DB at
+// strain × 100 (legacy sync path). Detect either form and return the real
+// 0–21 value rounded to 1dp.
+function normaliseStrain(raw: number): number {
+  const v = raw > 22 ? raw / 100 : raw;
+  return +v.toFixed(1);
+}
+
 function isoDate(unix: number): string {
   return new Date(unix * 1000).toISOString().slice(0, 10);
 }
@@ -393,16 +401,17 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   const cycleByDate = new Map<string, (typeof cycleRows)[number]>();
   for (const c of cycleRows) cycleByDate.set(isoDate(c.startDate), c);
 
-  // apple_health_metrics.value is stored as value * 100 (per ingest endpoint).
-  // Divide by 100 before aggregating so pulse-grid normalisation lands in
-  // its expected 0–16k range rather than 0–1.6M.
+  // step_count rows are cumulative daily totals reposted multiple times by
+  // the iOS shortcut, so summing duplicates the count. Take the daily max.
+  // The values are raw step counts (NOT *100, despite the ingest convention
+  // for other Apple metrics — observed empirically against prod data).
   const stepsByDate = new Map<string, number>();
   for (const r of stepRows) {
     if (r.date == null || r.value == null) continue;
     const key = isoDate(r.date);
-    stepsByDate.set(key, (stepsByDate.get(key) ?? 0) + r.value / 100);
+    const prior = stepsByDate.get(key) ?? 0;
+    if (r.value > prior) stepsByDate.set(key, r.value);
   }
-  for (const [k, v] of stepsByDate) stepsByDate.set(k, Math.round(v));
 
   // Weight: latest reading per day (kg). Same *100 storage convention.
   const weightByDate = new Map<string, number>();
@@ -448,7 +457,7 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     }
 
     const cycle = cycleByDate.get(date);
-    if (cycle) day.strain = +cycle.strain.toFixed(1);
+    if (cycle) day.strain = normaliseStrain(cycle.strain);
 
     day.steps = stepsByDate.get(date) ?? 0;
 

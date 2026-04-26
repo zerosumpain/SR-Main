@@ -107,15 +107,18 @@ export async function getCorrelations(): Promise<Correlation[]> {
   }
   for (const c of cycleRows) {
     const d = ensure(isoDate(c.startDate));
-    d.strain = c.strain;
+    // Same scale fix as the 30d series: legacy rows landed at strain*100.
+    d.strain = c.strain > 22 ? c.strain / 100 : c.strain;
   }
+  // Daily max — same reasoning as the 30d series loader.
   const stepsByDate = new Map<string, number>();
   for (const r of stepRows) {
     if (r.date == null || r.value == null) continue;
     const k = isoDate(r.date);
-    stepsByDate.set(k, (stepsByDate.get(k) ?? 0) + r.value / 100);
+    const prior = stepsByDate.get(k) ?? 0;
+    if (r.value > prior) stepsByDate.set(k, r.value);
   }
-  for (const [k, v] of stepsByDate) ensure(k).steps = Math.round(v);
+  for (const [k, v] of stepsByDate) ensure(k).steps = v;
 
   const ordered = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
   const ix: Record<string, number> = {};
