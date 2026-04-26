@@ -7,22 +7,6 @@
   import Correlations from '$lib/components/health/v2/Correlations.svelte';
 
   let { data } = $props();
-
-  // Hand-curated annotation callouts. Replace with computed call-outs once tooling exists.
-  const annotations = [
-    {
-      when: 'PEAK STRAIN DAY',
-      text: `Hardest session in the window — visible spike on the strain row. Recovery and HRV pay for it the next morning.`,
-    },
-    {
-      when: 'HRV TROUGH',
-      text: `Lowest HRV reading lines up with elevated RHR — same physiology, two metrics. Watch for clustering.`,
-    },
-    {
-      when: 'RECOVERY STREAK',
-      text: `The greenest cells on the recovery row mark the days the body was, briefly, happy.`,
-    },
-  ];
 </script>
 
 <svelte:head>
@@ -70,14 +54,16 @@
         </p>
       </div>
       <PulseGrid series={data.series} />
-      <div class="h-annot-grid">
-        {#each annotations as a, i (i)}
-          <div class="h-annot">
-            <p class="h-annot-when">{a.when}</p>
-            <p class="h-annot-text">{a.text}</p>
-          </div>
-        {/each}
-      </div>
+      {#if data.annotations?.length}
+        <div class="h-annot-grid">
+          {#each data.annotations as a, i (i)}
+            <div class="h-annot">
+              <p class="h-annot-when">{a.when}</p>
+              <p class="h-annot-text">{@html a.text}</p>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </section>
 
@@ -95,6 +81,8 @@
         today={data.today}
         yesterday={data.yesterday}
         workouts={data.workouts}
+        rhrBaseline={data.rhrBaseline}
+        rings={data.rings}
       />
     </div>
   </section>

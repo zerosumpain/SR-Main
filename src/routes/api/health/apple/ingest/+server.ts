@@ -16,6 +16,9 @@ const SUPPORTED_METRICS = [
   'walking_running_distance',
   'flights_climbed',
   'active_energy',
+  'body_mass',
+  'apple_exercise_time',
+  'apple_stand_hour',
 ];
 
 interface AppleHealthDataPoint {

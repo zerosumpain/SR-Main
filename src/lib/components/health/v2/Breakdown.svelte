@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { HealthDay, Workout } from '$lib/health/series-30d-service';
+  import type { HealthDay, Workout, ActivityRings } from '$lib/health/series-30d-service';
   import Sparkline from './Sparkline.svelte';
 
   let {
@@ -7,11 +7,15 @@
     today,
     yesterday,
     workouts,
+    rhrBaseline = 58,
+    rings,
   }: {
     series: HealthDay[];
     today: HealthDay;
     yesterday: HealthDay;
     workouts: Workout[];
+    rhrBaseline?: number;
+    rings: ActivityRings;
   } = $props();
 
   const recovery = $derived(series.map((d) => d.rec));
@@ -26,7 +30,6 @@
   const hrvAvg7 = $derived(
     Math.round(series.slice(-7).reduce((a, b) => a + b.hrv, 0) / 7),
   );
-  const rhrBaseline = 58;
 
   const recoveryTag = $derived(
     today.rec < 40 ? 'RED' : today.rec < 67 ? 'AMBER' : 'GREEN',
@@ -115,13 +118,12 @@
   );
   const weightDelta = $derived(today.weight && series[0].weight ? +(today.weight - series[0].weight).toFixed(1) : 0);
 
-  // Activity rings — derive from steps + workouts
+  // Activity rings — driven by Apple Health (Move kcal / Exercise min / Stand hours)
   const stepsToday = $derived(today.steps);
   const stepsTotal30d = $derived(Math.round(series.reduce((a, b) => a + b.steps, 0) / 1000));
-  const movePct = $derived(Math.min(1, today.steps / 12000));
-  const exercisePct = $derived(Math.min(1, today.strain / 18));
-  // Stand: count workouts last 7 / 12-target
-  const standPct = $derived(Math.min(1, workouts.length / 7));
+  const movePct = $derived(Math.min(1, rings.moveKcal / Math.max(1, rings.moveTarget)));
+  const exercisePct = $derived(Math.min(1, rings.exerciseMin / Math.max(1, rings.exerciseTarget)));
+  const standPct = $derived(Math.min(1, rings.standHours / Math.max(1, rings.standTarget)));
 
   function fmtPct(n: number): string {
     return `${Math.round(n * 100)}%`;
@@ -275,8 +277,8 @@
           </div>
         </div>
         <p class="h-card-foot h-activity-foot">
-          Move <em>{fmtPct(movePct)}</em> · Exercise <em>{fmtPct(exercisePct)}</em> · Stand
-          <em>{fmtPct(standPct)}</em>.
+          Move <em>{rings.moveKcal} kcal</em> · Exercise <em>{rings.exerciseMin} min</em> · Stand
+          <em>{rings.standHours}/{rings.standTarget}h</em>.
         </p>
       </div>
     </div>

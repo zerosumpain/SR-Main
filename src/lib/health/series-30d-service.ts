@@ -6,7 +6,9 @@ import {
   whoopWorkouts,
   appleHealthMetrics,
 } from '$lib/db/schema';
-import { gte, eq, and, desc } from 'drizzle-orm';
+import { gte, eq, and, desc, inArray } from 'drizzle-orm';
+import { getCorrelations } from './correlations-service';
+import { getNarrative } from './narrative-service';
 
 export type HealthDay = {
   i: number;
@@ -24,9 +26,20 @@ export type HealthDay = {
   sleepScore?: number;
 };
 
+export type ActivityRings = {
+  moveKcal: number;
+  moveTarget: number;
+  exerciseMin: number;
+  exerciseTarget: number;
+  standHours: number;
+  standTarget: number;
+};
+
 export type Workout = { day: string; name: string; strain: number; dur: string };
 
 export type Correlation = { cause: string; effect: string; num: string; conf: string };
+
+export type Annotation = { when: string; text: string };
 
 export type HealthSeriesData = {
   series: HealthDay[];
@@ -34,9 +47,12 @@ export type HealthSeriesData = {
   yesterday: HealthDay;
   workouts: Workout[];
   correlations: Correlation[];
+  annotations: Annotation[];
   narrative: { tag: string; text: string };
   headline: { primary: string; ghost: string };
   strap: string;
+  rhrBaseline: number;
+  rings: ActivityRings;
   todayDeltas: {
     recDelta: number;
     hrvDeltaPct: number;
@@ -102,13 +118,13 @@ function pickHeadline(rec: number): { primary: string; ghost: string } {
   return { primary: "RECOVERED.", ghost: "BUILD SOMETHING." };
 }
 
-function buildStrap(today: HealthDay, yesterday: HealthDay): string {
+function buildStrap(today: HealthDay, yesterday: HealthDay, rhrBaseline: number): string {
   if (yesterday.hrv === 0 || today.hrv === 0) {
     return `Recovery's at ${today.rec}%. HRV ${today.hrv}ms, RHR ${today.rhr}bpm. Body's reporting in.`;
   }
   const hrvDelta = Math.round(((yesterday.hrv - today.hrv) / yesterday.hrv) * 100);
   const direction = hrvDelta > 0 ? 'dropped' : 'climbed';
-  const baselineDelta = today.rhr - 58;
+  const baselineDelta = today.rhr - rhrBaseline;
   const rhrLine =
     baselineDelta > 0
       ? `Heart rate's still ${baselineDelta} bpm above baseline.`
@@ -118,32 +134,80 @@ function buildStrap(today: HealthDay, yesterday: HealthDay): string {
   return `Recovery's at ${today.rec}%. HRV ${direction} ${Math.abs(hrvDelta)}% overnight after yesterday's session. ${rhrLine} The body is asking, politely, for a walk and a sandwich.`;
 }
 
-function buildNarrative(series: HealthDay[]): { tag: string; text: string } {
-  const last7 = series.slice(-7);
-  const today = series[series.length - 1];
-  const sortedByStrain = [...last7].sort((a, b) => b.strain - a.strain);
-  const hardest = sortedByStrain[0];
-  const lowestHrv = [...last7].sort((a, b) => a.hrv - b.hrv)[0];
-  const avgRec = Math.round(avg(last7.map((d) => d.rec)));
-  const weightDelta = +(today.weight - series[0].weight).toFixed(1);
+function median(values: number[]): number {
+  const xs = values.filter((v) => v > 0).sort((a, b) => a - b);
+  if (!xs.length) return 0;
+  const mid = Math.floor(xs.length / 2);
+  return xs.length % 2 === 0 ? Math.round((xs[mid - 1] + xs[mid]) / 2) : xs[mid];
+}
 
-  const hardestDay = new Date(hardest.date).toLocaleString('en', {
-    weekday: 'long',
-  });
-  const recBand = today.rec < 40 ? 'red' : today.rec < 67 ? 'amber' : 'green';
+function fmtAnnotDate(date: string): string {
+  const d = new Date(date + 'T00:00:00Z');
+  const dom = d.getUTCDate();
+  const mon = d.toLocaleString('en', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const dow = d.toLocaleString('en', { weekday: 'short', timeZone: 'UTC' }).toUpperCase();
+  return `${mon} ${dom} · ${dow}`;
+}
 
-  let text = `You went hard on ${hardestDay}. <em>Strain ${hardest.strain.toFixed(1)}</em>. `;
-  if (lowestHrv.hrv > 0 && lowestHrv.hrv < 45) {
-    text += `HRV cratered to <em>${lowestHrv.hrv}ms</em> — your worst this window. `;
+function computeAnnotations(series: HealthDay[]): Annotation[] {
+  const out: Annotation[] = [];
+  if (!series.length) return out;
+
+  // 1) Peak strain day in window (skip "today" so it's not redundant with the hero)
+  const windowForPeaks = series.slice(0, -1);
+  if (windowForPeaks.length) {
+    const peakStrain = [...windowForPeaks].sort((a, b) => b.strain - a.strain)[0];
+    if (peakStrain.strain > 8) {
+      out.push({
+        when: fmtAnnotDate(peakStrain.date),
+        text: `Hardest session in the window. Strain hit <em>${peakStrain.strain.toFixed(1)}</em> — visible spike on the strain row.`,
+      });
+    }
   }
-  text += `Week's average recovery sits at <em>${avgRec}%</em> and today is still <em>${recBand}</em>. `;
-  if (Math.abs(weightDelta) > 0.3 && today.weight > 0) {
-    const dir = weightDelta < 0 ? '−' : '+';
-    text += `Weight's moved <em>${dir}${Math.abs(weightDelta).toFixed(1)} kg</em> over the window. `;
-  }
-  text += today.rec < 50 ? `The sandwich is earned.` : `Plenty of rope left.`;
 
-  return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text };
+  // 2) Lowest HRV day
+  const validHrv = series.filter((d) => d.hrv > 0);
+  if (validHrv.length) {
+    const lowHrv = [...validHrv].sort((a, b) => a.hrv - b.hrv)[0];
+    const sameDay = series.find((d) => d.date === lowHrv.date);
+    const rhrNote =
+      sameDay && sameDay.rhr > 0
+        ? ` RHR was <em>${sameDay.rhr} bpm</em> — same physiological story, two metrics.`
+        : '';
+    out.push({
+      when: fmtAnnotDate(lowHrv.date),
+      text: `HRV trough at <em>${lowHrv.hrv}ms</em>, the darkest cell in the row.${rhrNote}`,
+    });
+  }
+
+  // 3) Longest green-recovery streak (rec >= 67)
+  let bestStart = -1;
+  let bestLen = 0;
+  let curStart = -1;
+  let curLen = 0;
+  for (let i = 0; i < series.length; i++) {
+    if (series[i].rec >= 67) {
+      if (curLen === 0) curStart = i;
+      curLen++;
+      if (curLen > bestLen) {
+        bestLen = curLen;
+        bestStart = curStart;
+      }
+    } else {
+      curLen = 0;
+    }
+  }
+  if (bestLen >= 2) {
+    const a = series[bestStart];
+    const b = series[bestStart + bestLen - 1];
+    const range = bestLen === 1 ? fmtAnnotDate(a.date) : `${fmtAnnotDate(a.date)} → ${fmtAnnotDate(b.date)}`;
+    out.push({
+      when: range,
+      text: `${bestLen} green recovery days back-to-back. The body, briefly, was happy.`,
+    });
+  }
+
+  return out.slice(0, 3);
 }
 
 function rng(seed: number): () => number {
@@ -261,7 +325,7 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   const todayStart = startOfTodayUnix();
   const windowStart = todayStart - (DAYS - 1) * 86400;
 
-  const [recoveryRows, sleepRows, cycleRows, stepRows] = await Promise.all([
+  const [recoveryRows, sleepRows, cycleRows, stepRows, weightRows, ringRows] = await Promise.all([
     db
       .select()
       .from(whoopRecovery)
@@ -287,6 +351,33 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
         ),
       )
       .orderBy(appleHealthMetrics.date),
+    db
+      .select({ date: appleHealthMetrics.date, value: appleHealthMetrics.value })
+      .from(appleHealthMetrics)
+      .where(
+        and(
+          gte(appleHealthMetrics.date, windowStart),
+          eq(appleHealthMetrics.metricName, 'body_mass'),
+        ),
+      )
+      .orderBy(appleHealthMetrics.date),
+    db
+      .select({
+        date: appleHealthMetrics.date,
+        metric: appleHealthMetrics.metricName,
+        value: appleHealthMetrics.value,
+      })
+      .from(appleHealthMetrics)
+      .where(
+        and(
+          gte(appleHealthMetrics.date, todayStart),
+          inArray(appleHealthMetrics.metricName, [
+            'active_energy',
+            'apple_exercise_time',
+            'apple_stand_hour',
+          ]),
+        ),
+      ),
   ]);
 
   // Index by ISO date (UTC midnight)
@@ -312,6 +403,13 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     stepsByDate.set(key, (stepsByDate.get(key) ?? 0) + r.value / 100);
   }
   for (const [k, v] of stepsByDate) stepsByDate.set(k, Math.round(v));
+
+  // Weight: latest reading per day (kg). Same *100 storage convention.
+  const weightByDate = new Map<string, number>();
+  for (const r of weightRows) {
+    if (r.date == null || r.value == null) continue;
+    weightByDate.set(isoDate(r.date), r.value / 100);
+  }
 
   const series: HealthDay[] = [];
   let lastWeight = 0;
@@ -354,9 +452,13 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
 
     day.steps = stepsByDate.get(date) ?? 0;
 
-    // Weight: no source yet — keep last known or 0.
-    day.weight = lastWeight;
-    if (day.weight > 0) lastWeight = day.weight;
+    const w = weightByDate.get(date);
+    if (w && w > 0) {
+      day.weight = +w.toFixed(1);
+      lastWeight = day.weight;
+    } else {
+      day.weight = lastWeight;
+    }
 
     series.push(day);
   }
@@ -389,22 +491,57 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   const recAvg7 = Math.round(avg(last7.map((d) => d.rec)));
   const sleepAvgMs = avg(last7.map((d) => d.slept * 3600));
 
+  const rhrMedian = median(series.map((d) => d.rhr));
+  const rhrBaseline = rhrMedian > 0 ? rhrMedian : 58;
+
   const todayDeltas = {
     recDelta: today.rec - recAvg7,
     hrvDeltaPct:
       yesterday.hrv > 0
         ? Math.round(((today.hrv - yesterday.hrv) / yesterday.hrv) * 100)
         : 0,
-    rhrDelta: Math.round(today.rhr - 58),
+    rhrDelta: Math.round(today.rhr - rhrBaseline),
     sleepDelta: Math.round(today.slept * 3600 - sleepAvgMs),
   };
 
   const headline = pickHeadline(today.rec);
-  const strap = buildStrap(today, yesterday);
-  const narrative = buildNarrative(series);
+  const strap = buildStrap(today, yesterday, rhrBaseline);
+  const narrative = await getNarrative(series, rhrBaseline);
+  const annotations = computeAnnotations(series);
 
   let workouts = await getWorkouts(todayStart);
   if (!hasRealData && workouts.length === 0) workouts = buildMockWorkouts();
+
+  let correlations = await getCorrelations();
+  if (correlations.length === 0) correlations = STATIC_CORRELATIONS;
+
+  // Activity rings (today only): sum live readings from Apple Health.
+  // Targets are sane defaults — Apple Watch users can override these in iOS,
+  // but we don't have that signal yet so we use the platform defaults.
+  let moveKcal = 0;
+  let exerciseMin = 0;
+  let standHours = 0;
+  for (const r of ringRows) {
+    if (r.value == null) continue;
+    const v = r.value / 100;
+    if (r.metric === 'active_energy') moveKcal += v;
+    else if (r.metric === 'apple_exercise_time') exerciseMin += v;
+    else if (r.metric === 'apple_stand_hour') standHours += v > 0 ? 1 : 0;
+  }
+  const rings: ActivityRings = {
+    moveKcal: Math.round(moveKcal),
+    moveTarget: 600,
+    exerciseMin: Math.round(exerciseMin),
+    exerciseTarget: 30,
+    standHours: Math.min(12, Math.round(standHours)),
+    standTarget: 12,
+  };
+  // Mock ring values when no real data is available so the card looks alive.
+  if (!hasRealData && rings.moveKcal === 0 && rings.exerciseMin === 0 && rings.standHours === 0) {
+    rings.moveKcal = 192;
+    rings.exerciseMin = 5;
+    rings.standHours = 8;
+  }
 
   // Most recent sync — use latest recovery row's syncedAt, else now.
   const latestSyncedAt =
@@ -418,10 +555,13 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     today,
     yesterday,
     workouts,
-    correlations: STATIC_CORRELATIONS,
+    correlations,
+    annotations,
+    rings,
     narrative,
     headline,
     strap,
+    rhrBaseline,
     todayDeltas,
     syncedAgoSeconds,
   };
