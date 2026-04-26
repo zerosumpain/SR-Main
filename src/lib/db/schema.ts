@@ -856,6 +856,10 @@ export const customTools = pgTable('custom_tools', {
   errorCount: integer('error_count').notNull().default(0),
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  // 'orchestrator' = LLM-created via create_tool (today, all rows).
+  // 'user' = future admin-created path. Defaults to 'orchestrator' so
+  // existing rows backfill correctly.
+  createdBy: text('created_by').notNull().default('orchestrator'),
 });
 
 export type CustomTool = typeof customTools.$inferSelect;
