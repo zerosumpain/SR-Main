@@ -454,11 +454,17 @@ export async function generalChat(
     graphSectionPromise,
     buildCanvasContextSection(options.workflowId),
   ]);
-  const planSection = options.jobId && (options.subagentDepth ?? 0) === 0
+  // Plan/clarify gates only fire when there's a UI to render the card and
+  // PATCH the ack — that's /jkai today. Canvas chat (workflowId set) does
+  // not consume plan/clarify SSE events, so the prompt must not invite the
+  // model to emit them or the job stalls.
+  const supportsGates = options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId;
+
+  const planSection = supportsGates
     ? `\n\n--- Plan phase ---\nIf the user's request will require more than one tool call OR any write/modify/delete action, FIRST emit a plan as a JSON block:\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval. For trivial single-read lookups (e.g. one web_search for a factual question, checking a single piece of intel) you may skip the plan and answer directly.`
     : '';
 
-  const clarifySection = options.jobId && (options.subagentDepth ?? 0) === 0
+  const clarifySection = supportsGates
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
@@ -767,7 +773,11 @@ export async function generalChat(
     // route to ClarifyCard, not the raw chat bubble). Top-level jobs only.
     // Takes priority over plan interception: ask questions first, plan only
     // once we know what we're doing.
-    if (options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<clarify>')) {
+    // Plan/clarify gates require a UI that can render the card and PATCH
+    // the job with an ack. Only /jkai has that today — canvas chat (workflowId
+    // set) consumes only token/done/error events, so a plan emission would
+    // stall the job forever. Skip these phases when embedded in a canvas.
+    if (options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId && typeof msg.content === 'string' && msg.content.includes('<clarify>')) {
       const extracted = extractClarify(msg.content);
       if (extracted) {
         msg.tool_calls = undefined;
@@ -792,7 +802,7 @@ export async function generalChat(
     // --- Plan-phase interception (every round — the LLM may emit a revised
     // plan after an "adjusted" decision, and that revision must also go
     // through PlanCard, not the raw chat bubble). Top-level jobs only. ---
-    if (options.jobId && (options.subagentDepth ?? 0) === 0 && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
+    if (options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
       const extracted = extractPlan(msg.content);
       if (extracted) {
         // Tool calls in the same turn as a plan would be premature — discard
