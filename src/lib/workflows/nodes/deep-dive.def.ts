@@ -2,9 +2,10 @@ import type { NodeDefinition } from '../types';
 
 export const deepDiveDef: NodeDefinition = {
   type: 'deep-dive',
-  label: 'Deep Dive',
+  label: 'Deep Dive (legacy)',
   category: 'integration',
-  description: 'Run deep research sessions: start, check status, list, get reports, and control.',
+  hidden: true,
+  description: 'Legacy multi-mode node. Replaced by `deep-dive-start`, `deep-dive-status`, `deep-dive-report`, `deep-dive-list`, `deep-dive-control`. Existing canvases keep running.',
   configSchema: {
     type: 'object',
     properties: {

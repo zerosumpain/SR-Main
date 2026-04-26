@@ -51,6 +51,27 @@ import { triggerDef, triggerExecutor } from './nodes/trigger';
 import { inspectorDef, inspectorExecutor } from './nodes/inspector';
 import { fileStoreDef, fileStoreExecutor } from './nodes/file-store';
 import { fileExtractDef, fileExtractExecutor } from './nodes/file-extract';
+import { fileTextExtractDef, fileTextExtractExecutor } from './nodes/file-text-extract';
+import { fileBuildDef, fileBuildExecutor } from './nodes/file-build';
+import {
+  fileReadDef, fileReadExecutor,
+  fileWriteDef, fileWriteExecutor,
+  fileDeleteDef, fileDeleteExecutor,
+  fileListDef, fileListExecutor,
+} from './nodes/file-ops';
+import {
+  blogListDef, blogListExecutor,
+  blogGetDef, blogGetExecutor,
+  blogCreateDef, blogCreateExecutor,
+  blogUpdateDef, blogUpdateExecutor,
+} from './nodes/blog-ops';
+import {
+  deepDiveStartDef, deepDiveStartExecutor,
+  deepDiveStatusDef, deepDiveStatusExecutor,
+  deepDiveReportDef, deepDiveReportExecutor,
+  deepDiveListDef, deepDiveListExecutor,
+  deepDiveControlDef, deepDiveControlExecutor,
+} from './nodes/deep-dive-ops';
 import { postitDef, postitExecutor } from './nodes/postit';
 import { annotationDef, annotationExecutor } from './nodes/annotation';
 import { getWhatsAppService } from './whatsapp/service';
@@ -123,6 +144,24 @@ registry.register(triggerDef, triggerExecutor);
 registry.register(inspectorDef, inspectorExecutor);
 registry.register(fileStoreDef, fileStoreExecutor);
 registry.register(fileExtractDef, fileExtractExecutor);
+// Per-operation file primitives (replace fileStore + fileExtract for new canvases)
+registry.register(fileReadDef, fileReadExecutor);
+registry.register(fileWriteDef, fileWriteExecutor);
+registry.register(fileDeleteDef, fileDeleteExecutor);
+registry.register(fileListDef, fileListExecutor);
+registry.register(fileTextExtractDef, fileTextExtractExecutor);
+registry.register(fileBuildDef, fileBuildExecutor);
+// Per-operation blog primitives (replace blog)
+registry.register(blogListDef, blogListExecutor);
+registry.register(blogGetDef, blogGetExecutor);
+registry.register(blogCreateDef, blogCreateExecutor);
+registry.register(blogUpdateDef, blogUpdateExecutor);
+// Per-operation deep-dive primitives (replace deepDive)
+registry.register(deepDiveStartDef, deepDiveStartExecutor);
+registry.register(deepDiveStatusDef, deepDiveStatusExecutor);
+registry.register(deepDiveReportDef, deepDiveReportExecutor);
+registry.register(deepDiveListDef, deepDiveListExecutor);
+registry.register(deepDiveControlDef, deepDiveControlExecutor);
 registry.register(postitDef, postitExecutor);
 registry.register(annotationDef, annotationExecutor);
 

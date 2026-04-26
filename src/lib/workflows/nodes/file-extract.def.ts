@@ -3,10 +3,11 @@ import type { NodeDefinition } from '../types';
 
 export const fileExtractDef: NodeDefinition = {
   type: 'file-extract',
-  label: 'File Extract / Convert',
+  label: 'File Extract / Convert (legacy)',
   category: 'integration',
+  hidden: true,
   description:
-    'Extract text + structured metadata from PDF/DOCX/MD/audio/video files in the file store, OR synthesise a new file (docx/pdf/html/xlsx/csv) from text/markdown/json/csv/xlsx.',
+    'Legacy multi-mode node. Replaced by `file-text-extract` (extract) and `file-build` (synthesise). Existing canvases keep running; new canvases should use the split versions.',
   configSchema: {
     type: 'object',
     properties: {

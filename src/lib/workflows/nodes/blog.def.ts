@@ -2,9 +2,10 @@ import type { NodeDefinition } from '../types';
 
 export const blogDef: NodeDefinition = {
   type: 'blog',
-  label: 'Blog',
+  label: 'Blog (legacy)',
   category: 'integration',
-  description: 'Manage blog posts: list, get, create, and update.',
+  hidden: true,
+  description: 'Legacy multi-mode node. Replaced by `blog-list`, `blog-get`, `blog-create`, `blog-update`. Existing canvases keep running.',
   configSchema: {
     type: 'object',
     properties: {

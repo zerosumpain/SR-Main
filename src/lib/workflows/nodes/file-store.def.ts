@@ -2,10 +2,11 @@ import type { NodeDefinition } from '../types';
 
 export const fileStoreDef: NodeDefinition = {
   type: 'file-store',
-  label: 'File Store',
+  label: 'File Store (legacy)',
   category: 'integration',
+  hidden: true,
   description:
-    'Read, write, append, delete, or list files in the global file store. Upload/manage files via the /admin/files page. Each file has per-operation permissions that are enforced at runtime.',
+    'Legacy multi-mode node. Replaced by `file-read`, `file-write` (with append toggle), `file-delete`, and `file-list`. Existing canvases keep running; new canvases should use the per-operation versions.',
   configSchema: {
     type: 'object',
     properties: {
