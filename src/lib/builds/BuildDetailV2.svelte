@@ -5,6 +5,7 @@
   import FilesTimeline from './FilesTimeline.svelte';
   import PlanEditor from './PlanEditor.svelte';
   import IterApproval from './IterApproval.svelte';
+  import PreviewPanel from './PreviewPanel.svelte';
   import BuildSidebar from './BuildSidebar.svelte';
   import ModeSwitcher from './ModeSwitcher.svelte';
   import WatchPane from './WatchPane.svelte';
@@ -22,7 +23,9 @@
   );
   let mode = $state<'watch' | 'tinker' | 'drive'>('watch');
   let publishing = $state(false);
+  let unpublishing = $state(false);
   let acting = $state<string | null>(null);
+  let showPreview = $state(false);
 
   const feed = $derived(reduceFeed(events));
   const fileTimeline = $derived(buildFileTimeline(iterations));
@@ -118,9 +121,24 @@
       if (r.ok) {
         const body = await r.json();
         if (body.slug) build = { ...build, publishedSlug: body.slug };
+      } else {
+        const err = await r.text().catch(() => r.statusText);
+        alert(`Publish failed: ${err.slice(0, 200)}`);
       }
     } finally {
       publishing = false;
+    }
+  }
+
+  async function unpublishBuild() {
+    if (!confirm(`Unpublish "${build.publishedSlug}"? The public URL will go offline.`)) return;
+    unpublishing = true;
+    try {
+      const r = await fetch(`/api/jkai/builds/${build.id}/unpublish`, { method: 'POST' });
+      if (r.ok) build = { ...build, publishedSlug: null };
+      else alert(`Unpublish failed: ${await r.text().catch(() => r.statusText)}`);
+    } finally {
+      unpublishing = false;
     }
   }
 </script>
@@ -149,14 +167,26 @@
       <button class="nm-save-btn" disabled={acting !== null} onclick={() => controlAction('resume')}>Resume</button>
       <button class="nm-btn-ghost" disabled={acting !== null} onclick={() => controlAction('stop')}>Stop</button>
     {/if}
-    {#if build.status === 'completed' || build.status === 'paused'}
-      {#if build.publishedSlug}
-        <a class="row-link" href={`/projects/jkai/${build.publishedSlug}/`} target="_blank">↗ Live</a>
-      {:else}
-        <button class="nm-btn-ghost" disabled={publishing} onclick={publishBuild}>
-          {publishing ? 'Publishing…' : 'Publish'}
-        </button>
-      {/if}
+    {#if build.serveConfig}
+      <button
+        class="nm-btn-ghost"
+        class:active={showPreview}
+        onclick={() => (showPreview = !showPreview)}
+        type="button"
+      >
+        {showPreview ? 'Hide preview' : 'Preview'}
+      </button>
+    {/if}
+    {#if build.serveConfig && !build.publishedSlug}
+      <button class="nm-btn-ghost" disabled={publishing} onclick={publishBuild} type="button">
+        {publishing ? 'Publishing…' : 'Publish'}
+      </button>
+    {/if}
+    {#if build.publishedSlug}
+      <a class="row-link" href={`/projects/jkai/${build.publishedSlug}/`} target="_blank" rel="noreferrer">↗ Live</a>
+      <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
+        {unpublishing ? 'Unpublishing…' : 'Unpublish'}
+      </button>
     {/if}
   </div>
 
@@ -164,6 +194,14 @@
     <PlanEditor plan={iter0?.plan ?? feed.proposedPlan ?? ''} buildId={build.id} onAfter={refresh} />
   {:else if build.status === 'awaiting_iter_approval'}
     <IterApproval buildId={build.id} onAfter={refresh} />
+  {/if}
+
+  {#if showPreview && build.serveConfig}
+    <PreviewPanel
+      buildId={build.id}
+      serveConfig={build.serveConfig}
+      publishedSlug={build.publishedSlug}
+    />
   {/if}
 
   <div class="layout">
@@ -238,6 +276,12 @@
     gap: 0.6rem;
     margin: 0 0 1rem;
     align-items: center;
+    flex-wrap: wrap;
+  }
+  .actions-row :global(.nm-btn-ghost.active) {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
   }
   .layout {
     display: grid;
