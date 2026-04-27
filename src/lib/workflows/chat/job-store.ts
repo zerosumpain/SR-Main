@@ -172,7 +172,7 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
 }
 
 const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;   // check every 5s
-const HEARTBEAT_MIN_SILENCE_MS = 25_000;     // only emit after 25s of silence
+export const HEARTBEAT_MIN_SILENCE_MS = 25_000; // also the stall threshold in derivePhase
 
 function startHeartbeat(jobId: string, job: OrchestratorJob): void {
   job.heartbeat = setInterval(() => {

@@ -9,6 +9,7 @@ import {
   cancelJob,
   respondToWaiter,
   derivePhase,
+  HEARTBEAT_MIN_SILENCE_MS,
 } from './job-store';
 import type { JobEvent } from './job-store';
 
@@ -69,7 +70,7 @@ describe('heartbeat', () => {
       const { jobId } = createJob('test');
       const received: JobEvent[] = [];
       subscribeJob(jobId, (e) => received.push(e));
-      vi.advanceTimersByTime(26_000);
+      vi.advanceTimersByTime(HEARTBEAT_MIN_SILENCE_MS + 1_000);
       expect(received.some((e) => e.type === 'heartbeat')).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -101,7 +102,7 @@ describe('heartbeat', () => {
       const received: JobEvent[] = [];
       subscribeJob(jobId, (e) => received.push(e));
       const before = job.lastEventAt;
-      vi.advanceTimersByTime(26_000);
+      vi.advanceTimersByTime(HEARTBEAT_MIN_SILENCE_MS + 1_000);
       // Assert heartbeat actually fired — otherwise the lastEventAt check
       // below is vacuously true and we'd miss a broken heartbeat path.
       expect(received.some((e) => e.type === 'heartbeat')).toBe(true);
@@ -175,7 +176,7 @@ describe('derivePhase', () => {
     const { jobId } = createJob('hi');
     const job = getJob(jobId)!;
     job.lastEventAt = start;
-    vi.setSystemTime(start + 26_000);
+    vi.setSystemTime(start + HEARTBEAT_MIN_SILENCE_MS + 1_000);
     expect(derivePhase(job)).toBe('stalled');
   });
 
