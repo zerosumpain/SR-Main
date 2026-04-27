@@ -64,12 +64,33 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   }
   if (stream.closed) return;
   stream.buffer.push(event);
-  // Reset idle watchdog on any non-heartbeat event. Heartbeats are
-  // informational and must not mask a genuinely stuck job.
-  if (event.type !== 'heartbeat') {
-    const job = jobs.get(jobId);
-    if (job) job.lastEventAt = Date.now();
+
+  const job = jobs.get(jobId);
+  if (job) {
+    // CRITICAL: reset idle watchdog on any non-heartbeat event. Heartbeats are
+    // informational and must not mask a genuinely stuck job.
+    if (event.type !== 'heartbeat') {
+      job.lastEventAt = Date.now();
+    }
+    // Maintain phase-derivation slots in lock-step with the event stream.
+    if (event.type === 'tool_start') {
+      job.inflightTool = {
+        name: event.tool,
+        toolCallId: event.toolCallId ?? '',
+        since: Date.now(),
+      };
+    } else if (event.type === 'tool_result') {
+      if (job.inflightTool && job.inflightTool.toolCallId === (event.toolCallId ?? '')) {
+        job.inflightTool = null;
+      }
+    } else if (event.type === 'token') {
+      // Both lastEventAt (set above) AND lastTokenAt must be touched. Without
+      // lastTokenAt, derivePhase never returns 'streaming'. Without lastEventAt
+      // the watchdog would still see freshness via lastTokenAt path — keep both.
+      job.lastTokenAt = Date.now();
+    }
   }
+
   for (const sub of stream.subscribers) {
     try { sub(event); } catch { /* ignore broken subscriber */ }
   }
@@ -376,6 +397,17 @@ export function createWaiter<T = unknown>(
   });
   if (!waiter) throw new Error('waiter init failed');
   map.set(key, waiter);
+
+  const job = jobs.get(jobId);
+  if (job) {
+    const kind: 'plan' | 'clarify' | 'confirm' | null =
+      key.startsWith('plan:') ? 'plan'
+      : key.startsWith('clarify:') ? 'clarify'
+      : key.startsWith('confirm:') ? 'confirm'
+      : null;
+    if (kind) job.awaitingWaiter = { kind, key, since: Date.now() };
+  }
+
   return {
     awaitResponse: () => promise,
     respond: (value: T) => {
@@ -383,6 +415,8 @@ export function createWaiter<T = unknown>(
       const w = m.get(key); if (!w) return;
       m.delete(key);
       if (m.size === 0) waiters.delete(jobId);
+      const j = jobs.get(jobId);
+      if (j && j.awaitingWaiter && j.awaitingWaiter.key === key) j.awaitingWaiter = null;
       w.resolve(value);
     },
   };
@@ -393,6 +427,8 @@ export function respondToWaiter(jobId: string, key: string, value: unknown): boo
   const w = m.get(key); if (!w) return false;
   m.delete(key);
   if (m.size === 0) waiters.delete(jobId);
+  const j = jobs.get(jobId);
+  if (j && j.awaitingWaiter && j.awaitingWaiter.key === key) j.awaitingWaiter = null;
   w.resolve(value);
   return true;
 }
@@ -402,6 +438,8 @@ export function rejectWaiter(jobId: string, key: string, reason: string): void {
   const w = m.get(key); if (!w) return;
   m.delete(key);
   if (m.size === 0) waiters.delete(jobId);
+  const j = jobs.get(jobId);
+  if (j && j.awaitingWaiter && j.awaitingWaiter.key === key) j.awaitingWaiter = null;
   w.reject(new Error(reason));
 }
 
@@ -411,4 +449,6 @@ export function failAllWaiters(jobId: string, reason: string): void {
   const m = waiters.get(jobId); if (!m) return;
   for (const [, w] of m) w.reject(new Error(reason));
   waiters.delete(jobId);
+  const j = jobs.get(jobId);
+  if (j) j.awaitingWaiter = null;
 }

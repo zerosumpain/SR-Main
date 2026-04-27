@@ -186,3 +186,35 @@ describe('derivePhase', () => {
     expect(derivePhase(job)).toBe('thinking');
   });
 });
+
+describe('inflightTool tracking', () => {
+  it('tool_start sets inflightTool, tool_result clears it', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    publishJobEvent(jobId, { type: 'tool_start', tool: 't1', args: {}, toolCallId: 'c1' });
+    expect(job.inflightTool?.name).toBe('t1');
+    expect(job.inflightTool?.toolCallId).toBe('c1');
+    publishJobEvent(jobId, { type: 'tool_result', tool: 't1', result: {}, status: 'done', toolCallId: 'c1' });
+    expect(job.inflightTool).toBeNull();
+  });
+
+  it('token event updates lastTokenAt', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    expect(job.lastTokenAt).toBeNull();
+    publishJobEvent(jobId, { type: 'token', delta: 'hello' });
+    expect(job.lastTokenAt).not.toBeNull();
+  });
+});
+
+describe('awaitingWaiter tracking', () => {
+  it('createWaiter sets awaitingWaiter, respondToWaiter clears it', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    const w = createWaiter<unknown>(jobId, 'plan:abc');
+    expect(job.awaitingWaiter?.kind).toBe('plan');
+    expect(job.awaitingWaiter?.key).toBe('plan:abc');
+    w.respond('ok');
+    expect(job.awaitingWaiter).toBeNull();
+  });
+});
