@@ -22,6 +22,7 @@ import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
+import { getJob } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
@@ -163,6 +164,10 @@ async function runSingleToolCall(
 
   const runningSummary = summarizeRunningTool(fnName, fnArgs);
   onToolProgress?.({ tool: fnName, toolCallId: toolCall.id, args: fnArgs, status: 'running' });
+  if (ctx.parentJobId) {
+    const j = getJob(ctx.parentJobId);
+    if (j) j.currentStep = `${fnName}${runningSummary ? `: ${runningSummary}` : ''}`.slice(0, 140);
+  }
   onProgress?.(`${fnName}: running${runningSummary ? ` — ${runningSummary}` : ''}\n`);
   onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs, toolCallId: toolCall.id, summary: runningSummary || undefined });
 
@@ -817,6 +822,14 @@ export async function generalChat(
 
         const decision = await awaitPlanApproval(options.jobId, extracted.plan);
 
+        if (options.jobId) {
+          const job = getJob(options.jobId);
+          if (job && (decision.decision === 'approved' || decision.decision === 'adjusted')) {
+            job.plan = extracted.plan;
+            job.coveredStepIds = new Set();
+          }
+        }
+
         if (decision.decision === 'rejected') {
           responseText = extracted.cleaned || 'Plan rejected — stopping here.';
           break;
@@ -875,6 +888,19 @@ export async function generalChat(
     );
     for (const { toolMessage } of toolOutcomes) {
       messages.push(toolMessage);
+      if (options.jobId) {
+        const job = getJob(options.jobId);
+        if (job?.plan) {
+          const haystack = (typeof toolMessage.content === 'string' ? toolMessage.content : '').toLowerCase();
+          for (const step of job.plan.steps) {
+            if (job.coveredStepIds.has(step.id)) continue;
+            const idHit = !!step.id && haystack.includes(step.id.toLowerCase());
+            const titleSnippet = (step.title ?? '').slice(0, 30).toLowerCase();
+            const titleHit = titleSnippet.length >= 6 && haystack.includes(titleSnippet);
+            if (idHit || titleHit) job.coveredStepIds.add(step.id);
+          }
+        }
+      }
     }
   }
 
