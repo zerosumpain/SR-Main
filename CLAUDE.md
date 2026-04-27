@@ -8,6 +8,8 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - **Auth:** Google OAuth via Auth.js
 - **LLM:** All AI calls via `$lib/vertex` (never direct API calls)
 
+> **Note:** OpenClaw and the `oc` CLI were decommissioned on 2026-04-27. Some references below (notably `~/.openclaw/...` paths and the `jkai-sandbox` container) still appear in code and docs — they are paths/containers that pre-date the decommissioning and may now be inert. Verify the underlying infrastructure exists before relying on a feature that points at OpenClaw-era resources.
+
 ## Key areas
 
 - `src/lib/workflows/` — workflow engine nodes and runners
@@ -18,12 +20,12 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 
 Two workflow nodes + supporting infra:
 
-- `stealth-scrape` node — headless Chromium with `playwright-stealth`, persistent per-domain profiles at `~/.openclaw/scraper-profiles/<profile>/`, human pacing, form/cookie login, pagination.
+- `stealth-scrape` node — headless Chromium with `playwright-stealth`, persistent per-domain profiles at `~/.openclaw/scraper-profiles/<profile>/` (path predates the OpenClaw decommissioning — directory is now just an inert data folder), human pacing, form/cookie login, pagination.
 - `stealth-scrape-llm` node — LLM-based field extraction over scraped HTML/text for when CSS selectors are too brittle.
 
 **Admin UI:** `/admin/scraper` — manage encrypted login credentials, inspect browser profiles, ad-hoc test runs, last 50 run logs.
 
-**Runtime:** The Python Playwright runner lives in `src/lib/workflows/scraper/python/scrape.py`; it executes inside the `jkai-sandbox` Docker container on homeserv via `execInSandbox`. The sandbox bind-mounts `~/.openclaw/scraper-profiles/` for cross-restart profile persistence.
+**Runtime:** The Python Playwright runner lives in `src/lib/workflows/scraper/python/scrape.py`; it executes inside the `jkai-sandbox` Docker container on homeserv via `execInSandbox`. The sandbox bind-mounts `~/.openclaw/scraper-profiles/` for cross-restart profile persistence. *Note:* `jkai-sandbox` was originally provisioned alongside the OpenClaw stack — verify the container is still running on homeserv before relying on the scraper end-to-end.
 
 **Critical: homeserv-only.** `runScrape()` refuses to execute on any host other than `homeserv` in production (escape hatch: `SCRAPER_ALLOW_NON_HOMESERV=1`). Stealth only makes sense from a residential IP; running from the Hetzner VPS would be counterproductive and could get the IP banned.
 
