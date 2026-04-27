@@ -67,6 +67,12 @@ export interface NodeDefinition {
 
 export interface NodeResult {
   output: Record<string, unknown>;
+  /**
+   * How many rows / records this node produced. Set explicitly by every
+   * executor — defaults to 1 in the engine when omitted (e.g. legacy executors).
+   * Used for status pills on nodes and labels on outgoing edges.
+   */
+  rowCount?: number;
   logs?: string[];
   metadata?: Record<string, unknown>;
   /** When set, the engine halts the run and waits for human input. */
