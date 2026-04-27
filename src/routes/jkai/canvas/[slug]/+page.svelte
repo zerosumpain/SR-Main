@@ -70,7 +70,13 @@
   // $state.raw tracks the container reference only.
   let liveStatus = $state.raw<Record<string, NodeStatus>>({});
   let liveData = $state.raw<
-    Record<string, { inputData?: unknown; outputData?: unknown; error?: string | null }>
+    Record<string, {
+      inputData?: unknown;
+      outputData?: unknown;
+      error?: string | null;
+      rowCount?: number;
+      durationMs?: number;
+    }>
   >({});
   let activeRunId = $state<string | null>(null);
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
@@ -916,13 +922,28 @@
       scheduleLiveFlush();
     } else if (evt.type === 'node_completed' && evt.nodeId) {
       pendingLiveStatus.set(evt.nodeId, 'ok');
-      if (evt.data) {
-        pendingLiveData.set(evt.nodeId, {
-          ...(pendingLiveData.get(evt.nodeId) ?? {}),
-          inputData: (evt.data.inputData ?? liveData[evt.nodeId]?.inputData) as unknown,
-          outputData: (evt.data.outputData ?? evt.data.output ?? undefined) as unknown,
-        });
-      }
+      const data = (evt.data ?? {}) as Record<string, unknown>;
+      const rowCount = typeof data._rowCount === 'number' ? (data._rowCount as number) : undefined;
+      const durationMs = typeof data._durationMs === 'number' ? (data._durationMs as number) : undefined;
+      // Strip the metadata keys from the visible output so they don't pollute
+      // the rendered Output panel; we surface them via the status pill instead.
+      const { _rowCount: _r, _durationMs: _d, inputData, outputData, output, ...rest } = data;
+      void _r; void _d;
+      const visibleOutput =
+        outputData !== undefined
+          ? outputData
+          : output !== undefined
+            ? output
+            : Object.keys(rest).length > 0
+              ? rest
+              : undefined;
+      pendingLiveData.set(evt.nodeId, {
+        ...(pendingLiveData.get(evt.nodeId) ?? {}),
+        inputData: (inputData ?? liveData[evt.nodeId]?.inputData) as unknown,
+        outputData: visibleOutput as unknown,
+        rowCount,
+        durationMs,
+      });
       scheduleLiveFlush();
     } else if (evt.type === 'node_failed' && evt.nodeId) {
       pendingLiveStatus.set(evt.nodeId, 'failed');
