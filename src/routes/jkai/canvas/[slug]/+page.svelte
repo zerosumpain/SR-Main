@@ -18,6 +18,21 @@
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
+  import { getDefinition } from '$lib/workflows/registry-client';
+
+  // Node types that always render a config panel (specialised panels), in addition
+  // to anything whose NodeDefinition.basicConfig is populated.
+  const SPECIALISED_PANEL_TYPES = new Set([
+    'stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step',
+    'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search',
+    'code-execute',
+  ]);
+
+  function menuShowsConfigPanel(type: string): boolean {
+    if (SPECIALISED_PANEL_TYPES.has(type)) return true;
+    const def = getDefinition(type);
+    return !!(def?.basicConfig && def.basicConfig.length > 0);
+  }
   import CollapsibleOutput from '$lib/canvas/CollapsibleOutput.svelte';
 
   let { data } = $props();
@@ -4403,13 +4418,15 @@
                 </section>
               {/if}
 
-              <!-- Schema-driven config panel for scraper / gmail / interactive-step nodes -->
-              {#if ['stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step', 'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search', 'code-execute'].includes(menuNode.type)}
-                {@const Panel = getPanel(menuNode.type)}
+              <!-- Schema-driven config panel: specialised → BasicConfigForm (basicConfig) → JSON fallback -->
+              {#if menuShowsConfigPanel(menuNode.type)}
+                {@const menuDefinition = getDefinition(menuNode.type)}
+                {@const Panel = getPanel(menuNode.type, menuDefinition)}
                 <div class="menu-config-section">
                   <Panel
                     config={configDraft}
                     onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
+                    definition={menuDefinition}
                   />
                 </div>
               {/if}

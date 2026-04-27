@@ -4,14 +4,17 @@ import StealthScrapeLlmPanel from './StealthScrapeLlmPanel.svelte';
 import InteractiveStepPanel from './InteractiveStepPanel.svelte';
 import SiteMapperPanel from './SiteMapperPanel.svelte';
 import CodeExecutePanel from './CodeExecutePanel.svelte';
+import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
+import type { NodeDefinition } from '$lib/workflows/types';
 
 export type PanelProps = {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  definition?: NodeDefinition;
 };
 
-const panels: Record<string, Component<PanelProps>> = {
+const specialized: Record<string, Component<PanelProps>> = {
   'stealth-scrape': StealthScrapePanel,
   'stealth-scrape-llm': StealthScrapeLlmPanel,
   'interactive-step': InteractiveStepPanel,
@@ -19,6 +22,20 @@ const panels: Record<string, Component<PanelProps>> = {
   'code-execute': CodeExecutePanel,
 };
 
-export function getPanel(type: string): Component<PanelProps> {
-  return panels[type] ?? GenericJsonPanel;
+/**
+ * Resolution order:
+ *   1. specialized panel for this type (if registered)
+ *   2. BasicConfigForm if the definition declares basicConfig
+ *   3. GenericJsonPanel as last-resort
+ */
+export function getPanel(type: string, definition?: NodeDefinition): Component<PanelProps> {
+  if (specialized[type]) return specialized[type];
+  if (definition?.basicConfig && definition.basicConfig.length > 0) {
+    // BasicConfigForm requires `definition` (non-optional in its props), so its
+    // own typed Component<...> is narrower than Component<PanelProps>. The
+    // resolver only returns it when the caller has a definition to pass, so
+    // this cast is sound at the call site.
+    return BasicConfigForm as unknown as Component<PanelProps>;
+  }
+  return GenericJsonPanel;
 }
