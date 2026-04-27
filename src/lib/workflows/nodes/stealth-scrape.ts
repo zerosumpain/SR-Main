@@ -238,7 +238,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           transcript: mapping.transcript.slice(-10),
         },
         metadata: { _selectedHandle: 'output' },
-        rowCount: mapping.firstItemSample ? 1 : 1,
+        rowCount: 1,
       };
     }
 

@@ -37,7 +37,8 @@ export const jkaiExecutor: NodeExecutor = {
 
       case 'list': {
         const result = await executeSiteTool('jkai_list_builds', {});
-        return { output: result, rowCount: 1 };
+        const builds = (result as { builds?: unknown[] }).builds;
+        return { output: result, rowCount: Array.isArray(builds) ? builds.length : 1 };
       }
 
       case 'control': {

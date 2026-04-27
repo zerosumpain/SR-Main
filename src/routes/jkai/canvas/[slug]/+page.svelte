@@ -873,6 +873,7 @@
     if (runMeta.state === 'running') return;
     liveStatus = {};
     liveData = {};
+    nodeStartedAt = {};
     runMeta = { state: 'running' };
     runStartedAt = Date.now();
     runSummary = null;
@@ -1787,6 +1788,7 @@
     closeMenu();
     liveStatus = {};
     liveData = {};
+    nodeStartedAt = {};
     runMeta = { state: 'running' };
     runStartedAt = Date.now();
     runSummary = null;
@@ -3368,17 +3370,18 @@
             <!-- Last-run status square. Green = completed OK, amber =
                  partial / warnings / running, red = failed. Absent when
                  the node has never run (status === 'idle' or undefined). -->
-            {#if statusDotColour(liveStatus[n.id] ?? n.status)}
+            {@const _status = liveStatus[n.id] ?? n.status}
+            {@const _colour = statusDotColour(_status)}
+            {@const _pill = statusPillText(n.id, _status)}
+            {#if _colour}
               <div
-                class="wf-node-status-dot wf-node-status-{statusDotColour(liveStatus[n.id] ?? n.status)}"
-                title={`Last run: ${liveStatus[n.id] ?? n.status}`}
-                aria-label={`status ${liveStatus[n.id] ?? n.status}`}
+                class="wf-node-status-dot wf-node-status-{_colour}"
+                title={`Last run: ${_status}`}
+                aria-label={`status ${_status}`}
               ></div>
             {/if}
-            {#if statusPillText(n.id, liveStatus[n.id] ?? n.status)}
-              <span
-                class="wf-node-status-pill wf-node-status-{statusDotColour(liveStatus[n.id] ?? n.status)}"
-              >{statusPillText(n.id, liveStatus[n.id] ?? n.status)}</span>
+            {#if _pill}
+              <span class="wf-node-status-pill wf-node-status-{_colour}">{_pill}</span>
             {/if}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
