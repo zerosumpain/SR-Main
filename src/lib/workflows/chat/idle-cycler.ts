@@ -3,6 +3,11 @@ import { pulseEvents, pulseSettings } from '$lib/db/schema';
 import { lt } from 'drizzle-orm';
 import { publishPulseEvent } from './pulse-bus';
 import type { PulseEvent, NewPulseEvent } from '$lib/db/schema';
+import { runHealthCheck } from './pulse-jobs/health-check';
+import { runAuditDigest } from './pulse-jobs/audit-digest';
+import { runWorkflowEfficiency } from './pulse-jobs/workflow-efficiency';
+import { runChatLogReview } from './pulse-jobs/chat-log-review';
+import { runMemoryUpdateReview } from './pulse-jobs/memory-update-review';
 
 export interface PulseJobContext {
   now: number;
@@ -82,11 +87,19 @@ export async function loadSettings(): Promise<void> {
     const [row] = await db.select().from(pulseSettings).limit(1);
     if (!row) return;
     idleQuietMs = row.idleQuietMs;
-    // Subsequent tasks (15-19) extend `scheduled` here by reading row.schedules.
-    // The skeleton starts with no jobs registered; tests inject one via _internal.setRunner.
+    const cfg = row.schedules as Record<string, { intervalMs: number; enabled: boolean }>;
+    scheduled.length = 0;
+    if (cfg.health_check)
+      scheduled.push({ kind: 'health_check', ...cfg.health_check, lastRunAt: 0, run: runHealthCheck });
+    if (cfg.audit_digest)
+      scheduled.push({ kind: 'audit_digest', ...cfg.audit_digest, lastRunAt: 0, run: runAuditDigest });
+    if (cfg.workflow_efficiency)
+      scheduled.push({ kind: 'workflow_efficiency', ...cfg.workflow_efficiency, lastRunAt: 0, run: runWorkflowEfficiency });
+    if (cfg.chat_log_review)
+      scheduled.push({ kind: 'chat_log_review', ...cfg.chat_log_review, lastRunAt: 0, run: runChatLogReview });
+    if (cfg.memory_update_review)
+      scheduled.push({ kind: 'memory_update_review', ...cfg.memory_update_review, lastRunAt: 0, run: runMemoryUpdateReview });
   } catch (err) {
-    // Tolerate missing table in tests / fresh installs, but log so a
-    // production misconfiguration doesn't go unnoticed.
     console.warn('[pulse-cycler] loadSettings failed, using defaults:', err instanceof Error ? err.message : err);
   }
 }
