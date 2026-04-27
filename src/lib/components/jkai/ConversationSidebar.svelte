@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PulseFeed from '$lib/components/jkai/PulseFeed.svelte';
+
   interface ConversationItem {
     id: string;
     title: string | null;
@@ -224,6 +226,7 @@
           </div>
         {/if}
       {/each}
+      <PulseFeed />
     </div>
 
     <!-- Footer actions -->
