@@ -247,6 +247,22 @@ async function runToolLoop(
             { dryRun: true },
           );
 
+          // Cap any string field at 500 chars before sending the captureLog
+          // to the LLM — a single intel-write or email body can otherwise be
+          // many KB, and across 3 rounds that can blow the context window.
+          const truncate = (v: unknown): unknown => {
+            if (typeof v === 'string') {
+              return v.length > 500 ? `${v.slice(0, 500)}…[truncated, ${v.length} chars total]` : v;
+            }
+            if (Array.isArray(v)) return v.map(truncate);
+            if (v && typeof v === 'object') {
+              const out: Record<string, unknown> = {};
+              for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = truncate(val);
+              return out;
+            }
+            return v;
+          };
+
           const captureLog: Array<{ nodeId: string; nodeType: string; capture: unknown }> = [];
           for (const [nodeId, output] of result.nodeOutputs.entries()) {
             if (
@@ -255,7 +271,7 @@ async function runToolLoop(
               (output as { simulated?: unknown }).simulated === true
             ) {
               const nodeType = definition.nodes.find((n) => n.id === nodeId)?.type ?? 'unknown';
-              captureLog.push({ nodeId, nodeType, capture: output });
+              captureLog.push({ nodeId, nodeType, capture: truncate(output) });
             }
           }
 

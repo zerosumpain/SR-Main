@@ -129,7 +129,9 @@ For each issue:
    - **use_node** or **create_node** only when the fix requires adding a new node
 3. Call finalize_workflow when all issues are addressed
 
-Fix only what the critic flagged — don't redesign the entire workflow.`;
+Fix only what the critic flagged — don't redesign the entire workflow.
+
+Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first and review its capture log. You have at most 3 verification rounds.`;
 }
 
 export function buildModifySystemPrompt(
@@ -162,6 +164,7 @@ ${edgesSummary}
 - Use search_nodes before assuming a node type exists
 - Explain what you're changing and why in each tool call's reason field
 - Call finalize_workflow when the modification is complete
+- Before finalize_workflow, if the modified workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first and review its capture log (3 rounds max).
 
 ## Node Registry
 

@@ -59,6 +59,7 @@ export const subWorkflowExecutor: NodeExecutor = {
       input,
       undefined,
       workflowId,
+      { dryRun: context.dryRun },
     );
 
     if (result.status === 'failed') {
