@@ -198,6 +198,7 @@ export class WorkflowEngine {
           // Capture input before execution
           nodeInputs.set(nodeId, { ...mergedInput });
 
+          const nodeStartedAt = Date.now();
           emit('node_started', nodeId);
 
           const context: ExecutionContext = {
@@ -225,8 +226,9 @@ export class WorkflowEngine {
               throw new PauseForHumanSignal(nodeId, result.pause.interactionId);
             }
 
+            const rowCount = typeof result.rowCount === 'number' ? result.rowCount : 1;
             nodeOutputs.set(nodeId, result.output);
-            emit('node_completed', nodeId, result.output);
+            emit('node_completed', nodeId, { ...result.output, _rowCount: rowCount, _durationMs: Date.now() - nodeStartedAt });
 
             // Handle conditional routing: if _selectedHandle is set, skip non-matching branches.
             // Edges with no sourceHandle (null/undefined) accept any selectedHandle — this keeps
@@ -379,12 +381,14 @@ export class WorkflowEngine {
                 }
 
                 // Retry the node
+                const retryStartedAt = Date.now();
                 emit('node_started', nodeId);
                 try {
                   const retryResult: NodeResult = await executor.execute(mergedInput, currentConfig, context);
+                  const retryRowCount = typeof retryResult.rowCount === 'number' ? retryResult.rowCount : 1;
                   nodeOutputs.set(nodeId, retryResult.output);
                   emit('healing_succeeded', nodeId, { attempt });
-                  emit('node_completed', nodeId, retryResult.output);
+                  emit('node_completed', nodeId, { ...retryResult.output, _rowCount: retryRowCount, _durationMs: Date.now() - retryStartedAt });
 
                   const retryHandle = retryResult.metadata?._selectedHandle as string | undefined;
                   if (retryHandle !== undefined) {
