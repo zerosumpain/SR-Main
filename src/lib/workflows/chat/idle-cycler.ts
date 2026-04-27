@@ -67,12 +67,13 @@ async function tick(): Promise<void> {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[pulse-cycler] ${job.kind} error:`, msg);
         try {
-          await db.insert(pulseEvents).values({
+          const inserted = await db.insert(pulseEvents).values({
             kind: job.kind,
             severity: 'error',
             summary: `${job.kind} failed: ${msg.slice(0, 120)}`,
             details: { error: msg },
-          } satisfies NewPulseEvent);
+          } satisfies NewPulseEvent).returning();
+          for (const ev of inserted) publishPulseEvent(ev as PulseEvent);
         } catch { /* swallow nested DB error */ }
       }
     }

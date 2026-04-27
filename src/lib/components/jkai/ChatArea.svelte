@@ -128,14 +128,13 @@
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
   type Phase = 'idle' | 'thinking' | 'streaming' | 'tool' | 'awaiting_user' | 'stalled';
-  const pulseEnabled = !!import.meta.env.PUBLIC_PULSE_ENABLED;
+  const pulseEnabled = import.meta.env.PUBLIC_PULSE_ENABLED === '1';
   let phase = $state<Phase>('idle');
   let pillLabel = $state('');
   let pillElapsed = $state(0);
   let pillWatchdog = $state<{ idleMs: number; idleLimitMs: number; totalMs: number; totalLimitMs: number } | null>(null);
   let lastEvents = $state<Array<{ type: string; summary: string; at: number }>>([]);
   let panelOpen = $state(false);
-  let pulseFeed = $state<Array<{ id: string; kind: string; severity: 'info'|'warn'|'error'; summary: string; at: number }>>([]);
   let activeStepId = $state<string | null>(null);
   let coveredStepIds = $state<string[]>([]);
   let planSteps = $state<Array<{ id: string; title: string }>>([]);
@@ -156,7 +155,6 @@
       case 'token':
         phase = 'streaming';
         if (!pillLabel) pillLabel = 'Streaming response…';
-        pushEvent('token', '');
         return;
       case 'tool_start':
         phase = 'tool';
@@ -836,6 +834,33 @@
   }
 </script>
 
+{#snippet pillBlock()}
+  {#if pulseEnabled}
+    <div class="pill-wrapper">
+      <HeartbeatPill
+        {phase}
+        label={pillLabel || (phase === 'idle' ? 'idle' : 'Working…')}
+        elapsedSec={pillElapsed}
+        watchdog={pillWatchdog ?? undefined}
+        onClick={() => (panelOpen = !panelOpen)}
+      />
+      {#if panelOpen}
+        <div class="pill-popover">
+          <HeartbeatPanel
+            {phase}
+            label={pillLabel}
+            watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
+            plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
+            events={[...lastEvents].reverse().map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
+            pulseEvents={[]}
+            onClose={() => (panelOpen = false)}
+          />
+        </div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
 <div class="flex flex-col h-full relative">
   <!-- Chat header -->
   <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2" style="border-color: var(--card-border);">
@@ -944,30 +969,7 @@
                     onresolve={() => { pendingClarify = null; }}
                   />
                 {/if}
-                {#if pulseEnabled}
-                  <div class="pill-wrapper">
-                    <HeartbeatPill
-                      {phase}
-                      label={pillLabel || (phase === 'idle' ? 'idle' : 'Working…')}
-                      elapsedSec={pillElapsed}
-                      watchdog={pillWatchdog ?? undefined}
-                      onClick={() => (panelOpen = !panelOpen)}
-                    />
-                    {#if panelOpen}
-                      <div class="pill-popover">
-                        <HeartbeatPanel
-                          {phase}
-                          label={pillLabel}
-                          watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
-                          plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
-                          events={[...lastEvents].reverse().map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
-                          pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
-                          onClose={() => (panelOpen = false)}
-                        />
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
+                {@render pillBlock()}
                 {#each Object.values(subAgents) as agent (agent.agentId)}
                   <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
                 {/each}
@@ -1055,30 +1057,7 @@
                   onresolve={() => { pendingClarify = null; }}
                 />
               {/if}
-              {#if pulseEnabled}
-                <div class="pill-wrapper">
-                  <HeartbeatPill
-                    {phase}
-                    label={pillLabel || (phase === 'idle' ? 'idle' : 'Working…')}
-                    elapsedSec={pillElapsed}
-                    watchdog={pillWatchdog ?? undefined}
-                    onClick={() => (panelOpen = !panelOpen)}
-                  />
-                  {#if panelOpen}
-                    <div class="pill-popover">
-                      <HeartbeatPanel
-                        {phase}
-                        label={pillLabel}
-                        watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
-                        plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
-                        events={[...lastEvents].reverse().map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
-                        pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
-                        onClose={() => (panelOpen = false)}
-                      />
-                    </div>
-                  {/if}
-                </div>
-              {/if}
+              {@render pillBlock()}
               {#each Object.values(subAgents) as agent (agent.agentId)}
                 <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
               {/each}

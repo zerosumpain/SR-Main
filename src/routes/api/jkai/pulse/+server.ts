@@ -9,6 +9,9 @@ export async function GET({ url }: { url: URL }) {
     return Response.json({ events: rows });
   }
 
+  let unsub: (() => void) | null = null;
+  let ka: ReturnType<typeof setInterval> | null = null;
+
   const stream = new ReadableStream({
     start(controller) {
       const enc = new TextEncoder();
@@ -18,10 +21,12 @@ export async function GET({ url }: { url: URL }) {
         for (const row of rows.slice().reverse()) send(row);
       });
 
-      const unsub = subscribePulse(send);
-      const ka = setInterval(() => controller.enqueue(enc.encode(': keepalive\n\n')), 25_000);
-
-      return () => { unsub(); clearInterval(ka); };
+      unsub = subscribePulse(send);
+      ka = setInterval(() => controller.enqueue(enc.encode(': keepalive\n\n')), 25_000);
+    },
+    cancel() {
+      if (unsub) { unsub(); unsub = null; }
+      if (ka) { clearInterval(ka); ka = null; }
     },
   });
 

@@ -6,7 +6,7 @@
     summary: string; details: Record<string, unknown>; at: string;
   }
 
-  const pulseEnabled = !!import.meta.env.PUBLIC_PULSE_ENABLED;
+  const pulseEnabled = import.meta.env.PUBLIC_PULSE_ENABLED === '1';
   let items = $state<Item[]>([]);
   let es: EventSource | null = null;
 

@@ -282,9 +282,7 @@ export const POST: RequestHandler = async ({ request }) => {
             } else {
               job.toolSteps.push(step);
             }
-            if (step.status === 'running') {
-              job.currentStep = `Running ${step.tool}…`;
-            }
+            // currentStep is kept fresh by runSingleToolCall; no override needed here
           },
           onStreamEvent: (event) => {
             if (abortController.signal.aborted) return;
