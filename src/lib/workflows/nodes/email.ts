@@ -28,7 +28,7 @@ export const emailExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const to = interpolateTemplate((config.to as string) || '', input);
     const subject = interpolateTemplate((config.subject as string) || '', input);
@@ -37,6 +37,14 @@ export const emailExecutor: NodeExecutor = {
 
     if (!to) {
       return { output: { error: 'No recipient (to) configured' }, rowCount: 1 };
+    }
+
+    if (context.dryRun) {
+      return {
+        output: { simulated: true, would_send: { to, subject, body } },
+        rowCount: 1,
+        logs: [`[dry-run] would send email to ${to} (subject: ${String(subject).slice(0, 80)})`],
+      };
     }
 
     const isHtml = body.trimStart().startsWith('<');

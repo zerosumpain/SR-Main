@@ -80,6 +80,14 @@ export const dataStoreExecutor: NodeExecutor = {
         value = input.value !== undefined ? input.value : input;
       }
 
+      if (context.dryRun) {
+        return {
+          output: { simulated: true, would_write: { key, value } },
+          rowCount: 1,
+          logs: [`[dry-run] would set data-store key "${key}"`],
+        };
+      }
+
       await setStoreValue(workflowId, key, value);
       return { output: { key, value, stored: true }, rowCount: 1 };
     }

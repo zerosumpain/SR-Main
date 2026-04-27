@@ -24,8 +24,6 @@ export const gmailSendExecutor: NodeExecutor = {
   type: 'gmail-send',
 
   async execute(input, config, context): Promise<NodeResult> {
-    const acct = await loadAccount(config, input);
-
     const interp = (tpl: string) => interpolateTemplateStrict(tpl, input).result;
 
     const to = interp(String(config.to ?? ''));
@@ -34,6 +32,24 @@ export const gmailSendExecutor: NodeExecutor = {
     const bodyHtml = interp(String(config.bodyHtml ?? '')) || undefined;
     const cc = interp(String(config.cc ?? '')) || undefined;
     const bcc = interp(String(config.bcc ?? '')) || undefined;
+
+    if (context.dryRun) {
+      const accountId = Number(
+        (config.accountId as number | string | undefined) ??
+        (input.accountId as number | string | undefined) ??
+        0,
+      );
+      return {
+        output: {
+          simulated: true,
+          would_send: { accountId, to, subject, body: bodyHtml ?? bodyText ?? '' },
+        },
+        rowCount: 1,
+        logs: [`[dry-run] would send Gmail to ${to} (subject: ${String(subject).slice(0, 80)})`],
+      };
+    }
+
+    const acct = await loadAccount(config, input);
 
     const result = await gmailService.sendMessage(acct, { to, subject, bodyText, bodyHtml, cc, bcc });
     return {

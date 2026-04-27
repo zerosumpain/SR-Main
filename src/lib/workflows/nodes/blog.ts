@@ -10,7 +10,7 @@ export const blogExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
     if (!operation) {
@@ -34,6 +34,20 @@ export const blogExecutor: NodeExecutor = {
         const title = interpolateTemplate((config.title as string) || '', input);
         const content = interpolateTemplate((config.content as string) || '', input);
         if (!title) return { output: { success: false, error: 'Title is required for create' }, rowCount: 1 };
+        if (context.dryRun) {
+          return {
+            output: {
+              simulated: true,
+              would_publish: {
+                title,
+                slug: (config.slug as string | undefined) ?? null,
+                status: (config.status as string | undefined) ?? 'draft',
+              },
+            },
+            rowCount: 1,
+            logs: [`[dry-run] would create blog post "${title}" (status: ${config.status ?? 'draft'})`],
+          };
+        }
         const args: Record<string, unknown> = { title, content };
         if (config.status) args.status = config.status;
         if (config.tags) args.tags = config.tags;
@@ -44,8 +58,23 @@ export const blogExecutor: NodeExecutor = {
       case 'update': {
         const postId = interpolateTemplate((config.postId as string) || '', input);
         if (!postId) return { output: { success: false, error: 'No postId configured for update' }, rowCount: 1 };
+        const interpolatedTitle = config.title ? interpolateTemplate((config.title as string), input) : undefined;
+        if (context.dryRun) {
+          return {
+            output: {
+              simulated: true,
+              would_publish: {
+                title: interpolatedTitle ?? `(unchanged, postId=${postId})`,
+                slug: (config.slug as string | undefined) ?? null,
+                status: (config.status as string | undefined) ?? null,
+              },
+            },
+            rowCount: 1,
+            logs: [`[dry-run] would update blog post ${postId}${interpolatedTitle ? ` -> "${interpolatedTitle}"` : ''}`],
+          };
+        }
         const args: Record<string, unknown> = { postId };
-        if (config.title) args.title = interpolateTemplate((config.title as string), input);
+        if (interpolatedTitle !== undefined) args.title = interpolatedTitle;
         if (config.content) args.content = interpolateTemplate((config.content as string), input);
         if (config.status) args.status = config.status;
         if (config.tags) args.tags = config.tags;

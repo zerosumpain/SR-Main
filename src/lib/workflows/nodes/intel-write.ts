@@ -54,6 +54,20 @@ export const intelWriteExecutor: NodeExecutor = {
     if (sourceTag) metadata.sourceTag = sourceTag;
     if (sourceUrl) metadata.sourceUrl = sourceUrl;
 
+    if (context.dryRun) {
+      return {
+        output: {
+          simulated: true,
+          would_write: {
+            collection: 'intel-notes',
+            record: { title: title ?? null, format, content, metadata },
+          },
+        },
+        rowCount: 1,
+        logs: [`[dry-run] would create intel note (format: ${format}, content len: ${content.length})`],
+      };
+    }
+
     const noteId = await createNote({
       title,
       rawContent: content,

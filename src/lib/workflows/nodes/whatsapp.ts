@@ -10,7 +10,7 @@ export const whatsappExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const to = interpolateTemplate((config.to as string) || '', input);
     const message = interpolateTemplate((config.message as string) || '', input);
@@ -21,6 +21,14 @@ export const whatsappExecutor: NodeExecutor = {
 
     if (!message) {
       return { output: { sent: false, error: 'No message content configured' }, rowCount: 1 };
+    }
+
+    if (context.dryRun) {
+      return {
+        output: { simulated: true, would_send: { to, message } },
+        rowCount: 1,
+        logs: [`[dry-run] would send WhatsApp to ${to}: ${String(message).slice(0, 80)}`],
+      };
     }
 
     const service = getWhatsAppService();

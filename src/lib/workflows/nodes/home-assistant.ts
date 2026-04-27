@@ -11,7 +11,7 @@ export const homeAssistantExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as HAOperation | undefined;
     if (!operation) {
@@ -37,6 +37,16 @@ export const homeAssistantExecutor: NodeExecutor = {
         if (rawData) {
           try { serviceData = JSON.parse(rawData); } catch { serviceData = undefined; }
         }
+        if (context.dryRun) {
+          return {
+            output: {
+              simulated: true,
+              would_call: { domain, service: svc, entity_id: entityId || undefined, data: serviceData },
+            },
+            rowCount: 1,
+            logs: [`[dry-run] would call HA service ${domain}.${svc} on ${entityId || '(no entity)'}`],
+          };
+        }
         const result = await service.callService(domain, svc, entityId || undefined, serviceData);
         return { output: result, rowCount: 1 };
       }
@@ -48,6 +58,16 @@ export const homeAssistantExecutor: NodeExecutor = {
         const rawEvent = interpolateTemplate((config.eventData as string) || '', input);
         if (rawEvent) {
           try { eventData = JSON.parse(rawEvent); } catch { eventData = undefined; }
+        }
+        if (context.dryRun) {
+          return {
+            output: {
+              simulated: true,
+              would_call: { domain: 'event', service: eventType, entity_id: undefined, data: eventData },
+            },
+            rowCount: 1,
+            logs: [`[dry-run] would fire HA event ${eventType}`],
+          };
         }
         const result = await service.fireEvent(eventType, eventData);
         return { output: result, rowCount: 1 };
