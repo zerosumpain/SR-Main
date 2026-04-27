@@ -17,6 +17,7 @@ const mockContext: ExecutionContext = {
   runId: 'test-run',
   workflowId: '',
   workspaceDir: '/tmp/test',
+  dryRun: false,
   emit: () => {},
   getNodeOutput: () => undefined,
   checkBreakpoint: async () => {},

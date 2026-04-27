@@ -92,6 +92,8 @@ export interface ExecutionContext {
   runId: string;
   workflowId: string;
   workspaceDir: string;
+  /** When true, side-effecting nodes must short-circuit and return a simulated output. */
+  dryRun: boolean;
   emit: (event: WorkflowEvent) => void;
   getNodeOutput: (nodeId: string) => Record<string, unknown> | undefined;
   checkBreakpoint: () => Promise<void>;

@@ -40,6 +40,7 @@ const mockContext: ExecutionContext = {
   runId: 'test-run',
   workflowId: 'wf-123',
   workspaceDir: '/tmp/test',
+  dryRun: false,
   emit: () => {},
   getNodeOutput: () => undefined,
   checkBreakpoint: async () => {},

@@ -96,7 +96,7 @@ export class WorkflowEngine {
     runId: string,
     preSeededOutputs: Record<string, Record<string, unknown>>,
     workflowId?: string,
-    options?: { selfHealing?: boolean },
+    options?: { selfHealing?: boolean; dryRun?: boolean },
   ): Promise<EngineResult> {
     return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs);
   }
@@ -107,7 +107,7 @@ export class WorkflowEngine {
     initialInput: Record<string, unknown>,
     breakpoints?: Set<string>,
     workflowId?: string,
-    options?: { selfHealing?: boolean },
+    options?: { selfHealing?: boolean; dryRun?: boolean },
     preSeededOutputs?: Record<string, Record<string, unknown>>,
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
@@ -205,6 +205,7 @@ export class WorkflowEngine {
             runId,
             workflowId: workflowId ?? workflow.id,
             workspaceDir: `/tmp/workflow-${runId}`,
+            dryRun: options?.dryRun ?? false,
             emit: (event) => emitWorkflowEvent(event),
             getNodeOutput: (id) => nodeOutputs.get(id),
             checkBreakpoint: async () => {},

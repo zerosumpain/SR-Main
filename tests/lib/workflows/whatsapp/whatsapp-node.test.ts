@@ -18,6 +18,7 @@ const mockContext: ExecutionContext = {
   runId: 'run-1',
   workflowId: 'wf-1',
   workspaceDir: '/tmp',
+  dryRun: false,
   emit: vi.fn(),
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),

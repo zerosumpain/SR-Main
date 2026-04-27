@@ -29,6 +29,7 @@ const stubContext: ExecutionContext = {
   runId: 'parent-run',
   workflowId: 'parent-wf',
   workspaceDir: '/tmp/test',
+  dryRun: false,
   emit: vi.fn(),
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),
