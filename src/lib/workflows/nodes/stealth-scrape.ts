@@ -22,6 +22,28 @@ export { stealthScrapeDef } from './stealth-scrape.def';
 const INTERACTIVE_TIMEOUT_MINUTES = 15;
 const INTERACTIVE_POLL_INTERVAL_MS = 3_000;
 
+/**
+ * Count the rows produced by a scrape result. Each ExtractedPage's `fields`
+ * is a Record where values are either single strings (one row per page) or
+ * string[] (one row per array entry). The right rowCount is the sum across
+ * all pages of the LARGEST array length in each page's fields — that's the
+ * "items per page" count for list scrapes (job listings, search results,
+ * directory pages). Falls back to pages.length when no arrays are present.
+ */
+function countScrapeRows(pages: Array<{ fields?: Record<string, unknown> }> | undefined): number {
+  if (!pages || pages.length === 0) return 0;
+  let total = 0;
+  for (const page of pages) {
+    const fields = page?.fields ?? {};
+    let pageMax = 0;
+    for (const v of Object.values(fields)) {
+      if (Array.isArray(v) && v.length > pageMax) pageMax = v.length;
+    }
+    total += pageMax > 0 ? pageMax : 1;
+  }
+  return total;
+}
+
 export const stealthScrapeExecutor: NodeExecutor = {
   type: 'stealth-scrape',
 
@@ -177,7 +199,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           acceptanceMet: pb.acceptanceMet,
         },
         metadata: { _selectedHandle: 'output' },
-        rowCount: pb.pages.length || 1,
+        rowCount: pb.itemCount || countScrapeRows(pb.pages) || 1,
       };
     }
 
@@ -238,7 +260,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           transcript: mapping.transcript.slice(-10),
         },
         metadata: { _selectedHandle: 'output' },
-        rowCount: 1,
+        rowCount: mapping.itemCount || 1,
       };
     }
 
@@ -337,7 +359,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
         runLogId: result.runLogId,
       },
       metadata: { _selectedHandle: 'output' },
-      rowCount: result.pages.length || 1,
+      rowCount: countScrapeRows(result.pages) || 1,
     };
   },
 

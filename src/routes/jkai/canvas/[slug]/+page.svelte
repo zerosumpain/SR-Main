@@ -894,7 +894,13 @@
     // the common case is: user detached chat to decouple, and Run
     // fires the real pipe from the trigger outward.
     if (runMeta.state === 'running') return;
-    liveStatus = {};
+    // Seed every node to 'idle' so the pill no longer falls back to
+    // n.status (which is the persisted result of the LAST run, e.g. 'ok').
+    // Without this seed, every node visibly shows "Done" until the engine
+    // emits node_started for it.
+    const idleSeed: Record<string, NodeStatus> = {};
+    for (const n of canvas?.nodes ?? []) idleSeed[n.id] = 'idle';
+    liveStatus = idleSeed;
     liveData = {};
     nodeStartedAt = {};
     runMeta = { state: 'running' };
@@ -1809,7 +1815,9 @@
     if (!target) return;
     if (runMeta.state === 'running') return;
     closeMenu();
-    liveStatus = {};
+    const idleSeed: Record<string, NodeStatus> = {};
+    for (const n of canvas?.nodes ?? []) idleSeed[n.id] = 'idle';
+    liveStatus = idleSeed;
     liveData = {};
     nodeStartedAt = {};
     runMeta = { state: 'running' };
