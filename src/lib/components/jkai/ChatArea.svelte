@@ -960,7 +960,7 @@
                           label={pillLabel}
                           watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
                           plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
-                          events={lastEvents.map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
+                          events={[...lastEvents].reverse().map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
                           pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
                           onClose={() => (panelOpen = false)}
                         />
@@ -1071,7 +1071,7 @@
                         label={pillLabel}
                         watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
                         plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
-                        events={lastEvents.map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
+                        events={[...lastEvents].reverse().map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
                         pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
                         onClose={() => (panelOpen = false)}
                       />
@@ -1290,6 +1290,11 @@
   @keyframes typing-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
     30% { transform: translateY(-4px); opacity: 0.7; }
+  }
+
+  @keyframes hb-pulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1.1);  }
   }
 
   .step-cards {
