@@ -67,17 +67,22 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
 
   const job = jobs.get(jobId);
   if (job) {
+    const now = Date.now();
     // CRITICAL: reset idle watchdog on any non-heartbeat event. Heartbeats are
     // informational and must not mask a genuinely stuck job.
     if (event.type !== 'heartbeat') {
-      job.lastEventAt = Date.now();
+      job.lastEventAt = now;
     }
     // Maintain phase-derivation slots in lock-step with the event stream.
+    // The empty-string `toolCallId` fallback is safe because the orchestrator
+    // runs tools sequentially per job: at most one anonymous tool call can be
+    // in flight at a time, so a result with no id can only match a start with
+    // no id.
     if (event.type === 'tool_start') {
       job.inflightTool = {
         name: event.tool,
         toolCallId: event.toolCallId ?? '',
-        since: Date.now(),
+        since: now,
       };
     } else if (event.type === 'tool_result') {
       if (job.inflightTool && job.inflightTool.toolCallId === (event.toolCallId ?? '')) {
@@ -87,7 +92,7 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
       // Both lastEventAt (set above) AND lastTokenAt must be touched. Without
       // lastTokenAt, derivePhase never returns 'streaming'. Without lastEventAt
       // the watchdog would still see freshness via lastTokenAt path — keep both.
-      job.lastTokenAt = Date.now();
+      job.lastTokenAt = now;
     }
   }
 

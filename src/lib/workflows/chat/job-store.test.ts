@@ -208,13 +208,29 @@ describe('inflightTool tracking', () => {
 });
 
 describe('awaitingWaiter tracking', () => {
-  it('createWaiter sets awaitingWaiter, respondToWaiter clears it', () => {
+  it('createWaiter sets awaitingWaiter, the returned respond callback clears it', () => {
     const { jobId } = createJob('hi');
     const job = getJob(jobId)!;
     const w = createWaiter<unknown>(jobId, 'plan:abc');
     expect(job.awaitingWaiter?.kind).toBe('plan');
     expect(job.awaitingWaiter?.key).toBe('plan:abc');
     w.respond('ok');
+    expect(job.awaitingWaiter).toBeNull();
+  });
+
+  it('respondToWaiter (free function) also clears awaitingWaiter on key match', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    createWaiter<unknown>(jobId, 'clarify:q1');
+    expect(job.awaitingWaiter?.kind).toBe('clarify');
+    expect(respondToWaiter(jobId, 'clarify:q1', { answer: 'yes' })).toBe(true);
+    expect(job.awaitingWaiter).toBeNull();
+  });
+
+  it('createWaiter with unknown prefix leaves awaitingWaiter null', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    createWaiter<unknown>(jobId, 'custom:xyz');
     expect(job.awaitingWaiter).toBeNull();
   });
 });
