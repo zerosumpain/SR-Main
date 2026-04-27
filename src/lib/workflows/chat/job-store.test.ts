@@ -109,3 +109,17 @@ describe('heartbeat', () => {
     }
   });
 });
+
+describe('createJob initialises new heartbeat/plan fields', () => {
+  it('sets inflightTool, awaitingWaiter, plan to null and counters to defaults', () => {
+    const { jobId, job } = createJob('m');
+    expect(job.inflightTool).toBeNull();
+    expect(job.awaitingWaiter).toBeNull();
+    expect(job.plan).toBeNull();
+    expect(job.coveredStepIds).toBeInstanceOf(Set);
+    expect(job.coveredStepIds.size).toBe(0);
+    expect(job.selfProdCount).toBe(0);
+    expect(job.lastSelfProdAt).toBeNull();
+    expect(typeof jobId).toBe('string');
+  });
+});

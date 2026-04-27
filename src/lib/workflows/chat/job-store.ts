@@ -120,7 +120,9 @@ export interface OrchestratorJob {
   // persist what was streamed so far instead of throwing it away.
   partialResponse: string;
   // --- Phase / pill ---
+  // `since` fields below are epoch ms; the heartbeat wire field `sinceMs` is Date.now() - since
   inflightTool: { name: string; toolCallId: string; since: number } | null;
+  // `key` matches the waiter-map key, e.g. 'plan:<planId>', 'clarify:<clarifyId>', 'confirm:<confirmId>'
   awaitingWaiter: { kind: 'plan' | 'clarify' | 'confirm'; key: string; since: number } | null;
   // --- Plan + self-prod ---
   plan: PlanPayload | null;
