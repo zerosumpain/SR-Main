@@ -47,6 +47,7 @@ export const siteMapperExecutor: NodeExecutor = {
         error: result.error,
       },
       metadata: { _selectedHandle: 'output' },
+      rowCount: result.itemCount ?? 1,
     };
   },
 

@@ -69,6 +69,7 @@ export const interactiveStepExecutor: NodeExecutor = {
     return {
       output: {},
       pause: { reason: 'awaiting_human', interactionId },
+      rowCount: 1,
     };
   },
 

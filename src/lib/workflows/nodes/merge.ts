@@ -8,7 +8,8 @@ import type { NodeExecutor, NodeDefinition, NodeResult } from '../types';
 export const mergeExecutor: NodeExecutor = {
   type: 'merge',
   async execute(input, _config, _context): Promise<NodeResult> {
-    return { output: { ...input } };
+    const merged = (input as { merged?: unknown }).merged;
+    return { output: { ...input }, rowCount: Array.isArray(merged) ? merged.length : 1 };
   },
   getInputSchema() { return { type: 'object', description: 'Merged data from all upstream nodes' }; },
   getOutputSchema() { return { type: 'object', description: 'Shallow combination of every upstream output' }; },

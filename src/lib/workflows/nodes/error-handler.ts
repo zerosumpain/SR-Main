@@ -30,6 +30,7 @@ export const errorHandlerExecutor: NodeExecutor = {
     return {
       output,
       metadata: { _selectedHandle: hasError ? 'error' : 'success' },
+      rowCount: 1,
     };
   },
 

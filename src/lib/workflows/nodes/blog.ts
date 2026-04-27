@@ -14,47 +14,47 @@ export const blogExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
     if (!operation) {
-      return { output: { success: false, error: 'No operation configured' } };
+      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
     }
 
     switch (operation) {
       case 'list': {
         const result = await executeSiteTool('site_blog_list', {});
-        return { output: result };
+        return { output: result, rowCount: 1 };
       }
 
       case 'get': {
         const postId = interpolateTemplate((config.postId as string) || '', input);
-        if (!postId) return { output: { success: false, error: 'No postId configured' } };
+        if (!postId) return { output: { success: false, error: 'No postId configured' }, rowCount: 1 };
         const result = await executeSiteTool('site_blog_get', { postId });
-        return { output: result };
+        return { output: result, rowCount: 1 };
       }
 
       case 'create': {
         const title = interpolateTemplate((config.title as string) || '', input);
         const content = interpolateTemplate((config.content as string) || '', input);
-        if (!title) return { output: { success: false, error: 'Title is required for create' } };
+        if (!title) return { output: { success: false, error: 'Title is required for create' }, rowCount: 1 };
         const args: Record<string, unknown> = { title, content };
         if (config.status) args.status = config.status;
         if (config.tags) args.tags = config.tags;
         const result = await executeSiteTool('site_blog_create', args);
-        return { output: result };
+        return { output: result, rowCount: 1 };
       }
 
       case 'update': {
         const postId = interpolateTemplate((config.postId as string) || '', input);
-        if (!postId) return { output: { success: false, error: 'No postId configured for update' } };
+        if (!postId) return { output: { success: false, error: 'No postId configured for update' }, rowCount: 1 };
         const args: Record<string, unknown> = { postId };
         if (config.title) args.title = interpolateTemplate((config.title as string), input);
         if (config.content) args.content = interpolateTemplate((config.content as string), input);
         if (config.status) args.status = config.status;
         if (config.tags) args.tags = config.tags;
         const result = await executeSiteTool('site_blog_update', args);
-        return { output: result };
+        return { output: result, rowCount: 1 };
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` } };
+        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
     }
   },
 

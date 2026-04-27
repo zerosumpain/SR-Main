@@ -87,6 +87,7 @@ export const fileExtractExecutor: NodeExecutor = {
             sourceFile: { id: existing.id, name: existing.name, mimeType: existing.mimeType },
             file: persisted,
           },
+          rowCount: 1,
         };
       } catch (err) {
         if (err instanceof ExtractError) {
@@ -122,6 +123,7 @@ export const fileExtractExecutor: NodeExecutor = {
           suggestedExtension: result.suggestedExtension,
           file: persisted,
         },
+        rowCount: 1,
       };
     } catch (err) {
       if (err instanceof ExtractError) {

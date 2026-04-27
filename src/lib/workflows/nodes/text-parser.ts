@@ -16,7 +16,7 @@ export const textParserExecutor: NodeExecutor = {
       // Try direct JSON.parse first
       try {
         const parsed = JSON.parse(text);
-        return { output: { ...input, parsed } };
+        return { output: { ...input, parsed }, rowCount: 1 };
       } catch {
         // fall through
       }
@@ -26,7 +26,7 @@ export const textParserExecutor: NodeExecutor = {
       if (mdMatch) {
         try {
           const parsed = JSON.parse(mdMatch[1].trim());
-          return { output: { ...input, parsed } };
+          return { output: { ...input, parsed }, rowCount: 1 };
         } catch {
           // fall through
         }
@@ -37,7 +37,7 @@ export const textParserExecutor: NodeExecutor = {
       if (objMatch) {
         try {
           const parsed = JSON.parse(objMatch[1]);
-          return { output: { ...input, parsed } };
+          return { output: { ...input, parsed }, rowCount: 1 };
         } catch {
           // fall through
         }
@@ -46,6 +46,7 @@ export const textParserExecutor: NodeExecutor = {
       return {
         output: { ...input, parsed: null, error: 'No valid JSON found in text' },
         logs: ['text-parser: could not extract JSON from input'],
+        rowCount: 1,
       };
     }
 
@@ -57,6 +58,7 @@ export const textParserExecutor: NodeExecutor = {
         return {
           output: { ...input, match: null, groups: null, allMatches: [], error: 'No pattern provided' },
           logs: ['text-parser: no regex pattern configured'],
+          rowCount: 1,
         };
       }
 
@@ -75,12 +77,16 @@ export const textParserExecutor: NodeExecutor = {
           allMatches = [firstMatch[0]];
         }
 
-        return { output: { ...input, match, groups, allMatches } };
+        return {
+          output: { ...input, match, groups, allMatches },
+          rowCount: Array.isArray(allMatches) ? allMatches.length : 1,
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
           output: { ...input, match: null, groups: null, allMatches: [], error: message },
           logs: [`text-parser: regex error: ${message}`],
+          rowCount: 1,
         };
       }
     }
@@ -88,12 +94,13 @@ export const textParserExecutor: NodeExecutor = {
     if (mode === 'split') {
       const delimiter = config.delimiter !== undefined ? String(config.delimiter) : '\n';
       const items = text.split(delimiter).filter((s) => s.trim() !== '');
-      return { output: { ...input, items, count: items.length } };
+      return { output: { ...input, items, count: items.length }, rowCount: items.length };
     }
 
     return {
       output: { ...input, error: `Unknown mode: ${mode}` },
       logs: [`text-parser: unknown mode "${mode}"`],
+      rowCount: 1,
     };
   },
 

@@ -10,7 +10,7 @@ export const delayExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const ms = (config.milliseconds as number) || 0;
     await new Promise((resolve) => setTimeout(resolve, ms));
-    return { output: { ...input } };
+    return { output: { ...input }, rowCount: 1 };
   },
 
   getInputSchema() {

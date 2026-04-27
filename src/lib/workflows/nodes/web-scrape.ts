@@ -35,6 +35,7 @@ export const webScrapeExecutor: NodeExecutor = {
           text: '',
           length: 0,
         },
+        rowCount: 1,
       };
     }
 
@@ -50,6 +51,7 @@ export const webScrapeExecutor: NodeExecutor = {
         length: text.length,
         truncated: maxChars > 0 && result.content.length > maxChars,
       },
+      rowCount: 1,
     };
   },
 

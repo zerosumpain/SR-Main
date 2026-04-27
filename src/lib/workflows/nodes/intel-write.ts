@@ -17,7 +17,7 @@ export const intelWriteExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const content = interpolateTemplate((config.content as string) || '', input).trim();
     if (!content) {
-      return { output: { success: false, error: 'intel-write: content is required' } };
+      return { output: { success: false, error: 'intel-write: content is required' }, rowCount: 1 };
     }
 
     const rawTitle = interpolateTemplate((config.title as string) || '', input).trim();
@@ -76,6 +76,7 @@ export const intelWriteExecutor: NodeExecutor = {
         sourceTag: sourceTag || null,
         sourceUrl: sourceUrl || null,
       },
+      rowCount: 1,
     };
   },
 

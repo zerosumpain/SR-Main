@@ -62,6 +62,7 @@ export const researchResultExecutor: NodeExecutor = {
           researchSessionId: '',
           researchError: 'Not commissioned',
         },
+        rowCount: 1,
       };
     }
 
@@ -79,6 +80,7 @@ export const researchResultExecutor: NodeExecutor = {
         researchSessionId: sessionId,
         researchDurationMs: res.durationMs,
       },
+      rowCount: 1,
     };
   },
 

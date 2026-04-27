@@ -11,9 +11,9 @@ export const llmRouterExecutor: NodeExecutor = {
     try {
       routes = JSON.parse(routesStr);
     } catch {
-      return { output: { ...input, error: 'Invalid routes JSON' } };
+      return { output: { ...input, error: 'Invalid routes JSON' }, rowCount: 1 };
     }
-    if (routes.length === 0) return { output: { ...input, error: 'No routes defined' } };
+    if (routes.length === 0) return { output: { ...input, error: 'No routes defined' }, rowCount: 1 };
 
     const routeList = routes.map((r, i) => `${i + 1}. "${r.handle}" — ${r.description}`).join('\n');
     const systemPrompt = `You are a routing engine. Given input data and routes, respond with ONLY the handle name of the best matching route. No explanation, no quotes.\n\nAvailable routes:\n${routeList}`;
@@ -37,6 +37,7 @@ export const llmRouterExecutor: NodeExecutor = {
     return {
       output: { ...input, selectedRoute: handle },
       metadata: { _selectedHandle: handle, model },
+      rowCount: 1,
     };
   },
 

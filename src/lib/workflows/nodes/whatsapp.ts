@@ -16,11 +16,11 @@ export const whatsappExecutor: NodeExecutor = {
     const message = interpolateTemplate((config.message as string) || '', input);
 
     if (!to) {
-      return { output: { sent: false, error: 'No recipient (to) configured' } };
+      return { output: { sent: false, error: 'No recipient (to) configured' }, rowCount: 1 };
     }
 
     if (!message) {
-      return { output: { sent: false, error: 'No message content configured' } };
+      return { output: { sent: false, error: 'No message content configured' }, rowCount: 1 };
     }
 
     const service = getWhatsAppService();
@@ -32,6 +32,7 @@ export const whatsappExecutor: NodeExecutor = {
         messageId: result.messageId || null,
         error: result.error || null,
       },
+      rowCount: 1,
     };
   },
 

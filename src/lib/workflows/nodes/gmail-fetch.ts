@@ -28,7 +28,7 @@ export const gmailFetchExecutor: NodeExecutor = {
     const messageId = interpolateTemplateStrict(String(config.messageId ?? ''), input).result;
     if (!messageId) throw new Error('messageId is required');
     const msg = await gmailService.fetchMessage(acct, messageId);
-    return { output: msg, metadata: { _selectedHandle: 'output' } };
+    return { output: msg, metadata: { _selectedHandle: 'output' }, rowCount: 1 };
   },
 
   getInputSchema() {

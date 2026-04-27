@@ -7,7 +7,7 @@ export const subWorkflowExecutor: NodeExecutor = {
   type: 'sub-workflow',
   async execute(input, config, context): Promise<NodeResult> {
     const workflowId = config.workflowId as string;
-    if (!workflowId) return { output: { error: 'No workflowId configured' } };
+    if (!workflowId) return { output: { error: 'No workflowId configured' }, rowCount: 1 };
 
     // Load the sub-workflow definition from DB
     const [workflow] = await db
@@ -87,6 +87,7 @@ export const subWorkflowExecutor: NodeExecutor = {
     return {
       output: lastNodeOutput,
       metadata: { subRunId, subWorkflowId: workflowId, subStatus: result.status },
+      rowCount: 1,
     };
   },
   getInputSchema() { return { type: 'object', description: 'Passed as initial input to the sub-workflow' }; },

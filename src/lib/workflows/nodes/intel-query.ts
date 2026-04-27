@@ -17,7 +17,7 @@ export const intelQueryExecutor: NodeExecutor = {
     const query = interpolateTemplate(queryTemplate, input).trim();
 
     if (!query) {
-      return { output: { ...input, intelContext: '', intelQuery: '' } };
+      return { output: { ...input, intelContext: '', intelQuery: '' }, rowCount: 1 };
     }
 
     const context = await buildKnowledgeContext(query);
@@ -27,6 +27,7 @@ export const intelQueryExecutor: NodeExecutor = {
         intelQuery: query,
         intelContext: context,
       },
+      rowCount: 1,
     };
   },
 

@@ -50,6 +50,7 @@ export const gmailReplyExecutor: NodeExecutor = {
     return {
       output: { ...result, sent: true },
       metadata: { _selectedHandle: 'output' },
+      rowCount: 1,
     };
   },
 

@@ -93,6 +93,7 @@ export const llmCallExecutor: NodeExecutor = {
         promptTokens,
         completionTokens,
       },
+      rowCount: 1,
     };
   },
 

@@ -22,7 +22,7 @@ export const loopExecutor: NodeExecutor = {
     const array = resolvePath(input, arrayPath);
 
     if (!Array.isArray(array)) {
-      return { output: { error: 'Not an array', path: arrayPath } };
+      return { output: { error: 'Not an array', path: arrayPath }, rowCount: 1 };
     }
 
     const results: unknown[] = [];
@@ -35,7 +35,7 @@ export const loopExecutor: NodeExecutor = {
       }
     }
 
-    return { output: { results, count: results.length } };
+    return { output: { results, count: results.length }, rowCount: results.length };
   },
 
   getInputSchema() {

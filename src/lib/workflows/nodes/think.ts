@@ -41,6 +41,7 @@ Be thorough in your reasoning. Consider edge cases.`;
     return {
       output: { ...input, reasoning, conclusion, fullResponse: content },
       metadata: { model, promptTokens: response.usage?.prompt_tokens ?? 0, completionTokens: response.usage?.completion_tokens ?? 0 },
+      rowCount: 1,
     };
   },
   getInputSchema() { return { type: 'object', description: 'Data for the LLM to reason about' }; },

@@ -303,6 +303,7 @@ export const llmAgentExecutor: NodeExecutor = {
         stopReason,
         tokensUsed,
       },
+      rowCount: 1,
     };
   },
 

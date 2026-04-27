@@ -25,7 +25,7 @@ export const accumulatorExecutor: NodeExecutor = {
       items = [input];
     }
 
-    return { output: { items, count: items.length } };
+    return { output: { items, count: items.length }, rowCount: items.length };
   },
 
   getInputSchema() {

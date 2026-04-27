@@ -17,7 +17,7 @@ export const deepResearchExecutor: NodeExecutor = {
     const topicTemplate = typeof config.topic === 'string' ? (config.topic as string) : '';
     const topic = interpolateTemplate(topicTemplate, input).trim();
     if (!topic) {
-      return { output: { ...input, success: false, error: 'Topic is required' } };
+      return { output: { ...input, success: false, error: 'Topic is required' }, rowCount: 1 };
     }
 
     const goalsRaw = typeof config.goals === 'string' ? (config.goals as string) : '';
@@ -45,6 +45,7 @@ export const deepResearchExecutor: NodeExecutor = {
           researchEngine: 'deep' as const,
           researchStatus: 'failed',
         },
+        rowCount: 1,
       };
     }
 
@@ -72,6 +73,7 @@ export const deepResearchExecutor: NodeExecutor = {
             researchStatus: lastStatus,
             researchSessionId: sessionId,
           },
+          rowCount: 1,
         };
       }
       // Timeout
@@ -84,6 +86,7 @@ export const deepResearchExecutor: NodeExecutor = {
           researchStatus: 'timeout',
           researchSessionId: sessionId,
         },
+        rowCount: 1,
       };
     }
 
@@ -118,6 +121,7 @@ export const deepResearchExecutor: NodeExecutor = {
         researchSessionId: sessionId,
         researchDurationMs: durationMs,
       },
+      rowCount: 1,
     };
   },
 

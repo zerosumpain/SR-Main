@@ -90,6 +90,7 @@ export const fileBuildExecutor: NodeExecutor = {
           suggestedExtension: result.suggestedExtension,
           file: persisted,
         },
+        rowCount: 1,
       };
     } catch (err) {
       if (err instanceof ExtractError) {

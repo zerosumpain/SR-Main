@@ -55,11 +55,11 @@ export const stealthScrapeLlmExecutor: NodeExecutor = {
         const text = itemTextPath ? String(getByPath(item, itemTextPath) ?? '') : JSON.stringify(item);
         out.push(await extractOne(client, model, text, schema, instructions));
       }
-      return { output: { extracted: out }, metadata: { _selectedHandle: 'output' } };
+      return { output: { extracted: out }, metadata: { _selectedHandle: 'output' }, rowCount: out.length };
     } else {
       const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
       const extracted = await extractOne(client, model, text, schema, instructions);
-      return { output: { extracted }, metadata: { _selectedHandle: 'output' } };
+      return { output: { extracted }, metadata: { _selectedHandle: 'output' }, rowCount: 1 };
     }
   },
 

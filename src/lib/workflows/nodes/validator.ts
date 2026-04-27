@@ -21,6 +21,7 @@ function validateSchema(
     return {
       output: { ...input, valid: false, errors: ['Invalid JSON schema'] },
       metadata: { _selectedHandle: 'fail' },
+      rowCount: 1,
     };
   }
 
@@ -51,6 +52,7 @@ function validateSchema(
   return {
     output: { ...input, valid, errors },
     metadata: { _selectedHandle: valid ? 'pass' : 'fail' },
+    rowCount: 1,
   };
 }
 
@@ -64,6 +66,7 @@ function validateExpression(
     return {
       output: { ...input, valid: false, errors: ['Empty expression'] },
       metadata: { _selectedHandle: 'fail' },
+      rowCount: 1,
     };
   }
 
@@ -79,12 +82,14 @@ function validateExpression(
     return {
       output: { ...input, valid: false, errors },
       metadata: { _selectedHandle: 'fail' },
+      rowCount: 1,
     };
   }
 
   return {
     output: { ...input, valid, errors },
     metadata: { _selectedHandle: valid ? 'pass' : 'fail' },
+    rowCount: 1,
   };
 }
 
@@ -102,6 +107,7 @@ export const validatorExecutor: NodeExecutor = {
     return {
       output: { ...input, valid: false, errors: ['Unknown validation mode'] },
       metadata: { _selectedHandle: 'fail' },
+      rowCount: 1,
     };
   },
 

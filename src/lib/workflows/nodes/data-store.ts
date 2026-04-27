@@ -66,7 +66,7 @@ export const dataStoreExecutor: NodeExecutor = {
 
     if (operation === 'get') {
       const result = await getStoreValue(workflowId, key);
-      return { output: result };
+      return { output: result, rowCount: 1 };
     }
 
     if (operation === 'set') {
@@ -81,10 +81,10 @@ export const dataStoreExecutor: NodeExecutor = {
       }
 
       await setStoreValue(workflowId, key, value);
-      return { output: { key, value, stored: true } };
+      return { output: { key, value, stored: true }, rowCount: 1 };
     }
 
-    return { output: { error: `Unknown operation: ${operation}` } };
+    return { output: { error: `Unknown operation: ${operation}` }, rowCount: 1 };
   },
 
   getInputSchema(_config: Record<string, unknown>) {

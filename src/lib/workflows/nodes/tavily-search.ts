@@ -41,6 +41,7 @@ export const tavilySearchExecutor: NodeExecutor = {
         })),
         count: response.results.length,
       },
+      rowCount: response.results.length,
     };
   },
 

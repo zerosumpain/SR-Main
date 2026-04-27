@@ -25,7 +25,7 @@ export const deepDiveStartExecutor: NodeExecutor = {
     if (goals) args.goals = goals;
     if (config.depth) args.depth = config.depth;
     const result = await executeSiteTool('research_start', args);
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -75,7 +75,7 @@ export const deepDiveStatusExecutor: NodeExecutor = {
     const sessionId = interpolateTemplate((config.sessionId as string) || '', input).trim();
     if (!sessionId) throw new Error('deep-dive-status: sessionId is required');
     const result = await executeSiteTool('research_status', { id: sessionId });
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -111,7 +111,7 @@ export const deepDiveReportExecutor: NodeExecutor = {
     const sessionId = interpolateTemplate((config.sessionId as string) || '', input).trim();
     if (!sessionId) throw new Error('deep-dive-report: sessionId is required');
     const result = await executeSiteTool('research_get_report', { id: sessionId });
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -145,7 +145,7 @@ export const deepDiveListExecutor: NodeExecutor = {
   type: 'deep-dive-list',
   async execute(_input, _config, _ctx: ExecutionContext): Promise<NodeResult> {
     const result = await executeSiteTool('research_list', {});
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'No input required.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -175,7 +175,7 @@ export const deepDiveControlExecutor: NodeExecutor = {
     if (!sessionId) throw new Error('deep-dive-control: sessionId is required');
     if (!action) throw new Error('deep-dive-control: action is required (pause | resume | cancel)');
     const result = await executeSiteTool('research_control', { id: sessionId, action });
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },

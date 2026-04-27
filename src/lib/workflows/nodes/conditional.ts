@@ -21,12 +21,14 @@ export const conditionalExecutor: NodeExecutor = {
       return {
         output: { ...input, error: `Conditional expression error: ${message}` },
         metadata: { _selectedHandle: 'false' },
+        rowCount: 1,
       };
     }
 
     return {
       output: { ...input },
       metadata: { _selectedHandle: selected },
+      rowCount: 1,
     };
   },
 

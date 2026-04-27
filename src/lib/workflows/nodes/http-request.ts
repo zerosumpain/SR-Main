@@ -93,6 +93,7 @@ export const httpRequestExecutor: NodeExecutor = {
         headers: responseHeaders,
         body,
       },
+      rowCount: Array.isArray(body) ? body.length : 1,
     };
   },
 

@@ -39,6 +39,7 @@ export const gmailSendExecutor: NodeExecutor = {
     return {
       output: { ...result, sent: true },
       metadata: { _selectedHandle: 'output' },
+      rowCount: 1,
     };
   },
 

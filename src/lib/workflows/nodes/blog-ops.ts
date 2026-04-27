@@ -19,7 +19,7 @@ export const blogListExecutor: NodeExecutor = {
   type: 'blog-list',
   async execute(_input, _config, _ctx: ExecutionContext): Promise<NodeResult> {
     const result = await executeSiteTool('site_blog_list', {});
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'No input required.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -47,7 +47,7 @@ export const blogGetExecutor: NodeExecutor = {
     const postId = interpolateTemplate((config.postId as string) || '', input).trim();
     if (!postId) throw new Error('blog-get: postId is required');
     const result = await executeSiteTool('site_blog_get', { postId });
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation of postId.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -87,7 +87,7 @@ export const blogCreateExecutor: NodeExecutor = {
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
     const result = await executeSiteTool('site_blog_create', args);
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation in title/content.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },
@@ -140,7 +140,7 @@ export const blogUpdateExecutor: NodeExecutor = {
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
     const result = await executeSiteTool('site_blog_update', args);
-    return { output: result };
+    return { output: result, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Used for template interpolation.' }; },
   getOutputSchema(): JsonSchema { return RESULT_SCHEMA; },

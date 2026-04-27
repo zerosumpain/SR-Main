@@ -87,7 +87,7 @@ export const fileStoreExecutor: NodeExecutor = {
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       }));
-      return { output: { files, count: files.length } };
+      return { output: { files, count: files.length }, rowCount: files.length };
     }
 
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
@@ -113,19 +113,20 @@ export const fileStoreExecutor: NodeExecutor = {
           encoding,
           content,
         },
+        rowCount: 1,
       };
     }
 
     if (operation === 'delete') {
       if (!existing) {
-        return { output: { ok: true, deleted: false, reason: 'not-found' } };
+        return { output: { ok: true, deleted: false, reason: 'not-found' }, rowCount: 1 };
       }
       if (!perms || !perms.delete) {
         throw new Error(`file-store: delete permission denied on ${fileName}`);
       }
       await deleteFile(existing.diskPath);
       await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
-      return { output: { ok: true, deleted: true, name: fileName } };
+      return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
     }
 
     if (operation === 'write') {
@@ -146,7 +147,7 @@ export const fileStoreExecutor: NodeExecutor = {
           .update(workflowFiles)
           .set({ sizeBytes: buf.byteLength, updatedAt: new Date() })
           .where(eq(workflowFiles.id, existing.id));
-        return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false } };
+        return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
       }
 
       const diskPath = newDiskPath(fileName);
@@ -161,7 +162,7 @@ export const fileStoreExecutor: NodeExecutor = {
           permissions: { read: true, write: true, append: true, delete: false },
         })
         .returning();
-      return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: true, id: inserted.id } };
+      return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: true, id: inserted.id }, rowCount: 1 };
     }
 
     if (operation === 'append') {
@@ -181,7 +182,7 @@ export const fileStoreExecutor: NodeExecutor = {
         .update(workflowFiles)
         .set({ sizeBytes: newSize, updatedAt: new Date() })
         .where(eq(workflowFiles.id, existing.id));
-      return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength } };
+      return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength }, rowCount: 1 };
     }
 
     throw new Error(`file-store: unknown operation: ${operation}`);

@@ -63,6 +63,7 @@ export const openrouterExecutor: NodeExecutor = {
             promptTokens: usage?.prompt_tokens ?? 0,
             completionTokens: usage?.completion_tokens ?? 0,
           },
+          rowCount: 1,
         };
       }
 
@@ -75,7 +76,7 @@ export const openrouterExecutor: NodeExecutor = {
         if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
         const data = await res.json();
         const models = data.data ?? [];
-        return { output: { models, count: models.length } };
+        return { output: { models, count: models.length }, rowCount: 1 };
       }
 
       case 'get_usage': {
@@ -86,7 +87,7 @@ export const openrouterExecutor: NodeExecutor = {
         });
         if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
         const data = await res.json();
-        return { output: { usage: data.data ?? data } };
+        return { output: { usage: data.data ?? data }, rowCount: 1 };
       }
 
       default:

@@ -52,6 +52,7 @@ export const intelligenceExecutor: NodeExecutor = {
           intelItems: [] as IntelItem[],
           intelCount: 0,
         },
+        rowCount: 1,
       };
     }
 
@@ -75,6 +76,7 @@ export const intelligenceExecutor: NodeExecutor = {
         intelItems: items,
         intelCount: total,
       },
+      rowCount: items.length || 1,
     };
   },
 

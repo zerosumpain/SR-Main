@@ -22,7 +22,7 @@ export const triggerExecutor: NodeExecutor = {
     _config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    return { output: { ...input } };
+    return { output: { ...input }, rowCount: 1 };
   },
 
   getInputSchema() {

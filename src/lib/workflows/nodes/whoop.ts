@@ -123,7 +123,7 @@ export const whoopExecutor: NodeExecutor = {
         },
       };
 
-      return { output: { summary } };
+      return { output: { summary }, rowCount: 1 };
     }
 
     if (operation === 'get_recent') {
@@ -144,7 +144,7 @@ export const whoopExecutor: NodeExecutor = {
         spo2: r.spo2,
         skinTempC: r.skinTemp != null ? r.skinTemp / 100 : null,
       }));
-      return { output: { series, count: series.length } };
+      return { output: { series, count: series.length }, rowCount: series.length };
     }
 
     if (operation === 'query_recovery') {
@@ -162,6 +162,7 @@ export const whoopExecutor: NodeExecutor = {
             metric,
             series: rows.map((r) => ({ date: new Date(r.d * 1000).toISOString().slice(0, 10), value: r.v })),
           },
+          rowCount: rows.length,
         };
       }
       if (metric === 'strain') {
@@ -175,6 +176,7 @@ export const whoopExecutor: NodeExecutor = {
             metric,
             series: rows.map((r) => ({ date: new Date(r.d * 1000).toISOString().slice(0, 10), value: Number(r.v.toFixed(2)) })),
           },
+          rowCount: rows.length,
         };
       }
       const col = RECOVERY_METRIC_COL[metric as keyof typeof RECOVERY_METRIC_COL];
@@ -189,6 +191,7 @@ export const whoopExecutor: NodeExecutor = {
           metric,
           series: rows.map((r) => ({ date: new Date(r.d * 1000).toISOString().slice(0, 10), value: r.v })),
         },
+        rowCount: rows.length,
       };
     }
 
@@ -202,19 +205,19 @@ export const whoopExecutor: NodeExecutor = {
     switch (operation) {
       case 'get_cycles': {
         const cycles = await getWhoopCycles(token, opts);
-        return { output: { cycles, count: cycles.length } };
+        return { output: { cycles, count: cycles.length }, rowCount: cycles.length };
       }
       case 'get_recovery': {
         const recoveries = await getWhoopRecoveries(token, opts);
-        return { output: { recoveries, count: recoveries.length } };
+        return { output: { recoveries, count: recoveries.length }, rowCount: recoveries.length };
       }
       case 'get_sleep': {
         const sleeps = await getWhoopSleeps(token, opts);
-        return { output: { sleeps, count: sleeps.length } };
+        return { output: { sleeps, count: sleeps.length }, rowCount: sleeps.length };
       }
       case 'get_workouts': {
         const workouts = await getWhoopWorkouts(token, opts);
-        return { output: { workouts, count: workouts.length } };
+        return { output: { workouts, count: workouts.length }, rowCount: workouts.length };
       }
       default:
         throw new Error(`Unknown Whoop operation: ${operation}`);

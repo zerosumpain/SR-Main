@@ -12,14 +12,14 @@ export const transformExecutor: NodeExecutor = {
     const expression = config.expression as string | undefined;
 
     if (!expression) {
-      return { output: { ...input } };
+      return { output: { ...input }, rowCount: 1 };
     }
 
     try {
       const fn = safeFunction(['input'], expression);
       const result = fn(input);
       const output = result && typeof result === 'object' ? result : { result };
-      return { output };
+      return { output, rowCount: 1 };
     } catch (err: unknown) {
       if (err instanceof UnsafeExpressionError) {
         throw err;

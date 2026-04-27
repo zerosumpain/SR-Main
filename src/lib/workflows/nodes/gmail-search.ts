@@ -49,6 +49,7 @@ export const gmailSearchExecutor: NodeExecutor = {
     return {
       output,
       metadata: { _selectedHandle: 'output' },
+      rowCount: messageIds.length,
     };
   },
 

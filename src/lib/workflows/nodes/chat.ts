@@ -39,13 +39,13 @@ export const chatExecutor: NodeExecutor = {
 
     // Passthrough trigger mode.
     if (outgoing.length > 0) {
-      return { output: { ...input } };
+      return { output: { ...input }, rowCount: 1 };
     }
 
     const message =
       typeof input.message === 'string' ? (input.message as string).trim() : '';
     if (!message) {
-      return { output: { ...input, response: '', reply: '' } };
+      return { output: { ...input, response: '', reply: '' }, rowCount: 1 };
     }
 
     // The /api/workflows/[id]/chat endpoint guarantees a conversationId
@@ -145,6 +145,7 @@ export const chatExecutor: NodeExecutor = {
         model: modelContext.modelId,
         provider: modelContext.provider,
       },
+      rowCount: 1,
     };
   },
 

@@ -52,7 +52,7 @@ export const annotationExecutor: NodeExecutor = {
   async execute(): Promise<NodeResult> {
     // Display-only; the engine filters this type out before execution.
     // Returning an empty result if it's ever reached keeps the run alive.
-    return { output: {} };
+    return { output: {}, rowCount: 1 };
   },
   getInputSchema(): JsonSchema {
     return { type: 'object' };

@@ -37,7 +37,7 @@ export const codeExecuteExecutor: NodeExecutor = {
     const logs: string[] = [];
 
     if (!code) {
-      return { output: { error: 'No code provided' }, logs: ['No code provided'] };
+      return { output: { error: 'No code provided' }, logs: ['No code provided'], rowCount: 1 };
     }
 
     await ensureSandboxRunning();
@@ -109,6 +109,7 @@ export const codeExecuteExecutor: NodeExecutor = {
       return {
         output: { error: result.stderr || 'Non-zero exit code', exitCode: result.exitCode },
         logs,
+        rowCount: 1,
       };
     }
 
@@ -127,7 +128,7 @@ export const codeExecuteExecutor: NodeExecutor = {
       logs.push(stdoutLines.slice(0, -1).join('\n'));
     }
 
-    return { output, logs: logs.length > 0 ? logs : undefined };
+    return { output, logs: logs.length > 0 ? logs : undefined, rowCount: 1 };
   },
 
   getInputSchema() {

@@ -9,7 +9,7 @@ export const gmailTriggerExecutor: NodeExecutor = {
     const trigger = (input.gmail ?? {}) as Record<string, unknown>;
 
     if (!trigger || Object.keys(trigger).length === 0) {
-      return { output: {} };
+      return { output: {}, rowCount: 1 };
     }
 
     return {
@@ -27,6 +27,7 @@ export const gmailTriggerExecutor: NodeExecutor = {
         watchLabel: trigger.watchLabel,
         timestamp: trigger.timestamp,
       },
+      rowCount: 1,
     };
   },
 

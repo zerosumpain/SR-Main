@@ -112,6 +112,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           ...(dispatched.code ? { script: dispatched.code } : {}),
         },
         metadata: { _selectedHandle: 'output' },
+        rowCount: dispatched.items.length || 1,
       };
     }
 
@@ -176,6 +177,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           acceptanceMet: pb.acceptanceMet,
         },
         metadata: { _selectedHandle: 'output' },
+        rowCount: pb.pages.length || 1,
       };
     }
 
@@ -236,6 +238,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
           transcript: mapping.transcript.slice(-10),
         },
         metadata: { _selectedHandle: 'output' },
+        rowCount: mapping.firstItemSample ? 1 : 1,
       };
     }
 
@@ -295,6 +298,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
             error: `Interactive fallback failed: ${err instanceof Error ? err.message : String(err)}`,
           },
           metadata: { _selectedHandle: 'output' },
+          rowCount: 1,
         };
       }
 
@@ -333,6 +337,7 @@ export const stealthScrapeExecutor: NodeExecutor = {
         runLogId: result.runLogId,
       },
       metadata: { _selectedHandle: 'output' },
+      rowCount: result.pages.length || 1,
     };
   },
 

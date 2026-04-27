@@ -37,6 +37,7 @@ export const gmailLabelExecutor: NodeExecutor = {
     return {
       output: { ok: true, messageId, added: add, removed: remove },
       metadata: { _selectedHandle: 'output' },
+      rowCount: 1,
     };
   },
 

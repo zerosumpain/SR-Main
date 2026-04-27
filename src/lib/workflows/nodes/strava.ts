@@ -128,7 +128,7 @@ export const stravaExecutor: NodeExecutor = {
           after || before
             ? await getStravaActivities(token, page, perPage, { after, before })
             : await getStravaActivities(token, page, perPage);
-        return { output: { activities, count: activities.length } };
+        return { output: { activities, count: activities.length }, rowCount: activities.length };
       }
 
       case 'get_activity': {
@@ -139,7 +139,7 @@ export const stravaExecutor: NodeExecutor = {
         });
         if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
         const activity = await res.json();
-        return { output: { activity } };
+        return { output: { activity }, rowCount: 1 };
       }
 
       case 'get_athlete_stats': {
@@ -153,7 +153,7 @@ export const stravaExecutor: NodeExecutor = {
         });
         if (!statsRes.ok) throw new Error(`Strava API error: ${statsRes.status}`);
         const stats = await statsRes.json();
-        return { output: { athlete, stats } };
+        return { output: { athlete, stats }, rowCount: 1 };
       }
 
       default:

@@ -20,7 +20,7 @@ export const quickAnswerExecutor: NodeExecutor = {
     const topicTemplate = typeof config.topic === 'string' ? (config.topic as string) : '';
     const topic = interpolateTemplate(topicTemplate, input).trim();
     if (!topic) {
-      return { output: { ...input, success: false, error: 'Topic is required' } };
+      return { output: { ...input, success: false, error: 'Topic is required' }, rowCount: 1 };
     }
 
     const goalsRaw = (config.goals as unknown) ?? [];
@@ -54,7 +54,7 @@ export const quickAnswerExecutor: NodeExecutor = {
     }
 
     if (!last) {
-      return { output: { ...input, success: false, error: 'No row after insert', researchSessionId: id } };
+      return { output: { ...input, success: false, error: 'No row after insert', researchSessionId: id }, rowCount: 1 };
     }
 
     return {
@@ -70,6 +70,7 @@ export const quickAnswerExecutor: NodeExecutor = {
         researchSessionId: id,
         researchDurationMs: last.durationMs ?? undefined,
       },
+      rowCount: 1,
     };
   },
 

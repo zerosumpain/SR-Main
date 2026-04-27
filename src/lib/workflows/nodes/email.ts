@@ -36,7 +36,7 @@ export const emailExecutor: NodeExecutor = {
     const from = (config.from as string) || env.SMTP_FROM || 'noreply@localhost';
 
     if (!to) {
-      return { output: { error: 'No recipient (to) configured' } };
+      return { output: { error: 'No recipient (to) configured' }, rowCount: 1 };
     }
 
     const isHtml = body.trimStart().startsWith('<');
@@ -54,6 +54,7 @@ export const emailExecutor: NodeExecutor = {
         sent: true,
         messageId: info.messageId,
       },
+      rowCount: 1,
     };
   },
 

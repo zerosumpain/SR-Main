@@ -70,6 +70,7 @@ export const fileReadExecutor: NodeExecutor = {
         encoding,
         content,
       },
+      rowCount: 1,
     };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Only fileName is needed; supports {{input.field}} templates.' }; },
@@ -145,7 +146,7 @@ export const fileWriteExecutor: NodeExecutor = {
       await db.update(workflowFiles)
         .set({ sizeBytes: newSize, updatedAt: new Date() })
         .where(eq(workflowFiles.id, existing.id));
-      return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength, mode: 'append' } };
+      return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength, mode: 'append' }, rowCount: 1 };
     }
 
     if (existing) {
@@ -154,7 +155,7 @@ export const fileWriteExecutor: NodeExecutor = {
       await db.update(workflowFiles)
         .set({ sizeBytes: buf.byteLength, updatedAt: new Date() })
         .where(eq(workflowFiles.id, existing.id));
-      return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false } };
+      return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
     }
 
     const diskPath = newDiskPath(fileName);
@@ -166,7 +167,7 @@ export const fileWriteExecutor: NodeExecutor = {
       diskPath,
       permissions: { read: true, write: true, append: true, delete: false },
     }).returning();
-    return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: true, id: inserted.id } };
+    return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: true, id: inserted.id }, rowCount: 1 };
   },
   getInputSchema(): JsonSchema {
     return { type: 'object', description: 'Content comes from `contentPath` if set, else `input.content`, else the whole input.' };
@@ -230,12 +231,12 @@ export const fileDeleteExecutor: NodeExecutor = {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-delete: fileName is required');
     const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
-    if (!existing) return { output: { ok: true, deleted: false, reason: 'not-found', name: fileName } };
+    if (!existing) return { output: { ok: true, deleted: false, reason: 'not-found', name: fileName }, rowCount: 1 };
     const perms = permissionsFor(existing.permissions);
     if (!perms.delete) throw new Error(`file-delete: delete permission denied on ${fileName}`);
     await deleteFile(existing.diskPath);
     await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
-    return { output: { ok: true, deleted: true, name: fileName } };
+    return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Only fileName is needed.' }; },
   getOutputSchema(): JsonSchema {
@@ -291,7 +292,7 @@ export const fileListExecutor: NodeExecutor = {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
-    return { output: { files, count: files.length } };
+    return { output: { files, count: files.length }, rowCount: files.length };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'No input needed.' }; },
   getOutputSchema(): JsonSchema {

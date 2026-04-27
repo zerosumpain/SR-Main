@@ -71,7 +71,7 @@ export const postitExecutor: NodeExecutor = {
   type: 'postit',
   async execute(): Promise<NodeResult> {
     // Display-only; the engine filters this type out before execution.
-    return { output: {} };
+    return { output: {}, rowCount: 1 };
   },
   getInputSchema(): JsonSchema {
     return { type: 'object' };

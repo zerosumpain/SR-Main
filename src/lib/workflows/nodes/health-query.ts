@@ -14,7 +14,7 @@ export const healthQueryExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
     if (!operation) {
-      return { output: { success: false, error: 'No operation configured' } };
+      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
     }
 
     const toolName = `site_health_${operation}`;
@@ -25,18 +25,24 @@ export const healthQueryExecutor: NodeExecutor = {
       case 'sleep':
       case 'training_load': {
         const result = await executeSiteTool(toolName, {});
-        return { output: result };
+        const points = (result as { points?: unknown[]; rows?: unknown[] }).points;
+        const rows = (result as { points?: unknown[]; rows?: unknown[] }).rows;
+        const rowCount = points?.length ?? rows?.length ?? 1;
+        return { output: result, rowCount };
       }
 
       case 'timeline': {
         const page = parseInt(interpolateTemplate((config.page as string) || '', input)) || 1;
         const limit = parseInt(interpolateTemplate((config.limit as string) || '', input)) || 20;
         const result = await executeSiteTool(toolName, { page, limit });
-        return { output: result };
+        const points = (result as { points?: unknown[]; rows?: unknown[] }).points;
+        const rows = (result as { points?: unknown[]; rows?: unknown[] }).rows;
+        const rowCount = points?.length ?? rows?.length ?? 1;
+        return { output: result, rowCount };
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` } };
+        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
     }
   },
 
