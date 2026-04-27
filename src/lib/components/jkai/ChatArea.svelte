@@ -9,6 +9,7 @@
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
   import ClarifyCard from '$lib/components/jkai/ClarifyCard.svelte';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
+  import { PUBLIC_PULSE_ENABLED } from '$env/static/public';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
@@ -128,7 +129,7 @@
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
   type Phase = 'idle' | 'thinking' | 'streaming' | 'tool' | 'awaiting_user' | 'stalled';
-  const pulseEnabled = import.meta.env.PUBLIC_PULSE_ENABLED === '1';
+  const pulseEnabled = PUBLIC_PULSE_ENABLED === '1';
   let phase = $state<Phase>('idle');
   let pillLabel = $state('');
   let pillElapsed = $state(0);

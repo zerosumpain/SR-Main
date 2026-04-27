@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { PUBLIC_PULSE_ENABLED } from '$env/static/public';
 
   interface Item {
     id: string; kind: string; severity: 'info' | 'warn' | 'error';
     summary: string; details: Record<string, unknown>; at: string;
   }
 
-  const pulseEnabled = import.meta.env.PUBLIC_PULSE_ENABLED === '1';
+  const pulseEnabled = PUBLIC_PULSE_ENABLED === '1';
   let items = $state<Item[]>([]);
   let es: EventSource | null = null;
 
