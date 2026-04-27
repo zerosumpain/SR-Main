@@ -104,9 +104,11 @@
 <style>
   .token-row { display: flex; gap: 2.5rem; padding: 0.4rem 0; }
   .big-num {
-    font-family: var(--font-display);
+    font-family: var(--font-brand);
     font-size: 1.5rem;
-    font-weight: 900;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
     line-height: 1;
   }

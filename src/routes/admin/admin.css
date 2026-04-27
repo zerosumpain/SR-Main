@@ -60,11 +60,12 @@
   color: var(--text-ghost);
 }
 .stat-card-value {
-  font-family: var(--font-display);
+  font-family: var(--font-brand);
   font-size: 1.65rem;
-  font-weight: 900;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: -0.01em;
+  text-transform: lowercase;
   color: var(--text-primary);
 }
 .stat-card-meta {
@@ -244,10 +245,11 @@
   color: var(--text-ghost);
 }
 .nm-tile-title {
-  font-family: var(--font-display);
+  font-family: var(--font-brand);
   font-size: 1.1rem;
-  font-weight: 900;
+  font-weight: 500;
   letter-spacing: -0.01em;
+  text-transform: lowercase;
   color: var(--text-primary);
   line-height: 1.05;
 }
