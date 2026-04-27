@@ -39,6 +39,9 @@ export function startIdleCycler(opts: { force?: boolean } = {}): void {
 export function stopIdleCycler(): void {
   if (timer) { clearInterval(timer); timer = null; }
   scheduled.length = 0;
+  activeJobs = 0;
+  lastJobCompletedAt = 0;
+  idleQuietMs = 300_000;
 }
 
 async function tick(): Promise<void> {
@@ -81,7 +84,11 @@ export async function loadSettings(): Promise<void> {
     idleQuietMs = row.idleQuietMs;
     // Subsequent tasks (15-19) extend `scheduled` here by reading row.schedules.
     // The skeleton starts with no jobs registered; tests inject one via _internal.setRunner.
-  } catch { /* table may not exist in tests */ }
+  } catch (err) {
+    // Tolerate missing table in tests / fresh installs, but log so a
+    // production misconfiguration doesn't go unnoticed.
+    console.warn('[pulse-cycler] loadSettings failed, using defaults:', err instanceof Error ? err.message : err);
+  }
 }
 
 export const _internal = {

@@ -123,7 +123,7 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   if (event.type === 'done' || event.type === 'error') {
     stream.closed = true;
     refreshActive();
-    markRunningJobEnded();
+    noteJobCompleted();
     // Give late subscribers a moment to attach, then clean up
     setTimeout(() => streams.delete(jobId), 60_000);
   }
@@ -189,10 +189,6 @@ function refreshActive() {
   setActiveJobs(running);
 }
 
-function markRunningJobEnded() {
-  noteJobCompleted();
-}
-
 // If no event for this long, the job is considered stuck and we publish a
 // terminal error so SSE subscribers stop waiting. Tuned to outlast a typical
 // long LLM generation but catch real hangs (e.g. provider that never returns).
@@ -224,8 +220,6 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
       job.watchdog = undefined;
       if (job.heartbeat) clearInterval(job.heartbeat);
       job.heartbeat = undefined;
-      refreshActive();
-      markRunningJobEnded();
       publishJobEvent(jobId, { type: 'error', message: reason });
       failAllWaiters(jobId, reason);
     }
@@ -332,8 +326,6 @@ export function cancelJob(jobId: string): boolean {
   job.result = { success: false, error: 'Cancelled by user' };
   if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
   if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
-  refreshActive();
-  markRunningJobEnded();
   publishJobEvent(jobId, { type: 'error', message: 'Cancelled by user' });
   failAllWaiters(jobId, 'Cancelled by user');
   return true;
@@ -364,8 +356,6 @@ export function cancelForScope(scope: JobScope, reason: string): number {
     job.result = { success: false, error: reason };
     if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
     if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
-    refreshActive();
-    markRunningJobEnded();
     publishJobEvent(id, { type: 'error', message: reason });
     failAllWaiters(id, reason);
     cancelled += 1;
@@ -384,8 +374,6 @@ export function cancelAllRunning(reason: string): void {
       job.result = { success: false, error: reason };
       if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
       if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
-      refreshActive();
-      markRunningJobEnded();
       publishJobEvent(id, { type: 'error', message: reason });
       failAllWaiters(id, reason);
     }
