@@ -14,13 +14,6 @@ export async function runHealthCheck(): Promise<NewPulseEvent[]> {
   }
 
   try {
-    const r = await fetch('http://localhost:18789/health', { signal: AbortSignal.timeout(3000) });
-    checks.push({ name: 'openclaw_gateway', pass: r.ok, detail: r.ok ? undefined : `HTTP ${r.status}` });
-  } catch (e) {
-    checks.push({ name: 'openclaw_gateway', pass: false, detail: (e as Error).message });
-  }
-
-  try {
     const rows = await db.select().from(gmailHistoryCursors);
     const stale = rows.filter((r) => {
       const age = Date.now() - new Date(r.updatedAt).getTime();
