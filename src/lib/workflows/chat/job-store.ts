@@ -353,7 +353,7 @@ export function derivePhase(job: OrchestratorJob): Phase {
   if (job.inflightTool) return 'tool';
   const now = Date.now();
   if (job.lastTokenAt && now - job.lastTokenAt < STREAMING_FRESHNESS_MS) return 'streaming';
-  if (now - job.lastEventAt >= 25_000) return 'stalled';
+  if (now - job.lastEventAt >= HEARTBEAT_MIN_SILENCE_MS) return 'stalled';
   return 'thinking';
 }
 

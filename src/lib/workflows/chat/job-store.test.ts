@@ -157,6 +157,17 @@ describe('derivePhase', () => {
     expect(derivePhase(job)).toBe('streaming');
   });
 
+  it('returns streaming even when lastEventAt is stale, if lastTokenAt is recent', () => {
+    vi.useFakeTimers();
+    const start = Date.UTC(2026, 0, 1);
+    vi.setSystemTime(start);
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.lastEventAt = start - 30_000; // stale — would be stalled without lastTokenAt
+    job.lastTokenAt = start;          // recent token
+    expect(derivePhase(job)).toBe('streaming');
+  });
+
   it('returns stalled when last event is older than 25s', () => {
     vi.useFakeTimers();
     const start = Date.UTC(2026, 0, 1);
