@@ -65,7 +65,7 @@
       <a
         href={titleHref}
         title={title}
-        class="display text-[20px] sm:text-[24px] leading-none truncate hover:text-[var(--accent)] transition-colors min-w-0 flex-shrink"
+        class="display-title text-[20px] sm:text-[24px] leading-none truncate hover:text-[var(--accent)] transition-colors min-w-0 flex-shrink"
         style="color: var(--text-primary); max-width: min(55vw, 520px);"
       >
         {title}
@@ -73,7 +73,7 @@
     {:else}
       <h1
         title={title}
-        class="display text-[20px] sm:text-[24px] leading-none truncate min-w-0 flex-shrink"
+        class="display-title text-[20px] sm:text-[24px] leading-none truncate min-w-0 flex-shrink"
         style="color: var(--text-primary); max-width: min(55vw, 520px);"
       >
         {title}

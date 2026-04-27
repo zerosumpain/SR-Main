@@ -73,7 +73,7 @@
           </div>
 
           <h2
-            class="display text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+            class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
             style="color: var(--text-primary);"
           >
             {project.title || project.prompt.slice(0, 40)}
@@ -111,7 +111,7 @@
 </section>
 
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
-  <p class="display text-[14px]" style="color: var(--text-ghost);">STRANGE RAMBLINGS</p>
+  <p class="display-title text-[14px]" style="color: var(--text-ghost);">STRANGE RAMBLINGS</p>
   <div class="flex gap-6">
     <a href="/projects" class="nav-link">Projects</a>
     <a href="/" class="nav-link">Home</a>

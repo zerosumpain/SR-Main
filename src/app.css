@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   /* Warm brutalist palette — high contrast */
@@ -10,8 +10,11 @@
 
   --accent: #c4570a;        /* Burnt orange — punchy, not regal */
   --accent-hover: #a84808;
+  --accent-tint-04: rgba(196, 87, 10, 0.04);
   --accent-tint-08: rgba(196, 87, 10, 0.08);
+  --accent-tint-14: rgba(196, 87, 10, 0.14);
   --accent-tint-20: rgba(196, 87, 10, 0.2);
+  --accent-tint-25: rgba(196, 87, 10, 0.25);
   --accent-tint-35: rgba(196, 87, 10, 0.35);
   --bg: #ede4d4;            /* Warm cream, slightly darker */
   --bg-base: #ede4d4;       /* Alias of --bg for admin layout background */
@@ -34,8 +37,30 @@
   --status-success: #6ab88a;
 
   --font-display: 'Archivo Black', Impact, sans-serif;
+  --font-brand: 'DM Mono', ui-monospace, monospace;
+  --font-title: 'Neue Haas Grotesk Display Pro', 'Neue Haas Grotesk Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Type scale */
+  --fs-display-xl: 120px;
+  --fs-display-lg: 96px;
+  --fs-display-md: 64px;
+  --fs-display-sm: 32px;
+  --fs-display-xs: 20px;
+  --fs-body-lg: 18px;
+  --fs-body: 16px;
+  --fs-body-sm: 14px;
+  --fs-label: 11px;
+  --fs-label-xs: 10px;
+  --fs-nav: 12px;
+
+  /* Layout */
+  --site-nav-height: 56px;
+  --site-nav-height-mobile: 48px;
+  --radius-sharp: 2px;
+  --radius-pill: 100px;
+  --radius-round: 4px;
 
   /* Grain overlay */
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
@@ -69,11 +94,12 @@ body::after {
 
 /* Selection — bold orange */
 ::selection {
-  background: rgba(196, 87, 10, 0.25);
+  background: var(--accent-tint-25);
   color: var(--text-primary);
 }
 
-/* Headlines — heavy, unapologetic */
+/* Display — Archivo Black, the canonical heavy headline (matches design system).
+   Used for hero numerals, page titles, section callouts. */
 .display {
   font-family: var(--font-display);
   font-weight: 900;
@@ -81,6 +107,63 @@ body::after {
   letter-spacing: -0.02em;
   line-height: 0.9;
 }
+
+/* Display-title — Neue Haas Grotesk variant, used in admin/health UIs and
+   inner-page headlines that want the cleaner geometric look over Archivo's heft. */
+.display-title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+  line-height: 0.85;
+}
+
+/* Brand wordmark — DM Mono lowercase with orange `>` prompt prefix.
+   Pair with lowercase text content. */
+.brand {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: lowercase;
+  line-height: 1;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45ch;
+  transition: color 0.2s;
+}
+.brand::before {
+  content: '>';
+  color: var(--accent);
+  opacity: 0.7;
+  font-weight: 500;
+}
+.brand:hover { color: var(--accent); }
+.brand:hover::before { opacity: 1; }
+
+/* Compact monogram variant — bordered pill for nav/header use */
+.brand--mono {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: lowercase;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4ch;
+  padding: 4px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sharp);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color 0.2s, color 0.2s;
+}
+.brand--mono::before {
+  content: '>';
+  color: var(--accent);
+  opacity: 0.7;
+}
+.brand--mono:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Section label — industrial */
 .label {

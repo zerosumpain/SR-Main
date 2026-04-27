@@ -30,7 +30,7 @@
 
     <div class="caption">
       <p class="label">/heart/2&ensp;·&ensp;FIELD ADVECTION</p>
-      <p class="display">{bpm}<span class="unit">&thinsp;BPM</span></p>
+      <p class="display-title">{bpm}<span class="unit">&thinsp;BPM</span></p>
       <p class="phase">{phaseLabels[stats.phase] ?? stats.phase.toUpperCase()}</p>
       <div class="cycle-bar">
         <div class="cycle-fill" style:width="{(stats.cyclePhi * 100).toFixed(1)}%"></div>

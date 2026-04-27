@@ -27,7 +27,7 @@
 
     <div class="caption">
       <p class="label">/heart&ensp;·&ensp;{stats.phase.toUpperCase()}</p>
-      <p class="display">{bpm}<span class="unit">&thinsp;BPM</span></p>
+      <p class="display-title">{bpm}<span class="unit">&thinsp;BPM</span></p>
       <p class="sub">
         Position-based fluids through an SDF heart. Valves toggle with the
         cardiac cycle; particles solve density constraints.
