@@ -3,10 +3,12 @@ import {
   publishJobEvent,
   subscribeJob,
   createJob,
+  getJob,
   cleanOldJobs,
   createWaiter,
   cancelJob,
   respondToWaiter,
+  derivePhase,
 } from './job-store';
 import type { JobEvent } from './job-store';
 
@@ -121,5 +123,54 @@ describe('createJob initialises new heartbeat/plan fields', () => {
     expect(job.selfProdCount).toBe(0);
     expect(job.lastSelfProdAt).toBeNull();
     expect(typeof jobId).toBe('string');
+  });
+});
+
+describe('derivePhase', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('returns idle when job is not running', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.status = 'done';
+    expect(derivePhase(job)).toBe('idle');
+  });
+
+  it('returns awaiting_user when a waiter is registered', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.awaitingWaiter = { kind: 'plan', key: 'plan:abc', since: Date.now() };
+    expect(derivePhase(job)).toBe('awaiting_user');
+  });
+
+  it('returns tool when a tool is in flight', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.inflightTool = { name: 'stealth-scrape', toolCallId: 'c1', since: Date.now() };
+    expect(derivePhase(job)).toBe('tool');
+  });
+
+  it('returns streaming when a recent token event arrived', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.lastTokenAt = Date.now();
+    expect(derivePhase(job)).toBe('streaming');
+  });
+
+  it('returns stalled when last event is older than 25s', () => {
+    vi.useFakeTimers();
+    const start = Date.UTC(2026, 0, 1);
+    vi.setSystemTime(start);
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    job.lastEventAt = start;
+    vi.setSystemTime(start + 26_000);
+    expect(derivePhase(job)).toBe('stalled');
+  });
+
+  it('returns thinking when running with no tool, no streaming, recent activity', () => {
+    const { jobId } = createJob('hi');
+    const job = getJob(jobId)!;
+    expect(derivePhase(job)).toBe('thinking');
   });
 });

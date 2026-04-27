@@ -124,6 +124,7 @@ export interface OrchestratorJob {
   inflightTool: { name: string; toolCallId: string; since: number } | null;
   // `key` matches the waiter-map key, e.g. 'plan:<planId>', 'clarify:<clarifyId>', 'confirm:<confirmId>'
   awaitingWaiter: { kind: 'plan' | 'clarify' | 'confirm'; key: string; since: number /* epoch ms */ } | null;
+  lastTokenAt: number | null;
   // --- Plan + self-prod ---
   plan: PlanPayload | null;
   coveredStepIds: Set<string>;
@@ -218,6 +219,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     partialResponse: '',
     inflightTool: null,
     awaitingWaiter: null,
+    lastTokenAt: null,
     plan: null,
     coveredStepIds: new Set<string>(),
     selfProdCount: 0,
@@ -339,6 +341,20 @@ export function listJobs(): Array<{
     progressCount: job.progress.length,
     elapsed: Date.now() - job.startedAt,
   }));
+}
+
+export type Phase = 'idle' | 'thinking' | 'streaming' | 'tool' | 'awaiting_user' | 'stalled';
+
+export const STREAMING_FRESHNESS_MS = 2_000;
+
+export function derivePhase(job: OrchestratorJob): Phase {
+  if (job.status !== 'running') return 'idle';
+  if (job.awaitingWaiter) return 'awaiting_user';
+  if (job.inflightTool) return 'tool';
+  const now = Date.now();
+  if (job.lastTokenAt && now - job.lastTokenAt < STREAMING_FRESHNESS_MS) return 'streaming';
+  if (now - job.lastEventAt >= 25_000) return 'stalled';
+  return 'thinking';
 }
 
 interface Waiter {
