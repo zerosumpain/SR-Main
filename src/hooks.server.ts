@@ -9,6 +9,11 @@ import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
+import { startIdleCycler, loadSettings } from '$lib/workflows/chat/idle-cycler';
+
+if (process.env.PULSE_CYCLER_ENABLED === '1') {
+  void loadSettings().then(() => startIdleCycler());
+}
 
 // Expensive endpoints — apply per-user rate limits.
 // Pattern → { capacity (burst), refillPerSecond (steady-state) }.
