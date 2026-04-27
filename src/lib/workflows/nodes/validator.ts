@@ -8,21 +8,44 @@ function checkType(value: unknown, expectedType: string): boolean {
   return typeof value === expectedType;
 }
 
+/**
+ * Convert a SchemaFieldRow[] (from the schema-builder field type) into the
+ * { properties, required } JSON-Schema shape the validator already consumes.
+ */
+function rowsToSchema(rows: unknown): { type: 'object'; properties: Record<string, { type: string }>; required: string[] } {
+  if (!Array.isArray(rows)) return { type: 'object', properties: {}, required: [] };
+  const properties: Record<string, { type: string }> = {};
+  const required: string[] = [];
+  for (const r of rows as { name: string; type: string; required: boolean }[]) {
+    if (!r || typeof r !== 'object' || !r.name) continue;
+    properties[r.name] = { type: r.type };
+    if (r.required) required.push(r.name);
+  }
+  return { type: 'object', properties, required };
+}
+
 function validateSchema(
   input: Record<string, unknown>,
   config: Record<string, unknown>,
 ): NodeResult {
-  const schemaStr = (config.schema as string) || '';
+  const rawSchema = config.schema;
   let schema: JsonSchema;
 
-  try {
-    schema = JSON.parse(schemaStr) as JsonSchema;
-  } catch {
-    return {
-      output: { ...input, valid: false, errors: ['Invalid JSON schema'] },
-      metadata: { _selectedHandle: 'fail' },
-      rowCount: 1,
-    };
+  // Backwards compatibility: existing workflows store the schema as a JSON
+  // string (textarea). The new UI stores it as SchemaFieldRow[]. Support both.
+  if (Array.isArray(rawSchema)) {
+    schema = rowsToSchema(rawSchema) as unknown as JsonSchema;
+  } else {
+    const schemaStr = (rawSchema as string) || '';
+    try {
+      schema = JSON.parse(schemaStr) as JsonSchema;
+    } catch {
+      return {
+        output: { ...input, valid: false, errors: ['Invalid JSON schema'] },
+        metadata: { _selectedHandle: 'fail' },
+        rowCount: 1,
+      };
+    }
   }
 
   const errors: string[] = [];
@@ -168,9 +191,8 @@ export const validatorDef: NodeDefinition = {
     {
       key: 'schema',
       label: 'Schema',
-      type: 'textarea',
-      placeholder: '{"type":"object","required":["title"]}',
-      description: 'JSON Schema string.',
+      type: 'schema-builder',
+      description: 'Define the expected fields, types, and which are required.',
       visibleWhen: { key: 'mode', equals: 'schema' },
     },
   ],
