@@ -23,7 +23,17 @@ describe('job-store event schema', () => {
   it('accepts all new event variants without type error', () => {
     const { jobId } = createJob('test');
     const events: JobEvent[] = [
-      { type: 'heartbeat', summary: 'Still working: fetching data', elapsedMs: 30000 },
+      {
+        type: 'heartbeat',
+        phase: 'thinking',
+        summary: 'Still working: fetching data',
+        currentStep: 'fetching data',
+        inflightTool: null,
+        awaitingWaiter: null,
+        elapsedMs: 30000,
+        sinceLastEventMs: 30000,
+        watchdog: { idleMs: 30000, idleLimitMs: 180000, totalMs: 30000, totalLimitMs: 600000 },
+      } satisfies JobEvent,
       { type: 'plan', plan: { steps: [{ id: 's1', title: 'x', detail: 'y' }], filesToTouch: [] }, planId: 'p1' },
       { type: 'plan_ack', planId: 'p1', decision: 'approved' },
       { type: 'confirm', confirmId: 'c1', prompt: 'Delete workflow?', destructive: true },
@@ -71,7 +81,14 @@ describe('heartbeat', () => {
       const received: JobEvent[] = [];
       subscribeJob(jobId, (e) => received.push(e));
       vi.advanceTimersByTime(HEARTBEAT_MIN_SILENCE_MS + 1_000);
-      expect(received.some((e) => e.type === 'heartbeat')).toBe(true);
+      const hb = received.find((e) => e.type === 'heartbeat');
+      expect(hb).toBeDefined();
+      if (hb && hb.type === 'heartbeat') {
+        expect(hb.phase).toBe('stalled');
+        expect(hb.elapsedMs).toBeGreaterThanOrEqual(HEARTBEAT_MIN_SILENCE_MS);
+        expect(hb.watchdog.idleLimitMs).toBe(180_000);
+        expect(hb.watchdog.totalLimitMs).toBe(600_000);
+      }
     } finally {
       vi.useRealTimers();
     }

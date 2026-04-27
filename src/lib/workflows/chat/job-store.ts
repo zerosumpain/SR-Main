@@ -32,7 +32,22 @@ export type JobEvent =
   | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string; summary?: string }
   | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }
-  | { type: 'heartbeat'; summary: string; elapsedMs: number }
+  | {
+      type: 'heartbeat';
+      phase: Exclude<Phase, 'idle' | 'streaming'>; // streaming/idle never trigger a heartbeat emission
+      summary: string;
+      currentStep: string | null;
+      inflightTool: { name: string; sinceMs: number } | null;
+      awaitingWaiter: { kind: 'plan' | 'clarify' | 'confirm'; sinceMs: number } | null;
+      elapsedMs: number;
+      sinceLastEventMs: number;
+      watchdog: {
+        idleMs: number;
+        idleLimitMs: number;
+        totalMs: number;
+        totalLimitMs: number;
+      };
+    }
   | { type: 'plan'; planId: string; plan: PlanPayload }
   | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
   | { type: 'confirm'; confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> }
@@ -210,18 +225,36 @@ function startHeartbeat(jobId: string, job: OrchestratorJob): void {
     const now = Date.now();
     const sinceEvent = now - job.lastEventAt;
     const sinceHeartbeat = now - job.lastHeartbeatAt;
-    if (sinceEvent >= HEARTBEAT_MIN_SILENCE_MS && sinceHeartbeat >= HEARTBEAT_MIN_SILENCE_MS) {
-      const summary =
-        job.currentStep ??
-        job.progress[job.progress.length - 1] ??
-        'Still thinking...';
-      job.lastHeartbeatAt = now;
-      publishJobEvent(jobId, {
-        type: 'heartbeat',
-        summary: summary.trim().slice(0, 140),
-        elapsedMs: now - job.startedAt,
-      });
-    }
+    if (sinceEvent < HEARTBEAT_MIN_SILENCE_MS || sinceHeartbeat < HEARTBEAT_MIN_SILENCE_MS) return;
+
+    const phase = derivePhase(job);
+    if (phase === 'idle' || phase === 'streaming') return;
+
+    const summary =
+      job.currentStep ??
+      job.progress[job.progress.length - 1] ??
+      'Still thinking...';
+    job.lastHeartbeatAt = now;
+    publishJobEvent(jobId, {
+      type: 'heartbeat',
+      phase,
+      summary: summary.trim().slice(0, 140),
+      currentStep: job.currentStep ?? null,
+      inflightTool: job.inflightTool
+        ? { name: job.inflightTool.name, sinceMs: now - job.inflightTool.since }
+        : null,
+      awaitingWaiter: job.awaitingWaiter
+        ? { kind: job.awaitingWaiter.kind, sinceMs: now - job.awaitingWaiter.since }
+        : null,
+      elapsedMs: now - job.startedAt,
+      sinceLastEventMs: sinceEvent,
+      watchdog: {
+        idleMs: sinceEvent,
+        idleLimitMs: IDLE_TIMEOUT_MS,
+        totalMs: now - job.startedAt,
+        totalLimitMs: HARD_TIMEOUT_MS,
+      },
+    });
   }, HEARTBEAT_CHECK_INTERVAL_MS);
 }
 
