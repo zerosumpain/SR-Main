@@ -17,6 +17,8 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
+  import HeartbeatPill from './HeartbeatPill.svelte';
+  import HeartbeatPanel from './HeartbeatPanel.svelte';
 
   let {
     conversationId,
@@ -125,7 +127,58 @@
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
-  let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
+  type Phase = 'idle' | 'thinking' | 'streaming' | 'tool' | 'awaiting_user' | 'stalled';
+  const pulseEnabled = !!import.meta.env.PUBLIC_PULSE_ENABLED;
+  let phase = $state<Phase>('idle');
+  let pillLabel = $state('');
+  let pillElapsed = $state(0);
+  let pillWatchdog = $state<{ idleMs: number; idleLimitMs: number; totalMs: number; totalLimitMs: number } | null>(null);
+  let lastEvents = $state<Array<{ type: string; summary: string; at: number }>>([]);
+  let panelOpen = $state(false);
+  let pulseFeed = $state<Array<{ id: string; kind: string; severity: 'info'|'warn'|'error'; summary: string; at: number }>>([]);
+  let activeStepId = $state<string | null>(null);
+  let coveredStepIds = $state<string[]>([]);
+  let planSteps = $state<Array<{ id: string; title: string }>>([]);
+
+  function clearPill() {
+    phase = 'idle';
+    pillLabel = '';
+    pillElapsed = 0;
+    pillWatchdog = null;
+  }
+
+  function pushEvent(type: string, summary: string) {
+    lastEvents = [...lastEvents.slice(-19), { type, summary, at: Date.now() }];
+  }
+
+  function tagEvent(data: { type: string; tool?: string; plan?: { steps: Array<{ id: string; title: string }> } }) {
+    switch (data.type) {
+      case 'token':
+        phase = 'streaming';
+        if (!pillLabel) pillLabel = 'Streaming response…';
+        pushEvent('token', '');
+        return;
+      case 'tool_start':
+        phase = 'tool';
+        pillLabel = `Tool: ${data.tool ?? 'unknown'}`;
+        pushEvent('tool_start', data.tool ?? '');
+        return;
+      case 'tool_result':
+        phase = 'thinking';
+        pillLabel = 'Thinking…';
+        pushEvent('tool_result', data.tool ?? '');
+        return;
+      case 'plan':
+        if (data.plan?.steps) {
+          planSteps = data.plan.steps.map((s) => ({ id: s.id, title: s.title }));
+          activeStepId = data.plan.steps[0]?.id ?? null;
+        }
+        return;
+      case 'self_prod':
+        pushEvent('self_prod', 'auto-continued');
+        return;
+    }
+  }
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
@@ -424,7 +477,10 @@
 
     input = '';
     loading = true;
-    heartbeat = null;
+    phase = 'thinking';
+    pillLabel = 'Thinking…';
+    pillElapsed = 0;
+    pillWatchdog = null;
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
@@ -520,10 +576,11 @@
           let data: any;
           try { data = JSON.parse(event.data); } catch { return; }
 
+          tagEvent(data);
+
           if (data.type === 'connected') return;
 
           if (data.type === 'token') {
-            heartbeat = null;
             accumulatedContent += data.delta;
             messages = messages.map((m) =>
               m.id === progressId ? { ...m, content: accumulatedContent } : m,
@@ -533,7 +590,6 @@
           }
 
           if (data.type === 'tool_start') {
-            heartbeat = null;
             const newStep: ToolStep = {
               tool: data.tool,
               args: data.args || {},
@@ -549,7 +605,6 @@
           }
 
           if (data.type === 'tool_result') {
-            heartbeat = null;
             messages = messages.map((m) => {
               if (m.id !== progressId || !m.toolSteps) return m;
               // Find the most recent running step for this tool name and finalise it
@@ -569,7 +624,7 @@
           }
 
           if (data.type === 'status') {
-            heartbeat = null;
+            clearPill();
             // Mid-task working note — same UX as `/api/jkai/events` status_update
             const newMsg: Message = {
               id: crypto.randomUUID(),
@@ -592,16 +647,24 @@
           }
 
           if (data.type === 'heartbeat') {
-            heartbeat = {
-              summary: data.summary,
-              elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
-            };
+            phase = data.phase;
+            pillElapsed = Math.round((data.elapsedMs ?? 0) / 1000);
+            pillWatchdog = data.watchdog;
+            pillLabel =
+              data.phase === 'tool' && data.inflightTool
+                ? `Tool: ${data.inflightTool.name} (${Math.round(data.inflightTool.sinceMs / 1000)}s)`
+              : data.phase === 'awaiting_user' && data.awaitingWaiter
+                ? `Awaiting your ${data.awaitingWaiter.kind}`
+              : data.phase === 'stalled'
+                ? `Stalled — ${data.summary}`
+                : data.summary;
+            pushEvent('heartbeat', data.summary);
             return;
           }
 
           if (data.type === 'plan') {
             pendingPlan = { planId: data.planId, plan: data.plan };
-            heartbeat = null;
+            clearPill();
             return;
           }
 
@@ -617,7 +680,7 @@
               destructive: data.destructive,
               details: data.details,
             };
-            heartbeat = null;
+            clearPill();
             return;
           }
 
@@ -628,7 +691,7 @@
 
           if (data.type === 'clarify') {
             pendingClarify = { clarifyId: data.clarifyId, questions: data.questions };
-            heartbeat = null;
+            clearPill();
             return;
           }
 
@@ -645,7 +708,7 @@
               liveTokens: '',
               toolSteps: [],
             };
-            heartbeat = null;
+            clearPill();
             return;
           }
 
@@ -690,7 +753,7 @@
           }
 
           if (data.type === 'done') {
-            heartbeat = null;
+            clearPill();
             pendingPlan = null;
             pendingConfirm = null;
             pendingClarify = null;
@@ -723,7 +786,7 @@
           }
 
           if (data.type === 'error') {
-            heartbeat = null;
+            clearPill();
             pendingPlan = null;
             pendingConfirm = null;
             pendingClarify = null;
@@ -752,7 +815,7 @@
 
     loading = false;
     currentJobId = null;
-    heartbeat = null;
+    clearPill();
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
@@ -881,11 +944,28 @@
                     onresolve={() => { pendingClarify = null; }}
                   />
                 {/if}
-                {#if heartbeat}
-                  <div class="heartbeat-line" role="status" aria-live="polite">
-                    <span class="hb-dot"></span>
-                    <span class="hb-summary">{heartbeat.summary}</span>
-                    <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                {#if pulseEnabled}
+                  <div class="pill-wrapper">
+                    <HeartbeatPill
+                      {phase}
+                      label={pillLabel || (phase === 'idle' ? 'idle' : 'Working…')}
+                      elapsedSec={pillElapsed}
+                      watchdog={pillWatchdog ?? undefined}
+                      onClick={() => (panelOpen = !panelOpen)}
+                    />
+                    {#if panelOpen}
+                      <div class="pill-popover">
+                        <HeartbeatPanel
+                          {phase}
+                          label={pillLabel}
+                          watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
+                          plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
+                          events={lastEvents.map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
+                          pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
+                          onClose={() => (panelOpen = false)}
+                        />
+                      </div>
+                    {/if}
                   </div>
                 {/if}
                 {#each Object.values(subAgents) as agent (agent.agentId)}
@@ -975,11 +1055,28 @@
                   onresolve={() => { pendingClarify = null; }}
                 />
               {/if}
-              {#if heartbeat}
-                <div class="heartbeat-line mb-3" role="status" aria-live="polite">
-                  <span class="hb-dot"></span>
-                  <span class="hb-summary">{heartbeat.summary}</span>
-                  <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+              {#if pulseEnabled}
+                <div class="pill-wrapper">
+                  <HeartbeatPill
+                    {phase}
+                    label={pillLabel || (phase === 'idle' ? 'idle' : 'Working…')}
+                    elapsedSec={pillElapsed}
+                    watchdog={pillWatchdog ?? undefined}
+                    onClick={() => (panelOpen = !panelOpen)}
+                  />
+                  {#if panelOpen}
+                    <div class="pill-popover">
+                      <HeartbeatPanel
+                        {phase}
+                        label={pillLabel}
+                        watchdog={pillWatchdog ?? { idleMs: 0, idleLimitMs: 180000, totalMs: 0, totalLimitMs: 600000 }}
+                        plan={planSteps.length > 0 ? { steps: planSteps, activeStepId, coveredStepIds } : null}
+                        events={lastEvents.map((e) => ({ type: e.type, summary: e.summary, relMs: Date.now() - e.at }))}
+                        pulseEvents={pulseFeed.slice(0, 5).map((p) => ({ ...p, relMs: Date.now() - p.at }))}
+                        onClose={() => (panelOpen = false)}
+                      />
+                    </div>
+                  {/if}
                 </div>
               {/if}
               {#each Object.values(subAgents) as agent (agent.agentId)}
@@ -1193,31 +1290,6 @@
   @keyframes typing-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
     30% { transform: translateY(-4px); opacity: 0.7; }
-  }
-
-  .heartbeat-line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    background: color-mix(in srgb, var(--accent) 4%, transparent);
-    border-bottom: 1px solid var(--card-border);
-  }
-  .heartbeat-line .hb-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: hb-pulse 1.4s ease-in-out infinite;
-  }
-  .heartbeat-line .hb-summary { flex: 1; }
-  .heartbeat-line .hb-elapsed { opacity: 0.7; font-variant-numeric: tabular-nums; }
-  @keyframes hb-pulse {
-    0%, 100% { opacity: 0.25; transform: scale(0.85); }
-    50%      { opacity: 1;    transform: scale(1.1);  }
   }
 
   .step-cards {
@@ -1479,5 +1551,13 @@
     text-align: center;
     padding: 2rem 0;
     color: var(--text-ghost);
+  }
+
+  .pill-wrapper { position: relative; display: inline-block; }
+  .pill-popover {
+    position: absolute;
+    bottom: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 30;
   }
 </style>
