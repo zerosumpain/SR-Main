@@ -1238,3 +1238,46 @@ export type WorkflowFilePermissions = {
   append: boolean;
   delete: boolean;
 };
+
+// ==========================================
+// Orchestrator Heartbeat — Pulse Events + Settings
+// ==========================================
+//
+// pulse_events: one row per cycler observation.
+//   kind: 'health_check' | 'audit_digest' | 'workflow_efficiency' |
+//         'chat_log_review' | 'memory_update_review' | 'self_prod'
+//   severity: 'info' | 'warn' | 'error'
+//
+// pulse_settings: singleton config (id = 'singleton').
+//   schedules: { [kind]: { intervalMs: number, enabled: boolean } }
+
+export const pulseEvents = pgTable(
+  'pulse_events',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    kind: text('kind').notNull(),
+    severity: text('severity').notNull(),
+    summary: text('summary').notNull(),
+    details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  },
+  (t) => ({
+    byAt: index('pulse_events_at_idx').on(t.at.desc()),
+  }),
+);
+
+export type PulseEvent = typeof pulseEvents.$inferSelect;
+export type NewPulseEvent = typeof pulseEvents.$inferInsert;
+
+export const pulseSettings = pgTable(
+  'pulse_settings',
+  {
+    id: text('id').primaryKey().default(sql`'singleton'`),
+    schedules: jsonb('schedules').notNull().default(sql`'{}'::jsonb`),
+    idleQuietMs: integer('idle_quiet_ms').notNull().default(300_000),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export type PulseSettings = typeof pulseSettings.$inferSelect;
