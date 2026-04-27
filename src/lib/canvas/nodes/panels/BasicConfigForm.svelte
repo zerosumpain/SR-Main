@@ -92,14 +92,43 @@
 
 <style>
   .bcf { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
-  .bcf-section { margin: 8px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #666; }
+  .bcf-section {
+    margin: 8px 0 0 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
   .bcf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .bcf-label { font-weight: 600; color: #222; }
-  .bcf-desc { font-size: 11px; color: #666; }
-  .bcf-slider { display: flex; gap: 8px; align-items: center; }
-  .bcf-code { font-family: var(--font-mono, monospace); font-size: 11px; }
-  .bcf-advanced-toggle { margin-top: 8px; background: none; border: 1px dashed #ccc; padding: 4px 8px; font-size: 11px; cursor: pointer; }
+  .bcf-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .bcf-desc { font-size: 11px; color: var(--text-ghost); }
+  .bcf-slider { display: flex; gap: 8px; align-items: center; color: var(--text-primary); }
+  .bcf-code { font-family: var(--font-mono); font-size: 11px; }
+  .bcf-advanced-toggle {
+    margin-top: 8px;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px dashed var(--card-border);
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .bcf-advanced-toggle:hover { color: var(--text-primary); }
   input[type='text'], input[type='number'], select, textarea {
-    width: 100%; padding: 4px 6px; border: 1px solid #d0d0d0; border-radius: 3px; font: inherit; box-sizing: border-box;
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    font: inherit;
+    box-sizing: border-box;
+    outline: none;
+  }
+  input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus {
+    border-color: var(--text-muted);
   }
 </style>

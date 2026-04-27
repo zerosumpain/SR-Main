@@ -28,8 +28,16 @@
     'code-execute',
   ]);
 
-  function menuShowsConfigPanel(type: string): boolean {
+  // Kinds that have a hand-crafted inline config UI further down in this file
+  // (search for `{:else if menuNode.kind === '<kind>'}` blocks). For these,
+  // BasicConfigForm would duplicate the editor — defer to the inline UI.
+  const INLINE_CONFIG_KINDS = new Set([
+    'trigger', 'chat', 'llm', 'parse', 'input', 'output', 'intel', 'intelligence',
+  ]);
+
+  function menuShowsConfigPanel(type: string, kind?: string): boolean {
     if (SPECIALISED_PANEL_TYPES.has(type)) return true;
+    if (kind && INLINE_CONFIG_KINDS.has(kind)) return false;
     const def = getDefinition(type);
     return !!(def?.basicConfig && def.basicConfig.length > 0);
   }
@@ -4419,8 +4427,9 @@
                 </section>
               {/if}
 
-              <!-- Schema-driven config panel: specialised → BasicConfigForm (basicConfig) → JSON fallback -->
-              {#if menuShowsConfigPanel(menuNode.type)}
+              <!-- Schema-driven config panel: specialised → BasicConfigForm (basicConfig) → JSON fallback.
+                   Skipped for kinds that already have a hand-crafted inline editor above. -->
+              {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
                 {@const menuDefinition = getDefinition(menuNode.type)}
                 {@const Panel = getPanel(menuNode.type, menuDefinition)}
                 <div class="menu-config-section">

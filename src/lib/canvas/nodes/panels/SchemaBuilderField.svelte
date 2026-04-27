@@ -50,11 +50,37 @@
 <button type="button" class="sb-add" onclick={add}>+ Add field</button>
 
 <style>
-  .sb { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .sb th, .sb td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  .sb th { font-size: 10px; text-transform: uppercase; color: #666; }
-  .sb input[type='text'], .sb select { width: 100%; padding: 3px 6px; border: 1px solid #d0d0d0; border-radius: 3px; }
-  .sb-empty { color: #999; text-align: center; font-style: italic; padding: 12px 0; }
-  .sb-add { margin-top: 6px; background: none; border: 1px dashed #ccc; padding: 3px 8px; font-size: 11px; cursor: pointer; }
-  button[aria-label='remove'] { background: none; border: none; font-size: 16px; cursor: pointer; color: #c5221f; }
+  .sb { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--text-primary); }
+  .sb th, .sb td { padding: 4px 6px; border-bottom: 1px solid var(--card-border); text-align: left; }
+  .sb th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+  .sb input[type='text'], .sb select {
+    width: 100%;
+    padding: 4px 6px;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    font: inherit;
+    outline: none;
+  }
+  .sb-empty { color: var(--text-ghost); text-align: center; font-style: italic; padding: 12px 0; }
+  .sb-add {
+    margin-top: 6px;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px dashed var(--card-border);
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .sb-add:hover { color: var(--text-primary); }
+  button[aria-label='remove'] { background: none; border: none; font-size: 16px; cursor: pointer; color: #c44; }
 </style>
