@@ -3,6 +3,12 @@
 
 export type ToolResult = { success: boolean; data?: unknown; error?: string };
 
+export interface ToolContext {
+  conversationId?: string | null;
+  messageId?: string | null;
+  parentJobId?: string | null;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -13,7 +19,7 @@ export interface ToolDefinition {
   };
   category: string;
   toolset: string;
-  handler: (args: Record<string, unknown>) => Promise<ToolResult>;
+  handler: (args: Record<string, unknown>, ctx?: ToolContext) => Promise<ToolResult>;
 }
 
 export const tools: ToolDefinition[] = [];

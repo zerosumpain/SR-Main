@@ -4,7 +4,7 @@
 export { register } from './registry-internal';
 export type { ToolDefinition, ToolResult } from './registry-internal';
 import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
-import type { ToolResult } from './registry-internal';
+import type { ToolResult, ToolContext } from './registry-internal';
 
 // --- Load all domain modules (each calls register() on import) ---
 import './tools/health';
@@ -98,11 +98,12 @@ export function getToolsetManifest(): Array<{
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
+  ctx?: ToolContext,
 ): Promise<ToolResult> {
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
   try {
-    return await tool.handler(args);
+    return await tool.handler(args, ctx);
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }

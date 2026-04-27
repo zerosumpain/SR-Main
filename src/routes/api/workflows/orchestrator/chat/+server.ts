@@ -5,7 +5,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
@@ -355,6 +355,19 @@ export const POST: RequestHandler = async ({ request }) => {
             }).returning({ id: orchestratorChats.id });
             assistantMsgId = ins.id;
           }
+        }
+
+        // Promote any orphan attachments created by tools during this turn
+        // (e.g. write_document) to the just-saved assistant message so the
+        // chat UI surfaces them. Tools insert with messageId=null because the
+        // assistant message id doesn't exist yet at tool-execution time.
+        if (assistantMsgId && conversationId) {
+          await db.update(jkaiAttachments)
+            .set({ messageId: assistantMsgId })
+            .where(and(
+              eq(jkaiAttachments.conversationId, conversationId),
+              isNull(jkaiAttachments.messageId),
+            ));
         }
 
         const assistantAttachments = assistantMsgId

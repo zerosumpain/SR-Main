@@ -104,7 +104,7 @@ register({
     },
     required: ['filename', 'content'],
   },
-  handler: async (args) => {
-    return handleWriteDocument(args as any);
+  handler: async (args, ctx) => {
+    return handleWriteDocument(args as any, ctx ?? undefined);
   },
 });
