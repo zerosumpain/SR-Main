@@ -73,7 +73,7 @@
           </div>
 
           <h2
-            class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+            class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
             style="color: var(--text-primary);"
           >
             {project.title || project.prompt.slice(0, 40)}

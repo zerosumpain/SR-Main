@@ -45,7 +45,7 @@
         </span>
       </div>
       <h2
-        class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
         DEEP DIVE
@@ -87,7 +87,7 @@
         </span>
       </div>
       <h2
-        class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
         THE BIOME
@@ -129,7 +129,7 @@
         </span>
       </div>
       <h2
-        class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
         AI EXPERIMENTS
@@ -171,7 +171,7 @@
         </span>
       </div>
       <h2
-        class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
         100-DAY PLAN
@@ -213,7 +213,7 @@
         </span>
       </div>
       <h2
-        class="display-title text-[22px] mb-3 group-hover:text-[var(--accent)] transition-colors"
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
         HEALTH

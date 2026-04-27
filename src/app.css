@@ -38,7 +38,6 @@
 
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-brand: 'DM Mono', ui-monospace, monospace;
-  --font-title: 'Neue Haas Grotesk Display Pro', 'Neue Haas Grotesk Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
@@ -106,16 +105,6 @@ body::after {
   text-transform: uppercase;
   letter-spacing: -0.02em;
   line-height: 0.9;
-}
-
-/* Display-title — Neue Haas Grotesk variant, used in admin/health UIs and
-   inner-page headlines that want the cleaner geometric look over Archivo's heft. */
-.display-title {
-  font-family: var(--font-title);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: -0.04em;
-  line-height: 0.85;
 }
 
 /* Brand wordmark — DM Mono lowercase with orange `>` prompt prefix.

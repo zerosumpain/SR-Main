@@ -128,7 +128,7 @@
 <div class="live-page">
   {#if !isLive}
     <div class="live-empty">
-      <p class="display-title text-[24px]" style="color: var(--text-primary);">No active walk</p>
+      <p class="display text-[24px]" style="color: var(--text-primary);">No active walk</p>
       <p class="text-sm mt-2" style="color: var(--text-secondary);">
         When a walk is in progress, it will appear here in realtime.
       </p>
@@ -143,7 +143,7 @@
               {liveState.status === 'paused' ? 'PAUSED' : 'LIVE'}
             </span>
           </div>
-          <h2 class="display-title text-[18px] mt-1" style="color: var(--text-primary);">{liveState.routeName}</h2>
+          <h2 class="display text-[18px] mt-1" style="color: var(--text-primary);">{liveState.routeName}</h2>
         </div>
       </div>
     </div>
