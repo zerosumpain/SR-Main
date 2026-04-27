@@ -78,6 +78,11 @@
       durationMs?: number;
     }>
   >({});
+  // Per-node start times (Date.now() when node_started fired) feed the
+  // running-pill ticker. nowTick advances every 250ms while at least one
+  // node is running so the "Running 1.2s" label increments live.
+  let nodeStartedAt = $state.raw<Record<string, number>>({});
+  let nowTick = $state(Date.now());
   let activeRunId = $state<string | null>(null);
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
     state: 'idle',
@@ -201,6 +206,18 @@
       // user mid-interaction with another modal.
       if (!activeInteraction) activeInteraction = row;
     }
+  });
+
+  // 250ms ticker that advances `nowTick` while at least one node is
+  // running, so the "Running 1.2s" pill counts up live. The interval id is
+  // a local `const` (NOT $state) — per the codebase's Svelte 5 rule, never
+  // $state an internal handle that gets read inside a function called from
+  // a $effect, otherwise effect_update_depth_exceeded fires.
+  $effect(() => {
+    const anyRunning = Object.values(liveStatus).some((s) => s === 'running');
+    if (!anyRunning) return;
+    const id = setInterval(() => { nowTick = Date.now(); }, 250);
+    return () => clearInterval(id);
   });
 
   async function fetchInteractions(runId: string) {
@@ -332,11 +349,32 @@
     return out;
   }
 
-  function statusDotColour(s: string | null | undefined): 'red' | 'amber' | 'green' | null {
+  function statusDotColour(s: string | null | undefined): 'red' | 'amber' | 'green' | 'blue' | null {
     if (!s || s === 'idle' || s === 'pending') return null;
     if (s === 'failed') return 'red';
-    if (s === 'running' || s === 'completed_with_errors' || s === 'partial' || s === 'warning') return 'amber';
+    if (s === 'running') return 'blue';
+    if (s === 'completed_with_errors' || s === 'partial' || s === 'warning' || s === 'awaiting_human') return 'amber';
     return 'green';
+  }
+
+  function statusPillText(nodeId: string, status: string | null | undefined): string | null {
+    const live = liveData[nodeId];
+    if (status === 'running') {
+      const startedAt = nodeStartedAt[nodeId];
+      if (!startedAt) return 'Running…';
+      const secs = ((nowTick - startedAt) / 1000).toFixed(1);
+      return `Running ${secs}s`;
+    }
+    if (status === 'ok') {
+      if (typeof live?.rowCount === 'number') return `Done · ${live.rowCount} rows`;
+      return 'Done';
+    }
+    if (status === 'failed') {
+      const err = live?.error || 'failed';
+      return `Failed: ${String(err).split('\n')[0].slice(0, 40)}`;
+    }
+    if (status === 'awaiting_human') return 'Awaiting input';
+    return null;
   }
 
   function scrollChatToBottom(chatNodeId: string) {
@@ -877,13 +915,18 @@
   // in the flush tick.
   const pendingLiveStatus = new Map<string, 'running' | 'ok' | 'failed'>();
   const pendingLiveData = new Map<string, Record<string, unknown>>();
+  const pendingNodeStartedAt = new Map<string, number>();
   let liveFlushHandle: ReturnType<typeof setTimeout> | null = null;
   // 250ms is plenty for visual status — fast enough to feel live, slow
   // enough that viewNodes isn't re-derived 20x/sec.
   const LIVE_FLUSH_MS = 250;
   function flushLive() {
     liveFlushHandle = null;
-    if (pendingLiveStatus.size === 0 && pendingLiveData.size === 0) return;
+    if (
+      pendingLiveStatus.size === 0 &&
+      pendingLiveData.size === 0 &&
+      pendingNodeStartedAt.size === 0
+    ) return;
     if (pendingLiveStatus.size > 0) {
       const next = { ...liveStatus };
       for (const [id, status] of pendingLiveStatus) next[id] = status;
@@ -897,6 +940,12 @@
       }
       pendingLiveData.clear();
       liveData = next;
+    }
+    if (pendingNodeStartedAt.size > 0) {
+      const next = { ...nodeStartedAt };
+      for (const [id, ts] of pendingNodeStartedAt) next[id] = ts;
+      pendingNodeStartedAt.clear();
+      nodeStartedAt = next;
     }
   }
   function scheduleLiveFlush() {
@@ -913,6 +962,7 @@
   }) {
     if (evt.type === 'node_started' && evt.nodeId) {
       pendingLiveStatus.set(evt.nodeId, 'running');
+      pendingNodeStartedAt.set(evt.nodeId, Date.now());
       if (evt.data && 'inputData' in evt.data) {
         pendingLiveData.set(evt.nodeId, {
           ...(pendingLiveData.get(evt.nodeId) ?? {}),
@@ -3249,6 +3299,7 @@
             class:is-trigger={n.kind === 'trigger'}
             class:flash={flashNodeId === n.id}
             data-kind={n.kind}
+            data-status={liveStatus[n.id] ?? n.status ?? 'idle'}
             style:left="{n.x}px"
             style:top="{n.y}px"
             role="button"
@@ -3295,6 +3346,11 @@
                 title={`Last run: ${liveStatus[n.id] ?? n.status}`}
                 aria-label={`status ${liveStatus[n.id] ?? n.status}`}
               ></div>
+            {/if}
+            {#if statusPillText(n.id, liveStatus[n.id] ?? n.status)}
+              <span
+                class="wf-node-status-pill wf-node-status-{statusDotColour(liveStatus[n.id] ?? n.status)}"
+              >{statusPillText(n.id, liveStatus[n.id] ?? n.status)}</span>
             {/if}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
@@ -5868,6 +5924,47 @@
   .wf-node-status-red {
     background: #c44;
     box-shadow: 0 0 4px rgba(204, 68, 68, 0.55);
+  }
+  .wf-node-status-blue {
+    background: #1a73e8;
+    box-shadow: 0 0 4px rgba(26, 115, 232, 0.55);
+  }
+  /* Live-state status pill — sits below the corner dot, shows
+     "Running 1.2s" / "Done · 47 rows" / "Failed: …" while the canvas is
+     receiving SSE node events. Shares the colour class with the dot but
+     overrides background/text/shape so it reads as a label. */
+  .wf-node-status-pill {
+    position: absolute;
+    top: 4px;
+    right: 18px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    line-height: 1.4;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .wf-node-status-pill.wf-node-status-blue   { background: #1a73e8; box-shadow: none; color: #fff; }
+  .wf-node-status-pill.wf-node-status-green  { background: #1e8e3e; box-shadow: none; color: #fff; }
+  .wf-node-status-pill.wf-node-status-red    { background: #c5221f; box-shadow: none; color: #fff; }
+  .wf-node-status-pill.wf-node-status-amber  { background: #b06000; box-shadow: none; color: #fff; }
+  /* Coloured outline by data-status on the wrapper — gives every node a
+     distinct frame while a run is live so you can scan the canvas at a
+     glance. Keyframe pulse on running so it reads as alive. */
+  .wf-node[data-status='running'] {
+    box-shadow: 0 0 0 2px #1a73e8;
+    animation: wf-pulse 1.4s ease-in-out infinite;
+  }
+  .wf-node[data-status='ok']             { box-shadow: 0 0 0 2px #1e8e3e; }
+  .wf-node[data-status='failed']         { box-shadow: 0 0 0 2px #c5221f; }
+  .wf-node[data-status='awaiting_human'] { box-shadow: 0 0 0 2px #b06000; }
+  @keyframes wf-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px #1a73e8; }
+    50%      { box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.45); }
   }
   .nm-field-read {
     background: var(--bg-section);
