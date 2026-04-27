@@ -71,14 +71,14 @@ describe('shouldSelfProd', () => {
 });
 
 describe('buildProdMessage', () => {
-  it('lists uncovered step titles in the default template', () => {
-    const msg = buildProdMessage(jobWith({ plan }), 0);
+  it('lists uncovered step titles in the default template (first prod, count=1)', () => {
+    const msg = buildProdMessage(jobWith({ plan, selfProdCount: 1 }));
     expect(msg).toContain('Read config');
     expect(msg).toContain('Apply migration');
     expect(msg).toContain('Run smoke tests');
   });
-  it('uses harsher template on second prod', () => {
-    const msg = buildProdMessage(jobWith({ plan, selfProdCount: 1 }), 1);
+  it('uses harsher template on second prod (count=2)', () => {
+    const msg = buildProdMessage(jobWith({ plan, selfProdCount: 2 }));
     expect(msg.toLowerCase()).toContain('paused again');
   });
 });

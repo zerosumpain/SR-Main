@@ -26,13 +26,15 @@ export function shouldSelfProd(job: OrchestratorJob, replyText: string): boolean
   return true;
 }
 
-export function buildProdMessage(job: OrchestratorJob, prodAttempt: number): string {
+export function buildProdMessage(job: OrchestratorJob): string {
   const remaining = (job.plan?.steps ?? [])
     .filter((s) => !job.coveredStepIds.has(s.id))
     .map((s) => `- ${s.title}`)
     .join('\n');
 
-  if (prodAttempt === 0) {
+  // selfProdCount is read AFTER the caller has incremented it,
+  // so the first prod sees count=1 and the second sees count=2.
+  if (job.selfProdCount <= 1) {
     return `The plan still has uncovered steps:\n${remaining}\n\nContinue with the next step now. If a step is genuinely blocked or no longer applicable, say so and stop; otherwise proceed.`;
   }
   return `You paused again without finishing. The remaining plan steps:\n${remaining}\n\nList which step is blocking you, what is needed to unblock it, and either continue or stop with a clear reason.`;

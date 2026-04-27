@@ -294,8 +294,8 @@ describe('awaitingWaiter tracking', () => {
   });
 });
 
-describe('watchdog overrides self-prod', () => {
-  it('watchdog still aborts a job whose lastEventAt is stale, regardless of selfProdCount', async () => {
+describe('watchdog is not gated on selfProdCount', () => {
+  it('fires on stale lastEventAt even when selfProdCount > 0', async () => {
     vi.useFakeTimers();
     try {
       const start = Date.UTC(2026, 0, 1);

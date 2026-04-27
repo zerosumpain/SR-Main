@@ -85,7 +85,10 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   if (job) {
     const now = Date.now();
     // CRITICAL: reset idle watchdog on any non-heartbeat event. Heartbeats are
-    // informational and must not mask a genuinely stuck job.
+    // informational and must not mask a genuinely stuck job. `self_prod` events
+    // DO refresh lastEventAt — they only fire after the LLM has just responded,
+    // so the system is genuinely active. The cap of 2 prods bounds any window
+    // a hung subsequent call could open.
     if (event.type !== 'heartbeat') {
       job.lastEventAt = now;
     }

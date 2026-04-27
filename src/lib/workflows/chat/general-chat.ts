@@ -862,16 +862,16 @@ export async function generalChat(
 
       // --- Self-prod ---
       const selfProdEnabled = process.env.SELF_PROD_ENABLED === '1';
-      if (selfProdEnabled && options.jobId) {
+      if (selfProdEnabled && options.jobId && (options.subagentDepth ?? 0) === 0) {
         const job = getJob(options.jobId);
         if (job) {
           const { shouldSelfProd, buildProdMessage } = await import('./self-prod');
           if (shouldSelfProd(job, trimmed ?? '')) {
-            const prodMsg = buildProdMessage(job, job.selfProdCount);
-            messages.push(msg);
-            messages.push({ role: 'user', content: prodMsg });
             job.selfProdCount += 1;
             job.lastSelfProdAt = Date.now();
+            const prodMsg = buildProdMessage(job);
+            messages.push(msg);
+            messages.push({ role: 'user', content: prodMsg });
             publishJobEvent(options.jobId, {
               type: 'self_prod',
               attempt: job.selfProdCount,
