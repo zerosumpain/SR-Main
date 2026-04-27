@@ -357,6 +357,27 @@
     return 'green';
   }
 
+  /**
+   * Centre point of an edge — placed at the midpoint of the bounding box
+   * defined by the two nodes' top-left corners + half-size, which is
+   * stable enough for the row-count label even though the actual
+   * orthogonal path bends. The label sits over the rendered path and
+   * gets a small white pill behind it for legibility.
+   */
+  function edgeMidpoint(e: { from: string; to: string }): { x: number; y: number } {
+    const a = byId[e.from];
+    const b = byId[e.to];
+    if (!a || !b) return { x: 0, y: 0 };
+    const aw = nodeW(a);
+    const ah = nodeH(a);
+    const bw = nodeW(b);
+    const bh = nodeH(b);
+    return {
+      x: (a.x + aw / 2 + b.x + bw / 2) / 2,
+      y: (a.y + ah / 2 + b.y + bh / 2) / 2,
+    };
+  }
+
   function statusPillText(nodeId: string, status: string | null | undefined): string | null {
     const live = liveData[nodeId];
     if (status === 'running') {
@@ -2668,6 +2689,13 @@
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
+          {#if typeof liveData[e.from]?.rowCount === 'number'}
+            {@const _mid = edgeMidpoint(e)}
+            <g class="edge-rowcount" transform="translate({_mid.x}, {_mid.y})">
+              <rect x="-26" y="-9" width="52" height="14" rx="3" />
+              <text x="0" y="2" text-anchor="middle">{liveData[e.from]?.rowCount} rows</text>
+            </g>
+          {/if}
         {/each}
       </svg>
 
@@ -5965,6 +5993,20 @@
   @keyframes wf-pulse {
     0%, 100% { box-shadow: 0 0 0 2px #1a73e8; }
     50%      { box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.45); }
+  }
+  /* Row-count tag at the midpoint of every edge whose source has emitted
+     a rowCount this run. White pill so it stays legible over both stroke
+     and the canvas background. */
+  .edge-rowcount rect {
+    fill: rgba(255, 255, 255, 0.92);
+    stroke: rgba(0, 0, 0, 0.15);
+    stroke-width: 1;
+  }
+  .edge-rowcount text {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    fill: #222;
+    pointer-events: none;
   }
   .nm-field-read {
     background: var(--bg-section);
