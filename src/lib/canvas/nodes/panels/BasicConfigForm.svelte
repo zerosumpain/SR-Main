@@ -1,0 +1,105 @@
+<script lang="ts">
+  import type { BasicConfigField, NodeDefinition } from '$lib/workflows/types';
+  import SchemaBuilderField from './SchemaBuilderField.svelte';
+
+  let {
+    config,
+    onChange,
+    definition,
+  }: {
+    config: Record<string, unknown>;
+    onChange: (config: Record<string, unknown>) => void;
+    definition: NodeDefinition;
+  } = $props();
+
+  let showAdvanced = $state(false);
+  const fields = $derived(definition.basicConfig ?? []);
+
+  function isVisible(field: BasicConfigField): boolean {
+    if (field.advancedOnly && !showAdvanced) return false;
+    const v = field.visibleWhen;
+    if (!v) return true;
+    const other = config[v.key];
+    if (v.equals !== undefined) return other === v.equals;
+    if (v.in) return v.in.includes(other);
+    if (v.not !== undefined) return other !== v.not;
+    return true;
+  }
+
+  function update(key: string, value: unknown) {
+    onChange({ ...config, [key]: value });
+  }
+
+  const sections = $derived.by(() => {
+    const order: string[] = [];
+    const map = new Map<string, BasicConfigField[]>();
+    for (const f of fields) {
+      const sec = f.section ?? '';
+      if (!map.has(sec)) {
+        map.set(sec, []);
+        order.push(sec);
+      }
+      map.get(sec)!.push(f);
+    }
+    return order.map((s) => ({ name: s, fields: map.get(s)! }));
+  });
+
+  function toggleAdvanced() { showAdvanced = !showAdvanced; }
+</script>
+
+<div class="bcf">
+  {#each sections as sec (sec.name)}
+    {#if sec.name}<h4 class="bcf-section">{sec.name}</h4>{/if}
+    {#each sec.fields as f (f.key)}
+      {#if isVisible(f)}
+        <label class="bcf-field" class:bcf-field-wide={f.type === 'textarea' || f.type === 'template-textarea' || f.type === 'code' || f.type === 'schema-builder'}>
+          <span class="bcf-label">{f.label}</span>
+          {#if f.description}<span class="bcf-desc">{f.description}</span>{/if}
+
+          {#if f.type === 'dropdown'}
+            <select value={config[f.key] ?? ''} onchange={(e) => update(f.key, (e.currentTarget as HTMLSelectElement).value)}>
+              {#each f.options ?? [] as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+            </select>
+          {:else if f.type === 'toggle'}
+            <input type="checkbox" checked={Boolean(config[f.key])} onchange={(e) => update(f.key, (e.currentTarget as HTMLInputElement).checked)} />
+          {:else if f.type === 'slider'}
+            <div class="bcf-slider">
+              <input type="range" min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={Number(config[f.key] ?? f.min ?? 0)} oninput={(e) => update(f.key, Number((e.currentTarget as HTMLInputElement).value))} />
+              <span>{config[f.key] ?? f.min ?? 0}</span>
+            </div>
+          {:else if f.type === 'number'}
+            <input type="number" min={f.min} max={f.max} step={f.step ?? 1} value={Number(config[f.key] ?? 0)} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, Number((e.currentTarget as HTMLInputElement).value))} />
+          {:else if f.type === 'text'}
+            <input type="text" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLInputElement).value)} />
+          {:else if f.type === 'textarea' || f.type === 'template-textarea'}
+            <textarea rows="4" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
+          {:else if f.type === 'code'}
+            <textarea class="bcf-code" rows="8" spellcheck="false" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
+          {:else if f.type === 'schema-builder'}
+            <SchemaBuilderField value={(config[f.key] as unknown[]) ?? []} onChange={(v) => update(f.key, v)} />
+          {/if}
+        </label>
+      {/if}
+    {/each}
+  {/each}
+
+  <button type="button" class="bcf-advanced-toggle" onclick={toggleAdvanced}>
+    {showAdvanced ? 'Hide advanced fields' : 'Show advanced fields'}
+  </button>
+</div>
+
+<style>
+  .bcf { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
+  .bcf-section { margin: 8px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #666; }
+  .bcf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .bcf-label { font-weight: 600; color: #222; }
+  .bcf-desc { font-size: 11px; color: #666; }
+  .bcf-slider { display: flex; gap: 8px; align-items: center; }
+  .bcf-code { font-family: var(--font-mono, monospace); font-size: 11px; }
+  .bcf-advanced-toggle { margin-top: 8px; background: none; border: 1px dashed #ccc; padding: 4px 8px; font-size: 11px; cursor: pointer; }
+  input[type='text'], input[type='number'], select, textarea {
+    width: 100%; padding: 4px 6px; border: 1px solid #d0d0d0; border-radius: 3px; font: inherit; box-sizing: border-box;
+  }
+</style>
