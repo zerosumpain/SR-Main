@@ -238,7 +238,7 @@
 
 <!-- Footer -->
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
-  <p class="display-title text-[14px]" style="color: var(--text-ghost);">STRANGE RAMBLINGS</p>
+  <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
   <div class="flex gap-6">
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>

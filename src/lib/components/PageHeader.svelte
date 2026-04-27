@@ -65,16 +65,16 @@
       <a
         href={titleHref}
         title={title}
-        class="display-title text-[20px] sm:text-[24px] leading-none truncate hover:text-[var(--accent)] transition-colors min-w-0 flex-shrink"
-        style="color: var(--text-primary); max-width: min(55vw, 520px);"
+        class="brand text-[18px] sm:text-[22px] leading-none truncate min-w-0 flex-shrink"
+        style="max-width: min(55vw, 520px);"
       >
         {title}
       </a>
     {:else}
       <h1
         title={title}
-        class="display-title text-[20px] sm:text-[24px] leading-none truncate min-w-0 flex-shrink"
-        style="color: var(--text-primary); max-width: min(55vw, 520px);"
+        class="brand text-[18px] sm:text-[22px] leading-none truncate min-w-0 flex-shrink"
+        style="max-width: min(55vw, 520px);"
       >
         {title}
       </h1>

@@ -41,19 +41,14 @@
   {#if showBrand}
     <a
       href="/"
-      class="display leading-none no-underline site-brand"
-      class:text-[28px]={variant === 'hero'}
-      class:sm:text-[32px]={variant === 'hero'}
-      class:text-[20px]={variant === 'compact'}
-      class:sm:text-[24px]={variant === 'compact'}
-      style="color: var(--text-primary);"
+      class="brand leading-none no-underline site-brand"
+      class:text-[24px]={variant === 'hero'}
+      class:sm:text-[28px]={variant === 'hero'}
+      class:text-[18px]={variant === 'compact'}
+      class:sm:text-[20px]={variant === 'compact'}
       aria-label="Strange Ramblings — Home"
     >
-      {#if variant === 'hero'}
-        STRANGE<br />RAMBLINGS
-      {:else}
-        SR
-      {/if}
+      strange ramblings
     </a>
   {/if}
 

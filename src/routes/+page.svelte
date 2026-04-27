@@ -107,19 +107,19 @@
       <p class="label mb-4">The Biome</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="accent-strip">
-          <p class="display-title text-[20px] mb-2" style="color: var(--text-primary);">PULSE</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">PULSE</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             When my heart rate rises, the particles quicken. Each beat pulses through the field.
           </p>
         </div>
         <div class="accent-strip">
-          <p class="display-title text-[20px] mb-2" style="color: var(--text-primary);">WEATHER</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">WEATHER</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             When it rains outside, it rains here too. Wind direction and speed drive particle drift.
           </p>
         </div>
         <div class="accent-strip">
-          <p class="display-title text-[20px] mb-2" style="color: var(--text-primary);">RECOVERY</p>
+          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">RECOVERY</p>
           <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
             Colour intensity tracks recovery score. Higher recovery means more vivid particles.
           </p>
@@ -170,7 +170,7 @@
 
 <!-- FOOTER — dense, utilitarian -->
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
-  <p class="display-title text-[14px]" style="color: var(--text-ghost);">STRANGE RAMBLINGS</p>
+  <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
   <div class="flex gap-6">
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>

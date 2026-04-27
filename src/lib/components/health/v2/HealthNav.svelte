@@ -15,8 +15,8 @@
 
 <header class="h-nav-bar">
   <div class="h-nav-title-wrap">
-    <a href="/" class="sr-brand h-brand">SR</a>
-    <h1 class="h-page-title">HEALTH</h1>
+    <a href="/" class="brand h-brand">strange ramblings</a>
+    <h1 class="h-page-title">health</h1>
     <span class="h-page-sub"
       ><span class="h-pulse-dot" aria-hidden="true"></span>Live · synced {fmtAgo(
         syncedAgoSeconds,
@@ -59,28 +59,25 @@
     flex-wrap: wrap;
   }
   .h-brand {
-    font-family: var(--font-display);
-    font-weight: 900;
     font-size: 22px;
-    text-transform: uppercase;
-    letter-spacing: -0.02em;
-    line-height: 0.9;
-    color: var(--text-primary);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .h-brand:hover {
-    color: var(--accent);
   }
   .h-page-title {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: 24px;
-    text-transform: uppercase;
-    letter-spacing: -0.02em;
+    font-family: var(--font-brand);
+    font-weight: 500;
+    font-size: 22px;
+    text-transform: lowercase;
+    letter-spacing: -0.01em;
     line-height: 1;
     margin: 0;
     color: var(--text-primary);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45ch;
+  }
+  .h-page-title::before {
+    content: '>';
+    color: var(--accent);
+    opacity: 0.7;
   }
   .h-page-sub {
     font-family: var(--font-mono);
@@ -175,7 +172,7 @@
       padding: 10px 16px;
     }
     .h-page-title {
-      font-size: 20px;
+      font-size: 18px;
     }
   }
 </style>

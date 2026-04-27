@@ -17,7 +17,7 @@
 
 <div class="min-h-screen flex items-center justify-center p-8" style="background: var(--bg, #ede4d4);">
   <div class="w-full max-w-xs text-center">
-    <a href="/" class="brand--mono text-[28px] inline-block mb-8" style="color: var(--text-primary);">sr.</a>
+    <a href="/" class="brand text-[22px] inline-flex mb-8 justify-center">strange ramblings</a>
 
     <h1
       class="text-[10px] uppercase tracking-[0.3em] mb-8"

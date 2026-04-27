@@ -80,9 +80,9 @@
 <div class="admin-shell">
   <!-- Mobile top bar -->
   <header class="mobile-bar">
-    <a href={tokenHref('/admin')} class="mobile-brand">
-      <span class="brand-mark">SR</span>
-      <span class="brand-tag">Admin</span>
+    <a href={tokenHref('/admin')} class="mobile-brand admin-brand-link">
+      <span class="brand admin-brand-mark">strange ramblings</span>
+      <span class="brand-tag">admin</span>
     </a>
     <button
       type="button"
@@ -96,9 +96,9 @@
   </header>
 
   <aside class="sidebar" class:open={mobileOpen}>
-    <a href={tokenHref('/admin')} class="brand">
-      <span class="brand-mark">SR</span>
-      <span class="brand-tag">Admin</span>
+    <a href={tokenHref('/admin')} class="admin-brand-link">
+      <span class="brand admin-brand-mark">strange ramblings</span>
+      <span class="brand-tag">admin</span>
     </a>
 
     <nav class="nav">
@@ -161,20 +161,17 @@
     padding: 1.5rem 0 1rem;
   }
 
-  .brand {
+  .admin-brand-link {
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
     padding: 0 1.25rem 1.25rem;
     border-bottom: 1px solid var(--divider);
     margin-bottom: 1rem;
+    text-decoration: none;
   }
-  .brand-mark {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    font-weight: 900;
-    letter-spacing: -0.02em;
-    color: var(--text-primary);
+  .admin-brand-mark {
+    font-size: 18px;
   }
   .brand-tag {
     font-family: var(--font-mono);
