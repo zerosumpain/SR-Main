@@ -64,6 +64,10 @@ export const updateNodeSchema = z.object({
   reason: z.string().min(10, 'Reason must explain what is being fixed and why'),
 });
 
+export const verifyWorkflowSchema = z.object({
+  initialInput: z.record(z.string(), z.unknown()).optional().describe('Optional input to seed the workflow with'),
+});
+
 // --- Schema Map ---
 
 export const toolSchemas = {
@@ -75,6 +79,7 @@ export const toolSchemas = {
   finalize_workflow: finalizeWorkflowSchema,
   set_trigger: setTriggerSchema,
   update_node: updateNodeSchema,
+  verify_workflow: verifyWorkflowSchema,
 } as const;
 
 export type ToolName = keyof typeof toolSchemas;
@@ -188,4 +193,9 @@ export const openaiTools: OpenAIFunctionDef[] = [
   zodToFunction('finalize_workflow', finalizeWorkflowSchema, 'Signal that the workflow design is complete.'),
   zodToFunction('set_trigger', setTriggerSchema, 'Set the workflow trigger type. Use "manual" for user-initiated runs (this is the default; you can omit this tool call for manual workflows), "webhook" for HTTP-triggered, "cron" for scheduled (provide config.expression as a cron string like "0 9 * * *"), or "event" for event-driven.'),
   zodToFunction('update_node', updateNodeSchema, 'Update an existing node\'s config in the workflow by its ID. Use this to fix config issues (e.g. change a wrong template path, swap an operation, correct a URL). Does NOT change the node type — use create_node for that. Requires a reason explaining what issue is being fixed.'),
+  zodToFunction(
+    'verify_workflow',
+    verifyWorkflowSchema,
+    'Run the current workflow draft in dry-run mode (side-effecting nodes simulated, capture log returned). Use BEFORE finalize_workflow when the workflow contains any side-effecting nodes (whatsapp, email, gmail-send, gmail-reply, gmail-label, blog, home-assistant, data-store, intel-write). Review the captureLog against the user\'s original goal — if it does not satisfy the goal, call update_node to fix and verify again. You may call verify_workflow at most 3 times per draft.',
+  ),
 ];

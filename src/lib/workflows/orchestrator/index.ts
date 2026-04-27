@@ -11,13 +11,15 @@ import type { ToolCallDeps } from './loop';
 import { saveDynamicNode, validateExecutorSyntax, DYNAMIC_NODES_DIR } from './dynamic-nodes';
 import { verifyWorkflow, formatIssues } from './verify';
 import { nodeDefinitions } from '../registry-client';
-import { registry } from '../index';
+import { registry, engine } from '../index';
+import { randomUUID } from 'crypto';
 import type { GeneratedWorkflow, ChatMessage, WorkflowDraft, OrchestratorThinking, CritiqueIssue, RevisionDelta } from './types';
 import { serializeDraft, deserializeDraft } from './draft-serde';
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema } from '../types';
 
 const MAX_TOOL_ROUNDS = 30;
 const MAX_VERIFY_ROUNDS = 3;
+const MAX_BEHAVIOURAL_VERIFY_ROUNDS = 3;
 
 async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
   try {
@@ -97,6 +99,7 @@ async function runToolLoop(
   conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   onChunk?: (text: string) => void,
   existingDraft?: WorkflowDraft,
+  workflowId?: string | null,
 ): Promise<{
   draft: WorkflowDraft;
   name: string;
@@ -118,6 +121,7 @@ async function runToolLoop(
   let workflowName = 'Generated Workflow';
   let workflowDescription: string | undefined;
   let verifyAttempts = 0;
+  let behaviouralVerifyAttempts = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Retry with backoff on 429 rate limits
@@ -192,6 +196,97 @@ async function runToolLoop(
             role: 'tool',
             tool_call_id: toolCall.id,
             content: JSON.stringify({ success: false, error: err?.message ?? 'lookup failed' }),
+          });
+        }
+        continue;
+      }
+
+      // --- Async tool: verify_workflow (behavioural dry-run check) ---
+      if (fnName === 'verify_workflow') {
+        if (behaviouralVerifyAttempts >= MAX_BEHAVIOURAL_VERIFY_ROUNDS) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              success: false,
+              error: `Verification limit reached (${MAX_BEHAVIOURAL_VERIFY_ROUNDS}). Call finalize_workflow next, or stop and ask the user for guidance.`,
+            }),
+          });
+          continue;
+        }
+        behaviouralVerifyAttempts++;
+        try {
+          const draftWorkflow = assembleWorkflow(
+            draft,
+            workflowName ?? 'draft',
+            workflowDescription ?? '',
+          );
+          const dbgRunId = `dbg_${randomUUID()}`;
+          const initialInput =
+            fnArgs.initialInput && typeof fnArgs.initialInput === 'object'
+              ? (fnArgs.initialInput as Record<string, unknown>)
+              : {};
+
+          // engine.execute() needs a WorkflowDefinition with an id. The
+          // GeneratedWorkflow returned by assembleWorkflow has no id, so we
+          // synthesise one (the run is ephemeral — id is only used for
+          // workspaceDir / data-store keying inside the engine).
+          const definition = {
+            id: workflowId ?? `draft-${dbgRunId}`,
+            name: draftWorkflow.name,
+            nodes: draftWorkflow.nodes,
+            edges: draftWorkflow.edges,
+          };
+
+          const result = await engine.execute(
+            definition,
+            dbgRunId,
+            initialInput,
+            undefined,
+            workflowId ?? undefined,
+            { dryRun: true },
+          );
+
+          const captureLog: Array<{ nodeId: string; nodeType: string; capture: unknown }> = [];
+          for (const [nodeId, output] of result.nodeOutputs.entries()) {
+            if (
+              output &&
+              typeof output === 'object' &&
+              (output as { simulated?: unknown }).simulated === true
+            ) {
+              const nodeType = definition.nodes.find((n) => n.id === nodeId)?.type ?? 'unknown';
+              captureLog.push({ nodeId, nodeType, capture: output });
+            }
+          }
+
+          onChunk?.(
+            `Verification round ${behaviouralVerifyAttempts}/${MAX_BEHAVIOURAL_VERIFY_ROUNDS}: ${captureLog.length} simulated send(s)\n`,
+          );
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(
+              {
+                success: true,
+                verificationRound: behaviouralVerifyAttempts,
+                maxRounds: MAX_BEHAVIOURAL_VERIFY_ROUNDS,
+                runStatus: result.status,
+                captureLog,
+                errors: Object.fromEntries(result.nodeErrors),
+              },
+              null,
+              2,
+            ),
+          });
+        } catch (err: any) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              success: false,
+              error: err?.message ?? 'verify_workflow failed',
+            }),
           });
         }
         continue;
@@ -443,6 +538,7 @@ export async function generateWorkflow(
     conversationHistory,
     onChunk,
     existingDraft,
+    workflowId,
   );
 
   if (followUp) {
@@ -501,6 +597,7 @@ export async function generateWorkflow(
         [],
         onChunk,
         draft, // Pass the existing draft so revision builds on it
+        workflowId,
       );
 
       if (revisionResult.draft.nodes.size > 0) {
@@ -590,6 +687,8 @@ export async function modifyWorkflow(
     userMessage,
     conversationHistory,
     onChunk,
+    undefined,
+    workflowId,
   );
 
   if (followUp) {

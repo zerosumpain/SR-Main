@@ -73,6 +73,7 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 - If you need information you don't have (API keys, URLs, preferences), call ask_user
 - Do NOT guess API endpoints — if unsure, ask the user
 - Do NOT call finalize_workflow until all nodes are connected with edges
+- Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first. Inspect the returned \`captureLog\` carefully — does each captured \`would_send\` / \`would_publish\` / \`would_call\` / \`would_write\` actually meet the user's stated goal (correct phone number, sensible message body, right entity, right slug)? If not, call \`update_node\` to fix the issue and call \`verify_workflow\` again. You have at most 3 verification rounds per workflow.
 - After connecting nodes with connect_nodes, review the upstream schema in the response. Every {{input.X}} reference in your node config MUST match a path listed in that schema. If a path doesn't exist, update the node's config to use the correct path.
 - Do NOT call finalize_workflow if any node (other than the trigger) has zero incoming edges.
 - When using {{input.X}} templates, prefer specific paths from the upstream schema over guessing. If the schema says "input.body.data", use "input.body.data" — not "input.data" or "input.result".
