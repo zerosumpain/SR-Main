@@ -546,11 +546,22 @@
   }
   .page-hdr h1 {
     margin: 0;
-    font-family: var(--font-display);
-    font-size: 2rem;
-    font-weight: 900;
-    line-height: 1.05;
+    font-family: var(--font-brand);
+    font-size: 1.75rem;
+    font-weight: 500;
+    line-height: 1.1;
     color: var(--text-primary);
+    text-transform: lowercase;
+    letter-spacing: -0.01em;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45ch;
+  }
+  .page-hdr h1::before {
+    content: '>';
+    color: var(--accent);
+    opacity: 0.7;
+    font-weight: 500;
   }
   .sub {
     margin: 0.6rem 0 0;
