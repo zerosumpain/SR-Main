@@ -1273,7 +1273,7 @@ export type NewPulseEvent = typeof pulseEvents.$inferInsert;
 export const pulseSettings = pgTable(
   'pulse_settings',
   {
-    id: text('id').primaryKey().default(sql`'singleton'`),
+    id: text('id').primaryKey().default('singleton'),
     schedules: jsonb('schedules').notNull().default(sql`'{}'::jsonb`),
     idleQuietMs: integer('idle_quiet_ms').notNull().default(300_000),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
