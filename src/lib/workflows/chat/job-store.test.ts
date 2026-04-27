@@ -110,6 +110,48 @@ describe('heartbeat', () => {
     }
   });
 
+  it('emits phase:tool heartbeat with sinceMs delta when a tool is in flight and silence has built up', () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId, job } = createJob('test');
+      const received: JobEvent[] = [];
+      subscribeJob(jobId, (e) => received.push(e));
+      const start = Date.now();
+      job.inflightTool = { name: 'stealth-scrape', toolCallId: 'c1', since: start };
+      vi.advanceTimersByTime(HEARTBEAT_MIN_SILENCE_MS + 1_000);
+      const hb = received.find((e) => e.type === 'heartbeat');
+      expect(hb).toBeDefined();
+      if (hb && hb.type === 'heartbeat') {
+        expect(hb.phase).toBe('tool');
+        expect(hb.inflightTool?.name).toBe('stealth-scrape');
+        expect(hb.inflightTool?.sinceMs).toBeGreaterThanOrEqual(HEARTBEAT_MIN_SILENCE_MS);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('emits phase:awaiting_user heartbeat with sinceMs delta when a waiter is open', () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId, job } = createJob('test');
+      const received: JobEvent[] = [];
+      subscribeJob(jobId, (e) => received.push(e));
+      const start = Date.now();
+      job.awaitingWaiter = { kind: 'plan', key: 'plan:p1', since: start };
+      vi.advanceTimersByTime(HEARTBEAT_MIN_SILENCE_MS + 1_000);
+      const hb = received.find((e) => e.type === 'heartbeat');
+      expect(hb).toBeDefined();
+      if (hb && hb.type === 'heartbeat') {
+        expect(hb.phase).toBe('awaiting_user');
+        expect(hb.awaitingWaiter?.kind).toBe('plan');
+        expect(hb.awaitingWaiter?.sinceMs).toBeGreaterThanOrEqual(HEARTBEAT_MIN_SILENCE_MS);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('heartbeat event does not reset watchdog lastEventAt', () => {
     // Verify semantic: heartbeats are informational — they must NOT mask a
     // genuinely-stuck job from the idle-timeout watchdog.

@@ -228,6 +228,9 @@ function startHeartbeat(jobId: string, job: OrchestratorJob): void {
     if (sinceEvent < HEARTBEAT_MIN_SILENCE_MS || sinceHeartbeat < HEARTBEAT_MIN_SILENCE_MS) return;
 
     const phase = derivePhase(job);
+    // 'streaming' cannot reach this point in practice — the silence gate above
+    // means lastTokenAt is always stale by now. Kept as a belt-and-suspenders
+    // guard in case a future caller bypasses sinceEvent (e.g. a test path).
     if (phase === 'idle' || phase === 'streaming') return;
 
     const summary =
