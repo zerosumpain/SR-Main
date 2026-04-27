@@ -21,7 +21,7 @@ export interface JsonSchema {
 export interface BasicConfigField {
   key: string;
   label: string;
-  type: 'dropdown' | 'toggle' | 'slider' | 'text' | 'textarea' | 'template-textarea' | 'number' | 'code';
+  type: 'dropdown' | 'toggle' | 'slider' | 'text' | 'textarea' | 'template-textarea' | 'number' | 'code' | 'schema-builder';
   options?: { value: string; label: string }[];
   min?: number;
   max?: number;
@@ -39,6 +39,12 @@ export interface BasicConfigField {
     in?: unknown[];
     not?: unknown;
   };
+}
+
+export interface SchemaFieldRow {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+  required: boolean;
 }
 
 export interface NodeDefinition {
