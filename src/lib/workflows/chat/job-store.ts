@@ -119,6 +119,14 @@ export interface OrchestratorJob {
   // streamed `token` event's delta here so a user-initiated cancel can
   // persist what was streamed so far instead of throwing it away.
   partialResponse: string;
+  // --- Phase / pill ---
+  inflightTool: { name: string; toolCallId: string; since: number } | null;
+  awaitingWaiter: { kind: 'plan' | 'clarify' | 'confirm'; key: string; since: number } | null;
+  // --- Plan + self-prod ---
+  plan: PlanPayload | null;
+  coveredStepIds: Set<string>;
+  selfProdCount: number;
+  lastSelfProdAt: number | null;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -206,6 +214,12 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     lastEventAt: now,
     lastHeartbeatAt: now,
     partialResponse: '',
+    inflightTool: null,
+    awaitingWaiter: null,
+    plan: null,
+    coveredStepIds: new Set<string>(),
+    selfProdCount: 0,
+    lastSelfProdAt: null,
   };
   jobs.set(jobId, job);
   startWatchdog(jobId, job);
