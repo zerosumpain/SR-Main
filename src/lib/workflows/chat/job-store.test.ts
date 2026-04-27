@@ -293,3 +293,24 @@ describe('awaitingWaiter tracking', () => {
     expect(job.awaitingWaiter).toBeNull();
   });
 });
+
+describe('watchdog overrides self-prod', () => {
+  it('watchdog still aborts a job whose lastEventAt is stale, regardless of selfProdCount', async () => {
+    vi.useFakeTimers();
+    try {
+      const start = Date.UTC(2026, 0, 1);
+      vi.setSystemTime(start);
+      const { jobId } = createJob('hi');
+      const job = getJob(jobId)!;
+      job.selfProdCount = 1;          // mid-prodding
+      job.lastEventAt = start;         // never moves
+
+      vi.setSystemTime(start + 200_000); // > IDLE_TIMEOUT_MS (180s)
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(job.status).toBe('error');
+      expect(job.error).toMatch(/idle/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

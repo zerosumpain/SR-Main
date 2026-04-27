@@ -22,7 +22,7 @@ import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
-import { getJob } from '$lib/workflows/chat/job-store';
+import { getJob, publishJobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
@@ -859,6 +859,29 @@ export async function generalChat(
           `usage=${JSON.stringify(lastUsage)}`,
         );
       }
+
+      // --- Self-prod ---
+      const selfProdEnabled = process.env.SELF_PROD_ENABLED === '1';
+      if (selfProdEnabled && options.jobId) {
+        const job = getJob(options.jobId);
+        if (job) {
+          const { shouldSelfProd, buildProdMessage } = await import('./self-prod');
+          if (shouldSelfProd(job, trimmed ?? '')) {
+            const prodMsg = buildProdMessage(job, job.selfProdCount);
+            messages.push(msg);
+            messages.push({ role: 'user', content: prodMsg });
+            job.selfProdCount += 1;
+            job.lastSelfProdAt = Date.now();
+            publishJobEvent(options.jobId, {
+              type: 'self_prod',
+              attempt: job.selfProdCount,
+              remainingStepIds: (job.plan?.steps ?? []).filter((s) => !job.coveredStepIds.has(s.id)).map((s) => s.id),
+            });
+            continue;
+          }
+        }
+      }
+
       responseText = trimmed || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
       break;
     }

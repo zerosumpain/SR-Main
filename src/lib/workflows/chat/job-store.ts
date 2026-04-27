@@ -60,6 +60,7 @@ export type JobEvent =
   // treats it as opaque JSON, which is safe.
   | { type: 'subagent_event'; agentId: string; event: JobEvent }
   | { type: 'subagent_done'; agentId: string; summary: string; result: unknown }
+  | { type: 'self_prod'; attempt: number; remainingStepIds: string[] }
   | { type: 'done'; result: Record<string, unknown> }
   | { type: 'error'; message: string };
 
