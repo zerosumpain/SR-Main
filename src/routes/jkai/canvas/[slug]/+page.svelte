@@ -3385,19 +3385,20 @@
             <!-- Last-run status square. Green = completed OK, amber =
                  partial / warnings / running, red = failed. Absent when
                  the node has never run (status === 'idle' or undefined). -->
-            {@const _status = liveStatus[n.id] ?? n.status}
-            {@const _colour = statusDotColour(_status)}
-            {@const _pill = statusPillText(n.id, _status)}
-            {#if _colour}
-              <div
-                class="wf-node-status-dot wf-node-status-{_colour}"
-                title={`Last run: ${_status}`}
-                aria-label={`status ${_status}`}
-              ></div>
-            {/if}
-            {#if _pill}
-              <span class="wf-node-status-pill wf-node-status-{_colour}">{_pill}</span>
-            {/if}
+            {#each [liveStatus[n.id] ?? n.status] as _status (1)}
+              {@const _colour = statusDotColour(_status)}
+              {@const _pill = statusPillText(n.id, _status)}
+              {#if _colour}
+                <div
+                  class="wf-node-status-dot wf-node-status-{_colour}"
+                  title={`Last run: ${_status}`}
+                  aria-label={`status ${_status}`}
+                ></div>
+              {/if}
+              {#if _pill}
+                <span class="wf-node-status-pill wf-node-status-{_colour}">{_pill}</span>
+              {/if}
+            {/each}
             {#if n.kind === 'trigger'}
               <span class="trig-icon">▶</span>
               <div class="trig-stack">
