@@ -111,6 +111,8 @@
 </script>
 
 <script lang="ts">
+  import CollapsibleOutput from './CollapsibleOutput.svelte';
+
   let {
     data,
     depth = 0,
@@ -135,6 +137,42 @@
   const arrPrims = $derived(
     format === 'json-array-of-primitives' ? (data as unknown[]) : [],
   );
+
+  // Tracks which nested cells are currently expanded.
+  // Key shape: `${rowKey}:${cellKey}` for kv-rows, `${rowIndex}:${columnKey}` for tables.
+  const expanded = $state(new Set<string>());
+
+  function toggle(key: string) {
+    if (expanded.has(key)) expanded.delete(key);
+    else expanded.add(key);
+  }
+
+  function isComplexCell(v: unknown): boolean {
+    return v !== null && typeof v === 'object';
+  }
+
+  function pillLabel(v: unknown): string {
+    if (Array.isArray(v)) return `[${v.length} ${v.length === 1 ? 'item' : 'items'}]`;
+    if (v && typeof v === 'object') {
+      const n = Object.keys(v as Record<string, unknown>).length;
+      return `{${n} ${n === 1 ? 'field' : 'fields'}}`;
+    }
+    return '';
+  }
+
+  let copiedKey = $state<string | null>(null);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function copyCell(value: string, key: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(value).catch(() => {});
+    }
+    copiedKey = key;
+    if (copiedTimer) clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => {
+      copiedKey = null;
+    }, 900);
+  }
 </script>
 
 {#if format === 'empty'}
@@ -176,13 +214,37 @@
   <table class="kv">
     <tbody>
       {#each objRows as [k, v] (k)}
+        {@const cellKey = `kv:${k}`}
+        {@const isOpen = expanded.has(cellKey)}
         <tr>
           <th>{k}</th>
           <td>
-            {#if v && typeof v === 'object'}
-              <pre class="sub">{JSON.stringify(v, null, 2)}</pre>
+            {#if isComplexCell(v)}
+              <button
+                type="button"
+                class="pill"
+                aria-expanded={isOpen}
+                onclick={() => toggle(cellKey)}
+              >
+                <span class="pill-label">{pillLabel(v)}</span>
+                <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
+              </button>
+              {#if isOpen}
+                <div class="nested">
+                  {#if depth + 1 >= maxDepth}
+                    <CollapsibleOutput text={JSON.stringify(v, null, 2)} />
+                  {:else}
+                    <svelte:self data={v} depth={depth + 1} {maxDepth} />
+                  {/if}
+                </div>
+              {/if}
             {:else}
-              {cellText(v)}
+              <button
+                type="button"
+                class="copy-cell"
+                title={cellText(v)}
+                onclick={() => copyCell(cellText(v), cellKey)}
+              >{cellText(v)}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
             {/if}
           </td>
         </tr>
@@ -201,11 +263,54 @@
       </thead>
       <tbody>
         {#each tableRows as r, i (i)}
-          <tr>
+          {@const rowHasOpen = tableKeys.some((k) => expanded.has(`row:${i}:${k}`))}
+          <tr class:row-open={rowHasOpen}>
             {#each tableKeys as k (k)}
-              <td>{cellText(r[k])}</td>
+              {@const v = r[k]}
+              {@const cellKey = `row:${i}:${k}`}
+              {@const isOpen = expanded.has(cellKey)}
+              <td class:cell-open={isOpen}>
+                {#if v === undefined}
+                  <span class="missing">—</span>
+                {:else if isComplexCell(v)}
+                  <button
+                    type="button"
+                    class="pill"
+                    aria-expanded={isOpen}
+                    onclick={() => toggle(cellKey)}
+                  >
+                    <span class="pill-label">{pillLabel(v)}</span>
+                    <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    class="copy-cell"
+                    title={cellText(v)}
+                    onclick={() => copyCell(cellText(v), cellKey)}
+                  >{cellText(v)}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+                {/if}
+              </td>
             {/each}
           </tr>
+          {#each tableKeys as k (k)}
+            {@const v = r[k]}
+            {@const cellKey = `row:${i}:${k}`}
+            {#if expanded.has(cellKey) && isComplexCell(v)}
+              <tr class="nested-row">
+                <td colspan={tableKeys.length}>
+                  <div class="nested nested-inline">
+                    <span class="nested-crumb">{k}</span>
+                    {#if depth + 1 >= maxDepth}
+                      <CollapsibleOutput text={JSON.stringify(v, null, 2)} />
+                    {:else}
+                      <svelte:self data={v} depth={depth + 1} {maxDepth} />
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/if}
+          {/each}
         {/each}
       </tbody>
     </table>
@@ -370,5 +475,90 @@
     font-size: 11px;
     line-height: 1.6;
     color: var(--text-primary);
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+  }
+  .pill:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .pill[aria-expanded='true'] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(196, 87, 10, 0.08);
+  }
+  .pill-caret {
+    font-size: 9px;
+    line-height: 1;
+  }
+  .copy-cell {
+    display: inline;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    position: relative;
+  }
+  .copy-cell:hover {
+    color: var(--accent);
+  }
+  .copied {
+    margin-left: 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+  .missing {
+    color: var(--text-ghost);
+    font-style: italic;
+  }
+  .nested {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-left: 2px solid var(--accent);
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .nested-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .nested-crumb {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+  }
+  .nested-row td {
+    background: var(--bg);
+    border-top: none;
+    padding: 0 8px 8px;
+  }
+  .row-open td {
+    border-bottom: none;
+  }
+  .cell-open {
+    background: rgba(196, 87, 10, 0.06);
   }
 </style>
