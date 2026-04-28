@@ -677,6 +677,12 @@
     color: var(--accent);
   }
   .im-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    inset: auto;
     width: min(900px, 90vw);
     max-width: 90vw;
     max-height: 80vh;
