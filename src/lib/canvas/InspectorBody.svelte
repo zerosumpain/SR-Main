@@ -187,6 +187,43 @@
     else stringExpanded.add(key);
   }
 
+  // TSV copy: build a tab-separated string from a table-shaped value so the
+  // clipboard contents paste cleanly into Sheets / Excel as a real grid.
+  // Cells: primitives stringified; null/undefined → empty; objects/arrays →
+  // single-line JSON; tab/newline characters stripped so each value stays
+  // in one cell.
+  function tsvCell(v: unknown): string {
+    if (v === null || v === undefined) return '';
+    let s: string;
+    if (typeof v === 'string') s = v;
+    else if (typeof v === 'number' || typeof v === 'boolean') s = String(v);
+    else {
+      try { s = JSON.stringify(v); } catch { s = String(v); }
+    }
+    return s.replace(/[\t\r\n]+/g, ' ').trim();
+  }
+  function kvToTsv(rows: [string, unknown][]): string {
+    return rows.map(([k, v]) => `${tsvCell(k)}\t${tsvCell(v)}`).join('\n');
+  }
+  function tableToTsv(rows: Record<string, unknown>[], keys: string[]): string {
+    const header = keys.map(tsvCell).join('\t');
+    const body = rows.map((r) => keys.map((k) => tsvCell(r[k])).join('\t'));
+    return [header, ...body].join('\n');
+  }
+
+  let tableCopied = $state(false);
+  let tableCopiedTimer: ReturnType<typeof setTimeout> | null = null;
+  function copyTable(text: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    tableCopied = true;
+    if (tableCopiedTimer) clearTimeout(tableCopiedTimer);
+    tableCopiedTimer = setTimeout(() => {
+      tableCopied = false;
+    }, 1200);
+  }
+
   // Modal drill-in: clicking "↗" beside a pill opens the value in a full-size
   // dialog with a fresh InspectorBody at depth=0, so deep nesting doesn't get
   // squashed by the parent panel's width or the maxDepth cap.
@@ -240,6 +277,13 @@
     sandbox=""
   ></iframe>
 {:else if format === 'json-obj'}
+  <div class="tbl-toolbar">
+    <button
+      type="button"
+      class="tbl-copy"
+      onclick={() => copyTable(kvToTsv(objRows))}
+    >{tableCopied ? '✓ copied' : 'Copy table'}</button>
+  </div>
   <table class="kv">
     <tbody>
       {#each objRows as [k, v] (k)}
@@ -308,6 +352,13 @@
     </tbody>
   </table>
 {:else if format === 'json-array-of-objects'}
+  <div class="tbl-toolbar">
+    <button
+      type="button"
+      class="tbl-copy"
+      onclick={() => copyTable(tableToTsv(tableRows, tableKeys))}
+    >{tableCopied ? '✓ copied' : `Copy table (${tableRows.length} ${tableRows.length === 1 ? 'row' : 'rows'})`}</button>
+  </div>
   <div class="scroll-x">
     <table class="tbl">
       <thead>
@@ -409,6 +460,13 @@
     </ul>
   {/if}
 {:else if format === 'csv'}
+  <div class="tbl-toolbar">
+    <button
+      type="button"
+      class="tbl-copy"
+      onclick={() => copyTable(data as string)}
+    >{tableCopied ? '✓ copied' : `Copy CSV (${csvBody.length} ${csvBody.length === 1 ? 'row' : 'rows'})`}</button>
+  </div>
   <div class="scroll-x">
     <table class="tbl">
       <thead>
@@ -649,6 +707,26 @@
   }
   .tbl tr td.cell-open {
     background: rgba(196, 87, 10, 0.06);
+  }
+  .tbl-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 0 4px;
+  }
+  .tbl-copy {
+    background: transparent;
+    color: var(--text-ghost);
+    border: 1px solid var(--card-border);
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+  }
+  .tbl-copy:hover {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .pill-group {
     display: inline-flex;
