@@ -176,6 +176,32 @@
       copiedKey = null;
     }, 900);
   }
+
+  // Long-string truncation: cells with text above this length collapse by
+  // default with a "▾ +N chars" toggle. Avoids one giant value forcing the
+  // whole panel to scroll forever.
+  const STRING_TRUNCATE = 160;
+  const stringExpanded = new SvelteSet<string>();
+  function toggleString(key: string) {
+    if (stringExpanded.has(key)) stringExpanded.delete(key);
+    else stringExpanded.add(key);
+  }
+
+  // Modal drill-in: clicking "↗" beside a pill opens the value in a full-size
+  // dialog with a fresh InspectorBody at depth=0, so deep nesting doesn't get
+  // squashed by the parent panel's width or the maxDepth cap.
+  let modalData = $state<unknown>(undefined);
+  let modalCrumb = $state<string>('');
+  let dialogEl: HTMLDialogElement | undefined = $state();
+  function openModal(value: unknown, crumb: string) {
+    modalData = value;
+    modalCrumb = crumb;
+    dialogEl?.showModal();
+  }
+  function closeModal() {
+    dialogEl?.close();
+    modalData = undefined;
+  }
 </script>
 
 {#if format === 'empty'}
@@ -223,15 +249,24 @@
           <th>{k}</th>
           <td>
             {#if isComplexCell(v)}
-              <button
-                type="button"
-                class="pill"
-                aria-expanded={isOpen}
-                onclick={() => toggle(cellKey)}
-              >
-                <span class="pill-label">{pillLabel(v)}</span>
-                <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
-              </button>
+              <span class="pill-group">
+                <button
+                  type="button"
+                  class="pill"
+                  aria-expanded={isOpen}
+                  onclick={() => toggle(cellKey)}
+                >
+                  <span class="pill-label">{pillLabel(v)}</span>
+                  <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
+                </button>
+                <button
+                  type="button"
+                  class="pill pill-modal"
+                  title="Open in modal"
+                  aria-label="Open {k} in modal"
+                  onclick={() => openModal(v, k)}
+                >↗</button>
+              </span>
               {#if isOpen}
                 <div class="nested">
                   {#if depth + 1 >= maxDepth}
@@ -245,6 +280,19 @@
               {@const text = cellText(v)}
               {#if text === ''}
                 <span class="missing">—</span>
+              {:else if text.length > STRING_TRUNCATE}
+                {@const isStringOpen = stringExpanded.has(cellKey)}
+                <button
+                  type="button"
+                  class="copy-cell"
+                  title="Click to copy full value"
+                  onclick={() => copyCell(text, cellKey)}
+                >{isStringOpen ? text : text.slice(0, STRING_TRUNCATE) + '…'}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+                <button
+                  type="button"
+                  class="str-toggle"
+                  onclick={() => toggleString(cellKey)}
+                >{isStringOpen ? '▴ collapse' : `▾ +${text.length - STRING_TRUNCATE} chars`}</button>
               {:else}
                 <button
                   type="button"
@@ -281,19 +329,41 @@
                 {#if v === undefined}
                   <span class="missing">—</span>
                 {:else if isComplexCell(v)}
-                  <button
-                    type="button"
-                    class="pill"
-                    aria-expanded={isOpen}
-                    onclick={() => toggle(cellKey)}
-                  >
-                    <span class="pill-label">{pillLabel(v)}</span>
-                    <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
-                  </button>
+                  <span class="pill-group">
+                    <button
+                      type="button"
+                      class="pill"
+                      aria-expanded={isOpen}
+                      onclick={() => toggle(cellKey)}
+                    >
+                      <span class="pill-label">{pillLabel(v)}</span>
+                      <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="pill pill-modal"
+                      title="Open in modal"
+                      aria-label="Open {k} in modal"
+                      onclick={() => openModal(v, `${k} (row ${i + 1})`)}
+                    >↗</button>
+                  </span>
                 {:else}
                   {@const text = cellText(v)}
                   {#if text === ''}
                     <span class="missing">—</span>
+                  {:else if text.length > STRING_TRUNCATE}
+                    {@const isStringOpen = stringExpanded.has(cellKey)}
+                    <button
+                      type="button"
+                      class="copy-cell"
+                      title="Click to copy full value"
+                      onclick={() => copyCell(text, cellKey)}
+                    >{isStringOpen ? text : text.slice(0, STRING_TRUNCATE) + '…'}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+                    <button
+                      type="button"
+                      class="str-toggle"
+                      onclick={() => toggleString(cellKey)}
+                    >{isStringOpen ? '▴ collapse' : `▾ +${text.length - STRING_TRUNCATE} chars`}</button>
                   {:else}
                     <button
                       type="button"
@@ -360,6 +430,18 @@
     </table>
   </div>
 {/if}
+
+<dialog bind:this={dialogEl} class="im-dialog" onclose={closeModal}>
+  <div class="im-dialog-hdr">
+    <span class="im-dialog-crumb">{modalCrumb}</span>
+    <button type="button" class="im-dialog-close" onclick={closeModal} aria-label="Close">✕</button>
+  </div>
+  <div class="im-dialog-body">
+    {#if modalData !== undefined}
+      <InspectorBody data={modalData} depth={0} {maxDepth} />
+    {/if}
+  </div>
+</dialog>
 
 <style>
   .empty {
@@ -567,5 +649,80 @@
   }
   .tbl tr td.cell-open {
     background: rgba(196, 87, 10, 0.06);
+  }
+  .pill-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .pill-modal {
+    padding: 1px 5px;
+    font-size: 11px;
+    line-height: 1;
+  }
+  .str-toggle {
+    margin-left: 6px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    vertical-align: baseline;
+  }
+  .str-toggle:hover {
+    color: var(--accent);
+  }
+  .im-dialog {
+    width: min(900px, 90vw);
+    max-width: 90vw;
+    max-height: 80vh;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .im-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+  }
+  .im-dialog-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--card-border);
+    background: var(--bg-section);
+    position: sticky;
+    top: 0;
+  }
+  .im-dialog-crumb {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+  .im-dialog-close {
+    background: transparent;
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .im-dialog-close:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .im-dialog-body {
+    padding: 12px 14px;
+    overflow: auto;
+    max-height: calc(80vh - 44px);
   }
 </style>
