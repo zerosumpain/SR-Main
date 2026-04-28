@@ -561,7 +561,7 @@
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
-  .tbl .nested-row td {
+  .tbl tr.nested-row td {
     background: var(--bg);
     border-top: none;
     padding: 0 8px 8px;
@@ -569,7 +569,7 @@
   .row-open td {
     border-bottom: none;
   }
-  .tbl td.cell-open {
+  .tbl tr td.cell-open {
     background: rgba(196, 87, 10, 0.06);
   }
 </style>
