@@ -112,6 +112,7 @@
 
 <script lang="ts">
   import CollapsibleOutput from './CollapsibleOutput.svelte';
+  import InspectorBody from './InspectorBody.svelte';
 
   let {
     data,
@@ -234,17 +235,22 @@
                   {#if depth + 1 >= maxDepth}
                     <CollapsibleOutput text={JSON.stringify(v, null, 2)} />
                   {:else}
-                    <svelte:self data={v} depth={depth + 1} {maxDepth} />
+                    <InspectorBody data={v} depth={depth + 1} {maxDepth} />
                   {/if}
                 </div>
               {/if}
             {:else}
-              <button
-                type="button"
-                class="copy-cell"
-                title={cellText(v)}
-                onclick={() => copyCell(cellText(v), cellKey)}
-              >{cellText(v)}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+              {@const text = cellText(v)}
+              {#if text === ''}
+                <span class="missing">—</span>
+              {:else}
+                <button
+                  type="button"
+                  class="copy-cell"
+                  title={text}
+                  onclick={() => copyCell(text, cellKey)}
+                >{text}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+              {/if}
             {/if}
           </td>
         </tr>
@@ -283,12 +289,17 @@
                     <span class="pill-caret">{isOpen ? '▾' : '▸'}</span>
                   </button>
                 {:else}
-                  <button
-                    type="button"
-                    class="copy-cell"
-                    title={cellText(v)}
-                    onclick={() => copyCell(cellText(v), cellKey)}
-                  >{cellText(v)}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+                  {@const text = cellText(v)}
+                  {#if text === ''}
+                    <span class="missing">—</span>
+                  {:else}
+                    <button
+                      type="button"
+                      class="copy-cell"
+                      title={text}
+                      onclick={() => copyCell(text, cellKey)}
+                    >{text}{#if copiedKey === cellKey}<span class="copied">copied</span>{/if}</button>
+                  {/if}
                 {/if}
               </td>
             {/each}
@@ -304,7 +315,7 @@
                     {#if depth + 1 >= maxDepth}
                       <CollapsibleOutput text={JSON.stringify(v, null, 2)} />
                     {:else}
-                      <svelte:self data={v} depth={depth + 1} {maxDepth} />
+                      <InspectorBody data={v} depth={depth + 1} {maxDepth} />
                     {/if}
                   </div>
                 </td>
@@ -550,7 +561,7 @@
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
-  .nested-row td {
+  .tbl .nested-row td {
     background: var(--bg);
     border-top: none;
     padding: 0 8px 8px;
@@ -558,7 +569,7 @@
   .row-open td {
     border-bottom: none;
   }
-  .cell-open {
+  .tbl td.cell-open {
     background: rgba(196, 87, 10, 0.06);
   }
 </style>
