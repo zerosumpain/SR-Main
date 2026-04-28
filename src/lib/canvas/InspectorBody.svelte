@@ -111,7 +111,11 @@
 </script>
 
 <script lang="ts">
-  let { data }: { data: unknown } = $props();
+  let {
+    data,
+    depth = 0,
+    maxDepth = 4,
+  }: { data: unknown; depth?: number; maxDepth?: number } = $props();
   const format = $derived(detectFormat(data));
 
   const csvRows = $derived(format === 'csv' ? parseCsv(data as string) : []);
