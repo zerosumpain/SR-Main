@@ -41,8 +41,6 @@
     const def = getDefinition(type);
     return !!(def?.basicConfig && def.basicConfig.length > 0);
   }
-  import CollapsibleOutput from '$lib/canvas/CollapsibleOutput.svelte';
-
   let { data } = $props();
 
   // Synchronous duplicate-key audit of the initial page payload. Runs BEFORE
@@ -3511,7 +3509,7 @@
               </div>
               <div class="nm-field nm-field-read">
                 {#if inspectorFrom.outputData !== undefined}
-                  <CollapsibleOutput text={pretty(inspectorFrom.outputData)} />
+                  <InspectorBody data={inspectorFrom.outputData} />
                 {:else if inspectorFrom.error}
                   <pre class="error-text">{inspectorFrom.error}</pre>
                 {:else}
@@ -3525,7 +3523,7 @@
               </div>
               <div class="nm-field nm-field-read">
                 {#if inspectorTo.inputData !== undefined}
-                  <CollapsibleOutput text={pretty(inspectorTo.inputData)} />
+                  <InspectorBody data={inspectorTo.inputData} />
                 {:else}
                   <pre class="ghost">// no run yet</pre>
                 {/if}
@@ -3947,7 +3945,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
+                      <InspectorBody data={menuNode.inputData} />
                     {:else}
                       <pre class="ghost">// no run yet — press ▶ Run to pipe data</pre>
                     {/if}
@@ -3963,7 +3961,7 @@
                     {#if menuNode.status === 'running'}
                       <pre class="ghost">// running…</pre>
                     {:else if menuNode.outputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
+                      <InspectorBody data={menuNode.outputData} />
                     {:else if menuNode.error}
                       <pre class="error-text">{menuNode.error}</pre>
                     {:else}
@@ -4031,7 +4029,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
+                      <InspectorBody data={menuNode.inputData} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -4063,7 +4061,7 @@
                   {#if menuNode.outputData !== undefined}
                     <div class="nm-field nm-field-read">
                       <div class="sr-label-tight" style="margin-bottom:4px;">OUTPUT</div>
-                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
+                      <InspectorBody data={menuNode.outputData} />
                     </div>
                   {:else if !menuNode.error}
                     <div class="nm-field nm-field-read">
@@ -4085,7 +4083,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
+                      <InspectorBody data={menuNode.outputData} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -4119,7 +4117,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
+                      <InspectorBody data={menuNode.inputData} />
                     {:else}
                       <pre class="ghost">// pending</pre>
                     {/if}
@@ -4129,7 +4127,7 @@
                   <div class="nm-sec-hd"><span class="sr-label-tight">OUTPUT DATA</span></div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.outputData)} />
+                      <InspectorBody data={menuNode.outputData} />
                     {:else}
                       <pre class="ghost">// pending</pre>
                     {/if}
@@ -4159,7 +4157,7 @@
                     </div>
                     <div class="nm-field nm-field-read">
                       {#if menuNode.outputData !== undefined}
-                        <CollapsibleOutput text={pretty(menuNode.outputData)} />
+                        <InspectorBody data={menuNode.outputData} />
                       {:else}
                         <pre class="ghost">// no run yet</pre>
                       {/if}
@@ -4327,7 +4325,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.inputData !== undefined}
-                      <CollapsibleOutput text={pretty(menuNode.inputData)} />
+                      <InspectorBody data={menuNode.inputData} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
@@ -4427,7 +4425,7 @@
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.outputData !== undefined}
-                      <CollapsibleOutput text={pretty((menuNode.outputData as any)?.intelFocus ?? menuNode.outputData)} />
+                      <InspectorBody data={(menuNode.outputData as Record<string, unknown> | undefined)?.intelFocus ?? menuNode.outputData} />
                     {:else}
                       <pre class="ghost">// no run yet</pre>
                     {/if}
