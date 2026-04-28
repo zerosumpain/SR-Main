@@ -443,12 +443,6 @@
     vertical-align: top;
     word-break: break-word;
   }
-  .kv pre.sub {
-    margin: 0;
-    font-size: 10px;
-    color: var(--text-muted);
-    white-space: pre-wrap;
-  }
   .scroll-x {
     max-width: 100%;
     overflow-x: auto;
