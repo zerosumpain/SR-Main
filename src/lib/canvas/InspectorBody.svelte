@@ -111,6 +111,7 @@
 </script>
 
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity';
   import CollapsibleOutput from './CollapsibleOutput.svelte';
   import InspectorBody from './InspectorBody.svelte';
 
@@ -141,7 +142,8 @@
 
   // Tracks which nested cells are currently expanded.
   // Key shape: `${rowKey}:${cellKey}` for kv-rows, `${rowIndex}:${columnKey}` for tables.
-  const expanded = $state(new Set<string>());
+  // SvelteSet (not plain Set) so .add()/.delete() trigger reactivity.
+  const expanded = new SvelteSet<string>();
 
   function toggle(key: string) {
     if (expanded.has(key)) expanded.delete(key);
