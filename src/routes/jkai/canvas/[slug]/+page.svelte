@@ -1478,16 +1478,6 @@
     }
   }
 
-  function pretty(v: unknown): string {
-    if (v === undefined || v === null) return '';
-    if (typeof v === 'string') return v;
-    try {
-      return JSON.stringify(v, null, 2);
-    } catch {
-      return String(v);
-    }
-  }
-
   // ——— Inline menu — editable config state ———
   let configDraft = $state<Record<string, unknown>>({});
   let labelDraft = $state('');
