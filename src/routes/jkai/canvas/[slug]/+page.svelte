@@ -31,6 +31,9 @@
     'whatsapp',
     'llm-call',
     'llm-agent',
+    'conditional',
+    'transform',
+    'data-store',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new

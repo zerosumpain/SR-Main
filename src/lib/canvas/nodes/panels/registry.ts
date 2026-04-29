@@ -8,6 +8,10 @@ import HttpRequestPanel from './HttpRequestPanel.svelte';
 import WhatsAppPanel from './WhatsAppPanel.svelte';
 import LlmCallPanel from './LlmCallPanel.svelte';
 import LlmAgentPanel from './LlmAgentPanel.svelte';
+import GmailSendPanel from './GmailSendPanel.svelte';
+import ConditionalPanel from './ConditionalPanel.svelte';
+import TransformPanel from './TransformPanel.svelte';
+import DataStorePanel from './DataStorePanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -28,6 +32,10 @@ const specialized: Record<string, Component<PanelProps>> = {
   'whatsapp': WhatsAppPanel as unknown as Component<PanelProps>,
   'llm-call': LlmCallPanel as unknown as Component<PanelProps>,
   'llm-agent': LlmAgentPanel as unknown as Component<PanelProps>,
+  'gmail-send': GmailSendPanel as unknown as Component<PanelProps>,
+  'conditional': ConditionalPanel as unknown as Component<PanelProps>,
+  'transform': TransformPanel as unknown as Component<PanelProps>,
+  'data-store': DataStorePanel as unknown as Component<PanelProps>,
 };
 
 /**
