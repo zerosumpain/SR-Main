@@ -30,12 +30,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
         for await (const ev of runAssistant({ postId, userMessage, history, client, model })) {
           send(ev);
           if (ev.type === 'text') assistantText += ev.delta;
-          if (ev.type === 'tool_result') {
-            await appendMessage(
-              postId,
-              'tool',
-              JSON.stringify({ name: ev.name, ok: ev.ok, result: ev.ok ? ev.result : ev.error }),
-            );
+          if (ev.type === 'proposal') {
+            await appendMessage(postId, 'proposal', JSON.stringify(ev.proposal));
           }
         }
       } catch (e) {
