@@ -4,6 +4,7 @@ import StealthScrapeLlmPanel from './StealthScrapeLlmPanel.svelte';
 import InteractiveStepPanel from './InteractiveStepPanel.svelte';
 import SiteMapperPanel from './SiteMapperPanel.svelte';
 import CodeExecutePanel from './CodeExecutePanel.svelte';
+import HttpRequestPanel from './HttpRequestPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -20,6 +21,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'interactive-step': InteractiveStepPanel,
   'site-mapper': SiteMapperPanel,
   'code-execute': CodeExecutePanel,
+  'http-request': HttpRequestPanel as unknown as Component<PanelProps>,
 };
 
 /**

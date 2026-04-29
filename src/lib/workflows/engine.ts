@@ -219,24 +219,55 @@ export class WorkflowEngine {
             _registry: this.registry,
           } as ExecutionContext & { _currentNodeId: string; _registry: NodeRegistry };
 
+          // Per-node "On failure" config (set in the canvas inspector). Read
+          // before the try block so retry/continue/route modes wrap the
+          // executor call uniformly. Default is 'stop' (legacy behaviour).
+          const onErrorCfg = (nodeDef.config?._onError as
+            | { mode?: 'stop' | 'continue' | 'retry' | 'route'; retries?: number; retryDelayMs?: number }
+            | undefined) ?? { mode: 'stop' };
+          const onErrorMode = onErrorCfg.mode ?? 'stop';
+          const onErrorRetries = Math.max(0, Math.min(10, Number(onErrorCfg.retries ?? 0)));
+          const onErrorDelayMs = Math.max(0, Number(onErrorCfg.retryDelayMs ?? 0));
+
           try {
-            const result: NodeResult = await executor.execute(mergedInput, nodeDef.config, context);
+            // Retry wrapper: re-attempt up to `onErrorRetries` times before
+            // letting the caught path run. Pause signals propagate immediately
+            // and are never retried.
+            let result: NodeResult | null = null;
+            let attemptErr: unknown = null;
+            const maxAttempts = onErrorMode === 'retry' ? onErrorRetries + 1 : 1;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                result = await executor.execute(mergedInput, nodeDef.config, context);
+                attemptErr = null;
+                break;
+              } catch (err) {
+                if (err instanceof PauseForHumanSignal) throw err;
+                attemptErr = err;
+                if (attempt < maxAttempts && onErrorDelayMs > 0) {
+                  await new Promise((r) => setTimeout(r, onErrorDelayMs));
+                }
+              }
+            }
+            if (attemptErr) throw attemptErr;
+            // Non-null after a successful attempt; assertion narrows the type.
+            const r = result as NodeResult;
 
             // Option A pause sentinel: node executor requests human interaction.
-            if (result.pause?.reason === 'awaiting_human') {
-              throw new PauseForHumanSignal(nodeId, result.pause.interactionId);
+            if (r.pause?.reason === 'awaiting_human') {
+              throw new PauseForHumanSignal(nodeId, r.pause.interactionId);
             }
 
-            const rowCount = typeof result.rowCount === 'number' ? result.rowCount : 1;
-            nodeOutputs.set(nodeId, result.output);
-            emit('node_completed', nodeId, { ...result.output, _rowCount: rowCount, _durationMs: Date.now() - nodeStartedAt });
+            const rowCount = typeof r.rowCount === 'number' ? r.rowCount : 1;
+            nodeOutputs.set(nodeId, r.output);
+            emit('node_completed', nodeId, { ...r.output, _rowCount: rowCount, _durationMs: Date.now() - nodeStartedAt });
 
             // Handle conditional routing: if _selectedHandle is set, skip non-matching branches.
             // Edges with no sourceHandle (null/undefined) accept any selectedHandle — this keeps
             // single-output nodes (stealth-scrape, gmail-*, llm-agent) working when canvases
             // store edges without a handle id, and only true branching nodes (conditional,
             // validator, llm-router, error-handler) need explicit per-branch handle tagging.
-            const selectedHandle = result.metadata?._selectedHandle as string | undefined;
+            const selectedHandle = r.metadata?._selectedHandle as string | undefined;
             if (selectedHandle !== undefined) {
               const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
               for (const edge of outgoingEdges) {
@@ -251,6 +282,36 @@ export class WorkflowEngine {
             if (err instanceof PauseForHumanSignal) throw err;
 
             const message = err instanceof Error ? err.message : String(err);
+
+            // User-configured failure handling takes precedence over self-
+            // healing. mode='continue' swallows the error and moves on with
+            // an empty output. mode='route' marks node failed but routes
+            // execution along the node's `error` outgoing edge if one exists.
+            if (onErrorMode === 'continue') {
+              console.log(`[on-error] ${nodeId} (${nodeDef.type}) failed but mode=continue — swallowing: ${message.slice(0, 100)}`);
+              nodeOutputs.set(nodeId, {});
+              emit('node_completed', nodeId, { _onErrorContinued: true, _error: message, _durationMs: Date.now() - nodeStartedAt });
+              return;
+            }
+            if (onErrorMode === 'route') {
+              const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+              const hasErrorEdge = outgoingEdges.some((e) => e.sourceHandle === 'error');
+              if (hasErrorEdge) {
+                console.log(`[on-error] ${nodeId} (${nodeDef.type}) failed, mode=route — selecting 'error' edge`);
+                nodeErrors.set(nodeId, message);
+                nodeOutputs.set(nodeId, { _error: message });
+                emit('node_failed', nodeId, { error: message, _selectedHandle: 'error' });
+                for (const edge of outgoingEdges) {
+                  if (edge.sourceHandle && edge.sourceHandle !== 'error') {
+                    blockedEdgeIds.add(edge.id);
+                    this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+                  }
+                }
+                return;
+              }
+              // No error edge declared — fall through to default behaviour.
+            }
+
             // Per-type opt-out: LLM-agent node types (site-mapper, llm-agent)
             // never benefit from the healing loop because their failure mode
             // is "LLM was confused", and healing's response is to ask another

@@ -27,6 +27,7 @@
     'stealth-scrape', 'stealth-scrape-llm', 'site-mapper', 'interactive-step',
     'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search',
     'code-execute',
+    'http-request',
   ]);
 
   // Kinds that have a hand-crafted inline config UI further down in this file
