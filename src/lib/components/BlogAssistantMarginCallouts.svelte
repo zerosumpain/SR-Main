@@ -30,13 +30,16 @@
       raw.push({ id: p.id, top: r.top });
     }
     raw.sort((a, b) => a.top - b.top);
-    // Naive overlap-resolution: stack downward with MIN_GAP.
+    // Stack downward, using each callout's real rendered height when we can
+    // measure it; fall back to a conservative default for newly-spawned ones.
     let lastBottom = -Infinity;
     const stacked: Anchor[] = [];
     for (const a of raw) {
       const top = Math.max(a.top, lastBottom + MIN_GAP);
       stacked.push({ id: a.id, top });
-      lastBottom = top + 80; // assumed callout height; refined after first paint via re-run on resize
+      const calloutEl = document.querySelector(`[data-callout-id="${a.id}"]`) as HTMLElement | null;
+      const measured = calloutEl?.offsetHeight ?? 0;
+      lastBottom = top + (measured > 0 ? measured : 100);
     }
     anchors = stacked;
   }
@@ -45,10 +48,15 @@
     // Re-read proposal list to register dependency.
     void proposals.length;
     recompute();
+    // Re-run on next frame so we can read each callout's actual measured
+    // height (which only exists after the first paint with the initial
+    // estimated tops).
+    const raf = requestAnimationFrame(() => recompute());
     const handler = () => recompute();
     window.addEventListener('resize', handler);
     window.addEventListener('scroll', handler, true);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('resize', handler);
       window.removeEventListener('scroll', handler, true);
     };
@@ -176,12 +184,20 @@
     font-size: 0.85rem;
     display: flex; flex-direction: column; gap: 0.4rem;
     cursor: pointer;
-    transition: border-color 120ms ease, box-shadow 120ms ease;
+    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+    z-index: 1;
   }
-  .callout:hover { border-color: rgba(255, 184, 0, 0.7); }
+  .callout:hover {
+    border-color: rgba(255, 184, 0, 0.7);
+    z-index: 5;
+  }
   .callout.active {
     border-color: rgba(255, 184, 0, 1);
-    box-shadow: 0 4px 18px rgba(255, 184, 0, 0.35);
+    box-shadow: 0 6px 24px rgba(255, 184, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.18);
+    /* Lift the selected callout above all neighbours so action buttons are
+       never hidden behind a stacked card below it. */
+    z-index: 50;
+    transform: translateY(-1px);
   }
   .anchor-link {
     position: absolute; left: -22px; top: 6px;
