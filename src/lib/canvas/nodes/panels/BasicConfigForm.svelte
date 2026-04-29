@@ -4,7 +4,6 @@
   import KeyValueTableField from './widgets/KeyValueTableField.svelte';
   import ChipInputField from './widgets/ChipInputField.svelte';
   import PhoneField from './widgets/PhoneField.svelte';
-  import { summarizeNode } from '$lib/workflows/node-summary';
 
   let {
     config,
@@ -19,10 +18,6 @@
   let showAdvanced = $state(false);
   let showRawJson = $state(false);
   const fields = $derived(definition.basicConfig ?? []);
-
-  // Live preview — re-runs whenever config changes so the user sees the
-  // effective action update as they edit dropdowns/toggles/text.
-  const summary = $derived(summarizeNode(definition.type, config, definition.description));
 
   function isVisible(field: BasicConfigField): boolean {
     if (field.advancedOnly && !showAdvanced) return false;
@@ -57,24 +52,6 @@
 </script>
 
 <div class="bcf">
-  <!-- "What this does" header — always visible at the top of every config
-       panel. Surfaces the runtime action without making the user read code. -->
-  <section class="bcf-preview" aria-label="What this node will do">
-    <header class="bcf-preview-hdr">
-      <span class="bcf-preview-eyebrow">What this does</span>
-      <span class="bcf-preview-kind">{summary.preview.kind}</span>
-    </header>
-    <p class="bcf-preview-line">{summary.line}</p>
-    {#if Object.keys(summary.preview.details).length > 0}
-      <dl class="bcf-preview-grid">
-        {#each Object.entries(summary.preview.details) as [k, v] (k)}
-          <dt>{k}</dt>
-          <dd>{v}</dd>
-        {/each}
-      </dl>
-    {/if}
-  </section>
-
   {#each sections as sec (sec.name)}
     {#if sec.name}<h4 class="bcf-section">{sec.name}</h4>{/if}
     {#each sec.fields as f (f.key)}

@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
-  import { summarizeNode } from '$lib/workflows/node-summary';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
 
   let {
@@ -78,15 +77,23 @@
   }
 
   // ---------- Headers (stored as JSON string, edited as key-value) --------
+  // The orchestrator sometimes writes `headers` as an object literal in JSON
+  // (e.g. `"headers": {}`), and sometimes as a stringified JSON value (e.g.
+  // `"headers": "{}"`). The executor expects a string; we handle both shapes
+  // so the editor doesn't flag valid configs as invalid.
 
-  function parseHeaders(raw: string): Array<{ k: string; v: string }> {
-    if (!raw) return [];
-    try {
-      const obj = JSON.parse(raw);
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        return Object.entries(obj as Record<string, unknown>).map(([k, v]) => ({ k, v: String(v) }));
-      }
-    } catch { /* invalid → empty */ }
+  function parseHeaders(raw: unknown): Array<{ k: string; v: string }> {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return Object.entries(raw as Record<string, unknown>).map(([k, v]) => ({ k, v: String(v) }));
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          return Object.entries(obj as Record<string, unknown>).map(([k, v]) => ({ k, v: String(v) }));
+        }
+      } catch { /* fall through */ }
+    }
     return [];
   }
   function stringifyHeaders(rows: Array<{ k: string; v: string }>): string {
@@ -97,11 +104,16 @@
     return JSON.stringify(obj);
   }
 
-  const headerRows = $derived(parseHeaders(String(config.headers ?? '{}')));
+  const headerRows = $derived(parseHeaders(config.headers));
   const headersAreValid = $derived.by(() => {
-    const raw = String(config.headers ?? '{}');
-    if (!raw.trim()) return true;
-    try { JSON.parse(raw); return true; } catch { return false; }
+    const raw = config.headers;
+    if (raw == null) return true;
+    if (typeof raw === 'object') return true;
+    if (typeof raw === 'string') {
+      if (!raw.trim()) return true;
+      try { JSON.parse(raw); return true; } catch { return false; }
+    }
+    return false;
   });
 
   function setHeaderRows(rows: Array<{ k: string; v: string }>) {
@@ -134,25 +146,17 @@
     onChange({ ...config, [key]: value });
   }
 
-  // ---------- Live preview ------------------------------------------------
-
-  const summary = $derived(summarizeNode('http-request', config, definition?.description));
-
   // ---------- Raw JSON --------------------------------------------------
 
   let showRawJson = $state(false);
+
+  // `definition` is referenced only for typings; the canvas-level preview
+  // header (in /jkai/canvas/[slug]/+page.svelte) handles the "What this does"
+  // line so we don't duplicate it inside the panel.
+  void definition;
 </script>
 
 <div class="hp">
-  <!-- What this does -->
-  <section class="hp-preview">
-    <header class="hp-preview-hdr">
-      <span class="sr-label-tight">What this does</span>
-      <span class="hp-preview-kind">{summary.preview.kind}</span>
-    </header>
-    <p class="hp-preview-line">{summary.line}</p>
-  </section>
-
   <!-- Method & URL base -->
   <section class="hp-sec">
     <div class="hp-row hp-method-row">
@@ -263,7 +267,7 @@
       <header class="hp-sec-hdr">
         <span class="sr-label-tight">Request body</span>
         {#if bodyValid === true}<span class="hp-ok">JSON ✓</span>{/if}
-        {#if bodyValid === false}<span class="hp-warn">not valid JSON (will send as raw text)</span>{/if}
+        {#if bodyValid === false}<span class="hp-info">will send as raw text</span>{/if}
       </header>
       <textarea
         class="hp-code"
@@ -398,6 +402,7 @@
 
   .hp-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
   .hp-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
+  .hp-info { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
 
   input[type='text'], select, textarea {
     width: 100%;
