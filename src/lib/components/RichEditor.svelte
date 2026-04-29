@@ -6,6 +6,8 @@
   import Link from '@tiptap/extension-link';
   import Placeholder from '@tiptap/extension-placeholder';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
+  import { SuggestionMark } from '$lib/blog/assistant/suggestion-mark';
+  import type { ProseProposal } from '$lib/blog/assistant/proposal';
 
   interface RichEditorApi {
     getHTML: () => string;
@@ -14,7 +16,12 @@
     linkSnippet: (snippet: string, url: string, title?: string) => boolean;
     /** Append a numbered footnote referencing `snippet`. Returns the footnote number. */
     addFootnote: (snippet: string, url: string, title?: string) => number;
+    applyProposal: (p: ProseProposal) => boolean;
+    acceptProposal: (id: string, modifiedText?: string) => boolean;
+    rejectProposal: (id: string) => boolean;
   }
+
+  type DisplayMode = 'inline' | 'margin';
 
   let {
     content = '',
@@ -22,12 +29,18 @@
     onAutoSave,
     uploadImage,
     api = $bindable<RichEditorApi | undefined>(),
+    displayMode = 'inline' as DisplayMode,
+    onProposalAccepted,
+    onProposalRejected,
   }: {
     content?: string;
     onSave?: (html: string) => Promise<void>;
     onAutoSave?: (html: string) => Promise<void>;
     uploadImage?: (file: File) => Promise<string>;
     api?: RichEditorApi;
+    displayMode?: DisplayMode;
+    onProposalAccepted?: (id: string, finalText: string) => void;
+    onProposalRejected?: (id: string) => void;
   } = $props();
 
   let host: HTMLDivElement | undefined = $state();
@@ -252,7 +265,101 @@
         }
         return n;
       },
+      applyProposal: (p) => {
+        if (!editor) return false;
+        const found = locateOriginal(editor, p);
+        if (!found) return false;
+        const { from, to } = found;
+        const tr = editor.state.tr;
+        if (p.original.length > 0) {
+          tr.addMark(from, to, editor.schema.marks.suggestion.create({ id: p.id, type: 'remove' }));
+        }
+        if (p.suggested.length > 0) {
+          const insertAt = p.original.length > 0 ? to : from;
+          tr.insertText(p.suggested, insertAt);
+          tr.addMark(insertAt, insertAt + p.suggested.length, editor.schema.marks.suggestion.create({ id: p.id, type: 'add' }));
+        }
+        editor.view.dispatch(tr);
+        return true;
+      },
+      acceptProposal: (id, modifiedText) => {
+        if (!editor) return false;
+        let removeFrom = -1, removeTo = -1, addFrom = -1, addTo = -1;
+        editor.state.doc.descendants((node, pos) => {
+          const mark = node.marks.find((m) => m.type.name === 'suggestion' && m.attrs.id === id);
+          if (!mark) return;
+          const end = pos + node.nodeSize;
+          if (mark.attrs.type === 'remove') { removeFrom = pos; removeTo = end; }
+          else { addFrom = pos; addTo = end; }
+        });
+        if (removeFrom < 0 && addFrom < 0) return false;
+        let tr = editor.state.tr;
+        // 1) Drop the deletion span entirely.
+        if (removeFrom >= 0) {
+          tr = tr.delete(removeFrom, removeTo);
+          // shift add positions if they were after the removed range
+          if (addFrom > removeTo) { addFrom -= (removeTo - removeFrom); addTo -= (removeTo - removeFrom); }
+        }
+        // 2) Replace insertion text if user modified it, then strip the suggestion mark.
+        if (addFrom >= 0) {
+          if (modifiedText !== undefined) {
+            tr = tr.insertText(modifiedText, addFrom, addTo);
+            addTo = addFrom + modifiedText.length;
+          }
+          tr = tr.removeMark(addFrom, addTo, editor.schema.marks.suggestion);
+        }
+        editor.view.dispatch(tr);
+        const finalText = addFrom >= 0 ? editor.state.doc.textBetween(addFrom, addTo) : '';
+        onProposalAccepted?.(id, finalText);
+        // Trigger autosave so the accepted change is persisted promptly.
+        if (onAutoSave) {
+          void onAutoSave(editor.getHTML()).catch(() => {});
+        }
+        return true;
+      },
+      rejectProposal: (id) => {
+        if (!editor) return false;
+        let removeFrom = -1, removeTo = -1, addFrom = -1, addTo = -1;
+        editor.state.doc.descendants((node, pos) => {
+          const mark = node.marks.find((m) => m.type.name === 'suggestion' && m.attrs.id === id);
+          if (!mark) return;
+          const end = pos + node.nodeSize;
+          if (mark.attrs.type === 'remove') { removeFrom = pos; removeTo = end; }
+          else { addFrom = pos; addTo = end; }
+        });
+        if (removeFrom < 0 && addFrom < 0) return false;
+        let tr = editor.state.tr;
+        // 1) Drop insertion text entirely.
+        if (addFrom >= 0) {
+          tr = tr.delete(addFrom, addTo);
+          if (removeFrom > addTo) { removeFrom -= (addTo - addFrom); removeTo -= (addTo - addFrom); }
+        }
+        // 2) Strip suggestion mark from the removed-span text (keeping the original text).
+        if (removeFrom >= 0) {
+          tr = tr.removeMark(removeFrom, removeTo, editor.schema.marks.suggestion);
+        }
+        editor.view.dispatch(tr);
+        onProposalRejected?.(id);
+        return true;
+      },
     };
+  }
+
+  function locateOriginal(ed: Editor, p: ProseProposal): { from: number; to: number } | null {
+    if (p.original.length === 0) {
+      return { from: p.anchor.from + 1, to: p.anchor.from + 1 };
+    }
+    const docText = ed.state.doc.textContent;
+    const win = 200;
+    const start = Math.max(0, p.anchor.from - win);
+    const end = Math.min(docText.length, p.anchor.to + win);
+    const idx = docText.indexOf(p.original, start);
+    if (idx < 0 || idx > end) {
+      const fallback = docText.indexOf(p.original);
+      if (fallback < 0) return null;
+      return { from: fallback + 1, to: fallback + 1 + p.original.length };
+    }
+    return { from: idx + 1, to: idx + 1 + p.original.length };
   }
 
   function escapeHtml(s: string): string {
@@ -277,6 +384,7 @@
         Image.configure({ inline: false, allowBase64: false }),
         Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
+        SuggestionMark,
       ],
       content: content || '',
       onUpdate: () => {
@@ -417,7 +525,7 @@
     </div>
   </div>
 
-  <div bind:this={host} class="rich-host"></div>
+  <div bind:this={host} class="rich-host" data-suggestion-display={displayMode}></div>
 
   {#if scores.words > 0}
     <div class="readability">
@@ -535,4 +643,20 @@
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
   .r-audience { color: var(--text-primary); font-style: italic; }
   .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
+
+  :global(.sg-add) {
+    background: rgba(34, 139, 34, 0.18);
+    text-decoration: none;
+  }
+  :global(.sg-remove) {
+    background: rgba(220, 38, 38, 0.14);
+    text-decoration: line-through;
+    text-decoration-color: rgba(220, 38, 38, 0.7);
+  }
+  :global([data-suggestion-display="margin"] .sg-add),
+  :global([data-suggestion-display="margin"] .sg-remove) {
+    background: transparent;
+    text-decoration: none;
+    border-bottom: 2px dotted var(--accent, #888);
+  }
 </style>
