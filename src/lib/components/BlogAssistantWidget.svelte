@@ -47,6 +47,55 @@
     return proposalStore.list().filter((p): p is MetaProposal => p.kind === 'meta');
   });
 
+  // Revision history (rollback)
+  type Revision = { id: number; field: string; previousValue: string; reason: string | null; createdAt: string; proposalId: string | null };
+  let historyOpen = $state(false);
+  let revisions = $state<Revision[]>([]);
+  let loadingRevisions = $state(false);
+
+  async function loadRevisions() {
+    loadingRevisions = true;
+    try {
+      const r = await fetch(`/api/admin/blog/${postId}/revisions?token=${adminToken}`);
+      if (r.ok) {
+        const body = await r.json();
+        revisions = body.revisions ?? [];
+      }
+    } finally {
+      loadingRevisions = false;
+    }
+  }
+
+  $effect(() => {
+    const onChanged = () => { if (historyOpen) loadRevisions(); };
+    window.addEventListener('jkai:revisions-changed', onChanged);
+    return () => window.removeEventListener('jkai:revisions-changed', onChanged);
+  });
+
+  async function rollback(rev: Revision) {
+    if (!confirm(`Roll back this ${rev.field} change?`)) return;
+    const r = await fetch(`/api/admin/blog/${postId}/revisions/${rev.id}/rollback?token=${adminToken}`, { method: 'POST' });
+    if (!r.ok) { appendStatus('✗ Rollback failed.'); return; }
+    appendStatus(`↶ Rolled back ${rev.field}.`);
+    // Notify the page so it refreshes its state from the returned post.
+    const body = await r.json().catch(() => ({}));
+    if (body?.post) {
+      window.dispatchEvent(new CustomEvent('jkai:post-rolled-back', { detail: { post: body.post } }));
+    }
+    await loadRevisions();
+  }
+
+  function fmtRevValue(rev: Revision): string {
+    if (rev.field === 'content') {
+      const text = rev.previousValue.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+    }
+    if (rev.field === 'tags') {
+      try { return (JSON.parse(rev.previousValue) as string[]).join(', '); } catch { return rev.previousValue; }
+    }
+    return rev.previousValue.length > 80 ? `${rev.previousValue.slice(0, 80)}…` : rev.previousValue;
+  }
+
   // Pos.x = px from LEFT edge of viewport, Pos.y = px from BOTTOM.
   // Default anchor: bottom-LEFT, so the widget doesn't collide with margin
   // callouts on the right.
@@ -238,9 +287,36 @@
         <button type="button" class:active={displayMode === 'inline'} onclick={() => onSetDisplayMode('inline')}>inline</button>
         <button type="button" class:active={displayMode === 'margin'} onclick={() => onSetDisplayMode('margin')}>margin</button>
       </span>
+      <button type="button" class="hist" class:active={historyOpen}
+        onclick={() => { historyOpen = !historyOpen; if (historyOpen) loadRevisions(); }}
+        aria-label="History" title="Recent LLM changes (rollback)">↶</button>
       <button type="button" class="clear" onclick={clearChat} aria-label="Clear chat" title="Clear chat history and proposals">Clear</button>
       <button type="button" class="close" onclick={() => (open = false)} aria-label="Minimise">–</button>
     </header>
+
+    {#if historyOpen}
+      <div class="history-panel">
+        <div class="hist-hd">
+          <span>Recent LLM changes</span>
+          {#if loadingRevisions}<span class="muted">loading…</span>{/if}
+        </div>
+        {#if revisions.length === 0 && !loadingRevisions}
+          <p class="empty">No changes captured yet.</p>
+        {:else}
+          <ul class="hist-list">
+            {#each revisions as rev (rev.id)}
+              <li class="hist-row">
+                <div class="hist-row-main">
+                  <span class="hist-field">{rev.field}</span>
+                  <span class="hist-prev" title={rev.previousValue}>{fmtRevValue(rev)}</span>
+                </div>
+                <button class="nm-btn-ghost" onclick={() => rollback(rev)}>Roll back</button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/if}
 
     <div class="body">
       {#each chatRows as row, i (i)}
@@ -316,6 +392,41 @@
     color: var(--text-muted);
   }
   .clear:hover { color: var(--danger, #c33); border-color: var(--danger, #c33); }
+  .hist {
+    border: 1px solid var(--card-border); background: transparent;
+    padding: 0.1rem 0.45rem; font-size: 0.85rem; cursor: pointer;
+    color: var(--text-muted);
+  }
+  .hist.active { background: var(--accent-tint-08); color: var(--text-primary); }
+  .history-panel {
+    border-bottom: 1px solid var(--card-border);
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+    max-height: 220px; overflow-y: auto;
+    background: var(--bg-section, transparent);
+  }
+  .hist-hd {
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-mono); font-size: 0.72rem;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 0.4rem;
+  }
+  .muted { color: var(--text-ghost); text-transform: none; letter-spacing: 0; }
+  .hist-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+  .hist-row {
+    display: flex; gap: 0.5rem; align-items: center;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid var(--card-border);
+  }
+  .hist-row-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .hist-field {
+    font-family: var(--font-mono); font-size: 0.7rem;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .hist-prev {
+    font-size: 0.78rem; color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; padding: 0 0.3rem; }
   .body {
     flex: 1; overflow-y: auto; padding: 0.6rem;

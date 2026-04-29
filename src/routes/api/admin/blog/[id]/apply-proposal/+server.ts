@@ -2,6 +2,8 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { updatePostFields, replaceTags, getPostById } from '$lib/blog';
 import { appendMessage } from '$lib/blog/assistant/messages';
+import { db } from '$lib/db';
+import { blogPostRevisions } from '$lib/db/schema';
 
 type Body = {
   proposalId: string;
@@ -16,6 +18,28 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const field = body.field;
   if (!field) throw error(400, 'field required');
   const value = body.value;
+
+  // Snapshot the previous value BEFORE applying so the user can roll back.
+  const cur = await getPostById(postId);
+  if (cur) {
+    let prev: string;
+    switch (field) {
+      case 'title': prev = cur.title; break;
+      case 'excerpt': prev = cur.excerpt; break;
+      case 'slug': prev = cur.slug; break;
+      case 'tags': prev = JSON.stringify(cur.tags ?? []); break;
+      case 'status': prev = cur.status; break;
+      case 'cover_alt': prev = (cur as { coverImageAlt?: string | null }).coverImageAlt ?? ''; break;
+      default: prev = '';
+    }
+    await db.insert(blogPostRevisions).values({
+      postId,
+      proposalId: body.proposalId ?? null,
+      field,
+      previousValue: prev,
+      reason: `assistant accepted: ${field}`,
+    });
+  }
 
   switch (field) {
     case 'title':
@@ -33,7 +57,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
     case 'status': {
       const status: 'draft' | 'published' = value === 'published' ? 'published' : 'draft';
       const fields: Parameters<typeof updatePostFields>[1] = { status };
-      const cur = await getPostById(postId);
       if (status === 'published' && cur && !cur.publishedAt) {
         fields.publishedAt = new Date();
       }

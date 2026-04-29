@@ -266,6 +266,7 @@
     if (p.field === 'tags') tags = (body.post.tags as string[]).join(', ');
     if (p.field === 'status') status = body.post.status;
     data.post = body.post;
+    window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
   }
 
   function rejectMetaProposal(p: MetaProposal) {
@@ -274,6 +275,31 @@
   }
 
   let widgetSendMessage = $state<((text: string) => Promise<void>) | undefined>();
+
+  // After a rollback, update the editor + form fields from the returned post.
+  $effect(() => {
+    const handler = (ev: Event) => {
+      const post = (ev as CustomEvent).detail?.post;
+      if (!post) return;
+      title = post.title ?? title;
+      slug = post.slug ?? slug;
+      excerpt = post.excerpt ?? excerpt;
+      tags = Array.isArray(post.tags) ? (post.tags as string[]).join(', ') : tags;
+      coverImageUrl = post.coverImageUrl ?? coverImageUrl;
+      status = post.status ?? status;
+      if (typeof post.content === 'string') {
+        content = post.content;
+        data.post.content = post.content;
+        // Push the new content into the editor (props don't reactively swap content).
+        richApi?.setContent?.(post.content);
+        // Also clear any orphan suggestion marks left in the editor.
+        richApi?.clearAllSuggestions?.();
+      }
+      data.post = post;
+    };
+    window.addEventListener('jkai:post-rolled-back', handler);
+    return () => window.removeEventListener('jkai:post-rolled-back', handler);
+  });
 
   async function regenerate(p: Proposal, note: string) {
     // Mark the old proposal as superseded; widget will call SSE to fetch a new one.
@@ -439,7 +465,23 @@
           {uploadImage}
           bind:api={richApi}
           {displayMode}
-          onProposalAccepted={(id) => { proposalStore.resolve(id, 'accepted'); proposalTick++; }}
+          onProposalAccepted={(id, _finalText, preAcceptHtml) => {
+            proposalStore.resolve(id, 'accepted');
+            proposalTick++;
+            // Capture revision so the user can roll back this change later.
+            void fetch(`/api/admin/blog/${data.post.id}/revisions?token=${adminToken}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                proposalId: id,
+                field: 'content',
+                previousValue: preAcceptHtml,
+                reason: 'assistant accepted: content',
+              }),
+            }).catch(() => undefined);
+            // Also re-fetch revisions list so the widget's history view stays current.
+            window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
+          }}
           onProposalRejected={(id) => { proposalStore.resolve(id, 'rejected'); proposalTick++; }}
         />
         {#if displayMode === 'margin'}

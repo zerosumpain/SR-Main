@@ -22,6 +22,8 @@
     /** Strip ALL suggestion marks from the document, treating each one as a
      *  reject (delete insertions, unwrap deletions). Used by the Clear button. */
     clearAllSuggestions: () => void;
+    /** Replace the entire document content. Used after rollback. */
+    setContent: (html: string) => void;
   }
 
   type DisplayMode = 'inline' | 'margin';
@@ -42,7 +44,7 @@
     uploadImage?: (file: File) => Promise<string>;
     api?: RichEditorApi;
     displayMode?: DisplayMode;
-    onProposalAccepted?: (id: string, finalText: string) => void;
+    onProposalAccepted?: (id: string, finalText: string, preAcceptHtml: string) => void;
     onProposalRejected?: (id: string) => void;
   } = $props();
 
@@ -300,6 +302,18 @@
       },
       acceptProposal: (id, modifiedText) => {
         if (!editor) return false;
+        // Snapshot the pre-accept HTML *with* the suggestion marks stripped
+        // (i.e. the document as if the proposal had been rejected). This is
+        // what the user wants to roll back to.
+        let preAcceptHtml = editor.getHTML();
+        try {
+          // Build a "rejected" version by removing this proposal's <ins> and
+          // unwrapping its <del>. Keep other pending proposals intact.
+          const insRe = new RegExp(`<ins[^>]*data-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
+          const delRe = new RegExp(`<del[^>]*data-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
+          preAcceptHtml = preAcceptHtml.replace(insRe, '').replace(delRe, '$1');
+        } catch { /* fall back to raw HTML */ }
+
         let removeFrom = -1, removeTo = -1, addFrom = -1, addTo = -1;
         editor.state.doc.descendants((node, pos) => {
           const mark = node.marks.find((m) => m.type.name === 'suggestion' && m.attrs.id === id);
@@ -326,7 +340,7 @@
         }
         editor.view.dispatch(tr);
         const finalText = addFrom >= 0 ? editor.state.doc.textBetween(addFrom, addTo) : '';
-        onProposalAccepted?.(id, finalText);
+        onProposalAccepted?.(id, finalText, preAcceptHtml);
         // Trigger autosave so the accepted change is persisted promptly.
         if (onAutoSave) {
           void onAutoSave(editor.getHTML()).catch(() => {});
@@ -384,6 +398,10 @@
         }
         editor.view.dispatch(tr);
         if (onAutoSave) void onAutoSave(editor.getHTML()).catch(() => {});
+      },
+      setContent: (html) => {
+        if (!editor) return;
+        editor.commands.setContent(html, { emitUpdate: true });
       },
     };
   }
@@ -533,12 +551,13 @@
   }
   const noop = () => {};
   // Reactive derivations referencing editor must read state through getters.
-  let activeMap = $state({ bold: false, italic: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false });
+  let activeMap = $state({ bold: false, italic: false, strike: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false });
   function refreshActive() {
     if (!editor) return;
     activeMap = {
       bold: editor.isActive('bold'),
       italic: editor.isActive('italic'),
+      strike: editor.isActive('strike'),
       h2: editor.isActive('heading', { level: 2 }),
       h3: editor.isActive('heading', { level: 3 }),
       ul: editor.isActive('bulletList'),
@@ -567,6 +586,7 @@
     <div class="toolbar-left">
       <button class="tool-btn" class:active={activeMap.bold} onclick={() => editor?.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)"><b>B</b></button>
       <button class="tool-btn" class:active={activeMap.italic} onclick={() => editor?.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)"><i>I</i></button>
+      <button class="tool-btn" class:active={activeMap.strike} onclick={() => editor?.chain().focus().toggleStrike().run()} title="Strikethrough (Ctrl+Shift+X)"><s>S</s></button>
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.h2} onclick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2">H2</button>
       <button class="tool-btn" class:active={activeMap.h3} onclick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3">H3</button>

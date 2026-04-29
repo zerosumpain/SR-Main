@@ -58,8 +58,22 @@ export const blogAssistantMessages = pgTable('blog_assistant_messages', {
   postId: integer('post_id')
     .notNull()
     .references(() => blogPosts.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // 'user' | 'assistant' | 'tool'
+  role: text('role').notNull(), // 'user' | 'assistant' | 'tool' | 'proposal' | 'proposal_resolved'
   content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Revisions captured BEFORE an assistant-driven change is applied. Lets the
+// user roll back any prose or metadata edit the LLM made.
+export const blogPostRevisions = pgTable('blog_post_revisions', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id')
+    .notNull()
+    .references(() => blogPosts.id, { onDelete: 'cascade' }),
+  proposalId: text('proposal_id'),
+  field: text('field').notNull(), // 'content' | 'title' | 'excerpt' | 'slug' | 'tags' | 'status' | 'cover_alt'
+  previousValue: text('previous_value').notNull(), // raw text or JSON-encoded
+  reason: text('reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
