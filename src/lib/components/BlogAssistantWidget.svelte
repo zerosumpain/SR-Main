@@ -139,6 +139,15 @@
     busy = false;
   }
 
+  async function clearChat() {
+    if (!confirm('Clear the chat history and all pending proposals for this post?')) return;
+    try {
+      await fetch(`/api/admin/blog/${postId}/assistant/clear?token=${adminToken}`, { method: 'POST' });
+    } catch { /* still clear locally */ }
+    chatRows = [];
+    proposalStore.clear();
+  }
+
   function onKeydown(ev: KeyboardEvent) {
     if (ev.key === 'Enter' && !ev.shiftKey) {
       ev.preventDefault();
@@ -172,6 +181,7 @@
         <button type="button" class:active={displayMode === 'inline'} onclick={() => onSetDisplayMode('inline')}>inline</button>
         <button type="button" class:active={displayMode === 'margin'} onclick={() => onSetDisplayMode('margin')}>margin</button>
       </span>
+      <button type="button" class="clear" onclick={clearChat} aria-label="Clear chat" title="Clear chat history and proposals">Clear</button>
       <button type="button" class="close" onclick={() => (open = false)} aria-label="Minimise">–</button>
     </header>
 
@@ -236,6 +246,12 @@
     padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
   }
   .mode button.active { background: var(--accent-tint-08); }
+  .clear {
+    border: 1px solid var(--card-border); background: transparent;
+    padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
+    color: var(--text-muted);
+  }
+  .clear:hover { color: var(--danger, #c33); border-color: var(--danger, #c33); }
   .close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; padding: 0 0.3rem; }
   .body {
     flex: 1; overflow-y: auto; padding: 0.6rem;

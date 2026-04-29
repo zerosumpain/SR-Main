@@ -10,29 +10,40 @@
   };
   let { proposals, editorEl, onAccept, onReject, onRegenerate }: Props = $props();
 
-  type Anchor = { id: string; top: number; height: number };
+  type Anchor = { id: string; top: number };
   let anchors = $state<Anchor[]>([]);
   let regenFor = $state<string | null>(null);
   let regenNote = $state('');
   let editFor = $state<string | null>(null);
   let editText = $state('');
 
+  const MIN_GAP = 8; // px between stacked callouts
+
   function recompute() {
     if (!editorEl) { anchors = []; return; }
-    const containerRect = editorEl.getBoundingClientRect();
-    const next: Anchor[] = [];
+    const raw: { id: string; top: number }[] = [];
     for (const p of proposals) {
       if (p.status !== 'pending') continue;
       const el = editorEl.querySelector(`[data-suggestion-id="${p.id}"]`) as HTMLElement | null;
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      next.push({ id: p.id, top: r.top - containerRect.top, height: r.height });
+      raw.push({ id: p.id, top: r.top });
     }
-    anchors = next;
+    raw.sort((a, b) => a.top - b.top);
+    // Naive overlap-resolution: stack downward with MIN_GAP.
+    let lastBottom = -Infinity;
+    const stacked: Anchor[] = [];
+    for (const a of raw) {
+      const top = Math.max(a.top, lastBottom + MIN_GAP);
+      stacked.push({ id: a.id, top });
+      lastBottom = top + 80; // assumed callout height; refined after first paint via re-run on resize
+    }
+    anchors = stacked;
   }
 
   $effect(() => {
-    // re-run whenever proposals change OR window resizes
+    // Re-read proposal list to register dependency.
+    void proposals.length;
     recompute();
     const handler = () => recompute();
     window.addEventListener('resize', handler);
@@ -55,6 +66,11 @@
     regenFor = null;
     regenNote = '';
   }
+
+  function scrollToMark(p: ProseProposal) {
+    const el = editorEl?.querySelector(`[data-suggestion-id="${p.id}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 </script>
 
 <aside class="margin-layer" aria-label="Pending suggestions">
@@ -62,6 +78,7 @@
     {@const anchor = anchors.find((a) => a.id === p.id)}
     {#if anchor}
       <div class="callout" style="top: {anchor.top}px;">
+        <button class="anchor-link" onclick={() => scrollToMark(p)} aria-label="Scroll to highlighted text">→</button>
         {#if editFor === p.id}
           <textarea class="nm-textarea" rows="3" bind:value={editText}></textarea>
           <div class="acts">
@@ -92,29 +109,47 @@
 
 <style>
   .margin-layer {
-    position: absolute;
+    position: fixed;
     top: 0;
-    right: -340px;
+    right: 16px;
     width: 320px;
     pointer-events: none;
+    z-index: 70;
+    height: 0; /* container has no height itself; callouts position themselves */
   }
   .callout {
-    position: absolute;
-    width: 100%;
-    background: var(--bg-section);
+    position: fixed;
+    right: 16px;
+    width: 320px;
+    background: var(--bg-card, var(--bg-page, #fff));
     border: 1px solid var(--card-border);
-    padding: 0.5rem 0.6rem;
+    padding: 0.55rem 0.7rem;
     pointer-events: auto;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     font-size: 0.85rem;
-    display: flex; flex-direction: column; gap: 0.35rem;
+    display: flex; flex-direction: column; gap: 0.4rem;
   }
-  .suggested { margin: 0; font-weight: 500; }
+  .anchor-link {
+    position: absolute; left: -22px; top: 6px;
+    width: 18px; height: 18px;
+    border: 1px solid var(--card-border);
+    background: var(--bg-card, #fff);
+    cursor: pointer; padding: 0;
+    font-size: 0.7rem; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+  }
+  .suggested {
+    margin: 0; font-weight: 500;
+    background: rgba(34, 139, 34, 0.10);
+    padding: 0.35rem 0.45rem;
+    border-left: 3px solid rgba(34, 139, 34, 0.6);
+  }
   .reason { margin: 0; font-size: 0.78rem; color: var(--text-muted); }
   .acts { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
   .regen-row { display: flex; }
   .regen-row .nm-text-input { width: 100%; }
   @media (max-width: 1100px) {
-    .margin-layer { display: none; }
+    .margin-layer, .callout { display: none; }
   }
 </style>
