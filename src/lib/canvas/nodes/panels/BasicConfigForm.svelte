@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { BasicConfigField, NodeDefinition } from '$lib/workflows/types';
   import SchemaBuilderField from './SchemaBuilderField.svelte';
+  import KeyValueTableField from './widgets/KeyValueTableField.svelte';
+  import ChipInputField from './widgets/ChipInputField.svelte';
+  import PhoneField from './widgets/PhoneField.svelte';
+  import { summarizeNode } from '$lib/workflows/node-summary';
 
   let {
     config,
@@ -13,7 +17,12 @@
   } = $props();
 
   let showAdvanced = $state(false);
+  let showRawJson = $state(false);
   const fields = $derived(definition.basicConfig ?? []);
+
+  // Live preview — re-runs whenever config changes so the user sees the
+  // effective action update as they edit dropdowns/toggles/text.
+  const summary = $derived(summarizeNode(definition.type, config, definition.description));
 
   function isVisible(field: BasicConfigField): boolean {
     if (field.advancedOnly && !showAdvanced) return false;
@@ -48,11 +57,29 @@
 </script>
 
 <div class="bcf">
+  <!-- "What this does" header — always visible at the top of every config
+       panel. Surfaces the runtime action without making the user read code. -->
+  <section class="bcf-preview" aria-label="What this node will do">
+    <header class="bcf-preview-hdr">
+      <span class="bcf-preview-eyebrow">What this does</span>
+      <span class="bcf-preview-kind">{summary.preview.kind}</span>
+    </header>
+    <p class="bcf-preview-line">{summary.line}</p>
+    {#if Object.keys(summary.preview.details).length > 0}
+      <dl class="bcf-preview-grid">
+        {#each Object.entries(summary.preview.details) as [k, v] (k)}
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        {/each}
+      </dl>
+    {/if}
+  </section>
+
   {#each sections as sec (sec.name)}
     {#if sec.name}<h4 class="bcf-section">{sec.name}</h4>{/if}
     {#each sec.fields as f (f.key)}
       {#if isVisible(f)}
-        <label class="bcf-field" class:bcf-field-wide={f.type === 'textarea' || f.type === 'template-textarea' || f.type === 'code' || f.type === 'schema-builder'}>
+        <label class="bcf-field" class:bcf-field-wide={f.type === 'textarea' || f.type === 'template-textarea' || f.type === 'code' || f.type === 'schema-builder' || f.type === 'key-value-table'}>
           <span class="bcf-label">{f.label}</span>
           {#if f.description}<span class="bcf-desc">{f.description}</span>{/if}
 
@@ -77,8 +104,24 @@
             <textarea rows="4" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
           {:else if f.type === 'code'}
             <textarea class="bcf-code" rows="8" spellcheck="false" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
+            {#if f.cheatsheet && f.cheatsheet.length > 0}
+              <details class="bcf-cheatsheet">
+                <summary>Variables in scope</summary>
+                <ul>
+                  {#each f.cheatsheet as line}
+                    <li><code>{line}</code></li>
+                  {/each}
+                </ul>
+              </details>
+            {/if}
           {:else if f.type === 'schema-builder'}
             <SchemaBuilderField value={(config[f.key] as unknown[]) ?? []} onChange={(v) => update(f.key, v)} />
+          {:else if f.type === 'key-value-table'}
+            <KeyValueTableField value={(config[f.key] as Record<string, string>) ?? {}} onChange={(v) => update(f.key, v)} />
+          {:else if f.type === 'chip-input'}
+            <ChipInputField value={(config[f.key] as string[]) ?? []} placeholder={f.placeholder} onChange={(v) => update(f.key, v)} />
+          {:else if f.type === 'phone'}
+            <PhoneField value={String(config[f.key] ?? '')} onChange={(v) => update(f.key, v)} />
           {/if}
         </label>
       {/if}
@@ -88,10 +131,84 @@
   <button type="button" class="bcf-advanced-toggle" onclick={toggleAdvanced}>
     {showAdvanced ? 'Hide advanced fields' : 'Show advanced fields'}
   </button>
+
+  <details class="bcf-raw" bind:open={showRawJson}>
+    <summary>Advanced — raw JSON config</summary>
+    <textarea
+      class="bcf-code"
+      rows="10"
+      spellcheck="false"
+      value={JSON.stringify(config, null, 2)}
+      oninput={(e) => {
+        try {
+          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
+          if (next && typeof next === 'object') onChange(next);
+        } catch { /* invalid JSON — ignore until valid */ }
+      }}
+    ></textarea>
+  </details>
 </div>
 
 <style>
   .bcf { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
+  .bcf-preview {
+    border: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bcf-preview-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .bcf-preview-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .bcf-preview-kind {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .bcf-preview-line {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+  .bcf-preview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) 1fr;
+    gap: 4px 12px;
+    margin: 4px 0 0 0;
+    font-size: 11px;
+  }
+  .bcf-preview-grid dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    align-self: center;
+  }
+  .bcf-preview-grid dd {
+    margin: 0;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
   .bcf-section {
     margin: 8px 0 0 0;
     font-family: var(--font-mono);
@@ -105,6 +222,20 @@
   .bcf-desc { font-size: 11px; color: var(--text-ghost); }
   .bcf-slider { display: flex; gap: 8px; align-items: center; color: var(--text-primary); }
   .bcf-code { font-family: var(--font-mono); font-size: 11px; }
+  .bcf-cheatsheet {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .bcf-cheatsheet summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .bcf-cheatsheet ul { margin: 4px 0 0 12px; padding: 0; }
+  .bcf-cheatsheet code { font-size: 11px; }
   .bcf-advanced-toggle {
     margin-top: 8px;
     background: var(--bg);
@@ -118,6 +249,21 @@
     cursor: pointer;
   }
   .bcf-advanced-toggle:hover { color: var(--text-primary); }
+  .bcf-raw {
+    margin-top: 8px;
+    border-top: 1px dashed var(--card-border);
+    padding-top: 8px;
+  }
+  .bcf-raw summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+  .bcf-raw summary:hover { color: var(--text-primary); }
+  .bcf-raw textarea { margin-top: 8px; }
   input[type='text'], input[type='number'], select, textarea {
     width: 100%;
     padding: 6px 8px;

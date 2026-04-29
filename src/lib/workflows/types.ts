@@ -21,7 +21,19 @@ export interface JsonSchema {
 export interface BasicConfigField {
   key: string;
   label: string;
-  type: 'dropdown' | 'toggle' | 'slider' | 'text' | 'textarea' | 'template-textarea' | 'number' | 'code' | 'schema-builder';
+  type:
+    | 'dropdown'
+    | 'toggle'
+    | 'slider'
+    | 'text'
+    | 'textarea'
+    | 'template-textarea'
+    | 'number'
+    | 'code'
+    | 'schema-builder'
+    | 'key-value-table'
+    | 'chip-input'
+    | 'phone';
   options?: { value: string; label: string }[];
   min?: number;
   max?: number;
@@ -39,6 +51,24 @@ export interface BasicConfigField {
     in?: unknown[];
     not?: unknown;
   };
+  /** Language hint for `code` widget. */
+  language?: 'json' | 'javascript' | 'jsonpath' | 'sql' | 'plaintext';
+  /** For dropdown widgets, dynamic option resolver (resolved client-side at render time). */
+  dynamicOptionsKey?: 'gemini-models' | 'scraper-profiles' | 'workflow-vars';
+  /** Cheatsheet shown beneath a `code` widget — variables in scope, etc. */
+  cheatsheet?: string[];
+}
+
+/**
+ * Per-instance summary of what a configured node will do at runtime.
+ * Populated either by deterministic `summarize(config)` on the NodeDefinition,
+ * by the LLM workflow generator, or hand-edited. Surfaced on the canvas under
+ * the node title and at the top of the config panel for trust-by-transparency.
+ */
+export interface NodeActionPreview {
+  kind: 'http' | 'message' | 'llm' | 'db' | 'file' | 'cron' | 'scrape' | 'compute' | 'control' | 'trigger' | 'other';
+  /** Compact key/value pairs displayed in a 2-column table. */
+  details: Record<string, string>;
 }
 
 export interface SchemaFieldRow {
@@ -62,6 +92,16 @@ export interface NodeDefinition {
   llmDescription?: string;
   /** Example configs for the orchestrator */
   llmExamples?: Record<string, unknown>[];
+  /**
+   * Deterministic per-instance summary. Given the configured values, return
+   * a one-line plain-English description plus a structured preview of the
+   * exact action the node will take at runtime. Used for canvas summary
+   * lines and the "What this does" header on config panels.
+   */
+  summarize?: (config: Record<string, unknown>) => {
+    line: string;
+    preview: NodeActionPreview;
+  };
   /**
    * Hide from orchestrator grounding and the admin /tools listing.
    * Stays registered + executable so existing canvases keep running, but
@@ -260,6 +300,10 @@ export interface WorkflowNodeDef {
   position: Position;
   config: Record<string, unknown>;
   label: string;
+  /** Plain-English one-liner of what this node will do at runtime. */
+  actionSummary?: string;
+  /** Structured preview shown above the config form. */
+  actionPreview?: NodeActionPreview;
 }
 
 export interface WorkflowEdgeDef {

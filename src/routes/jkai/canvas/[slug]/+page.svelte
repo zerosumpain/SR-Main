@@ -19,6 +19,7 @@
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
   import { getDefinition } from '$lib/workflows/registry-client';
+  import { summarizeNode } from '$lib/workflows/node-summary';
 
   // Node types that always render a config panel (specialised panels), in addition
   // to anything whose NodeDefinition.basicConfig is populated.
@@ -3409,18 +3410,16 @@
                 <span class="wf-name">{n.name}</span>
                 <span class="trig-summary">{triggerSummary(n.config)}</span>
               </div>
-            {:else if n.type === 'quick-answer' && n.config.topic}
-              <div class="trig-stack">
-                <span class="wf-name">{n.name}</span>
-                <span class="trig-summary">{String(n.config.topic).slice(0, 60)}{String(n.config.topic).length > 60 ? '…' : ''}</span>
-              </div>
-            {:else if n.type === 'deep-research' && n.config.topic}
-              <div class="trig-stack">
-                <span class="wf-name">{n.name}</span>
-                <span class="trig-summary">{String(n.config.topic).slice(0, 60)}{String(n.config.topic).length > 60 ? '…' : ''}</span>
-              </div>
             {:else}
-              <span class="wf-name">{n.name}</span>
+              {@const _def = getDefinition(n.type)}
+              {@const _summary = (n as { actionSummary?: string }).actionSummary
+                || summarizeNode(n.type, n.config as Record<string, unknown>, _def?.description).line}
+              <div class="trig-stack">
+                <span class="wf-name">{n.name}</span>
+                {#if _summary && _summary !== n.name}
+                  <span class="trig-summary wf-summary" title={_summary}>{_summary.length > 90 ? _summary.slice(0, 89) + '…' : _summary}</span>
+                {/if}
+              </div>
             {/if}
             <div
               class="node-handle"
