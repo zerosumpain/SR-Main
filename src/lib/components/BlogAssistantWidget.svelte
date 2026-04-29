@@ -15,6 +15,7 @@
     onAcceptMeta: (p: MetaProposal) => Promise<void>;
     onRejectMeta: (p: MetaProposal) => void;
     onRegenerate: (p: Proposal, note: string) => void;
+    onClear?: () => void;
     sendMessage?: (text: string) => Promise<void>;
   };
 
@@ -22,6 +23,7 @@
     postId, adminToken, history, proposalStore,
     displayMode, onSetDisplayMode,
     onProposalArrived, onAcceptMeta, onRejectMeta, onRegenerate,
+    onClear,
     sendMessage = $bindable(),
   }: Props = $props();
 
@@ -35,7 +37,13 @@
       .filter((r) => r.role === 'user' || r.role === 'assistant')
       .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }))
   );
-  let metaProposals = $derived(proposalStore.list().filter((p): p is MetaProposal => p.kind === 'meta'));
+  // proposalStore is a plain Map — not $state-tracked. Bump this counter
+  // whenever the store mutates so Svelte re-derives metaProposals.
+  let proposalsTick = $state(0);
+  let metaProposals = $derived.by(() => {
+    proposalsTick;
+    return proposalStore.list().filter((p): p is MetaProposal => p.kind === 'meta');
+  });
 
   type Pos = { x: number; y: number };
   const POS_KEY = 'blog-assistant-widget-pos';
@@ -118,6 +126,7 @@
             const p = ev.proposal as Proposal;
             if (p.replaces) proposalStore.replace(p.replaces, p);
             else proposalStore.add(p);
+            proposalsTick++;
             onProposalArrived(p);
           } else if (ev.type === 'error') {
             chatRows = [...chatRows, { role: 'assistant', content: `Error: ${ev.message}` }];
@@ -146,6 +155,8 @@
     } catch { /* still clear locally */ }
     chatRows = [];
     proposalStore.clear();
+    proposalsTick++;
+    onClear?.();
   }
 
   function onKeydown(ev: KeyboardEvent) {

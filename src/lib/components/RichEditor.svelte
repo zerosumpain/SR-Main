@@ -19,6 +19,9 @@
     applyProposal: (p: ProseProposal) => boolean;
     acceptProposal: (id: string, modifiedText?: string) => boolean;
     rejectProposal: (id: string) => boolean;
+    /** Strip ALL suggestion marks from the document, treating each one as a
+     *  reject (delete insertions, unwrap deletions). Used by the Clear button. */
+    clearAllSuggestions: () => void;
   }
 
   type DisplayMode = 'inline' | 'margin';
@@ -267,8 +270,21 @@
       },
       applyProposal: (p) => {
         if (!editor) return false;
+        // Full-body replacement: too large to anchor; just swap content directly
+        // and treat the whole new HTML as one giant "add" mark with a wrapping
+        // remove of the old. We just setContent and leave acceptance/rejection
+        // to a follow-up flow (for full-body proposals, accept = save, reject =
+        // restore). For now, prefer many small patch_content proposals — the
+        // prompt now discourages replace_content.
+        if (p.original.length > 1000 && p.original === editor.state.doc.textContent) {
+          editor.commands.setContent(p.suggested, { emitUpdate: true });
+          return true;
+        }
         const found = locateOriginal(editor, p);
-        if (!found) return false;
+        if (!found) {
+          console.warn('[RichEditor] applyProposal: could not locate original for proposal', p.id, JSON.stringify(p.original).slice(0, 120));
+          return false;
+        }
         const { from, to } = found;
         const tr = editor.state.tr;
         if (p.original.length > 0) {
@@ -341,6 +357,33 @@
         editor.view.dispatch(tr);
         onProposalRejected?.(id);
         return true;
+      },
+      clearAllSuggestions: () => {
+        if (!editor) return;
+        // Collect ranges (in reverse order so deletes don't shift later ones).
+        type R = { kind: 'add' | 'remove'; from: number; to: number };
+        const ranges: R[] = [];
+        editor.state.doc.descendants((node, pos) => {
+          const mark = node.marks.find((m) => m.type.name === 'suggestion');
+          if (!mark) return;
+          ranges.push({
+            kind: mark.attrs.type === 'remove' ? 'remove' : 'add',
+            from: pos,
+            to: pos + node.nodeSize,
+          });
+        });
+        // Sort descending by from.
+        ranges.sort((a, b) => b.from - a.from);
+        let tr = editor.state.tr;
+        for (const r of ranges) {
+          if (r.kind === 'add') {
+            tr = tr.delete(r.from, r.to);
+          } else {
+            tr = tr.removeMark(r.from, r.to, editor.schema.marks.suggestion);
+          }
+        }
+        editor.view.dispatch(tr);
+        if (onAutoSave) void onAutoSave(editor.getHTML()).catch(() => {});
       },
     };
   }

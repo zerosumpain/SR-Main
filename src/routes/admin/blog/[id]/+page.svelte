@@ -481,6 +481,7 @@
     onAcceptMeta={acceptMetaProposal}
     onRejectMeta={rejectMetaProposal}
     onRegenerate={regenerate}
+    onClear={() => { richApi?.clearAllSuggestions?.(); proposalTick++; }}
     bind:sendMessage={widgetSendMessage}
   />
 </PageWrap>

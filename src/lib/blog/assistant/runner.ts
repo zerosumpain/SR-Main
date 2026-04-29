@@ -21,14 +21,34 @@ export type RunOptions = {
   model: string;
 };
 
+/**
+ * Strip pending-suggestion marks that prior assistant runs left in the saved
+ * HTML. The LLM should see the post as if all unaccepted proposals had been
+ * resolved as "keep the original":
+ *   - <ins data-suggestion-id="…" class="sg-add">X</ins> → drop entirely (X
+ *     is a not-yet-accepted insertion).
+ *   - <del data-suggestion-id="…" class="sg-remove">X</del> → unwrap, keep X
+ *     (the original text the user hasn't yet agreed to delete).
+ */
+function stripSuggestionMarks(html: string): string {
+  let out = html;
+  // Remove <ins data-suggestion-id="…" …>…</ins> entirely.
+  out = out.replace(/<ins\s+[^>]*data-suggestion-id=[^>]*>[\s\S]*?<\/ins>/gi, '');
+  // Unwrap <del data-suggestion-id="…" …>…</del> — keep inner content.
+  out = out.replace(/<del\s+[^>]*data-suggestion-id=[^>]*>([\s\S]*?)<\/del>/gi, '$1');
+  return out;
+}
+
 function toRowSnapshot(row: Awaited<ReturnType<typeof getPostById>>): PostSnapshot {
   if (!row) throw new Error('Post not found');
+  const rawContent = row.content;
+  const cleaned = stripSuggestionMarks(rawContent);
   return {
     id: row.id,
     title: row.title,
     excerpt: row.excerpt,
     slug: row.slug,
-    content: row.content,
+    content: cleaned,
     contentFormat: (row.contentFormat as 'html' | 'markdown') ?? 'html',
     status: (row.status as 'draft' | 'published') ?? 'draft',
     coverImageUrl: row.coverImageUrl ?? null,
