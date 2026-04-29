@@ -6,6 +6,7 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import BlogAssistantPanel from '$lib/components/BlogAssistantPanel.svelte';
+  import BlogStatsCard from '$lib/components/BlogStatsCard.svelte';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -195,6 +196,14 @@
   {#if errorMsg}
     <div class="banner banner-error">{errorMsg}</div>
   {/if}
+
+  <BlogStatsCard
+    stats30d={data.stats.stats30d}
+    statsLifetime={data.stats.statsLifetime}
+    daily={data.stats.daily}
+    referrers={data.stats.referrers}
+    available={data.stats.available}
+  />
 
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Metadata</span></div>

@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { loadHistory } from '$lib/blog/assistant/messages';
+import { getUmami } from '$lib/umami/client';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -36,5 +37,24 @@ export const load: PageServerLoad = async ({ params }) => {
 
   const history = await loadHistory(post.id);
 
-  return { post: { ...post, tags: tags.map((t) => t.tag) }, history };
+  const umami = getUmami();
+  const path = `/blog/${post.slug}`;
+  let stats30d: { pageviews: number; visitors: number } | null = null;
+  let statsLifetime: { pageviews: number; visitors: number } | null = null;
+  let daily: { date: string; count: number }[] = [];
+  let referrers: { name: string; count: number }[] = [];
+  if (umami) {
+    [stats30d, statsLifetime, daily, referrers] = await Promise.all([
+      umami.getStatsForPath(path, 30),
+      umami.getStatsForPath(path, 365 * 5),
+      umami.getDailyViews(path, 30),
+      umami.getTopReferrers(path, 30, 5),
+    ]);
+  }
+
+  return {
+    post: { ...post, tags: tags.map((t) => t.tag) },
+    history,
+    stats: { stats30d, statsLifetime, daily, referrers, available: umami !== null },
+  };
 };
