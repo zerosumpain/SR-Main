@@ -66,21 +66,38 @@
   }
 
   const primitiveCount = $derived(data.primitives.length);
-  const siteToolCount = $derived(data.toolsets.reduce((n, ts) => n + ts.tools.length, 0));
+  const siteNodeCount = $derived(data.siteNodeFamilies.reduce((n, g) => n + g.nodes.length, 0));
+  const toolsetCount = $derived(data.toolsets.reduce((n, ts) => n + ts.tools.length, 0));
+  const siteToolCount = $derived(siteNodeCount + toolsetCount);
   const customCount = $derived(data.tools.length);
+
+  function matchPrim(p: { type: string; label: string; description: string; category: string }, q: string) {
+    return (
+      p.type.toLowerCase().includes(q) ||
+      p.label.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    );
+  }
 
   const filteredPrimitives = $derived(
     filter.trim()
-      ? data.primitives.filter((p) => {
-          const q = filter.toLowerCase();
-          return (
-            p.type.toLowerCase().includes(q) ||
-            p.label.toLowerCase().includes(q) ||
-            p.description.toLowerCase().includes(q) ||
-            p.category.toLowerCase().includes(q)
-          );
-        })
+      ? data.primitives.filter((p) => matchPrim(p, filter.toLowerCase()))
       : data.primitives,
+  );
+
+  const filteredSiteFamilies = $derived(
+    filter.trim()
+      ? data.siteNodeFamilies
+          .map((g) => ({
+            ...g,
+            nodes: g.nodes.filter((n) => {
+              const q = filter.toLowerCase();
+              return matchPrim(n, q) || g.family.toLowerCase().includes(q);
+            }),
+          }))
+          .filter((g) => g.nodes.length > 0)
+      : data.siteNodeFamilies,
   );
 
   const filteredToolsets = $derived(
@@ -119,7 +136,7 @@
   <PageHeader
     kicker="AI Config"
     title="Tools"
-    sub="Everything the orchestrator and the workflow engine can reach for. Primitives drop on the canvas; site tools are LLM-callable functions; custom tools are LLM-authored."
+    sub="Everything the orchestrator and the workflow engine can reach for. Primitives are the general building blocks; site tools cover this site's features and connected accounts; custom tools are LLM-authored."
   />
 
   <div class="nm-tabs">
@@ -143,7 +160,7 @@
   />
 
   {#if tab === 'primitives'}
-    <p class="tab-note">Workflow node primitives — the building blocks the orchestrator picks from when generating a canvas.</p>
+    <p class="tab-note">General workflow building blocks — triggers, control flow, LLM calls, generic integrations. The orchestrator combines these to compose any activity. Site-specific things (blog, deep-dive, intel, gmail, etc.) live under <strong>Site tools</strong>.</p>
     {#if filteredPrimitives.length === 0}
       <div class="nm-empty">No primitives match.</div>
     {:else}
@@ -188,10 +205,66 @@
   {/if}
 
   {#if tab === 'site'}
-    <p class="tab-note">Site tools — orchestrator-callable functions, hardcoded under <code>src/lib/workflows/site-tools/</code>.</p>
-    {#if filteredToolsets.length === 0}
-      <div class="nm-empty">No tools match.</div>
-    {:else}
+    <p class="tab-note">Tools tied to this site's features and connected accounts — workflow node primitives that hit those features, plus orchestrator-callable functions hardcoded under <code>src/lib/workflows/site-tools/</code>.</p>
+
+    {#if filteredSiteFamilies.length === 0 && filteredToolsets.length === 0}
+      <div class="nm-empty">No site tools match.</div>
+    {/if}
+
+    {#if filteredSiteFamilies.length > 0}
+      <h3 class="section-h">Workflow nodes</h3>
+      <div class="row-list">
+        {#each filteredSiteFamilies as g (g.family)}
+          <div class="row-card">
+            <div class="row-head static">
+              <span class="row-name">{g.family}</span>
+              <span class="nm-pill" data-state="connected">site · {g.nodes.length}</span>
+              <span class="row-desc">{g.description}</span>
+            </div>
+            <div class="row-body family-nodes">
+              {#each g.nodes as n (n.type)}
+                <div class="row-card inner">
+                  <button class="row-head" onclick={() => toggle(`site:${n.type}`)}>
+                    <span class="caret">{expanded.has(`site:${n.type}`) ? '▾' : '▸'}</span>
+                    <span class="row-name">{n.type}</span>
+                    <span class="nm-pill">primitive</span>
+                    <span class="nm-pill" data-state="warn">{n.category}</span>
+                    <span class="row-desc">{n.label} — {n.description}</span>
+                  </button>
+                  {#if expanded.has(`site:${n.type}`)}
+                    <div class="row-body">
+                      {#if n.llmDescription}
+                        <div>
+                          <span class="sr-label-tight">Orchestrator guidance</span>
+                          <p class="hint-line">{n.llmDescription}</p>
+                        </div>
+                      {/if}
+                      <div class="io-grid">
+                        <div>
+                          <span class="sr-label-tight">Inputs</span>
+                          <div class="io-line">{n.inputs.length === 0 ? 'none' : n.inputs.map((i) => `${i.name}:${i.type}`).join(', ')}</div>
+                        </div>
+                        <div>
+                          <span class="sr-label-tight">Outputs</span>
+                          <div class="io-line">{n.outputs.length === 0 ? 'none' : n.outputs.map((o) => `${o.name}:${o.type}`).join(', ')}</div>
+                        </div>
+                      </div>
+                      <div>
+                        <span class="sr-label-tight">Config schema</span>
+                        <pre class="code">{JSON.stringify(n.configSchema, null, 2)}</pre>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    {#if filteredToolsets.length > 0}
+      <h3 class="section-h">Orchestrator functions</h3>
       <div class="row-list">
         {#each filteredToolsets as ts (ts.toolset)}
           <div class="row-card">
@@ -275,6 +348,18 @@
     color: var(--text-secondary);
     margin: 0 0 0.8rem;
   }
+  .section-h {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    margin: 1.2rem 0 0.45rem;
+    font-weight: 500;
+  }
+  .section-h:first-of-type { margin-top: 0.2rem; }
+  .row-body.family-nodes { padding: 0.55rem 0.55rem 0.7rem; gap: 0.4rem; }
+  .row-card.inner { background: var(--bg-base, var(--bg-section)); }
   .tab-note code {
     font-family: var(--font-mono);
     font-size: 0.85em;

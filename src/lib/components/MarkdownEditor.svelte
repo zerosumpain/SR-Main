@@ -18,6 +18,7 @@
     indentOnInput,
   } from '@codemirror/language';
   import { renderContent } from '$lib/blog/renderer';
+  import { readability, plainTextFromHtml, type ReadabilityScores } from '$lib/blog/readability';
 
   let {
     content = '',
@@ -34,7 +35,14 @@
   let editorContainer: HTMLDivElement | undefined = $state();
   let mode: 'edit' | 'preview' = $state('edit');
   let saveStatus: 'idle' | 'saving' | 'saved' | 'error' = $state('idle');
-  let wordCount = $state(0);
+  let scores = $state<ReadabilityScores>({
+    words: 0,
+    sentences: 0,
+    syllables: 0,
+    fleschReadingEase: 0,
+    fleschKincaidGrade: 0,
+    audience: '—',
+  });
   let currentContent = $state(content);
 
   let view: EditorView | null = null;
@@ -46,8 +54,10 @@
   }
 
   function updateWordCount(text: string) {
-    const words = text.trim().split(/\s+/).filter(Boolean).length;
-    wordCount = words;
+    // Strip markdown syntax for a fair readability measure: render to HTML
+    // then drop tags, the same way the published page sees it.
+    const plain = plainTextFromHtml(renderContent(text, 'markdown'));
+    scores = readability(plain);
   }
 
   function getContent(): string {
@@ -138,8 +148,10 @@
       try {
         const url = await uploadImage(file);
         insertAtCursor(`\n![](${url})\n`);
-      } catch {
-        // Silently fail
+      } catch (e) {
+        saveStatus = 'error';
+        // eslint-disable-next-line no-console
+        console.error('image upload failed:', e);
       }
     };
     input.click();
@@ -423,14 +435,26 @@
 
   <!-- Editor / Preview area -->
   <div class="editor-body" onpaste={handlePaste}>
-    {#if mode === 'edit'}
-      <div bind:this={editorContainer} class="codemirror-host"></div>
-    {:else}
+    <div
+      bind:this={editorContainer}
+      class="codemirror-host"
+      style:display={mode === 'edit' ? '' : 'none'}
+    ></div>
+    {#if mode === 'preview'}
       <div class="preview-pane">
         {@html renderedPreview}
       </div>
     {/if}
   </div>
+
+  {#if scores.words > 0}
+    <div class="readability">
+      <span class="r-pill">Reading ease <strong>{scores.fleschReadingEase}</strong></span>
+      <span class="r-pill">Grade <strong>{scores.fleschKincaidGrade}</strong></span>
+      <span class="r-audience">{scores.audience}</span>
+      <span class="r-meta">{scores.sentences} sentences · {(scores.words / Math.max(1, scores.sentences)).toFixed(1)} words/sentence</span>
+    </div>
+  {/if}
 
   <!-- Status bar -->
   <div class="status-bar">
@@ -443,8 +467,10 @@
       {/if}
     </div>
     <div class="status-right">
-      <span class="status-item">{wordCount} words</span>
-      <span class="status-item">{estimateReadTime(wordCount)}</span>
+      <span class="status-item" title="Flesch Reading Ease">FRE {scores.fleschReadingEase}</span>
+      <span class="status-item" title="Flesch–Kincaid Grade Level">FKGL {scores.fleschKincaidGrade}</span>
+      <span class="status-item">{scores.words} words</span>
+      <span class="status-item">{estimateReadTime(scores.words)}</span>
     </div>
   </div>
 </div>
@@ -688,4 +714,18 @@
   .status-error {
     color: #c44;
   }
+
+  .readability {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 8px 12px; border-top: 1px solid var(--card-border);
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-secondary); background: rgba(255,255,255,0.02);
+  }
+  .r-pill {
+    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px;
+  }
+  .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
+  .r-audience { color: var(--text-primary); font-style: italic; }
+  .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
 </style>
