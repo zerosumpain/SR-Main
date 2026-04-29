@@ -1,9 +1,5 @@
-import {
-  updatePostFields,
-  replaceTags,
-  isSlugTaken,
-} from '$lib/blog';
-import type { UndoStore } from './undo-store';
+import { randomUUID } from 'node:crypto';
+import type { Proposal, MetaField } from './proposal';
 
 export type PostSnapshot = {
   id: number;
@@ -23,162 +19,92 @@ export type PostSnapshot = {
 export type ToolContext = {
   postId: number;
   snapshot: PostSnapshot;
-  undoStore: UndoStore;
 };
 
 export type ToolResult =
-  | { ok: true; undoToken?: string; result?: unknown }
+  | { ok: true; proposal: Proposal }
+  | { ok: true; snapshot: PostSnapshot }
   | { ok: false; error: string };
 
 export const toolDefinitions = [
-  {
-    type: 'function' as const,
-    function: {
-      name: 'update_title',
-      description: 'Set the post title.',
-      parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'update_excerpt',
-      description: 'Set the short excerpt shown in lists and previews.',
-      parameters: { type: 'object', properties: { excerpt: { type: 'string' } }, required: ['excerpt'] },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'update_slug',
-      description: 'Set the URL slug (kebab-case). Errors if already taken.',
-      parameters: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'update_tags',
-      description: 'Replace the full tag list.',
-      parameters: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' } } }, required: ['tags'] },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'replace_content',
-      description: 'Replace the entire post body.',
-      parameters: {
-        type: 'object',
-        properties: {
-          content: { type: 'string' },
-          format: { type: 'string', enum: ['html', 'markdown'] },
-        },
-        required: ['content'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'patch_content',
-      description: 'Find/replace a single substring inside the post body. Errors if find is missing or non-unique.',
-      parameters: {
-        type: 'object',
-        properties: { find: { type: 'string' }, replace: { type: 'string' } },
-        required: ['find', 'replace'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'set_status',
-      description: 'Publish or unpublish the post.',
-      parameters: {
-        type: 'object',
-        properties: { status: { type: 'string', enum: ['draft', 'published'] } },
-        required: ['status'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'set_cover_alt',
-      description: 'Set the alt text for the cover image.',
-      parameters: { type: 'object', properties: { alt: { type: 'string' } }, required: ['alt'] },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'read_post',
-      description: 'Return the current post payload (no write).',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
+  toolDef('update_title', 'Propose a new post title.', { title: { type: 'string' } }, ['title']),
+  toolDef('update_excerpt', 'Propose a new excerpt.', { excerpt: { type: 'string' } }, ['excerpt']),
+  toolDef('update_slug', 'Propose a new URL slug (kebab-case).', { slug: { type: 'string' } }, ['slug']),
+  toolDef('update_tags', 'Propose a new full tag list.', {
+    tags: { type: 'array', items: { type: 'string' } },
+  }, ['tags']),
+  toolDef('set_status', 'Propose publish/unpublish.', {
+    status: { type: 'string', enum: ['draft', 'published'] },
+  }, ['status']),
+  toolDef('set_cover_alt', 'Propose alt text for the cover image.', {
+    alt: { type: 'string' },
+  }, ['alt']),
+  toolDef('replace_content', 'Propose replacing the entire post body.', {
+    content: { type: 'string' },
+  }, ['content']),
+  toolDef('patch_content', 'Propose a substring replacement in the post body. Errors if find is missing or non-unique.', {
+    find: { type: 'string' },
+    replace: { type: 'string' },
+    reason: { type: 'string', description: 'one short sentence; shown as a tooltip on the suggestion' },
+  }, ['find', 'replace']),
+  toolDef('read_post', 'Return the current post snapshot. Use when you need to inspect more than what is in the system prompt.', {}, []),
 ];
+
+function toolDef(name: string, description: string, properties: Record<string, unknown>, required: string[]) {
+  return {
+    type: 'function' as const,
+    function: { name, description, parameters: { type: 'object', properties, required } },
+  };
+}
+
+function metaProposal(field: MetaField, currentValue: unknown, suggestedValue: unknown, reason?: string): Proposal {
+  return {
+    id: randomUUID(), kind: 'meta', field,
+    currentValue, suggestedValue, reason, status: 'pending',
+  };
+}
+
+function proseProposal(original: string, suggested: string, from: number, to: number, reason?: string): Proposal {
+  return {
+    id: randomUUID(), kind: 'prose',
+    original, suggested, anchor: { from, to }, reason, status: 'pending',
+  };
+}
 
 export async function runTool(
   name: string,
   args: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const { postId, snapshot, undoStore } = ctx;
+  const { snapshot } = ctx;
+  const reason = typeof args.reason === 'string' ? args.reason : undefined;
 
   switch (name) {
-    case 'read_post':
-      return { ok: true, result: snapshot };
+    case 'update_title':
+      return { ok: true, proposal: metaProposal('title', snapshot.title, String(args.title ?? ''), reason) };
 
-    case 'update_title': {
-      const title = String(args.title ?? '');
-      await updatePostFields(postId, { title });
-      const undoToken = undoStore.put({ postId, field: 'title', previousValue: snapshot.title });
-      ctx.snapshot.title = title;
-      return { ok: true, undoToken, result: { title } };
-    }
+    case 'update_excerpt':
+      return { ok: true, proposal: metaProposal('excerpt', snapshot.excerpt, String(args.excerpt ?? ''), reason) };
 
-    case 'update_excerpt': {
-      const excerpt = String(args.excerpt ?? '');
-      await updatePostFields(postId, { excerpt });
-      const undoToken = undoStore.put({ postId, field: 'excerpt', previousValue: snapshot.excerpt });
-      ctx.snapshot.excerpt = excerpt;
-      return { ok: true, undoToken, result: { excerpt } };
-    }
-
-    case 'update_slug': {
-      const slug = String(args.slug ?? '');
-      if (await isSlugTaken(slug, postId)) {
-        return { ok: false, error: `Slug "${slug}" is already in use.` };
-      }
-      await updatePostFields(postId, { slug });
-      const undoToken = undoStore.put({ postId, field: 'slug', previousValue: snapshot.slug });
-      ctx.snapshot.slug = slug;
-      return { ok: true, undoToken, result: { slug } };
-    }
+    case 'update_slug':
+      return { ok: true, proposal: metaProposal('slug', snapshot.slug, String(args.slug ?? ''), reason) };
 
     case 'update_tags': {
       const tags = (args.tags as unknown[] | undefined ?? []).map((t) => String(t));
-      await replaceTags(postId, tags);
-      const undoToken = undoStore.put({ postId, field: 'tags', previousValue: snapshot.tags });
-      ctx.snapshot.tags = tags;
-      return { ok: true, undoToken, result: { tags } };
+      return { ok: true, proposal: metaProposal('tags', snapshot.tags, tags, reason) };
     }
 
-    case 'replace_content': {
-      const content = String(args.content ?? '');
-      const format = (args.format as 'html' | 'markdown' | undefined) ?? snapshot.contentFormat;
-      await updatePostFields(postId, { content, contentFormat: format });
-      const undoToken = undoStore.put({
-        postId,
-        field: 'content',
-        previousValue: { content: snapshot.content, contentFormat: snapshot.contentFormat },
-      });
-      ctx.snapshot.content = content;
-      ctx.snapshot.contentFormat = format;
-      return { ok: true, undoToken, result: { content, format } };
-    }
+    case 'set_status':
+      return { ok: true, proposal: metaProposal('status', snapshot.status, args.status === 'published' ? 'published' : 'draft', reason) };
+
+    case 'set_cover_alt':
+      return { ok: true, proposal: metaProposal('cover_alt', snapshot.coverImageAlt, String(args.alt ?? ''), reason) };
+
+    case 'replace_content':
+      return {
+        ok: true,
+        proposal: proseProposal(snapshot.content, String(args.content ?? ''), 0, snapshot.content.length, reason),
+      };
 
     case 'patch_content': {
       const find = String(args.find ?? '');
@@ -187,39 +113,19 @@ export async function runTool(
       const occurrences = snapshot.content.split(find).length - 1;
       if (occurrences === 0) return { ok: false, error: `find string not found in content.` };
       if (occurrences > 1) return { ok: false, error: `find string not unique (${occurrences} matches).` };
-      const next = snapshot.content.replace(find, replace);
-      await updatePostFields(postId, { content: next });
-      const undoToken = undoStore.put({ postId, field: 'content', previousValue: snapshot.content });
-      ctx.snapshot.content = next;
-      return { ok: true, undoToken, result: { content: next } };
+      const from = snapshot.content.indexOf(find);
+      const to = from + find.length;
+      return { ok: true, proposal: proseProposal(find, replace, from, to, reason) };
     }
 
-    case 'set_status': {
-      const status = args.status === 'published' ? 'published' : 'draft';
-      const fields: Parameters<typeof updatePostFields>[1] = { status };
-      if (status === 'published' && !snapshot.publishedAt) {
-        fields.publishedAt = new Date();
-      }
-      await updatePostFields(postId, fields);
-      const undoToken = undoStore.put({
-        postId,
-        field: 'status',
-        previousValue: { status: snapshot.status, publishedAt: snapshot.publishedAt },
-      });
-      ctx.snapshot.status = status;
-      if (fields.publishedAt) ctx.snapshot.publishedAt = fields.publishedAt;
-      return { ok: true, undoToken, result: { status } };
-    }
-
-    case 'set_cover_alt': {
-      const alt = String(args.alt ?? '');
-      await updatePostFields(postId, { coverImageAlt: alt });
-      const undoToken = undoStore.put({ postId, field: 'coverImageAlt', previousValue: snapshot.coverImageAlt });
-      ctx.snapshot.coverImageAlt = alt;
-      return { ok: true, undoToken, result: { alt } };
-    }
+    case 'read_post':
+      return { ok: true, snapshot };
 
     default:
       return { ok: false, error: `Unknown tool: ${name}` };
   }
+}
+
+export function isProposalResult(r: ToolResult): r is { ok: true; proposal: Proposal } {
+  return r.ok && 'proposal' in r;
 }
