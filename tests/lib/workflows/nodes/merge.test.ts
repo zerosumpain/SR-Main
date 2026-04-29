@@ -14,34 +14,27 @@ const mockContext: ExecutionContext = {
 };
 
 describe('mergeExecutor', () => {
-  it('deep-merge passes input through unchanged', async () => {
+  it('passes input through unchanged (deep-merge is the only mode)', async () => {
     const input = { a: 1, b: 'hello', c: [1, 2, 3] };
-    const result = await mergeExecutor.execute(input, { strategy: 'deep-merge' }, mockContext);
-    expect(result.output).toEqual(input);
-  });
-
-  it('deep-merge is default when no strategy provided', async () => {
-    const input = { x: 42, y: 'world' };
     const result = await mergeExecutor.execute(input, {}, mockContext);
     expect(result.output).toEqual(input);
   });
 
-  it('pick extracts only specified fields', async () => {
-    const input = { name: 'Alice', age: 30, role: 'admin', secret: 'hidden' };
-    const result = await mergeExecutor.execute(input, { strategy: 'pick', fields: 'name, age' }, mockContext);
-    expect(result.output).toEqual({ name: 'Alice', age: 30 });
+  it('ignores legacy strategy/fields config and still merges', async () => {
+    const input = { x: 42, y: 'world' };
+    const result = await mergeExecutor.execute(input, { strategy: 'deep-merge' }, mockContext);
+    expect(result.output).toEqual(input);
   });
 
-  it('pick with nonexistent fields returns empty object', async () => {
-    const input = { a: 1, b: 2 };
-    const result = await mergeExecutor.execute(input, { strategy: 'pick', fields: 'x, y, z' }, mockContext);
-    expect(result.output).toEqual({});
+  it('returns rowCount=length when input.merged is an array', async () => {
+    const input = { merged: [{ a: 1 }, { a: 2 }, { a: 3 }] };
+    const result = await mergeExecutor.execute(input, {}, mockContext);
+    expect(result.rowCount).toBe(3);
   });
 
-  it('pick with empty fields string returns empty object', async () => {
-    const input = { a: 1, b: 2 };
-    const result = await mergeExecutor.execute(input, { strategy: 'pick', fields: '' }, mockContext);
-    expect(result.output).toEqual({});
+  it('returns rowCount=1 when input has no merged array', async () => {
+    const result = await mergeExecutor.execute({ a: 1 }, {}, mockContext);
+    expect(result.rowCount).toBe(1);
   });
 
   it('has correct type', () => {
@@ -59,7 +52,7 @@ describe('mergeDef', () => {
     expect(mergeDef.outputs).toHaveLength(1);
   });
 
-  it('has deep-merge as default strategy', () => {
-    expect(mergeDef.defaultConfig?.strategy).toBe('deep-merge');
+  it('has empty defaultConfig (no strategy field)', () => {
+    expect(mergeDef.defaultConfig).toEqual({});
   });
 });

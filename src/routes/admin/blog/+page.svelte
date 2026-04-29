@@ -151,6 +151,9 @@
               {/if}
             </div>
             <span class="nm-pill" data-state={post.status}>{post.status}</span>
+            <span class="post-views" title="Views (7d)">
+              {post.views7d == null ? '–' : post.views7d}
+            </span>
             <span class="post-date">{fmtDate(post.updatedAt)}</span>
           </a>
         {/each}
@@ -182,7 +185,7 @@
   }
   .post-row {
     display: grid;
-    grid-template-columns: 36px 1fr auto auto;
+    grid-template-columns: 36px 1fr auto auto auto;
     align-items: center;
     gap: 0.85rem;
     padding: 0.75rem 0.5rem;
@@ -220,11 +223,18 @@
     color: var(--text-ghost);
     letter-spacing: 0.06em;
   }
+  .post-views {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-ghost);
+    min-width: 2.5em;
+    text-align: right;
+  }
 
   @media (max-width: 640px) {
     .post-row {
       grid-template-columns: 36px 1fr auto;
     }
-    .post-date { display: none; }
+    .post-views, .post-date { display: none; }
   }
 </style>

@@ -40,7 +40,7 @@ describe('research-result executor', () => {
       { engine: 'deep', sessionId: 'sess-1', topic: 'x' },
       ctx(),
     );
-    expect(executeSiteToolMock).toHaveBeenCalledWith('research_report', { sessionId: 'sess-1' });
+    expect(executeSiteToolMock).toHaveBeenCalledWith('research_get_report', { id: 'sess-1' });
     expect(res.output.researchReport).toContain('Hi');
     expect(res.output.researchStatus).toBe('complete');
   });

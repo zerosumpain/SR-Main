@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { blogPosts } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
+import { getUmami } from '$lib/umami/client';
 
 export const load: PageServerLoad = async () => {
   const posts = await db
@@ -17,5 +18,17 @@ export const load: PageServerLoad = async () => {
     .from(blogPosts)
     .orderBy(desc(blogPosts.updatedAt));
 
-  return { posts };
+  const umami = getUmami();
+  let stats: Record<string, { pageviews: number; visitors: number }> = {};
+  if (umami) {
+    const paths = posts.map((p) => `/blog/${p.slug}`);
+    stats = await umami.getStatsBatch(paths, 7);
+  }
+
+  return {
+    posts: posts.map((p) => ({
+      ...p,
+      views7d: stats[`/blog/${p.slug}`]?.pageviews ?? null,
+    })),
+  };
 };

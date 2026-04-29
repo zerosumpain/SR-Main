@@ -140,6 +140,51 @@ export async function getPostsByTag(tag: string): Promise<PostMeta[]> {
   }));
 }
 
+export async function getPostById(id: number) {
+  const [row] = await db.select().from(blogPosts).where(eq(blogPosts.id, id));
+  if (!row) return null;
+  const tags = await db
+    .select({ tag: blogPostTags.tag })
+    .from(blogPostTags)
+    .where(eq(blogPostTags.postId, id));
+  return { ...row, tags: tags.map((t) => t.tag) };
+}
+
+export async function updatePostFields(
+  id: number,
+  fields: Partial<{
+    title: string;
+    excerpt: string;
+    slug: string;
+    content: string;
+    contentFormat: 'html' | 'markdown';
+    coverImageUrl: string | null;
+    coverImageAlt: string | null;
+    status: 'draft' | 'published';
+    publishedAt: Date | null;
+    previewToken: string;
+  }>,
+) {
+  await db
+    .update(blogPosts)
+    .set({ ...fields, updatedAt: new Date() })
+    .where(eq(blogPosts.id, id));
+}
+
+export async function replaceTags(postId: number, tags: string[]) {
+  await db.delete(blogPostTags).where(eq(blogPostTags.postId, postId));
+  if (tags.length === 0) return;
+  await db.insert(blogPostTags).values(tags.map((tag) => ({ postId, tag })));
+}
+
+export async function isSlugTaken(slug: string, exceptId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: blogPosts.id })
+    .from(blogPosts)
+    .where(eq(blogPosts.slug, slug));
+  return !!row && row.id !== exceptId;
+}
+
 export async function getPostByPreviewToken(token: string): Promise<Post | null> {
   const [post] = await db
     .select({

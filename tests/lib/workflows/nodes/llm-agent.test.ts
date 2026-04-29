@@ -1,15 +1,38 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { llmAgentExecutor, llmAgentDef, discoverTools } from '$lib/workflows/nodes/llm-agent';
-import type { ExecutionContext } from '$lib/workflows/types';
 
 // Shared mock for OpenRouter client
-const mockCreate = vi.fn();
+const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
 
 vi.mock('$lib/deepdive/keys', () => ({
   getOpenRouterClient: () => ({
     chat: { completions: { create: mockCreate } },
   }),
+  loadKeys: () => ({ zaiApiKey: 'test', openrouterApiKey: 'test' }),
 }));
+
+vi.mock('$lib/server/models/settings', () => ({
+  resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'glm-4-flash' }),
+  getOpenRouterApiKey: vi.fn().mockResolvedValue('test'),
+}));
+
+vi.mock('$lib/db', () => ({
+  db: {
+    select: () => ({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+    }),
+  },
+}));
+
+vi.mock('$lib/jkai/llm-client', () => ({
+  getLLMClient: vi.fn().mockResolvedValue({
+    client: { chat: { completions: { create: mockCreate } } },
+    model: 'glm-4-flash',
+  }),
+  clearLLMClientCache: vi.fn(),
+}));
+
+import { llmAgentExecutor, llmAgentDef, discoverTools } from '$lib/workflows/nodes/llm-agent';
+import type { ExecutionContext } from '$lib/workflows/types';
 
 function makeMockContext(overrides?: Partial<ExecutionContext> & Record<string, any>): ExecutionContext {
   const mockExecutor = {
@@ -322,7 +345,7 @@ describe('llmAgentDef', () => {
     expect(llmAgentDef.defaultConfig.maxIterations).toBe(10);
   });
 
-  it('defaults model to openai/gpt-4o', () => {
-    expect(llmAgentDef.defaultConfig.model).toBe('openai/gpt-4o');
+  it('defaults model to empty string (admin default)', () => {
+    expect(llmAgentDef.defaultConfig.model).toBe('');
   });
 });

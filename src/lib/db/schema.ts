@@ -36,6 +36,7 @@ export const blogPosts = pgTable('blog_posts', {
   excerpt: text('excerpt').notNull(),
   content: text('content').notNull(),
   coverImageUrl: text('cover_image_url'),
+  coverImageAlt: text('cover_image_alt'),
   contentFormat: text('content_format').default('html').notNull(),
   previewToken: text('preview_token').$defaultFn(() => crypto.randomUUID()),
   status: text('status').notNull().default('draft'),
@@ -50,6 +51,16 @@ export const blogPostTags = pgTable('blog_post_tags', {
     .notNull()
     .references(() => blogPosts.id, { onDelete: 'cascade' }),
   tag: text('tag').notNull(),
+});
+
+export const blogAssistantMessages = pgTable('blog_assistant_messages', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id')
+    .notNull()
+    .references(() => blogPosts.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' | 'assistant' | 'tool'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 // ==========================================

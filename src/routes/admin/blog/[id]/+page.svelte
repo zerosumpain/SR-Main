@@ -5,6 +5,8 @@
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import BlogAssistantPanel from '$lib/components/BlogAssistantPanel.svelte';
+  import BlogStatsCard from '$lib/components/BlogStatsCard.svelte';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -195,6 +197,14 @@
     <div class="banner banner-error">{errorMsg}</div>
   {/if}
 
+  <BlogStatsCard
+    stats30d={data.stats.stats30d}
+    statsLifetime={data.stats.statsLifetime}
+    daily={data.stats.daily}
+    referrers={data.stats.referrers}
+    available={data.stats.available}
+  />
+
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Metadata</span></div>
     <label class="nm-field">
@@ -280,6 +290,28 @@
       </div>
     </section>
   {/if}
+
+  <BlogAssistantPanel
+    postId={data.post.id}
+    {adminToken}
+    history={data.history ?? []}
+    onPostUpdated={(p) => {
+      title = (p.title as string) ?? title;
+      slug = (p.slug as string) ?? slug;
+      excerpt = (p.excerpt as string) ?? excerpt;
+      tags = Array.isArray(p.tags) ? (p.tags as string[]).join(', ') : tags;
+      coverImageUrl = (p.coverImageUrl as string | null) ?? coverImageUrl;
+      status = (p.status as string) ?? status;
+      content = (p.content as string) ?? content;
+      data.post.title = title;
+      data.post.slug = slug;
+      data.post.excerpt = excerpt;
+      data.post.content = content;
+      data.post.tags = tags.split(',').map((t) => t.trim()).filter(Boolean);
+      data.post.status = status;
+      data.post.coverImageUrl = coverImageUrl;
+    }}
+  />
 </PageWrap>
 
 <style>
