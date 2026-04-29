@@ -156,23 +156,23 @@
     class="fab"
     style="right: {pos.x}px; bottom: {pos.y}px;"
     onclick={() => (open = true)}
-    aria-label="Open assistant"
+    aria-label="Open jkai"
   >🪶</button>
 {:else}
-  <section class="widget" style="right: {pos.x}px; bottom: {pos.y}px;" role="region" aria-label="Blog assistant">
-    <header
-      class="bar"
-      onpointerdown={startDrag}
-      onpointermove={onDrag}
-      onpointerup={endDrag}
-      onpointercancel={endDrag}
-    >
-      <span class="title">Assistant</span>
+  <section class="widget" style="right: {pos.x}px; bottom: {pos.y}px;" role="region" aria-label="jkai blog assistant">
+    <header class="bar">
+      <span
+        class="title"
+        onpointerdown={startDrag}
+        onpointermove={onDrag}
+        onpointerup={endDrag}
+        onpointercancel={endDrag}
+      >&gt;jkai</span>
       <span class="mode">
-        <button class:active={displayMode === 'inline'} onclick={() => onSetDisplayMode('inline')}>inline</button>
-        <button class:active={displayMode === 'margin'} onclick={() => onSetDisplayMode('margin')}>margin</button>
+        <button type="button" class:active={displayMode === 'inline'} onclick={() => onSetDisplayMode('inline')}>inline</button>
+        <button type="button" class:active={displayMode === 'margin'} onclick={() => onSetDisplayMode('margin')}>margin</button>
       </span>
-      <button class="close" onclick={() => (open = false)} aria-label="Minimise">–</button>
+      <button type="button" class="close" onclick={() => (open = false)} aria-label="Minimise">–</button>
     </header>
 
     <div class="body">
@@ -188,13 +188,13 @@
         />
       {/each}
       {#if chatRows.length === 0 && metaProposals.length === 0}
-        <p class="empty">Ask the assistant to rewrite, retitle, retag, publish, etc.</p>
+        <p class="empty">Ask jkai to rewrite, retitle, retag, publish, etc.</p>
       {/if}
     </div>
 
     <footer class="composer">
       <textarea class="nm-textarea" rows="2" bind:value={input} onkeydown={onKeydown} disabled={busy}
-        placeholder="Ask the assistant…"></textarea>
+        placeholder="Ask jkai…"></textarea>
       {#if busy}
         <button class="nm-btn-ghost" onclick={cancel}>Stop</button>
       {:else}
@@ -213,20 +213,23 @@
   }
   .widget {
     position: fixed; z-index: 80;
-    width: 360px; height: 500px;
-    background: var(--bg-section);
+    width: 360px; height: 580px;
+    background: var(--bg-card, var(--bg-page, #fff));
     border: 1px solid var(--card-border);
-    box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
     display: flex; flex-direction: column;
   }
   .bar {
     display: flex; align-items: center; gap: 0.6rem;
     padding: 0.4rem 0.6rem;
     border-bottom: 1px solid var(--card-border);
-    cursor: grab; user-select: none;
+    user-select: none;
   }
-  .bar:active { cursor: grabbing; }
-  .title { font-family: var(--font-mono); font-size: 0.85rem; }
+  .title {
+    font-family: var(--font-mono); font-size: 0.9rem;
+    cursor: grab; padding: 0.1rem 0.2rem;
+  }
+  .title:active { cursor: grabbing; }
   .mode { display: flex; gap: 0.25rem; margin-left: auto; }
   .mode button {
     border: 1px solid var(--card-border); background: transparent;
