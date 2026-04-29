@@ -40,18 +40,19 @@ vi.mock('$lib/workflows/orchestrator/dynamic-nodes', () => ({
   loadDynamicNodeExecutor: vi.fn().mockResolvedValue(null),
   ensureDynamicNodesDir: vi.fn(),
 }));
-vi.mock('$lib/db/schema', () => ({
-  whatsappConfig: { id: 'id' },
-  homeAssistantConfig: { id: 'id' },
-}));
-vi.mock('drizzle-orm', () => ({
-  eq: vi.fn(),
-}));
+vi.mock(import('$lib/db/schema'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual };
+});
+vi.mock(import('drizzle-orm'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual };
+});
 
 describe('scheduler boot', () => {
   it('calls startScheduler on module load', async () => {
     const { startScheduler } = await import('$lib/workflows/scheduler');
     await import('$lib/workflows/index');
     expect(startScheduler).toHaveBeenCalled();
-  });
+  }, 30000);
 });

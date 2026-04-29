@@ -1,17 +1,42 @@
 import { describe, it, expect, vi } from 'vitest';
-import { thinkExecutor, thinkDef } from '$lib/workflows/nodes/think';
-import type { ExecutionContext } from '$lib/workflows/types';
 
-const mockCreate = vi.fn().mockResolvedValue({
-  choices: [{ message: { content: '<thinking>\nStep 1: Analyze.\nStep 2: Score is above threshold.\n</thinking>\n\nThe input passes quality checks.' } }],
-  usage: { prompt_tokens: 100, completion_tokens: 50 },
-});
+const { mockCreate } = vi.hoisted(() => ({
+  mockCreate: vi.fn().mockResolvedValue({
+    choices: [{ message: { content: '<thinking>\nStep 1: Analyze.\nStep 2: Score is above threshold.\n</thinking>\n\nThe input passes quality checks.' } }],
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
+  }),
+}));
 
 vi.mock('$lib/deepdive/keys', () => ({
   getOpenRouterClient: () => ({
     chat: { completions: { create: mockCreate } },
   }),
+  loadKeys: () => ({ zaiApiKey: 'test', openrouterApiKey: 'test' }),
 }));
+
+vi.mock('$lib/server/models/settings', () => ({
+  resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'glm-4-flash' }),
+  getOpenRouterApiKey: vi.fn().mockResolvedValue('test'),
+}));
+
+vi.mock('$lib/db', () => ({
+  db: {
+    select: () => ({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+    }),
+  },
+}));
+
+vi.mock('$lib/jkai/llm-client', () => ({
+  getLLMClient: vi.fn().mockResolvedValue({
+    client: { chat: { completions: { create: mockCreate } } },
+    model: 'glm-4-flash',
+  }),
+  clearLLMClientCache: vi.fn(),
+}));
+
+import { thinkExecutor, thinkDef } from '$lib/workflows/nodes/think';
+import type { ExecutionContext } from '$lib/workflows/types';
 
 const mockContext: ExecutionContext = {
   runId: 'test-run',

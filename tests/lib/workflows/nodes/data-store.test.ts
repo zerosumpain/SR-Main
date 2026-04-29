@@ -148,19 +148,21 @@ describe('dataStoreExecutor', () => {
     });
   });
 
-  it('returns error output for unknown operation', async () => {
-    const result = await dataStoreExecutor.execute(
-      {},
-      { operation: 'delete', key: 'x' },
-      mockContext,
-    );
-    expect(result.output.error).toMatch(/Unknown operation/);
+  it('throws on unknown operation', async () => {
+    await expect(
+      dataStoreExecutor.execute(
+        {},
+        { operation: 'delete', key: 'x' },
+        mockContext,
+      ),
+    ).rejects.toThrow(/data-store: operation must be "get" or "set"/);
   });
 
-  it('returns error output when workflowId is missing', async () => {
+  it('throws when workflowId is missing', async () => {
     const contextNoWorkflow = { ...mockContext, workflowId: '' };
-    const result = await dataStoreExecutor.execute({}, { operation: 'get', key: 'x' }, contextNoWorkflow);
-    expect(result.output.error).toMatch(/workflowId/);
+    await expect(
+      dataStoreExecutor.execute({}, { operation: 'get', key: 'x' }, contextNoWorkflow),
+    ).rejects.toThrow(/data-store: workflowId not available in context/);
   });
 });
 

@@ -49,14 +49,16 @@ describe('tool registry', () => {
     expect(unique.size).toBe(names.length);
   });
 
-  it('system prompt section includes all categories', () => {
+  it('system prompt section advertises the available toolsets', () => {
     const prompt = buildSystemPromptSection();
-    expect(prompt).toContain('Health Data');
-    expect(prompt).toContain('Blog');
-    expect(prompt).toContain('JKAI Builder');
-    expect(prompt).toContain('Workflows');
-    expect(prompt).toContain('Deep Dive Research');
-    expect(prompt).toContain('WhatsApp');
+    expect(prompt).toContain('You have toolsets available');
+    expect(prompt).toContain('health');
+    expect(prompt).toContain('blog');
+    expect(prompt).toContain('builds');
+    expect(prompt).toContain('workflows');
+    expect(prompt).toContain('research');
+    expect(prompt).toContain('whatsapp');
+    expect(prompt).toContain('activate_toolset');
   });
 
   it('uses new naming convention (no site_ or jkai_ prefix)', () => {
