@@ -5,6 +5,9 @@ import InteractiveStepPanel from './InteractiveStepPanel.svelte';
 import SiteMapperPanel from './SiteMapperPanel.svelte';
 import CodeExecutePanel from './CodeExecutePanel.svelte';
 import HttpRequestPanel from './HttpRequestPanel.svelte';
+import WhatsAppPanel from './WhatsAppPanel.svelte';
+import LlmCallPanel from './LlmCallPanel.svelte';
+import LlmAgentPanel from './LlmAgentPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -22,6 +25,9 @@ const specialized: Record<string, Component<PanelProps>> = {
   'site-mapper': SiteMapperPanel,
   'code-execute': CodeExecutePanel,
   'http-request': HttpRequestPanel as unknown as Component<PanelProps>,
+  'whatsapp': WhatsAppPanel as unknown as Component<PanelProps>,
+  'llm-call': LlmCallPanel as unknown as Component<PanelProps>,
+  'llm-agent': LlmAgentPanel as unknown as Component<PanelProps>,
 };
 
 /**

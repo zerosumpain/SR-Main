@@ -28,7 +28,14 @@
     'gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search',
     'code-execute',
     'http-request',
+    'whatsapp',
+    'llm-call',
+    'llm-agent',
   ]);
+
+  // The 'llm' inline editor in this file has been superseded by the new
+  // LlmCallPanel / LlmAgentPanel. Keep it out of INLINE_CONFIG_KINDS so the
+  // canvas falls through to getPanel() for these node types.
 
   // Kinds that have a hand-crafted inline config UI further down in this file
   // (search for `{:else if menuNode.kind === '<kind>'}` blocks). For these,
@@ -3846,7 +3853,7 @@
                     </p>
                   </div>
                 </section>
-              {:else if menuNode.kind === 'llm'}
+              {:else if menuNode.kind === 'llm' && !SPECIALISED_PANEL_TYPES.has(menuNode.type)}
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">USER PROMPT</span>
