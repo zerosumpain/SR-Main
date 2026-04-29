@@ -3,8 +3,9 @@ import { json } from '@sveltejs/kit';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { BLOG_IMAGE_ROOT } from '$lib/blog/upload-paths';
 
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -12,35 +13,32 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/gif': 'gif',
   'image/webp': 'webp',
 };
-const UPLOAD_DIR = '/opt/strange-rambling/static/images/blog';
 
 export const POST: RequestHandler = async ({ request }) => {
   const formData = await request.formData();
-  const file = formData.get('image');
+  const file = formData.get('file');
   const postId = formData.get('postId');
 
   if (!file || !(file instanceof File)) {
     return json({ error: 'No image file provided' }, { status: 400 });
   }
-
   if (!ALLOWED_TYPES.has(file.type)) {
     return json({ error: `Unsupported file type: ${file.type}` }, { status: 400 });
   }
-
   if (file.size > MAX_SIZE) {
-    return json({ error: 'File too large (max 5MB)' }, { status: 400 });
+    return json({ error: 'File too large (max 10MB)' }, { status: 400 });
   }
 
-  const dir = join(UPLOAD_DIR, String(postId ?? 'uncategorized'));
+  const safePostId = String(postId ?? 'uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_') || 'uncategorized';
+  const dir = join(BLOG_IMAGE_ROOT, safePostId);
   await mkdir(dir, { recursive: true });
 
-  const ext = MIME_TO_EXT[file.type] || 'jpg';
+  const ext = MIME_TO_EXT[file.type] ?? 'bin';
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
   const filepath = join(dir, filename);
 
   const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(filepath, buffer);
 
-  const url = `/static/images/blog/${postId ?? 'uncategorized'}/${filename}`;
-  return json({ url });
+  return json({ url: `/api/blog/images/${safePostId}/${filename}` });
 };

@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
       slug,
       excerpt: excerpt || '',
       content: content || '',
-      contentFormat: contentFormat || 'markdown',
+      contentFormat: contentFormat || 'html',
       status: 'draft',
       createdAt: now,
       updatedAt: now,

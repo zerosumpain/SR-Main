@@ -3,6 +3,15 @@
   import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+  import RichEditor from '$lib/components/RichEditor.svelte';
+  import ClaimReviewPanel from '$lib/components/ClaimReviewPanel.svelte';
+  import { Marked } from 'marked';
+
+  type RichApi = {
+    getHTML: () => string;
+    linkSnippet: (snippet: string, url: string, title?: string) => boolean;
+    addFootnote: (snippet: string, url: string, title?: string) => number;
+  };
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import BlogAssistantPanel from '$lib/components/BlogAssistantPanel.svelte';
@@ -27,7 +36,10 @@
   let coverUploading = $state(false);
   let previewCopied = $state(false);
 
-  const isMarkdown = data.post.contentFormat === 'markdown';
+  let contentFormat = $state<'html' | 'markdown'>(data.post.contentFormat);
+  let isMarkdown = $derived(contentFormat === 'markdown');
+  let converting = $state(false);
+  let richApi = $state<RichApi | undefined>();
 
   let dirty = $derived(
     title !== data.post.title ||
@@ -88,28 +100,84 @@
     formData.append('file', file);
     formData.append('postId', String(data.post.id));
     const res = await fetch(`/api/admin/blog/upload-image?token=${adminToken}`, { method: 'POST', body: formData });
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Upload failed (${res.status})`);
+    }
     const body = await res.json();
     return body.url;
+  }
+
+  async function setCoverFromFile(file: File) {
+    coverUploading = true;
+    errorMsg = null;
+    try {
+      const url = await uploadImage(file);
+      coverImageUrl = url;
+      await save({ content: undefined, tags: undefined, coverImageUrl: url });
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : 'Upload failed';
+    } finally {
+      coverUploading = false;
+    }
   }
 
   async function uploadCoverImage() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/jpeg,image/png,image/webp';
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      coverUploading = true;
-      try {
-        const url = await uploadImage(file);
-        coverImageUrl = url;
-        await save({ content: undefined, tags: undefined, coverImageUrl: url });
-      } finally {
-        coverUploading = false;
-      }
+      await setCoverFromFile(file);
     };
     input.click();
+  }
+
+  function handleCoverPaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) setCoverFromFile(file);
+        return;
+      }
+    }
+  }
+
+  function handleCoverDrop(e: DragEvent) {
+    const file = e.dataTransfer?.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    e.preventDefault();
+    setCoverFromFile(file);
+  }
+
+  async function convertToRichText() {
+    if (!confirm('Convert this post to the rich-text (HTML) editor? Markdown source will be replaced with rendered HTML.')) return;
+    converting = true;
+    errorMsg = null;
+    try {
+      const marked = new Marked({ gfm: true, breaks: false });
+      const html = (await marked.parse(content || '')).toString();
+      const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: html, contentFormat: 'html' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        errorMsg = body.error ?? `Error ${res.status}`;
+        return;
+      }
+      content = html;
+      data.post.content = html;
+      data.post.contentFormat = 'html';
+      contentFormat = 'html';
+    } finally {
+      converting = false;
+    }
   }
 
   async function removeCoverImage() {
@@ -164,7 +232,13 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (!isMarkdown && (e.metaKey || e.ctrlKey) && e.key === 's') {
+    // Both editors handle Ctrl+S inside the content area; this is a fallback
+    // for when focus is on metadata fields.
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      e.key === 's' &&
+      !(e.target instanceof HTMLElement && e.target.closest('.editor-wrapper'))
+    ) {
       e.preventDefault();
       save();
     }
@@ -185,11 +259,9 @@
       <button class="nm-btn-ghost" onclick={togglePublish} disabled={saving}>
         {status === 'published' ? 'Unpublish' : 'Publish'}
       </button>
-      {#if !isMarkdown}
-        <button class="nm-save-btn" onclick={() => save()} disabled={saving || !dirty}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      {/if}
+      <button class="nm-save-btn" onclick={() => save()} disabled={saving || !dirty}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
     {/snippet}
   </PageHeader>
 
@@ -230,7 +302,15 @@
     </label>
   </section>
 
-  <section class="nm-sec">
+  <section
+    class="nm-sec"
+    role="region"
+    aria-label="Cover image (paste or drop image)"
+    tabindex="-1"
+    onpaste={handleCoverPaste}
+    ondrop={handleCoverDrop}
+    ondragover={(e) => e.preventDefault()}
+  >
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Cover image</span>
       <span style="margin-left: auto; display: flex; gap: 0.5rem;">
@@ -243,7 +323,7 @@
     {#if coverImageUrl}
       <img class="cover" src={coverImageUrl} alt="Cover" />
     {:else}
-      <div class="nm-empty">No cover image.</div>
+      <div class="nm-empty">No cover image. Click Upload, or paste / drop one here.</div>
     {/if}
   </section>
 
@@ -260,19 +340,30 @@
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Content · {isMarkdown ? 'Markdown' : 'HTML'}</span>
+      <span class="sr-label-tight">Content · {isMarkdown ? 'Markdown' : 'Rich Text (HTML)'}</span>
+      {#if isMarkdown}
+        <span style="margin-left: auto;">
+          <button class="nm-btn-ghost" onclick={convertToRichText} disabled={converting}>
+            {converting ? 'Converting…' : 'Convert to Rich Text'}
+          </button>
+        </span>
+      {/if}
     </div>
     {#if isMarkdown}
       <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
     {:else}
-      <textarea
-        class="nm-textarea content-area"
-        rows="24"
-        bind:value={content}
-        placeholder="Write your post content here… (HTML supported)"
-      ></textarea>
+      <RichEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} bind:api={richApi} />
     {/if}
   </section>
+
+  {#if !isMarkdown && richApi}
+    <ClaimReviewPanel
+      {adminToken}
+      getHTML={() => richApi!.getHTML()}
+      insertInlineLink={(snippet, url, title) => richApi!.linkSnippet(snippet, url, title)}
+      insertFootnote={(snippet, url, title) => richApi!.addFootnote(snippet, url, title)}
+    />
+  {/if}
 
   <div class="bottom-row">
     <button class="nm-link-btn danger" onclick={deletePost} disabled={deleting}>
