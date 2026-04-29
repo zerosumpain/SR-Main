@@ -4,8 +4,8 @@
   const scriptUrl = env.PUBLIC_UMAMI_SCRIPT_URL;
 </script>
 
-{#if siteId && scriptUrl}
-  <svelte:head>
+<svelte:head>
+  {#if siteId && scriptUrl}
     <script async defer data-website-id={siteId} src={scriptUrl}></script>
-  </svelte:head>
-{/if}
+  {/if}
+</svelte:head>
