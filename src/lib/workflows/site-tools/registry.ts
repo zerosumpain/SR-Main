@@ -98,11 +98,12 @@ export function getToolsetManifest(): Array<{
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
+  ctx?: import('./registry-internal').ToolExecContext,
 ): Promise<ToolResult> {
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
   try {
-    return await tool.handler(args);
+    return await tool.handler(args, ctx);
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }

@@ -3,6 +3,17 @@
 
 export type ToolResult = { success: boolean; data?: unknown; error?: string };
 
+/**
+ * Context passed to long-running tool handlers so they can emit user-visible
+ * progress between major sub-steps. Optional — handlers that finish in <2s
+ * can ignore it. The orchestrator wires `emit` to publish a `status` event
+ * onto the active job's SSE stream.
+ */
+export interface ToolExecContext {
+  emit: (text: string) => void;
+  jobId?: string;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -13,7 +24,10 @@ export interface ToolDefinition {
   };
   category: string;
   toolset: string;
-  handler: (args: Record<string, unknown>) => Promise<ToolResult>;
+  handler: (
+    args: Record<string, unknown>,
+    ctx?: ToolExecContext,
+  ) => Promise<ToolResult>;
 }
 
 export const tools: ToolDefinition[] = [];

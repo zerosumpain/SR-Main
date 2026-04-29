@@ -16,6 +16,7 @@ import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
+import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
@@ -249,17 +250,35 @@ async function runSingleToolCall(
     }
   } else if (isRegisteredTool(fnName)) {
     const { isDestructive, describeDestructiveAction, requireConfirmation } = await import('./confirmation-gate');
-    if (ctx.parentJobId && isDestructive(fnName)) {
+    // Build a tool-execution context so long-running tools can emit
+    // user-visible progress (e.g. "Generating workflow nodes…"). The emit
+    // callback publishes a `status` event onto the job's SSE stream, which
+    // also resets the idle watchdog and the heartbeat ticker's currentStep.
+    const jobId = ctx.parentJobId;
+    const toolCtx = jobId
+      ? {
+          jobId,
+          emit: (text: string) => {
+            const trimmed = text.trim().slice(0, 200);
+            if (!trimmed) return;
+            setJobPhase(jobId, 'tool_running', `${fnName}: ${trimmed}`);
+            onStreamEvent?.({ type: 'status', text: trimmed });
+          },
+        }
+      : undefined;
+    if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
+    if (jobId && isDestructive(fnName)) {
       const prompt = describeDestructiveAction(fnName, fnArgs);
-      const approved = await requireConfirmation(ctx.parentJobId, prompt, fnArgs, { destructive: true });
+      const approved = await requireConfirmation(jobId, prompt, fnArgs, { destructive: true });
       if (!approved) {
         toolResult = { success: false, error: 'User declined the action.' };
       } else {
-        toolResult = await executeSiteTool(fnName, fnArgs);
+        toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
       }
     } else {
-      toolResult = await executeSiteTool(fnName, fnArgs);
+      toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
     }
+    if (jobId) setJobPhase(jobId, 'waiting_llm', 'Drafting reply…');
   } else {
     toolResult = { error: `Unknown function: ${fnName}` };
   }
@@ -668,6 +687,7 @@ export async function generalChat(
     let lastUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
     let finishReason: string | null = null;
 
+    if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Calling LLM…');
     try {
       const stream = await client.chat.completions.create({
         model,
@@ -679,6 +699,7 @@ export async function generalChat(
         stream_options: { include_usage: true },
       });
 
+      let firstTokenSeen = false;
       for await (const chunk of stream) {
         const choice = chunk.choices?.[0];
         if (!choice) {
@@ -687,6 +708,10 @@ export async function generalChat(
         }
         const delta = choice.delta ?? {};
         if (typeof delta.content === 'string' && delta.content.length > 0) {
+          if (!firstTokenSeen) {
+            firstTokenSeen = true;
+            if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Streaming reply…');
+          }
           fullContent += delta.content;
           options.onStreamEvent?.({ type: 'token', delta: delta.content });
         }

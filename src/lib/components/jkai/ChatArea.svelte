@@ -125,7 +125,8 @@
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
-  let heartbeat = $state<{ summary: string; elapsedSec: number } | null>(null);
+  let heartbeat = $state<{ summary: string; phase: string; elapsedSec: number } | null>(null);
+  let connectionWarning = $state<string | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
@@ -486,40 +487,73 @@
       await new Promise<void>((resolve) => {
         let accumulatedContent = '';
         let finished = false;
-        const TIMEOUT = 300000;
+        // Stale-connection detection: if no SSE event of any kind (including
+        // heartbeats which now fire every 5s) arrives for SSE_GAP_LIMIT, the
+        // connection is dead — reconnect. The server is the only source of
+        // truth for whether the job is still alive; we never inject a fake
+        // "timed out" message client-side.
+        const SSE_GAP_LIMIT_MS = 12_000;
+        const SSE_CHECK_INTERVAL_MS = 3_000;
+        let lastSseEventAt = Date.now();
+        let reconnectAttempts = 0;
+        const MAX_RECONNECTS = 5;
 
         const cleanup = () => {
           if (jobEventSource) {
             jobEventSource.close();
             jobEventSource = null;
           }
-          if (timeoutHandle) clearTimeout(timeoutHandle);
+          if (gapTimer) clearInterval(gapTimer);
         };
 
         const finalize = () => {
           if (finished) return;
           finished = true;
           cleanup();
+          connectionWarning = null;
           resolve();
         };
 
-        const timeoutHandle = setTimeout(() => {
+        const openStream = () => {
+          const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
+          jobEventSource = es;
+          lastSseEventAt = Date.now();
+          es.onmessage = onSseMessage;
+          es.onerror = () => {
+            // Browser will auto-reconnect; just surface a quiet warning.
+            if (!finished) connectionWarning = 'Reconnecting…';
+          };
+        };
+
+        const gapTimer = setInterval(() => {
           if (finished) return;
-          messages = messages.map((m) =>
-            m.id === progressId
-              ? { ...m, isProgress: false, content: 'Still working... check back shortly.' }
-              : m,
-          );
-          finalize();
-        }, TIMEOUT);
+          const gap = Date.now() - lastSseEventAt;
+          if (gap > SSE_GAP_LIMIT_MS) {
+            reconnectAttempts++;
+            if (reconnectAttempts > MAX_RECONNECTS) {
+              connectionWarning = 'Lost connection to orchestrator. The job may still be running — try refreshing.';
+              return;
+            }
+            connectionWarning = `No update for ${Math.round(gap / 1000)}s — reconnecting…`;
+            console.warn(`[chat] SSE gap ${gap}ms (attempt ${reconnectAttempts}/${MAX_RECONNECTS}) — reconnecting`);
+            if (jobEventSource) {
+              jobEventSource.close();
+              jobEventSource = null;
+            }
+            openStream();
+          }
+        }, SSE_CHECK_INTERVAL_MS);
 
-        const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
-        jobEventSource = es;
-
-        es.onmessage = (event) => {
+        const onSseMessage = (event: MessageEvent) => {
+          lastSseEventAt = Date.now();
+          if (connectionWarning) connectionWarning = null;
           let data: any;
           try { data = JSON.parse(event.data); } catch { return; }
 
+          processSseEvent(data);
+        };
+
+        const processSseEvent = (data: any) => {
           if (data.type === 'connected') return;
 
           if (data.type === 'token') {
@@ -594,6 +628,7 @@
           if (data.type === 'heartbeat') {
             heartbeat = {
               summary: data.summary,
+              phase: data.phase ?? 'thinking',
               elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
             };
             return;
@@ -738,10 +773,7 @@
           }
         };
 
-        es.onerror = () => {
-          // Browser may auto-reconnect; if the stream really died, the
-          // server-side timeout will fire and we'll show the fallback message.
-        };
+        openStream();
       });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -757,6 +789,18 @@
     pendingConfirm = null;
     pendingClarify = null;
     scrollToBottom();
+  }
+
+  function phaseHumanLabel(phase: string): string {
+    switch (phase) {
+      case 'starting': return 'Starting up';
+      case 'thinking': return 'Thinking';
+      case 'tool_running': return 'Running tool';
+      case 'waiting_llm': return 'Drafting reply';
+      case 'finalising': return 'Finalising';
+      case 'subagent': return 'Sub-agent';
+      default: return 'Working';
+    }
   }
 
   function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
@@ -882,10 +926,17 @@
                   />
                 {/if}
                 {#if heartbeat}
-                  <div class="heartbeat-line" role="status" aria-live="polite">
+                  <div class="heartbeat-line" role="status" aria-live="polite" data-phase={heartbeat.phase}>
                     <span class="hb-dot"></span>
+                    <span class="hb-phase">{phaseHumanLabel(heartbeat.phase)}</span>
                     <span class="hb-summary">{heartbeat.summary}</span>
                     <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                  </div>
+                {/if}
+                {#if connectionWarning}
+                  <div class="conn-warning" role="status" aria-live="polite">
+                    <span class="hb-dot warn"></span>
+                    <span>{connectionWarning}</span>
                   </div>
                 {/if}
                 {#each Object.values(subAgents) as agent (agent.agentId)}
@@ -1213,8 +1264,36 @@
     background: var(--accent);
     animation: hb-pulse 1.4s ease-in-out infinite;
   }
+  .heartbeat-line .hb-phase {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 10px;
+  }
   .heartbeat-line .hb-summary { flex: 1; }
   .heartbeat-line .hb-elapsed { opacity: 0.7; font-variant-numeric: tabular-nums; }
+  .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success, #2a9d4a); }
+  .heartbeat-line[data-phase='waiting_llm'] .hb-dot { background: var(--accent); }
+  .heartbeat-line[data-phase='subagent'] .hb-dot { background: color-mix(in srgb, var(--accent) 60%, white); }
+  .conn-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--status-error, #c0392b);
+    background: color-mix(in srgb, var(--status-error, #c0392b) 6%, transparent);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .conn-warning .hb-dot.warn {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-error, #c0392b);
+    animation: hb-pulse 1.0s ease-in-out infinite;
+  }
   @keyframes hb-pulse {
     0%, 100% { opacity: 0.25; transform: scale(0.85); }
     50%      { opacity: 1;    transform: scale(1.1);  }

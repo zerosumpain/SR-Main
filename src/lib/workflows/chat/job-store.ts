@@ -27,12 +27,20 @@ export interface ClarifyQuestion {
   choices?: string[];
 }
 
+export type JobPhase =
+  | 'starting'
+  | 'thinking'
+  | 'tool_running'
+  | 'waiting_llm'
+  | 'finalising'
+  | 'subagent';
+
 export type JobEvent =
   | { type: 'token'; delta: string }
   | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string; summary?: string }
   | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }
-  | { type: 'heartbeat'; summary: string; elapsedMs: number }
+  | { type: 'heartbeat'; summary: string; phase: JobPhase; elapsedMs: number }
   | { type: 'plan'; planId: string; plan: PlanPayload }
   | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
   | { type: 'confirm'; confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> }
@@ -113,8 +121,10 @@ export interface OrchestratorJob {
   lastEventAt: number;
   watchdog?: ReturnType<typeof setInterval>;
   currentStep?: string;       // short description updated by onProgress / tool_start for heartbeat summaries
+  phase: JobPhase;
   lastHeartbeatAt: number;
   heartbeat?: ReturnType<typeof setInterval>;
+  lastHeartbeatPayload?: { summary: string; phase: JobPhase };
   // Aggregated assistant tokens. The orchestrator endpoint appends each
   // streamed `token` event's delta here so a user-initiated cancel can
   // persist what was streamed so far instead of throwing it away.
@@ -123,10 +133,10 @@ export interface OrchestratorJob {
 
 const jobs = new Map<string, OrchestratorJob>();
 
-// If no event for this long, the job is considered stuck and we publish a
-// terminal error so SSE subscribers stop waiting. Tuned to outlast a typical
-// long LLM generation but catch real hangs (e.g. provider that never returns).
-const IDLE_TIMEOUT_MS = 180_000; // 3 min idle
+// If no progress event of any kind (including heartbeats) for this long, the
+// job is considered stuck. Heartbeats fire every 5s, so anything past 120s
+// means the heartbeat ticker itself stopped — the job is genuinely dead.
+const IDLE_TIMEOUT_MS = 120_000; // 2 min idle (heartbeats include themselves now)
 const HARD_TIMEOUT_MS = 600_000; // 10 min total
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {
@@ -142,9 +152,10 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     const idle = now - job.lastEventAt;
     const elapsed = now - job.startedAt;
     if (idle > IDLE_TIMEOUT_MS || elapsed > HARD_TIMEOUT_MS) {
+      const phaseLabel = `${job.phase}${job.currentStep ? `: ${job.currentStep}` : ''}`;
       const reason = elapsed > HARD_TIMEOUT_MS
-        ? `Job exceeded max duration (${Math.round(HARD_TIMEOUT_MS / 1000)}s)`
-        : `Job idle for ${Math.round(idle / 1000)}s — likely stuck`;
+        ? `Job exceeded max duration (${Math.round(HARD_TIMEOUT_MS / 1000)}s) while ${phaseLabel}`
+        : `Job idle for ${Math.round(idle / 1000)}s while ${phaseLabel} — likely stuck`;
       console.warn(`[orchestrator] Watchdog terminating job ${jobId}: ${reason}`);
       job.abortController.abort();
       job.status = 'error';
@@ -160,8 +171,22 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
   }, 15_000);
 }
 
-const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;   // check every 5s
-const HEARTBEAT_MIN_SILENCE_MS = 25_000;     // only emit after 25s of silence
+// Fixed-cadence heartbeat: fire unconditionally every 5s while the job is
+// running. The client deduplicates if the (phase, summary) pair is identical
+// to the previous tick. This removes the entire class of "did silence
+// detection miss an edge?" bugs.
+const HEARTBEAT_INTERVAL_MS = 5_000;
+
+function phaseLabel(phase: JobPhase): string {
+  switch (phase) {
+    case 'starting': return 'Starting up';
+    case 'thinking': return 'Thinking';
+    case 'tool_running': return 'Running tool';
+    case 'waiting_llm': return 'Drafting reply';
+    case 'finalising': return 'Finalising';
+    case 'subagent': return 'Sub-agent working';
+  }
+}
 
 function startHeartbeat(jobId: string, job: OrchestratorJob): void {
   job.heartbeat = setInterval(() => {
@@ -171,21 +196,45 @@ function startHeartbeat(jobId: string, job: OrchestratorJob): void {
       return;
     }
     const now = Date.now();
-    const sinceEvent = now - job.lastEventAt;
-    const sinceHeartbeat = now - job.lastHeartbeatAt;
-    if (sinceEvent >= HEARTBEAT_MIN_SILENCE_MS && sinceHeartbeat >= HEARTBEAT_MIN_SILENCE_MS) {
-      const summary =
-        job.currentStep ??
-        job.progress[job.progress.length - 1] ??
-        'Still thinking...';
-      job.lastHeartbeatAt = now;
-      publishJobEvent(jobId, {
-        type: 'heartbeat',
-        summary: summary.trim().slice(0, 140),
-        elapsedMs: now - job.startedAt,
-      });
-    }
-  }, HEARTBEAT_CHECK_INTERVAL_MS);
+    const summary = (
+      job.currentStep ??
+      job.progress[job.progress.length - 1] ??
+      phaseLabel(job.phase) + '…'
+    ).trim().slice(0, 140);
+    const phase = job.phase;
+    job.lastHeartbeatAt = now;
+    job.lastHeartbeatPayload = { summary, phase };
+    console.log(`[hb] ${jobId} ${phase} ${Math.round((now - job.startedAt) / 1000)}s "${summary}"`);
+    publishJobEvent(jobId, {
+      type: 'heartbeat',
+      summary,
+      phase,
+      elapsedMs: now - job.startedAt,
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+export function setJobPhase(jobId: string, phase: JobPhase, currentStep?: string): void {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  const changed = job.phase !== phase || (currentStep && job.currentStep !== currentStep);
+  job.phase = phase;
+  if (currentStep) job.currentStep = currentStep;
+  if (changed) {
+    // Fire an immediate heartbeat on phase change so the UI updates without
+    // waiting up to 5s for the next ticker firing.
+    const now = Date.now();
+    const summary = (job.currentStep ?? phaseLabel(phase) + '…').trim().slice(0, 140);
+    job.lastHeartbeatAt = now;
+    job.lastHeartbeatPayload = { summary, phase };
+    console.log(`[hb] ${jobId} ${phase} ${Math.round((now - job.startedAt) / 1000)}s "${summary}" (phase change)`);
+    publishJobEvent(jobId, {
+      type: 'heartbeat',
+      summary,
+      phase,
+      elapsedMs: now - job.startedAt,
+    });
+  }
 }
 
 export function createJob(message: string, scope: JobScope = {}): { jobId: string; job: OrchestratorJob } {
@@ -205,6 +254,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     },
     lastEventAt: now,
     lastHeartbeatAt: now,
+    phase: 'starting',
     partialResponse: '',
   };
   jobs.set(jobId, job);

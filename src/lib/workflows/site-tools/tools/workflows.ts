@@ -43,11 +43,26 @@ register({
   },
   category: 'Workflows',
   toolset: 'workflows',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const { generateWorkflow } = await import('$lib/workflows/orchestrator');
+    const emit = ctx?.emit ?? (() => {});
 
     const description = args.description as string;
-    const { workflow, followUp } = await generateWorkflow(description, null);
+    emit('Planning workflow structure…');
+    // generateWorkflow already emits internal chunks (Planning..., Reviewing...,
+    // Revising..., Registering new node types...). Pipe each non-trivial chunk
+    // up to the orchestrator as a `status` event so the user sees progress.
+    let lastEmittedAt = 0;
+    const { workflow, followUp } = await generateWorkflow(description, null, (text) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      // Throttle to one emit per 800ms to avoid flooding when generateWorkflow
+      // chunks arrive in bursts.
+      const now = Date.now();
+      if (now - lastEmittedAt < 800) return;
+      lastEmittedAt = now;
+      emit(trimmed);
+    });
 
     if (followUp) {
       return { success: true, data: { needsMoreInfo: true, question: followUp } };
@@ -60,6 +75,7 @@ register({
           'Could not generate a valid workflow. Try being more specific about triggers, inputs, and outputs.',
       };
     }
+    emit(`Saving canvas with ${workflow.nodes.length} nodes…`);
 
     // Canvas-compatible naming: pick a SHORT slug (≤ 24 chars, 3–4 words
     // max) from the generated title, ensure the "canvas:" prefix. If the
