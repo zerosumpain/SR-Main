@@ -3617,6 +3617,25 @@
 
             <!-- Kind-specific body -->
             <div class="nm-body">
+              {#each [summarizeNode(menuNode.type, configDraft as Record<string, unknown>, getDefinition(menuNode.type)?.description)] as _previewSummary (1)}
+                {#if _previewSummary.line}
+                  <section class="nm-sec nm-action-preview" aria-label="What this node will do">
+                    <header class="nm-action-hdr">
+                      <span class="sr-label-tight">What this does</span>
+                      <span class="nm-action-kind">{_previewSummary.preview.kind}</span>
+                    </header>
+                    <p class="nm-action-line">{_previewSummary.line}</p>
+                    {#if Object.keys(_previewSummary.preview.details).length > 0}
+                      <dl class="nm-action-grid">
+                        {#each Object.entries(_previewSummary.preview.details) as [k, v] (k)}
+                          <dt>{k}</dt>
+                          <dd>{v}</dd>
+                        {/each}
+                      </dl>
+                    {/if}
+                  </section>
+                {/if}
+              {/each}
               {#if menuNode.kind === 'trigger'}
                 {@const kind = ((configDraft.kind as string) || 'manual') as
                   | 'manual'
@@ -4435,6 +4454,32 @@
                   />
                 </div>
               {/if}
+
+              <!-- Universal "Advanced — raw JSON" disclosure available on every
+                   node, regardless of which editor renders above. The structured
+                   editors are the primary surface; this is the power-user
+                   escape hatch. -->
+              <details class="nm-raw-json">
+                <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
+                <textarea
+                  class="nm-raw-textarea"
+                  rows="10"
+                  spellcheck="false"
+                  value={JSON.stringify(configDraft, null, 2)}
+                  oninput={(e) => {
+                    const txt = (e.currentTarget as HTMLTextAreaElement).value;
+                    try {
+                      const next = JSON.parse(txt);
+                      if (next && typeof next === 'object') {
+                        configDraft = next as Record<string, unknown>;
+                        configDirty = true;
+                      }
+                    } catch {
+                      /* invalid JSON — keep typing, don't apply */
+                    }
+                  }}
+                ></textarea>
+              </details>
             </div>
 
             <!-- Actions footer -->
@@ -5872,6 +5917,81 @@
     padding-top: 10px;
     overflow-y: auto;
   }
+  .nm-action-preview {
+    border: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .nm-action-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .nm-action-kind {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .nm-action-line {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+  .nm-action-grid {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) 1fr;
+    gap: 4px 12px;
+    margin: 4px 0 0 0;
+    font-size: 11px;
+  }
+  .nm-action-grid dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    align-self: center;
+  }
+  .nm-action-grid dd {
+    margin: 0;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+  .nm-raw-json {
+    margin-top: 8px;
+    border-top: 1px dashed var(--card-border);
+    padding-top: 10px;
+  }
+  .nm-raw-json summary {
+    cursor: pointer;
+    list-style: none;
+  }
+  .nm-raw-json summary:hover { color: var(--text-primary); }
+  .nm-raw-json[open] summary { color: var(--text-primary); }
+  .nm-raw-textarea {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    box-sizing: border-box;
+    outline: none;
+    resize: vertical;
+  }
+  .nm-raw-textarea:focus { border-color: var(--text-muted); }
   /* .nm-sec, .nm-sec-error, .nm-sec-hd, .sr-label-tight, .sr-label-tight.error,
    * .nm-sec-meta moved to $lib/styles/nm-tokens.css */
   .nm-link {
