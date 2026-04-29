@@ -34,6 +34,11 @@
     'conditional',
     'transform',
     'data-store',
+    'delay',
+    'tavily-search',
+    'web-scrape',
+    'email',
+    'text-parser',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new

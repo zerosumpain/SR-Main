@@ -9,9 +9,18 @@ import WhatsAppPanel from './WhatsAppPanel.svelte';
 import LlmCallPanel from './LlmCallPanel.svelte';
 import LlmAgentPanel from './LlmAgentPanel.svelte';
 import GmailSendPanel from './GmailSendPanel.svelte';
+import GmailFetchPanel from './GmailFetchPanel.svelte';
+import GmailReplyPanel from './GmailReplyPanel.svelte';
+import GmailSearchPanel from './GmailSearchPanel.svelte';
+import GmailTriggerPanel from './GmailTriggerPanel.svelte';
 import ConditionalPanel from './ConditionalPanel.svelte';
 import TransformPanel from './TransformPanel.svelte';
 import DataStorePanel from './DataStorePanel.svelte';
+import DelayPanel from './DelayPanel.svelte';
+import TavilySearchPanel from './TavilySearchPanel.svelte';
+import WebScrapePanel from './WebScrapePanel.svelte';
+import EmailPanel from './EmailPanel.svelte';
+import TextParserPanel from './TextParserPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -33,9 +42,18 @@ const specialized: Record<string, Component<PanelProps>> = {
   'llm-call': LlmCallPanel as unknown as Component<PanelProps>,
   'llm-agent': LlmAgentPanel as unknown as Component<PanelProps>,
   'gmail-send': GmailSendPanel as unknown as Component<PanelProps>,
+  'gmail-fetch': GmailFetchPanel as unknown as Component<PanelProps>,
+  'gmail-reply': GmailReplyPanel as unknown as Component<PanelProps>,
+  'gmail-search': GmailSearchPanel as unknown as Component<PanelProps>,
+  'gmail-trigger': GmailTriggerPanel as unknown as Component<PanelProps>,
   'conditional': ConditionalPanel as unknown as Component<PanelProps>,
   'transform': TransformPanel as unknown as Component<PanelProps>,
   'data-store': DataStorePanel as unknown as Component<PanelProps>,
+  'delay': DelayPanel as unknown as Component<PanelProps>,
+  'tavily-search': TavilySearchPanel as unknown as Component<PanelProps>,
+  'web-scrape': WebScrapePanel as unknown as Component<PanelProps>,
+  'email': EmailPanel as unknown as Component<PanelProps>,
+  'text-parser': TextParserPanel as unknown as Component<PanelProps>,
 };
 
 /**
