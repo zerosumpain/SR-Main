@@ -2,7 +2,9 @@
   import type { Proposal, MetaProposal, ProseProposal } from '$lib/blog/assistant/proposal';
   import BlogAssistantSuggestionChip from './BlogAssistantSuggestionChip.svelte';
 
-  type ChatRow = { role: 'user' | 'assistant'; content: string };
+  type ChatRow =
+    | { role: 'user' | 'assistant'; content: string }
+    | { role: 'status'; content: string; transient?: boolean };
 
   type Props = {
     postId: number;
@@ -85,14 +87,34 @@
     await send();
   };
 
+  function appendStatus(content: string, transient = false) {
+    chatRows = [...chatRows, { role: 'status', content, transient }];
+  }
+  function clearTransientStatus() {
+    chatRows = chatRows.filter((r) => !(r.role === 'status' && r.transient));
+  }
+
+  function shortLabel(p: Proposal): string {
+    if (p.kind === 'meta') {
+      const v = Array.isArray(p.suggestedValue) ? p.suggestedValue.join(', ') : String(p.suggestedValue ?? '');
+      return `${p.field} → ${v.slice(0, 40)}${v.length > 40 ? '…' : ''}`;
+    }
+    const orig = (p.original ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    return orig.length > 40 ? `"${orig.slice(0, 40)}…"` : `"${orig}"`;
+  }
+
   async function send() {
     if (!input.trim() || busy) return;
     const message = input.trim();
     input = '';
     busy = true;
     chatRows = [...chatRows, { role: 'user', content: message }];
+    appendStatus('Reviewing post…', true);
+
     let assistantBuf = '';
     let assistantIdx = -1;
+    let proposalsThisRun = 0;
+    let firstEventArrived = false;
 
     abortCtl = new AbortController();
     try {
@@ -103,6 +125,7 @@
         signal: abortCtl.signal,
       });
       if (!res.ok || !res.body) {
+        clearTransientStatus();
         chatRows = [...chatRows, { role: 'assistant', content: `Error: ${res.status}` }];
         return;
       }
@@ -118,6 +141,10 @@
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const ev = JSON.parse(line.slice(6));
+          if (!firstEventArrived) {
+            firstEventArrived = true;
+            clearTransientStatus();
+          }
           if (ev.type === 'text') {
             assistantBuf += ev.delta;
             if (assistantIdx === -1) {
@@ -132,13 +159,27 @@
             if (p.replaces) proposalStore.replace(p.replaces, p);
             else proposalStore.add(p);
             proposalsTick++;
+            proposalsThisRun++;
+            // Brief progress note so the user sees suggestions land one by one.
+            appendStatus(`Suggestion ${proposalsThisRun}: ${shortLabel(p)}`);
             onProposalArrived(p);
           } else if (ev.type === 'error') {
             chatRows = [...chatRows, { role: 'assistant', content: `Error: ${ev.message}` }];
           }
         }
       }
+
+      // Stream finished. Summarise what happened.
+      clearTransientStatus();
+      if (proposalsThisRun > 0) {
+        appendStatus(`✓ Done — ${proposalsThisRun} suggestion${proposalsThisRun === 1 ? '' : 's'} ready. Accept, reject, or modify each in the editor.`);
+      } else if (assistantBuf.trim().length > 0) {
+        // The assistant answered in text; no extra summary needed.
+      } else {
+        appendStatus('✓ Nothing to suggest — the post reads well as-is.');
+      }
     } catch (e) {
+      clearTransientStatus();
       if ((e as Error).name !== 'AbortError') {
         chatRows = [...chatRows, { role: 'assistant', content: `Error: ${(e as Error).message}` }];
       }
@@ -203,7 +244,14 @@
 
     <div class="body">
       {#each chatRows as row, i (i)}
-        <div class="row {row.role}"><span class="bubble">{row.content}</span></div>
+        {#if row.role === 'status'}
+          <div class="row status">
+            {#if row.transient}<span class="dots" aria-hidden="true"></span>{/if}
+            <span class="status-text">{row.content}</span>
+          </div>
+        {:else}
+          <div class="row {row.role}"><span class="bubble">{row.content}</span></div>
+        {/if}
       {/each}
       {#each metaProposals as p (p.id)}
         <BlogAssistantSuggestionChip
@@ -283,6 +331,27 @@
     white-space: pre-wrap;
   }
   .row.user .bubble { background: var(--accent-tint-08); }
+  .row.status {
+    display: flex; align-items: center; gap: 0.45rem;
+    font-size: 0.78rem; color: var(--text-muted);
+    font-family: var(--font-mono);
+    padding: 0.1rem 0.1rem;
+  }
+  .status-text { word-break: break-word; }
+  .dots {
+    width: 0.9rem; height: 0.9rem;
+    display: inline-block;
+    background: radial-gradient(circle at 25% 50%, currentColor 25%, transparent 26%) 0 0 / 33% 100%,
+                radial-gradient(circle at 25% 50%, currentColor 25%, transparent 26%) 50% 0 / 33% 100%,
+                radial-gradient(circle at 25% 50%, currentColor 25%, transparent 26%) 100% 0 / 33% 100%;
+    background-repeat: no-repeat;
+    animation: jkai-dots 1.1s infinite ease-in-out;
+    color: var(--accent, #888);
+  }
+  @keyframes jkai-dots {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
   .empty { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
   .composer { display: flex; gap: 0.4rem; padding: 0.4rem; border-top: 1px solid var(--card-border); }
   .composer .nm-textarea { flex: 1; }
