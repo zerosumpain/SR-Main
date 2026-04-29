@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blogPosts, blogPostTags } from '$lib/db/schema';
+import { blogPosts, blogPostTags, blogAssistantMessages } from '$lib/db/schema';
 
 describe('blog schema', () => {
   it('blogPosts table has expected columns', () => {
@@ -20,5 +20,21 @@ describe('blog schema', () => {
 
   it('blogPosts has previewToken column', () => {
     expect(blogPosts.previewToken).toBeDefined();
+  });
+});
+
+describe('blogPosts new column', () => {
+  it('blogPosts has coverImageAlt column', () => {
+    expect(blogPosts.coverImageAlt).toBeDefined();
+  });
+});
+
+describe('blogAssistantMessages schema', () => {
+  it('exists with role, content, postId, createdAt', () => {
+    expect(blogAssistantMessages.id).toBeDefined();
+    expect(blogAssistantMessages.postId).toBeDefined();
+    expect(blogAssistantMessages.role).toBeDefined();
+    expect(blogAssistantMessages.content).toBeDefined();
+    expect(blogAssistantMessages.createdAt).toBeDefined();
   });
 });
