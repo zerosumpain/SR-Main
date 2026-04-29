@@ -16,11 +16,9 @@ function fakeClient(scripted: Array<{ tool?: { name: string; args: Record<string
             return {
               choices: [{
                 message: {
-                  role: 'assistant',
-                  content: null,
+                  role: 'assistant', content: null,
                   tool_calls: [{
-                    id: `call_${i}`,
-                    type: 'function',
+                    id: `call_${i}`, type: 'function',
                     function: { name: step.tool.name, arguments: JSON.stringify(step.tool.args) },
                   }],
                 },
@@ -29,10 +27,7 @@ function fakeClient(scripted: Array<{ tool?: { name: string; args: Record<string
             };
           }
           return {
-            choices: [{
-              message: { role: 'assistant', content: step.text ?? '' },
-              finish_reason: 'stop',
-            }],
+            choices: [{ message: { role: 'assistant', content: step.text ?? '' }, finish_reason: 'stop' }],
           };
         },
       },
@@ -41,16 +36,17 @@ function fakeClient(scripted: Array<{ tool?: { name: string; args: Record<string
 }
 
 const snapshot = {
-  id: 1, title: 'old', excerpt: 'e', slug: 's', content: '<p>x</p>',
+  id: 1, title: 'old', excerpt: 'e', slug: 's',
+  content: 'one. two. three.',
   contentFormat: 'html' as const, status: 'draft' as const,
   coverImageUrl: null, coverImageAlt: null, publishedAt: null,
   previewToken: 't', tags: [],
 };
 
 describe('runAssistant', () => {
-  it('emits text events and a final done', async () => {
+  it('emits text + done for plain replies', async () => {
     vi.mocked(blog.getPostById).mockResolvedValue({ ...snapshot } as never);
-    const client = fakeClient([{ text: 'hello there' }]);
+    const client = fakeClient([{ text: 'hello' }]);
     const events: Array<{ type: string }> = [];
     for await (const e of runAssistant({
       postId: 1, userMessage: 'hi', history: [], client: client as never, model: 'm',
@@ -58,31 +54,31 @@ describe('runAssistant', () => {
     expect(events.map((e) => e.type)).toEqual(['text', 'done']);
   });
 
-  it('executes a tool call and emits tool events + post_state', async () => {
+  it('emits proposal events for tool calls', async () => {
     vi.mocked(blog.getPostById).mockResolvedValue({ ...snapshot } as never);
-    vi.mocked(blog.updatePostFields).mockResolvedValue();
     const client = fakeClient([
       { tool: { name: 'update_title', args: { title: 'new' } } },
-      { text: 'done' },
+      { text: 'proposed' },
     ]);
-    const events: Array<{ type: string }> = [];
+    const events: Array<{ type: string; [k: string]: unknown }> = [];
     for await (const e of runAssistant({
       postId: 1, userMessage: 'rename', history: [], client: client as never, model: 'm',
     })) events.push(e);
-    expect(events.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'post_state', 'text', 'done']);
+    expect(events.map((e) => e.type)).toEqual(['proposal', 'text', 'done']);
+    const proposal = events[0] as unknown as { proposal: { kind: string } };
+    expect(proposal.proposal.kind).toBe('meta');
   });
 
   it('caps tool calls at 6', async () => {
     vi.mocked(blog.getPostById).mockResolvedValue({ ...snapshot } as never);
-    vi.mocked(blog.updatePostFields).mockResolvedValue();
     const scripted = Array.from({ length: 8 }, () => ({ tool: { name: 'update_title', args: { title: 'x' } } }));
     const client = fakeClient(scripted);
     const events: Array<{ type: string }> = [];
     for await (const e of runAssistant({
       postId: 1, userMessage: 'spam', history: [], client: client as never, model: 'm',
     })) events.push(e);
-    const toolCalls = events.filter((e) => e.type === 'tool_call').length;
-    expect(toolCalls).toBeLessThanOrEqual(6);
+    const proposalCount = events.filter((e) => e.type === 'proposal').length;
+    expect(proposalCount).toBeLessThanOrEqual(6);
     expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
 });
