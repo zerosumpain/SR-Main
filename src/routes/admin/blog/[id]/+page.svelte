@@ -371,17 +371,6 @@
     </button>
   </div>
 
-  {#if !isMarkdown && content}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Preview</span>
-      </div>
-      <div class="prose">
-        {@html content}
-      </div>
-    </section>
-  {/if}
-
   <BlogAssistantPanel
     postId={data.post.id}
     {adminToken}
