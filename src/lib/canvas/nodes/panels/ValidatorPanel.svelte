@@ -2,18 +2,28 @@
   import type { NodeDefinition, SchemaFieldRow } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import SchemaBuilderField from './SchemaBuilderField.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   void definition;
+
+  // Upstream paths arrive as bare keys; the rule compiler writes them with
+  // an `input.` prefix to match the eval scope, so the picker shows the
+  // prefixed forms.
+  const upstreamWithInputPrefix = $derived(
+    upstreamFields.map((p) => (p.startsWith('input.') ? p : `input.${p}`)),
+  );
 
   // ----------------------------------------------------------------------
   // The validator executor branches on `config.mode`:
@@ -437,13 +447,13 @@
           {/if}
           <div class="va-rule-row">
             <label class="va-field va-field-fld">
-              <span class="va-label">Field</span>
-              <input
-                type="text"
-                spellcheck="false"
-                placeholder="input.value"
+              <UpstreamFieldPicker
+                label="Field"
                 value={r.field}
-                oninput={(e) => updateRule(i, { field: (e.currentTarget as HTMLInputElement).value })}
+                upstreamFields={upstreamWithInputPrefix}
+                placeholder="pick or type input.<path>"
+                allowCustom={true}
+                onChange={(v) => updateRule(i, { field: v })}
               />
             </label>
             <label class="va-field va-field-op">

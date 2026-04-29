@@ -1,18 +1,29 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   void definition;
+
+  // Upstream paths arrive as bare keys (e.g. "body.results.0.id"); the rule
+  // builder writes them as `input.body.results.0.id` to match the eval
+  // context. We expose both forms in the picker so the user sees what they
+  // expect regardless of which side they're typing on.
+  const upstreamWithInputPrefix = $derived(
+    upstreamFields.map((p) => (p.startsWith('input.') ? p : `input.${p}`)),
+  );
 
   // ---------- Rule model ---------------------------------------------------
   // The panel keeps its own structured rule list and compiles to a single
@@ -358,13 +369,13 @@
 
         <div class="cd-rule-row">
           <label class="cd-field cd-field-fld">
-            <span class="cd-label">Field</span>
-            <input
-              type="text"
-              spellcheck="false"
-              placeholder="input.value"
+            <UpstreamFieldPicker
+              label="Field"
               value={r.field}
-              oninput={(e) => updateRule(i, { field: (e.currentTarget as HTMLInputElement).value })}
+              upstreamFields={upstreamWithInputPrefix}
+              placeholder="pick or type input.<path>"
+              allowCustom={true}
+              onChange={(v) => updateRule(i, { field: v })}
             />
           </label>
           <label class="cd-field cd-field-op">

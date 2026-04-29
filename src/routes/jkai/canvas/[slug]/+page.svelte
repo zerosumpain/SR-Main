@@ -20,6 +20,7 @@
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
   import { getDefinition } from '$lib/workflows/registry-client';
   import { summarizeNode } from '$lib/workflows/node-summary';
+  import { computeUpstreamFields } from '$lib/canvas/upstream-fields';
 
   // Node types that always render a config panel (specialised panels), in addition
   // to anything whose NodeDefinition.basicConfig is populated.
@@ -4494,11 +4495,19 @@
               {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
                 {@const menuDefinition = getDefinition(menuNode.type)}
                 {@const Panel = getPanel(menuNode.type, menuDefinition)}
+                {@const _upstreamFields = computeUpstreamFields(
+                  menuNode.id,
+                  (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
+                  (canvas.edges ?? []) as Array<{ sourceNodeId: string; targetNodeId: string }>,
+                )}
                 <div class="menu-config-section">
                   <Panel
                     config={configDraft}
                     onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
                     definition={menuDefinition}
+                    nodeId={menuNode.id}
+                    workflowId={canvas.workflowId}
+                    upstreamFields={_upstreamFields}
                   />
                 </div>
               {/if}

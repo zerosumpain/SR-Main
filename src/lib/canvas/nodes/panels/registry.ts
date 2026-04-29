@@ -62,6 +62,23 @@ export type PanelProps = {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   definition?: NodeDefinition;
+  /**
+   * Context plumbed from the canvas page so panels can offer pickers
+   * grounded in real data (instead of forcing the user to type field
+   * paths or store keys from memory).
+   *
+   * - `nodeId`: the workflow_nodes row id of the node being edited.
+   * - `workflowId`: the canvas this node belongs to. Lets panels query
+   *   workflow-scoped resources like the data-store keys.
+   * - `upstreamFields`: dot-paths to every value the upstream nodes have
+   *   actually emitted in their most recent run output. e.g.
+   *   `["body.results", "body.results.0.id", "currentStates.jemima"]`.
+   *   Drives `<UpstreamFieldPicker>` dropdowns. Empty when the upstream
+   *   nodes haven't run yet.
+   */
+  nodeId?: string;
+  workflowId?: string;
+  upstreamFields?: string[];
 };
 
 const specialized: Record<string, Component<PanelProps>> = {

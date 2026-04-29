@@ -1,16 +1,30 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import StoreKeyPicker from './shared/StoreKeyPicker.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    workflowId,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    workflowId?: string;
+    upstreamFields?: string[];
   } = $props();
+
+  async function fetchKeys(): Promise<Array<{ key: string; meta?: string }>> {
+    if (!workflowId) return [];
+    const res = await fetch(`/api/workflows/${workflowId}/data-store`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    return (body.keys ?? []) as Array<{ key: string; meta?: string }>;
+  }
 
   // ---------- Operation (canonical 'get' | 'set') -------------------------
   // The executor leniently absorbs read→get and write→set at runtime, but on
@@ -120,23 +134,21 @@
     </p>
   </section>
 
-  <!-- Key -->
+  <!-- Key — picker over the existing data-store keys for this workflow,
+       with create-new mode for `set` operations and a `{{template}}`
+       escape hatch for dynamic keys. -->
   <section class="ds-sec">
     <header class="ds-sec-hdr">
       <span class="sr-label-tight">Key</span>
       {#if keyMissing}<span class="ds-warn">⚠ key is required</span>{/if}
     </header>
-    <textarea
-      class="ds-key-input"
-      rows="1"
-      spellcheck="false"
-      placeholder={`last_run_timestamp  or  forecast_{{input.date}}`}
+    <StoreKeyPicker
       value={key}
-      oninput={(e) => set('key', (e.currentTarget as HTMLTextAreaElement).value)}
-    ></textarea>
-    <span class="ds-hint">
-      Templates: <code>{`{{input.field}}`}</code>. Keys are scoped to this workflow.
-    </span>
+      mode={operation}
+      fetcher={fetchKeys}
+      onChange={(v) => set('key', v)}
+      placeholder={operation === 'get' ? 'pick a key to read' : 'pick existing or create new'}
+    />
   </section>
 
   <!-- Value to store (Set-only) -->
@@ -175,19 +187,14 @@
       </div>
       {#if valueMode === 'field'}
         <label class="ds-field">
-          <span class="ds-label">Value path</span>
-          <input
-            bind:this={valuePathInputEl}
-            type="text"
-            spellcheck="false"
-            placeholder="data.count"
+          <UpstreamFieldPicker
+            label="Value path"
             value={valuePath}
-            oninput={(e) => set('valuePath', (e.currentTarget as HTMLInputElement).value)}
+            upstreamFields={upstreamFields}
+            placeholder="pick the field to store"
+            allowCustom={true}
+            onChange={(v) => set('valuePath', v)}
           />
-          <span class="ds-hint">
-            Dot-path into the input. Leading <code>input.</code> is optional. Use
-            <code>body.results.0.id</code> to walk into arrays/objects.
-          </span>
         </label>
       {/if}
     </section>

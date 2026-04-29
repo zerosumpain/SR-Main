@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The executor at src/lib/workflows/nodes/text-parser.ts supports three
@@ -151,13 +154,13 @@
         </select>
       </label>
       <label class="tp-field tp-field-source">
-        <span class="tp-label">Source field</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder="response"
+        <UpstreamFieldPicker
+          label="Source field"
           value={inputField}
-          oninput={(e) => set('inputField', (e.currentTarget as HTMLInputElement).value)}
+          upstreamFields={upstreamFields}
+          placeholder="pick the field to parse"
+          allowCustom={true}
+          onChange={(v) => set('inputField', v)}
         />
         <span class="tp-hint">Reads <code>input.{inputField || 'response'}</code> from the upstream node.</span>
       </label>
