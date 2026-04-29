@@ -47,6 +47,55 @@
   // `definition` is referenced only for typings; the canvas-level preview
   // header handles the "What this does" line so we don't duplicate it here.
   void definition;
+
+  // ---------- Browse the file store ---------------------------------------
+  // Fetches /api/files once per panel mount and lets the user pick a file
+  // from a real list rather than typing the name from memory. Optional —
+  // they can still type a templated name (e.g. `reports/{{input.date}}.csv`)
+  // for dynamic destinations.
+  interface FileEntry { id: number; name: string; mimeType: string; sizeBytes: number; description?: string | null }
+  let fileList = $state<FileEntry[] | null>(null);
+  let fileError = $state<string | null>(null);
+  let filesLoading = $state(false);
+  let pickerQuery = $state('');
+  let pickerOpen = $state(false);
+
+  async function loadFiles() {
+    if (filesLoading || fileList !== null) return;
+    filesLoading = true;
+    try {
+      const res = await fetch('/api/files');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      fileList = (body.files ?? []) as FileEntry[];
+    } catch (err) {
+      fileError = err instanceof Error ? err.message : String(err);
+    } finally {
+      filesLoading = false;
+    }
+  }
+
+  function togglePicker() {
+    pickerOpen = !pickerOpen;
+    if (pickerOpen) loadFiles();
+  }
+  function pickFile(name: string) {
+    set('fileName', name);
+    pickerOpen = false;
+  }
+
+  const filteredFiles = $derived.by(() => {
+    if (!fileList) return [];
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return fileList;
+    return fileList.filter((f) => f.name.toLowerCase().includes(q));
+  });
+
+  function fmtSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
 </script>
 
 <div class="fs">
@@ -81,6 +130,9 @@
     <section class="fs-sec">
       <header class="fs-sec-hdr">
         <span class="sr-label-tight">File name</span>
+        <button type="button" class="fs-browse-btn" onclick={togglePicker}>
+          {pickerOpen ? 'Hide browser' : 'Browse files…'}
+        </button>
       </header>
       <label class="fs-field">
         <input
@@ -90,8 +142,44 @@
           value={String(config.fileName ?? '')}
           oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
         />
-        <span class="fs-hint">Templates supported: <code>{`{{input.field}}`}</code></span>
+        <span class="fs-hint">Type a name (templates supported: <code>{`{{input.field}}`}</code>) or click Browse to pick from the file store.</span>
       </label>
+      {#if pickerOpen}
+        <div class="fs-picker">
+          <input
+            type="text"
+            class="fs-picker-search"
+            placeholder="Filter by name…"
+            value={pickerQuery}
+            oninput={(e) => { pickerQuery = (e.currentTarget as HTMLInputElement).value; }}
+          />
+          {#if filesLoading}
+            <p class="fs-picker-empty">Loading…</p>
+          {:else if fileError}
+            <p class="fs-picker-empty fs-picker-err">Couldn't load file list: {fileError}. <a href="/admin/files" target="_blank" rel="noopener">Open /admin/files →</a></p>
+          {:else if !fileList || fileList.length === 0}
+            <p class="fs-picker-empty">No files in store yet. <a href="/admin/files" target="_blank" rel="noopener">Upload one →</a></p>
+          {:else if filteredFiles.length === 0}
+            <p class="fs-picker-empty">No files match "{pickerQuery}".</p>
+          {:else}
+            <ul class="fs-picker-list" role="listbox">
+              {#each filteredFiles as f (f.id)}
+                <li>
+                  <button
+                    type="button"
+                    class="fs-picker-row"
+                    class:fs-picker-row-active={String(config.fileName ?? '') === f.name}
+                    onclick={() => pickFile(f.name)}
+                  >
+                    <span class="fs-picker-name">{f.name}</span>
+                    <span class="fs-picker-meta">{f.mimeType} · {fmtSize(f.sizeBytes)}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
     </section>
   {/if}
 
@@ -245,4 +333,73 @@
     padding-top: 8px;
   }
   .fs-raw summary { cursor: pointer; }
+
+  .fs-browse-btn {
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px dashed var(--card-border);
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+  .fs-browse-btn:hover { color: var(--text-primary); }
+  .fs-picker {
+    margin-top: 6px;
+    border: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--accent) 3%, transparent);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .fs-picker-search { font-family: var(--font-mono); font-size: 11px; }
+  .fs-picker-empty {
+    margin: 0;
+    padding: 6px 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .fs-picker-empty.fs-picker-err { color: var(--status-error, #c0392b); }
+  .fs-picker-empty a { color: var(--accent); }
+  .fs-picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 280px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .fs-picker-row {
+    width: 100%;
+    text-align: left;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    padding: 6px 8px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-primary);
+  }
+  .fs-picker-row:hover { border-color: var(--text-muted); }
+  .fs-picker-row-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .fs-picker-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+  .fs-picker-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
 </style>

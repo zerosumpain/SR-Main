@@ -164,10 +164,33 @@ const summarizers: Record<string, (cfg: Cfg) => NodeSummary> = {
     line: `Write file ${truncate(s(c.path, '<path>'), 60)}`,
     preview: { kind: 'file', details: { Path: s(c.path, '—'), Mode: s(c.mode, 'overwrite') } },
   }),
-  'file-store': (c) => ({
-    line: `File store: ${s(c.operation, 'list')} ${s(c.path, '')}`.trim(),
-    preview: { kind: 'file', details: { Operation: s(c.operation, 'list'), Path: s(c.path, '—') } },
-  }),
+  'file-store': (c) => {
+    const op = s(c.operation, 'read');
+    const fileName = s(c.fileName, '');
+    const prefix = s(c.prefix, '');
+    const contentPath = s(c.contentPath, '');
+    const encoding = s(c.encoding, 'utf8');
+    const opLabel: Record<string, string> = {
+      read: 'Read', write: 'Write', append: 'Append to', delete: 'Delete', list: 'List',
+    };
+    let line: string;
+    if (op === 'list') {
+      line = prefix ? `List files in store starting with "${prefix}"` : 'List all files in store';
+    } else if (fileName) {
+      line = `${opLabel[op] ?? op} "${truncate(fileName, 50)}" in file store`;
+    } else {
+      line = `${opLabel[op] ?? op} <file not set> in file store`;
+    }
+    const details: Record<string, string> = { Operation: op };
+    if (op === 'list') {
+      details.Prefix = prefix || '(none)';
+    } else {
+      details['File name'] = fileName || '—';
+      if (op === 'read' || op === 'write' || op === 'append') details.Encoding = encoding;
+      if (op === 'write' || op === 'append') details['Content from'] = contentPath || 'whole input';
+    }
+    return { line, preview: { kind: 'file', details } };
+  },
   'trigger': (c) => {
     const kind = s(c.kind, 'manual');
     if (kind === 'cron') {
@@ -178,6 +201,41 @@ const summarizers: Record<string, (cfg: Cfg) => NodeSummary> = {
     return { line: `Manual trigger`, preview: { kind: 'trigger', details: { Type: 'manual' } } };
   },
   'manual-trigger': () => ({ line: 'Manual trigger', preview: { kind: 'trigger', details: { Type: 'manual' } } }),
+  'home-assistant': (c) => {
+    const op = s(c.operation, 'query_state');
+    const entity = s(c.entityId, '');
+    const domain = s(c.domain, '');
+    const service = s(c.service, '');
+    const template = s(c.template, '');
+    const eventType = s(c.eventType, '');
+    const opLabel: Record<string, string> = {
+      query_state: 'Read state of', call_service: 'Call service', fire_event: 'Fire event',
+      get_history: 'Get history of', render_template: 'Render template',
+    };
+    let line: string;
+    let details: Record<string, string> = { Operation: op };
+    if (op === 'render_template') {
+      const preview = template.replace(/\s+/g, ' ').trim();
+      line = `Render Jinja2 template${preview ? `: ${truncate(preview, 60)}` : ''}`;
+      if (template) details.Template = truncate(template, 240);
+    } else if (op === 'call_service') {
+      const target = domain && service ? `${domain}.${service}` : (domain || service || '<service>');
+      line = `Call HA service ${target}${entity ? ` on ${entity}` : ''}`;
+      if (domain) details.Domain = domain;
+      if (service) details.Service = service;
+      if (entity) details['Target entity'] = entity;
+    } else if (op === 'fire_event') {
+      line = `Fire HA event "${eventType || '<eventType>'}"`;
+      if (eventType) details['Event type'] = eventType;
+    } else if (op === 'get_history') {
+      line = `Get HA history of ${entity || '<entity>'}`;
+      if (entity) details.Entity = entity;
+    } else {
+      line = `${opLabel[op] ?? op} ${entity || '<entity>'}`;
+      if (entity) details.Entity = entity;
+    }
+    return { line, preview: { kind: 'control', details } };
+  },
 };
 
 export function summarizeNode(
