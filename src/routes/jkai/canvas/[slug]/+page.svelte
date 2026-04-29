@@ -63,6 +63,14 @@
     'health-query',
     'quick-answer',
     'research-result',
+    'file-build',
+    'file-read',
+    'file-list',
+    'file-delete',
+    'loop',
+    'sub-workflow',
+    'openrouter',
+    'jkai',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new

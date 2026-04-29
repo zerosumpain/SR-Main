@@ -46,6 +46,14 @@ import StravaPanel from './StravaPanel.svelte';
 import HealthQueryPanel from './HealthQueryPanel.svelte';
 import QuickAnswerPanel from './QuickAnswerPanel.svelte';
 import ResearchResultPanel from './ResearchResultPanel.svelte';
+import FileBuildPanel from './FileBuildPanel.svelte';
+import FileReadPanel from './FileReadPanel.svelte';
+import FileListPanel from './FileListPanel.svelte';
+import FileDeletePanel from './FileDeletePanel.svelte';
+import LoopPanel from './LoopPanel.svelte';
+import SubWorkflowPanel from './SubWorkflowPanel.svelte';
+import OpenRouterPanel from './OpenRouterPanel.svelte';
+import JkaiPanel from './JkaiPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -104,6 +112,14 @@ const specialized: Record<string, Component<PanelProps>> = {
   'health-query': HealthQueryPanel as unknown as Component<PanelProps>,
   'quick-answer': QuickAnswerPanel as unknown as Component<PanelProps>,
   'research-result': ResearchResultPanel as unknown as Component<PanelProps>,
+  'file-build': FileBuildPanel as unknown as Component<PanelProps>,
+  'file-read': FileReadPanel as unknown as Component<PanelProps>,
+  'file-list': FileListPanel as unknown as Component<PanelProps>,
+  'file-delete': FileDeletePanel as unknown as Component<PanelProps>,
+  'loop': LoopPanel as unknown as Component<PanelProps>,
+  'sub-workflow': SubWorkflowPanel as unknown as Component<PanelProps>,
+  'openrouter': OpenRouterPanel as unknown as Component<PanelProps>,
+  'jkai': JkaiPanel as unknown as Component<PanelProps>,
 };
 
 /**
