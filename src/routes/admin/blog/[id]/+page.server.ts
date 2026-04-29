@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { loadHistory } from '$lib/blog/assistant/messages';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -33,5 +34,7 @@ export const load: PageServerLoad = async ({ params }) => {
     .from(blogPostTags)
     .where(eq(blogPostTags.postId, id));
 
-  return { post: { ...post, tags: tags.map((t) => t.tag) } };
+  const history = await loadHistory(post.id);
+
+  return { post: { ...post, tags: tags.map((t) => t.tag) }, history };
 };
