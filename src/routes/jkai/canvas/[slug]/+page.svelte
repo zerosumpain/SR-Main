@@ -39,6 +39,14 @@
     'web-scrape',
     'email',
     'text-parser',
+    'accumulator',
+    'merge',
+    'file-store',
+    'intel-write',
+    'intel-query',
+    'home-assistant',
+    'think',
+    'error-handler',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new

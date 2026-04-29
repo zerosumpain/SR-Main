@@ -21,6 +21,15 @@ import TavilySearchPanel from './TavilySearchPanel.svelte';
 import WebScrapePanel from './WebScrapePanel.svelte';
 import EmailPanel from './EmailPanel.svelte';
 import TextParserPanel from './TextParserPanel.svelte';
+import AccumulatorPanel from './AccumulatorPanel.svelte';
+import MergePanel from './MergePanel.svelte';
+import FileStorePanel from './FileStorePanel.svelte';
+import IntelWritePanel from './IntelWritePanel.svelte';
+import IntelQueryPanel from './IntelQueryPanel.svelte';
+import HomeAssistantPanel from './HomeAssistantPanel.svelte';
+import GmailLabelPanel from './GmailLabelPanel.svelte';
+import ThinkPanel from './ThinkPanel.svelte';
+import ErrorHandlerPanel from './ErrorHandlerPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -54,6 +63,15 @@ const specialized: Record<string, Component<PanelProps>> = {
   'web-scrape': WebScrapePanel as unknown as Component<PanelProps>,
   'email': EmailPanel as unknown as Component<PanelProps>,
   'text-parser': TextParserPanel as unknown as Component<PanelProps>,
+  'accumulator': AccumulatorPanel as unknown as Component<PanelProps>,
+  'merge': MergePanel as unknown as Component<PanelProps>,
+  'file-store': FileStorePanel as unknown as Component<PanelProps>,
+  'intel-write': IntelWritePanel as unknown as Component<PanelProps>,
+  'intel-query': IntelQueryPanel as unknown as Component<PanelProps>,
+  'home-assistant': HomeAssistantPanel as unknown as Component<PanelProps>,
+  'gmail-label': GmailLabelPanel as unknown as Component<PanelProps>,
+  'think': ThinkPanel as unknown as Component<PanelProps>,
+  'error-handler': ErrorHandlerPanel as unknown as Component<PanelProps>,
 };
 
 /**
