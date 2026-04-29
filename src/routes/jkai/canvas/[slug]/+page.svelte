@@ -47,6 +47,22 @@
     'home-assistant',
     'think',
     'error-handler',
+    'validator',
+    'llm-router',
+    'file-write',
+    'file-extract',
+    'file-text-extract',
+    'blog-list',
+    'blog-get',
+    'blog-create',
+    'blog-update',
+    'deep-research',
+    'deep-dive',
+    'whoop',
+    'strava',
+    'health-query',
+    'quick-answer',
+    'research-result',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new

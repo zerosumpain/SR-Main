@@ -30,6 +30,22 @@ import HomeAssistantPanel from './HomeAssistantPanel.svelte';
 import GmailLabelPanel from './GmailLabelPanel.svelte';
 import ThinkPanel from './ThinkPanel.svelte';
 import ErrorHandlerPanel from './ErrorHandlerPanel.svelte';
+import ValidatorPanel from './ValidatorPanel.svelte';
+import LlmRouterPanel from './LlmRouterPanel.svelte';
+import FileWritePanel from './FileWritePanel.svelte';
+import FileExtractPanel from './FileExtractPanel.svelte';
+import FileTextExtractPanel from './FileTextExtractPanel.svelte';
+import BlogListPanel from './BlogListPanel.svelte';
+import BlogGetPanel from './BlogGetPanel.svelte';
+import BlogCreatePanel from './BlogCreatePanel.svelte';
+import BlogUpdatePanel from './BlogUpdatePanel.svelte';
+import DeepResearchPanel from './DeepResearchPanel.svelte';
+import DeepDivePanel from './DeepDivePanel.svelte';
+import WhoopPanel from './WhoopPanel.svelte';
+import StravaPanel from './StravaPanel.svelte';
+import HealthQueryPanel from './HealthQueryPanel.svelte';
+import QuickAnswerPanel from './QuickAnswerPanel.svelte';
+import ResearchResultPanel from './ResearchResultPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
@@ -72,6 +88,22 @@ const specialized: Record<string, Component<PanelProps>> = {
   'gmail-label': GmailLabelPanel as unknown as Component<PanelProps>,
   'think': ThinkPanel as unknown as Component<PanelProps>,
   'error-handler': ErrorHandlerPanel as unknown as Component<PanelProps>,
+  'validator': ValidatorPanel as unknown as Component<PanelProps>,
+  'llm-router': LlmRouterPanel as unknown as Component<PanelProps>,
+  'file-write': FileWritePanel as unknown as Component<PanelProps>,
+  'file-extract': FileExtractPanel as unknown as Component<PanelProps>,
+  'file-text-extract': FileTextExtractPanel as unknown as Component<PanelProps>,
+  'blog-list': BlogListPanel as unknown as Component<PanelProps>,
+  'blog-get': BlogGetPanel as unknown as Component<PanelProps>,
+  'blog-create': BlogCreatePanel as unknown as Component<PanelProps>,
+  'blog-update': BlogUpdatePanel as unknown as Component<PanelProps>,
+  'deep-research': DeepResearchPanel as unknown as Component<PanelProps>,
+  'deep-dive': DeepDivePanel as unknown as Component<PanelProps>,
+  'whoop': WhoopPanel as unknown as Component<PanelProps>,
+  'strava': StravaPanel as unknown as Component<PanelProps>,
+  'health-query': HealthQueryPanel as unknown as Component<PanelProps>,
+  'quick-answer': QuickAnswerPanel as unknown as Component<PanelProps>,
+  'research-result': ResearchResultPanel as unknown as Component<PanelProps>,
 };
 
 /**
