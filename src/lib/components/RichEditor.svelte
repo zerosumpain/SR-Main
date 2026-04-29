@@ -490,10 +490,23 @@
     };
     host.addEventListener('paste', onPasteNative, { capture: true });
     host.addEventListener('drop', onDropNative, { capture: true });
+    // Click on a suggestion mark → broadcast so the margin callout layer
+    // can scroll to and highlight its own card. Bubbles up from the inner
+    // <ins>/<del data-suggestion-id> element.
+    const onSuggestionClick = (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement | null;
+      const el = target?.closest('[data-suggestion-id]') as HTMLElement | null;
+      if (!el) return;
+      const id = el.getAttribute('data-suggestion-id');
+      if (!id) return;
+      window.dispatchEvent(new CustomEvent('jkai:suggestion-click', { detail: { id, source: 'body' } }));
+    };
+    host.addEventListener('click', onSuggestionClick);
     // Stash for cleanup.
     (host as any).__pasteCleanup = () => {
       host?.removeEventListener('paste', onPasteNative, { capture: true } as any);
       host?.removeEventListener('drop', onDropNative, { capture: true } as any);
+      host?.removeEventListener('click', onSuggestionClick);
     };
 
     recomputeScores();
@@ -687,19 +700,33 @@
   .r-audience { color: var(--text-primary); font-style: italic; }
   .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
 
-  :global(.sg-add) {
-    background: rgba(34, 139, 34, 0.18);
-    text-decoration: none;
-  }
+  /* Highlight only — no strikethrough, no dotted underline. */
   :global(.sg-remove) {
-    background: rgba(220, 38, 38, 0.14);
-    text-decoration: line-through;
-    text-decoration-color: rgba(220, 38, 38, 0.7);
-  }
-  :global([data-suggestion-display="margin"] .sg-add),
-  :global([data-suggestion-display="margin"] .sg-remove) {
-    background: transparent;
+    background: rgba(255, 217, 64, 0.45); /* warm marker-pen yellow */
     text-decoration: none;
-    border-bottom: 2px dotted var(--accent, #888);
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  :global(.sg-add) {
+    /* Inline mode: subtle green so the insertion is visible alongside the original. */
+    background: rgba(46, 160, 67, 0.18);
+    text-decoration: none;
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: pointer;
+  }
+  /* Margin mode: hide the inserted text in the body — its replacement lives
+     in the right-margin callout. The user only sees the original highlighted. */
+  :global([data-suggestion-display="margin"] .sg-add) {
+    display: none;
+  }
+  /* Active state — bumped highlight when the user clicks a callout. */
+  :global(.sg-remove.sg-active),
+  :global(.sg-add.sg-active) {
+    background: rgba(255, 184, 0, 0.85);
+    outline: 2px solid rgba(255, 184, 0, 1);
+    outline-offset: 1px;
   }
 </style>
