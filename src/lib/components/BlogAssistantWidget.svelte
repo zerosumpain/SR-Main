@@ -45,8 +45,11 @@
     return proposalStore.list().filter((p): p is MetaProposal => p.kind === 'meta');
   });
 
+  // Pos.x = px from LEFT edge of viewport, Pos.y = px from BOTTOM.
+  // Default anchor: bottom-LEFT, so the widget doesn't collide with margin
+  // callouts on the right.
   type Pos = { x: number; y: number };
-  const POS_KEY = 'blog-assistant-widget-pos';
+  const POS_KEY = 'blog-assistant-widget-pos-v2';
   let pos = $state<Pos>(loadPos());
   function loadPos(): Pos {
     if (typeof localStorage === 'undefined') return { x: 16, y: 16 };
@@ -64,7 +67,9 @@
   function onDrag(e: PointerEvent) {
     if (!dragging || !dragStart) return;
     pos = {
-      x: Math.max(8, dragStart.px - (e.clientX - dragStart.x)),
+      // dragging right (positive deltaX) increases left offset
+      x: Math.max(8, dragStart.px + (e.clientX - dragStart.x)),
+      // dragging up (negative deltaY) increases bottom offset
       y: Math.max(8, dragStart.py - (e.clientY - dragStart.y)),
     };
   }
@@ -174,12 +179,12 @@
 {#if !open}
   <button
     class="fab"
-    style="right: {pos.x}px; bottom: {pos.y}px;"
+    style="left: {pos.x}px; bottom: {pos.y}px;"
     onclick={() => (open = true)}
     aria-label="Open jkai"
   >🪶</button>
 {:else}
-  <section class="widget" style="right: {pos.x}px; bottom: {pos.y}px;" role="region" aria-label="jkai blog assistant">
+  <section class="widget" style="left: {pos.x}px; bottom: {pos.y}px;" role="region" aria-label="jkai blog assistant">
     <header class="bar">
       <span
         class="title"
