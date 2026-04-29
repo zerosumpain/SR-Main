@@ -302,46 +302,34 @@
       },
       acceptProposal: (id, modifiedText) => {
         if (!editor) return false;
-        // Snapshot the pre-accept HTML *with* the suggestion marks stripped
-        // (i.e. the document as if the proposal had been rejected). This is
-        // what the user wants to roll back to.
-        let preAcceptHtml = editor.getHTML();
-        try {
-          // Build a "rejected" version by removing this proposal's <ins> and
-          // unwrapping its <del>. Keep other pending proposals intact.
-          const insRe = new RegExp(`<ins[^>]*data-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
-          const delRe = new RegExp(`<del[^>]*data-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
-          preAcceptHtml = preAcceptHtml.replace(insRe, '').replace(delRe, '$1');
-        } catch { /* fall back to raw HTML */ }
+        const html = editor.getHTML();
+        const insRe = new RegExp(`<ins\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
+        const delRe = new RegExp(`<del\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
+        const hasMarks = insRe.test(html) || delRe.test(html);
+        if (!hasMarks) return false;
+        // Reset lastIndex after .test() so .replace() starts from the beginning.
+        insRe.lastIndex = 0; delRe.lastIndex = 0;
 
-        let removeFrom = -1, removeTo = -1, addFrom = -1, addTo = -1;
-        editor.state.doc.descendants((node, pos) => {
-          const mark = node.marks.find((m) => m.type.name === 'suggestion' && m.attrs.id === id);
-          if (!mark) return;
-          const end = pos + node.nodeSize;
-          if (mark.attrs.type === 'remove') { removeFrom = pos; removeTo = end; }
-          else { addFrom = pos; addTo = end; }
-        });
-        if (removeFrom < 0 && addFrom < 0) return false;
-        let tr = editor.state.tr;
-        // 1) Drop the deletion span entirely.
-        if (removeFrom >= 0) {
-          tr = tr.delete(removeFrom, removeTo);
-          // shift add positions if they were after the removed range
-          if (addFrom > removeTo) { addFrom -= (removeTo - removeFrom); addTo -= (removeTo - removeFrom); }
+        // Pre-accept HTML for rollback = "what the doc would look like if this
+        // proposal had been rejected" (drop <ins>, unwrap <del>). Other
+        // pending proposals' marks remain intact for them to be acted on
+        // independently later.
+        const preAcceptHtml = html.replace(insRe, '').replace(delRe, '$1');
+        insRe.lastIndex = 0; delRe.lastIndex = 0;
+
+        // Accepted HTML = drop <del>, replace <ins>'s content with modified
+        // text if provided, otherwise unwrap <ins> keeping its content.
+        let accepted = html.replace(delRe, '');
+        if (modifiedText !== undefined) {
+          accepted = accepted.replace(insRe, escapeHtml(modifiedText));
+        } else {
+          accepted = accepted.replace(insRe, '$1');
         }
-        // 2) Replace insertion text if user modified it, then strip the suggestion mark.
-        if (addFrom >= 0) {
-          if (modifiedText !== undefined) {
-            tr = tr.insertText(modifiedText, addFrom, addTo);
-            addTo = addFrom + modifiedText.length;
-          }
-          tr = tr.removeMark(addFrom, addTo, editor.schema.marks.suggestion);
-        }
-        editor.view.dispatch(tr);
-        const finalText = addFrom >= 0 ? editor.state.doc.textBetween(addFrom, addTo) : '';
+
+        editor.commands.setContent(accepted, { emitUpdate: true });
+
+        const finalText = modifiedText ?? '';
         onProposalAccepted?.(id, finalText, preAcceptHtml);
-        // Trigger autosave so the accepted change is persisted promptly.
         if (onAutoSave) {
           void onAutoSave(editor.getHTML()).catch(() => {});
         }
@@ -349,27 +337,20 @@
       },
       rejectProposal: (id) => {
         if (!editor) return false;
-        let removeFrom = -1, removeTo = -1, addFrom = -1, addTo = -1;
-        editor.state.doc.descendants((node, pos) => {
-          const mark = node.marks.find((m) => m.type.name === 'suggestion' && m.attrs.id === id);
-          if (!mark) return;
-          const end = pos + node.nodeSize;
-          if (mark.attrs.type === 'remove') { removeFrom = pos; removeTo = end; }
-          else { addFrom = pos; addTo = end; }
-        });
-        if (removeFrom < 0 && addFrom < 0) return false;
-        let tr = editor.state.tr;
-        // 1) Drop insertion text entirely.
-        if (addFrom >= 0) {
-          tr = tr.delete(addFrom, addTo);
-          if (removeFrom > addTo) { removeFrom -= (addTo - addFrom); removeTo -= (addTo - addFrom); }
-        }
-        // 2) Strip suggestion mark from the removed-span text (keeping the original text).
-        if (removeFrom >= 0) {
-          tr = tr.removeMark(removeFrom, removeTo, editor.schema.marks.suggestion);
-        }
-        editor.view.dispatch(tr);
+        const html = editor.getHTML();
+        const insRe = new RegExp(`<ins\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
+        const delRe = new RegExp(`<del\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
+        const hasMarks = insRe.test(html) || delRe.test(html);
+        if (!hasMarks) return false;
+        insRe.lastIndex = 0; delRe.lastIndex = 0;
+
+        // Rejected = drop <ins> entirely, unwrap <del> to keep the original text.
+        const rejected = html.replace(insRe, '').replace(delRe, '$1');
+        editor.commands.setContent(rejected, { emitUpdate: true });
         onProposalRejected?.(id);
+        if (onAutoSave) {
+          void onAutoSave(editor.getHTML()).catch(() => {});
+        }
         return true;
       },
       clearAllSuggestions: () => {
