@@ -257,9 +257,16 @@
   }
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let lastAutoScanAt = 0;
+  // Body length the last time we ran a scan. Initialised to the loaded
+  // content's length so a small typo on a freshly-loaded post doesn't
+  // trigger a scan immediately.
+  let lastScanLen = data.post.content.length;
   const IDLE_DELAY_MS = 12_000;
   const AUTO_COOLDOWN_MS = 30_000;
   const MAX_PENDING_BEFORE_SKIP = 6;
+  // Skip auto-review when fewer than this many characters have changed since
+  // the last scan. Single-typo fixes shouldn't burn an LLM call.
+  const MIN_DELTA_CHARS = 80;
   let autoScanInflight = false;
 
   function scheduleAutoScan() {
@@ -275,8 +282,11 @@
     if (Date.now() - lastAutoScanAt < AUTO_COOLDOWN_MS) return;
     const pendingNow = proposalStore.list().filter((p) => p.status === 'pending');
     if (pendingNow.length >= MAX_PENDING_BEFORE_SKIP) return;
+    // Tiny-edit gate — only scan after a meaningful chunk of new typing.
+    if (Math.abs(content.length - lastScanLen) < MIN_DELTA_CHARS) return;
     autoScanInflight = true;
     lastAutoScanAt = Date.now();
+    lastScanLen = content.length;
     try {
       const pendingHints = pendingNow.map((p) => p.kind === 'prose' ? p.original : `${p.field}`);
       const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review?token=${adminToken}`, {
