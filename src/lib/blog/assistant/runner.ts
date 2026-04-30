@@ -36,6 +36,16 @@ function stripSuggestionMarks(html: string): string {
   out = out.replace(/<ins\s+[^>]*data-suggestion-id=[^>]*>[\s\S]*?<\/ins>/gi, '');
   // Unwrap <del data-suggestion-id="…" …>…</del> — keep inner content.
   out = out.replace(/<del\s+[^>]*data-suggestion-id=[^>]*>([\s\S]*?)<\/del>/gi, '$1');
+  // Unwrap <s>…</s> and <strike>…</strike>. The user's stored content can
+  // contain these as legitimate styling, but the LLM's find/replace patch
+  // engine matches against TipTap's textContent which doesn't include the
+  // tag markup — and the LLM, when shown raw HTML, will copy <s> tags into
+  // its `find` argument and the patch will fail to anchor. Stripping them
+  // before the prompt means the LLM sees the rendered prose and proposes
+  // patches against that. (Stylistic strikethrough may be inadvertently
+  // un-struck by an accepted proposal — the user can re-apply via the
+  // toolbar.)
+  out = out.replace(/<\/?(?:s|strike)>/gi, '');
   return out;
 }
 

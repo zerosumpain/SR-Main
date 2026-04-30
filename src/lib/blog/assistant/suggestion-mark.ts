@@ -5,16 +5,28 @@ export const SuggestionMark = Mark.create({
 
   addAttributes() {
     return {
-      id: { default: null },
+      id: {
+        default: null,
+        // The DOM attr is `data-suggestion-id`, not `id`. Without this
+        // explicit parseHTML the round-trip loses ids and every other
+        // pending proposal becomes unanchorable.
+        parseHTML: (el) => (el as HTMLElement).getAttribute('data-suggestion-id'),
+        renderHTML: (attrs) => (attrs.id ? { 'data-suggestion-id': attrs.id } : {}),
+      },
       // 'add' wraps the proposed insertion; 'remove' wraps the original (about to be removed).
-      type: { default: 'add' },
+      type: {
+        default: 'add',
+        parseHTML: (el) => ((el as HTMLElement).tagName.toLowerCase() === 'del' ? 'remove' : 'add'),
+        // type is reflected via the tag name in renderHTML, not as an attr.
+        renderHTML: () => ({}),
+      },
     };
   },
 
   parseHTML() {
     return [
-      { tag: 'ins[data-suggestion-id]', attrs: { type: 'add' } },
-      { tag: 'del[data-suggestion-id]', attrs: { type: 'remove' } },
+      { tag: 'ins[data-suggestion-id]' },
+      { tag: 'del[data-suggestion-id]' },
     ];
   },
 

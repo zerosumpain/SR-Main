@@ -12,15 +12,30 @@
 
   type Anchor = { id: string; top: number };
   let anchors = $state<Anchor[]>([]);
+  // Computed each recompute so callouts anchor to the article's right edge,
+  // not the viewport's right edge.
+  let calloutLeft = $state<number>(16);
+  let calloutWidth = $state<number>(320);
   let regenFor = $state<string | null>(null);
   let regenNote = $state('');
   let editFor = $state<string | null>(null);
   let editText = $state('');
 
   const MIN_GAP = 8; // px between stacked callouts
+  const SIDE_GAP = 16; // px between editor's right edge and the callouts column
+  const PREFERRED_WIDTH = 320;
+  const MIN_WIDTH = 220;
 
   function recompute() {
     if (!editorEl) { anchors = []; return; }
+    // Callouts column position — anchor to the editor's right edge so the
+    // suggestion cards sit beside the article rather than out at the
+    // viewport edge.
+    const editorRect = editorEl.getBoundingClientRect();
+    const available = window.innerWidth - editorRect.right - SIDE_GAP - 8;
+    calloutWidth = Math.max(MIN_WIDTH, Math.min(PREFERRED_WIDTH, available));
+    calloutLeft = editorRect.right + SIDE_GAP;
+
     const raw: { id: string; top: number }[] = [];
     for (const p of proposals) {
       if (p.status !== 'pending') continue;
@@ -127,7 +142,7 @@
         class="callout"
         class:active={activeId === p.id}
         data-callout-id={p.id}
-        style="top: {anchor.top}px;"
+        style="top: {anchor.top}px; left: {calloutLeft}px; width: {calloutWidth}px;"
         role="button"
         tabindex="0"
         onclick={() => selectCallout(p)}
@@ -165,17 +180,15 @@
 <style>
   .margin-layer {
     position: fixed;
-    top: 0;
-    right: 16px;
-    width: 320px;
+    inset: 0 0 auto 0;
     pointer-events: none;
     z-index: 70;
     height: 0; /* container has no height itself; callouts position themselves */
   }
   .callout {
     position: fixed;
-    right: 16px;
-    width: 320px;
+    /* `left` and `width` are set inline at recompute time so callouts anchor
+       beside the article body rather than at the viewport's right edge. */
     background: var(--bg-card, var(--bg-page, #fff));
     border: 1px solid var(--card-border);
     padding: 0.55rem 0.7rem;
