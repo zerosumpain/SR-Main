@@ -6,7 +6,7 @@
   import Link from '@tiptap/extension-link';
   import Placeholder from '@tiptap/extension-placeholder';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
-  import { SuggestionMark } from '$lib/blog/assistant/suggestion-mark';
+  import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
   import type { ProseProposal } from '$lib/blog/assistant/proposal';
 
   interface RichEditorApi {
@@ -270,126 +270,79 @@
       },
       applyProposal: (p) => {
         if (!editor) return false;
-        // Full-body replacement: too large to anchor; just swap content directly
-        // and treat the whole new HTML as one giant "add" mark with a wrapping
-        // remove of the old. We just setContent and leave acceptance/rejection
-        // to a follow-up flow (for full-body proposals, accept = save, reject =
-        // restore). For now, prefer many small patch_content proposals — the
-        // prompt now discourages replace_content.
-        if (p.original.length > 1000 && p.original === editor.state.doc.textContent) {
-          editor.commands.setContent(p.suggested, { emitUpdate: true });
-          return true;
-        }
         const found = locateOriginal(editor, p);
         if (!found) {
-          console.warn('[RichEditor] applyProposal: could not locate original for proposal', p.id, JSON.stringify(p.original).slice(0, 120));
+          // Surface but don't throw — the chat status row can show this gap.
+          // The proposal still exists in the store; the user just can't act on
+          // it from the body. Likely cause: LLM `find` does not appear in the
+          // current document text (post was edited since the proposal was
+          // generated, or the `find` includes structural fragments).
+          console.warn('[RichEditor] applyProposal: could not anchor proposal', p.id, JSON.stringify(p.original).slice(0, 120));
           return false;
         }
-        const { from, to } = found;
-        const tr = editor.state.tr;
-        if (p.original.length > 0) {
-          tr.addMark(from, to, editor.schema.marks.suggestion.create({ id: p.id, type: 'remove' }));
-        }
-        if (p.suggested.length > 0) {
-          const insertAt = p.original.length > 0 ? to : from;
-          tr.insertText(p.suggested, insertAt);
-          tr.addMark(insertAt, insertAt + p.suggested.length, editor.schema.marks.suggestion.create({ id: p.id, type: 'add' }));
-        }
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, {
+          add: { id: p.id, from: found.from, to: found.to, replace: p.suggested },
+        });
         editor.view.dispatch(tr);
         return true;
       },
       acceptProposal: (id, modifiedText) => {
         if (!editor) return false;
-        // Snapshot the LITERAL document state before any mutation. This is
-        // what gets persisted as a rollback target, so even if the regex
-        // transform below misbehaves we can restore exactly what was there.
+        const ps = suggestionPluginKey.getState(editor.state);
+        const range = ps?.ranges.get(id);
+        if (!range) return false;
+
+        // Snapshot the literal pre-mutation HTML so the user can roll back
+        // the exact bytes that were on screen the moment they clicked Accept.
         const htmlBeforeAccept = editor.getHTML();
+        const replaceText = modifiedText ?? range.replace;
 
-        const insRe = new RegExp(`<ins\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
-        const delRe = new RegExp(`<del\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
-        if (!insRe.test(htmlBeforeAccept) && !delRe.test(htmlBeforeAccept)) return false;
-        // Reset lastIndex after .test() so .replace() starts from the beginning.
-        insRe.lastIndex = 0; delRe.lastIndex = 0;
-
-        // Accepted HTML = drop <del>, replace <ins>'s content with modified
-        // text if provided, otherwise unwrap <ins> keeping its content.
-        let accepted = htmlBeforeAccept.replace(delRe, '');
-        if (modifiedText !== undefined) {
-          accepted = accepted.replace(insRe, escapeHtml(modifiedText));
+        const tr = editor.state.tr;
+        if (replaceText.length === 0) {
+          tr.delete(range.from, range.to);
         } else {
-          accepted = accepted.replace(insRe, '$1');
+          tr.replaceWith(range.from, range.to, editor.state.schema.text(replaceText));
         }
+        tr.setMeta(suggestionPluginKey, { remove: id });
+        editor.view.dispatch(tr);
 
-        // Sanity guard: an accept should not lose more than ~30% of the body.
-        // If it does, abort and let the user investigate rather than silently
-        // shrinking the post.
-        const ratio = accepted.length / Math.max(1, htmlBeforeAccept.length);
-        if (ratio < 0.7 && htmlBeforeAccept.length - accepted.length > 200) {
+        // Sanity guard — refuse silent >30% deletions.
+        const after = editor.getHTML();
+        const ratio = after.length / Math.max(1, htmlBeforeAccept.length);
+        if (ratio < 0.7 && htmlBeforeAccept.length - after.length > 200) {
           const ok = window.confirm(
             `Heads up — accepting this would remove ~${Math.round((1 - ratio) * 100)}% of the post body. Apply anyway?`,
           );
-          if (!ok) return false;
+          if (!ok) {
+            editor.commands.setContent(htmlBeforeAccept, { emitUpdate: false });
+            return false;
+          }
         }
 
-        // Persist the literal pre-mutation HTML BEFORE swapping content, so
-        // even if setContent throws we already have a rollback row.
-        const finalText = modifiedText ?? '';
-        onProposalAccepted?.(id, finalText, htmlBeforeAccept);
-
-        editor.commands.setContent(accepted, { emitUpdate: true });
-
-        if (onAutoSave) {
-          void onAutoSave(editor.getHTML()).catch(() => {});
-        }
+        onProposalAccepted?.(id, replaceText, htmlBeforeAccept);
+        if (onAutoSave) void onAutoSave(after).catch(() => {});
         return true;
       },
       rejectProposal: (id) => {
         if (!editor) return false;
-        const html = editor.getHTML();
-        const insRe = new RegExp(`<ins\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
-        const delRe = new RegExp(`<del\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
-        const hasMarks = insRe.test(html) || delRe.test(html);
-        if (!hasMarks) return false;
-        insRe.lastIndex = 0; delRe.lastIndex = 0;
-
-        // Rejected = drop <ins> entirely, unwrap <del> to keep the original text.
-        const rejected = html.replace(insRe, '').replace(delRe, '$1');
-        editor.commands.setContent(rejected, { emitUpdate: true });
+        // Decorations are an overlay only; rejecting is purely state — no
+        // edits to the document, so nothing for autosave to chase.
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { remove: id });
+        editor.view.dispatch(tr);
         onProposalRejected?.(id);
-        if (onAutoSave) {
-          void onAutoSave(editor.getHTML()).catch(() => {});
-        }
         return true;
       },
       clearAllSuggestions: () => {
         if (!editor) return;
-        // Collect ranges (in reverse order so deletes don't shift later ones).
-        type R = { kind: 'add' | 'remove'; from: number; to: number };
-        const ranges: R[] = [];
-        editor.state.doc.descendants((node, pos) => {
-          const mark = node.marks.find((m) => m.type.name === 'suggestion');
-          if (!mark) return;
-          ranges.push({
-            kind: mark.attrs.type === 'remove' ? 'remove' : 'add',
-            from: pos,
-            to: pos + node.nodeSize,
-          });
-        });
-        // Sort descending by from.
-        ranges.sort((a, b) => b.from - a.from);
-        let tr = editor.state.tr;
-        for (const r of ranges) {
-          if (r.kind === 'add') {
-            tr = tr.delete(r.from, r.to);
-          } else {
-            tr = tr.removeMark(r.from, r.to, editor.schema.marks.suggestion);
-          }
-        }
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { clear: true });
         editor.view.dispatch(tr);
-        if (onAutoSave) void onAutoSave(editor.getHTML()).catch(() => {});
       },
       setContent: (html) => {
         if (!editor) return;
+        // Replacing the doc invalidates every tracked range — clear before
+        // the swap so the plugin doesn't try to map stale positions.
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { clear: true });
+        editor.view.dispatch(tr);
         editor.commands.setContent(html, { emitUpdate: true });
       },
     };
@@ -465,7 +418,7 @@
         Image.configure({ inline: false, allowBase64: false }),
         Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
-        SuggestionMark,
+        SuggestionDecorations,
       ],
       content: content || '',
       onUpdate: () => {
