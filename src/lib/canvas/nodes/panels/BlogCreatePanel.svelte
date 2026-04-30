@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ChipInputField from './widgets/ChipInputField.svelte';
 
   // Editor for the `blog-create` node.
   //
@@ -56,28 +57,14 @@
     set('tags', joinTags(next));
   }
 
-  let tagDraft = $state('');
-
-  function commitTagDraft() {
-    const v = tagDraft.trim().replace(/,+$/, '');
-    if (!v) { tagDraft = ''; return; }
-    if (tagList.includes(v)) { tagDraft = ''; return; }
-    setTags([...tagList, v]);
-    tagDraft = '';
-  }
-
-  function removeTag(i: number) {
-    const next = tagList.slice();
-    next.splice(i, 1);
-    setTags(next);
-  }
-
-  function onTagKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      commitTagDraft();
-    } else if (e.key === 'Backspace' && tagDraft === '' && tagList.length > 0) {
-      removeTag(tagList.length - 1);
+  async function fetchTagSuggestions(): Promise<string[]> {
+    try {
+      const res = await fetch('/api/admin/blog/tags');
+      if (!res.ok) return [];
+      const body = (await res.json()) as { tags?: Array<{ tag: string; count: number }> };
+      return (body.tags ?? []).map((t) => t.tag).filter((t): t is string => typeof t === 'string');
+    } catch {
+      return [];
     }
   }
 
@@ -176,27 +163,13 @@
       <span class="sr-label-tight">Tags</span>
       <span class="bo-sec-meta">{tagList.length} {tagList.length === 1 ? 'tag' : 'tags'}</span>
     </header>
-    <div class="bo-chips" role="list">
-      {#each tagList as tag, i (tag + i)}
-        <span class="bo-chip" role="listitem">
-          {tag}
-          <button type="button" class="bo-chip-rm" onclick={() => removeTag(i)} aria-label="remove tag">
-            &times;
-          </button>
-        </span>
-      {/each}
-      <input
-        type="text"
-        class="bo-chip-input"
-        spellcheck="false"
-        placeholder={tagList.length === 0 ? 'add tags…  (Enter to commit)' : 'add tag…'}
-        value={tagDraft}
-        oninput={(e) => (tagDraft = (e.currentTarget as HTMLInputElement).value)}
-        onkeydown={onTagKeydown}
-        onblur={commitTagDraft}
-      />
-    </div>
-    <span class="bo-hint">Press <code>Enter</code> or <code>,</code> to add. Backspace removes the last chip.</span>
+    <ChipInputField
+      value={tagList}
+      placeholder={tagList.length === 0 ? 'add tags…  (Enter to commit)' : 'add tag…'}
+      onChange={setTags}
+      fetcher={fetchTagSuggestions}
+    />
+    <span class="bo-hint">Press <code>Enter</code> or <code>,</code> to add. Pick from existing tags or type a new one.</span>
   </section>
 
   <section class="bo-sec">
@@ -262,38 +235,6 @@
   .bo-warn { font-size: 11px; color: var(--status-error, #c0392b); }
 
   .bo-content { min-height: 180px; }
-
-  .bo-chips {
-    display: flex; flex-wrap: wrap; gap: 4px;
-    padding: 4px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    min-height: 32px;
-    align-items: center;
-  }
-  .bo-chip {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 4px 2px 8px;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--text-primary);
-    font-family: var(--font-mono); font-size: 11px;
-  }
-  .bo-chip-rm {
-    background: transparent; color: var(--text-muted);
-    border: none; cursor: pointer;
-    padding: 0 4px;
-    font-size: 14px; line-height: 1;
-  }
-  .bo-chip-rm:hover { color: var(--status-error, #c0392b); }
-  .bo-chip-input {
-    flex: 1; min-width: 100px;
-    padding: 4px 6px;
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    font: inherit;
-    outline: none;
-  }
 
   .bo-toggle {
     display: flex; align-items: center; gap: 8px;

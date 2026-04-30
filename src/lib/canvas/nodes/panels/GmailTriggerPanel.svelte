@@ -1,48 +1,3 @@
-<script lang="ts" module>
-  // Module-scoped cache for the per-account watches list (accounts list is
-  // cached in shared/gmailAccounts.ts and shared across all Gmail panels).
-  type GmailWatch = {
-    id: number;
-    accountId: number;
-    label: string;
-    query: string;
-    enabled?: boolean;
-  };
-
-  const watchesPromises = new Map<number, Promise<GmailWatch[]>>();
-
-  function loadWatches(accountId: number): Promise<GmailWatch[]> {
-    if (!accountId) return Promise.resolve([]);
-    const cached = watchesPromises.get(accountId);
-    if (cached) return cached;
-    const p = fetch(`/api/gmail/accounts/${accountId}/watches`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((rows): GmailWatch[] => {
-        if (!Array.isArray(rows)) return [];
-        return rows
-          .filter((r) => r && typeof r === 'object')
-          .map((r) => {
-            const o = r as Record<string, unknown>;
-            return {
-              id: Number(o.id ?? 0),
-              accountId: Number(o.accountId ?? 0),
-              label: String(o.label ?? ''),
-              query: String(o.query ?? ''),
-              enabled: Boolean(o.enabled ?? true),
-            };
-          })
-          .filter((r) => r.id > 0);
-      })
-      .catch((err) => {
-        watchesPromises.delete(accountId);
-        console.warn(`[GmailTriggerPanel] failed to load watches for account ${accountId}`, err);
-        return [] as GmailWatch[];
-      });
-    watchesPromises.set(accountId, p);
-    return p;
-  }
-</script>
-
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -82,45 +37,52 @@
   }
 
   // ---------- Watch picker ----------------------------------------------
+  // Powered by the shared ResourcePicker. The fetcher closes over the live
+  // accountId so the dropdown always reflects the currently selected
+  // account (DataStorePanel uses the same workflowId-capture pattern).
+  // ResourcePicker re-runs its loader whenever its identity changes, and
+  // because we re-create `watchesFetcher` via `$derived` whenever
+  // accountId changes, the picker re-fetches transparently.
 
-  const rawWatchId = config.watchId;
   const watchId = $derived(
-    rawWatchId == null || rawWatchId === '' ? 0 : Number(rawWatchId) || 0,
+    config.watchId == null || config.watchId === '' ? 0 : Number(config.watchId) || 0,
   );
+  // ResourcePicker speaks strings; "0" is our sentinel for "any watch".
+  const watchValue = $derived(String(watchId || 0));
 
-  let watches = $state<GmailWatch[]>([]);
-  let watchesLoaded = $state(false);
-  let watchesError = $state(false);
-
-  $effect(() => {
+  const watchesFetcher = $derived.by(() => {
     const id = accountId;
-    let cancelled = false;
-    watchesLoaded = false;
-    watchesError = false;
-    watches = [];
-    if (!id) {
-      watchesLoaded = true;
-      return () => {
-        cancelled = true;
-      };
-    }
-    loadWatches(id).then((rows) => {
-      if (cancelled) return;
-      watches = rows;
-      watchesLoaded = true;
-      watchesError = rows.length === 0;
-    });
-    return () => {
-      cancelled = true;
+    return async (): Promise<Array<{ value: string; label: string; meta?: string }>> => {
+      if (!id) return [];
+      const res = await fetch(`/api/gmail/accounts/${id}/watches`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return [];
+      const items = rows
+        .filter((r) => r && typeof r === 'object')
+        .map((r) => {
+          const o = r as Record<string, unknown>;
+          const wid = Number(o.id ?? 0);
+          const lbl = String(o.label ?? '').trim();
+          const q = String(o.query ?? '').trim();
+          const display = lbl || q || `watch ${wid}`;
+          const metaQ = q && q.length > 40 ? `${q.slice(0, 37)}…` : q;
+          return { value: String(wid), label: display, meta: metaQ || undefined };
+        })
+        .filter((r) => r.value !== '0');
+      // Synthetic "any watch" entry preserves the previous UX where
+      // leaving watchId unset matches every watch on this account.
+      return [{ value: '0', label: 'any watch on this account' }, ...items];
     };
   });
 
-  function setWatchId(v: number) {
+  function setWatchValue(next: string) {
+    const n = next === '' ? 0 : Number(next) || 0;
     // Picking a watch always wins over the freeform query — clear `query`
     // so the executor / dispatcher don't see conflicting hints.
-    const next = { ...config, watchId: v || null };
-    if ('query' in next) delete (next as Record<string, unknown>).query;
-    onChange(next);
+    const out: Record<string, unknown> = { ...config, watchId: n || null };
+    if ('query' in out) delete out.query;
+    onChange(out);
   }
 
   // ---------- Freeform query (advanced) ---------------------------------
@@ -173,50 +135,25 @@
   <section class="gt-sec">
     <header class="gt-sec-hdr">
       <span class="sr-label-tight">Watch</span>
-      {#if accountId && watchesLoaded && watches.length > 0}
-        <span class="gt-sec-meta">{watches.length} {watches.length === 1 ? 'watch' : 'watches'}</span>
-      {/if}
     </header>
     {#if !accountId}
       <p class="gt-empty">Pick an account first to load its watches.</p>
-    {:else if !watchesLoaded}
-      <p class="gt-empty">Loading watches…</p>
-    {:else if watchesError || watches.length === 0}
-      <label class="gt-field">
-        <span class="gt-label">Watch ID</span>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={watchId || ''}
-          placeholder="e.g. 3 (blank = any watch on this account)"
-          oninput={(e) =>
-            setWatchId(Number((e.currentTarget as HTMLInputElement).value) || 0)}
-        />
-        <span class="gt-hint">
-          Couldn’t load this account’s watches. Configure them at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-          Leave blank to fire on any watch for this account.
-        </span>
-      </label>
     {:else}
-      <label class="gt-field">
-        <span class="gt-label">Watch</span>
-        <select
-          value={String(watchId || 0)}
-          onchange={(e) =>
-            setWatchId(Number((e.currentTarget as HTMLSelectElement).value) || 0)}
-        >
-          <option value="0">— any watch on this account —</option>
-          {#each watches as w (w.id)}
-            <option value={String(w.id)}>{w.label} — {w.query}</option>
-          {/each}
-        </select>
-        <span class="gt-hint">
-          Manage watches at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-        </span>
-      </label>
+      {#key accountId}
+        <ResourcePicker
+          label="Watch"
+          value={watchValue}
+          fetcher={watchesFetcher}
+          onChange={setWatchValue}
+          placeholder="any watch on this account"
+          emptyHint="No watches configured — set them up at /admin/gmail."
+        />
+      {/key}
+      <span class="gt-hint">
+        Manage watches at
+        <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+        Pick "any watch" to fire on every watch attached to this account.
+      </span>
     {/if}
   </section>
 

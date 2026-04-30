@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
@@ -18,18 +19,9 @@
   void definition;
 
   // ---------- Model dropdown options --------------------------------------
-  // Mirrored from llm-agent.def.ts so the panel renders without needing the
-  // basicConfig descriptor at runtime. Keep these two lists in sync.
-  const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: '', label: 'Default (site setting)' },
-    { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-    { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
-    { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  ];
+  // Sourced from the shared list so all LLM panels stay in lockstep. If new
+  // models are added, edit src/lib/canvas/nodes/panels/shared/vertex-models.ts.
+  const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
 
   // ---------- Generic setter ----------------------------------------------
 
@@ -134,15 +126,20 @@
       </span>
     </label>
 
+    {@const _currentModel = String(config.model ?? '')}
+    {@const _modelInList = MODEL_OPTIONS.some((o) => o.value === _currentModel)}
     <label class="la-field">
       <span class="la-label">Model</span>
       <select
-        value={String(config.model ?? '')}
+        value={_currentModel}
         onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}
       >
         {#each MODEL_OPTIONS as opt (opt.value)}
           <option value={opt.value}>{opt.label}</option>
         {/each}
+        {#if !_modelInList && _currentModel}
+          <option value={_currentModel}>Custom: {_currentModel}</option>
+        {/if}
       </select>
       <span class="la-hint">
         Leave as <strong>Default</strong> to use the site-wide admin setting (recommended).

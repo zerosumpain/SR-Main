@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
@@ -22,20 +23,24 @@
     { value: 'get_usage', label: 'Get API Usage', hint: 'Return current usage / limits for the OpenRouter key.' },
   ];
 
-  // Model dropdown — kept in sync with src/lib/workflows/nodes/openrouter.def.ts.
-  // OpenRouter routes via slashed IDs (provider/model). Empty value falls back
-  // to the admin-configured chat-alt OpenRouter model at runtime.
-  const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: '', label: 'Default (use admin alt OpenRouter model)' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
-    { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  ];
-
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
+  }
+
+  // Fetch the live OpenRouter model catalogue from /api/admin/models/openrouter.
+  // The endpoint returns paginated rows; we pull a generous page size and
+  // sort by id so the alphabetised list groups by provider naturally.
+  async function fetchOpenRouterModels(): Promise<Array<{ value: string; label: string; meta?: string }>> {
+    const res = await fetch('/api/admin/models/openrouter?pageSize=100&sortBy=id&sortDir=asc');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json() as {
+      rows: Array<{ id: string; name: string; provider: string | null; contextLength: number | null }>;
+    };
+    return data.rows.map((r) => ({
+      value: r.id,
+      label: r.name || r.id,
+      meta: r.provider ?? undefined,
+    }));
   }
 
   // ---------- Derived values ----------------------------------------------
@@ -67,10 +72,6 @@
     if (temperature < 1.5) return 'Adventurous';
     return 'Creative';
   });
-
-  // The orchestrator sometimes writes model IDs we haven't enumerated. Surface
-  // them rather than silently snapping to "Default".
-  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === model));
 
   const operationHint = $derived(
     OPERATIONS.find((o) => o.value === operation)?.hint ?? '',
@@ -138,24 +139,21 @@
 
     <!-- Model -->
     <section class="or-sec">
-      <label class="or-field">
+      <div class="or-field">
         <span class="or-label">Model</span>
-        <select
+        <ResourcePicker
           value={model}
-          onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}
-        >
-          {#if !modelInList}
-            <option value={model}>Custom: {model}</option>
-          {/if}
-          {#each MODEL_OPTIONS as opt (opt.value)}
-            <option value={opt.value}>{opt.label}</option>
-          {/each}
-        </select>
+          fetcher={fetchOpenRouterModels}
+          onChange={(v) => set('model', v)}
+          placeholder="pick an OpenRouter model"
+          allowCustom={true}
+          emptyHint="No OpenRouter models cached — refresh from /admin/models or type a slashed ID."
+        />
         <span class="or-hint">
-          Leave on Default to use the admin-configured OpenRouter alt model. All IDs are slashed
-          <code>provider/model</code> values routed through OpenRouter.
+          Loaded live from the OpenRouter catalogue. Leave blank to use the admin-configured alt model.
+          All IDs are slashed <code>provider/model</code> values.
         </span>
-      </label>
+      </div>
     </section>
 
     <!-- Temperature -->

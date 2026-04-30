@@ -78,6 +78,54 @@
   const addLabels = $derived(readLabelArray(config.add));
   const removeLabels = $derived(readLabelArray(config.remove));
 
+  // ---------- Label fetcher (per-account) -------------------------------
+  // The fetcher closure captures `config` so it always reads the current
+  // accountId at fetch time. ResourcePicker only fetches once on mount, so
+  // we re-mount the picker via `{#key accountId}` whenever the account
+  // changes (otherwise switching accounts would still show the old account's
+  // labels). Same pattern as DataStorePanel's workflowId capture.
+
+  type LabelEntry = { value: string; label: string; meta?: string };
+
+  async function fetchLabels(): Promise<LabelEntry[]> {
+    const id = Number(config.accountId ?? 0);
+    if (!id) return [];
+    const res = await fetch(`/api/gmail/accounts/${id}/labels`);
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.message) msg = body.message;
+        else if (body?.error) msg = body.error;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const body = (await res.json()) as { labels?: Array<{ id: string; name: string; type: string }> };
+    const labels = body.labels ?? [];
+    return labels.map((l) => ({
+      // Executor uses Gmail label IDs (passed straight to addLabelIds /
+      // removeLabelIds). For system labels, id === name (e.g. "INBOX",
+      // "STARRED"). For user labels, id is "Label_12345" and name is
+      // human-readable (e.g. "Newsletters").
+      value: l.id,
+      label: l.name,
+      meta: l.type === 'system' ? 'system' : undefined,
+    }));
+  }
+
+  // Append-on-pick adapters for the "add" / "remove" lists. The picker
+  // resets after each selection so the user can chain multiple picks.
+  let addPickerNonce = $state(0);
+  let removePickerNonce = $state(0);
+
+  function appendLabel(list: 'add' | 'remove', selected: string) {
+    if (!selected) return;
+    const current = list === 'add' ? addLabels : removeLabels;
+    if (current.includes(selected)) return; // de-dupe
+    set(list, [...current, selected]);
+    if (list === 'add') addPickerNonce++; else removePickerNonce++;
+  }
+
   // ---------- Message id -------------------------------------------------
 
   const messageId = $derived(String(config.messageId ?? ''));
@@ -175,12 +223,26 @@
         <span class="sr-label-tight">Labels to add</span>
         <span class="gl-sec-meta">{addLabels.length} {addLabels.length === 1 ? 'label' : 'labels'}</span>
       </header>
+      {#if !accountId}
+        <p class="gl-empty">Pick a Gmail account above to load labels.</p>
+      {:else}
+        {#key `${accountId}-add-${addPickerNonce}`}
+          <ResourcePicker
+            label="Pick a label to add"
+            value=""
+            fetcher={fetchLabels}
+            onChange={(v) => appendLabel('add', v)}
+            placeholder="pick a label"
+            emptyHint="No labels available — type a label id manually."
+          />
+        {/key}
+      {/if}
       <ChipInputField
         value={addLabels}
-        placeholder="STARRED, IMPORTANT, Label_12345 — Enter or , to add"
+        placeholder="picked labels appear here — Enter or , to add manually"
         onChange={(v) => set('add', v)}
       />
-      <span class="gl-hint">System labels: <code>STARRED</code>, <code>IMPORTANT</code>. Custom label ids look like <code>Label_12345</code> — find them at <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.</span>
+      <span class="gl-hint">Picker writes Gmail label IDs (e.g. <code>STARRED</code> for system, <code>Label_12345</code> for custom). System-only labels like <code>SENT</code>/<code>DRAFT</code>/<code>CATEGORY_*</code> are hidden because Gmail rejects modifying them.</span>
     </section>
   {/if}
 
@@ -190,9 +252,23 @@
         <span class="sr-label-tight">Labels to remove</span>
         <span class="gl-sec-meta">{removeLabels.length} {removeLabels.length === 1 ? 'label' : 'labels'}</span>
       </header>
+      {#if !accountId}
+        <p class="gl-empty">Pick a Gmail account above to load labels.</p>
+      {:else}
+        {#key `${accountId}-remove-${removePickerNonce}`}
+          <ResourcePicker
+            label="Pick a label to remove"
+            value=""
+            fetcher={fetchLabels}
+            onChange={(v) => appendLabel('remove', v)}
+            placeholder="pick a label"
+            emptyHint="No labels available — type a label id manually."
+          />
+        {/key}
+      {/if}
       <ChipInputField
         value={removeLabels}
-        placeholder="INBOX, UNREAD — Enter or , to add"
+        placeholder="picked labels appear here — Enter or , to add manually"
         onChange={(v) => set('remove', v)}
       />
       <span class="gl-hint"><code>INBOX</code> archives the message; <code>UNREAD</code> marks it read.</span>

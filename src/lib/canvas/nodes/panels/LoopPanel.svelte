@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   // Loop node config (executor reads `arrayPath` + `expression`; see
   // src/lib/workflows/nodes/loop.ts). The editor exposes a structured shape:
@@ -25,10 +26,12 @@
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   type Source = 'input' | 'range';
@@ -85,17 +88,17 @@
     </label>
 
     {#if source === 'input'}
-      <label class="lp-field">
+      <div class="lp-field">
         <span class="lp-label">Array path</span>
-        <input
-          type="text"
-          spellcheck="false"
+        <UpstreamFieldPicker
           value={arrayPath}
+          upstreamFields={upstreamFields}
+          onChange={(v) => set('arrayPath', v)}
           placeholder={'items  or  data.values'}
-          oninput={(e) => set('arrayPath', (e.currentTarget as HTMLInputElement).value)}
+          allowCustom={true}
         />
         <span class="lp-hint">Dot-path into the input object. Templates supported: <code>{`{{input.field}}`}</code></span>
-      </label>
+      </div>
     {:else}
       <label class="lp-field">
         <span class="lp-label">Count</span>

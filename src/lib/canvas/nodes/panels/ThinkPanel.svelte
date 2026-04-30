@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import { THINK_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
@@ -16,17 +17,10 @@
   // already renders the "What this does" line, so we don't duplicate it here.
   void definition;
 
-  // Model dropdown options — kept in sync with src/lib/workflows/nodes/think.def.ts.
-  // If new models are added there, mirror them here.
-  const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
-    { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
-    { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  ];
+  // Model dropdown options — sourced from the shared list so all LLM panels
+  // stay in lockstep. If new models are added, edit
+  // src/lib/canvas/nodes/panels/shared/vertex-models.ts.
+  const MODEL_OPTIONS = THINK_MODEL_OPTIONS;
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });

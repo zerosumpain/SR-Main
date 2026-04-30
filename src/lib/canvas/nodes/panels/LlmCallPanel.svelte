@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
@@ -16,19 +17,10 @@
   // already renders the "What this does" line, so we don't duplicate it here.
   void definition;
 
-  // Model dropdown options — kept in sync with src/lib/workflows/nodes/llm-call.def.ts.
-  // If new models are added there, mirror them here.
-  const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: '', label: 'Default (site setting)' },
-    { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-    { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-    { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku (fast)' },
-    { value: 'google/gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash' },
-    { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
-  ];
+  // Model dropdown options — sourced from the shared list so all LLM panels
+  // stay in lockstep. If new models are added, edit
+  // src/lib/canvas/nodes/panels/shared/vertex-models.ts.
+  const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
