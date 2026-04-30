@@ -107,17 +107,30 @@ export async function runTool(
       };
 
     case 'patch_content': {
-      const find = String(args.find ?? '');
-      let replace = String(args.replace ?? '');
-      if (!find) return { ok: false, error: 'find string is empty.' };
-      const occurrences = snapshot.content.split(find).length - 1;
-      if (occurrences === 0) return { ok: false, error: `find string not found in content.` };
+      const findRaw = String(args.find ?? '');
+      const replaceRaw = String(args.replace ?? '');
+      if (!findRaw) return { ok: false, error: 'find string is empty.' };
+
+      // The LLM is shown the post body as HTML. Its `find` argument frequently
+      // includes tag fragments (<s>, </p><p>, etc.) that exist in the HTML
+      // string but not in the editor's textContent — so any anchoring against
+      // the live editor fails. Strip HTML tags from both sides and match
+      // against a tag-stripped haystack so patches always anchor to plain
+      // prose. Whitespace runs are collapsed to single spaces on both sides
+      // so the LLM doesn't have to guess about indentation between blocks.
+      const stripTags = (s: string) => s.replace(/<\/?[^>]+>/g, '');
+      const collapse = (s: string) => s.replace(/\s+/g, ' ');
+      const find = collapse(stripTags(findRaw)).trim();
+      let replace = collapse(stripTags(replaceRaw));
+      const haystack = collapse(stripTags(snapshot.content));
+
+      if (!find) return { ok: false, error: 'find string is empty after stripping tags.' };
+      const occurrences = haystack.split(find).length - 1;
+      if (occurrences === 0) return { ok: false, error: 'find string not found in content.' };
       if (occurrences > 1) return { ok: false, error: `find string not unique (${occurrences} matches).` };
 
       // Defensively preserve boundary whitespace from `find` if the LLM
-      // dropped it on `replace` — this is the most common cause of edits
-      // that "delete a space". We only auto-fix when `replace` is non-empty;
-      // an empty replace means the LLM is intentionally deleting a span.
+      // dropped it on `replace`. Only auto-fix when `replace` is non-empty.
       if (replace.length > 0) {
         const leading = find.match(/^\s+/)?.[0] ?? '';
         const trailing = find.match(/\s+$/)?.[0] ?? '';
@@ -125,7 +138,7 @@ export async function runTool(
         if (trailing && !/\s$/.test(replace)) replace = replace + trailing;
       }
 
-      const from = snapshot.content.indexOf(find);
+      const from = haystack.indexOf(find);
       const to = from + find.length;
       return { ok: true, proposal: proseProposal(find, replace, from, to, reason) };
     }

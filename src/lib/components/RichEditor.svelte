@@ -400,16 +400,47 @@
       return { from: p.anchor.from + 1, to: p.anchor.from + 1 };
     }
     const docText = ed.state.doc.textContent;
-    const win = 200;
-    const start = Math.max(0, p.anchor.from - win);
-    const end = Math.min(docText.length, p.anchor.to + win);
-    const idx = docText.indexOf(p.original, start);
-    if (idx < 0 || idx > end) {
-      const fallback = docText.indexOf(p.original);
-      if (fallback < 0) return null;
-      return { from: fallback + 1, to: fallback + 1 + p.original.length };
+
+    // Fast path: literal match.
+    let idx = docText.indexOf(p.original);
+    let needleLen = p.original.length;
+
+    // Fallback path: collapse whitespace runs on both sides and search again.
+    // The proposal's `original` was matched against a tag-stripped, whitespace-
+    // collapsed haystack on the server; the editor's textContent collapses
+    // block boundaries differently, so a literal compare can still miss.
+    if (idx < 0) {
+      const collapsedDoc = docText.replace(/\s+/g, ' ');
+      const collapsedNeedle = p.original.replace(/\s+/g, ' ').trim();
+      const cIdx = collapsedDoc.indexOf(collapsedNeedle);
+      if (cIdx < 0) return null;
+      // Map collapsed index back to original docText by walking and counting.
+      let consumed = 0;
+      let prevWs = false;
+      for (let i = 0; i < docText.length; i++) {
+        const isWs = /\s/.test(docText[i]);
+        const collapsedHere = isWs ? (prevWs ? false : true) : true;
+        if (collapsedHere) {
+          if (consumed === cIdx) { idx = i; break; }
+          consumed += 1;
+        }
+        prevWs = isWs;
+      }
+      if (idx < 0) return null;
+      // Walk forward in docText to cover collapsedNeedle.length characters.
+      let needleConsumed = 0;
+      let j = idx;
+      let prevWs2 = false;
+      while (j < docText.length && needleConsumed < collapsedNeedle.length) {
+        const isWs = /\s/.test(docText[j]);
+        if (!(isWs && prevWs2)) needleConsumed += 1;
+        prevWs2 = isWs;
+        j += 1;
+      }
+      needleLen = j - idx;
     }
-    return { from: idx + 1, to: idx + 1 + p.original.length };
+
+    return { from: idx + 1, to: idx + 1 + needleLen };
   }
 
   function escapeHtml(s: string): string {
