@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
@@ -11,6 +12,29 @@
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
   } = $props();
+
+  // ---------- Deep-dive session picker ------------------------------------
+  // Lets users pick an existing research session instead of pasting a UUID.
+  // Falls back to free-text / templates inside ResourcePicker.
+
+  async function fetchDeepDiveSessions(): Promise<Array<{ value: string; label: string; meta?: string }>> {
+    const res = await fetch('/api/deepdive');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('Expected array');
+    return rows
+      .filter((r) => r && typeof r.id === 'string')
+      .map((r) => {
+        const id = r.id as string;
+        const title = typeof r.title === 'string' ? r.title.trim() : '';
+        const topic = typeof r.topic === 'string' ? r.topic.trim() : '';
+        const label = title || topic || id;
+        const status = typeof r.status === 'string' ? r.status : '';
+        const createdAt = typeof r.createdAt === 'string' ? r.createdAt : '';
+        const meta = status || createdAt || undefined;
+        return { value: id, label, meta };
+      });
+  }
 
   // ---------- Engine / session / topic ------------------------------------
   // The executor reads:
@@ -70,23 +94,22 @@
         <span class="rr-info">templated</span>
       {/if}
     </header>
-    <label class="rr-field">
+    <div class="rr-field">
       <span class="rr-label">Session ID</span>
-      <textarea
-        class="rr-code"
-        rows="2"
-        spellcheck="false"
-        placeholder={'{{input.researchSessionId}}'}
+      <ResourcePicker
         value={sessionId}
-        oninput={(e) => set('sessionId', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        fetcher={fetchDeepDiveSessions}
+        onChange={(v) => set('sessionId', v)}
+        placeholder="select a research session"
+        emptyHint="No sessions yet — commission one upstream, or template a value."
+      />
       <span class="rr-hint">
-        Existing session UUID. Typically fed from an upstream
-        <code>quick-answer</code> or deep-research commission node via
-        <code>{`{{input.researchSessionId}}`}</code>. Empty values yield a
-        <em>not commissioned</em> output.
+        Pick an existing session, type a UUID, or template from upstream — e.g.
+        <code>{`{{input.researchSessionId}}`}</code> from a
+        <code>quick-answer</code> or deep-research commission node. Empty values
+        yield a <em>not commissioned</em> output.
       </span>
-    </label>
+    </div>
   </section>
 
   <!-- Topic (display passthrough) -->

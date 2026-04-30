@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   let {
     config,
@@ -139,23 +140,19 @@
     </label>
 
     {#if persist}
-      <label class="fb-field">
+      <div class="fb-field">
         <span class="fb-label">Saved file name</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder={'reports/{{input.id}}.docx'}
+        <FilePicker
           value={outputName}
-          oninput={(e) => set('outputName', (e.currentTarget as HTMLInputElement).value)}
+          mode="write"
+          placeholder={'reports/{{input.id}}.docx'}
+          onChange={(v) => set('outputName', v)}
+          hint={'Required when persist is on. Type a new path to create, or pick an existing file to overwrite. Templates supported: {{input.field}}.'}
         />
-        <span class="fb-hint">
-          Required when persist is on. Templates supported: <code>{`{{input.field}}`}</code>.
-          Existing files with the same name are overwritten.
-        </span>
         {#if persistNeedsName}
           <span class="fb-warn">Required — executor will throw without a name.</span>
         {/if}
-      </label>
+      </div>
     {/if}
   </section>
 

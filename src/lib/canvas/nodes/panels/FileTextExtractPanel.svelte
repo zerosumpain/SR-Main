@@ -20,6 +20,7 @@
 
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   let {
     config,
@@ -153,20 +154,17 @@
     <header class="ft-sec-hdr">
       <span class="sr-label-tight">Source file</span>
     </header>
-    <label class="ft-field">
+    <div class="ft-field">
       <span class="ft-label">File name in the workflow file store</span>
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder={'docs/contract.pdf or {{input.upload.name}}'}
+      <FilePicker
         value={fileName}
-        oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
+        mode="read"
+        placeholder={'docs/contract.pdf or {{input.upload.name}}'}
+        onChange={(v) => set('fileName', v)}
+        hint={'Required. Pick from the file store, or type a templated name. Templates supported: {{input.field}}.'}
       />
-      <span class="ft-hint">
-        Required. Templates supported: <code>{`{{input.field}}`}</code>.
-        {#if !fileName.trim()}<span class="ft-warn">empty - workflow will fail at runtime</span>{/if}
-      </span>
-    </label>
+      {#if !fileName.trim()}<span class="ft-warn">empty - workflow will fail at runtime</span>{/if}
+    </div>
   </section>
 
   <!-- PDF page range + language -->
@@ -318,19 +316,16 @@
       <span>Save the extracted plain text as a new <code>.txt</code> file in the store</span>
     </label>
     {#if persist}
-      <label class="ft-field">
+      <div class="ft-field">
         <span class="ft-label">Saved file name</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder={'extracted/{{input.upload.name}}.txt'}
+        <FilePicker
           value={outputName}
-          oninput={(e) => set('outputName', (e.currentTarget as HTMLInputElement).value)}
+          mode="write"
+          placeholder={'extracted/{{input.upload.name}}.txt'}
+          onChange={(v) => set('outputName', v)}
+          hint="Templates supported. Type a new path, or pick an existing file to overwrite. Defaults to <source>.extracted.txt when blank."
         />
-        <span class="ft-hint">
-          Templates supported. If left empty, defaults to <code>&lt;source&gt;.extracted.txt</code>.
-        </span>
-      </label>
+      </div>
     {/if}
   </section>
 

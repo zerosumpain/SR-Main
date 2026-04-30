@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   let {
     config,
@@ -68,17 +69,16 @@
   <!-- File path -->
   <section class="fr-sec">
     <header class="fr-sec-hdr"><span class="sr-label-tight">File</span></header>
-    <label class="fr-field">
+    <div class="fr-field">
       <span class="fr-label">File name / path</span>
-      <input
-        type="text"
-        spellcheck="false"
+      <FilePicker
         value={fileName}
+        mode="read"
         placeholder={'reports/{{input.id}}.csv'}
-        oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
+        onChange={(v) => set('fileName', v)}
+        hint={'Pick from the workflow file store, or type a templated name. Templates supported: {{input.field}}.'}
       />
-      <span class="fr-hint">Name in the workflow file store. Templates supported: <code>{`{{input.field}}`}</code></span>
-    </label>
+    </div>
   </section>
 
   <!-- Encoding & parse-as -->

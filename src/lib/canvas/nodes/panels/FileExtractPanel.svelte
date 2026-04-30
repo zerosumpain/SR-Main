@@ -19,15 +19,19 @@
 
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   void definition;
@@ -191,20 +195,17 @@
     <!-- Extract: source file -->
     <section class="fe-sec">
       <header class="fe-sec-hdr"><span class="sr-label-tight">Source file</span></header>
-      <label class="fe-field">
+      <div class="fe-field">
         <span class="fe-label">File name in the workflow file store</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder={'docs/contract.pdf or {{input.upload.name}}'}
+        <FilePicker
           value={fileName}
-          oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
+          mode="read"
+          placeholder={'docs/contract.pdf or {{input.upload.name}}'}
+          onChange={(v) => set('fileName', v)}
+          hint={'Required. Pick from the file store, or type a templated name. Templates supported: {{input.field}}.'}
         />
-        <span class="fe-hint">
-          Required. Templates supported: <code>{`{{input.field}}`}</code>.
-          {#if !fileName.trim()}<span class="fe-warn">empty - workflow will fail at runtime</span>{/if}
-        </span>
-      </label>
+        {#if !fileName.trim()}<span class="fe-warn">empty - workflow will fail at runtime</span>{/if}
+      </div>
     </section>
 
     <!-- Extract: PDF + audio options -->
@@ -375,12 +376,13 @@
     <section class="fe-sec">
       <header class="fe-sec-hdr"><span class="sr-label-tight">Content source</span></header>
       <label class="fe-field">
-        <span class="fe-label">Content path</span>
-        <input
-          type="text"
-          placeholder="input.content"
+        <UpstreamFieldPicker
+          label="Content path"
           value={contentPath}
-          oninput={(e) => set('contentPath', (e.currentTarget as HTMLInputElement).value)}
+          upstreamFields={upstreamFields}
+          placeholder="pick the field with the content"
+          allowCustom={true}
+          onChange={(v) => set('contentPath', v)}
         />
         <span class="fe-hint">
           Dot-path into the input object. Defaults to <code>input.content</code> when empty.
@@ -419,20 +421,17 @@
       </span>
     </label>
     {#if persist}
-      <label class="fe-field">
+      <div class="fe-field">
         <span class="fe-label">Saved file name</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder={mode === 'extract' ? 'extracted/{{input.upload.name}}.txt' : 'reports/{{input.id}}.docx'}
+        <FilePicker
           value={outputName}
-          oninput={(e) => set('outputName', (e.currentTarget as HTMLInputElement).value)}
+          mode="write"
+          placeholder={mode === 'extract' ? 'extracted/{{input.upload.name}}.txt' : 'reports/{{input.id}}.docx'}
+          onChange={(v) => set('outputName', v)}
+          hint="Templates supported. Type a new path to create, or pick an existing file to overwrite."
         />
-        <span class="fe-hint">
-          Templates supported.
-          {#if mode === 'synthesize'}<span class="fe-warn">required when persist is on</span>{/if}
-        </span>
-      </label>
+        {#if mode === 'synthesize' && !outputName.trim()}<span class="fe-warn">required when persist is on</span>{/if}
+      </div>
     {/if}
   </section>
 

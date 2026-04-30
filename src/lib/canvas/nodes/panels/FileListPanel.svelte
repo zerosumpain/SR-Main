@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   let {
     config,
@@ -49,20 +50,16 @@
   <!-- Directory / prefix -->
   <section class="fl-sec">
     <header class="fl-sec-hdr"><span class="sr-label-tight">Directory / name prefix</span></header>
-    <label class="fl-field">
+    <div class="fl-field">
       <span class="fl-label">Path prefix</span>
-      <input
-        type="text"
-        spellcheck="false"
+      <FilePicker
         value={prefix}
+        mode="read"
         placeholder={'logs/ or reports/{{input.date}}/'}
-        oninput={(e) => set('prefix', (e.currentTarget as HTMLInputElement).value)}
+        onChange={(v) => set('prefix', v)}
+        hint={`Files whose name starts with this prefix are returned. Browse the file store to inspect existing names, then trim to a directory-style prefix (e.g. 'logs/'). Empty = list everything. Templates supported: {{input.field}}.`}
       />
-      <span class="fl-hint">
-        Files whose name starts with this prefix are returned. Empty = list everything.
-        Templates supported: <code>{`{{input.field}}`}</code>.
-      </span>
-    </label>
+    </div>
   </section>
 
   <!-- Glob filter -->

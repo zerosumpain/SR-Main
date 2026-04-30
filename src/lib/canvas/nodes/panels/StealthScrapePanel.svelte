@@ -1,8 +1,37 @@
 <script lang="ts">
   import type { PanelProps } from './registry';
   import { onMount } from 'svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let { config, onChange }: PanelProps = $props();
+
+  // ResourcePicker fetchers (kept here so they close over the same
+  // HTTP layer the rest of this panel uses, and so the picker shows
+  // a sensible fallback if the API errors).
+  async function fetchProfiles(): Promise<Array<{ value: string; label: string }>> {
+    const res = await fetch('/api/scraper/profiles');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('Expected string[]');
+    return rows
+      .filter((r): r is string => typeof r === 'string' && r.length > 0)
+      .map((name) => ({ value: name, label: name }));
+  }
+
+  async function fetchCredentials(): Promise<Array<{ value: string; label: string; meta?: string }>> {
+    const res = await fetch('/api/scraper/credentials');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('Expected array');
+    return rows
+      .filter((r) => r && typeof r === 'object' && r.id != null)
+      .map((r) => {
+        const id = String(r.id);
+        const label = typeof r.label === 'string' && r.label ? r.label : `credential ${id}`;
+        const domain = typeof r.domain === 'string' ? r.domain : '';
+        return { value: id, label, meta: domain || undefined };
+      });
+  }
 
   // Local draft — mirrored from config on mount and when config changes externally
   let url = $state((config.url as string) ?? '');
@@ -42,9 +71,6 @@
   let credentialId = $state(config.credentialId != null ? String(config.credentialId) : '');
   let pacingMin = $state((config.pacingMinMs as number | undefined) ?? null);
   let pacingMax = $state((config.pacingMaxMs as number | undefined) ?? null);
-
-  let profiles = $state<string[]>([]);
-  let credentials = $state<Array<{ id: number; domain: string; label: string }>>([]);
 
   // Playbook status for this URL's domain — the node dispatches through
   // this deterministically when present, and auto-maps on first run when
@@ -150,14 +176,7 @@
   }
 
   onMount(async () => {
-    try {
-      const [pRes, cRes] = await Promise.all([
-        fetch('/api/scraper/profiles'),
-        fetch('/api/scraper/credentials'),
-      ]);
-      if (pRes.ok) profiles = await pRes.json();
-      if (cRes.ok) credentials = await cRes.json();
-    } catch { /* non-fatal */ }
+    // Profile/credential lists are fetched by their respective ResourcePickers.
     await refreshPlaybook();
     await refreshScript();
   });
@@ -377,14 +396,13 @@
   <!-- Profile -->
   <section class="ps">
     <div class="ps-hd"><span class="ps-label">Profile name</span></div>
-    <input class="ps-input" type="text" list="scrape-profiles" value={profile}
-      oninput={(e) => { profile = (e.target as HTMLInputElement).value; emit(); }}
-      placeholder="e.g. civilservicejobs-gov-uk" />
-    <datalist id="scrape-profiles">
-      {#each profiles as p (p)}
-        <option value={p}>{p}</option>
-      {/each}
-    </datalist>
+    <ResourcePicker
+      value={profile}
+      fetcher={fetchProfiles}
+      onChange={(v) => { profile = v; emit(); }}
+      placeholder="select a profile"
+      emptyHint="No profiles yet — type a new identifier (e.g. civilservicejobs-gov-uk)."
+    />
     <div class="ps-hint">Stable identifier for this site. Cookies + solved CAPTCHAs persist under this name across runs.</div>
   </section>
 
@@ -511,13 +529,13 @@
   <!-- Credential -->
   <section class="ps">
     <div class="ps-hd"><span class="ps-label">Credential</span></div>
-    <select class="ps-select ps-select-wide" value={credentialId}
-      onchange={(e) => { credentialId = (e.target as HTMLSelectElement).value; emit(); }}>
-      <option value="">None</option>
-      {#each credentials as c (c.id)}
-        <option value={String(c.id)}>{c.label} ({c.domain})</option>
-      {/each}
-    </select>
+    <ResourcePicker
+      value={credentialId}
+      fetcher={fetchCredentials}
+      onChange={(v) => { credentialId = v; emit(); }}
+      placeholder="select a credential"
+      emptyHint="No credentials saved — leave blank, or add one in /admin/scraper."
+    />
   </section>
 
   <!-- Pacing -->

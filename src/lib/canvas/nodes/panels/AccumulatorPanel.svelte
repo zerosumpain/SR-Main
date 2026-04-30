@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The accumulator executor (src/lib/workflows/nodes/accumulator.ts) reads a
@@ -57,13 +60,13 @@
       <span class="acc-sec-meta">{collectField.trim() ? 'field' : 'entire input'}</span>
     </header>
     <label class="acc-field">
-      <span class="acc-label">Input field key</span>
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder="results"
+      <UpstreamFieldPicker
+        label="Input field key"
         value={collectField}
-        oninput={(e) => set('collectField', (e.currentTarget as HTMLInputElement).value)}
+        upstreamFields={upstreamFields}
+        placeholder="pick the field to collect"
+        allowCustom={true}
+        onChange={(v) => set('collectField', v)}
       />
       <span class="acc-hint">
         Top-level key on the input object whose value to accumulate. Leave

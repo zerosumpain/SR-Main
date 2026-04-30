@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   // Panel for the `file-write` workflow node. The executor lives in
   // `src/lib/workflows/nodes/file-ops.ts` (see `fileWriteExecutor`) and reads:
@@ -54,22 +55,19 @@
   <section class="fw-sec">
     <header class="fw-sec-hdr">
       <span class="sr-label-tight">File name</span>
-      <span class="fw-sec-meta">required</span>
+      <span class="fw-sec-meta">required · {mode === 'append' ? 'must exist' : 'will create or overwrite'}</span>
     </header>
-    <label class="fw-field">
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder={'logs/{{input.id}}.txt'}
+    <div class="fw-field">
+      <FilePicker
         value={fileName}
-        oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
+        mode={mode === 'append' ? 'read' : 'write'}
+        placeholder={'logs/{{input.id}}.txt'}
+        onChange={(v) => set('fileName', v)}
+        hint={mode === 'append'
+          ? 'Pick the existing file to append to, or type a templated name. Templates supported: {{input.field}}.'
+          : 'Pick an existing file to overwrite, or type a new path to create. Templates supported: {{input.field}}.'}
       />
-      <span class="fw-hint">
-        Path-style name in the workflow file store (e.g.
-        <code>reports/daily.csv</code>). Templates supported:
-        <code>{`{{input.field}}`}</code>.
-      </span>
-    </label>
+    </div>
   </section>
 
   <!-- Write mode -->

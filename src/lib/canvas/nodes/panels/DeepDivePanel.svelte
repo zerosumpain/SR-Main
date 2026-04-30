@@ -16,6 +16,7 @@
 
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
@@ -31,6 +32,29 @@
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
+  }
+
+  // ---------- Deep-dive session picker ------------------------------------
+  // Fetches existing research sessions so the user can pick one rather than
+  // pasting a UUID. Falls back to free-text / templates via ResourcePicker.
+
+  async function fetchDeepDiveSessions(): Promise<Array<{ value: string; label: string; meta?: string }>> {
+    const res = await fetch('/api/deepdive');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('Expected array');
+    return rows
+      .filter((r) => r && typeof r.id === 'string')
+      .map((r) => {
+        const id = r.id as string;
+        const title = typeof r.title === 'string' ? r.title.trim() : '';
+        const topic = typeof r.topic === 'string' ? r.topic.trim() : '';
+        const label = title || topic || id;
+        const status = typeof r.status === 'string' ? r.status : '';
+        const createdAt = typeof r.createdAt === 'string' ? r.createdAt : '';
+        const meta = status || createdAt || undefined;
+        return { value: id, label, meta };
+      });
   }
 
   // ---------- Derived values ----------------------------------------------
@@ -174,20 +198,21 @@
   <!-- Status / Report / Control: sessionId -->
   {#if showSessionId}
     <section class="dd-sec">
-      <label class="dd-field">
+      <div class="dd-field">
         <span class="dd-label">Session ID <span class="dd-req">required</span></span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder={'{{input.data.id}}'}
+        <ResourcePicker
           value={sessionId}
-          oninput={(e) => set('sessionId', (e.currentTarget as HTMLInputElement).value)}
+          fetcher={fetchDeepDiveSessions}
+          onChange={(v) => set('sessionId', v)}
+          placeholder="select a deep-dive session"
+          emptyHint="No sessions yet — start one with the deep-dive-start node, or template a value."
         />
         <span class="dd-hint">
-          Templates: <code>{`{{input.field}}`}</code>. Typically <code>{`{{input.data.id}}`}</code> from an upstream <em>start</em> node.
+          Pick an existing session, type a UUID, or use a template like
+          <code>{`{{input.data.id}}`}</code> from an upstream <em>start</em> node.
           {#if !sessionId.trim()}<span class="dd-warn">empty — workflow will fail at runtime</span>{/if}
         </span>
-      </label>
+      </div>
     </section>
   {/if}
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import FilePicker from './shared/FilePicker.svelte';
 
   // Panel for the `file-delete` workflow node. The executor lives in
   // `src/lib/workflows/nodes/file-ops.ts` (see `fileDeleteExecutor`) and reads:
@@ -63,20 +64,15 @@
       <span class="sr-label-tight">File name</span>
       <span class="fd-sec-meta">required</span>
     </header>
-    <label class="fd-field">
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder={'tmp/{{input.id}}.csv'}
+    <div class="fd-field">
+      <FilePicker
         value={fileName}
-        oninput={(e) => set('fileName', (e.currentTarget as HTMLInputElement).value)}
+        mode="read"
+        placeholder={'tmp/{{input.id}}.csv'}
+        onChange={(v) => set('fileName', v)}
+        hint={'Pick the file to delete, or type a templated name. Templates supported: {{input.field}}.'}
       />
-      <span class="fd-hint">
-        Path-style name in the workflow file store (e.g.
-        <code>logs/old.txt</code>). Templates supported:
-        <code>{`{{input.field}}`}</code>.
-      </span>
-    </label>
+    </div>
   </section>
 
   <!-- Safety toggles -->
