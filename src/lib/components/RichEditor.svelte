@@ -296,12 +296,28 @@
         // the exact bytes that were on screen the moment they clicked Accept.
         const htmlBeforeAccept = editor.getHTML();
         const replaceText = modifiedText ?? range.replace;
+        const { schema } = editor.state;
+        const strikeMark = schema.marks.strike;
+
+        // Resolve the containing block so we can scrub stale Strike marks
+        // from it. Legacy <s> tags often span multiple sentences; replacing
+        // just our sentence leaves the neighbours visually struck. The user
+        // has the toolbar Strike button if they want it back deliberately.
+        const resolvedFrom = editor.state.doc.resolve(range.from);
+        const blockDepth = Math.max(1, resolvedFrom.depth);
+        const blockStart = resolvedFrom.start(blockDepth);
+        const blockEnd = resolvedFrom.end(blockDepth);
 
         const tr = editor.state.tr;
+        if (strikeMark) {
+          tr.removeMark(blockStart, blockEnd, strikeMark);
+        }
         if (replaceText.length === 0) {
           tr.delete(range.from, range.to);
         } else {
-          tr.replaceWith(range.from, range.to, editor.state.schema.text(replaceText));
+          // Pass an explicit empty marks array so the inserted text never
+          // inherits storedMarks (Strike included) from the boundary.
+          tr.replaceWith(range.from, range.to, schema.text(replaceText, []));
         }
         tr.setMeta(suggestionPluginKey, { remove: id });
         editor.view.dispatch(tr);
