@@ -6,10 +6,14 @@ import {
   getToolsetManifest,
 } from '$lib/workflows/site-tools/registry';
 
-const SECRET_RAW = process.env.JKAI_BRIDGE_SECRET ?? 'jkai-bridge-dev-secret';
-
 function secret(): string {
-  return SECRET_RAW;
+  const value = process.env.JKAI_BRIDGE_SECRET;
+  if (!value || value.length < 32) {
+    throw new Error(
+      'JKAI_BRIDGE_SECRET must be set to a strong random value (>=32 chars)',
+    );
+  }
+  return value;
 }
 
 export function signBridgeToken(buildId: string): string {
