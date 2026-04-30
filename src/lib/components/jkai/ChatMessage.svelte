@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Marked } from 'marked';
   import ThinkingTimeline from './ThinkingTimeline.svelte';
+  import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
 
   let {
@@ -42,7 +43,7 @@
 
   let renderedContent = $derived(
     role === 'assistant'
-      ? injectConvParam(marked.parse(content) as string, conversationId)
+      ? injectConvParam(sanitizeChatHtml(marked.parse(content) as string), conversationId)
       : ''
   );
 

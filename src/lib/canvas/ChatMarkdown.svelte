@@ -1,13 +1,14 @@
 <script lang="ts" module>
   import { Marked } from 'marked';
+  import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   // Module-singleton so every chat message shares the same renderer.
   const marked = new Marked({ gfm: true, breaks: true });
   export function renderMarkdown(src: string): string {
     if (!src) return '';
     try {
-      return marked.parse(src) as string;
+      return sanitizeChatHtml(marked.parse(src) as string);
     } catch {
-      return src;
+      return sanitizeChatHtml(src);
     }
   }
 </script>

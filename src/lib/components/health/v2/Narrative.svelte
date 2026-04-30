@@ -1,12 +1,16 @@
 <script lang="ts">
+  import { sanitizeNarrativeHtml } from '$lib/security/sanitize-chat';
+
   let { narrative }: { narrative: { tag: string; text: string } } = $props();
+
+  const safeText = $derived(sanitizeNarrativeHtml(narrative.text));
 </script>
 
 <div class="h-narrative">
   <div class="h-narr-icon" aria-hidden="true">→</div>
   <div class="h-narr-body">
     <p class="h-narr-tag">{narrative.tag}</p>
-    <p class="h-narr-text">{@html narrative.text}</p>
+    <p class="h-narr-text">{@html safeText}</p>
   </div>
 </div>
 
