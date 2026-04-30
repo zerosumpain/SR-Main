@@ -62,27 +62,9 @@
   let popupLeft = $state<number>(0);
   let popupBelow = $state<boolean>(true); // fallback positioning flag
 
-  // Lazy-load the optional caret library. Resolved once per component
-  // lifetime; if the import fails we just fall back to "below the box".
-  let getCaretCoords = $state<((el: HTMLTextAreaElement, pos: number) => { top: number; left: number; height: number }) | null>(null);
-  let triedCaretLib = $state(false);
-
-  async function ensureCaretLib() {
-    if (triedCaretLib || getCaretCoords) return;
-    triedCaretLib = true;
-    try {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error — optional dep, may not be installed
-      const mod = await import('textarea-caret-position');
-      const fn = (mod as { default?: unknown; getCaretCoordinates?: unknown }).getCaretCoordinates
-        ?? (mod as { default?: unknown }).default;
-      if (typeof fn === 'function') {
-        getCaretCoords = fn as (el: HTMLTextAreaElement, pos: number) => { top: number; left: number; height: number };
-      }
-    } catch {
-      // not installed — leave getCaretCoords null and use fallback
-    }
-  }
+  // Caret-precise positioning would need a `getCaretCoordinates` helper.
+  // We don't ship one — the popup anchors below the textarea via the
+  // `.tt-popup-below` CSS branch. Always good enough for this use.
 
   // Match the partial path immediately preceding the caret. Returns the
   // partial string and the start index of the opening `{{` token, or null
@@ -134,22 +116,6 @@
 
   function refreshPopupPosition() {
     if (!taEl) return;
-    if (getCaretCoords) {
-      try {
-        const coords = getCaretCoords(taEl, caret);
-        // Coordinates are relative to the textarea's content box. Convert
-        // to viewport coords for the floating popup.
-        const rect = taEl.getBoundingClientRect();
-        const top = rect.top + coords.top - taEl.scrollTop + (coords.height || 14) + 4;
-        const left = rect.left + coords.left - taEl.scrollLeft;
-        popupTop = top;
-        popupLeft = left;
-        popupBelow = false;
-        return;
-      } catch {
-        // fall through to below-the-box fallback
-      }
-    }
     const rect = taEl.getBoundingClientRect();
     popupTop = rect.bottom + 4;
     popupLeft = rect.left;
@@ -172,7 +138,6 @@
     }
     partial = found.partial;
     openAtBraceIdx = found.openIdx;
-    void ensureCaretLib().then(() => refreshPopupPosition());
     refreshPopupPosition();
   }
 
