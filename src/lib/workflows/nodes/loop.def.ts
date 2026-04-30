@@ -53,4 +53,11 @@ export const loopDef: NodeDefinition = {
       advancedOnly: true,
     },
   ],
+  llmDescription:
+    "Map-style iteration over an array — applies a JS expression to each item and returns the array of transformed values. Use when the upstream node produces a list and you need a per-item lightweight transform (reshape fields, derived flags, simple filters). For heavy per-item work that calls other nodes (e.g. fan-out a sub-workflow per item), use a sub-workflow node downstream of a transform/code-execute that yields the list. The expression has access to `item`, `index`, and the original `input` — must `return` a value. Output is the array of returned values, in order.",
+  llmExamples: [
+    { arrayPath: 'items', expression: 'return { id: item.id, doubled: item.value * 2 }' },
+    { arrayPath: 'data.results', expression: 'return item.title.toLowerCase()' },
+    { arrayPath: 'messages', expression: 'return { ...item, isUnread: item.labels.includes("UNREAD") }' },
+  ],
 };

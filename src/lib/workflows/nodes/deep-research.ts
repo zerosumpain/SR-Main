@@ -196,4 +196,10 @@ export const deepResearchDef: NodeDefinition = {
       section: 'ADVANCED',
     },
   ],
+  llmDescription:
+    "Commission a long-running deep-research session and block until it finishes (or maxWaitMs elapses). Outputs { researchEngine: 'deep', researchSessionId, researchStatus, researchReport, sources }. Use for thorough investigations where you want a multi-paragraph synthesis with citations — costs minutes of wall-clock time and several LLM calls. For a fast 1-2 paragraph answer use `quick-answer` instead. Pair with a `research-result` display node downstream if you want the canvas to render the report nicely. Templates allowed in topic/goals (e.g. {{input.title}}).",
+  llmExamples: [
+    { topic: '{{input.title}}', depth: 'medium' },
+    { topic: 'Latest advances in solid-state batteries 2026', goals: 'Players, technical readiness, commercialisation timelines', depth: 'deep' },
+  ],
 };

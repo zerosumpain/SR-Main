@@ -19,5 +19,10 @@ export const subWorkflowDef: NodeDefinition = {
         'The ID of the workflow to run. Find it in the URL of the workflow edit page.',
     },
   ],
-  llmDescription: 'Use to compose workflows — call a pre-built workflow as a reusable step. Essential for building complex agentic systems from smaller building blocks.',
+  llmDescription:
+    "Execute another saved workflow as a single step in this one. Pass the upstream node's output as the sub-workflow's input; receive the sub-workflow's output as this node's output. Use to compose reusable building blocks: e.g. a 'send-via-whatsapp-or-fallback-email' helper called from many parent workflows, or a per-item processor invoked inside a parent. The workflowId must reference a real saved workflow — pick from the 'Workflows (sub-workflow candidates)' list in Workspace Resources, do NOT invent ids. Recursion is rejected at run time, so don't reference the current workflow's own id.",
+  llmExamples: [
+    { workflowId: '{{input.helperWorkflowId}}' },
+    { workflowId: 'a3f1c4b2-7d8e-4f5a-9b6c-1d2e3f4a5b6c' },
+  ],
 };

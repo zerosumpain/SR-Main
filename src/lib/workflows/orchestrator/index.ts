@@ -5,6 +5,7 @@ import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { eq, asc, desc, and, isNotNull } from 'drizzle-orm';
 import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from './prompts';
 import { buildNodeGrounding, type ExecutionExample } from './grounding';
+import { buildWorkspaceResources } from './workspace-grounding';
 import { openaiTools, toolSchemas } from './tools';
 import { processToolCall, assembleWorkflow, resetNodeCounter } from './loop';
 import type { ToolCallDeps } from './loop';
@@ -509,8 +510,9 @@ export async function generateWorkflow(
   messages: ChatMessage[];
 }> {
   const grounding = await buildGrounding();
+  const workspaceResources = await buildWorkspaceResources(workflowId);
   const personalityPrompt = await getCompiledPrompt();
-  const basePrompt = buildToolUseSystemPrompt(grounding);
+  const basePrompt = buildToolUseSystemPrompt(grounding, workspaceResources);
   const systemPrompt = personalityPrompt
     ? `${personalityPrompt}\n\n---\n\n${basePrompt}`
     : basePrompt;
@@ -604,7 +606,10 @@ export async function generateWorkflow(
     }, null, 2);
 
     const revisionPrompt = buildRevisionPrompt();
-    const revisionSystem = `${revisionPrompt}\n\n## Node Registry\n\n${grounding}`;
+    const workspaceSection = workspaceResources && workspaceResources.trim().length > 0
+      ? `\n\n## Workspace Resources\n\n${workspaceResources}`
+      : '';
+    const revisionSystem = `${revisionPrompt}\n\n## Node Registry\n\n${grounding}${workspaceSection}`;
 
     try {
       const revisionResult = await runToolLoop(
@@ -681,10 +686,12 @@ export async function modifyWorkflow(
   thinking?: OrchestratorThinking;
 }> {
   const grounding = await buildGrounding();
+  const workspaceResources = await buildWorkspaceResources(workflowId);
   const personalityPrompt = await getCompiledPrompt();
   const baseModifyPrompt = buildModifySystemPrompt(
     { nodes: currentNodes, edges: currentEdges },
     grounding,
+    workspaceResources,
   );
   const systemPrompt = personalityPrompt
     ? `${personalityPrompt}\n\n---\n\n${baseModifyPrompt}`

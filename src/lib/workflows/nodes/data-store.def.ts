@@ -51,4 +51,11 @@ export const dataStoreDef: NodeDefinition = {
       visibleWhen: { key: 'operation', equals: 'set' },
     },
   ],
+  llmDescription:
+    "Workflow-scoped persistent key-value store. Survives across runs of the same workflow — use it to remember 'last processed message id', cursors for incremental sync, accumulated counters, or cached external lookups. Get/set only (no delete from this node). Keys are listed in the prompt's Workspace Resources for the current workflow; reference them verbatim. NOT for sharing data between workflows (use sub-workflow input/output) and NOT a general database (small JSON values only).",
+  llmExamples: [
+    { operation: 'get', key: 'last_processed_message_id' },
+    { operation: 'set', key: 'last_processed_message_id', valuePath: 'messageId' },
+    { operation: 'set', key: 'cursor_{{trigger.output.accountId}}', valuePath: 'data.historyId' },
+  ],
 };

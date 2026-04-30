@@ -1,7 +1,10 @@
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 import { getPatternsForOrchestrator } from './patterns';
 
-export function buildToolUseSystemPrompt(nodeGrounding: string): string {
+export function buildToolUseSystemPrompt(nodeGrounding: string, workspaceResources?: string): string {
+  const workspaceSection = workspaceResources && workspaceResources.trim().length > 0
+    ? `\n\n## Workspace Resources\n\n${workspaceResources}`
+    : '';
   return `You are a workflow automation architect. You design automation workflows by choosing from available nodes and connecting them into a directed graph.
 
 ## How You Work
@@ -43,7 +46,22 @@ A workflow with nodes but no edges is BROKEN. After adding all nodes, you MUST c
 
 ## Node Registry
 
-${nodeGrounding}
+${nodeGrounding}${workspaceSection}
+
+## Universal Config: \`_onError\`
+
+Every node accepts an optional \`_onError\` config block — an engine-level wrapper around the executor. Shape:
+
+\`\`\`json
+{ "_onError": { "mode": "stop" | "continue" | "retry" | "route", "retries": 3, "retryDelayMs": 1000 } }
+\`\`\`
+
+- **\`stop\`** (default) — workflow halts on node failure. Don't set this explicitly.
+- **\`continue\`** — swallow the error, emit an empty output, move on. Use for non-critical side-effects (logging webhooks, telemetry pings, optional notifications).
+- **\`retry\`** — re-attempt up to \`retries\` times (clamped 0–10) with \`retryDelayMs\` between attempts. Use for transient failures: HTTP 5xx, rate limits, flaky third-party APIs. Typical values: \`{ mode: 'retry', retries: 3, retryDelayMs: 1000 }\`.
+- **\`route\`** — route the failed flow down a \`sourceHandle: 'error'\` outgoing edge. Wire the error path via \`connect_nodes\` with \`sourceHandle: 'error'\`; the success path goes out the default handle. If no error edge exists, falls back to default failure behaviour.
+
+Only set \`_onError\` when overriding the default. Plain \`{ mode: 'stop' }\` is redundant — omit it.
 
 ## Composable Patterns
 
@@ -62,6 +80,7 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 - **\`merge\` has no config.** It always combines all upstream outputs. To pick a subset of fields, follow it with a \`transform\` node.
 - **Don't set \`model\` on LLM nodes unless the user asked for one.** Leave it empty so the call uses the admin default.
 - **\`error-handler\` after \`http-request\`** must be the only node connected from the http-request — wire downstream work through the error-handler's success output, not directly from http-request.
+- **Don't add \`_onError: { mode: 'stop' }\` explicitly — it's the default.** Only set \`_onError\` when overriding it (\`continue\`, \`retry\`, or \`route\`).
 
 ## Rules
 
@@ -137,7 +156,11 @@ Before calling finalize_workflow, if the workflow contains any side-effecting no
 export function buildModifySystemPrompt(
   currentWorkflow: { nodes: WorkflowNodeDef[]; edges: WorkflowEdgeDef[] },
   nodeGrounding: string,
+  workspaceResources?: string,
 ): string {
+  const workspaceSection = workspaceResources && workspaceResources.trim().length > 0
+    ? `\n\n## Workspace Resources\n\n${workspaceResources}`
+    : '';
   const nodesSummary = currentWorkflow.nodes.map(n =>
     `  - ${n.label || n.type} (\`${n.id}\`, type: \`${n.type}\`)`
   ).join('\n');
@@ -168,7 +191,11 @@ ${edgesSummary}
 
 ## Node Registry
 
-${nodeGrounding}
+${nodeGrounding}${workspaceSection}
+
+## Universal Config: \`_onError\`
+
+Every node accepts an optional \`_onError\` block: \`{ mode: 'stop' | 'continue' | 'retry' | 'route', retries?: number, retryDelayMs?: number }\`. Default is \`stop\`. Use \`continue\` for non-critical side-effects, \`retry\` for transient failures (HTTP 5xx / rate limits — typical \`{ mode: 'retry', retries: 3, retryDelayMs: 1000 }\`), and \`route\` to send failures down a \`sourceHandle: 'error'\` edge. Only set \`_onError\` when overriding the default.
 
 ## Composable Patterns
 
