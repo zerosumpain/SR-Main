@@ -1,44 +1,8 @@
-<script lang="ts" module>
-  // Module-scoped cache so re-mounting the panel doesn't re-fetch the
-  // accounts list on every open of the config drawer. Mirrors the cache
-  // used by GmailSendPanel.svelte.
-  type GmailAccount = {
-    id: number;
-    email: string;
-    status?: string | null;
-  };
-  let accountsPromise: Promise<GmailAccount[]> | null = null;
-
-  function loadAccounts(): Promise<GmailAccount[]> {
-    if (!accountsPromise) {
-      accountsPromise = fetch('/api/gmail/accounts')
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((rows): GmailAccount[] => {
-          if (!Array.isArray(rows)) return [];
-          return rows
-            .filter((r) => r && typeof r === 'object')
-            .map((r) => ({
-              id: Number((r as Record<string, unknown>).id ?? 0),
-              email: String((r as Record<string, unknown>).email ?? ''),
-              status: (r as Record<string, unknown>).status as string | null | undefined,
-            }))
-            .filter((r) => r.id > 0);
-        })
-        .catch((err) => {
-          // Reset so a later mount can retry, but resolve to [] for the UI
-          // (the panel renders a number-input fallback when the list is empty).
-          accountsPromise = null;
-          console.warn('[GmailFetchPanel] failed to load /api/gmail/accounts', err);
-          return [];
-        });
-    }
-    return accountsPromise;
-  }
-</script>
-
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
+  import { fetchGmailAccountOptions } from './shared/gmailAccounts';
 
   let {
     config,
@@ -62,24 +26,23 @@
   // gmail-fetch's executor reads `accountId` from config and falls back to
   // input.accountId if 0 — so 0 is a legitimate value (inherit from upstream
   // gmail-trigger / gmail-search output) rather than an error.
+  //
+  // ResourcePicker works with string values; we round-trip via String/Number.
+  // A blank/templated string from the picker becomes 0 = "inherit".
 
   const accountId = $derived(Number(config.accountId ?? 0));
-  let accounts = $state<GmailAccount[]>([]);
-  let accountsLoaded = $state(false);
-  let accountsError = $state(false);
+  const accountValue = $derived(
+    typeof config.accountId === 'string' && config.accountId.includes('{{')
+      ? config.accountId
+      : accountId ? String(accountId) : '',
+  );
 
-  $effect(() => {
-    let cancelled = false;
-    loadAccounts().then((rows) => {
-      if (cancelled) return;
-      accounts = rows;
-      accountsLoaded = true;
-      accountsError = rows.length === 0;
-    });
-    return () => {
-      cancelled = true;
-    };
-  });
+  function setAccount(next: string) {
+    if (!next) { set('accountId', 0); return; }
+    if (next.includes('{{')) { set('accountId', next); return; }
+    const n = Number(next);
+    set('accountId', Number.isFinite(n) ? n : 0);
+  }
 
   // ---------- Message id ------------------------------------------------
   // The executor runs strict template interpolation on `messageId`. The
@@ -121,46 +84,19 @@
       <span class="sr-label-tight">Source account</span>
       {#if !accountId}<span class="gf-info">inherits from upstream</span>{/if}
     </header>
-    {#if !accountsLoaded}
-      <p class="gf-empty">Loading accounts…</p>
-    {:else if accountsError || accounts.length === 0}
-      <label class="gf-field">
-        <span class="gf-label">Account ID</span>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={accountId || ''}
-          placeholder="0 = inherit from input.accountId"
-          oninput={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLInputElement).value) || 0)}
-        />
-        <span class="gf-hint">
-          Couldn’t load the accounts list. Connect or inspect accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-          Set to <code>0</code> to inherit from the upstream node’s output.
-        </span>
-      </label>
-    {:else}
-      <label class="gf-field">
-        <span class="gf-label">Account</span>
-        <select
-          value={String(accountId || 0)}
-          onchange={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLSelectElement).value) || 0)}
-        >
-          <option value="0">— inherit from upstream (input.accountId) —</option>
-          {#each accounts as a (a.id)}
-            <option value={String(a.id)}>{a.email} (#{a.id})</option>
-          {/each}
-        </select>
-        <span class="gf-hint">
-          Manage connected accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-          Leave on “inherit” when wiring directly after gmail-trigger or gmail-search.
-        </span>
-      </label>
-    {/if}
+    <ResourcePicker
+      label="Account"
+      value={accountValue}
+      fetcher={fetchGmailAccountOptions}
+      onChange={setAccount}
+      placeholder="inherit from upstream (input.accountId)"
+      emptyHint="No connected accounts — connect one at /admin/gmail, or leave blank to inherit."
+    />
+    <span class="gf-hint">
+      Manage connected accounts at
+      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+      Leave blank to inherit from the upstream node’s output (e.g. directly after gmail-trigger or gmail-search).
+    </span>
   </section>
 
   <!-- Template helpers (collapsed by default) -->

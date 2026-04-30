@@ -1,11 +1,6 @@
 <script lang="ts" module>
-  // Module-scoped caches so re-mounting the panel doesn't re-fetch the
-  // accounts list, or the watches-per-account list, on every drawer open.
-  type GmailAccount = {
-    id: number;
-    email: string;
-    status?: string | null;
-  };
+  // Module-scoped cache for the per-account watches list (accounts list is
+  // cached in shared/gmailAccounts.ts and shared across all Gmail panels).
   type GmailWatch = {
     id: number;
     accountId: number;
@@ -14,32 +9,7 @@
     enabled?: boolean;
   };
 
-  let accountsPromise: Promise<GmailAccount[]> | null = null;
   const watchesPromises = new Map<number, Promise<GmailWatch[]>>();
-
-  function loadAccounts(): Promise<GmailAccount[]> {
-    if (!accountsPromise) {
-      accountsPromise = fetch('/api/gmail/accounts')
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((rows): GmailAccount[] => {
-          if (!Array.isArray(rows)) return [];
-          return rows
-            .filter((r) => r && typeof r === 'object')
-            .map((r) => ({
-              id: Number((r as Record<string, unknown>).id ?? 0),
-              email: String((r as Record<string, unknown>).email ?? ''),
-              status: (r as Record<string, unknown>).status as string | null | undefined,
-            }))
-            .filter((r) => r.id > 0);
-        })
-        .catch((err) => {
-          accountsPromise = null;
-          console.warn('[GmailTriggerPanel] failed to load /api/gmail/accounts', err);
-          return [];
-        });
-    }
-    return accountsPromise;
-  }
 
   function loadWatches(accountId: number): Promise<GmailWatch[]> {
     if (!accountId) return Promise.resolve([]);
@@ -76,6 +46,8 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
+  import { fetchGmailAccountOptions } from './shared/gmailAccounts';
 
   let {
     config,
@@ -92,24 +64,22 @@
   }
 
   // ---------- Account picker --------------------------------------------
+  // ResourcePicker works with string values; we round-trip via String/Number
+  // because the executor / dispatcher treat accountId as a number.
 
   const accountId = $derived(Number(config.accountId ?? 0));
-  let accounts = $state<GmailAccount[]>([]);
-  let accountsLoaded = $state(false);
-  let accountsError = $state(false);
+  const accountValue = $derived(
+    typeof config.accountId === 'string' && config.accountId.includes('{{')
+      ? config.accountId
+      : accountId ? String(accountId) : '',
+  );
 
-  $effect(() => {
-    let cancelled = false;
-    loadAccounts().then((rows) => {
-      if (cancelled) return;
-      accounts = rows;
-      accountsLoaded = true;
-      accountsError = rows.length === 0;
-    });
-    return () => {
-      cancelled = true;
-    };
-  });
+  function setAccount(next: string) {
+    if (!next) { set('accountId', 0); return; }
+    if (next.includes('{{')) { set('accountId', next); return; }
+    const n = Number(next);
+    set('accountId', Number.isFinite(n) ? n : 0);
+  }
 
   // ---------- Watch picker ----------------------------------------------
 
@@ -185,44 +155,18 @@
       <span class="sr-label-tight">Gmail account</span>
       {#if !accountId}<span class="gt-warn">⚠ pick an account</span>{/if}
     </header>
-    {#if !accountsLoaded}
-      <p class="gt-empty">Loading accounts…</p>
-    {:else if accountsError || accounts.length === 0}
-      <label class="gt-field">
-        <span class="gt-label">Account ID</span>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={accountId || ''}
-          placeholder="e.g. 1"
-          oninput={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLInputElement).value) || 0)}
-        />
-        <span class="gt-hint">
-          Couldn’t load the accounts list. Connect or inspect accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-        </span>
-      </label>
-    {:else}
-      <label class="gt-field">
-        <span class="gt-label">Account</span>
-        <select
-          value={String(accountId || 0)}
-          onchange={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLSelectElement).value) || 0)}
-        >
-          <option value="0">— pick an account —</option>
-          {#each accounts as a (a.id)}
-            <option value={String(a.id)}>{a.email} (#{a.id})</option>
-          {/each}
-        </select>
-        <span class="gt-hint">
-          Manage connected accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-        </span>
-      </label>
-    {/if}
+    <ResourcePicker
+      label="Account"
+      value={accountValue}
+      fetcher={fetchGmailAccountOptions}
+      onChange={setAccount}
+      placeholder="pick an account"
+      emptyHint="No connected accounts — connect one at /admin/gmail."
+    />
+    <span class="gt-hint">
+      Manage connected accounts at
+      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+    </span>
   </section>
 
   <!-- Watch picker -->

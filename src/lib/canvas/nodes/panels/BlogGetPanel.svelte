@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   // Editor for the `blog-get` node.
   // Executor reads `config.postId` (string, may be a numeric ID or a slug
@@ -18,10 +19,25 @@
   } = $props();
 
   const postId = $derived(String(config.postId ?? ''));
-  const idLooksLikeSlug = $derived(/[a-zA-Z-]/.test(postId) && !/^\s*\{\{/.test(postId));
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
+  }
+
+  async function fetchPosts() {
+    const res = await fetch('/api/admin/blog');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const posts = (await res.json()) as Array<{
+      id: number | string;
+      slug: string;
+      title: string;
+      status?: string;
+    }>;
+    return posts.map((p) => ({
+      value: String(p.id),
+      label: p.title || p.slug || `#${p.id}`,
+      meta: p.status,
+    }));
   }
 
   let showRawJson = $state(false);
@@ -32,22 +48,19 @@
   <!-- Lookup -->
   <section class="bo-sec">
     <header class="bo-sec-hdr"><span class="sr-label-tight">Lookup</span></header>
-    <label class="bo-field">
-      <span class="bo-label">Post ID or slug</span>
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder={'42  or  {{input.id}}'}
+    <div class="bo-field">
+      <ResourcePicker
         value={postId}
-        oninput={(e) => set('postId', (e.currentTarget as HTMLInputElement).value)}
+        fetcher={fetchPosts}
+        onChange={(v) => set('postId', v)}
+        label="Post"
+        placeholder="pick a post"
+        emptyHint="No posts yet — type an ID."
       />
       <span class="bo-hint">
         Templates supported: <code>{`{{input.id}}`}</code>.
-        {#if idLooksLikeSlug}
-          <span class="bo-warn">Looks like a slug — the site tool currently resolves by numeric ID.</span>
-        {/if}
       </span>
-    </label>
+    </div>
   </section>
 
   <!-- On failure -->

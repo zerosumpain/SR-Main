@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   // Editor for the `blog-update` node.
   //
@@ -59,6 +60,22 @@
 
   let tagDraft = $state('');
 
+  async function fetchPosts() {
+    const res = await fetch('/api/admin/blog');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const posts = (await res.json()) as Array<{
+      id: number | string;
+      slug: string;
+      title: string;
+      status?: string;
+    }>;
+    return posts.map((p) => ({
+      value: String(p.id),
+      label: p.title || p.slug || `#${p.id}`,
+      meta: p.status,
+    }));
+  }
+
   function commitTagDraft() {
     const v = tagDraft.trim().replace(/,+$/, '');
     if (!v) { tagDraft = ''; return; }
@@ -116,17 +133,17 @@
   <!-- Target -->
   <section class="bo-sec">
     <header class="bo-sec-hdr"><span class="sr-label-tight">Target</span></header>
-    <label class="bo-field">
-      <span class="bo-label">Post ID <span class="bo-req">*</span></span>
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder={'42  or  {{input.id}}'}
+    <div class="bo-field">
+      <ResourcePicker
         value={postId}
-        oninput={(e) => set('postId', (e.currentTarget as HTMLInputElement).value)}
+        fetcher={fetchPosts}
+        onChange={(v) => set('postId', v)}
+        label="Post *"
+        placeholder="pick a post to update"
+        emptyHint="No posts yet — type an ID."
       />
       <span class="bo-hint">Required. Templates supported: <code>{`{{input.id}}`}</code>.</span>
-    </label>
+    </div>
   </section>
 
   <!-- Identity (optional changes) -->

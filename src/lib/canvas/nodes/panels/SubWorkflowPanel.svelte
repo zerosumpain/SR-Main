@@ -1,16 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import { onMount } from 'svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
     onChange,
     definition,
+    workflowId: currentWorkflowId,
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    workflowId?: string;
   } = $props();
 
   // `definition` is referenced for type carry-through only; the canvas page
@@ -18,43 +20,29 @@
   void definition;
 
   // ---------- Workflow picker -------------------------------------------
-  // Try a fetch to /api/workflows; on success render a <select>. On failure
-  // (network, non-2xx, malformed payload) we drop the picker and fall back
-  // to a plain text input so the user can still paste a workflowId.
+  // Fetch all workflows for ResourcePicker. We filter out the current
+  // workflow itself so the user can't accidentally wire a node to its
+  // own canvas (which would recurse forever).
 
-  type WorkflowRow = { id: string; name: string; description?: string | null };
-
-  let workflows = $state<WorkflowRow[]>([]);
-  let fetchState = $state<'loading' | 'ok' | 'failed'>('loading');
-  let fetchError = $state<string>('');
-
-  onMount(async () => {
-    try {
-      const res = await fetch('/api/workflows');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const rows = await res.json();
-      if (!Array.isArray(rows)) throw new Error('Expected array');
-      workflows = rows
-        .filter((r) => r && typeof r.id === 'string')
-        .map((r) => ({
-          id: r.id as string,
-          name: typeof r.name === 'string' ? r.name : r.id,
-          description: typeof r.description === 'string' ? r.description : null,
-        }));
-      fetchState = 'ok';
-    } catch (err) {
-      fetchState = 'failed';
-      fetchError = err instanceof Error ? err.message : String(err);
-    }
-  });
+  async function fetchWorkflows(): Promise<Array<{ value: string; label: string; meta?: string }>> {
+    const res = await fetch('/api/workflows');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('Expected array');
+    return rows
+      .filter((r) => r && typeof r.id === 'string')
+      // Prevent recursion: don't let a workflow target itself.
+      .filter((r) => r.id !== currentWorkflowId)
+      .map((r) => {
+        const id = r.id as string;
+        const name = typeof r.name === 'string' ? r.name : id;
+        const description = typeof r.description === 'string' ? r.description.trim() : '';
+        const label = description || name;
+        return { value: id, label, meta: id.slice(0, 8) };
+      });
+  }
 
   const workflowId = $derived(String(config.workflowId ?? ''));
-  const resolvedWorkflow = $derived(workflows.find((w) => w.id === workflowId));
-  // Prefer the human-readable description (used as the title at create time);
-  // fall back to the canvas slug name, then the raw id.
-  const resolvedLabel = $derived(
-    resolvedWorkflow ? (resolvedWorkflow.description?.trim() || resolvedWorkflow.name) : '',
-  );
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
@@ -122,61 +110,15 @@
   <section class="sw-sec">
     <header class="sw-sec-hdr">
       <span class="sr-label-tight">Sub-workflow</span>
-      {#if fetchState === 'loading'}<span class="sw-meta">loading…</span>{/if}
-      {#if fetchState === 'failed'}<span class="sw-warn">picker unavailable — paste ID below</span>{/if}
     </header>
-
-    {#if fetchState === 'ok'}
-      <label class="sw-field">
-        <span class="sw-label">Workflow</span>
-        <select
-          value={workflowId}
-          onchange={(e) => set('workflowId', (e.currentTarget as HTMLSelectElement).value)}
-        >
-          <option value="">— Select a workflow —</option>
-          {#each workflows as w (w.id)}
-            <option value={w.id}>{w.description?.trim() || w.name} ({w.id.slice(0, 8)})</option>
-          {/each}
-        </select>
-      </label>
-    {:else if fetchState === 'failed'}
-      <label class="sw-field">
-        <span class="sw-label">Workflow ID</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder="paste workflow id"
-          value={workflowId}
-          oninput={(e) => set('workflowId', (e.currentTarget as HTMLInputElement).value)}
-        />
-        <span class="sw-hint">Picker fetch failed{fetchError ? ` (${fetchError})` : ''} — paste an ID by hand.</span>
-      </label>
-    {:else}
-      <label class="sw-field">
-        <span class="sw-label">Workflow ID</span>
-        <input
-          type="text"
-          spellcheck="false"
-          placeholder="loading workflow list…"
-          value={workflowId}
-          oninput={(e) => set('workflowId', (e.currentTarget as HTMLInputElement).value)}
-        />
-      </label>
-    {/if}
-
-    {#if workflowId}
-      {#if resolvedWorkflow}
-        <p class="sw-chip-row">
-          <span class="sw-chip">
-            <span class="sw-chip-dot" aria-hidden="true">●</span>
-            {resolvedLabel}
-          </span>
-          <code class="sw-chip-id">{workflowId}</code>
-        </p>
-      {:else if fetchState === 'ok'}
-        <p class="sw-hint sw-warn">No workflow with that ID was found in the list.</p>
-      {/if}
-    {/if}
+    <ResourcePicker
+      value={workflowId}
+      fetcher={fetchWorkflows}
+      onChange={(v) => set('workflowId', v)}
+      label="Workflow"
+      placeholder="select a workflow"
+      emptyHint="No other workflows available — create one first."
+    />
   </section>
 
   <!-- Input mapping -->

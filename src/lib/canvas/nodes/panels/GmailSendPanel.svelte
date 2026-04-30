@@ -1,43 +1,8 @@
-<script lang="ts" module>
-  // Module-scoped cache so re-mounting the panel doesn't re-fetch the
-  // accounts list on every open of the config drawer.
-  type GmailAccount = {
-    id: number;
-    email: string;
-    status?: string | null;
-  };
-  let accountsPromise: Promise<GmailAccount[]> | null = null;
-
-  function loadAccounts(): Promise<GmailAccount[]> {
-    if (!accountsPromise) {
-      accountsPromise = fetch('/api/gmail/accounts')
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((rows): GmailAccount[] => {
-          if (!Array.isArray(rows)) return [];
-          return rows
-            .filter((r) => r && typeof r === 'object')
-            .map((r) => ({
-              id: Number((r as Record<string, unknown>).id ?? 0),
-              email: String((r as Record<string, unknown>).email ?? ''),
-              status: (r as Record<string, unknown>).status as string | null | undefined,
-            }))
-            .filter((r) => r.id > 0);
-        })
-        .catch((err) => {
-          // Reset so a later mount can retry, but resolve to [] for the UI
-          // (the panel renders a number-input fallback when the list is empty).
-          accountsPromise = null;
-          console.warn('[GmailSendPanel] failed to load /api/gmail/accounts', err);
-          return [];
-        });
-    }
-    return accountsPromise;
-  }
-</script>
-
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
+  import { fetchGmailAccountOptions } from './shared/gmailAccounts';
   import ChipInputField from './widgets/ChipInputField.svelte';
 
   let {
@@ -105,24 +70,23 @@
   }
 
   // ---------- Account picker --------------------------------------------
+  // ResourcePicker works with string values; we round-trip via String/Number
+  // because the executor expects accountId as a number. Templated values
+  // (e.g. `{{input.accountId}}`) round-trip as strings.
 
   const accountId = $derived(Number(config.accountId ?? 0));
-  let accounts = $state<GmailAccount[]>([]);
-  let accountsLoaded = $state(false);
-  let accountsError = $state(false);
+  const accountValue = $derived(
+    typeof config.accountId === 'string' && config.accountId.includes('{{')
+      ? config.accountId
+      : accountId ? String(accountId) : '',
+  );
 
-  $effect(() => {
-    let cancelled = false;
-    loadAccounts().then((rows) => {
-      if (cancelled) return;
-      accounts = rows;
-      accountsLoaded = true;
-      accountsError = rows.length === 0;
-    });
-    return () => {
-      cancelled = true;
-    };
-  });
+  function setAccount(next: string) {
+    if (!next) { set('accountId', 0); return; }
+    if (next.includes('{{')) { set('accountId', next); return; }
+    const n = Number(next);
+    set('accountId', Number.isFinite(n) ? n : 0);
+  }
 
   // ---------- Body tabs --------------------------------------------------
   // Defaults from existing config:
@@ -158,44 +122,18 @@
       <span class="sr-label-tight">Sending account</span>
       {#if !accountId}<span class="gs-warn">⚠ pick an account</span>{/if}
     </header>
-    {#if !accountsLoaded}
-      <p class="gs-empty">Loading accounts…</p>
-    {:else if accountsError || accounts.length === 0}
-      <label class="gs-field">
-        <span class="gs-label">Account ID</span>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={accountId || ''}
-          placeholder="e.g. 1"
-          oninput={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLInputElement).value) || 0)}
-        />
-        <span class="gs-hint">
-          Couldn’t load the accounts list. Connect or inspect accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-        </span>
-      </label>
-    {:else}
-      <label class="gs-field">
-        <span class="gs-label">Account</span>
-        <select
-          value={String(accountId || 0)}
-          onchange={(e) =>
-            set('accountId', Number((e.currentTarget as HTMLSelectElement).value) || 0)}
-        >
-          <option value="0">— pick an account —</option>
-          {#each accounts as a (a.id)}
-            <option value={String(a.id)}>{a.email} (#{a.id})</option>
-          {/each}
-        </select>
-        <span class="gs-hint">
-          Manage connected accounts at
-          <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-        </span>
-      </label>
-    {/if}
+    <ResourcePicker
+      label="Account"
+      value={accountValue}
+      fetcher={fetchGmailAccountOptions}
+      onChange={setAccount}
+      placeholder="pick an account"
+      emptyHint="No connected accounts — connect one at /admin/gmail."
+    />
+    <span class="gs-hint">
+      Manage connected accounts at
+      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+    </span>
   </section>
 
   <!-- To -->
