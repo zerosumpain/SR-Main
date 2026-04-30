@@ -34,9 +34,9 @@
   }
 
   .prose :global(p) {
-    margin-bottom: 1.25em;
-    line-height: 1.8;
-    font-size: 1rem;
+    margin-bottom: 1.4em;
+    line-height: 1.75;
+    font-size: 1.0625rem;
     color: var(--text-secondary);
   }
 
@@ -91,8 +91,8 @@
 
   .prose :global(li) {
     margin-bottom: 0.5em;
-    line-height: 1.8;
-    font-size: 1rem;
+    line-height: 1.75;
+    font-size: 1.0625rem;
     color: var(--text-secondary);
   }
 
