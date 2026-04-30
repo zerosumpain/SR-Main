@@ -349,56 +349,82 @@
   }
 
   function locateOriginal(ed: Editor, p: ProseProposal): { from: number; to: number } | null {
-    if (p.original.length === 0) {
-      return { from: p.anchor.from + 1, to: p.anchor.from + 1 };
-    }
-    // Defensive: if the LLM (or an old proposal) snuck HTML markup into
-    // `original`, strip it before matching. Server-side patch_content
-    // should already produce plain text, but old in-flight proposals from
-    // a stale client may not.
     const cleanedOriginal = p.original.replace(/<\/?[^>]+>/g, '');
-    const docText = ed.state.doc.textContent;
+    if (cleanedOriginal.length === 0) {
+      // Empty range — return a zero-width position at doc start.
+      return { from: 1, to: 1 };
+    }
 
-    // Fast path: literal match.
-    let idx = docText.indexOf(cleanedOriginal);
+    // Walk every text node, recording each one's text-content slice and the
+    // ProseMirror position it occupies. Concatenating `text` across spans
+    // gives the same string as `doc.textContent`. Mapping a textContent
+    // index back to a PM position is then exact — including the +2 cost of
+    // every block-node boundary the cursor crosses, which the previous
+    // `+1` shortcut got wrong (the cause of "accept deletes a whole section").
+    type Span = { pmStart: number; tcStart: number; len: number };
+    const spans: Span[] = [];
+    let tcCursor = 0;
+    ed.state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      const len = (node.text ?? '').length;
+      spans.push({ pmStart: pos, tcStart: tcCursor, len });
+      tcCursor += len;
+    });
+    const fullText = ed.state.doc.textContent;
+
+    // Locate the needle, with a whitespace-collapsed fallback if the literal
+    // compare misses (block boundaries can disagree with what the segmenter
+    // produced).
+    let tcIdx = fullText.indexOf(cleanedOriginal);
     let needleLen = cleanedOriginal.length;
-
-    // Fallback path: collapse whitespace runs on both sides and search again.
-    // The proposal's `original` was matched against a tag-stripped, whitespace-
-    // collapsed haystack on the server; the editor's textContent collapses
-    // block boundaries differently, so a literal compare can still miss.
-    if (idx < 0) {
-      const collapsedDoc = docText.replace(/\s+/g, ' ');
+    if (tcIdx < 0) {
+      const collapsedDoc = fullText.replace(/\s+/g, ' ');
       const collapsedNeedle = cleanedOriginal.replace(/\s+/g, ' ').trim();
+      if (!collapsedNeedle) return null;
       const cIdx = collapsedDoc.indexOf(collapsedNeedle);
       if (cIdx < 0) return null;
-      // Map collapsed index back to original docText by walking and counting.
       let consumed = 0;
       let prevWs = false;
-      for (let i = 0; i < docText.length; i++) {
-        const isWs = /\s/.test(docText[i]);
-        const collapsedHere = isWs ? (prevWs ? false : true) : true;
+      for (let i = 0; i < fullText.length; i++) {
+        const isWs = /\s/.test(fullText[i]);
+        const collapsedHere = isWs ? !prevWs : true;
         if (collapsedHere) {
-          if (consumed === cIdx) { idx = i; break; }
+          if (consumed === cIdx) { tcIdx = i; break; }
           consumed += 1;
         }
         prevWs = isWs;
       }
-      if (idx < 0) return null;
-      // Walk forward in docText to cover collapsedNeedle.length characters.
+      if (tcIdx < 0) return null;
       let needleConsumed = 0;
-      let j = idx;
+      let j = tcIdx;
       let prevWs2 = false;
-      while (j < docText.length && needleConsumed < collapsedNeedle.length) {
-        const isWs = /\s/.test(docText[j]);
+      while (j < fullText.length && needleConsumed < collapsedNeedle.length) {
+        const isWs = /\s/.test(fullText[j]);
         if (!(isWs && prevWs2)) needleConsumed += 1;
         prevWs2 = isWs;
         j += 1;
       }
-      needleLen = j - idx;
+      needleLen = j - tcIdx;
     }
+    const tcEnd = tcIdx + needleLen;
 
-    return { from: idx + 1, to: idx + 1 + needleLen };
+    // Translate textContent indices to ProseMirror positions via the span
+    // map. Each span owns the half-open interval [tcStart, tcStart + len).
+    function tcToPm(tc: number): number | null {
+      for (const s of spans) {
+        if (tc >= s.tcStart && tc <= s.tcStart + s.len) {
+          return s.pmStart + (tc - s.tcStart);
+        }
+      }
+      return null;
+    }
+    const from = tcToPm(tcIdx);
+    const to = tcToPm(tcEnd);
+    if (from === null || to === null || to <= from) {
+      console.warn('[RichEditor] locateOriginal: span-map miss', { tcIdx, tcEnd, spans: spans.length });
+      return null;
+    }
+    return { from, to };
   }
 
   function escapeHtml(s: string): string {
