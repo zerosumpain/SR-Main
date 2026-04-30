@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The canvas-level preview header (in /jkai/canvas/[slug]/+page.svelte)
@@ -72,14 +75,15 @@
   <section class="lc-sec">
     <label class="lc-field">
       <span class="lc-label">User Prompt — what you want the model to do</span>
-      <textarea
+      <TemplatedTextarea
         class="lc-code"
-        rows="6"
-        spellcheck="false"
+        rows={6}
+        spellcheck={false}
         placeholder={`Summarise this text: {{input.text}}`}
         value={userPrompt}
-        oninput={(e) => set('userPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('userPrompt', v)}
+      />
       <span class="lc-hint">
         Required. Templates supported: <code>{`{{input.field}}`}</code>.
         {#if !userPrompt.trim()}<span class="lc-warn">empty — workflow will fail at runtime</span>{/if}
@@ -91,14 +95,15 @@
   <section class="lc-sec">
     <label class="lc-field">
       <span class="lc-label">System Prompt — sets the model's role/voice (optional)</span>
-      <textarea
+      <TemplatedTextarea
         class="lc-code"
-        rows="4"
-        spellcheck="false"
+        rows={4}
+        spellcheck={false}
         placeholder="You are a helpful assistant that writes concise summaries."
         value={systemPrompt}
-        oninput={(e) => set('systemPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('systemPrompt', v)}
+      />
       <span class="lc-hint">Templates supported: <code>{`{{input.field}}`}</code>. Leave blank to skip the system message.</span>
     </label>
   </section>

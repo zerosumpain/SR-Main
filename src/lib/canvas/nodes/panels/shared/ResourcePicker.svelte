@@ -103,17 +103,20 @@
     </div>
     <span class="rp-hint">{emptyHint ?? 'Nothing available — type a value.'}</span>
   {:else}
-    <select class="rp-select" value={value} onchange={onSelect}>
-      <option value="" disabled>— {placeholder} —</option>
-      {#each items as it (it.value)}
-        <option value={it.value}>{it.label}{it.meta ? ` · ${it.meta}` : ''}</option>
-      {/each}
-      <option disabled>──────</option>
-      {#if allowCustom}
-        <option value="__custom__">+ Custom value…</option>
-      {/if}
-      <option value="__template__">{`{{template}}…`}</option>
-    </select>
+    <div class="rp-row">
+      <select class="rp-select" value={value} onchange={onSelect}>
+        <option value="" disabled>— {placeholder} —</option>
+        {#each items as it (it.value)}
+          <option value={it.value}>{it.label}{it.meta ? ` · ${it.meta}` : ''}</option>
+        {/each}
+        <option disabled>──────</option>
+        {#if allowCustom}
+          <option value="__custom__">+ Custom value…</option>
+        {/if}
+        <option value="__template__">{`{{template}}…`}</option>
+      </select>
+      <button type="button" class="rp-mini" onclick={refresh} title="Refresh from server">↻</button>
+    </div>
     <span class="rp-hint">{items.length} option{items.length === 1 ? '' : 's'}.</span>
   {/if}
 </div>

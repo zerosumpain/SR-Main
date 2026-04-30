@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // `definition` is referenced only for typings; the canvas-level preview
@@ -99,14 +102,15 @@
 
     <label class="la-field">
       <span class="la-label">User prompt <span class="la-req">required</span></span>
-      <textarea
+      <TemplatedTextarea
         class="la-code"
-        rows="5"
-        spellcheck="false"
+        rows={5}
+        spellcheck={false}
         placeholder={`{{input.query}}`}
         value={String(config.userPrompt ?? '')}
-        oninput={(e) => set('userPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('userPrompt', v)}
+      />
       <span class="la-hint">
         The main instruction for the agent. Templates supported:
         <code>{`{{input.field}}`}</code>.
@@ -115,14 +119,15 @@
 
     <label class="la-field">
       <span class="la-label">System prompt <span class="la-opt">optional</span></span>
-      <textarea
+      <TemplatedTextarea
         class="la-code"
-        rows="4"
-        spellcheck="false"
+        rows={4}
+        spellcheck={false}
         placeholder="You are a helpful assistant..."
         value={String(config.systemPrompt ?? '')}
-        oninput={(e) => set('systemPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('systemPrompt', v)}
+      />
       <span class="la-hint">
         Sets the agent's role and behaviour. Templates supported.
       </span>

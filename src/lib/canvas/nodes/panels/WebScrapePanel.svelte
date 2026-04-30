@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedInput from './shared/TemplatedInput.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The web-scrape executor (`src/lib/workflows/nodes/web-scrape.ts`) reads:
@@ -59,12 +62,12 @@
     </header>
     <label class="ws-field">
       <span class="ws-label">URL</span>
-      <input
-        type="text"
-        spellcheck="false"
+      <TemplatedInput
+        spellcheck={false}
         value={url}
+        upstreamFields={upstreamFields}
         placeholder="https://example.com/article"
-        oninput={(e) => set('url', (e.currentTarget as HTMLInputElement).value)}
+        onChange={(v) => set('url', v)}
       />
       <span class="ws-hint">
         Templates supported: <code>{`{{input.url}}`}</code>. Mozilla Readability strips nav/ads

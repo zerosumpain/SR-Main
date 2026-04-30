@@ -71,6 +71,11 @@
     onChange(name);
     pickerOpen = false;
   }
+  function refreshFiles() {
+    fileList = null;
+    fileError = null;
+    void loadFiles();
+  }
 
   const filteredFiles = $derived.by(() => {
     if (!fileList) return [];
@@ -111,13 +116,16 @@
 
   {#if pickerOpen}
     <div class="fp-picker">
-      <input
-        type="text"
-        class="fp-picker-search"
-        placeholder="Filter by name…"
-        value={pickerQuery}
-        oninput={(e) => { pickerQuery = (e.currentTarget as HTMLInputElement).value; }}
-      />
+      <div class="fp-picker-header">
+        <input
+          type="text"
+          class="fp-picker-search"
+          placeholder="Filter by name…"
+          value={pickerQuery}
+          oninput={(e) => { pickerQuery = (e.currentTarget as HTMLInputElement).value; }}
+        />
+        <button type="button" class="fp-mini" onclick={refreshFiles} title="Refresh from server">↻</button>
+      </div>
       {#if filesLoading}
         <p class="fp-picker-empty">Loading…</p>
       {:else if fileError}
@@ -194,6 +202,8 @@
     flex-direction: column;
     gap: 6px;
   }
+  .fp-picker-header { display: flex; gap: 4px; align-items: stretch; }
+  .fp-picker-header .fp-picker-search { flex: 1; }
   .fp-picker-search {
     padding: 6px 8px;
     background: var(--bg);
@@ -205,6 +215,19 @@
     outline: none;
   }
   .fp-picker-search:focus { border-color: var(--text-muted); }
+  .fp-mini {
+    padding: 2px 8px;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px dashed var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .fp-mini:hover { color: var(--text-primary); }
   .fp-picker-empty {
     margin: 0;
     padding: 6px 4px;

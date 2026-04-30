@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // Canvas-level page renders the "What this does" preview; we don't repeat it.
@@ -208,14 +211,15 @@
   <section class="lr-sec">
     <label class="lr-field">
       <span class="lr-label">System Prompt — extra context for the router (optional)</span>
-      <textarea
+      <TemplatedTextarea
         class="lr-code"
-        rows="3"
-        spellcheck="false"
+        rows={3}
+        spellcheck={false}
         placeholder="You are routing customer support tickets by topic."
         value={systemPrompt}
-        oninput={(e) => set('systemPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('systemPrompt', v)}
+      />
       <span class="lr-hint">Prepended to the routing instructions. Leave blank to use only the auto-generated routing prompt.</span>
     </label>
   </section>
@@ -224,14 +228,15 @@
   <section class="lr-sec">
     <label class="lr-field">
       <span class="lr-label">User Prompt — what the model classifies (optional)</span>
-      <textarea
+      <TemplatedTextarea
         class="lr-code"
-        rows="3"
-        spellcheck="false"
+        rows={3}
+        spellcheck={false}
         placeholder={'Classify this message: {{input.text}}'}
         value={userPrompt}
-        oninput={(e) => set('userPrompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('userPrompt', v)}
+      />
       <span class="lr-hint">If blank, the full input object is sent as JSON. Templates: <code>{`{{input.field}}`}</code>.</span>
     </label>
   </section>

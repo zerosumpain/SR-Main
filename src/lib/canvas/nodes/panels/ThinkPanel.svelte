@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
   import { THINK_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The canvas-level preview header (in /jkai/canvas/[slug]/+page.svelte)
@@ -67,14 +70,15 @@
   <section class="th-sec">
     <label class="th-field">
       <span class="th-label">Reasoning Task — what you want the model to think about</span>
-      <textarea
+      <TemplatedTextarea
         class="th-code"
-        rows="6"
-        spellcheck="false"
+        rows={6}
+        spellcheck={false}
         placeholder={`Analyze {{input.data}} and determine the best course of action.`}
         value={prompt}
-        oninput={(e) => set('prompt', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('prompt', v)}
+      />
       <span class="th-hint">
         Required. Templates supported: <code>{`{{input.field}}`}</code>. The full input is also injected verbatim before the task.
         {#if !prompt.trim()}<span class="th-warn">empty — workflow will fail at runtime</span>{/if}

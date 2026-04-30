@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // The intel-query executor reads only `config.query` today (see
@@ -99,14 +102,15 @@
     </header>
     <label class="iq-field">
       <span class="iq-label">Search text</span>
-      <textarea
+      <TemplatedTextarea
         class="iq-code"
-        rows="3"
-        spellcheck="false"
+        rows={3}
+        spellcheck={false}
         placeholder={`{{input.message}}`}
         value={query}
-        oninput={(e) => set('query', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('query', v)}
+      />
       <span class="iq-hint">
         What to look up in the intel knowledge graph. Templates supported:
         <code>{`{{input.field}}`}</code>. Empty string falls back to

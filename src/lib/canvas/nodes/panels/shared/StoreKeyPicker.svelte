@@ -139,17 +139,20 @@
     </div>
     <span class="skp-hint">No keys yet in this store — type a new one.</span>
   {:else}
-    <select class="skp-select" value={value} onchange={onSelect}>
-      <option value="" disabled>— {placeholder} —</option>
-      {#each keys as k (k.key)}
-        <option value={k.key}>{k.key}{k.meta ? ` · ${k.meta}` : ''}</option>
-      {/each}
-      <option disabled>──────</option>
-      {#if mode === 'set'}
-        <option value="__new__">+ New key…</option>
-      {/if}
-      <option value="__template__">{`{{template-driven key}}…`}</option>
-    </select>
+    <div class="skp-row">
+      <select class="skp-select" value={value} onchange={onSelect}>
+        <option value="" disabled>— {placeholder} —</option>
+        {#each keys as k (k.key)}
+          <option value={k.key}>{k.key}{k.meta ? ` · ${k.meta}` : ''}</option>
+        {/each}
+        <option disabled>──────</option>
+        {#if mode === 'set'}
+          <option value="__new__">+ New key…</option>
+        {/if}
+        <option value="__template__">{`{{template-driven key}}…`}</option>
+      </select>
+      <button type="button" class="skp-mini" onclick={refresh} title="Refresh from server">↻</button>
+    </div>
     <span class="skp-hint">{keys.length} existing key{keys.length === 1 ? '' : 's'} in this store.</span>
   {/if}
 </div>

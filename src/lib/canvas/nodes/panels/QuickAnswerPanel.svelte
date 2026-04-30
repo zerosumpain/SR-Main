@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // ---------- Topic (templated) -------------------------------------------
@@ -68,14 +71,15 @@
     </header>
     <label class="qa-field">
       <span class="qa-label">What to research</span>
-      <textarea
+      <TemplatedTextarea
         class="qa-code"
-        rows="3"
-        spellcheck="false"
+        rows={3}
+        spellcheck={false}
         placeholder={'What is the impact of {{input.subject}} on …'}
         value={topic}
-        oninput={(e) => set('topic', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('topic', v)}
+      />
       <span class="qa-hint">Required. Templates supported: <code>{`{{input.field}}`}</code> or <code>{`{{item.title}}`}</code>.</span>
     </label>
   </section>
@@ -88,14 +92,15 @@
     </header>
     <label class="qa-field">
       <span class="qa-label">One per line (optional)</span>
-      <textarea
+      <TemplatedTextarea
         class="qa-code"
-        rows="4"
-        spellcheck="false"
+        rows={4}
+        spellcheck={false}
         placeholder={'Understand key players\nIdentify risks\nList opportunities'}
         value={goalsText}
-        oninput={(e) => setGoalsText((e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => setGoalsText(v)}
+      />
       <span class="qa-hint">Specific angles or sub-questions. Each line is template-interpolated.</span>
     </label>
   </section>

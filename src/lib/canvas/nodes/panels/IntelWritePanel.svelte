@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // ---------- Field readers ------------------------------------------------
@@ -82,14 +85,15 @@
     </header>
     <label class="iw-field">
       <span class="iw-label">Note body</span>
-      <textarea
+      <TemplatedTextarea
         class="iw-code iw-content"
-        rows="6"
-        spellcheck="false"
+        rows={6}
+        spellcheck={false}
         placeholder={`{{input.summary}}\n\nSource: {{input.url}}`}
         value={content}
-        oninput={(e) => set('content', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onChange={(v) => set('content', v)}
+      />
       <span class="iw-hint">
         Markdown or plain text. Templates supported: <code>{`{{input.field}}`}</code>. This is what
         gets embedded and extracted into entities + relationships.

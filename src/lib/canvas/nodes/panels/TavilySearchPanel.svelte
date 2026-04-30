@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    upstreamFields?: string[];
   } = $props();
 
   // ---------- Field readers ------------------------------------------------
@@ -84,15 +87,16 @@
     </header>
     <label class="tv-field">
       <span class="tv-label">Query</span>
-      <textarea
+      <TemplatedTextarea
         class="tv-code tv-query"
-        rows="2"
-        spellcheck="false"
+        rows={2}
+        spellcheck={false}
         placeholder="svelte 5 runes best practices"
         value={query}
-        onkeydown={onQueryKeydown}
-        oninput={(e) => set('query', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
+        upstreamFields={upstreamFields}
+        onKeydown={onQueryKeydown}
+        onChange={(v) => set('query', v)}
+      />
       <span class="tv-hint">Templates supported: <code>{`{{input.field}}`}</code></span>
     </label>
   </section>
