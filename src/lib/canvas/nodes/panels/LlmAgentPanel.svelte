@@ -22,6 +22,8 @@
   // Sourced from the shared list so all LLM panels stay in lockstep. If new
   // models are added, edit src/lib/canvas/nodes/panels/shared/vertex-models.ts.
   const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
+  const currentModel = $derived(String(config.model ?? ''));
+  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === currentModel));
 
   // ---------- Generic setter ----------------------------------------------
 
@@ -126,19 +128,17 @@
       </span>
     </label>
 
-    {@const _currentModel = String(config.model ?? '')}
-    {@const _modelInList = MODEL_OPTIONS.some((o) => o.value === _currentModel)}
     <label class="la-field">
       <span class="la-label">Model</span>
       <select
-        value={_currentModel}
+        value={currentModel}
         onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}
       >
         {#each MODEL_OPTIONS as opt (opt.value)}
           <option value={opt.value}>{opt.label}</option>
         {/each}
-        {#if !_modelInList && _currentModel}
-          <option value={_currentModel}>Custom: {_currentModel}</option>
+        {#if !modelInList && currentModel}
+          <option value={currentModel}>Custom: {currentModel}</option>
         {/if}
       </select>
       <span class="la-hint">
