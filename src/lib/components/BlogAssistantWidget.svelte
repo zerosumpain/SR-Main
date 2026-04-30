@@ -11,6 +11,8 @@
     adminToken: string;
     history: { role: string; content: string }[];
     proposalStore: import('$lib/blog/assistant/proposal-store').ProposalStore;
+    autoReviewEnabled: boolean;
+    onSetAutoReview: (v: boolean) => void;
     onProposalArrived: (p: Proposal) => void;
     onAcceptMeta: (p: MetaProposal) => Promise<void>;
     onRejectMeta: (p: MetaProposal) => void;
@@ -21,6 +23,7 @@
 
   let {
     postId, adminToken, history, proposalStore,
+    autoReviewEnabled, onSetAutoReview,
     onProposalArrived, onAcceptMeta, onRejectMeta, onRegenerate,
     onClear,
     sendMessage = $bindable(),
@@ -280,8 +283,15 @@
         onpointerup={endDrag}
         onpointercancel={endDrag}
       >&gt;jkai</span>
-      <button type="button" class="hist" class:active={historyOpen}
+      <button
+        type="button"
+        class="auto"
+        class:on={autoReviewEnabled}
         style="margin-left: auto;"
+        onclick={() => onSetAutoReview(!autoReviewEnabled)}
+        title="Auto-review: scan as you type and quietly add suggestions to the margin"
+      >Auto: {autoReviewEnabled ? 'on' : 'off'}</button>
+      <button type="button" class="hist" class:active={historyOpen}
         onclick={() => { historyOpen = !historyOpen; if (historyOpen) loadRevisions(); }}
         aria-label="History" title="Recent LLM changes (rollback)">↶</button>
       <button type="button" class="clear" onclick={clearChat} aria-label="Clear chat" title="Clear chat history and proposals">Clear</button>
@@ -380,6 +390,13 @@
     color: var(--text-muted);
   }
   .clear:hover { color: var(--danger, #c33); border-color: var(--danger, #c33); }
+  .auto {
+    border: 1px solid var(--card-border); background: transparent;
+    padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .auto.on { background: var(--accent-tint-08); color: var(--text-primary); border-color: var(--accent, var(--card-border)); }
   .hist {
     border: 1px solid var(--card-border); background: transparent;
     padding: 0.1rem 0.45rem; font-size: 0.85rem; cursor: pointer;

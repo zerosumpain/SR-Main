@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Proposal, MetaField } from './proposal';
+import { segmentBody, getSentence } from './segment';
 
 export type PostSnapshot = {
   id: number;
@@ -40,14 +41,15 @@ export const toolDefinitions = [
     alt: { type: 'string' },
   }, ['alt']),
   toolDef(
-    'patch_content',
-    "Propose a plain-text substring replacement. `find` must be plain prose (no HTML tags, no <s>, no <p>, no </p>). It must appear exactly once in the body's plain-text content. `replace` is the new plain-text. Use multiple patches for multiple changes; never paste the whole body.",
+    'suggest_sentence_rewrite',
+    'Propose a rewrite for ONE specific sentence in the post body. The body is shown to you with [paragraphIdx.sentenceIdx] markers (e.g. [0.0], [1.2]). Pick a sentence by its indices and provide the full replacement sentence. The server resolves the original text from the indices — you never specify text boundaries.',
     {
-      find: { type: 'string' },
-      replace: { type: 'string' },
-      reason: { type: 'string', description: 'one short sentence; shown as a tooltip on the suggestion' },
+      paragraphIdx: { type: 'number', description: 'Zero-based paragraph number from the [p.s] markers.' },
+      sentenceIdx: { type: 'number', description: 'Zero-based sentence number within that paragraph.' },
+      newText: { type: 'string', description: 'The full replacement sentence. Plain prose, no HTML.' },
+      reason: { type: 'string', description: 'One short sentence; shown as a tooltip on the suggestion.' },
     },
-    ['find', 'replace'],
+    ['paragraphIdx', 'sentenceIdx', 'newText', 'reason'],
   ),
   toolDef('read_post', 'Return the current post snapshot. Use when you need to inspect more than what is in the system prompt.', {}, []),
 ];
@@ -102,41 +104,41 @@ export async function runTool(
     case 'set_cover_alt':
       return { ok: true, proposal: metaProposal('cover_alt', snapshot.coverImageAlt, String(args.alt ?? ''), reason) };
 
-    case 'patch_content': {
-      const findRaw = String(args.find ?? '');
-      const replaceRaw = String(args.replace ?? '');
-      if (!findRaw) return { ok: false, error: 'find string is empty.' };
+    case 'suggest_sentence_rewrite': {
+      const pIdx = Number(args.paragraphIdx);
+      const sIdx = Number(args.sentenceIdx);
+      const newText = String(args.newText ?? '').trim();
+      if (!Number.isFinite(pIdx) || !Number.isFinite(sIdx)) {
+        return { ok: false, error: 'paragraphIdx and sentenceIdx must be numbers.' };
+      }
+      if (!newText) return { ok: false, error: 'newText is empty.' };
 
-      // The LLM is shown the post body as HTML. Its `find` argument frequently
-      // includes tag fragments (<s>, </p><p>, etc.) that exist in the HTML
-      // string but not in the editor's textContent — so any anchoring against
-      // the live editor fails. Strip HTML tags from both sides and match
-      // against a tag-stripped haystack so patches always anchor to plain
-      // prose. Whitespace runs are collapsed to single spaces on both sides
-      // so the LLM doesn't have to guess about indentation between blocks.
-      const stripTags = (s: string) => s.replace(/<\/?[^>]+>/g, '');
-      const collapse = (s: string) => s.replace(/\s+/g, ' ');
-      const find = collapse(stripTags(findRaw)).trim();
-      let replace = collapse(stripTags(replaceRaw));
-      const haystack = collapse(stripTags(snapshot.content));
-
-      if (!find) return { ok: false, error: 'find string is empty after stripping tags.' };
-      const occurrences = haystack.split(find).length - 1;
-      if (occurrences === 0) return { ok: false, error: 'find string not found in content.' };
-      if (occurrences > 1) return { ok: false, error: `find string not unique (${occurrences} matches).` };
-
-      // Defensively preserve boundary whitespace from `find` if the LLM
-      // dropped it on `replace`. Only auto-fix when `replace` is non-empty.
-      if (replace.length > 0) {
-        const leading = find.match(/^\s+/)?.[0] ?? '';
-        const trailing = find.match(/\s+$/)?.[0] ?? '';
-        if (leading && !/^\s/.test(replace)) replace = leading + replace;
-        if (trailing && !/\s$/.test(replace)) replace = replace + trailing;
+      // Resolve the indices to the actual sentence text. The LLM never
+      // chooses character boundaries — segmentBody picks them deterministically,
+      // so accepts can never be off by a few chars.
+      const segmented = segmentBody(snapshot.content);
+      const original = getSentence(segmented, pIdx, sIdx);
+      if (!original) {
+        return { ok: false, error: `no sentence at [${pIdx}.${sIdx}].` };
       }
 
-      const from = haystack.indexOf(find);
-      const to = from + find.length;
-      return { ok: true, proposal: proseProposal(find, replace, from, to, reason) };
+      // Anchor against the body's plain-text view (used by the runner's
+      // prompt and matches the editor's textContent shape).
+      const stripTags = (s: string) => s.replace(/<\/?[^>]+>/g, '');
+      const collapse = (s: string) => s.replace(/\s+/g, ' ');
+      const haystack = collapse(stripTags(snapshot.content));
+      const needle = collapse(original).trim();
+      const from = haystack.indexOf(needle);
+      if (from < 0) {
+        return { ok: false, error: `sentence at [${pIdx}.${sIdx}] no longer present in body.` };
+      }
+      const to = from + needle.length;
+
+      // Strip stray markup from newText (the LLM occasionally wraps it in
+      // tags) but DON'T collapse whitespace — preserve the user's intended
+      // spacing within the rewritten sentence.
+      const cleanedNew = stripTags(newText).trim();
+      return { ok: true, proposal: proseProposal(needle, cleanedNew, from, to, reason) };
     }
 
     case 'read_post':

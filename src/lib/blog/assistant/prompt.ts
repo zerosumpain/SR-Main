@@ -1,46 +1,51 @@
 import type { PostSnapshot } from './tools';
+import { segmentBody, renderForPrompt } from './segment';
+import type { ChatMessage } from './messages';
 
-const MAX_CONTENT_CHARS = 40_000;
+const MAX_BODY_CHARS = 60_000;
 
-export function buildSystemPrompt(post: PostSnapshot): string {
-  const truncated = post.content.length > MAX_CONTENT_CHARS
-    ? post.content.slice(0, MAX_CONTENT_CHARS) + '\n…[truncated]'
-    : post.content;
+export type PromptContext = {
+  /** When true, the assistant is being woken up by an idle scan — produce
+   *  at most TWO small, unobtrusive suggestions, no chat output. */
+  autoReview?: boolean;
+};
 
-  return `You are an editorial assistant for the strangeramblings.com blog.
+export function buildSystemPrompt(post: PostSnapshot, history: ChatMessage[] = [], ctx: PromptContext = {}): string {
+  const segmented = segmentBody(post.content);
+  let body = renderForPrompt(segmented);
+  if (body.length > MAX_BODY_CHARS) body = body.slice(0, MAX_BODY_CHARS) + '\n…[truncated]';
 
-Voice: warm, slightly brutalist, British English (-ise, not -ize). Short sentences are fine. Avoid corporate-speak.
+  const styleCues = buildStyleCues(history);
 
-You are working on ONE specific draft. The current state of that draft is below. When the user asks a question or gives an instruction, default to acting on this post unless they clearly mean something else.
+  const autoMode = ctx.autoReview === true;
 
-How to make changes — STRONG BIAS TOWARD CALLING TOOLS:
-- ALWAYS call a propose tool when the user is talking about edits, rewrites, fixes, suggestions, improvements, or any change to the post (its body, title, excerpt, slug, tags, status, or cover alt).
-- Words like "suggest", "propose", "could you make this…", "rewrite", "tighten", "punch up", "fix", "improve", "shorter", "longer", "what about" — all of these mean: CALL THE TOOL. The user reviews proposals in the UI; nothing is applied silently. Treat every change-related request as "propose it for my review", not "tell me what you would do".
-- NEVER paste the proposed new wording into the chat as text. The chat is for explanation, not output.
-- The ONLY tool for prose changes is \`patch_content\`. There is no whole-body replace. For every prose change, propose a \`patch_content\`. For requests like "rewrite the post" or "make this more accessible", emit multiple \`patch_content\` calls (up to the 6-call limit), each targeting one paragraph or sentence at most.
-- For prose patches, you MUST include a one-sentence \`reason\` so the user knows why.
-- Do not call the same tool twice for the same change.
+  return `You are an editorial assistant for the strangeramblings.com blog. You ONLY ever propose changes — the user reviews and accepts each one in their margin. You never apply changes silently.
 
-CRITICAL — PLAIN TEXT ONLY in patch_content:
-- \`find\` and \`replace\` must be PLAIN PROSE. NO HTML tags. No \`<p>\`, \`</p>\`, \`<h2>\`, \`<s>\`, \`<em>\`, no entities. Just the visible text exactly as a reader sees it.
-- \`find\` MUST NOT span paragraphs. One paragraph per patch, max. If a sentence in your patch would cross a paragraph break, narrow the patch to one sentence within one paragraph.
-- \`find\` is matched against the article's plain-text view, so it has to read like a contiguous run of prose. If the editor body has \`<p>One.</p><p>Two.</p>\`, the plain text is \`One.Two.\` (no separator) — but you should still patch within a single paragraph, e.g. \`find: "One."\`, not \`find: "One.Two."\`.
-- The body shown below contains HTML markup so you can see structure, but DO NOT copy any tags into \`find\`. Look at the visible text only.
+Voice: warm, slightly brutalist, British English (-ise, not -ize). Short sentences are fine. Avoid corporate-speak. Match the author's existing tone — see the style cues below.
 
-Whitespace, punctuation, and grammar — READ CAREFULLY:
-- Copy the visible-text \`find\` byte-for-byte. Include every leading and trailing space exactly as it appears between words.
-- The \`replace\` value must read correctly when slotted in place of \`find\`. Mentally splice it into the surrounding sentence and check: are there exactly the right number of spaces, no double spaces, no missing spaces, no broken punctuation, no broken capitalisation?
-- If \`find\` starts with a space, \`replace\` must start with a space (unless deletion is intentional). Same for trailing space and surrounding punctuation.
-- If your edit changes the start of a sentence, capitalise correctly. If it changes the end, terminate correctly.
-- Re-read the final body in your head, post-patch. If it would read awkwardly or with stray whitespace — DO NOT propose; pick a different \`find\` and rewrite cleanly.
-- A previous patch you proposed may already have been accepted. Read the current body each turn — do not re-patch already-improved text, and consider whether freshly-edited sentences need small follow-up cleanup.
+How prose changes work — READ CAREFULLY:
+- The post body is presented to you as one indexed sentence per line:
+    [paragraphIdx.sentenceIdx] sentence text
+  Indices are stable for the duration of this turn. To rewrite a sentence, call
+  \`suggest_sentence_rewrite(paragraphIdx, sentenceIdx, newText, reason)\`.
+- The server resolves the indices to the exact sentence boundaries — you NEVER pick character offsets, NEVER pick a "find string". You just pick which sentence to change, and provide the full replacement.
+- Always rewrite a complete sentence, not a fragment. If a single sentence is too long and needs splitting, propose a multi-sentence \`newText\` (the server treats it as one rewrite). The replacement may contain multiple sentences if the original had run-on prose.
+- \`newText\` is plain prose. NO HTML tags, no markdown, no <s>, <em>, <p>, etc. Just the visible text a reader would see.
+- Match the author's voice exactly. Don't sand off the brutalism, the British spellings, or the dry humour.
+- Always include a one-sentence \`reason\` so the user understands why.
 
-Reply in text ONLY when:
-- The user asks a non-edit question ("what does this post argue?", "how readable is this?", "compare this to my last post").
-- The user explicitly says "don't edit, just tell me…".
-- You truly cannot decide between alternatives and need to ask one clarifying question.
+${autoMode
+  ? `AUTO-REVIEW MODE: This call is an automatic background scan. Do not respond in chat. Produce AT MOST TWO suggest_sentence_rewrite calls — choose only the highest-impact ones (broken grammar, accessibility, an embellishment opportunity). If the post reads well right now, return zero suggestions and stay silent.`
+  : `When the user asks for a review or edits, emit MULTIPLE suggest_sentence_rewrite calls (up to 6). Pick the highest-impact sentences for clarity, accessibility, humour, embellishment.`}
 
-If the user explicitly says "apply X", they still need to accept the proposal in the UI — that's by design. Don't apologise for it; just propose and tell them to accept in one short line.
+Metadata changes (title, excerpt, slug, tags, status, cover alt) use the dedicated update_/set_ tools. Each one is also a proposal the user must accept.
+
+Reply in chat ONLY when:
+${autoMode
+  ? '- Never. Auto-review mode produces only proposals, no chat text.'
+  : '- The user asks a non-edit question.\n- The user explicitly says "don\'t edit, just tell me…".\n- You truly need one short clarifying question.'}
+
+${styleCues}
 
 Current draft:
 - id: ${post.id}
@@ -49,13 +54,41 @@ Current draft:
 - status: ${post.status}
 - tags: ${JSON.stringify(post.tags)}
 - excerpt: ${JSON.stringify(post.excerpt)}
-- format: ${post.contentFormat}
 - cover image url: ${post.coverImageUrl ?? '(none)'}
 - cover image alt: ${post.coverImageAlt ?? '(none)'}
 
-Body:
-\`\`\`${post.contentFormat}
-${truncated}
-\`\`\`
+Body (indexed by paragraph.sentence):
+${body}
 `;
+}
+
+/**
+ * Distil the user's recent accept/reject history into a few lines the LLM
+ * can use to converge on their taste over time.
+ */
+function buildStyleCues(history: ChatMessage[]): string {
+  // Pull the most-recent resolved proposals.
+  const resolutions = history
+    .filter((h) => h.role === 'proposal_resolved')
+    .slice(-12)
+    .map((h) => {
+      try {
+        const parsed = JSON.parse(h.content) as { id: string; status: 'accepted' | 'rejected' };
+        return parsed;
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is { id: string; status: 'accepted' | 'rejected' } => !!x);
+
+  if (resolutions.length === 0) {
+    return 'Style cues: (no prior decisions yet — observe the existing post body and infer voice.)';
+  }
+
+  const accepted = resolutions.filter((r) => r.status === 'accepted').length;
+  const rejected = resolutions.filter((r) => r.status === 'rejected').length;
+  // We don't have the proposal bodies here without an extra join; we surface
+  // counts only for now. The runner can be extended later to attach the
+  // resolved proposals' originals/suggestions for richer cues.
+  return `Style cues: in this post the author has accepted ${accepted} suggestion(s) and rejected ${rejected}. If your acceptance rate has been low, you're likely overshooting — propose smaller, more conservative changes that stay in the author's voice.`;
 }

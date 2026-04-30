@@ -99,6 +99,7 @@
   async function saveContent(newContent: string) {
     content = newContent;
     await save();
+    scheduleAutoScan();
   }
 
   async function uploadImage(file: File): Promise<string> {
@@ -240,6 +241,60 @@
   const proposalStore = createProposalStore();
   let proposalTick = $state(0); // bump to force re-render of derived lists
   let editorContainer = $state<HTMLDivElement | undefined>();
+
+  // Always-on idle review. After 12s of no edits, ask the server for at most
+  // two unobtrusive suggestions; rate-limit to one scan per 30s. The user
+  // can disable via the widget toggle.
+  let autoReviewEnabled = $state<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('blog-assistant-auto') !== 'off'
+      : true,
+  );
+  function setAutoReview(v: boolean) {
+    autoReviewEnabled = v;
+    try { localStorage.setItem('blog-assistant-auto', v ? 'on' : 'off'); } catch { /* ignore */ }
+    if (!v && idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  }
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastAutoScanAt = 0;
+  const IDLE_DELAY_MS = 12_000;
+  const AUTO_COOLDOWN_MS = 30_000;
+  const MAX_PENDING_BEFORE_SKIP = 6;
+  let autoScanInflight = false;
+
+  function scheduleAutoScan() {
+    if (!autoReviewEnabled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(runAutoScan, IDLE_DELAY_MS);
+  }
+
+  async function runAutoScan() {
+    idleTimer = null;
+    if (autoScanInflight) return;
+    if (!autoReviewEnabled) return;
+    if (Date.now() - lastAutoScanAt < AUTO_COOLDOWN_MS) return;
+    const pendingNow = proposalStore.list().filter((p) => p.status === 'pending');
+    if (pendingNow.length >= MAX_PENDING_BEFORE_SKIP) return;
+    autoScanInflight = true;
+    lastAutoScanAt = Date.now();
+    try {
+      const pendingHints = pendingNow.map((p) => p.kind === 'prose' ? p.original : `${p.field}`);
+      const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending: pendingHints }),
+      });
+      if (!r.ok) return;
+      const body = await r.json();
+      const fresh = (body?.proposals ?? []) as Proposal[];
+      for (const p of fresh) {
+        proposalStore.add(p);
+        if (p.kind === 'prose' && richApi) richApi.applyProposal(p);
+      }
+      if (fresh.length > 0) proposalTick++;
+    } catch { /* silent — this is a background scan */ }
+    finally { autoScanInflight = false; }
+  }
 
   async function acceptMetaProposal(p: MetaProposal) {
     proposalStore.resolve(p.id, 'accepted');
@@ -506,6 +561,8 @@
     {adminToken}
     history={data.history ?? []}
     {proposalStore}
+    {autoReviewEnabled}
+    onSetAutoReview={setAutoReview}
     onProposalArrived={onProposalArrived}
     onAcceptMeta={acceptMetaProposal}
     onRejectMeta={rejectMetaProposal}

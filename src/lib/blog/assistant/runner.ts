@@ -19,6 +19,9 @@ export type RunOptions = {
   history: ChatMessage[];
   client: OpenAI;
   model: string;
+  /** When true, the system prompt is biased toward producing at most two
+   *  unobtrusive proposals and no chat output. */
+  autoReview?: boolean;
 };
 
 /**
@@ -54,7 +57,7 @@ function toRowSnapshot(row: Awaited<ReturnType<typeof getPostById>>): PostSnapsh
 }
 
 export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantEvent> {
-  const { postId, userMessage, history, client, model } = opts;
+  const { postId, userMessage, history, client, model, autoReview } = opts;
   const row = await getPostById(postId);
   if (!row) {
     yield { type: 'error', message: `Post ${postId} not found.` };
@@ -62,9 +65,14 @@ export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantE
   }
   const snapshot = toRowSnapshot(row);
 
+  // proposal_resolved rows are non-conversational; we use them only to build
+  // the style cues block. They're filtered out of the messages array fed to
+  // the model so they don't pollute the chat thread.
+  const conversational = history.filter((h) => h.role !== 'proposal_resolved' && h.role !== 'tool' && h.role !== 'proposal');
+
   const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: buildSystemPrompt(snapshot) },
-    ...history.map((h) => ({ role: h.role === 'tool' || h.role === 'proposal' ? 'assistant' : h.role, content: h.content })),
+    { role: 'system', content: buildSystemPrompt(snapshot, history, { autoReview: !!autoReview }) },
+    ...conversational.map((h) => ({ role: h.role, content: h.content })),
     { role: 'user', content: userMessage },
   ];
 
