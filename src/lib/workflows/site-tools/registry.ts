@@ -24,6 +24,7 @@ import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/scraper';
 import './tools/files';
+import './tools/gmail';
 
 // --- Public API ---
 
@@ -81,6 +82,7 @@ export function getToolsetManifest(): Array<{
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list and read files uploaded via /admin/files. PDFs, DOCX, audio, and video are auto-extracted to text on read.',
+    gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({
