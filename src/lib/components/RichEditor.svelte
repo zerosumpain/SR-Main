@@ -352,11 +352,16 @@
     if (p.original.length === 0) {
       return { from: p.anchor.from + 1, to: p.anchor.from + 1 };
     }
+    // Defensive: if the LLM (or an old proposal) snuck HTML markup into
+    // `original`, strip it before matching. Server-side patch_content
+    // should already produce plain text, but old in-flight proposals from
+    // a stale client may not.
+    const cleanedOriginal = p.original.replace(/<\/?[^>]+>/g, '');
     const docText = ed.state.doc.textContent;
 
     // Fast path: literal match.
-    let idx = docText.indexOf(p.original);
-    let needleLen = p.original.length;
+    let idx = docText.indexOf(cleanedOriginal);
+    let needleLen = cleanedOriginal.length;
 
     // Fallback path: collapse whitespace runs on both sides and search again.
     // The proposal's `original` was matched against a tag-stripped, whitespace-
@@ -364,7 +369,7 @@
     // block boundaries differently, so a literal compare can still miss.
     if (idx < 0) {
       const collapsedDoc = docText.replace(/\s+/g, ' ');
-      const collapsedNeedle = p.original.replace(/\s+/g, ' ').trim();
+      const collapsedNeedle = cleanedOriginal.replace(/\s+/g, ' ').trim();
       const cIdx = collapsedDoc.indexOf(collapsedNeedle);
       if (cIdx < 0) return null;
       // Map collapsed index back to original docText by walking and counting.

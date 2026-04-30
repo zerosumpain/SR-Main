@@ -39,14 +39,16 @@ export const toolDefinitions = [
   toolDef('set_cover_alt', 'Propose alt text for the cover image.', {
     alt: { type: 'string' },
   }, ['alt']),
-  toolDef('replace_content', 'Propose replacing the entire post body.', {
-    content: { type: 'string' },
-  }, ['content']),
-  toolDef('patch_content', 'Propose a substring replacement in the post body. Errors if find is missing or non-unique.', {
-    find: { type: 'string' },
-    replace: { type: 'string' },
-    reason: { type: 'string', description: 'one short sentence; shown as a tooltip on the suggestion' },
-  }, ['find', 'replace']),
+  toolDef(
+    'patch_content',
+    "Propose a plain-text substring replacement. `find` must be plain prose (no HTML tags, no <s>, no <p>, no </p>). It must appear exactly once in the body's plain-text content. `replace` is the new plain-text. Use multiple patches for multiple changes; never paste the whole body.",
+    {
+      find: { type: 'string' },
+      replace: { type: 'string' },
+      reason: { type: 'string', description: 'one short sentence; shown as a tooltip on the suggestion' },
+    },
+    ['find', 'replace'],
+  ),
   toolDef('read_post', 'Return the current post snapshot. Use when you need to inspect more than what is in the system prompt.', {}, []),
 ];
 
@@ -99,12 +101,6 @@ export async function runTool(
 
     case 'set_cover_alt':
       return { ok: true, proposal: metaProposal('cover_alt', snapshot.coverImageAlt, String(args.alt ?? ''), reason) };
-
-    case 'replace_content':
-      return {
-        ok: true,
-        proposal: proseProposal(snapshot.content, String(args.content ?? ''), 0, snapshot.content.length, reason),
-      };
 
     case 'patch_content': {
       const findRaw = String(args.find ?? '');
