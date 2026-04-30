@@ -2,16 +2,14 @@ import type OpenAI from 'openai';
 import { getPostById } from '$lib/blog';
 import { buildSystemPrompt } from './prompt';
 import { runTool, toolDefinitions, type PostSnapshot } from './tools';
-import { undoStore } from './undo-store';
+import type { Proposal } from './proposal';
 import type { ChatMessage } from './messages';
 
 const MAX_TOOL_CALLS = 6;
 
 export type AssistantEvent =
   | { type: 'text'; delta: string }
-  | { type: 'tool_call'; name: string; arguments: Record<string, unknown> }
-  | { type: 'tool_result'; name: string; ok: boolean; result?: unknown; error?: string; undoToken?: string }
-  | { type: 'post_state'; post: PostSnapshot }
+  | { type: 'proposal'; proposal: Proposal }
   | { type: 'done'; reason: 'stop' | 'cap' }
   | { type: 'error'; message: string };
 
@@ -21,16 +19,33 @@ export type RunOptions = {
   history: ChatMessage[];
   client: OpenAI;
   model: string;
+  /** When true, the system prompt is biased toward producing at most two
+   *  unobtrusive proposals and no chat output. */
+  autoReview?: boolean;
 };
+
+/**
+ * Strip stylistic strikethrough tags before showing the body to the LLM.
+ * The patch engine matches against the editor's plain-text content, which
+ * doesn't include `<s>` markup; if the LLM copies `<s>` into its `find`
+ * argument the patch will never anchor. (Suggestions are now overlays —
+ * decorations — so they never appear in saved HTML and no longer need
+ * stripping at this layer.)
+ */
+function stripSuggestionMarks(html: string): string {
+  return html.replace(/<\/?(?:s|strike)>/gi, '');
+}
 
 function toRowSnapshot(row: Awaited<ReturnType<typeof getPostById>>): PostSnapshot {
   if (!row) throw new Error('Post not found');
+  const rawContent = row.content;
+  const cleaned = stripSuggestionMarks(rawContent);
   return {
     id: row.id,
     title: row.title,
     excerpt: row.excerpt,
     slug: row.slug,
-    content: row.content,
+    content: cleaned,
     contentFormat: (row.contentFormat as 'html' | 'markdown') ?? 'html',
     status: (row.status as 'draft' | 'published') ?? 'draft',
     coverImageUrl: row.coverImageUrl ?? null,
@@ -42,7 +57,7 @@ function toRowSnapshot(row: Awaited<ReturnType<typeof getPostById>>): PostSnapsh
 }
 
 export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantEvent> {
-  const { postId, userMessage, history, client, model } = opts;
+  const { postId, userMessage, history, client, model, autoReview } = opts;
   const row = await getPostById(postId);
   if (!row) {
     yield { type: 'error', message: `Post ${postId} not found.` };
@@ -50,9 +65,14 @@ export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantE
   }
   const snapshot = toRowSnapshot(row);
 
+  // proposal_resolved rows are non-conversational; we use them only to build
+  // the style cues block. They're filtered out of the messages array fed to
+  // the model so they don't pollute the chat thread.
+  const conversational = history.filter((h) => h.role !== 'proposal_resolved' && h.role !== 'tool' && h.role !== 'proposal');
+
   const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: buildSystemPrompt(snapshot) },
-    ...history.map((h) => ({ role: h.role === 'tool' ? 'assistant' : h.role, content: h.content })),
+    { role: 'system', content: buildSystemPrompt(snapshot, history, { autoReview: !!autoReview }) },
+    ...conversational.map((h) => ({ role: h.role, content: h.content })),
     { role: 'user', content: userMessage },
   ];
 
@@ -88,32 +108,28 @@ export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantE
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* ignore parse error */ }
 
-        yield { type: 'tool_call', name, arguments: args };
+        const result = await runTool(name, args, { postId, snapshot });
 
-        const result = await runTool(name, args, { postId, snapshot, undoStore });
-        if (result.ok) {
-          yield {
-            type: 'tool_result',
-            name,
-            ok: true,
-            result: result.result,
-            undoToken: result.undoToken,
-          };
-        } else {
-          yield { type: 'tool_result', name, ok: false, error: result.error };
+        if (result.ok && 'proposal' in result) {
+          yield { type: 'proposal', proposal: result.proposal };
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: true, proposalId: result.proposal.id, summary: summarise(result.proposal) }),
+          });
+        } else if (result.ok && 'snapshot' in result) {
+          messages.push({
+            role: 'tool', tool_call_id: tc.id,
+            content: JSON.stringify({ ok: true, snapshot: result.snapshot }),
+          });
+        } else if (!result.ok) {
+          messages.push({
+            role: 'tool', tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: result.error }),
+          });
         }
-
-        if (name !== 'read_post') {
-          yield { type: 'post_state', post: { ...snapshot } };
-        }
-
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: JSON.stringify(result.ok ? { ok: true, result: result.result } : { ok: false, error: result.error }),
-        });
       }
-      continue; // let the model react to tool results
+      continue;
     }
 
     const text = msg.content ?? '';
@@ -121,4 +137,9 @@ export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantE
     yield { type: 'done', reason: 'stop' };
     return;
   }
+}
+
+function summarise(p: Proposal): string {
+  if (p.kind === 'meta') return `proposed ${p.field} → ${JSON.stringify(p.suggestedValue).slice(0, 60)}`;
+  return `proposed prose change at ${p.anchor.from}–${p.anchor.to}`;
 }

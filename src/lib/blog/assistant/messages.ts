@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { blogAssistantMessages } from '$lib/db/schema';
 import { asc, eq } from 'drizzle-orm';
 
-export type ChatRole = 'user' | 'assistant' | 'tool';
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'proposal' | 'proposal_resolved';
 
 export type ChatMessage = {
   id: number;
@@ -15,13 +15,12 @@ export async function appendMessage(postId: number, role: ChatRole, content: str
   await db.insert(blogAssistantMessages).values({ postId, role, content });
 }
 
-export async function loadHistory(postId: number, limit = 20): Promise<ChatMessage[]> {
+export async function loadHistory(postId: number, limit = 30): Promise<ChatMessage[]> {
   const rows = await db
     .select()
     .from(blogAssistantMessages)
     .where(eq(blogAssistantMessages.postId, postId))
     .orderBy(asc(blogAssistantMessages.createdAt));
-  // Take the LAST `limit` items (oldest at the front of the trimmed list).
   return rows.slice(-limit).map((r) => ({
     id: r.id,
     role: r.role as ChatRole,

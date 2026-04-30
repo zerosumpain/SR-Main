@@ -11,10 +11,16 @@
     getHTML: () => string;
     linkSnippet: (snippet: string, url: string, title?: string) => boolean;
     addFootnote: (snippet: string, url: string, title?: string) => number;
+    applyProposal: (p: ProseProposal) => boolean;
+    acceptProposal: (id: string, modifiedText?: string) => boolean;
+    rejectProposal: (id: string) => boolean;
   };
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import BlogAssistantPanel from '$lib/components/BlogAssistantPanel.svelte';
+  import BlogAssistantWidget from '$lib/components/BlogAssistantWidget.svelte';
+  import BlogAssistantMarginCallouts from '$lib/components/BlogAssistantMarginCallouts.svelte';
+  import { createProposalStore } from '$lib/blog/assistant/proposal-store';
+  import type { Proposal, MetaProposal, ProseProposal } from '$lib/blog/assistant/proposal';
   import BlogStatsCard from '$lib/components/BlogStatsCard.svelte';
 
   let { data } = $props();
@@ -93,6 +99,7 @@
   async function saveContent(newContent: string) {
     content = newContent;
     await save();
+    scheduleAutoScan();
   }
 
   async function uploadImage(file: File): Promise<string> {
@@ -231,6 +238,161 @@
     }
   }
 
+  const proposalStore = createProposalStore();
+  let proposalTick = $state(0); // bump to force re-render of derived lists
+  let editorContainer = $state<HTMLDivElement | undefined>();
+
+  // Always-on idle review. After 12s of no edits, ask the server for at most
+  // two unobtrusive suggestions; rate-limit to one scan per 30s. The user
+  // can disable via the widget toggle.
+  let autoReviewEnabled = $state<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('blog-assistant-auto') !== 'off'
+      : true,
+  );
+  function setAutoReview(v: boolean) {
+    autoReviewEnabled = v;
+    try { localStorage.setItem('blog-assistant-auto', v ? 'on' : 'off'); } catch { /* ignore */ }
+    if (!v && idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  }
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastAutoScanAt = 0;
+  // Body length the last time we ran a scan. Initialised to the loaded
+  // content's length so a small typo on a freshly-loaded post doesn't
+  // trigger a scan immediately.
+  let lastScanLen = data.post.content.length;
+  const IDLE_DELAY_MS = 12_000;
+  const AUTO_COOLDOWN_MS = 30_000;
+  const MAX_PENDING_BEFORE_SKIP = 6;
+  // Skip auto-review when fewer than this many characters have changed since
+  // the last scan. Single-typo fixes shouldn't burn an LLM call.
+  const MIN_DELTA_CHARS = 80;
+  let autoScanInflight = false;
+
+  function scheduleAutoScan() {
+    if (!autoReviewEnabled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(runAutoScan, IDLE_DELAY_MS);
+  }
+
+  async function runAutoScan() {
+    idleTimer = null;
+    if (autoScanInflight) return;
+    if (!autoReviewEnabled) return;
+    if (Date.now() - lastAutoScanAt < AUTO_COOLDOWN_MS) return;
+    const pendingNow = proposalStore.list().filter((p) => p.status === 'pending');
+    if (pendingNow.length >= MAX_PENDING_BEFORE_SKIP) return;
+    // Tiny-edit gate — only scan after a meaningful chunk of new typing.
+    if (Math.abs(content.length - lastScanLen) < MIN_DELTA_CHARS) return;
+    autoScanInflight = true;
+    lastAutoScanAt = Date.now();
+    lastScanLen = content.length;
+    try {
+      const pendingHints = pendingNow.map((p) => p.kind === 'prose' ? p.original : `${p.field}`);
+      const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending: pendingHints }),
+      });
+      if (!r.ok) return;
+      const body = await r.json();
+      const fresh = (body?.proposals ?? []) as Proposal[];
+      for (const p of fresh) {
+        proposalStore.add(p);
+        if (p.kind === 'prose' && richApi) richApi.applyProposal(p);
+      }
+      if (fresh.length > 0) proposalTick++;
+    } catch { /* silent — this is a background scan */ }
+    finally { autoScanInflight = false; }
+  }
+
+  async function acceptMetaProposal(p: MetaProposal) {
+    proposalStore.resolve(p.id, 'accepted');
+    proposalTick++;
+    const res = await fetch(`/api/admin/blog/${data.post.id}/apply-proposal?token=${adminToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposalId: p.id, field: p.field, value: p.suggestedValue }),
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!body.post) return;
+    if (p.field === 'title') title = body.post.title;
+    if (p.field === 'excerpt') excerpt = body.post.excerpt;
+    if (p.field === 'slug') slug = body.post.slug;
+    if (p.field === 'tags') tags = (body.post.tags as string[]).join(', ');
+    if (p.field === 'status') status = body.post.status;
+    data.post = body.post;
+    window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
+  }
+
+  function rejectMetaProposal(p: MetaProposal) {
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+  }
+
+  let widgetSendMessage = $state<((text: string) => Promise<void>) | undefined>();
+
+  // After a rollback, update the editor + form fields from the returned post.
+  $effect(() => {
+    const handler = (ev: Event) => {
+      const post = (ev as CustomEvent).detail?.post;
+      if (!post) return;
+      title = post.title ?? title;
+      slug = post.slug ?? slug;
+      excerpt = post.excerpt ?? excerpt;
+      tags = Array.isArray(post.tags) ? (post.tags as string[]).join(', ') : tags;
+      coverImageUrl = post.coverImageUrl ?? coverImageUrl;
+      status = post.status ?? status;
+      if (typeof post.content === 'string') {
+        content = post.content;
+        data.post.content = post.content;
+        // Push the new content into the editor (props don't reactively swap content).
+        richApi?.setContent?.(post.content);
+        // Also clear any orphan suggestion marks left in the editor.
+        richApi?.clearAllSuggestions?.();
+      }
+      data.post = post;
+    };
+    window.addEventListener('jkai:post-rolled-back', handler);
+    return () => window.removeEventListener('jkai:post-rolled-back', handler);
+  });
+
+  async function regenerate(p: Proposal, note: string) {
+    // Mark the old proposal as superseded; widget will call SSE to fetch a new one.
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+    const summary = p.kind === 'prose'
+      ? `the prose change at "${p.original.slice(0, 40)}…"`
+      : `the ${p.field} change to ${JSON.stringify(p.suggestedValue).slice(0, 40)}`;
+    await widgetSendMessage?.(`I rejected ${summary}. Try a different version: ${note}`);
+  }
+
+  function onProposalArrived(p: Proposal) {
+    proposalTick++;
+    if (p.kind === 'prose' && richApi) {
+      richApi.applyProposal(p);
+    }
+  }
+
+  let proseProposals = $derived(
+    proposalTick >= 0 ? proposalStore.list().filter((p): p is ProseProposal => p.kind === 'prose') : []
+  );
+
+  function acceptProse(p: ProseProposal, modifiedText?: string) {
+    if (!richApi) return;
+    richApi.acceptProposal(p.id, modifiedText);
+    proposalStore.resolve(p.id, 'accepted');
+    proposalTick++;
+  }
+
+  function rejectProse(p: ProseProposal) {
+    if (!richApi) return;
+    richApi.rejectProposal(p.id);
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     // Both editors handle Ctrl+S inside the content area; this is a fallback
     // for when focus is on metadata fields.
@@ -352,7 +514,40 @@
     {#if isMarkdown}
       <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
     {:else}
-      <RichEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} bind:api={richApi} />
+      <div bind:this={editorContainer} class="editor-host">
+        <RichEditor
+          {content}
+          onSave={saveContent}
+          onAutoSave={saveContent}
+          {uploadImage}
+          bind:api={richApi}
+          onProposalAccepted={(id, _finalText, preAcceptHtml) => {
+            proposalStore.resolve(id, 'accepted');
+            proposalTick++;
+            // Capture revision so the user can roll back this change later.
+            void fetch(`/api/admin/blog/${data.post.id}/revisions?token=${adminToken}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                proposalId: id,
+                field: 'content',
+                previousValue: preAcceptHtml,
+                reason: 'assistant accepted: content',
+              }),
+            }).catch(() => undefined);
+            // Also re-fetch revisions list so the widget's history view stays current.
+            window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
+          }}
+          onProposalRejected={(id) => { proposalStore.resolve(id, 'rejected'); proposalTick++; }}
+        />
+        <BlogAssistantMarginCallouts
+          proposals={proseProposals}
+          editorEl={editorContainer}
+          onAccept={(p, modifiedText) => acceptProse(p, modifiedText)}
+          onReject={(p) => rejectProse(p)}
+          onRegenerate={(p, note) => regenerate(p, note)}
+        />
+      </div>
     {/if}
   </section>
 
@@ -371,26 +566,19 @@
     </button>
   </div>
 
-  <BlogAssistantPanel
+  <BlogAssistantWidget
     postId={data.post.id}
     {adminToken}
     history={data.history ?? []}
-    onPostUpdated={(p) => {
-      title = (p.title as string) ?? title;
-      slug = (p.slug as string) ?? slug;
-      excerpt = (p.excerpt as string) ?? excerpt;
-      tags = Array.isArray(p.tags) ? (p.tags as string[]).join(', ') : tags;
-      coverImageUrl = (p.coverImageUrl as string | null) ?? coverImageUrl;
-      status = (p.status as string) ?? status;
-      content = (p.content as string) ?? content;
-      data.post.title = title;
-      data.post.slug = slug;
-      data.post.excerpt = excerpt;
-      data.post.content = content;
-      data.post.tags = tags.split(',').map((t) => t.trim()).filter(Boolean);
-      data.post.status = status;
-      data.post.coverImageUrl = coverImageUrl;
-    }}
+    {proposalStore}
+    {autoReviewEnabled}
+    onSetAutoReview={setAutoReview}
+    onProposalArrived={onProposalArrived}
+    onAcceptMeta={acceptMetaProposal}
+    onRejectMeta={rejectMetaProposal}
+    onRegenerate={regenerate}
+    onClear={() => { richApi?.clearAllSuggestions?.(); proposalTick++; }}
+    bind:sendMessage={widgetSendMessage}
   />
 </PageWrap>
 
@@ -425,6 +613,7 @@
     padding: 0.08rem 0.38rem;
   }
   .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: 12px; }
+  .editor-host { position: relative; }
   .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
 
   .prose :global(h1),

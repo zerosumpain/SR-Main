@@ -6,6 +6,8 @@
   import Link from '@tiptap/extension-link';
   import Placeholder from '@tiptap/extension-placeholder';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
+  import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
+  import type { ProseProposal } from '$lib/blog/assistant/proposal';
 
   interface RichEditorApi {
     getHTML: () => string;
@@ -14,6 +16,14 @@
     linkSnippet: (snippet: string, url: string, title?: string) => boolean;
     /** Append a numbered footnote referencing `snippet`. Returns the footnote number. */
     addFootnote: (snippet: string, url: string, title?: string) => number;
+    applyProposal: (p: ProseProposal) => boolean;
+    acceptProposal: (id: string, modifiedText?: string) => boolean;
+    rejectProposal: (id: string) => boolean;
+    /** Strip ALL suggestion marks from the document, treating each one as a
+     *  reject (delete insertions, unwrap deletions). Used by the Clear button. */
+    clearAllSuggestions: () => void;
+    /** Replace the entire document content. Used after rollback. */
+    setContent: (html: string) => void;
   }
 
   let {
@@ -22,12 +32,18 @@
     onAutoSave,
     uploadImage,
     api = $bindable<RichEditorApi | undefined>(),
+    onProposalAccepted,
+    onProposalRejected,
   }: {
     content?: string;
     onSave?: (html: string) => Promise<void>;
     onAutoSave?: (html: string) => Promise<void>;
     uploadImage?: (file: File) => Promise<string>;
     api?: RichEditorApi;
+    /** Third arg is the literal pre-mutation HTML — exact bytes the user
+     *  saw before the accept. Use as the rollback target. */
+    onProposalAccepted?: (id: string, finalText: string, htmlBeforeAccept: string) => void;
+    onProposalRejected?: (id: string) => void;
   } = $props();
 
   let host: HTMLDivElement | undefined = $state();
@@ -252,7 +268,179 @@
         }
         return n;
       },
+      applyProposal: (p) => {
+        if (!editor) return false;
+        const found = locateOriginal(editor, p);
+        if (!found) {
+          // Surface but don't throw — the chat status row can show this gap.
+          // The proposal still exists in the store; the user just can't act on
+          // it from the body. Likely cause: LLM `find` does not appear in the
+          // current document text (post was edited since the proposal was
+          // generated, or the `find` includes structural fragments).
+          console.warn('[RichEditor] applyProposal: could not anchor proposal', p.id, JSON.stringify(p.original).slice(0, 120));
+          return false;
+        }
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, {
+          add: { id: p.id, from: found.from, to: found.to, replace: p.suggested },
+        });
+        editor.view.dispatch(tr);
+        return true;
+      },
+      acceptProposal: (id, modifiedText) => {
+        if (!editor) return false;
+        const ps = suggestionPluginKey.getState(editor.state);
+        const range = ps?.ranges.get(id);
+        if (!range) return false;
+
+        // Snapshot the literal pre-mutation HTML so the user can roll back
+        // the exact bytes that were on screen the moment they clicked Accept.
+        const htmlBeforeAccept = editor.getHTML();
+        const replaceText = modifiedText ?? range.replace;
+        const { schema } = editor.state;
+        const strikeMark = schema.marks.strike;
+
+        // Resolve the containing block so we can scrub stale Strike marks
+        // from it. Legacy <s> tags often span multiple sentences; replacing
+        // just our sentence leaves the neighbours visually struck. The user
+        // has the toolbar Strike button if they want it back deliberately.
+        const resolvedFrom = editor.state.doc.resolve(range.from);
+        const blockDepth = Math.max(1, resolvedFrom.depth);
+        const blockStart = resolvedFrom.start(blockDepth);
+        const blockEnd = resolvedFrom.end(blockDepth);
+
+        const tr = editor.state.tr;
+        if (strikeMark) {
+          tr.removeMark(blockStart, blockEnd, strikeMark);
+        }
+        if (replaceText.length === 0) {
+          tr.delete(range.from, range.to);
+        } else {
+          // Pass an explicit empty marks array so the inserted text never
+          // inherits storedMarks (Strike included) from the boundary.
+          tr.replaceWith(range.from, range.to, schema.text(replaceText, []));
+        }
+        tr.setMeta(suggestionPluginKey, { remove: id });
+        editor.view.dispatch(tr);
+
+        // Sanity guard — refuse silent >30% deletions.
+        const after = editor.getHTML();
+        const ratio = after.length / Math.max(1, htmlBeforeAccept.length);
+        if (ratio < 0.7 && htmlBeforeAccept.length - after.length > 200) {
+          const ok = window.confirm(
+            `Heads up — accepting this would remove ~${Math.round((1 - ratio) * 100)}% of the post body. Apply anyway?`,
+          );
+          if (!ok) {
+            editor.commands.setContent(htmlBeforeAccept, { emitUpdate: false });
+            return false;
+          }
+        }
+
+        onProposalAccepted?.(id, replaceText, htmlBeforeAccept);
+        if (onAutoSave) void onAutoSave(after).catch(() => {});
+        return true;
+      },
+      rejectProposal: (id) => {
+        if (!editor) return false;
+        // Decorations are an overlay only; rejecting is purely state — no
+        // edits to the document, so nothing for autosave to chase.
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { remove: id });
+        editor.view.dispatch(tr);
+        onProposalRejected?.(id);
+        return true;
+      },
+      clearAllSuggestions: () => {
+        if (!editor) return;
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { clear: true });
+        editor.view.dispatch(tr);
+      },
+      setContent: (html) => {
+        if (!editor) return;
+        // Replacing the doc invalidates every tracked range — clear before
+        // the swap so the plugin doesn't try to map stale positions.
+        const tr = editor.state.tr.setMeta(suggestionPluginKey, { clear: true });
+        editor.view.dispatch(tr);
+        editor.commands.setContent(html, { emitUpdate: true });
+      },
     };
+  }
+
+  function locateOriginal(ed: Editor, p: ProseProposal): { from: number; to: number } | null {
+    const cleanedOriginal = p.original.replace(/<\/?[^>]+>/g, '');
+    if (cleanedOriginal.length === 0) {
+      // Empty range — return a zero-width position at doc start.
+      return { from: 1, to: 1 };
+    }
+
+    // Walk every text node, recording each one's text-content slice and the
+    // ProseMirror position it occupies. Concatenating `text` across spans
+    // gives the same string as `doc.textContent`. Mapping a textContent
+    // index back to a PM position is then exact — including the +2 cost of
+    // every block-node boundary the cursor crosses, which the previous
+    // `+1` shortcut got wrong (the cause of "accept deletes a whole section").
+    type Span = { pmStart: number; tcStart: number; len: number };
+    const spans: Span[] = [];
+    let tcCursor = 0;
+    ed.state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      const len = (node.text ?? '').length;
+      spans.push({ pmStart: pos, tcStart: tcCursor, len });
+      tcCursor += len;
+    });
+    const fullText = ed.state.doc.textContent;
+
+    // Locate the needle, with a whitespace-collapsed fallback if the literal
+    // compare misses (block boundaries can disagree with what the segmenter
+    // produced).
+    let tcIdx = fullText.indexOf(cleanedOriginal);
+    let needleLen = cleanedOriginal.length;
+    if (tcIdx < 0) {
+      const collapsedDoc = fullText.replace(/\s+/g, ' ');
+      const collapsedNeedle = cleanedOriginal.replace(/\s+/g, ' ').trim();
+      if (!collapsedNeedle) return null;
+      const cIdx = collapsedDoc.indexOf(collapsedNeedle);
+      if (cIdx < 0) return null;
+      let consumed = 0;
+      let prevWs = false;
+      for (let i = 0; i < fullText.length; i++) {
+        const isWs = /\s/.test(fullText[i]);
+        const collapsedHere = isWs ? !prevWs : true;
+        if (collapsedHere) {
+          if (consumed === cIdx) { tcIdx = i; break; }
+          consumed += 1;
+        }
+        prevWs = isWs;
+      }
+      if (tcIdx < 0) return null;
+      let needleConsumed = 0;
+      let j = tcIdx;
+      let prevWs2 = false;
+      while (j < fullText.length && needleConsumed < collapsedNeedle.length) {
+        const isWs = /\s/.test(fullText[j]);
+        if (!(isWs && prevWs2)) needleConsumed += 1;
+        prevWs2 = isWs;
+        j += 1;
+      }
+      needleLen = j - tcIdx;
+    }
+    const tcEnd = tcIdx + needleLen;
+
+    // Translate textContent indices to ProseMirror positions via the span
+    // map. Each span owns the half-open interval [tcStart, tcStart + len).
+    function tcToPm(tc: number): number | null {
+      for (const s of spans) {
+        if (tc >= s.tcStart && tc <= s.tcStart + s.len) {
+          return s.pmStart + (tc - s.tcStart);
+        }
+      }
+      return null;
+    }
+    const from = tcToPm(tcIdx);
+    const to = tcToPm(tcEnd);
+    if (from === null || to === null || to <= from) {
+      console.warn('[RichEditor] locateOriginal: span-map miss', { tcIdx, tcEnd, spans: spans.length });
+      return null;
+    }
+    return { from, to };
   }
 
   function escapeHtml(s: string): string {
@@ -277,6 +465,7 @@
         Image.configure({ inline: false, allowBase64: false }),
         Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
+        SuggestionDecorations,
       ],
       content: content || '',
       onUpdate: () => {
@@ -339,10 +528,23 @@
     };
     host.addEventListener('paste', onPasteNative, { capture: true });
     host.addEventListener('drop', onDropNative, { capture: true });
+    // Click on a suggestion mark → broadcast so the margin callout layer
+    // can scroll to and highlight its own card. Bubbles up from the inner
+    // <ins>/<del data-suggestion-id> element.
+    const onSuggestionClick = (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement | null;
+      const el = target?.closest('[data-suggestion-id]') as HTMLElement | null;
+      if (!el) return;
+      const id = el.getAttribute('data-suggestion-id');
+      if (!id) return;
+      window.dispatchEvent(new CustomEvent('jkai:suggestion-click', { detail: { id, source: 'body' } }));
+    };
+    host.addEventListener('click', onSuggestionClick);
     // Stash for cleanup.
     (host as any).__pasteCleanup = () => {
       host?.removeEventListener('paste', onPasteNative, { capture: true } as any);
       host?.removeEventListener('drop', onDropNative, { capture: true } as any);
+      host?.removeEventListener('click', onSuggestionClick);
     };
 
     recomputeScores();
@@ -369,12 +571,13 @@
   }
   const noop = () => {};
   // Reactive derivations referencing editor must read state through getters.
-  let activeMap = $state({ bold: false, italic: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false });
+  let activeMap = $state({ bold: false, italic: false, strike: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false });
   function refreshActive() {
     if (!editor) return;
     activeMap = {
       bold: editor.isActive('bold'),
       italic: editor.isActive('italic'),
+      strike: editor.isActive('strike'),
       h2: editor.isActive('heading', { level: 2 }),
       h3: editor.isActive('heading', { level: 3 }),
       ul: editor.isActive('bulletList'),
@@ -403,6 +606,7 @@
     <div class="toolbar-left">
       <button class="tool-btn" class:active={activeMap.bold} onclick={() => editor?.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)"><b>B</b></button>
       <button class="tool-btn" class:active={activeMap.italic} onclick={() => editor?.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)"><i>I</i></button>
+      <button class="tool-btn" class:active={activeMap.strike} onclick={() => editor?.chain().focus().toggleStrike().run()} title="Strikethrough (Ctrl+Shift+X)"><s>S</s></button>
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.h2} onclick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2">H2</button>
       <button class="tool-btn" class:active={activeMap.h3} onclick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3">H3</button>
@@ -535,4 +739,24 @@
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
   .r-audience { color: var(--text-primary); font-style: italic; }
   .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
+
+  /* Margin-only display: highlight the original (will be replaced) in the
+     body, hide the proposed insertion entirely (it lives in the callout). */
+  :global(.sg-remove) {
+    background: rgba(255, 217, 64, 0.45); /* warm marker-pen yellow */
+    text-decoration: none;
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  :global(.sg-add) {
+    display: none;
+  }
+  /* Active state — bumped highlight when the user clicks a callout. */
+  :global(.sg-remove.sg-active) {
+    background: rgba(255, 184, 0, 0.85);
+    outline: 2px solid rgba(255, 184, 0, 1);
+    outline-offset: 1px;
+  }
 </style>
