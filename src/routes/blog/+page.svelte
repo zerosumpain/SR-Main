@@ -49,18 +49,6 @@
   </div>
 </section>
 
-{#if allTags.length > 0}
-  <div class="b-tag-strip-wrap">
-    <nav class="b-tag-strip" aria-label="Filter by tag">
-      <span class="b-tag-link is-active">ALL</span>
-      {#each allTags as tag}
-        <span class="b-tag-sep">·</span>
-        <a href="/blog/tag/{tag}" class="b-tag-link">{tag.toUpperCase()}</a>
-      {/each}
-    </nav>
-  </div>
-{/if}
-
 <section id="posts" class="px-6 sm:px-10 md:px-16 py-10 sm:py-12">
   <div class="max-w-4xl mx-auto">
     {#if data.posts.length === 0}
