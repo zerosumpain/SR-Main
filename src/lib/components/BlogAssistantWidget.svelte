@@ -11,8 +11,6 @@
     adminToken: string;
     history: { role: string; content: string }[];
     proposalStore: import('$lib/blog/assistant/proposal-store').ProposalStore;
-    displayMode: 'inline' | 'margin';
-    onSetDisplayMode: (m: 'inline' | 'margin') => void;
     onProposalArrived: (p: Proposal) => void;
     onAcceptMeta: (p: MetaProposal) => Promise<void>;
     onRejectMeta: (p: MetaProposal) => void;
@@ -23,7 +21,6 @@
 
   let {
     postId, adminToken, history, proposalStore,
-    displayMode, onSetDisplayMode,
     onProposalArrived, onAcceptMeta, onRejectMeta, onRegenerate,
     onClear,
     sendMessage = $bindable(),
@@ -283,11 +280,8 @@
         onpointerup={endDrag}
         onpointercancel={endDrag}
       >&gt;jkai</span>
-      <span class="mode">
-        <button type="button" class:active={displayMode === 'inline'} onclick={() => onSetDisplayMode('inline')}>inline</button>
-        <button type="button" class:active={displayMode === 'margin'} onclick={() => onSetDisplayMode('margin')}>margin</button>
-      </span>
       <button type="button" class="hist" class:active={historyOpen}
+        style="margin-left: auto;"
         onclick={() => { historyOpen = !historyOpen; if (historyOpen) loadRevisions(); }}
         aria-label="History" title="Recent LLM changes (rollback)">↶</button>
       <button type="button" class="clear" onclick={clearChat} aria-label="Clear chat" title="Clear chat history and proposals">Clear</button>
@@ -380,12 +374,6 @@
     cursor: grab; padding: 0.1rem 0.2rem;
   }
   .title:active { cursor: grabbing; }
-  .mode { display: flex; gap: 0.25rem; margin-left: auto; }
-  .mode button {
-    border: 1px solid var(--card-border); background: transparent;
-    padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
-  }
-  .mode button.active { background: var(--accent-tint-08); }
   .clear {
     border: 1px solid var(--card-border); background: transparent;
     padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;

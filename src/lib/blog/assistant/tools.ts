@@ -108,11 +108,23 @@ export async function runTool(
 
     case 'patch_content': {
       const find = String(args.find ?? '');
-      const replace = String(args.replace ?? '');
+      let replace = String(args.replace ?? '');
       if (!find) return { ok: false, error: 'find string is empty.' };
       const occurrences = snapshot.content.split(find).length - 1;
       if (occurrences === 0) return { ok: false, error: `find string not found in content.` };
       if (occurrences > 1) return { ok: false, error: `find string not unique (${occurrences} matches).` };
+
+      // Defensively preserve boundary whitespace from `find` if the LLM
+      // dropped it on `replace` — this is the most common cause of edits
+      // that "delete a space". We only auto-fix when `replace` is non-empty;
+      // an empty replace means the LLM is intentionally deleting a span.
+      if (replace.length > 0) {
+        const leading = find.match(/^\s+/)?.[0] ?? '';
+        const trailing = find.match(/\s+$/)?.[0] ?? '';
+        if (leading && !/^\s/.test(replace)) replace = leading + replace;
+        if (trailing && !/\s$/.test(replace)) replace = replace + trailing;
+      }
+
       const from = snapshot.content.indexOf(find);
       const to = from + find.length;
       return { ok: true, proposal: proseProposal(find, replace, from, to, reason) };

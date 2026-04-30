@@ -26,15 +26,12 @@
     setContent: (html: string) => void;
   }
 
-  type DisplayMode = 'inline' | 'margin';
-
   let {
     content = '',
     onSave,
     onAutoSave,
     uploadImage,
     api = $bindable<RichEditorApi | undefined>(),
-    displayMode = 'inline' as DisplayMode,
     onProposalAccepted,
     onProposalRejected,
   }: {
@@ -43,8 +40,9 @@
     onAutoSave?: (html: string) => Promise<void>;
     uploadImage?: (file: File) => Promise<string>;
     api?: RichEditorApi;
-    displayMode?: DisplayMode;
-    onProposalAccepted?: (id: string, finalText: string, preAcceptHtml: string) => void;
+    /** Third arg is the literal pre-mutation HTML — exact bytes the user
+     *  saw before the accept. Use as the rollback target. */
+    onProposalAccepted?: (id: string, finalText: string, htmlBeforeAccept: string) => void;
     onProposalRejected?: (id: string) => void;
   } = $props();
 
@@ -302,34 +300,44 @@
       },
       acceptProposal: (id, modifiedText) => {
         if (!editor) return false;
-        const html = editor.getHTML();
+        // Snapshot the LITERAL document state before any mutation. This is
+        // what gets persisted as a rollback target, so even if the regex
+        // transform below misbehaves we can restore exactly what was there.
+        const htmlBeforeAccept = editor.getHTML();
+
         const insRe = new RegExp(`<ins\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</ins>`, 'gi');
         const delRe = new RegExp(`<del\\b[^>]*\\bdata-suggestion-id="${id}"[^>]*>([\\s\\S]*?)</del>`, 'gi');
-        const hasMarks = insRe.test(html) || delRe.test(html);
-        if (!hasMarks) return false;
+        if (!insRe.test(htmlBeforeAccept) && !delRe.test(htmlBeforeAccept)) return false;
         // Reset lastIndex after .test() so .replace() starts from the beginning.
-        insRe.lastIndex = 0; delRe.lastIndex = 0;
-
-        // Pre-accept HTML for rollback = "what the doc would look like if this
-        // proposal had been rejected" (drop <ins>, unwrap <del>). Other
-        // pending proposals' marks remain intact for them to be acted on
-        // independently later.
-        const preAcceptHtml = html.replace(insRe, '').replace(delRe, '$1');
         insRe.lastIndex = 0; delRe.lastIndex = 0;
 
         // Accepted HTML = drop <del>, replace <ins>'s content with modified
         // text if provided, otherwise unwrap <ins> keeping its content.
-        let accepted = html.replace(delRe, '');
+        let accepted = htmlBeforeAccept.replace(delRe, '');
         if (modifiedText !== undefined) {
           accepted = accepted.replace(insRe, escapeHtml(modifiedText));
         } else {
           accepted = accepted.replace(insRe, '$1');
         }
 
+        // Sanity guard: an accept should not lose more than ~30% of the body.
+        // If it does, abort and let the user investigate rather than silently
+        // shrinking the post.
+        const ratio = accepted.length / Math.max(1, htmlBeforeAccept.length);
+        if (ratio < 0.7 && htmlBeforeAccept.length - accepted.length > 200) {
+          const ok = window.confirm(
+            `Heads up — accepting this would remove ~${Math.round((1 - ratio) * 100)}% of the post body. Apply anyway?`,
+          );
+          if (!ok) return false;
+        }
+
+        // Persist the literal pre-mutation HTML BEFORE swapping content, so
+        // even if setContent throws we already have a rollback row.
+        const finalText = modifiedText ?? '';
+        onProposalAccepted?.(id, finalText, htmlBeforeAccept);
+
         editor.commands.setContent(accepted, { emitUpdate: true });
 
-        const finalText = modifiedText ?? '';
-        onProposalAccepted?.(id, finalText, preAcceptHtml);
         if (onAutoSave) {
           void onAutoSave(editor.getHTML()).catch(() => {});
         }
@@ -582,7 +590,7 @@
     </div>
   </div>
 
-  <div bind:this={host} class="rich-host" data-suggestion-display={displayMode}></div>
+  <div bind:this={host} class="rich-host"></div>
 
   {#if scores.words > 0}
     <div class="readability">
@@ -701,7 +709,8 @@
   .r-audience { color: var(--text-primary); font-style: italic; }
   .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
 
-  /* Highlight only — no strikethrough, no dotted underline. */
+  /* Margin-only display: highlight the original (will be replaced) in the
+     body, hide the proposed insertion entirely (it lives in the callout). */
   :global(.sg-remove) {
     background: rgba(255, 217, 64, 0.45); /* warm marker-pen yellow */
     text-decoration: none;
@@ -711,21 +720,10 @@
     transition: background 120ms ease;
   }
   :global(.sg-add) {
-    /* Inline mode: subtle green so the insertion is visible alongside the original. */
-    background: rgba(46, 160, 67, 0.18);
-    text-decoration: none;
-    border-radius: 2px;
-    padding: 0 1px;
-    cursor: pointer;
-  }
-  /* Margin mode: hide the inserted text in the body — its replacement lives
-     in the right-margin callout. The user only sees the original highlighted. */
-  :global([data-suggestion-display="margin"] .sg-add) {
     display: none;
   }
   /* Active state — bumped highlight when the user clicks a callout. */
-  :global(.sg-remove.sg-active),
-  :global(.sg-add.sg-active) {
+  :global(.sg-remove.sg-active) {
     background: rgba(255, 184, 0, 0.85);
     outline: 2px solid rgba(255, 184, 0, 1);
     outline-offset: 1px;

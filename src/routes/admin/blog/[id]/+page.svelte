@@ -239,15 +239,7 @@
 
   const proposalStore = createProposalStore();
   let proposalTick = $state(0); // bump to force re-render of derived lists
-  let displayMode = $state<'inline' | 'margin'>(
-    (typeof localStorage !== 'undefined' && (localStorage.getItem('blog-assistant-display-mode') as 'inline' | 'margin')) || 'inline',
-  );
   let editorContainer = $state<HTMLDivElement | undefined>();
-
-  function setDisplayMode(m: 'inline' | 'margin') {
-    displayMode = m;
-    try { localStorage.setItem('blog-assistant-display-mode', m); } catch { /* ignore */ }
-  }
 
   async function acceptMetaProposal(p: MetaProposal) {
     proposalStore.resolve(p.id, 'accepted');
@@ -457,14 +449,13 @@
     {#if isMarkdown}
       <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
     {:else}
-      <div bind:this={editorContainer} class="editor-host" data-suggestion-display={displayMode}>
+      <div bind:this={editorContainer} class="editor-host">
         <RichEditor
           {content}
           onSave={saveContent}
           onAutoSave={saveContent}
           {uploadImage}
           bind:api={richApi}
-          {displayMode}
           onProposalAccepted={(id, _finalText, preAcceptHtml) => {
             proposalStore.resolve(id, 'accepted');
             proposalTick++;
@@ -484,15 +475,13 @@
           }}
           onProposalRejected={(id) => { proposalStore.resolve(id, 'rejected'); proposalTick++; }}
         />
-        {#if displayMode === 'margin'}
-          <BlogAssistantMarginCallouts
-            proposals={proseProposals}
-            editorEl={editorContainer}
-            onAccept={(p, modifiedText) => acceptProse(p, modifiedText)}
-            onReject={(p) => rejectProse(p)}
-            onRegenerate={(p, note) => regenerate(p, note)}
-          />
-        {/if}
+        <BlogAssistantMarginCallouts
+          proposals={proseProposals}
+          editorEl={editorContainer}
+          onAccept={(p, modifiedText) => acceptProse(p, modifiedText)}
+          onReject={(p) => rejectProse(p)}
+          onRegenerate={(p, note) => regenerate(p, note)}
+        />
       </div>
     {/if}
   </section>
@@ -517,8 +506,6 @@
     {adminToken}
     history={data.history ?? []}
     {proposalStore}
-    {displayMode}
-    onSetDisplayMode={setDisplayMode}
     onProposalArrived={onProposalArrived}
     onAcceptMeta={acceptMetaProposal}
     onRejectMeta={rejectMetaProposal}
