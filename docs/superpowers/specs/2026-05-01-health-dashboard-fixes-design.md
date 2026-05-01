@@ -174,14 +174,14 @@ The 4 hardcoded analyses in `src/lib/health/correlations-service.ts:129-220`.
 
 Same data-loading prologue (lines 47-127 stay). After `ordered` is built:
 
-1. **Candidate pairs.** All ordered (X, Y) where X, Y ∈ `{rec, hrv, rhr, slept, strain, steps, sleepScore}` and X ≠ Y, in two flavours:
-   - Same-day: pair `(d.X, d.Y)`.
-   - Lagged: pair `(d_yesterday.X, d_today.Y)` — "after a high-X day, what does Y do".
-2. **Denylist** (definitionally entangled, both same-day and lagged):
-   - `rec ↔ hrv`
-   - `rec ↔ rhr`
-   - `sleepScore ↔ slept`
-   - Ordered both directions.
+1. **Candidate pairs.** With M = `{rec, hrv, rhr, slept, strain, steps, sleepScore}`:
+   - **Same-day pairs** — unordered `{X, Y}` with X ≠ Y. Pearson r is symmetric, so each pair appears once. Cardinality: C(7, 2) = 21.
+   - **Lagged pairs** — ordered `(X, Y)` with X ≠ Y, computed as `(d_yesterday.X, d_today.Y)`. Direction matters ("yesterday's strain → today's recovery" ≠ "yesterday's recovery → today's strain"), so both directions evaluated. Cardinality: 7 × 6 = 42.
+2. **Denylist** (definitionally entangled). Applied as unordered pair match for same-day, and to **both directions** for lagged:
+   - `{rec, hrv}`
+   - `{rec, rhr}`
+   - `{sleepScore, slept}`
+   - Easy to extend by adding to a `Set<string>` of canonicalised pair keys.
 3. For each surviving candidate, compute Pearson r over the 90-day window using only days where both raw values are non-null and > 0. Record `n` (number of paired days).
 4. Filter `n ≥ 10 AND |r| ≥ 0.3`.
 5. Rank by `|r| × √n` descending. Take top 4.
