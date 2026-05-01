@@ -37,7 +37,14 @@ const cache = new Map<string, { copy: HeroCopy; expires: number }>();
 const inflight = new Map<string, Promise<void>>();
 
 function cacheKey(input: HeroCopyInput): string {
-  return `${input.date}|${input.rec}|${input.hrv}|${input.rhr}|${input.slept}`;
+  // Key on date + recovery only. HRV/RHR/sleep tick throughout the day from
+  // the Apple webhook; including them in the key causes the LLM copy to
+  // "revert" to the deterministic fallback every time any metric updates,
+  // because each tick is a fresh cache miss. Recovery is a once-per-day
+  // score from Whoop (set when sleep ends) and is the primary driver of the
+  // headline anyway, so keying on it alone gives stable copy + a fresh call
+  // if the recovery score itself changes.
+  return `${input.date}|${input.rec}`;
 }
 
 function buildFallback(input: HeroCopyInput, fb: HeroCopyFallbackFns): HeroCopy {

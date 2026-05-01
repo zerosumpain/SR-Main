@@ -59,16 +59,29 @@ describe('getHeroCopy', () => {
     expect(llm).toHaveBeenCalledTimes(1);
   });
 
-  it('regenerates when any underlying number changes', async () => {
+  it('regenerates when recovery score changes (key is date|rec)', async () => {
     const llm = vi.fn().mockResolvedValue({
       headline: { primary: 'A.', ghost: 'B.' },
       strap: 'Recovery 67%, slept 7.4h.',
     });
     await getHeroCopy(baseInput, fallback, llm);
     await _awaitInflight(baseInput);
-    await getHeroCopy({ ...baseInput, hrv: 80 }, fallback, llm);
-    await _awaitInflight({ ...baseInput, hrv: 80 });
+    await getHeroCopy({ ...baseInput, rec: 72 }, fallback, llm);
+    await _awaitInflight({ ...baseInput, rec: 72 });
     expect(llm).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not regenerate when only HRV/RHR/sleep tick (Apple webhook churn)', async () => {
+    const llm = vi.fn().mockResolvedValue({
+      headline: { primary: 'A.', ghost: 'B.' },
+      strap: 'Recovery 67%, slept 7.4h.',
+    });
+    await getHeroCopy(baseInput, fallback, llm);
+    await _awaitInflight(baseInput);
+    // Same date + recovery, but RHR/HRV/sleep updated mid-day.
+    await getHeroCopy({ ...baseInput, hrv: 80, rhr: 55, slept: 7.6 }, fallback, llm);
+    await _awaitInflight({ ...baseInput, hrv: 80, rhr: 55, slept: 7.6 });
+    expect(llm).toHaveBeenCalledTimes(1);
   });
 
   it('returns fallback when LLM throws — and keeps fallback cached briefly', async () => {
