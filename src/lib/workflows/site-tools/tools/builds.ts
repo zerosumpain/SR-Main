@@ -22,10 +22,14 @@ register({
   toolset: 'builds',
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
+    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+    const ctx = await resolveDefaultModel('builder');
     const [build] = await db.insert(jkaiBuilds).values({
       title: (args.title as string) || null,
       prompt: args.prompt as string,
       budgetConfig: {},
+      modelProvider: ctx.provider,
+      modelId: ctx.modelId,
     }).returning();
     await orchestrator.startBuild(build.id);
     return { success: true, data: build };
