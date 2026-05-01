@@ -611,13 +611,18 @@ export async function generalChat(
 
   // Derive the tool-call budget for this turn. The caller can override
   // explicitly; otherwise we look at the user message for extended-autonomy
-  // phrases. The plan-extraction branch below may bump this further mid-loop
-  // when a long plan is approved.
+  // phrases. Canvas-bound chats start higher because plan/clarify gates are
+  // disabled there (no jobId-based plan extraction), so we can't bump the
+  // budget mid-loop based on plan length — and canvas builds are inherently
+  // multi-step (add nodes, wire edges, lint, run, repair). The plan-
+  // extraction branch below may still bump this further when applicable.
+  const isCanvasChat = !!options.workflowId;
+  const baseDefault = isCanvasChat ? EXTENDED_TOOL_ROUNDS : DEFAULT_TOOL_ROUNDS;
   let maxRounds = options.maxRounds
     ? Math.max(1, Math.min(ABSOLUTE_TOOL_ROUNDS, options.maxRounds))
     : detectExtendedAutonomy(userMessage)
-      ? EXTENDED_TOOL_ROUNDS
-      : DEFAULT_TOOL_ROUNDS;
+      ? Math.max(EXTENDED_TOOL_ROUNDS, baseDefault)
+      : baseDefault;
   if (maxRounds !== DEFAULT_TOOL_ROUNDS) {
     onProgress?.(`[budget] tool-call budget set to ${maxRounds} rounds for this turn\n`);
   }

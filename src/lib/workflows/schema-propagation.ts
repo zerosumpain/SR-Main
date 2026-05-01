@@ -31,6 +31,21 @@ export function resolveUpstreamSchema(
     return { type: 'object', properties: {} };
   }
 
+  // Loop body special case: when the immediate upstream is a `loop` node,
+  // each iteration sees the array element as `input`, NOT the loop's own
+  // {results, count} output. We can't statically infer the element shape
+  // without tracing through arrayPath, so we surface an "unknown" schema
+  // (no properties). The downstream verifier already skips reference
+  // checks when the upstream schema has zero properties — this prevents
+  // false positives like "input.title not found in upstream {results, count}"
+  // for nodes that legitimately read per-element fields inside a loop.
+  for (const edge of incomingEdges) {
+    const sourceNode = nodeMap.get(edge.sourceNodeId);
+    if (sourceNode?.type === 'loop') {
+      return { type: 'object', properties: {} };
+    }
+  }
+
   const mergedProperties: Record<string, JsonSchema> = {};
 
   for (const edge of incomingEdges) {

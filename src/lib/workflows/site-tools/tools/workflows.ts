@@ -450,12 +450,24 @@ async function validateNodeConfig(type: string, config: Record<string, unknown>)
 
 register({
   name: 'workflow_update_node',
-  description: "Update a workflow node's config, label, or type. When changing type, the new type must exist in the node registry.",
+  description:
+    "Update a workflow node's config, label, or type. When changing type, the new type must exist in the node registry. " +
+    'To REMOVE a config key entirely (not just set it to a new value), either pass it as `null` in `config` or list its name in `removeConfigKeys`. ' +
+    'Setting a key to `null` and leaving the key in the saved config used to be an LLM trap — now both paths actually delete.',
   parameters: {
     type: 'object',
     properties: {
       nodeId: { type: 'string', description: 'Node ID' },
-      config: { type: 'object', description: 'New config (merged with existing)' },
+      config: {
+        type: 'object',
+        description:
+          'Patch merged into existing config. To remove a key, set it to null (e.g. `{ value: null }`) — the merged result drops the key entirely.',
+      },
+      removeConfigKeys: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Explicit list of config keys to delete after the merge. Use this when you want to be unambiguous about removal.',
+      },
       label: { type: 'string', description: 'New label' },
       type: { type: 'string', description: 'New node type — must match a registered type (e.g. "whatsapp", "llm-call", "code-execute"). Use workflow_list_node_types to see all valid types.' },
     },
@@ -476,8 +488,26 @@ register({
     const updates: Record<string, unknown> = {};
     if (args.label) updates.label = args.label;
     if (args.type) updates.type = args.type;
-    if (args.config) {
-      updates.config = { ...(existing.config as Record<string, unknown>), ...(args.config as Record<string, unknown>) };
+
+    const incomingConfig = (args.config as Record<string, unknown> | undefined) ?? null;
+    const removeKeys = Array.isArray(args.removeConfigKeys)
+      ? (args.removeConfigKeys as string[])
+      : [];
+    if (incomingConfig || removeKeys.length > 0) {
+      const merged: Record<string, unknown> = {
+        ...(existing.config as Record<string, unknown>),
+        ...(incomingConfig ?? {}),
+      };
+      // Treat null as "delete this key" — most LLM-friendly way to remove a
+      // stale config field. Without this, `{ value: null }` left a `null`
+      // sentinel in the saved config and the lint kept flagging it.
+      if (incomingConfig) {
+        for (const k of Object.keys(incomingConfig)) {
+          if (incomingConfig[k] === null) delete merged[k];
+        }
+      }
+      for (const k of removeKeys) delete merged[k];
+      updates.config = merged;
     }
 
     const [node] = await db.update(workflowNodes).set(updates).where(eq(workflowNodes.id, nodeId)).returning();
