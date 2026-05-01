@@ -5,7 +5,7 @@ export const loopDef: NodeDefinition = {
   label: 'Loop',
   category: 'control',
   description:
-    'Iterate over an array in the input and apply an expression to each item. Returns results array.',
+    'Map an array in the input through a JS expression. Returns { results, count }. NOT a control-flow loop — downstream nodes execute ONCE with the results object, not per-item.',
   configSchema: {
     type: 'object',
     properties: {
@@ -54,7 +54,11 @@ export const loopDef: NodeDefinition = {
     },
   ],
   llmDescription:
-    "Map-style iteration over an array — applies a JS expression to each item and returns the array of transformed values. Use when the upstream node produces a list and you need a per-item lightweight transform (reshape fields, derived flags, simple filters). For heavy per-item work that calls other nodes (e.g. fan-out a sub-workflow per item), use a sub-workflow node downstream of a transform/code-execute that yields the list. The expression has access to `item`, `index`, and the original `input` — must `return` a value. Output is the array of returned values, in order.",
+    "CRITICAL: this is a MAP TRANSFORM, not a control-flow loop. It applies a synchronous JS expression to each array element and returns `{ results: [...], count: N }` exactly ONCE. Downstream nodes execute ONCE with that object — they DO NOT iterate per item. Therefore you CANNOT place an llm-call, http-request, data-store, or any node-that-does-IO after a loop and expect it to fire per element; the engine has no per-iteration downstream execution primitive. " +
+    "Correct uses: lightweight per-item reshaping (rename fields, derive flags, simple filters), where the result is just a transformed array consumed downstream as a whole. " +
+    "If you need per-item LLM classification, do it as ONE batch llm-call whose userPrompt embeds the entire array (e.g. `Classify each item in this list and return a JSON array... Items: {{input.newItems}}`) — the strict template interpolator JSON-stringifies arrays automatically. Then text-parser the JSON array out and store. " +
+    "If you genuinely need per-item fan-out into a multi-node sub-pipeline, use the sub-workflow node downstream of the loop and pass each result element via a transform. " +
+    "Expression API: receives `item`, `index`, original `input`. MUST `return` a value. Output: `{ results, count }`.",
   llmExamples: [
     { arrayPath: 'items', expression: 'return { id: item.id, doubled: item.value * 2 }' },
     { arrayPath: 'data.results', expression: 'return item.title.toLowerCase()' },

@@ -233,20 +233,6 @@ describe('resolveUpstreamSchema', () => {
     expect(schema.properties).toHaveProperty('errors');
   });
 
-  it('returns an empty schema for nodes whose immediate upstream is a loop', () => {
-    // A `loop` node iterates over an array, so each iteration's downstream
-    // body sees the array element as `input` — NOT the loop's {results, count}
-    // output shape. The verifier needs an empty schema to skip false-positive
-    // reference errors like "input.title not found in upstream schema".
-    const nodes = [
-      node('upstream', 'http-request'),
-      node('loop1', 'loop'),
-      node('classify', 'llm-call'),
-    ];
-    const edges = [edge('upstream', 'loop1'), edge('loop1', 'classify')];
-    const schema = resolveUpstreamSchema('classify', nodes, edges, mockGetOutputSchema);
-    expect(schema.properties).toEqual({});
-  });
 });
 
 describe('schemaToVariablePaths', () => {
