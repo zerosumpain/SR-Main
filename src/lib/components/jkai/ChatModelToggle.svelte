@@ -85,9 +85,9 @@
 </script>
 
 {#if !locked}
-  <div class="flex items-center gap-1 flex-wrap">
+  <div class="model-toggle-row">
     <span
-      class="text-[10px] uppercase tracking-wider mr-1"
+      class="hidden sm:inline text-[10px] uppercase tracking-wider mr-1"
       style="color: var(--text-ghost); font-family: var(--font-mono);"
     >
       model
@@ -98,7 +98,7 @@
       disabled={pending}
       aria-pressed={modelProvider === 'zai'}
       onclick={() => choose({ provider: 'zai', modelId: defaultGlmModelId })}
-      class="rounded-full px-3 py-1 text-[11px] transition-colors"
+      class="model-pill"
       style={
         modelProvider === 'zai'
           ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
@@ -114,7 +114,7 @@
       aria-pressed={modelProvider === 'openrouter'}
       title={altOpenRouterModel ? undefined : 'Set an OpenRouter alternate in admin'}
       onclick={() => altOpenRouterModel && choose(altOpenRouterModel)}
-      class="rounded-full px-3 py-1 text-[11px] transition-colors"
+      class="model-pill"
       style={
         !altOpenRouterModel
           ? 'background: transparent; color: var(--text-ghost); border: 1px dashed var(--card-border); cursor: not-allowed;'
@@ -131,3 +131,27 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  .model-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .model-pill {
+    border-radius: 9999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    line-height: 1.2;
+    transition: background-color 120ms, color 120ms;
+    max-width: 60vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 480px) {
+    .model-pill { padding: 3px 8px; font-size: 10px; max-width: 42vw; }
+  }
+</style>

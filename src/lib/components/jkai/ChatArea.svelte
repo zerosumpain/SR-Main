@@ -17,6 +17,7 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
+  import { onMount, tick } from 'svelte';
 
   let {
     conversationId,
@@ -132,8 +133,22 @@
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
   let chatContainer: HTMLDivElement;
+  let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let eventSource: EventSource | null = null;
   let jobEventSource: EventSource | null = null;
+
+  onMount(() => {
+    textareaEl?.focus();
+  });
+
+  $effect(() => {
+    // Refocus the composer when the active conversation changes or the
+    // assistant finishes responding, so the cursor lives in the input.
+    conversationId;
+    if (!loading) {
+      tick().then(() => textareaEl?.focus());
+    }
+  });
 
   // Attachment composer state
   interface PendingAttachment {
@@ -819,8 +834,8 @@
 
 <div class="flex flex-col h-full relative">
   <!-- Chat header -->
-  <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2" style="border-color: var(--card-border);">
-    <div class="flex items-center gap-2 min-w-0">
+  <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2 flex-wrap" style="border-color: var(--card-border);">
+    <div class="flex items-center gap-2 min-w-0 flex-1">
       <p class="text-[11px] hidden sm:block" style="color: var(--text-ghost);">
         {#if !conversationId}
           Select or start a conversation
@@ -850,7 +865,8 @@
             data-active={showToolDrawer ? 'true' : 'false'}
             title="View all tool calls in this conversation"
           >
-            Tool calls ({allToolCalls.length})
+            <span class="hidden sm:inline">Tool calls ({allToolCalls.length})</span>
+            <span class="sm:hidden">Tools ({allToolCalls.length})</span>
           </button>
         {/if}
         <button
@@ -858,15 +874,17 @@
           onclick={() => { showThinking = !showThinking; }}
           class="nm-btn-ghost"
           data-active={showThinking ? 'true' : 'false'}
+          title={showThinking ? 'Hide thinking timeline' : 'Show thinking timeline'}
         >
-          {showThinking ? 'Hide' : 'Show'} thinking
+          <span class="hidden sm:inline">{showThinking ? 'Hide' : 'Show'} thinking</span>
+          <span class="sm:hidden">{showThinking ? 'Hide' : 'Show'} think</span>
         </button>
       </div>
     {/if}
   </div>
 
   <!-- Messages -->
-  <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-3 sm:p-4">
+  <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-2 sm:p-4">
     {#if !conversationId}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm" style="color: var(--text-ghost);">
@@ -1099,7 +1117,7 @@
   {#if conversationId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="p-3 sm:p-4 border-t relative"
+      class="p-2 sm:p-4 border-t relative"
       style="border-color: var(--card-border);"
       ondragenter={(e) => { e.preventDefault(); dragOver = true; }}
       ondragover={(e) => e.preventDefault()}
@@ -1127,6 +1145,7 @@
           </button>
           <input bind:this={fileInputEl} type="file" class="hidden" multiple accept={acceptAttrForCaps()} onchange={onFilePick} />
           <textarea
+            bind:this={textareaEl}
             bind:value={input}
             onkeydown={handleKeydown}
             onpaste={onPaste}
@@ -1392,10 +1411,20 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .chat-toolbar :global(.nm-btn-ghost) {
     padding: 4px 10px;
     font-size: 9px;
+  }
+  @media (max-width: 480px) {
+    .chat-toolbar { gap: 4px; }
+    .chat-toolbar :global(.nm-btn-ghost) {
+      padding: 3px 6px;
+      font-size: 9px;
+      letter-spacing: 0.06em;
+    }
   }
 
   /* Progress bubble — outer box for tool step cards */
@@ -1474,6 +1503,11 @@
     padding: 10px 16px;
     font-size: 11px;
     letter-spacing: 0.14em;
+  }
+  @media (max-width: 480px) {
+    /* Mobile: prevent iOS zoom on focus + tighten chrome around the textarea */
+    .composer-textarea { font-size: 16px; padding: 8px 10px; }
+    .composer-send { padding: 9px 12px; letter-spacing: 0.08em; }
   }
 
   /* Tool call drawer */

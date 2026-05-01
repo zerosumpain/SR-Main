@@ -18,6 +18,9 @@
   let sidebarOpen = $state(false);
 
   const INTEL_CONTEXT_STORAGE_KEY = 'jkai.useIntelContext';
+  const LAST_VISIT_STORAGE_KEY = 'jkai.lastVisit';
+  const LAST_CONV_STORAGE_KEY = 'jkai.lastConversationId';
+  const RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
   let useIntelContext = $state(true);
 
   onMount(() => {
@@ -27,7 +30,38 @@
     } catch {
       // localStorage unavailable (private mode / SSR hydration race) — fall back to default.
     }
+
+    let resumed = false;
+    try {
+      const lastVisitStr = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
+      const lastConvId = localStorage.getItem(LAST_CONV_STORAGE_KEY);
+      const lastVisit = lastVisitStr ? Number(lastVisitStr) : 0;
+      const withinWindow = Number.isFinite(lastVisit) && Date.now() - lastVisit < RESUME_WINDOW_MS;
+      if (withinWindow && lastConvId && conversationList.some((c) => c.id === lastConvId)) {
+        selectConversation(lastConvId);
+        resumed = true;
+      }
+    } catch {
+      // localStorage unavailable — fall through to creating a fresh conversation.
+    }
+    if (!resumed) {
+      createConversation();
+    }
+
+    try {
+      localStorage.setItem(LAST_VISIT_STORAGE_KEY, String(Date.now()));
+    } catch {
+      // ignore
+    }
   });
+
+  function rememberConversation(id: string) {
+    try {
+      localStorage.setItem(LAST_CONV_STORAGE_KEY, id);
+    } catch {
+      // ignore
+    }
+  }
 
   function toggleIntelContext(next: boolean) {
     useIntelContext = next;
@@ -40,6 +74,7 @@
 
   async function selectConversation(id: string) {
     activeConversationId = id;
+    rememberConversation(id);
     sidebarOpen = false;
     try {
       const res = await fetch(`/api/jkai/conversations/${id}`);
@@ -70,6 +105,7 @@
           ...conversationList,
         ];
         activeConversationId = conv.id;
+        rememberConversation(conv.id);
         activeConversation = conv;
         activeMessages = [];
         sidebarOpen = false;
@@ -99,6 +135,7 @@
           ...conversationList,
         ];
         activeConversationId = conv.id;
+        rememberConversation(conv.id);
         sidebarOpen = false;
         const detailRes = await fetch(`/api/jkai/conversations/${conv.id}`);
         if (detailRes.ok) {
@@ -129,7 +166,7 @@
   <title>JKAI — Chat</title>
 </svelte:head>
 
-<div class="flex flex-col h-screen" style="background: var(--bg);">
+<div class="flex flex-col" style="background: var(--bg); height: 100dvh; min-height: 100vh;">
   <PageHeader title="JKAI">
     {#snippet before()}
       <button
@@ -178,8 +215,8 @@
         <div class="absolute inset-0" style="background: rgba(0,0,0,0.4);"></div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="absolute left-0 top-0 bottom-0 w-72 flex"
-          style="background: var(--bg);"
+          class="absolute left-0 top-0 bottom-0 flex"
+          style="background: var(--bg); width: min(85vw, 18rem);"
           onclick={(e) => e.stopPropagation()}
         >
           <ConversationSidebar

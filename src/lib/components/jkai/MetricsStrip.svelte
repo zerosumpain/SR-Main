@@ -8,7 +8,10 @@
   } = $props();
 </script>
 
-<div class="flex items-center gap-4 text-[11px]" style="font-family: var(--font-mono); color: var(--text-ghost);">
+<div
+  class="flex items-center gap-4 text-[11px] overflow-x-auto whitespace-nowrap min-w-0"
+  style="font-family: var(--font-mono); color: var(--text-ghost); scrollbar-width: none;"
+>
   <span>{metrics.scheduled} scheduled</span>
   <span style="color: var(--text-ghost);">|</span>
   {#if metrics.running > 0}
