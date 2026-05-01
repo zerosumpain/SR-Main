@@ -12,71 +12,117 @@
   let files: PromptFile[] = $state([]);
   let selectedFile: string | null = $state(null);
   let editContent: string = $state('');
+  let savedContent: string = $state('');
   let saving = $state(false);
   let syncing = $state(false);
-  let saveMessage: string = $state('');
+  let saveStatus: { kind: 'idle' | 'ok' | 'error'; text: string } = $state({ kind: 'idle', text: '' });
   let loading = $state(true);
 
+  let dirty = $derived(editContent !== savedContent);
   let selectedFileData = $derived(files.find((f) => f.name === selectedFile));
 
   async function loadFiles() {
     loading = true;
     try {
       const res = await fetch('/api/workflows/prompts');
-      if (!res.ok) return;
+      if (!res.ok) {
+        saveStatus = { kind: 'error', text: `Couldn't load files (${res.status})` };
+        return;
+      }
       const data = await res.json();
       files = data.files || [];
       if (files.length > 0 && !selectedFile) {
         selectFile(files[0].name);
       }
+    } catch (e) {
+      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error loading files' };
     } finally {
       loading = false;
     }
   }
 
   function selectFile(name: string) {
+    if (dirty && !confirm('You have unsaved changes. Discard and switch files?')) return;
     selectedFile = name;
     const file = files.find((f) => f.name === name);
-    editContent = file?.content || '';
-    saveMessage = '';
+    editContent = file?.content ?? '';
+    savedContent = file?.content ?? '';
+    saveStatus = { kind: 'idle', text: '' };
   }
 
   async function saveFile() {
-    if (!selectedFile) return;
+    if (!selectedFile || saving || !dirty) return;
+    const fileBeingSaved = selectedFile;
+    const contentBeingSaved = editContent;
     saving = true;
-    saveMessage = '';
+    saveStatus = { kind: 'idle', text: 'Saving…' };
     try {
-      const res = await fetch(`/api/workflows/prompts/${selectedFile}`, {
+      const res = await fetch(`/api/workflows/prompts/${fileBeingSaved}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editContent }),
+        body: JSON.stringify({ content: contentBeingSaved }),
       });
-      if (res.ok) {
-        saveMessage = 'Saved and synced';
-        await loadFiles();
-        // Re-select to update content
-        if (selectedFile) {
-          const updated = files.find((f) => f.name === selectedFile);
-          if (updated) editContent = updated.content;
-        }
-      } else {
-        saveMessage = 'Save failed';
+      if (!res.ok) {
+        let detail = `${res.status}`;
+        try {
+          const body = await res.json();
+          if (body?.error) detail = `${res.status}: ${body.error}`;
+        } catch {}
+        saveStatus = { kind: 'error', text: `Save failed (${detail})` };
+        return;
       }
+      // Mark this exact content as the persisted baseline. Do NOT touch
+      // editContent — the user may have typed more characters while the
+      // request was in flight; clobbering would lose those keystrokes.
+      if (selectedFile === fileBeingSaved) {
+        savedContent = contentBeingSaved;
+      }
+      saveStatus = { kind: 'ok', text: `Saved at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` };
+      // Refresh metadata (size + lastModified) but don't disturb the editor.
+      try {
+        const res2 = await fetch('/api/workflows/prompts');
+        if (res2.ok) {
+          const data = await res2.json();
+          files = data.files || files;
+        }
+      } catch { /* metadata refresh is best-effort */ }
+    } catch (e) {
+      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error' };
     } finally {
       saving = false;
-      setTimeout(() => { saveMessage = ''; }, 3000);
     }
   }
 
   async function forceSync() {
     syncing = true;
+    saveStatus = { kind: 'idle', text: 'Syncing…' };
     try {
-      await fetch('/api/workflows/prompts', { method: 'POST' });
-      saveMessage = 'Synced from disk';
-      await loadFiles();
+      const res = await fetch('/api/workflows/prompts', { method: 'POST' });
+      if (!res.ok) {
+        saveStatus = { kind: 'error', text: `Sync failed (${res.status})` };
+        return;
+      }
+      const data = await res.json();
+      files = data.files || [];
+      if (selectedFile) {
+        const updated = files.find((f) => f.name === selectedFile);
+        if (updated && !dirty) {
+          editContent = updated.content;
+          savedContent = updated.content;
+        }
+      }
+      saveStatus = { kind: 'ok', text: 'Re-synced from disk' };
+    } catch (e) {
+      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error' };
     } finally {
       syncing = false;
-      setTimeout(() => { saveMessage = ''; }, 3000);
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveFile();
     }
   }
 
@@ -142,26 +188,38 @@
       <!-- Editor -->
       <div class="flex-1 flex flex-col">
         {#if selectedFile}
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-medium" style="color: var(--text-primary); font-family: var(--font-mono);">
+          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <h2 class="text-sm font-medium flex items-center gap-2" style="color: var(--text-primary); font-family: var(--font-mono);">
               {selectedFile}
+              {#if dirty}
+                <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);">
+                  unsaved
+                </span>
+              {/if}
             </h2>
             <div class="flex items-center gap-3">
-              {#if saveMessage}
-                <span class="text-xs" style="color: #22c55e;">{saveMessage}</span>
+              {#if saveStatus.text}
+                <span
+                  class="text-xs"
+                  style="color: {saveStatus.kind === 'error' ? '#c44' : saveStatus.kind === 'ok' ? '#22c55e' : 'var(--text-ghost)'};"
+                >
+                  {saveStatus.text}
+                </span>
               {/if}
               <button
                 onclick={saveFile}
-                disabled={saving}
+                disabled={saving || !dirty}
+                title={dirty ? 'Save changes (Ctrl/Cmd+S)' : 'Nothing to save'}
                 class="px-4 py-1.5 rounded text-sm font-medium transition-colors"
-                style="background: var(--accent); color: white; opacity: {saving ? 0.7 : 1};"
+                style="background: var(--accent); color: white; opacity: {saving || !dirty ? 0.5 : 1}; cursor: {saving || !dirty ? 'not-allowed' : 'pointer'};"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
           <textarea
             bind:value={editContent}
+            onkeydown={handleKeydown}
             class="flex-1 w-full px-4 py-3 rounded-lg border resize-none text-sm leading-relaxed"
             style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 500px;"
             spellcheck="false"
