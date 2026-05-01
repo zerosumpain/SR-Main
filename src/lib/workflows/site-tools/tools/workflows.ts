@@ -6,10 +6,11 @@ import {
   workflowEdges,
   workflowRuns,
   workflowSchedules,
+  workflowDataStore,
   nodeExecutions,
   orchestratorChats,
 } from '$lib/db/schema';
-import { desc, eq, asc, and, or, like } from 'drizzle-orm';
+import { desc, eq, asc, and, or, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
 import { slugify } from '$lib/canvas/slug';
 
@@ -735,5 +736,284 @@ register({
     unregisterCronJob(scheduleId);
     await db.delete(workflowSchedules).where(eq(workflowSchedules.id, scheduleId));
     return { success: true, data: { deleted: true } };
+  },
+});
+
+// ==========================================
+// Run / Test Tools
+// ==========================================
+
+register({
+  name: 'workflow_run',
+  description:
+    'Trigger a workflow run on behalf of the user. Creates a manual run, fires the engine, and returns the runId immediately. ' +
+    'Pair with workflow_get_run after a brief wait to inspect what happened. ' +
+    'Use for test runs and "run + repair" loops — do not use for production triggers (those have schedules / webhooks already).',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Workflow ID to run' },
+      input: {
+        type: 'object',
+        description: 'Optional initial input passed to the trigger node. Defaults to {}.',
+      },
+      selfHealing: {
+        type: 'boolean',
+        description: 'If true (default), the engine attempts to auto-heal node config errors. Set false for strict test runs.',
+      },
+    },
+    required: ['id'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const id = args.id as string;
+    const initialInput = (args.input as Record<string, unknown>) ?? {};
+    const selfHealing = args.selfHealing !== false;
+
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
+    if (!workflow) return { success: false, error: 'Workflow not found' };
+
+    const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, id));
+    const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, id));
+
+    const { isDisplayOnlyType } = await import('$lib/workflows/types');
+    const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
+    const runnableEdges = edges.filter((e) => {
+      const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
+      const tgt = runnableNodes.find((n) => n.id === e.targetNodeId);
+      return src && tgt;
+    });
+
+    const [run] = await db.insert(workflowRuns).values({
+      workflowId: id,
+      status: 'running',
+      trigger: 'manual',
+      startedAt: new Date(),
+    }).returning();
+
+    for (const node of runnableNodes) {
+      await db.insert(nodeExecutions).values({
+        runId: run.id,
+        nodeId: node.id,
+        status: 'pending',
+      });
+    }
+
+    const definition = {
+      id: workflow.id,
+      name: workflow.name,
+      nodes: runnableNodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        position: n.position as { x: number; y: number },
+        config: (n.config || {}) as Record<string, unknown>,
+        label: n.label,
+      })),
+      edges: runnableEdges.map((e) => ({
+        id: e.id,
+        sourceNodeId: e.sourceNodeId,
+        targetNodeId: e.targetNodeId,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
+      })),
+    };
+
+    const { runWorkflowAndPersist } = await import('$lib/workflows/run-helpers');
+    runWorkflowAndPersist(definition, run.id, initialInput, {
+      workflowId: id,
+      selfHealing,
+      label: 'orchestrator-run',
+    });
+
+    return {
+      success: true,
+      data: {
+        runId: run.id,
+        status: 'running',
+        message: 'Run started in background. Wait a few seconds, then call workflow_get_run with this runId to see results.',
+      },
+    };
+  },
+});
+
+register({
+  name: 'workflow_clear_data_store',
+  description:
+    'Clear entries from a workflow\'s data store. Use this to enable smoother test runs of pipelines that dedupe via stored "seen" keys. ' +
+    'Three modes (pick one): pass `keys` to wipe specific keys (e.g. ["seen_urls"]), `all: true` to wipe every key for the workflow, ' +
+    'or `sinceLastNRuns` to wipe entries written/updated during the last N completed runs. ' +
+    'Always confirm with the user before calling — this is destructive within the workflow\'s scoped store.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workflowId: { type: 'string', description: 'Workflow ID whose data store should be cleared' },
+      keys: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Specific store keys to delete. Mutually exclusive with `all` and `sinceLastNRuns`.',
+      },
+      all: {
+        type: 'boolean',
+        description: 'When true, delete every data-store row for this workflow.',
+      },
+      sinceLastNRuns: {
+        type: 'number',
+        description: 'Delete data-store rows whose updatedAt is on/after the start time of the Nth most recent run.',
+      },
+    },
+    required: ['workflowId'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const workflowId = args.workflowId as string;
+    const keys = Array.isArray(args.keys) ? (args.keys as string[]) : null;
+    const all = args.all === true;
+    const sinceLastNRuns = typeof args.sinceLastNRuns === 'number' ? args.sinceLastNRuns : null;
+
+    const modes = [keys && keys.length > 0, all, sinceLastNRuns !== null].filter(Boolean).length;
+    if (modes !== 1) {
+      return {
+        success: false,
+        error: 'Pick exactly one of: `keys` (non-empty array), `all: true`, or `sinceLastNRuns` (number).',
+      };
+    }
+
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
+    if (!workflow) return { success: false, error: 'Workflow not found' };
+
+    if (keys && keys.length > 0) {
+      const deleted = await db
+        .delete(workflowDataStore)
+        .where(
+          and(
+            eq(workflowDataStore.workflowId, workflowId),
+            inArray(workflowDataStore.key, keys),
+          ),
+        )
+        .returning({ key: workflowDataStore.key });
+      return {
+        success: true,
+        data: { mode: 'keys', deletedCount: deleted.length, deletedKeys: deleted.map((d) => d.key) },
+      };
+    }
+
+    if (all) {
+      const deleted = await db
+        .delete(workflowDataStore)
+        .where(eq(workflowDataStore.workflowId, workflowId))
+        .returning({ key: workflowDataStore.key });
+      return {
+        success: true,
+        data: { mode: 'all', deletedCount: deleted.length, deletedKeys: deleted.map((d) => d.key) },
+      };
+    }
+
+    // sinceLastNRuns mode
+    const n = Math.max(1, Math.floor(sinceLastNRuns!));
+    const recentRuns = await db
+      .select({ startedAt: workflowRuns.startedAt })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.workflowId, workflowId))
+      .orderBy(desc(workflowRuns.startedAt))
+      .limit(n);
+
+    const runsWithStart = recentRuns.filter((r): r is { startedAt: Date } => r.startedAt !== null);
+    if (runsWithStart.length === 0) {
+      return { success: true, data: { mode: 'sinceLastNRuns', deletedCount: 0, deletedKeys: [], note: 'No prior runs with a start time found.' } };
+    }
+
+    const cutoff = runsWithStart[runsWithStart.length - 1].startedAt;
+    const deleted = await db
+      .delete(workflowDataStore)
+      .where(
+        and(
+          eq(workflowDataStore.workflowId, workflowId),
+          gte(workflowDataStore.updatedAt, cutoff),
+        ),
+      )
+      .returning({ key: workflowDataStore.key });
+
+    return {
+      success: true,
+      data: {
+        mode: 'sinceLastNRuns',
+        runsConsidered: recentRuns.length,
+        cutoffStartedAt: cutoff.toISOString(),
+        deletedCount: deleted.length,
+        deletedKeys: deleted.map((d) => d.key),
+      },
+    };
+  },
+});
+
+register({
+  name: 'workflow_lint',
+  description:
+    'Run a static linter over a workflow\'s nodes/edges before triggering a run. Catches the common authoring mistakes: ' +
+    'unsupported template syntax, unknown config keys, code-execute body issues, and {{input.X}} references that don\'t match the upstream schema. ' +
+    'Returns issues with severity. Call this after any structural edit to catch failures cheaply, before workflow_run.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workflowId: { type: 'string', description: 'Workflow ID to lint' },
+    },
+    required: ['workflowId'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const workflowId = args.workflowId as string;
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
+    if (!workflow) return { success: false, error: 'Workflow not found' };
+
+    const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
+    const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
+
+    const { registry } = await import('$lib/workflows');
+    const { verifyWorkflow, formatIssues } = await import('$lib/workflows/orchestrator/verify');
+
+    const nodeDefs = nodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      label: n.label,
+      position: n.position as { x: number; y: number },
+      config: (n.config || {}) as Record<string, unknown>,
+    }));
+    const edgeDefs = edges.map((e) => ({
+      id: e.id,
+      sourceNodeId: e.sourceNodeId,
+      targetNodeId: e.targetNodeId,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    }));
+
+    const getOutputSchema = (type: string, config: Record<string, unknown>) => {
+      const executor = registry.getExecutor(type);
+      if (executor) return executor.getOutputSchema(config);
+      return { type: 'object' as const };
+    };
+
+    const issues = verifyWorkflow(
+      nodeDefs,
+      edgeDefs,
+      (type) => registry.getDefinition(type),
+      getOutputSchema,
+    );
+
+    const errors = issues.filter((i) => i.severity === 'error');
+    const warnings = issues.filter((i) => i.severity === 'warning');
+
+    return {
+      success: true,
+      data: {
+        ok: errors.length === 0,
+        errorCount: errors.length,
+        warningCount: warnings.length,
+        issues,
+        report: issues.length === 0 ? 'No issues found.' : formatIssues(issues),
+      },
+    };
   },
 });

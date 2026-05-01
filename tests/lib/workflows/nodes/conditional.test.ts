@@ -45,6 +45,24 @@ describe('conditionalExecutor', () => {
   it('has correct type', () => {
     expect(conditionalExecutor.type).toBe('conditional');
   });
+
+  it('tolerates a leading `return` in the expression', async () => {
+    const result = await conditionalExecutor.execute(
+      { newCount: 3 },
+      { expression: 'return input.newCount > 0' },
+      mockContext,
+    );
+    expect(result.metadata?._selectedHandle).toBe('true');
+  });
+
+  it('tolerates a leading `return` with trailing semicolon', async () => {
+    const result = await conditionalExecutor.execute(
+      { newCount: 0 },
+      { expression: 'return input.newCount > 0;' },
+      mockContext,
+    );
+    expect(result.metadata?._selectedHandle).toBe('false');
+  });
 });
 
 describe('conditionalDef', () => {

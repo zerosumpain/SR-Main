@@ -89,11 +89,11 @@ describe('app_settings helpers', () => {
     expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') falls back to glm-5-turbo when unset", async () => {
+  it("resolveDefaultModel('chat') falls back to glm-5.1 when unset", async () => {
     store.delete('jkai.chat.default_glm_model');
     clearSettingsCache();
     const ctx = await resolveDefaultModel('chat');
-    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5-turbo' });
+    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
   });
 
   it('resolveChatAltOpenRouterModel returns null when unset', async () => {

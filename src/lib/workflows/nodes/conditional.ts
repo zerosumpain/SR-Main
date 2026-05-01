@@ -9,7 +9,12 @@ export const conditionalExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
-    const expression = (config.expression as string) || 'false';
+    const rawExpression = (config.expression as string) || 'false';
+    // Tolerate both styles: `input.x > 0` AND `return input.x > 0`. Strip a
+    // leading `return ` (with optional trailing semicolon) before wrapping —
+    // a `return (return …)` is a syntax error and used to silently flip the
+    // gate to false. Multi-statement bodies still fail loudly.
+    const expression = rawExpression.replace(/^\s*return\s+/, '').replace(/;\s*$/, '');
     let selected: 'true' | 'false' = 'false';
 
     try {

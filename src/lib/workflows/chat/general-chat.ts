@@ -33,7 +33,24 @@ import { extractPlan, awaitPlanApproval } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 
 const MAX_HISTORY = 30;
-const MAX_TOOL_ROUNDS = 10;
+const DEFAULT_TOOL_ROUNDS = 10;
+const EXTENDED_TOOL_ROUNDS = 30;
+const ABSOLUTE_TOOL_ROUNDS = 50;
+// User phrases that flip a turn into "extended autonomy" — bumps the
+// tool-call budget from DEFAULT to EXTENDED so long workflow builds don't
+// run out mid-wiring. Match anywhere in the message, case-insensitive.
+const EXTENDED_AUTONOMY_PHRASES = [
+  /\b(?:keep going|carry on)\b.*\b(?:until|till)\b/i,
+  /\bno need to (?:check ?in|stop|pause)\b/i,
+  /\bdon'?t (?:check ?in|stop|pause)\b/i,
+  /\b(?:until|till) it'?s? (?:done|finished|complete)\b/i,
+  /\bgo all the way\b/i,
+  /\bextended autonomy\b/i,
+  /\b(?:autonomously|on your own) (?:until|for longer)\b/i,
+];
+function detectExtendedAutonomy(userMessage: string): boolean {
+  return EXTENDED_AUTONOMY_PHRASES.some((re) => re.test(userMessage));
+}
 
 interface ToolProgress {
   tool: string;
@@ -67,6 +84,12 @@ interface ChatOptions {
       executed via this chat. Tools outside the list are filtered from
       activeTools at assembly time and agent_spawn is disabled. */
   toolWhitelist?: string[];
+  /** Override the tool-call round budget. Clamped to [1, ABSOLUTE_TOOL_ROUNDS].
+      When unset, the budget is derived: DEFAULT_TOOL_ROUNDS, bumped to
+      EXTENDED_TOOL_ROUNDS if the user message signals extended autonomy,
+      and bumped further at plan-emission time when the plan has many
+      steps (steps × 3, capped at ABSOLUTE_TOOL_ROUNDS). */
+  maxRounds?: number;
 }
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
@@ -586,8 +609,21 @@ export async function generalChat(
 
   let responseText = '';
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+  // Derive the tool-call budget for this turn. The caller can override
+  // explicitly; otherwise we look at the user message for extended-autonomy
+  // phrases. The plan-extraction branch below may bump this further mid-loop
+  // when a long plan is approved.
+  let maxRounds = options.maxRounds
+    ? Math.max(1, Math.min(ABSOLUTE_TOOL_ROUNDS, options.maxRounds))
+    : detectExtendedAutonomy(userMessage)
+      ? EXTENDED_TOOL_ROUNDS
+      : DEFAULT_TOOL_ROUNDS;
+  if (maxRounds !== DEFAULT_TOOL_ROUNDS) {
+    onProgress?.(`[budget] tool-call budget set to ${maxRounds} rounds for this turn\n`);
+  }
+
+  for (let round = 0; round < maxRounds; round++) {
+    const isFinalRound = round === maxRounds - 1;
 
     // --- Per-turn model selection ---
     // Use the thinking-tier model (e.g. glm-5.1) for "decision" turns: the
@@ -847,6 +883,19 @@ export async function generalChat(
           break;
         }
 
+        // If the approved plan has many steps, give the loop more rounds
+        // so it doesn't run out mid-execution. Honour any explicit caller
+        // override — never expand past it. Heuristic: 3 rounds per step is
+        // about right for workflow builds (add-node + add-edge + verify).
+        if (decision.decision === 'approved' && !options.maxRounds) {
+          const stepCount = extracted.plan.steps.length;
+          const projected = Math.min(ABSOLUTE_TOOL_ROUNDS, Math.max(maxRounds, stepCount * 3));
+          if (projected > maxRounds) {
+            onProgress?.(`[budget] plan has ${stepCount} steps — extending budget ${maxRounds} → ${projected} rounds\n`);
+            maxRounds = projected;
+          }
+        }
+
         // Feed the decision back in. The LLM sees its own plan block in the
         // conversation history (via `msg` being pushed below) plus a system
         // nudge matching what the prompt promised.
@@ -904,7 +953,7 @@ export async function generalChat(
   }
 
   if (!responseText) {
-    responseText = `Sorry, the model (${model}) did not produce a final response after ${MAX_TOOL_ROUNDS} tool rounds.`;
+    responseText = `Sorry, the model did not produce a final response after ${maxRounds} tool rounds.`;
   }
 
   return { response: responseText };

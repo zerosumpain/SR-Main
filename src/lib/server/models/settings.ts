@@ -42,10 +42,10 @@ export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<Mod
   if (kind === 'chat') {
     // Chat default is always the configured GLM model.
     const v = await getSetting<{ modelId?: string }>('jkai.chat.default_glm_model');
-    return { provider: 'zai', modelId: v?.modelId ?? 'glm-5-turbo' };
+    return { provider: 'zai', modelId: v?.modelId ?? 'glm-5.1' };
   }
   const v = await getSetting<ModelContext>('jkai.builder.default_model');
-  return v ?? { provider: 'zai', modelId: 'glm-4.6' };
+  return v ?? { provider: 'zai', modelId: 'glm-5.1' };
 }
 
 /**
