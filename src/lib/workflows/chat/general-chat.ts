@@ -53,6 +53,70 @@ function detectExtendedAutonomy(userMessage: string): boolean {
   return EXTENDED_AUTONOMY_PHRASES.some((re) => re.test(userMessage));
 }
 
+/**
+ * Fire-and-forget "opening acknowledgement" call. Reasoning models like
+ * GLM-5.x routinely sit silent for 10–20s before emitting either text or a
+ * tool_call on the orchestrator's first round, so the user sees nothing but
+ * a "Working…" spinner until tools start running. This kicks off a tiny
+ * parallel call with no tools, no reasoning-heavy context, and a 60-token
+ * cap to push a one-sentence "what I'm about to do" into the chat stream
+ * within a couple of seconds. Persists as source=status_update so it
+ * survives reload (same shape as the round-5 mid-task update).
+ */
+async function emitOpeningAck(opts: {
+  userMessage: string;
+  modelContext: ModelContext;
+  conversationId: string | null | undefined;
+  priceSnapshot: PriceSnapshot | null;
+  signal?: AbortSignal;
+}): Promise<void> {
+  if (!opts.conversationId) return;
+  try {
+    const { client, model } = await getLLMClient(opts.modelContext);
+    const resp = await client.chat.completions.create(
+      {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are jkai, a personal assistant. The user just sent a message and you are about to look something up. Reply with EXACTLY ONE short conversational sentence (max 14 words) telling them what you are about to do. Examples: "Pulling the weather for Darlington and your home temperatures.", "Checking your calendar for today.", "Looking up the bin schedule." No greetings, no JSON, no preamble. Just the one sentence.',
+          },
+          { role: 'user', content: opts.userMessage.slice(0, 2000) },
+        ],
+        temperature: 0.4,
+        max_tokens: 80,
+      },
+      opts.signal ? { signal: opts.signal } : undefined,
+    );
+    const text = resp.choices?.[0]?.message?.content?.trim();
+    if (!text) return;
+    if (opts.signal?.aborted) return;
+
+    await db.insert(orchestratorChats).values({
+      conversationId: opts.conversationId,
+      role: 'assistant',
+      content: text,
+      metadata: { source: 'status_update' },
+    });
+    notifySubscribers(opts.conversationId, {
+      role: 'assistant',
+      content: text,
+      source: 'status_update',
+    });
+    if (resp.usage) {
+      recordConversationUsage(
+        opts.conversationId,
+        parseUsage(resp.usage as any),
+        opts.priceSnapshot,
+      ).catch((e) => console.warn('[general-chat] opening-ack usage record failed:', e));
+    }
+  } catch (err) {
+    if ((err as any)?.name === 'AbortError') return;
+    console.warn('[general-chat] opening ack failed:', err instanceof Error ? err.message : err);
+  }
+}
+
 interface ToolProgress {
   tool: string;
   toolCallId: string;
@@ -499,6 +563,23 @@ export async function generalChat(
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
 
+  // Kick off the opening acknowledgement in parallel — it runs while the
+  // heavy orchestrator system prompt is being assembled and the first LLM
+  // round (which on reasoning models like GLM-5.x can sit silent for 10–20s)
+  // is in flight. Aborted as soon as the orchestrator emits its own first
+  // content token so we never double-up "Working…" callouts and the orchestrator's real reply.
+  // Skipped for sub-agents (their output isn't meant for the user chat).
+  const ackController = new AbortController();
+  if (options.conversationId && (options.subagentDepth ?? 0) === 0) {
+    void emitOpeningAck({
+      userMessage,
+      modelContext: options.modelContext,
+      conversationId: options.conversationId,
+      priceSnapshot: options.priceSnapshot,
+      signal: ackController.signal,
+    });
+  }
+
   // Check if user wants to capture knowledge
   maybeIngestAsNote(userMessage);
 
@@ -793,6 +874,11 @@ export async function generalChat(
           if (!firstTokenSeen) {
             firstTokenSeen = true;
             if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Streaming reply…');
+            // Orchestrator is now producing its own assistant content — drop
+            // the parallel opening ack so we don't render two "Working…"
+            // callouts back-to-back when the orchestrator turns out to be
+            // fast enough to beat the ack call.
+            ackController.abort();
           }
           fullContent += delta.content;
           options.onStreamEvent?.({ type: 'token', delta: delta.content });
