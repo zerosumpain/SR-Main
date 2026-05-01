@@ -201,6 +201,12 @@
       >
         {showPreview ? 'Hide preview' : 'Preview'}
       </button>
+      <a
+        class="nm-btn-ghost"
+        href={`/api/jkai/proxy/${build.id}/`}
+        target="_blank"
+        rel="noreferrer"
+      >↗ Open app</a>
     {/if}
     {#if build.serveConfig && !build.publishedSlug}
       <button class="nm-btn-ghost" disabled={publishing} onclick={publishBuild} type="button">
@@ -214,6 +220,25 @@
       </button>
     {/if}
   </div>
+
+  {#if build.serveConfig || build.publishedSlug}
+    <section class="app-url">
+      <span class="app-url-label">App URL</span>
+      <code class="app-url-value">{build.publishedSlug
+        ? `https://strangeramblings.com/projects/jkai/${build.publishedSlug}/`
+        : `https://strangeramblings.com/api/jkai/proxy/${build.id}/`}</code>
+      <button
+        type="button"
+        class="row-link"
+        onclick={() => navigator.clipboard?.writeText(build.publishedSlug
+          ? `https://strangeramblings.com/projects/jkai/${build.publishedSlug}/`
+          : `https://strangeramblings.com/api/jkai/proxy/${build.id}/`)}
+      >copy</button>
+      {#if !build.publishedSlug}
+        <span class="dim">requires sign-in</span>
+      {/if}
+    </section>
+  {/if}
 
   {#if build.status === 'failed'}
     <FailureRecovery
@@ -323,6 +348,32 @@
   }
   .planning-banner {
     border-left: 3px solid var(--accent);
+  }
+  .app-url {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0 0 1rem;
+    padding: 0.55rem 0.75rem;
+    background: var(--bg-secondary, var(--bg));
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent);
+  }
+  .app-url-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+  }
+  .app-url-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    word-break: break-all;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .layout {
     display: grid;

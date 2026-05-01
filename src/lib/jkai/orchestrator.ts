@@ -703,6 +703,7 @@ class Orchestrator {
                 failure: {
                   kind: 'design_lint',
                   message: `${findings.length} design-system violations`,
+                  findingsCount: findings.length,
                   attempts: 1,
                 } as unknown as Record<string, unknown>,
               })
@@ -713,6 +714,36 @@ class Orchestrator {
               `Iteration #${iterationNumber} rejected by design-system linter (${findings.length} findings) — feedback included in next iteration.`,
               iteration.id,
             );
+
+            // Linter-loop guard: if the last 3 iterations all failed design_lint
+            // and the findings count never decreased, the model isn't converging
+            // (either it doesn't understand the rule or the rule is wrong).
+            // Abort instead of burning hours of compute.
+            const lastThree = await db
+              .select()
+              .from(jkaiIterations)
+              .where(eq(jkaiIterations.buildId, buildId))
+              .orderBy(desc(jkaiIterations.number))
+              .limit(3);
+            const allDesignLint =
+              lastThree.length >= 3 &&
+              lastThree.every((i) => (i.failure as any)?.kind === 'design_lint');
+            if (allDesignLint) {
+              const counts = lastThree.map((i) => (i.failure as any)?.findingsCount ?? 0);
+              const noDecrease = counts[0] >= counts[1] && counts[1] >= counts[2];
+              if (noDecrease) {
+                await this.abortBuild(buildId, {
+                  kind: 'design_lint_loop',
+                  message: `Design-system linter has rejected 3 consecutive iterations with no decrease in findings (${counts
+                    .slice()
+                    .reverse()
+                    .join(' → ')}). The model isn't converging — review the prompt or the linter rule.`,
+                  attempts: 1,
+                });
+                return;
+              }
+            }
+
             this.scheduleNext(buildId, 1000);
             return;
           }

@@ -47,7 +47,9 @@ export type FailureKind =
   | 'container_missing'
   | 'wall_clock_timeout'
   | 'nonzero_exit'
-  | 'empty_output';
+  | 'empty_output'
+  | 'design_lint'
+  | 'design_lint_loop';
 
 export interface FailureEnvelope {
   kind: FailureKind;
