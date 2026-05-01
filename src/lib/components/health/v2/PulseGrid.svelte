@@ -1,14 +1,15 @@
 <script lang="ts">
   import type { HealthDay } from '$lib/health/series-30d-service';
-  import { clamp, ramp, dayLabel } from './utils';
+  import { clamp, ramp, dayLabel, pulsePeakIndex, type PulseRowKey } from './utils';
 
   let { series }: { series: HealthDay[] } = $props();
 
   type Row = {
-    key: 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps';
+    key: PulseRowKey;
     name: string;
     meta: string;
     f: (d: HealthDay) => number;
+    raw: (d: HealthDay) => number;
     display: (d: HealthDay) => string;
   };
 
@@ -18,6 +19,7 @@
       name: 'RECOVERY',
       meta: 'Whoop · %',
       f: (d) => d.rec / 100,
+      raw: (d) => d.rec,
       display: (d) => `${d.rec}%`,
     },
     {
@@ -25,6 +27,7 @@
       name: 'HRV',
       meta: 'ms · 5d ema',
       f: (d) => clamp((d.hrv - 25) / 50, 0, 1),
+      raw: (d) => d.hrv,
       display: (d) => `${d.hrv}ms`,
     },
     {
@@ -32,6 +35,7 @@
       name: 'RESTING HR',
       meta: 'bpm · inv',
       f: (d) => clamp(1 - (d.rhr - 50) / 22, 0, 1),
+      raw: (d) => d.rhr,
       display: (d) => `${d.rhr}bpm`,
     },
     {
@@ -39,6 +43,7 @@
       name: 'SLEEP',
       meta: 'hours',
       f: (d) => clamp((d.slept - 5) / 4, 0, 1),
+      raw: (d) => d.slept,
       display: (d) => `${d.slept.toFixed(1)}h`,
     },
     {
@@ -46,6 +51,7 @@
       name: 'STRAIN',
       meta: '0–21',
       f: (d) => clamp(d.strain / 21, 0, 1),
+      raw: (d) => d.strain,
       display: (d) => d.strain.toFixed(1),
     },
     {
@@ -53,6 +59,7 @@
       name: 'STEPS',
       meta: 'count · k',
       f: (d) => clamp(d.steps / 16000, 0, 1),
+      raw: (d) => d.steps,
       display: (d) => `${(d.steps / 1000).toFixed(1)}k`,
     },
   ];
@@ -60,40 +67,17 @@
   const labels = $derived(series.map((d) => dayLabel(d.date)));
   const lastIndex = $derived(series.length - 1);
 
-  // Per-row peak day index over the rolling window EXCLUDING today.
-  // Today is always shown with its own marker; the peak callout is the
-  // best previous day in the window. row.f returns "good direction"
-  // normalised, so max-of-normalised = best day (lowest RHR, highest
-  // strain, etc). Strict > picks the first occurrence on ties. Days
-  // with no raw data are skipped so empty cells don't win by default.
-  function peakIndex(row: Row): number {
-    let best = -Infinity;
-    let idx = -1;
-    const upto = series.length - 1; // exclude today (last index)
-    for (let i = 0; i < upto; i++) {
-      const d = series[i];
-      const raw =
-        row.key === 'rec'
-          ? d.rec
-          : row.key === 'hrv'
-            ? d.hrv
-            : row.key === 'rhr'
-              ? d.rhr
-              : row.key === 'slept'
-                ? d.slept
-                : row.key === 'strain'
-                  ? d.strain
-                  : d.steps;
-      if (raw <= 0) continue;
-      const v = row.f(d);
-      if (v > best) {
-        best = v;
-        idx = i;
-      }
-    }
-    return idx;
-  }
-  const peaks = $derived(rows.map((r) => peakIndex(r)));
+  // Peak ranks on raw values per metric (max for everything except RHR, which
+  // wins on min). Today is eligible — when today is the peak, its cream tint
+  // and the black ring render together.
+  const peaks = $derived(
+    rows.map((r) =>
+      pulsePeakIndex(
+        r.key,
+        series.map((d) => r.raw(d)),
+      ),
+    ),
+  );
 
   let tip = $state<{ x: number; y: number; label: string; val: string; metric: string } | null>(null);
   let wrap: HTMLDivElement | null = $state(null);
@@ -133,16 +117,18 @@
           type="button"
           class="h-pg-cell"
           class:today={isToday}
-          class:peak={isPeak && !isToday}
+          class:peak={isPeak}
           style="--c: {ramp(v)}"
-          aria-label="{labels[i].mon} {labels[i].dom} · {row.name} {display}{isPeak
-            ? ' · row peak'
-            : ''}"
+          aria-label="{labels[i].mon} {labels[i].dom} · {row.name} {display}{isToday
+            ? ' · today'
+            : ''}{isPeak ? ' · row peak' : ''}"
           onmouseenter={(e) => showTip(e, row.name, display, i)}
           onmouseleave={hideTip}
           onfocus={(e) => showTip(e, row.name, display, i)}
           onblur={hideTip}
-        ></button>
+        >
+          {#if isToday}<span class="h-pg-today-tint" aria-hidden="true"></span>{/if}
+        </button>
       {/each}
     </div>
   {/each}
@@ -272,13 +258,13 @@
     inset: 2px;
     background: var(--c, transparent);
   }
-  .h-pg-cell.today::after {
-    content: '';
+  .h-pg-today-tint {
     position: absolute;
     inset: 2px;
     background: rgba(237, 228, 212, 0.55);
     mix-blend-mode: screen;
     pointer-events: none;
+    z-index: 1;
   }
   .h-pg-cell.peak {
     z-index: 2;
@@ -293,6 +279,7 @@
       0 0 0 1px rgba(26, 16, 8, 0.45),
       0 4px 10px rgba(26, 16, 8, 0.25);
     pointer-events: none;
+    z-index: 3;
   }
   .h-pg-axis {
     display: grid;

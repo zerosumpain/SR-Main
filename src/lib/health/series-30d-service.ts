@@ -9,6 +9,7 @@ import {
 import { gte, eq, and, desc, inArray } from 'drizzle-orm';
 import { getCorrelations } from './correlations-service';
 import { getNarrative } from './narrative-service';
+import { getHeroCopy } from './hero-copy-service';
 
 export type HealthDay = {
   i: number;
@@ -37,7 +38,13 @@ export type ActivityRings = {
 
 export type Workout = { day: string; name: string; strain: number; dur: string };
 
-export type Correlation = { cause: string; effect: string; num: string; conf: string };
+export type Correlation = {
+  cause: string;
+  effect: string;
+  num: string;
+  conf: string;
+  confidence: 'STRONG' | 'MAYBE' | 'NOISE';
+};
 
 export type Annotation = { when: string; text: string };
 
@@ -118,7 +125,7 @@ function fmtDur(seconds: number): string {
   return `${m}m`;
 }
 
-function pickHeadline(rec: number): { primary: string; ghost: string } {
+export function pickHeadline(rec: number): { primary: string; ghost: string } {
   if (rec < 40) return { primary: "WRECKED.", ghost: "DON'T LIFT." };
   if (rec < 55) return { primary: "MEH.", ghost: "WALK IT OFF." };
   if (rec < 70) return { primary: "HOLD STEADY.", ghost: "STEADY HANDS." };
@@ -126,7 +133,11 @@ function pickHeadline(rec: number): { primary: string; ghost: string } {
   return { primary: "RECOVERED.", ghost: "BUILD SOMETHING." };
 }
 
-function buildStrap(today: HealthDay, yesterday: HealthDay, rhrBaseline: number): string {
+export function buildStrap(
+  today: { rec: number; hrv: number; rhr: number; slept: number },
+  yesterday: { hrv: number },
+  rhrBaseline: number,
+): string {
   if (yesterday.hrv === 0 || today.hrv === 0) {
     return `Recovery's at ${today.rec}%. HRV ${today.hrv}ms, RHR ${today.rhr}bpm. Body's reporting in.`;
   }
@@ -286,19 +297,33 @@ function buildMockWorkouts(): Workout[] {
 }
 
 const STATIC_CORRELATIONS: Correlation[] = [
-  { cause: 'When I sleep <6h', effect: 'HRV drops', num: '−21%', conf: 'r = −0.74 · n=12' },
-  { cause: 'When I drink', effect: 'Recovery is', num: '−18 pts', conf: 'r = −0.68 · n=8' },
+  {
+    cause: 'When I sleep <6h',
+    effect: 'HRV drops',
+    num: '−21%',
+    conf: 'r = −0.74 · n=12',
+    confidence: 'MAYBE',
+  },
+  {
+    cause: 'When I drink',
+    effect: 'Recovery is',
+    num: '−18 pts',
+    conf: 'r = −0.68 · n=8',
+    confidence: 'MAYBE',
+  },
   {
     cause: 'Strain >16 days',
     effect: 'Need',
     num: '2 days',
     conf: 'observed 4/4',
+    confidence: 'MAYBE',
   },
   {
     cause: 'After a 12k+ step day',
     effect: 'Sleep score',
     num: '+11 pts',
     conf: 'r = +0.52 · n=14',
+    confidence: 'MAYBE',
   },
 ];
 
@@ -513,8 +538,19 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     sleepDelta: Math.round(today.slept * 3600 - sleepAvgMs),
   };
 
-  const headline = pickHeadline(today.rec);
-  const strap = buildStrap(today, yesterday, rhrBaseline);
+  const heroCopy = await getHeroCopy(
+    {
+      date: today.date,
+      rec: today.rec,
+      hrv: today.hrv,
+      rhr: today.rhr,
+      slept: today.slept,
+      rhrBaseline,
+      hrvDeltaPct: todayDeltas.hrvDeltaPct,
+    },
+    { pickHeadline, buildStrap },
+  );
+  const { headline, strap } = heroCopy;
   const narrative = await getNarrative(series, rhrBaseline);
   const annotations = computeAnnotations(series);
 

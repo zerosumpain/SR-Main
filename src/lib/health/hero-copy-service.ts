@@ -1,0 +1,191 @@
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import { getLLMClient } from '$lib/jkai/llm-client';
+
+export interface HeroCopy {
+  headline: { primary: string; ghost: string };
+  strap: string;
+}
+
+export interface HeroCopyInput {
+  date: string;
+  rec: number;
+  hrv: number;
+  rhr: number;
+  slept: number;
+  rhrBaseline: number;
+  hrvDeltaPct: number;
+}
+
+export interface HeroCopyFallbackFns {
+  pickHeadline: (rec: number) => { primary: string; ghost: string };
+  buildStrap: (
+    today: { rec: number; hrv: number; rhr: number; slept: number },
+    yesterday: { hrv: number },
+    rhrBaseline: number,
+  ) => string;
+}
+
+const TTL_OK_MS = 6 * 60 * 60 * 1000; // successful LLM copy
+const TTL_FALLBACK_MS = 5 * 60 * 1000; // failed call — retry soon
+const TIMEOUT_MS = 15_000;
+const MAX_PRIMARY_LEN = 24;
+const MAX_GHOST_LEN = 24;
+const MAX_STRAP_LEN = 200;
+
+const cache = new Map<string, { copy: HeroCopy; expires: number }>();
+
+function cacheKey(input: HeroCopyInput): string {
+  return `${input.date}|${input.rec}|${input.hrv}|${input.rhr}|${input.slept}`;
+}
+
+function buildFallback(input: HeroCopyInput, fb: HeroCopyFallbackFns): HeroCopy {
+  return {
+    headline: fb.pickHeadline(input.rec),
+    strap: fb.buildStrap(
+      { rec: input.rec, hrv: input.hrv, rhr: input.rhr, slept: input.slept },
+      { hrv: input.hrv / (1 + input.hrvDeltaPct / 100) },
+      input.rhrBaseline,
+    ),
+  };
+}
+
+function buildPrompt(input: HeroCopyInput): { system: string; user: string } {
+  const baselineWord =
+    input.rhr > input.rhrBaseline
+      ? `${input.rhr - input.rhrBaseline} bpm above baseline`
+      : input.rhr < input.rhrBaseline
+        ? `${input.rhrBaseline - input.rhr} bpm below baseline`
+        : 'at baseline';
+  const hrvWord =
+    input.hrvDeltaPct > 0
+      ? `up ${input.hrvDeltaPct}% overnight`
+      : input.hrvDeltaPct < 0
+        ? `down ${Math.abs(input.hrvDeltaPct)}% overnight`
+        : 'flat overnight';
+  const system = [
+    'You write the hero copy for a personal health dashboard.',
+    'Tone: dry, brutal, witty, knowing. Never cheerful, never preachy.',
+    'You are addressing the dashboard owner — second person, light touch.',
+    'Output strict JSON only: {"primary": "...", "ghost": "...", "strap": "..."}.',
+    'No code fences, no commentary.',
+    'primary: 1-3 words, ALL CAPS, with a full stop. Reflects current recovery.',
+    'ghost: 1-3 words, ALL CAPS, with a full stop. The advice or the punchline.',
+    'strap: one sentence, max 24 words, must mention at least two of: recovery %, HRV change, RHR vs baseline, sleep hours.',
+    'Examples of voice (do not copy verbatim):',
+    '  primary "WRECKED.", ghost "DON\'T LIFT.", strap "Recovery 28%. HRV down 14% overnight, RHR 6 bpm above baseline. Walk, eat, repeat."',
+    '  primary "READY.", ghost "GO MOVE.", strap "Recovery 78%. HRV up 9%, sleep 8.1h. The body has agreed to one (1) hard effort."',
+    '  primary "MEH.", ghost "WALK IT OFF.", strap "Recovery 51%. HRV flat, RHR at baseline, slept 6.4h. A grey day. Go outside anyway."',
+  ].join('\n');
+  const user = [
+    `Today's numbers:`,
+    `- recovery: ${input.rec}%`,
+    `- HRV: ${input.hrv}ms (${hrvWord})`,
+    `- RHR: ${input.rhr} bpm (${baselineWord})`,
+    `- sleep: ${input.slept.toFixed(1)} h`,
+    '',
+    'Return only the JSON object.',
+  ].join('\n');
+  return { system, user };
+}
+
+function validateCopy(parsed: unknown): HeroCopy | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  const primary = typeof o.primary === 'string' ? o.primary.trim() : '';
+  const ghost = typeof o.ghost === 'string' ? o.ghost.trim() : '';
+  const strap = typeof o.strap === 'string' ? o.strap.trim() : '';
+  if (!primary || !ghost || !strap) return null;
+  if (primary.length > MAX_PRIMARY_LEN) return null;
+  if (ghost.length > MAX_GHOST_LEN) return null;
+  if (strap.length > MAX_STRAP_LEN) return null;
+  return {
+    headline: { primary: primary.toUpperCase(), ghost: ghost.toUpperCase() },
+    strap,
+  };
+}
+
+function tryParseJson(s: string): unknown {
+  // The model sometimes wraps JSON in code fences despite the prompt.
+  const cleaned = s
+    .trim()
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+async function callLLM(input: HeroCopyInput): Promise<HeroCopy | null> {
+  const ctx = await resolveDefaultModel('chat');
+  const { client, model } = await getLLMClient(ctx);
+  const { system, user } = buildPrompt(input);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0.9,
+        // GLM consumes reasoning tokens out of max_tokens before any visible
+        // output — give it enough headroom for both.
+        max_tokens: 800,
+      },
+      { signal: controller.signal },
+    );
+    const text = completion.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text) {
+      console.warn('[hero-copy] empty LLM response, finish:', completion.choices?.[0]?.finish_reason);
+      return null;
+    }
+    const parsed = tryParseJson(text);
+    const valid = validateCopy(parsed);
+    if (!valid) {
+      console.warn('[hero-copy] validation failed; raw:', JSON.stringify(text).slice(0, 200));
+    }
+    return valid;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function getHeroCopy(
+  input: HeroCopyInput,
+  fallback: HeroCopyFallbackFns,
+  llmCall: (i: HeroCopyInput) => Promise<HeroCopy | null> = callLLM,
+): Promise<HeroCopy> {
+  const key = cacheKey(input);
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && hit.expires > now) return hit.copy;
+
+  let copy: HeroCopy;
+  let usedFallback = false;
+  try {
+    const generated = await llmCall(input);
+    if (generated) {
+      copy = generated;
+    } else {
+      copy = buildFallback(input, fallback);
+      usedFallback = true;
+    }
+  } catch (err) {
+    console.warn('[hero-copy] LLM call failed, using fallback', err);
+    copy = buildFallback(input, fallback);
+    usedFallback = true;
+  }
+  const ttl = usedFallback ? TTL_FALLBACK_MS : TTL_OK_MS;
+  cache.set(key, { copy, expires: now + ttl });
+  return copy;
+}
+
+export function clearHeroCopyCache(): void {
+  cache.clear();
+}

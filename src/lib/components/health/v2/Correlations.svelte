@@ -8,6 +8,7 @@
     <div class="h-corr">
       <p class="h-corr-cause"><em>{it.cause}</em></p>
       <p class="h-corr-effect">{it.effect} <span class="num">{it.num}</span></p>
+      <p class="h-corr-badge h-corr-badge-{it.confidence.toLowerCase()}">{it.confidence}</p>
       <p class="h-corr-conf">{it.conf}</p>
     </div>
   {/each}
@@ -65,5 +66,25 @@
     color: var(--text-ghost);
     text-transform: uppercase;
     margin: 0;
+  }
+  .h-corr-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin: 0;
+    align-self: flex-start;
+    padding: 2px 6px;
+    border: 1px solid currentColor;
+  }
+  .h-corr-badge-strong {
+    color: var(--accent);
+  }
+  .h-corr-badge-maybe {
+    color: var(--text-muted);
+  }
+  .h-corr-badge-noise {
+    color: var(--text-ghost);
   }
 </style>

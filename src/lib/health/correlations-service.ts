@@ -4,7 +4,13 @@ import { gte, eq, and } from 'drizzle-orm';
 import type { Correlation } from './series-30d-service';
 
 const WINDOW_DAYS = 90;
-const MIN_PAIRS = 4;
+const MIN_PAIRS = 10;
+const MIN_R = 0.3;
+const STRONG_N = 30;
+const STRONG_R = 0.5;
+const MAX_RESULTS = 4;
+
+type MetricKey = 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps' | 'sleepScore';
 
 type DayRow = {
   date: string;
@@ -40,8 +46,130 @@ function pearson(xs: number[], ys: number[]): number {
   return den === 0 ? 0 : num / den;
 }
 
-function avg(xs: number[]): number {
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+const METRIC_KEYS: MetricKey[] = ['rec', 'hrv', 'rhr', 'slept', 'strain', 'steps', 'sleepScore'];
+
+// Definitionally entangled pairs (canonicalised, sorted, joined). Same key
+// blocks both same-day {A,B} and lagged (A,B)/(B,A).
+const DENYLIST: ReadonlySet<string> = new Set([
+  ['rec', 'hrv'].sort().join('|'),
+  ['rec', 'rhr'].sort().join('|'),
+  ['sleepScore', 'slept'].sort().join('|'),
+]);
+
+function denyKey(a: MetricKey, b: MetricKey): string {
+  return [a, b].sort().join('|');
+}
+
+// "Lower is better" — used to phrase the effect direction. RHR is the only
+// one in this set today.
+const LOWER_IS_BETTER: ReadonlySet<MetricKey> = new Set(['rhr']);
+
+const NOUN: Record<MetricKey, { cause: string; effect: string; level: string }> = {
+  rec: { cause: 'recovery', effect: 'recovery', level: 'high-recovery' },
+  hrv: { cause: 'HRV', effect: 'HRV', level: 'high-HRV' },
+  rhr: { cause: 'resting HR', effect: 'resting HR', level: 'high-RHR' },
+  slept: { cause: 'sleep', effect: 'sleep duration', level: 'long-sleep' },
+  strain: { cause: 'strain', effect: 'strain', level: 'high-strain' },
+  steps: { cause: 'steps', effect: 'steps', level: 'high-step' },
+  sleepScore: { cause: 'sleep score', effect: 'sleep score', level: 'high-sleep-score' },
+};
+
+function rawValueFor(d: DayRow, key: MetricKey): number | null {
+  return d[key];
+}
+
+function bucket(n: number, r: number): 'STRONG' | 'MAYBE' | 'NOISE' {
+  const a = Math.abs(r);
+  if (n >= STRONG_N && a >= STRONG_R) return 'STRONG';
+  if (n >= MIN_PAIRS && a >= MIN_R) return 'MAYBE';
+  return 'NOISE';
+}
+
+function fmtR(r: number): string {
+  const sign = r >= 0 ? '+' : '−';
+  return `r = ${sign}${Math.abs(r).toFixed(2)}`;
+}
+
+type PairResult = {
+  cor: Correlation;
+  rank: number;
+};
+
+function sameDayPair(ordered: DayRow[], a: MetricKey, b: MetricKey): PairResult | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const d of ordered) {
+    const va = rawValueFor(d, a);
+    const vb = rawValueFor(d, b);
+    if (va == null || vb == null || va <= 0 || vb <= 0) continue;
+    xs.push(va);
+    ys.push(vb);
+  }
+  if (xs.length < MIN_PAIRS) return null;
+  const r = pearson(xs, ys);
+  if (Math.abs(r) < MIN_R) return null;
+  const direction = r >= 0 ? 'tracks with' : 'inverts with';
+  const cor: Correlation = {
+    cause: NOUN[a].cause.toUpperCase(),
+    effect: `${direction} ${NOUN[b].effect}`,
+    num: fmtR(r),
+    conf: `same-day · n=${xs.length}`,
+    confidence: bucket(xs.length, r),
+  };
+  return { cor, rank: Math.abs(r) * Math.sqrt(xs.length) };
+}
+
+function laggedPair(ordered: DayRow[], a: MetricKey, b: MetricKey): PairResult | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const va = rawValueFor(ordered[i], a);
+    const vb = rawValueFor(ordered[i + 1], b);
+    if (va == null || vb == null || va <= 0 || vb <= 0) continue;
+    xs.push(va);
+    ys.push(vb);
+  }
+  if (xs.length < MIN_PAIRS) return null;
+  const r = pearson(xs, ys);
+  if (Math.abs(r) < MIN_R) return null;
+  const goodForB = LOWER_IS_BETTER.has(b) ? r <= 0 : r >= 0;
+  const direction = goodForB ? 'lifts' : 'tanks';
+  const cor: Correlation = {
+    cause: `After a ${NOUN[a].level} day`,
+    effect: `Next-day ${NOUN[b].effect} ${direction}`,
+    num: fmtR(r),
+    conf: `lagged · n=${xs.length}`,
+    confidence: bucket(xs.length, r),
+  };
+  return { cor, rank: Math.abs(r) * Math.sqrt(xs.length) };
+}
+
+export function discoverCorrelations(ordered: DayRow[]): Correlation[] {
+  const results: PairResult[] = [];
+
+  // Same-day: unordered pairs, each evaluated once.
+  for (let i = 0; i < METRIC_KEYS.length; i++) {
+    for (let j = i + 1; j < METRIC_KEYS.length; j++) {
+      const a = METRIC_KEYS[i];
+      const b = METRIC_KEYS[j];
+      if (DENYLIST.has(denyKey(a, b))) continue;
+      const r = sameDayPair(ordered, a, b);
+      if (r) results.push(r);
+    }
+  }
+
+  // Lagged: ordered pairs, both directions.
+  for (const a of METRIC_KEYS) {
+    for (const b of METRIC_KEYS) {
+      if (a === b) continue;
+      if (DENYLIST.has(denyKey(a, b))) continue;
+      const r = laggedPair(ordered, a, b);
+      if (r) results.push(r);
+    }
+  }
+
+  results.sort((x, y) => y.rank - x.rank);
+  return results.slice(0, MAX_RESULTS).map((p) => p.cor);
 }
 
 export async function getCorrelations(): Promise<Correlation[]> {
@@ -121,103 +249,5 @@ export async function getCorrelations(): Promise<Correlation[]> {
   for (const [k, v] of stepsByDate) ensure(k).steps = v;
 
   const ordered = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const ix: Record<string, number> = {};
-  ordered.forEach((d, i) => {
-    ix[d.date] = i;
-  });
-
-  const out: Correlation[] = [];
-
-  // 1) Sleep <6h → next-day HRV vs all other nights' HRV
-  {
-    const shortAfter: number[] = [];
-    const longAfter: number[] = [];
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const today = ordered[i];
-      const tomorrow = ordered[i + 1];
-      if (today.slept == null || tomorrow.hrv == null) continue;
-      if (today.slept < 6) shortAfter.push(tomorrow.hrv);
-      else if (today.slept >= 7) longAfter.push(tomorrow.hrv);
-    }
-    if (shortAfter.length >= MIN_PAIRS && longAfter.length >= MIN_PAIRS) {
-      const aShort = avg(shortAfter);
-      const aLong = avg(longAfter);
-      const pct = Math.round(((aShort - aLong) / aLong) * 100);
-      out.push({
-        cause: 'When I sleep <6h',
-        effect: 'HRV drops',
-        num: `${pct >= 0 ? '+' : '−'}${Math.abs(pct)}%`,
-        conf: `n=${shortAfter.length} short nights`,
-      });
-    }
-  }
-
-  // 2) Strain >14 → next-day recovery delta
-  {
-    const after: number[] = [];
-    const baseline: number[] = [];
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const today = ordered[i];
-      const tomorrow = ordered[i + 1];
-      if (today.strain == null || tomorrow.rec == null) continue;
-      if (today.strain > 14) after.push(tomorrow.rec);
-      else if (today.strain <= 10) baseline.push(tomorrow.rec);
-    }
-    if (after.length >= MIN_PAIRS && baseline.length >= MIN_PAIRS) {
-      const delta = Math.round(avg(after) - avg(baseline));
-      out.push({
-        cause: 'After a strain >14 day',
-        effect: 'Recovery is',
-        num: `${delta >= 0 ? '+' : '−'}${Math.abs(delta)} pts`,
-        conf: `n=${after.length} hard days`,
-      });
-    }
-  }
-
-  // 3) Steps >12k → next-night sleep score
-  {
-    const after: number[] = [];
-    const baseline: number[] = [];
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const today = ordered[i];
-      const tomorrow = ordered[i + 1];
-      if (today.steps == null || tomorrow.sleepScore == null) continue;
-      if (today.steps > 12000) after.push(tomorrow.sleepScore);
-      else if (today.steps < 8000) baseline.push(tomorrow.sleepScore);
-    }
-    if (after.length >= MIN_PAIRS && baseline.length >= MIN_PAIRS) {
-      const delta = Math.round(avg(after) - avg(baseline));
-      out.push({
-        cause: 'After a 12k+ step day',
-        effect: 'Sleep score',
-        num: `${delta >= 0 ? '+' : '−'}${Math.abs(delta)} pts`,
-        conf: `n=${after.length} active days`,
-      });
-    }
-  }
-
-  // 4) Sleep duration ↔ HRV (Pearson, same-day)
-  {
-    const xs: number[] = [];
-    const ys: number[] = [];
-    for (const d of ordered) {
-      if (d.slept != null && d.hrv != null && d.slept > 0 && d.hrv > 0) {
-        xs.push(d.slept);
-        ys.push(d.hrv);
-      }
-    }
-    if (xs.length >= MIN_PAIRS) {
-      const r = pearson(xs, ys);
-      const sign = r >= 0 ? '+' : '−';
-      const direction = r >= 0 ? 'tracks with' : 'inverts with';
-      out.push({
-        cause: 'Sleep hours',
-        effect: `HRV ${direction}`,
-        num: `r = ${sign}${Math.abs(r).toFixed(2)}`,
-        conf: `n=${xs.length} pairs`,
-      });
-    }
-  }
-
-  return out.slice(0, 4);
+  return discoverCorrelations(ordered);
 }

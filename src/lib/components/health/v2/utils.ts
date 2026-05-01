@@ -47,3 +47,27 @@ export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+export type PulseRowKey = 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps';
+
+// Lower-is-better keys; everything else ranks max wins.
+const MIN_DIRECTION: ReadonlySet<PulseRowKey> = new Set(['rhr']);
+
+// Returns the index of the best day in `values` for this metric, or -1 if none.
+// Skips entries where the raw value is <= 0 (no data). Strict comparison keeps
+// the first occurrence on ties — fine, since ties are now on real values rather
+// than clamp artefacts.
+export function pulsePeakIndex(key: PulseRowKey, values: ReadonlyArray<number>): number {
+  const minDir = MIN_DIRECTION.has(key);
+  let best = minDir ? Infinity : -Infinity;
+  let idx = -1;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v <= 0) continue;
+    if (minDir ? v < best : v > best) {
+      best = v;
+      idx = i;
+    }
+  }
+  return idx;
+}
