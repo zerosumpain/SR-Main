@@ -27,7 +27,7 @@ export interface HeroCopyFallbackFns {
 
 const TTL_OK_MS = 6 * 60 * 60 * 1000; // successful LLM copy
 const TTL_FALLBACK_MS = 5 * 60 * 1000; // failed call — retry soon
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 30_000;
 const MAX_PRIMARY_LEN = 24;
 const MAX_GHOST_LEN = 24;
 const MAX_STRAP_LEN = 200;
