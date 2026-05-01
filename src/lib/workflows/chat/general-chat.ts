@@ -24,6 +24,7 @@ import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup
 import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
+import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext } from '$lib/jkai/intel/context';
@@ -454,6 +455,42 @@ ${nodesLine}
   }
 }
 
+async function buildPastedUrlsSection(
+  userMessage: string,
+  onProgress?: (text: string) => void,
+  onStreamEvent?: (event: JobEvent) => void,
+): Promise<string> {
+  const urls = extractUrlsFromText(userMessage, 3);
+  if (urls.length === 0) return '';
+
+  onProgress?.(`[urls] Pre-fetching ${urls.length} pasted URL${urls.length === 1 ? '' : 's'}…\n`);
+  onStreamEvent?.({ type: 'status', text: `Reading ${urls.length} link${urls.length === 1 ? '' : 's'}…` });
+
+  const results = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const r = await fetchUrlContent(url);
+        return { url, ok: true as const, result: r };
+      } catch (err) {
+        const message = isUrlFetchError(err) ? err.message : err instanceof Error ? err.message : 'fetch failed';
+        return { url, ok: false as const, message };
+      }
+    }),
+  );
+
+  const sections = results.map((r) => {
+    if (!r.ok) {
+      return `[Pasted URL: ${r.url}]\n(could not fetch — ${r.message})`;
+    }
+    const { result } = r;
+    const titleLine = result.title ? `Title: ${result.title}\n` : '';
+    const truncNote = result.truncated ? '\n\n[content truncated]' : '';
+    return `[Pasted URL: ${result.url}${result.finalUrl !== result.url ? ` → ${result.finalUrl}` : ''}]\n${titleLine}${result.content}${truncNote}`;
+  });
+
+  return `\n\n--- Pasted URLs ---\nThe user pasted the following links in their message. Their readable contents have been fetched for you below — do not re-fetch unless you need a different page.\n\n${sections.join('\n\n')}`;
+}
+
 export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
@@ -490,11 +527,12 @@ export async function generalChat(
         ? Promise.resolve('')
         : buildKnowledgeContext(userMessage);
 
-  const [basePrompt, memorySection, graphSection, canvasSection] = await Promise.all([
+  const [basePrompt, memorySection, graphSection, canvasSection, pastedUrlsSection] = await Promise.all([
     getCompiledPrompt(),
     buildMemorySection(),
     graphSectionPromise,
     buildCanvasContextSection(options.workflowId),
+    buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
   ]);
   // Plan/clarify gates only fire when there's a UI to render the card and
   // PATCH the ack — that's /jkai today. Canvas chat (workflowId set) does
@@ -510,7 +548,7 @@ export async function generalChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
-  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${clarifySection}${planSection}`;
+  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [

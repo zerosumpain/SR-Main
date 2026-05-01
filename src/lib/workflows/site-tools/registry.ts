@@ -25,6 +25,7 @@ import './tools/media-generate-audio-tts';
 import './tools/scraper';
 import './tools/files';
 import './tools/gmail';
+import './tools/web';
 
 // --- Public API ---
 
@@ -83,6 +84,7 @@ export function getToolsetManifest(): Array<{
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list and read files uploaded via /admin/files. PDFs, DOCX, audio, and video are auto-extracted to text on read.',
     gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
+    web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({
