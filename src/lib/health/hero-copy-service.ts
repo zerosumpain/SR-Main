@@ -33,6 +33,7 @@ const MAX_GHOST_LEN = 24;
 const MAX_STRAP_LEN = 200;
 
 const cache = new Map<string, { copy: HeroCopy; expires: number }>();
+const inflight = new Map<string, Promise<void>>();
 
 function cacheKey(input: HeroCopyInput): string {
   return `${input.date}|${input.rec}|${input.hrv}|${input.rhr}|${input.slept}`;
@@ -156,6 +157,9 @@ async function callLLM(input: HeroCopyInput): Promise<HeroCopy | null> {
   }
 }
 
+// Stale-while-revalidate: never block SSR on the LLM. On a cache miss, return
+// the deterministic fallback now and fire the LLM call in the background; the
+// next request after it lands will get the LLM copy.
 export async function getHeroCopy(
   input: HeroCopyInput,
   fallback: HeroCopyFallbackFns,
@@ -166,26 +170,34 @@ export async function getHeroCopy(
   const hit = cache.get(key);
   if (hit && hit.expires > now) return hit.copy;
 
-  let copy: HeroCopy;
-  let usedFallback = false;
-  try {
-    const generated = await llmCall(input);
-    if (generated) {
-      copy = generated;
-    } else {
-      copy = buildFallback(input, fallback);
-      usedFallback = true;
-    }
-  } catch (err) {
-    console.warn('[hero-copy] LLM call failed, using fallback', err);
-    copy = buildFallback(input, fallback);
-    usedFallback = true;
+  const fb = buildFallback(input, fallback);
+  cache.set(key, { copy: fb, expires: now + TTL_FALLBACK_MS });
+
+  if (!inflight.has(key)) {
+    const p = (async () => {
+      try {
+        const generated = await llmCall(input);
+        if (generated) {
+          cache.set(key, { copy: generated, expires: Date.now() + TTL_OK_MS });
+        }
+      } catch (err) {
+        console.warn('[hero-copy] background LLM failed', err);
+      } finally {
+        inflight.delete(key);
+      }
+    })();
+    inflight.set(key, p);
   }
-  const ttl = usedFallback ? TTL_FALLBACK_MS : TTL_OK_MS;
-  cache.set(key, { copy, expires: now + ttl });
-  return copy;
+
+  return fb;
+}
+
+// Test helper: resolves once any in-flight LLM call for this input completes.
+export function _awaitInflight(input: HeroCopyInput): Promise<void> {
+  return inflight.get(cacheKey(input)) ?? Promise.resolve();
 }
 
 export function clearHeroCopyCache(): void {
   cache.clear();
+  inflight.clear();
 }
