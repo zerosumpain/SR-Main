@@ -727,7 +727,12 @@ export async function generalChat(
             content: statusText,
             metadata: { source: 'status_update' },
           });
-          // Push via SSE so the live chat UI receives it before the final response
+          // Push via SSE so the live chat UI receives it before the final response.
+          // Note: the per-job SSE stream (options.onStreamEvent { type: 'status' })
+          // would render the SAME status_update message a second time in the UI,
+          // since the frontend subscribes to both this and the conversation stream.
+          // Keep only the conversation-level notify here — it's also the path that
+          // survives reloads via the persisted orchestrator_chats row above.
           notifySubscribers(options.conversationId, {
             role: 'assistant',
             content: statusText,
@@ -735,8 +740,6 @@ export async function generalChat(
           });
           // Hint to onProgress stream too for debug visibility
           onProgress?.(`[status] ${statusText.slice(0, 80)}\n`);
-          // Also emit a stream event so the per-job SSE clients can render it
-          options.onStreamEvent?.({ type: 'status', text: statusText });
         }
       } catch (err) {
         console.warn('[general-chat] Status update failed:', err instanceof Error ? err.message : err);
