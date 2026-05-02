@@ -426,17 +426,15 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   const cycleByDate = new Map<string, (typeof cycleRows)[number]>();
   for (const c of cycleRows) cycleByDate.set(isoDate(c.startDate), c);
 
-  // step_count rows are cumulative daily totals reposted multiple times by
-  // the iOS shortcut, so summing duplicates the count. Take the daily max.
-  // The values are raw step counts (NOT *100, despite the ingest convention
-  // for other Apple metrics — observed empirically against prod data).
+  // step_count rows are per-bucket deltas from Health Auto Export (qty =
+  // steps in that bucket), stored ×100 by the ingest. Sum and divide.
   const stepsByDate = new Map<string, number>();
   for (const r of stepRows) {
     if (r.date == null || r.value == null) continue;
     const key = isoDate(r.date);
-    const prior = stepsByDate.get(key) ?? 0;
-    if (r.value > prior) stepsByDate.set(key, r.value);
+    stepsByDate.set(key, (stepsByDate.get(key) ?? 0) + r.value);
   }
+  for (const [k, v] of stepsByDate) stepsByDate.set(k, Math.round(v / 100));
 
   // Weight: latest reading per day (kg). Same *100 storage convention.
   const weightByDate = new Map<string, number>();

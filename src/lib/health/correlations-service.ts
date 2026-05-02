@@ -238,15 +238,14 @@ export async function getCorrelations(): Promise<Correlation[]> {
     // Same scale fix as the 30d series: legacy rows landed at strain*100.
     d.strain = c.strain > 22 ? c.strain / 100 : c.strain;
   }
-  // Daily max — same reasoning as the 30d series loader.
+  // Sum per-bucket step deltas, then unscale (ingest stores value ×100).
   const stepsByDate = new Map<string, number>();
   for (const r of stepRows) {
     if (r.date == null || r.value == null) continue;
     const k = isoDate(r.date);
-    const prior = stepsByDate.get(k) ?? 0;
-    if (r.value > prior) stepsByDate.set(k, r.value);
+    stepsByDate.set(k, (stepsByDate.get(k) ?? 0) + r.value);
   }
-  for (const [k, v] of stepsByDate) ensure(k).steps = v;
+  for (const [k, v] of stepsByDate) ensure(k).steps = Math.round(v / 100);
 
   const ordered = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
   return discoverCorrelations(ordered);
