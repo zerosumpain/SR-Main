@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
@@ -28,10 +28,19 @@
   // sync the local $state copies so derived values pick up the new plan/iters.
   // We only react to identity changes — typing in the plan editor is local
   // state, not page-data, so this won't clobber it.
+  //
+  // The writes here are wrapped in untrack() so reassigning `build` (which
+  // would otherwise recreate the $state proxy and re-trigger the effect on
+  // its own writes) does NOT count as a tracked read. Without this guard
+  // Svelte 5 hits effect_update_depth_exceeded when something downstream
+  // reads `build` and the runtime decides the proxy churn warrants a
+  // retrack — recursive `#c` calls in the call stack until the limit hits.
   $effect(() => {
     if (data.build && data.build.id === build.id) {
-      build = { ...build, ...data.build };
-      if (Array.isArray(data.iterations)) iterations = data.iterations;
+      untrack(() => {
+        build = { ...build, ...data.build };
+        if (Array.isArray(data.iterations)) iterations = data.iterations;
+      });
     }
   });
   let mode = $state<'watch' | 'tinker' | 'drive'>('watch');
