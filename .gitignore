@@ -40,3 +40,8 @@ services/webframe/dist
 # Scraper scripts — homeserv-local runtime state (LLM-authored per-domain
 # scrape scripts + metadata). Never synced to the VPS; see script-store.ts.
 scraper-scripts/
+
+# Claude Code agent scratch space
+.claude/worktrees/
+.claude/settings.json
+.claude/skills/
