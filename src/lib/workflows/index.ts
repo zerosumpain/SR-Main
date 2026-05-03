@@ -223,7 +223,16 @@ async function bootWhatsApp() {
   }
 }
 
-bootWhatsApp();
+// Network-/timer-side-effect boots only run in the SvelteKit web app, not
+// the jkai-builder sidecar. Both processes import this module (the builder
+// pulls $lib/workflows transitively via the orchestrator's planner +
+// site-tools deps), but only one process should hold the WhatsApp socket,
+// the workflow scheduler, the engine reaper, etc. The builder sets
+// JKAI_BUILDER_PROCESS=1 in its systemd unit; the SvelteKit web app does
+// not, so it picks these up.
+const RUN_PLATFORM_SERVICES = process.env.JKAI_BUILDER_PROCESS !== '1';
+
+if (RUN_PLATFORM_SERVICES) bootWhatsApp();
 
 // Boot Home Assistant service if configured
 async function bootHomeAssistant() {
@@ -265,19 +274,21 @@ async function bootHomeAssistant() {
   }
 }
 
-bootHomeAssistant();
+if (RUN_PLATFORM_SERVICES) bootHomeAssistant();
 
-syncPrompts().catch((err: unknown) => {
-  const msg = err instanceof Error ? err.message : 'Unknown error';
-  console.error('[prompts] Sync failed:', msg);
-});
+if (RUN_PLATFORM_SERVICES) {
+  syncPrompts().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[prompts] Sync failed:', msg);
+  });
 
-loadCustomTools().catch((err: unknown) => {
-  const msg = err instanceof Error ? err.message : 'Unknown error';
-  console.error('[custom-tools] Load failed:', msg);
-});
+  loadCustomTools().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[custom-tools] Load failed:', msg);
+  });
 
-startMemoryReview();
+  startMemoryReview();
+}
 
 // Bring every workflow into canvas shape before the scheduler takes
 // a fresh snapshot. Idempotent — no-ops on a clean DB.
@@ -290,16 +301,18 @@ startMemoryReview();
   }
 })();
 
-startScheduler().catch((err: unknown) => {
-  const msg = err instanceof Error ? err.message : 'Unknown error';
-  console.error('[scheduler] Boot failed:', msg);
-});
+if (RUN_PLATFORM_SERVICES) {
+  startScheduler().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[scheduler] Boot failed:', msg);
+  });
 
-// Boot stale-run reaper (clears orphaned `running` rows from previous process
-// + sweeps every 5 min) and start the event-loop delay histogram so the
-// /api/health/workflow-engine probe can report blockage.
-startReaper();
-initEventLoopMonitor();
+  // Boot stale-run reaper (clears orphaned `running` rows from previous process
+  // + sweeps every 5 min) and start the event-loop delay histogram so the
+  // /api/health/workflow-engine probe can report blockage.
+  startReaper();
+  initEventLoopMonitor();
+}
 
 export const engine = new WorkflowEngine(registry);
 
