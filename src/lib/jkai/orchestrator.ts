@@ -760,6 +760,11 @@ class Orchestrator {
               }
             }
 
+            // Even on lint failure, surface the preview link so the user
+            // can see the still-broken-but-iterating prototype. The agent
+            // already has the lint findings in next-iteration context;
+            // hiding the running app from the user adds no signal.
+            await this.checkServeConfig(buildId);
             this.scheduleNext(buildId, 1000);
             return;
           }
@@ -800,12 +805,15 @@ class Orchestrator {
           .where(eq(jkaiIterations.id, iteration.id));
       }
 
-      // Only promote to live if tests pass (or no tests exist)
-      if (testResult.passed) {
-        await this.checkServeConfig(buildId);
-      } else {
-        await emitLog(buildId, 'system', 'Skipping promotion to live — tests failed. Next iteration will receive failure context.', iteration.id);
+      // Always surface a preview, even when tests failed — the user
+      // explicitly wants link visibility from iteration #1, and seeing
+      // a broken running prototype is more useful than seeing nothing.
+      // Failure context still flows back to the agent via the iteration
+      // evaluation log appended above.
+      if (!testResult.passed) {
+        await emitLog(buildId, 'system', 'Tests failed — promoting anyway so the live preview reflects the latest iteration. Failure context is included for the next iteration.', iteration.id);
       }
+      await this.checkServeConfig(buildId);
 
       // Log iteration summary
       const summary = [
