@@ -834,8 +834,12 @@ class Orchestrator {
             .update(jkaiBuilds)
             .set({ status: 'completed', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
+          // Route through the SvelteKit proxy (/api/jkai/proxy/<id>/...) — the
+          // sandbox container doesn't publish its agent-picked ports to the
+          // host, so http://homeserv:<port> is unreachable. The proxy
+          // resolves the container bridge IP and forwards.
           const previewUrl = (build.serveConfig as { port?: number } | null)?.port
-            ? `http://homeserv:${(build.serveConfig as { port: number }).port}`
+            ? `/api/jkai/proxy/${buildId}/`
             : null;
           await emitStage(buildId, { stage: 'completed', previewUrl });
           this.activeBuildId = null;
@@ -977,7 +981,13 @@ class Orchestrator {
     await emitStage(buildId, { stage: 'promoting' });
     await promoteDevToLive(buildId);
 
-    const previewUrl = `http://homeserv:${config.port}`;
+    // Route through the SvelteKit proxy (/api/jkai/proxy/<id>/...) — see
+    // src/routes/api/jkai/proxy/[id]/[...path]/+server.ts. The sandbox is
+    // bridge-networked with no host port publishing, so http://homeserv:<port>
+    // is unreachable from the user's browser. The proxy fetches via the
+    // container's bridge IP + agent port and rewrites HTML hrefs through
+    // a <base> tag so relative URLs resolve back through the proxy.
+    const previewUrl = `/api/jkai/proxy/${buildId}/`;
     const action = configChanged ? 'Starting' : 'Restarting';
     if (configChanged) {
       await emitLog(buildId, 'system', `Starting project server on port ${config.port}: ${config.startCommand}`);
