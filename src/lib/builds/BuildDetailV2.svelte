@@ -38,6 +38,22 @@
   let unpublishing = $state(false);
   let acting = $state<string | null>(null);
   let showPreview = $state(false);
+  // Live preview URL observed from the SSE stage stream — arrives as soon as
+  // the orchestrator emits it, ~10s before the next page-data poll catches up.
+  // Used to populate the App URL banner the moment a preview goes live.
+  let livePreviewUrl = $state<string | null>(null);
+  // Always-prominent banner is shown when we have any signal the app is up:
+  // the persisted serveConfig (page load / 10s poll) OR a live stage event.
+  const previewLink = $derived(
+    build.publishedSlug
+      ? `/projects/jkai/${build.publishedSlug}/`
+      : (build.serveConfig || livePreviewUrl)
+        ? `/api/jkai/proxy/${build.id}/`
+        : null,
+  );
+  const previewBuilding = $derived(
+    !previewLink && (build.status === 'running' || build.status === 'awaiting_plan_approval' || build.status === 'awaiting_iter_approval'),
+  );
 
   const feed = $derived(reduceFeed(events));
   const fileTimeline = $derived(buildFileTimeline(iterations));
@@ -56,6 +72,19 @@
       try {
         const id = parseInt(e.lastEventId || '0', 10);
         const payload = JSON.parse(e.data);
+        // Stage events carry the preview URL the moment the orchestrator's
+        // checkServeConfig emits it. Surface immediately rather than waiting
+        // for the 10s page-data poll to catch up.
+        if (payload.type === 'stage' && typeof payload.content === 'string') {
+          try {
+            const stage = JSON.parse(payload.content) as { previewUrl?: string | null };
+            if (typeof stage.previewUrl === 'string' && stage.previewUrl.length > 0) {
+              livePreviewUrl = stage.previewUrl;
+            } else if (stage.previewUrl === null) {
+              livePreviewUrl = null;
+            }
+          } catch { /* malformed stage payload — ignore */ }
+        }
         if (id > 0) {
           events = [
             ...events,
@@ -173,6 +202,28 @@
 </svelte:head>
 
 <div class="wrap">
+  <!-- Top preview banner: appears the moment the orchestrator emits a
+       previewUrl (via SSE stage event) or has persisted a serveConfig.
+       Sticky so it stays visible while the user scrolls iteration logs. -->
+  {#if previewLink || previewBuilding}
+    <section class="preview-banner" class:building={previewBuilding} class:ready={!!previewLink}>
+      <span class="preview-dot" aria-hidden="true"></span>
+      {#if previewLink}
+        <span class="preview-label">Preview is live</span>
+        <a class="preview-cta" href={previewLink} target="_blank" rel="noreferrer">↗ Open app</a>
+        <code class="preview-url">{`https://strangeramblings.com${previewLink}`}</code>
+        <button
+          type="button"
+          class="row-link"
+          onclick={() => navigator.clipboard?.writeText(`https://strangeramblings.com${previewLink}`)}
+          title="Copy app URL"
+        >copy</button>
+      {:else}
+        <span class="preview-label">Preview: preparing… the link will appear here as soon as the build's preview server is reachable.</span>
+      {/if}
+    </section>
+  {/if}
+
   <header class="page-hdr">
     <div class="hdr-left">
       <a class="row-link" href="/jkai/builds">← all builds</a>
@@ -290,6 +341,73 @@
     padding: 0 1.5rem;
     color: var(--text-primary);
     font-family: var(--font-body);
+  }
+  .preview-banner {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 1rem;
+    border: 2px solid var(--text-primary);
+    background: var(--bg);
+    font-family: var(--font-body);
+  }
+  .preview-banner.ready {
+    background: var(--accent-soft, var(--bg));
+  }
+  .preview-banner.building {
+    border-style: dashed;
+    color: var(--text-muted);
+  }
+  .preview-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex: 0 0 auto;
+  }
+  .preview-banner.ready .preview-dot {
+    background: var(--color-emerald, #10b981);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-emerald, #10b981) 25%, transparent);
+  }
+  .preview-banner.building .preview-dot {
+    background: var(--accent);
+    animation: preview-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes preview-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  .preview-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .preview-cta {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--text-primary);
+    background: var(--text-primary);
+    color: var(--bg);
+    text-decoration: none;
+  }
+  .preview-cta:hover {
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .preview-url {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
   }
   .page-hdr {
     display: flex;
