@@ -629,6 +629,36 @@ export const jkaiLogs = pgTable('jkai_logs', {
 
 export type JkaiLog = typeof jkaiLogs.$inferSelect;
 
+// Mid-flight user interjections — Phase 5. The agent's iteration loop drains
+// any unconsumed rows for a build at the start of each LLM turn and prepends
+// them as a `<user-injected>` block in the system prompt, then marks them
+// consumed. Lets the user say "stop, do this instead" without restarting.
+export const jkaiBuildPendingMessages = pgTable('jkai_build_pending_messages', {
+  id: serial('id').primaryKey(),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  role: text('role').notNull().default('user'), // 'user' | 'system' | 'shell-result'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+});
+
+export type JkaiBuildPendingMessage = typeof jkaiBuildPendingMessages.$inferSelect;
+
+// Pinned notes — Phase 6. Re-injected at the top of every iteration's system
+// prompt. Used for "always remember this" feedback that the user wants the
+// agent to apply for the rest of the build (e.g. "use black not navy",
+// "the API key is in env.X"). Soft delete via removedAt so audit + history
+// of notes survive cleanup.
+export const jkaiBuildNotes = pgTable('jkai_build_notes', {
+  id: serial('id').primaryKey(),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+});
+
+export type JkaiBuildNote = typeof jkaiBuildNotes.$inferSelect;
+
 // ==========================================
 // CDO 100-Day Plan
 // ==========================================

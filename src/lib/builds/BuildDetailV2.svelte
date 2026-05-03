@@ -9,6 +9,7 @@
   import PreviewPanel from './PreviewPanel.svelte';
   import BuildSidebar from './BuildSidebar.svelte';
   import ModeSwitcher from './ModeSwitcher.svelte';
+  import BuildSessionPanel from './BuildSessionPanel.svelte';
   import WatchPane from './WatchPane.svelte';
   import { reduceFeed, type FeedEvent } from './feed';
   import { buildFileTimeline } from './parse-actions';
@@ -298,6 +299,12 @@
       onAfter={refresh}
     />
   {/if}
+
+  <!-- Session panel — bidirectional WebSocket UI: type to inject a message
+       into the agent's next turn, prefix with `# ` to pin a directive,
+       prefix with `$ ` to run a shell command in the workdir, Ctrl+C to
+       interrupt the in-flight pi process. -->
+  <BuildSessionPanel buildId={build.id} />
   {#if build.status === 'running' && build.planStatus === 'pending'}
     <section class="nm-sec planning-banner">
       <header class="nm-sec-hd"><span class="sr-label-tight">Planning…</span></header>

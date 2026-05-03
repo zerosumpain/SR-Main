@@ -100,9 +100,18 @@ fi
 exit \$ec
 REMOTE
 
-echo "==> Updating systemd service (if needed)..."
+echo "==> Syncing custom WS-aware server entry..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/scripts"
+rsync -avz -e "ssh -i $VPS_KEY" \
+  scripts/server-with-ws.mjs "$VPS_USER@$VPS_HOST:$VPS_DIR/scripts/"
+
+echo "==> Updating systemd service to run the WS-aware entry..."
+# scripts/server-with-ws.mjs wraps adapter-node's handler.js with a
+# WebSocket-upgrade proxy that pipes /api/jkai/builds/<id>/session to
+# the jkai-builder unix socket. Required for phases 5/6 (interjection,
+# notes, shell). Falls back to vanilla index.js if the wrapper is missing.
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
-  "sudo sed -i 's|ExecStart=.*index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/build/index.js|' /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload"
+  "sudo sed -i 's|ExecStart=.*build/index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/scripts/server-with-ws.mjs|' /etc/systemd/system/$SERVICE.service && sudo sed -i 's|ExecStart=.*index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/scripts/server-with-ws.mjs|' /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload"
 
 echo "==> Installing workflow-engine watchdog timer..."
 # External watchdog: every 60s, curl /api/health/workflow-engine. If it's down

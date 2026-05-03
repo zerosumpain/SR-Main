@@ -12,6 +12,7 @@ import { dirname } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { handleRpc } from './rpc';
 import { handleEvents } from './events';
+import { handleWsUpgrade } from './ws';
 
 const startedAt = new Date().toISOString();
 const startedAtMs = Date.now();
@@ -83,6 +84,20 @@ export async function startServer(socketPath: string): Promise<void> {
   }
 
   const server = createServer(handle);
+
+  // WebSocket upgrade for /ws/<buildId> — Phase 5/6 bidirectional session.
+  // Replaces the SSE-only event flow with one bidirectional channel that
+  // also carries inbound user messages (inject, interrupt, shell, notes).
+  server.on('upgrade', (req, socket, head) => {
+    const url = req.url ?? '';
+    const m = url.match(/^\/ws\/([0-9a-f-]+)(?:\?.*)?$/i);
+    if (!m) {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    handleWsUpgrade(m[1], req, socket as unknown as import('node:stream').Duplex, head);
+  });
 
   server.on('error', (err) => {
     console.error('[jkai-builder] server error:', err);

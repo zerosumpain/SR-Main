@@ -111,6 +111,21 @@ export async function executeIteration(
   const attachedGrounding = attachedIds.length > 0 ? await buildAttachedWorkflowGrounding(attachedIds) : '';
   if (attachedGrounding) systemPrompt = `${systemPrompt}\n\n${attachedGrounding}`;
 
+  // Phase 6: re-inject pinned notes every iteration. The user's "always
+  // remember this" directives — applied as hard constraints by the agent.
+  const { listNotes, formatNotesForPrompt } = await import('./build-notes');
+  const notes = await listNotes(build.id).catch(() => []);
+  const notesBlock = formatNotesForPrompt(notes);
+  if (notesBlock) systemPrompt = `${systemPrompt}\n\n${notesBlock}`;
+
+  // Phase 5: drain queued user messages (typed mid-iteration via the
+  // session WebSocket). They take precedence over earlier instructions
+  // where they conflict, so they're appended last.
+  const { drainPendingMessages, formatPendingForPrompt } = await import('./pending-messages');
+  const pending = await drainPendingMessages(build.id).catch(() => []);
+  const pendingBlock = formatPendingForPrompt(pending);
+  if (pendingBlock) systemPrompt = `${systemPrompt}\n\n${pendingBlock}`;
+
   const deliveries = await consumePendingDeliveries(build.id, 10).catch(() => []);
   const deliveriesBlock = buildDeliveriesBlock(deliveries);
 

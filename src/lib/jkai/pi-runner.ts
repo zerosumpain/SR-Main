@@ -9,6 +9,7 @@ import type { ActionRecord, FailureEnvelope, FailureKind } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { loadKeys } from '$lib/deepdive/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
+import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 
 const CONTAINER_NAME = 'jkai-sandbox';
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
@@ -242,6 +243,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
   const child = spawn(spawnCmd, spawnArgs, spawnOpts);
+  // Register so the WebSocket inbound `interrupt` handler can SIGTERM us.
+  registerActiveChild(build.id, child);
+  child.once('exit', () => clearActiveChild(build.id, child));
   // `docker exec -i` keeps the container's stdin attached to our pipe; if that
   // pipe never closes, pi with `--mode json -p` waits indefinitely for EOF
   // before emitting its first event. Using `stdio: 'ignore'` for stdin closes
