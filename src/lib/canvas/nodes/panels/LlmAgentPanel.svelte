@@ -2,6 +2,9 @@
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
+  import ModelSelect from './widgets/ModelSelect.svelte';
+  import TemperatureField from './widgets/TemperatureField.svelte';
+  import MaxTokensField from './widgets/MaxTokensField.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
@@ -21,20 +24,11 @@
   // line so we don't duplicate it inside the panel.
   void definition;
 
-  // ---------- Model dropdown options --------------------------------------
-  // Sourced from the shared list so all LLM panels stay in lockstep. If new
-  // models are added, edit src/lib/canvas/nodes/panels/shared/vertex-models.ts.
-  const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
   const currentModel = $derived(String(config.model ?? ''));
-  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === currentModel));
-
-  // ---------- Generic setter ----------------------------------------------
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
-
-  // ---------- Numeric setters with sane fallbacks --------------------------
 
   function setNumber(key: string, raw: string, fallback: number, min?: number) {
     const parsed = Number(raw);
@@ -43,15 +37,7 @@
     set(key, next);
   }
 
-  // ---------- Temperature derived state -----------------------------------
-
   const temperature = $derived(Number(config.temperature ?? 0.7));
-  const tempDescriptor = $derived.by(() => {
-    if (temperature <= 0.2) return 'Focused';
-    if (temperature <= 0.9) return 'Balanced';
-    if (temperature < 1.5) return 'Exploratory';
-    return 'Creative';
-  });
 
   // ---------- Tool overrides handling -------------------------------------
   // The orchestrator may store `toolOverrides` either as a JSON string or as
@@ -133,43 +119,21 @@
       </span>
     </label>
 
-    <label class="la-field">
-      <span class="la-label">Model</span>
-      <select
-        value={currentModel}
-        onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}
-      >
-        {#each MODEL_OPTIONS as opt (opt.value)}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-        {#if !modelInList && currentModel}
-          <option value={currentModel}>Custom: {currentModel}</option>
-        {/if}
-      </select>
-      <span class="la-hint">
-        Leave as <strong>Default</strong> to use the site-wide admin setting (recommended).
-        Slashed IDs route via OpenRouter and require a key.
-      </span>
-    </label>
+    <ModelSelect
+      value={currentModel}
+      onChange={(v) => set('model', v)}
+      options={VERTEX_MODEL_OPTIONS}
+      hint="Leave as <strong>Default</strong> to use the site-wide admin setting (recommended). Slashed IDs route via OpenRouter and require a key."
+    />
 
-    <label class="la-field">
-      <span class="la-label">
-        Temperature
-        <span class="la-temp-readout">{temperature.toFixed(1)} · {tempDescriptor}</span>
-      </span>
-      <input
-        type="range"
-        min="0"
-        max="2"
-        step="0.1"
-        class="la-slider"
-        value={temperature}
-        oninput={(e) => set('temperature', Number((e.currentTarget as HTMLInputElement).value))}
-      />
-      <span class="la-hint la-temp-scale">
-        <span>0 · Focused</span><span>0.7 · Balanced</span><span>1.5+ · Creative</span>
-      </span>
-    </label>
+    <TemperatureField
+      value={temperature}
+      onChange={(v) => set('temperature', v)}
+      focusedMax={0.2}
+      balancedMax={0.9}
+      bandLabels={['Focused', 'Balanced', 'Exploratory', 'Creative']}
+      hint='<span class="la-temp-scale-row"><span>0 · Focused</span><span>0.7 · Balanced</span><span>1.5+ · Creative</span></span>'
+    />
   </section>
 
   <!-- Section 2: Loop limits & timeouts (collapsed by default) -->
@@ -177,17 +141,13 @@
     <summary><span class="sr-label-tight">Loop limits &amp; timeouts</span></summary>
     <div class="la-sec la-sec-inner">
       <div class="la-row">
-        <label class="la-field">
-          <span class="la-label">Max tokens per call</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={Number(config.maxTokens ?? 2048)}
-            oninput={(e) => setNumber('maxTokens', (e.currentTarget as HTMLInputElement).value, 2048, 1)}
-          />
-          <span class="la-hint">Cap on each individual LLM response length.</span>
-        </label>
+        <MaxTokensField
+          value={Number(config.maxTokens ?? 2048)}
+          onChange={(v) => set('maxTokens', v)}
+          label="Max tokens per call"
+          fallback={2048}
+          hint="Cap on each individual LLM response length."
+        />
         <label class="la-field">
           <span class="la-label">Max iterations</span>
           <input
@@ -352,22 +312,10 @@
   }
   .la-code:focus { border-color: var(--text-muted); }
 
-  .la-slider {
-    width: 100%;
-    padding: 0;
-    background: transparent;
-    border: none;
-    accent-color: var(--accent);
-  }
-  .la-temp-readout {
-    margin-left: auto;
-    font-family: var(--font-mono); font-size: 11px;
-    color: var(--accent);
-    text-transform: none; letter-spacing: 0;
-  }
-  .la-temp-scale {
+  :global(.la-temp-scale-row) {
     display: flex; justify-content: space-between;
     font-family: var(--font-mono); font-size: 10px;
+    width: 100%;
   }
 
   .la-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }

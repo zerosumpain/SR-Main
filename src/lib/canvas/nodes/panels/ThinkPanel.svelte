@@ -2,6 +2,9 @@
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
+  import ModelSelect from './widgets/ModelSelect.svelte';
+  import TemperatureField from './widgets/TemperatureField.svelte';
+  import MaxTokensField from './widgets/MaxTokensField.svelte';
   import { THINK_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
@@ -20,16 +23,9 @@
   // already renders the "What this does" line, so we don't duplicate it here.
   void definition;
 
-  // Model dropdown options — sourced from the shared list so all LLM panels
-  // stay in lockstep. If new models are added, edit
-  // src/lib/canvas/nodes/panels/shared/vertex-models.ts.
-  const MODEL_OPTIONS = THINK_MODEL_OPTIONS;
-
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
-
-  // ---------- Derived values ----------------------------------------------
 
   const prompt = $derived(String(config.prompt ?? ''));
   const model = $derived(String(config.model ?? 'glm-5-turbo'));
@@ -45,20 +41,6 @@
     if (Number.isFinite(n) && n >= 1) return Math.floor(n);
     return 2048;
   });
-
-  // Temperature descriptor — single-word label that follows the slider live.
-  // Matches the LlmCallPanel thresholds for visual consistency.
-  const tempDescriptor = $derived.by(() => {
-    if (temperature <= 0.3) return 'Focused';
-    if (temperature <= 1.0) return 'Balanced';
-    if (temperature < 1.5) return 'Adventurous';
-    return 'Creative';
-  });
-
-  // Whether the chosen model is a custom (non-listed) value — the orchestrator
-  // sometimes writes IDs we haven't enumerated. Show them as a "Custom" option
-  // instead of silently swapping to the default.
-  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === model));
 
   // ---------- Raw JSON --------------------------------------------------
 
@@ -86,62 +68,25 @@
     </label>
   </section>
 
-  <!-- Model -->
-  <section class="th-sec">
-    <label class="th-field">
-      <span class="th-label">Model</span>
-      <select value={model} onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}>
-        {#if !modelInList}
-          <option value={model}>Custom: {model}</option>
-        {/if}
-        {#each MODEL_OPTIONS as opt (opt.value)}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-      </select>
-      <span class="th-hint">Bare IDs (e.g. <code>glm-5-turbo</code>) route via the jkai default provider. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter.</span>
-    </label>
-  </section>
+  <ModelSelect
+    value={model}
+    onChange={(v) => set('model', v)}
+    options={THINK_MODEL_OPTIONS}
+    hint="Bare IDs (e.g. <code>glm-5-turbo</code>) route via the jkai default provider. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter."
+  />
 
-  <!-- Temperature -->
-  <section class="th-sec">
-    <div class="th-field">
-      <div class="th-temp-hdr">
-        <span class="th-label">Temperature</span>
-        <span class="th-temp-readout">
-          <span class="th-temp-value">{temperature.toFixed(1)}</span>
-          <span class="th-temp-word">{tempDescriptor}</span>
-        </span>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="2"
-        step="0.1"
-        value={temperature}
-        oninput={(e) => set('temperature', Number((e.currentTarget as HTMLInputElement).value))}
-        class="th-range"
-      />
-      <span class="th-hint">0 = deterministic reasoning · 0.3 = focused (default for Think) · 1.5+ = creative.</span>
-    </div>
-  </section>
+  <TemperatureField
+    value={temperature}
+    onChange={(v) => set('temperature', v)}
+    hint="0 = deterministic reasoning · 0.3 = focused (default for Think) · 1.5+ = creative."
+  />
 
-  <!-- Max tokens -->
-  <section class="th-sec">
-    <label class="th-field th-field-narrow">
-      <span class="th-label">Max Tokens</span>
-      <input
-        type="number"
-        min="1"
-        step="1"
-        value={maxTokens}
-        oninput={(e) => {
-          const v = Math.max(1, Math.floor(Number((e.currentTarget as HTMLInputElement).value) || 1));
-          set('maxTokens', v);
-        }}
-      />
-      <span class="th-hint">Maximum length of the reasoning + conclusion combined (roughly 4 characters per token). Default 2048.</span>
-    </label>
-  </section>
+  <MaxTokensField
+    value={maxTokens}
+    onChange={(v) => set('maxTokens', v)}
+    fallback={2048}
+    hint="Maximum length of the reasoning + conclusion combined (roughly 4 characters per token). Default 2048."
+  />
 
   <!-- On failure -->
   <OnErrorBlock

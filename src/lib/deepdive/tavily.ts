@@ -1,6 +1,14 @@
 import { getTavilyKey } from './keys';
 
 const TAVILY_BASE = 'https://api.tavily.com';
+const TAVILY_TIMEOUT_MS = 15_000;
+
+function combineSignals(external: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!external) return timeout;
+  // AbortSignal.any is available in Node 20+
+  return AbortSignal.any([external, timeout]);
+}
 
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
@@ -54,7 +62,7 @@ export async function search(
         // it otherwise is ignored by the server but harmless.
         ...(options?.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
       }),
-      signal: options?.signal,
+      signal: combineSignals(options?.signal, TAVILY_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -86,7 +94,7 @@ export async function extract(urls: string[], signal?: AbortSignal): Promise<Tav
         api_key: apiKey,
         urls,
       }),
-      signal,
+      signal: combineSignals(signal, TAVILY_TIMEOUT_MS),
     });
 
     if (!res.ok) {

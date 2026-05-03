@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import ResourcePicker from './shared/ResourcePicker.svelte';
-  import { fetchGmailAccountOptions } from './shared/gmailAccounts';
-  import ChipInputField from './widgets/ChipInputField.svelte';
+  import GmailAccountPicker from './widgets/GmailAccountPicker.svelte';
+  import RecipientListBlock from './widgets/RecipientListBlock.svelte';
+  import BodyTabsBlock from './widgets/BodyTabsBlock.svelte';
 
   let {
     config,
@@ -21,90 +21,6 @@
     onChange({ ...config, [key]: value });
   }
 
-  // The orchestrator may serialise to/cc/bcc as either a comma-separated
-  // string or an array of strings. We accept both shapes when reading;
-  // we always write back as a single string (the executor expects a string
-  // and runs template interpolation on it).
-  function readRecipientRaw(raw: unknown): string {
-    if (Array.isArray(raw)) {
-      return raw.map((v) => String(v ?? '').trim()).filter(Boolean).join(', ');
-    }
-    return String(raw ?? '');
-  }
-
-  function rawToChips(raw: string): string[] {
-    return raw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
-  function chipsToRaw(chips: string[]): string {
-    return chips.join(', ');
-  }
-
-  function detectMode(raw: string): 'chips' | 'template' {
-    return raw.includes('{{') ? 'template' : 'chips';
-  }
-
-  // ---------- Recipient state -------------------------------------------
-
-  const initialTo = readRecipientRaw(config.to);
-  const initialCc = readRecipientRaw(config.cc);
-  const initialBcc = readRecipientRaw(config.bcc);
-
-  let toMode = $state<'chips' | 'template'>(detectMode(initialTo));
-  let ccMode = $state<'chips' | 'template'>(detectMode(initialCc));
-  let bccMode = $state<'chips' | 'template'>(detectMode(initialBcc));
-
-  const toRaw = $derived(readRecipientRaw(config.to));
-  const ccRaw = $derived(readRecipientRaw(config.cc));
-  const bccRaw = $derived(readRecipientRaw(config.bcc));
-
-  const toChips = $derived(rawToChips(toRaw));
-  const ccChips = $derived(rawToChips(ccRaw));
-  const bccChips = $derived(rawToChips(bccRaw));
-
-  function setRecipient(key: 'to' | 'cc' | 'bcc', raw: string) {
-    set(key, raw);
-  }
-
-  // ---------- Account picker --------------------------------------------
-  // ResourcePicker works with string values; we round-trip via String/Number
-  // because the executor expects accountId as a number. Templated values
-  // (e.g. `{{input.accountId}}`) round-trip as strings.
-
-  const accountId = $derived(Number(config.accountId ?? 0));
-  const accountValue = $derived(
-    typeof config.accountId === 'string' && config.accountId.includes('{{')
-      ? config.accountId
-      : accountId ? String(accountId) : '',
-  );
-
-  function setAccount(next: string) {
-    if (!next) { set('accountId', 0); return; }
-    if (next.includes('{{')) { set('accountId', next); return; }
-    const n = Number(next);
-    set('accountId', Number.isFinite(n) ? n : 0);
-  }
-
-  // ---------- Body tabs --------------------------------------------------
-  // Defaults from existing config:
-  //   - both bodyText and bodyHtml populated → 'both'
-  //   - bodyHtml only                       → 'html'
-  //   - else (bodyText only / both empty)   → 'text'
-  // Switching tabs does NOT erase the inactive value, so a user can flip
-  // back without losing work.
-
-  function detectBodyTab(c: Record<string, unknown>): 'text' | 'html' | 'both' {
-    const t = String(c.bodyText ?? '').trim();
-    const h = String(c.bodyHtml ?? '').trim();
-    if (t && h) return 'both';
-    if (h && !t) return 'html';
-    return 'text';
-  }
-  let bodyTab = $state<'text' | 'html' | 'both'>(detectBodyTab(config));
-
   // ---------- Raw JSON --------------------------------------------------
 
   let showRawJson = $state(false);
@@ -116,152 +32,38 @@
 </script>
 
 <div class="gs">
-  <!-- Account picker -->
-  <section class="gs-sec">
-    <header class="gs-sec-hdr">
-      <span class="sr-label-tight">Sending account</span>
-      {#if !accountId}<span class="gs-warn">⚠ pick an account</span>{/if}
-    </header>
-    <ResourcePicker
-      label="Account"
-      value={accountValue}
-      fetcher={fetchGmailAccountOptions}
-      onChange={setAccount}
-      placeholder="pick an account"
-      emptyHint="No connected accounts — connect one at /admin/gmail."
-    />
-    <span class="gs-hint">
-      Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-    </span>
-  </section>
+  <GmailAccountPicker
+    value={config.accountId as number | string | null | undefined}
+    onChange={(next) => set('accountId', next)}
+    title="Sending account"
+  />
 
-  <!-- To -->
-  <section class="gs-sec">
-    <header class="gs-sec-hdr">
-      <span class="sr-label-tight">To</span>
-      <div class="gs-mode-toggle" role="tablist" aria-label="To input mode">
-        <button
-          type="button"
-          class="gs-mode-btn"
-          class:gs-mode-btn-active={toMode === 'chips'}
-          role="tab"
-          aria-selected={toMode === 'chips'}
-          onclick={() => (toMode = 'chips')}
-        >Chips</button>
-        <button
-          type="button"
-          class="gs-mode-btn"
-          class:gs-mode-btn-active={toMode === 'template'}
-          role="tab"
-          aria-selected={toMode === 'template'}
-          onclick={() => (toMode = 'template')}
-        >Template</button>
-      </div>
-    </header>
-    {#if toMode === 'chips'}
-      <ChipInputField
-        value={toChips}
-        placeholder="alice@example.com — Enter or , to add"
-        onChange={(v) => setRecipient('to', chipsToRaw(v))}
-      />
-      <span class="gs-hint">One or more recipients. Use Template mode for <code>{`{{input.x}}`}</code> values.</span>
-    {:else}
-      <textarea
-        class="gs-code"
-        rows="2"
-        spellcheck="false"
-        placeholder={`{{input.recipient}} or {{trigger.output.from}}`}
-        value={toRaw}
-        oninput={(e) => setRecipient('to', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
-      <span class="gs-hint">Templates supported: <code>{`{{input.field}}`}</code>. Comma-separate for multiple.</span>
-    {/if}
-  </section>
+  <RecipientListBlock
+    label="To"
+    value={config.to}
+    onChange={(raw) => set('to', raw)}
+    placeholder="alice@example.com — Enter or , to add"
+    templatePlaceholder={`{{input.recipient}} or {{trigger.output.from}}`}
+    chipsHint={`One or more recipients. Use Template mode for <code>{{input.x}}</code> values.`}
+    templateHint={`Templates supported: <code>{{input.field}}</code>. Comma-separate for multiple.`}
+  />
 
-  <!-- Cc / Bcc (collapsed) -->
   <details class="gs-cc">
     <summary><span class="sr-label-tight">Cc / Bcc</span></summary>
-
-    <section class="gs-sec">
-      <header class="gs-sec-hdr">
-        <span class="sr-label-tight">Cc</span>
-        <div class="gs-mode-toggle" role="tablist" aria-label="Cc input mode">
-          <button
-            type="button"
-            class="gs-mode-btn"
-            class:gs-mode-btn-active={ccMode === 'chips'}
-            role="tab"
-            aria-selected={ccMode === 'chips'}
-            onclick={() => (ccMode = 'chips')}
-          >Chips</button>
-          <button
-            type="button"
-            class="gs-mode-btn"
-            class:gs-mode-btn-active={ccMode === 'template'}
-            role="tab"
-            aria-selected={ccMode === 'template'}
-            onclick={() => (ccMode = 'template')}
-          >Template</button>
-        </div>
-      </header>
-      {#if ccMode === 'chips'}
-        <ChipInputField
-          value={ccChips}
-          placeholder="cc@example.com"
-          onChange={(v) => setRecipient('cc', chipsToRaw(v))}
-        />
-      {:else}
-        <textarea
-          class="gs-code"
-          rows="2"
-          spellcheck="false"
-          placeholder={`{{input.cc}}`}
-          value={ccRaw}
-          oninput={(e) => setRecipient('cc', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-      {/if}
-    </section>
-
-    <section class="gs-sec">
-      <header class="gs-sec-hdr">
-        <span class="sr-label-tight">Bcc</span>
-        <div class="gs-mode-toggle" role="tablist" aria-label="Bcc input mode">
-          <button
-            type="button"
-            class="gs-mode-btn"
-            class:gs-mode-btn-active={bccMode === 'chips'}
-            role="tab"
-            aria-selected={bccMode === 'chips'}
-            onclick={() => (bccMode = 'chips')}
-          >Chips</button>
-          <button
-            type="button"
-            class="gs-mode-btn"
-            class:gs-mode-btn-active={bccMode === 'template'}
-            role="tab"
-            aria-selected={bccMode === 'template'}
-            onclick={() => (bccMode = 'template')}
-          >Template</button>
-        </div>
-      </header>
-      {#if bccMode === 'chips'}
-        <ChipInputField
-          value={bccChips}
-          placeholder="bcc@example.com"
-          onChange={(v) => setRecipient('bcc', chipsToRaw(v))}
-        />
-      {:else}
-        <textarea
-          class="gs-code"
-          rows="2"
-          spellcheck="false"
-          placeholder={`{{input.bcc}}`}
-          value={bccRaw}
-          oninput={(e) => setRecipient('bcc', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-      {/if}
-    </section>
+    <RecipientListBlock
+      label="Cc"
+      value={config.cc}
+      onChange={(raw) => set('cc', raw)}
+      placeholder="cc@example.com"
+      templatePlaceholder={`{{input.cc}}`}
+    />
+    <RecipientListBlock
+      label="Bcc"
+      value={config.bcc}
+      onChange={(raw) => set('bcc', raw)}
+      placeholder="bcc@example.com"
+      templatePlaceholder={`{{input.bcc}}`}
+    />
   </details>
 
   <!-- Subject -->
@@ -280,68 +82,14 @@
     </label>
   </section>
 
-  <!-- Body -->
-  <section class="gs-sec">
-    <header class="gs-sec-hdr">
-      <span class="sr-label-tight">Body</span>
-      <div class="gs-mode-toggle" role="tablist" aria-label="Body content type">
-        <button
-          type="button"
-          class="gs-mode-btn"
-          class:gs-mode-btn-active={bodyTab === 'text'}
-          role="tab"
-          aria-selected={bodyTab === 'text'}
-          onclick={() => (bodyTab = 'text')}
-        >Plain text</button>
-        <button
-          type="button"
-          class="gs-mode-btn"
-          class:gs-mode-btn-active={bodyTab === 'html'}
-          role="tab"
-          aria-selected={bodyTab === 'html'}
-          onclick={() => (bodyTab = 'html')}
-        >HTML</button>
-        <button
-          type="button"
-          class="gs-mode-btn"
-          class:gs-mode-btn-active={bodyTab === 'both'}
-          role="tab"
-          aria-selected={bodyTab === 'both'}
-          onclick={() => (bodyTab = 'both')}
-        >Both</button>
-      </div>
-    </header>
-
-    {#if bodyTab === 'text' || bodyTab === 'both'}
-      <label class="gs-field">
-        <span class="gs-label">Plain-text body</span>
-        <textarea
-          class="gs-code"
-          rows="6"
-          spellcheck="false"
-          placeholder={`Hello,\n\n{{input.summary}}`}
-          value={String(config.bodyText ?? '')}
-          oninput={(e) => set('bodyText', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-        <span class="gs-hint">Templates: <code>{`{{input.field}}`}</code></span>
-      </label>
-    {/if}
-
-    {#if bodyTab === 'html' || bodyTab === 'both'}
-      <label class="gs-field">
-        <span class="gs-label">HTML body</span>
-        <textarea
-          class="gs-code"
-          rows="6"
-          spellcheck="false"
-          placeholder={`<p>{{input.summary}}</p>`}
-          value={String(config.bodyHtml ?? '')}
-          oninput={(e) => set('bodyHtml', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-        <span class="gs-hint">Templates: <code>{`{{input.field}}`}</code>. With “Both”, executor sends <code>multipart/alternative</code>.</span>
-      </label>
-    {/if}
-  </section>
+  <BodyTabsBlock
+    text={String(config.bodyText ?? '')}
+    html={String(config.bodyHtml ?? '')}
+    onChangeText={(v) => set('bodyText', v)}
+    onChangeHtml={(v) => set('bodyHtml', v)}
+    textPlaceholder={`Hello,\n\n{{input.summary}}`}
+    htmlPlaceholder={`<p>{{input.summary}}</p>`}
+  />
 
   <!-- On failure -->
   <OnErrorBlock

@@ -101,6 +101,29 @@ export async function startQuickAnswer(id: string): Promise<void> {
   });
 }
 
+/**
+ * Run a quick-answer to completion in-process and return the final row.
+ * Used by the workflow node to avoid fire-and-forget + DB polling overhead.
+ */
+export async function runQuickAnswerSync(
+  id: string,
+): Promise<typeof quickAnswers.$inferSelect> {
+  try {
+    await runQuickAnswer(id);
+  } catch (err: any) {
+    // runQuickAnswer already persists 'failed' status before throwing in its
+    // own catch block, but be defensive in case it threw before the catch.
+    console.error(`[quickanswer] Failed for ${id}:`, err);
+    await db.update(quickAnswers)
+      .set({ status: 'failed', errorMessage: err?.message ?? 'Unknown error', completedAt: new Date() })
+      .where(eq(quickAnswers.id, id))
+      .catch(() => {});
+  }
+  const [row] = await db.select().from(quickAnswers).where(eq(quickAnswers.id, id)).limit(1);
+  if (!row) throw new Error('Quick answer row missing after run');
+  return row;
+}
+
 async function runQuickAnswer(id: string): Promise<void> {
   const ac = new AbortController();
   abortControllers.set(id, ac);
@@ -114,24 +137,46 @@ async function runQuickAnswer(id: string): Promise<void> {
     const goals = (row.goals ?? []) as string[];
     const sys = systemPrompt(topic, goals);
 
-    // Step 1: Generate queries
+    // Step 1+2 in parallel: kick off a Tavily search using the raw topic
+    // immediately, while the LLM generates refined queries. Saves 2-5s of
+    // serial latency.
     await updateStatus(id, 'searching');
-    emit(id, { type: 'log', message: 'Generating search queries...' });
+    emit(id, { type: 'log', message: 'Searching (raw topic) and generating queries in parallel...' });
 
-    const queryResult = await jsonCompletion<{ queries: string[] }>(
-      sys,
-      QUERY_GEN_PROMPT,
-      { maxTokens: 5012, signal: ac.signal },
-    );
+    const rawSearchPromise = search(topic, {
+      maxResults: 5,
+      searchDepth: 'basic',
+      includeAnswer: true,
+      signal: ac.signal,
+    }).catch((err) => {
+      console.error('[quickanswer] raw-topic search failed:', err);
+      return null;
+    });
 
-    const queries = queryResult.queries ?? [];
-    if (queries.length === 0) throw new Error('No queries generated');
+    let queries: string[] = [];
+    try {
+      const queryResult = await jsonCompletion<{ queries: string[] }>(
+        sys,
+        QUERY_GEN_PROMPT,
+        { maxTokens: 5012, signal: ac.signal },
+      );
+      queries = (queryResult.queries ?? []).filter((q) => typeof q === 'string' && q.trim());
+    } catch (err: any) {
+      if (err?.name === 'AbortError') throw err;
+      console.error('[quickanswer] query generation failed, falling back to topic:', err);
+    }
+
+    // Fallback: if query gen produced nothing, use the topic itself.
+    if (queries.length === 0) {
+      queries = [topic];
+      emit(id, { type: 'log', message: 'Query gen empty, using topic directly.' });
+    }
 
     await db.update(quickAnswers).set({ queries }).where(eq(quickAnswers.id, id));
     emit(id, { type: 'log', message: `Searching: ${queries.length} queries in parallel...` });
 
-    // Step 2: Parallel search
-    const results = await Promise.allSettled(
+    // Run refined-query searches in parallel with the (already in-flight) raw search.
+    const refinedResults = await Promise.allSettled(
       queries.map((q) =>
         search(q, {
           maxResults: 5,
@@ -141,8 +186,27 @@ async function runQuickAnswer(id: string): Promise<void> {
         }),
       ),
     );
+    const rawResult = await rawSearchPromise;
+    const allResults: PromiseSettledResult<Awaited<ReturnType<typeof search>>>[] = [...refinedResults];
+    if (rawResult) allResults.push({ status: 'fulfilled', value: rawResult });
 
-    const sources = mergeAndRank(results, 12);
+    let sources = mergeAndRank(allResults, 12);
+
+    // Fallback: if every search failed, retry once with the raw topic (advanced depth).
+    if (sources.length === 0) {
+      emit(id, { type: 'log', message: 'No results from initial searches, retrying with raw topic...' });
+      try {
+        const retry = await search(topic, {
+          maxResults: 8,
+          searchDepth: 'advanced',
+          includeAnswer: true,
+          signal: ac.signal,
+        });
+        sources = mergeAndRank([{ status: 'fulfilled', value: retry }], 12);
+      } catch (err) {
+        console.error('[quickanswer] retry search failed:', err);
+      }
+    }
     if (sources.length === 0) throw new Error('No search results found');
 
     await db.update(quickAnswers).set({ sources }).where(eq(quickAnswers.id, id));

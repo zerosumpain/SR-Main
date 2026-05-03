@@ -2,6 +2,9 @@
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
+  import ModelSelect from './widgets/ModelSelect.svelte';
+  import TemperatureField from './widgets/TemperatureField.svelte';
+  import MaxTokensField from './widgets/MaxTokensField.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
@@ -19,11 +22,6 @@
   // The canvas-level preview header (in /jkai/canvas/[slug]/+page.svelte)
   // already renders the "What this does" line, so we don't duplicate it here.
   void definition;
-
-  // Model dropdown options — sourced from the shared list so all LLM panels
-  // stay in lockstep. If new models are added, edit
-  // src/lib/canvas/nodes/panels/shared/vertex-models.ts.
-  const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
@@ -46,24 +44,6 @@
     if (Number.isFinite(n) && n >= 1) return Math.floor(n);
     return 1024;
   });
-
-  // Temperature descriptor — single-word label that follows the slider live.
-  // Thresholds:
-  //   <= 0.3  → Focused   (deterministic / near-deterministic)
-  //   <= 1.0  → Balanced  (default 0.7 lands here)
-  //   <  1.5  → Adventurous
-  //   >= 1.5  → Creative  (per spec)
-  const tempDescriptor = $derived.by(() => {
-    if (temperature <= 0.3) return 'Focused';
-    if (temperature <= 1.0) return 'Balanced';
-    if (temperature < 1.5) return 'Adventurous';
-    return 'Creative';
-  });
-
-  // Whether the chosen model is a custom (non-listed) value — the orchestrator
-  // sometimes writes IDs we haven't enumerated. Show them in a dim hint instead
-  // of silently swapping to "Default".
-  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === model));
 
   // ---------- Raw JSON --------------------------------------------------
 
@@ -108,62 +88,23 @@
     </label>
   </section>
 
-  <!-- Model -->
-  <section class="lc-sec">
-    <label class="lc-field">
-      <span class="lc-label">Model</span>
-      <select value={model} onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}>
-        {#if !modelInList}
-          <option value={model}>Custom: {model}</option>
-        {/if}
-        {#each MODEL_OPTIONS as opt (opt.value)}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-      </select>
-      <span class="lc-hint">Leave on Default to use the admin-configured site default. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter.</span>
-    </label>
-  </section>
+  <ModelSelect
+    value={model}
+    onChange={(v) => set('model', v)}
+    options={VERTEX_MODEL_OPTIONS}
+    hint="Leave on Default to use the admin-configured site default. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter."
+  />
 
-  <!-- Temperature -->
-  <section class="lc-sec">
-    <div class="lc-field">
-      <div class="lc-temp-hdr">
-        <span class="lc-label">Temperature</span>
-        <span class="lc-temp-readout">
-          <span class="lc-temp-value">{temperature.toFixed(1)}</span>
-          <span class="lc-temp-word">{tempDescriptor}</span>
-        </span>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="2"
-        step="0.1"
-        value={temperature}
-        oninput={(e) => set('temperature', Number((e.currentTarget as HTMLInputElement).value))}
-        class="lc-range"
-      />
-      <span class="lc-hint">0 = focused / deterministic · 0.7 = balanced (default) · 1.5+ = creative.</span>
-    </div>
-  </section>
+  <TemperatureField
+    value={temperature}
+    onChange={(v) => set('temperature', v)}
+  />
 
-  <!-- Max tokens -->
-  <section class="lc-sec">
-    <label class="lc-field lc-field-narrow">
-      <span class="lc-label">Max Tokens</span>
-      <input
-        type="number"
-        min="1"
-        step="1"
-        value={maxTokens}
-        oninput={(e) => {
-          const v = Math.max(1, Math.floor(Number((e.currentTarget as HTMLInputElement).value) || 1));
-          set('maxTokens', v);
-        }}
-      />
-      <span class="lc-hint">Maximum length of the AI response (roughly 4 characters per token). Default 1024.</span>
-    </label>
-  </section>
+  <MaxTokensField
+    value={maxTokens}
+    onChange={(v) => set('maxTokens', v)}
+    hint="Maximum length of the AI response (roughly 4 characters per token). Default 1024."
+  />
 
   <!-- On failure -->
   <OnErrorBlock

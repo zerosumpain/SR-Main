@@ -2,6 +2,8 @@
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
+  import ModelSelect from './widgets/ModelSelect.svelte';
+  import TemperatureField from './widgets/TemperatureField.svelte';
   import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
 
   let {
@@ -89,12 +91,6 @@
     setRoutes(next);
   }
 
-  // ---------- Model / prompts / temperature (mirrors LlmCallPanel) ----------
-  // Model list is shared across LLM panels — see
-  // src/lib/canvas/nodes/panels/shared/vertex-models.ts.
-
-  const MODEL_OPTIONS = VERTEX_MODEL_OPTIONS;
-
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
@@ -110,13 +106,6 @@
     // that as the slider's start position so users see what's actually used.
     return 0.1;
   });
-  const tempDescriptor = $derived.by(() => {
-    if (temperature <= 0.3) return 'Focused';
-    if (temperature <= 1.0) return 'Balanced';
-    if (temperature < 1.5) return 'Adventurous';
-    return 'Creative';
-  });
-  const modelInList = $derived(MODEL_OPTIONS.some((o) => o.value === model));
 
   // ---------- Compiled router prompt preview --------------------------------
   // The executor builds a system prompt from the routes; we replicate that
@@ -241,44 +230,18 @@
     </label>
   </section>
 
-  <!-- Model -->
-  <section class="lr-sec">
-    <label class="lr-field">
-      <span class="lr-label">Model</span>
-      <select value={model} onchange={(e) => set('model', (e.currentTarget as HTMLSelectElement).value)}>
-        {#if !modelInList}
-          <option value={model}>Custom: {model}</option>
-        {/if}
-        {#each MODEL_OPTIONS as opt (opt.value)}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-      </select>
-      <span class="lr-hint">Leave on Default to use the admin-configured site default. Routing benefits from a small fast model.</span>
-    </label>
-  </section>
+  <ModelSelect
+    value={model}
+    onChange={(v) => set('model', v)}
+    options={VERTEX_MODEL_OPTIONS}
+    hint="Leave on Default to use the admin-configured site default. Routing benefits from a small fast model."
+  />
 
-  <!-- Temperature -->
-  <section class="lr-sec">
-    <div class="lr-field">
-      <div class="lr-temp-hdr">
-        <span class="lr-label">Temperature</span>
-        <span class="lr-temp-readout">
-          <span class="lr-temp-value">{temperature.toFixed(1)}</span>
-          <span class="lr-temp-word">{tempDescriptor}</span>
-        </span>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="2"
-        step="0.1"
-        value={temperature}
-        oninput={(e) => set('temperature', Number((e.currentTarget as HTMLInputElement).value))}
-        class="lr-range"
-      />
-      <span class="lr-hint">Routing usually wants <strong>0.0 – 0.2</strong> for consistent, deterministic picks.</span>
-    </div>
-  </section>
+  <TemperatureField
+    value={temperature}
+    onChange={(v) => set('temperature', v)}
+    hint="Routing usually wants <strong>0.0 – 0.2</strong> for consistent, deterministic picks."
+  />
 
   <!-- Compiled router prompt — what the LLM actually sees -->
   <details class="lr-compiled" bind:open={showCompiled}>

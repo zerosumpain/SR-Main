@@ -1,5 +1,14 @@
 import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel } from './keys';
 
+const ZAI_NONSTREAM_TIMEOUT_MS = 30_000;
+const ZAI_STREAM_IDLE_TIMEOUT_MS = 30_000;
+
+function combineSignals(external: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!external) return timeout;
+  return AbortSignal.any([external, timeout]);
+}
+
 /** Attempt to close truncated JSON by balancing brackets/braces and removing trailing partial tokens */
 function repairJson(text: string): string {
   // Strip trailing incomplete string (e.g. `"some trunca`)
@@ -72,7 +81,7 @@ export async function chatCompletion(
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
         },
-        { signal: options?.signal as any },
+        { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
       ),
     'chatCompletion',
   );
@@ -101,7 +110,7 @@ export async function jsonCompletion<T>(
           max_tokens: options?.maxTokens ?? 4096,
           response_format: { type: 'json_object' },
         },
-        { signal: options?.signal as any },
+        { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
       ),
     'jsonCompletion',
   );
@@ -111,8 +120,13 @@ export async function jsonCompletion<T>(
     return JSON.parse(text) as T;
   } catch {
     // Attempt to repair truncated JSON (e.g. from max_tokens cutoff)
-    const repaired = repairJson(text);
-    return JSON.parse(repaired) as T;
+    try {
+      const repaired = repairJson(text);
+      return JSON.parse(repaired) as T;
+    } catch (err) {
+      console.error('[deepdive] jsonCompletion: repair failed. Raw text was:', text.slice(0, 500));
+      throw err;
+    }
   }
 }
 
@@ -131,33 +145,57 @@ export async function streamCompletion(
   const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
   const model = options?.model ?? getModel();
 
-  const stream = await client.chat.completions.create(
-    {
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: options?.temperature ?? 0.5,
-      max_tokens: options?.maxTokens ?? 2000,
-      stream: true,
-    },
-    { signal: options?.signal as any },
-  );
-
-  let text = '';
-  let tokensUsed = 0;
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content;
-    if (delta) {
-      text += delta;
-      options?.onToken?.(delta);
-    }
-    if (chunk.usage?.total_tokens) {
-      tokensUsed = chunk.usage.total_tokens;
-    }
+  // Watchdog: abort the stream if no token arrives within ZAI_STREAM_IDLE_TIMEOUT_MS.
+  // Uses an internal AbortController combined with the caller's signal.
+  const idleAc = new AbortController();
+  const externalSignal = options?.signal;
+  const onExternalAbort = () => idleAc.abort(externalSignal?.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) idleAc.abort(externalSignal.reason);
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
   }
-  return { text, tokensUsed };
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleAc.abort(new Error('Stream idle timeout'));
+    }, ZAI_STREAM_IDLE_TIMEOUT_MS);
+  };
+  resetIdleTimer();
+
+  try {
+    const stream = await client.chat.completions.create(
+      {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: options?.temperature ?? 0.5,
+        max_tokens: options?.maxTokens ?? 2000,
+        stream: true,
+      },
+      { signal: idleAc.signal as any },
+    );
+
+    let text = '';
+    let tokensUsed = 0;
+    for await (const chunk of stream) {
+      resetIdleTimer();
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        text += delta;
+        options?.onToken?.(delta);
+      }
+      if (chunk.usage?.total_tokens) {
+        tokensUsed = chunk.usage.total_tokens;
+      }
+    }
+    return { text, tokensUsed };
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+  }
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {

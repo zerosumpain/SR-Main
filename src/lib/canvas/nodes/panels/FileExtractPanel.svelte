@@ -17,10 +17,11 @@
   // Unknown keys are preserved via spread. The canvas-level header renders
   // the "What this does" preview, so we don't duplicate it.
 
-  import type { NodeDefinition } from '$lib/workflows/types';
+  import type { NodeDefinition, SchemaFieldRow } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
   import FilePicker from './shared/FilePicker.svelte';
+  import SchemaFieldTable from './widgets/SchemaFieldTable.svelte';
 
   let {
     config,
@@ -65,41 +66,27 @@
     { value: 'xlsx', label: 'XLSX (binary, base64)' },
   ];
 
-  // ---------- Fields-to-extract row model ---------------------------------
+  // ---------- Fields-to-extract: persistence ------------------------------
+  // Rows are stored as SchemaFieldRow[] under `extractFields`. We also
+  // compile a JSON Schema and persist it under `extractSchema` so a
+  // schema-aware extractor downstream (or the LLM extractor) can use it
+  // without re-deriving. Description is the only authored field beyond
+  // {name, type}; required isn't surfaced for this node.
 
-  type FieldType = 'string' | 'number' | 'boolean' | 'array' | 'object';
-  type FieldRow = { name: string; type: FieldType; description: string };
-
-  const TYPES: FieldType[] = ['string', 'number', 'boolean', 'array', 'object'];
-
-  function readRows(raw: unknown): FieldRow[] {
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .filter((r) => r && typeof r === 'object')
-      .map((r) => {
-        const o = r as Record<string, unknown>;
-        const t = String(o.type ?? 'string') as FieldType;
-        return {
-          name: String(o.name ?? ''),
-          type: TYPES.includes(t) ? t : 'string',
-          description: String(o.description ?? ''),
-        };
-      });
-  }
-
-  function buildSchema(rs: FieldRow[]): Record<string, unknown> | undefined {
+  function buildSchema(rs: SchemaFieldRow[]): Record<string, unknown> | undefined {
     const live = rs.filter((r) => r.name.trim());
     if (live.length === 0) return undefined;
     const properties: Record<string, Record<string, unknown>> = {};
     for (const r of live) {
       const prop: Record<string, unknown> = { type: r.type };
-      if (r.description.trim()) prop.description = r.description.trim();
+      const desc = (r.description ?? '').trim();
+      if (desc) prop.description = desc;
       properties[r.name.trim()] = prop;
     }
     return { type: 'object', properties };
   }
 
-  function writeRows(next: FieldRow[]) {
+  function writeRows(next: SchemaFieldRow[]) {
     const schema = buildSchema(next);
     const patched: Record<string, unknown> = { ...config, extractFields: next };
     if (schema) patched.extractSchema = schema;
@@ -107,20 +94,9 @@
     onChange(patched);
   }
 
-  const rows = $derived(readRows(config.extractFields));
-
-  function addRow() {
-    writeRows([...rows, { name: '', type: 'string', description: '' }]);
-  }
-  function updateRow(i: number, patch: Partial<FieldRow>) {
-    const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
-    writeRows(next);
-  }
-  function removeRow(i: number) {
-    const next = rows.slice();
-    next.splice(i, 1);
-    writeRows(next);
-  }
+  const rows = $derived<SchemaFieldRow[]>(
+    Array.isArray(config.extractFields) ? (config.extractFields as SchemaFieldRow[]) : [],
+  );
 
   // ---------- Plain field setter -----------------------------------------
 
@@ -265,41 +241,17 @@
         <span class="sr-label-tight">Fields to extract</span>
         <span class="fe-sec-meta">{rows.length} {rows.length === 1 ? 'field' : 'fields'}</span>
       </header>
-      {#if rows.length === 0}
-        <p class="fe-empty">No structured fields. The node returns plain text only.</p>
-      {:else}
-        <div class="fe-fld-grid">
-          <div class="fe-fld-head">Name</div>
-          <div class="fe-fld-head">Type</div>
-          <div class="fe-fld-head">Description (sent to model)</div>
-          <div></div>
-          {#each rows as row, i (i)}
-            <input
-              type="text"
-              class="fe-fld-input"
-              placeholder="title"
-              value={row.name}
-              oninput={(e) => updateRow(i, { name: (e.currentTarget as HTMLInputElement).value })}
-            />
-            <select
-              class="fe-fld-input"
-              value={row.type}
-              onchange={(e) => updateRow(i, { type: (e.currentTarget as HTMLSelectElement).value as FieldType })}
-            >
-              {#each TYPES as t (t)}<option value={t}>{t}</option>{/each}
-            </select>
-            <input
-              type="text"
-              class="fe-fld-input"
-              placeholder="Document title at the top of the page"
-              value={row.description}
-              oninput={(e) => updateRow(i, { description: (e.currentTarget as HTMLInputElement).value })}
-            />
-            <button type="button" class="fe-fld-rm" onclick={() => removeRow(i)} aria-label="remove">×</button>
-          {/each}
-        </div>
-      {/if}
-      <button type="button" class="fe-add" onclick={addRow}>+ Add field</button>
+      <SchemaFieldTable
+        value={rows}
+        onChange={writeRows}
+        includeRequired={false}
+        includeDescription={true}
+        nameLabel="Name"
+        namePlaceholder="title"
+        descriptionLabel="Description (sent to model)"
+        descriptionPlaceholder="Document title at the top of the page"
+        emptyHint="No structured fields. The node returns plain text only."
+      />
       <span class="fe-hint">
         A JSON Schema is built from these rows and stored under <code>extractSchema</code>
         for downstream LLM extractors.
@@ -481,44 +433,6 @@
   .fe-hint { font-size: 11px; color: var(--text-ghost); }
   .fe-hint code, .fe-label code { font-size: 11px; color: var(--text-muted); }
   .fe-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); margin-left: 6px; }
-
-  .fe-fld-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1.6fr) 24px;
-    gap: 4px;
-    align-items: center;
-  }
-  .fe-fld-head {
-    font-family: var(--font-mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
-  }
-  .fe-fld-input {
-    padding: 5px 7px;
-    background: var(--bg);
-    color: var(--text-primary);
-    border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
-    box-sizing: border-box;
-    outline: none;
-  }
-  .fe-fld-input:focus { border-color: var(--text-muted); }
-  .fe-fld-rm {
-    background: transparent; color: var(--text-muted);
-    border: 1px solid var(--card-border); cursor: pointer;
-  }
-  .fe-fld-rm:hover { color: var(--status-error, #c0392b); }
-
-  .fe-add {
-    align-self: flex-start;
-    padding: 4px 10px;
-    background: var(--bg); color: var(--text-muted);
-    border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    cursor: pointer;
-  }
-  .fe-add:hover { color: var(--text-primary); }
-  .fe-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
 
   .fe-temp-hdr { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .fe-temp-readout { display: inline-flex; gap: 8px; align-items: baseline; font-family: var(--font-mono); font-size: 11px; }

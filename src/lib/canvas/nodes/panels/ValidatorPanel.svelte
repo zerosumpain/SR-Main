@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { NodeDefinition, SchemaFieldRow } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import SchemaBuilderField from './SchemaBuilderField.svelte';
-  import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
+  import SchemaFieldTable from './widgets/SchemaFieldTable.svelte';
+  import ExpressionRuleBuilder from './widgets/ExpressionRuleBuilder.svelte';
 
   let {
     config,
@@ -17,13 +17,6 @@
   } = $props();
 
   void definition;
-
-  // Upstream paths arrive as bare keys; the rule compiler writes them with
-  // an `input.` prefix to match the eval scope, so the picker shows the
-  // prefixed forms.
-  const upstreamWithInputPrefix = $derived(
-    upstreamFields.map((p) => (p.startsWith('input.') ? p : `input.${p}`)),
-  );
 
   // ----------------------------------------------------------------------
   // The validator executor branches on `config.mode`:
@@ -48,217 +41,7 @@
     set('mode', next);
   }
 
-  // ---------- Expression rule builder (mirrors ConditionalPanel) ----------
-
-  type Operator =
-    | '=='
-    | '!='
-    | '<'
-    | '<='
-    | '>'
-    | '>='
-    | 'contains'
-    | 'matches'
-    | 'is empty'
-    | 'is not empty'
-    | 'is truthy'
-    | 'is falsy';
-
-  type Rule = { field: string; op: Operator; value: string };
-
-  const UNARY_OPS: Operator[] = ['is empty', 'is not empty', 'is truthy', 'is falsy'];
-  const ALL_OPS: Operator[] = [
-    '==',
-    '!=',
-    '<',
-    '<=',
-    '>',
-    '>=',
-    'contains',
-    'matches',
-    'is empty',
-    'is not empty',
-    'is truthy',
-    'is falsy',
-  ];
-
-  function isUnary(op: Operator): boolean {
-    return UNARY_OPS.includes(op);
-  }
-
-  function compileValue(raw: string): string {
-    const trimmed = raw.trim();
-    if (trimmed === '') return '""';
-    if (trimmed === 'true') return 'true';
-    if (trimmed === 'false') return 'false';
-    if (trimmed === 'null') return 'null';
-    if (/^-?\d+(\.\d+)?$/.test(trimmed) && Number.isFinite(Number(trimmed))) {
-      return trimmed;
-    }
-    return JSON.stringify(raw);
-  }
-
-  function compileRule(rule: Rule): string {
-    const field = rule.field.trim() || 'input.value';
-    const v = rule.value;
-    switch (rule.op) {
-      case '==': return `${field} == ${compileValue(v)}`;
-      case '!=': return `${field} != ${compileValue(v)}`;
-      case '<': return `${field} < ${compileValue(v)}`;
-      case '<=': return `${field} <= ${compileValue(v)}`;
-      case '>': return `${field} > ${compileValue(v)}`;
-      case '>=': return `${field} >= ${compileValue(v)}`;
-      case 'contains':
-        return `String(${field} ?? "").includes(${compileValue(v)})`;
-      case 'matches':
-        if (!v.trim()) return 'false';
-        return `new RegExp(${compileValue(v)}).test(String(${field} ?? ""))`;
-      case 'is empty':
-        return `(${field} == null || ${field} === "" || (Array.isArray(${field}) && ${field}.length === 0))`;
-      case 'is not empty':
-        return `!(${field} == null || ${field} === "" || (Array.isArray(${field}) && ${field}.length === 0))`;
-      case 'is truthy':
-        return `!!(${field})`;
-      case 'is falsy':
-        return `!(${field})`;
-    }
-  }
-
-  function compileRules(rs: Rule[], j: 'AND' | 'OR'): string {
-    if (rs.length === 0) return 'false';
-    const parts = rs.map((r) => `(${compileRule(r)})`);
-    if (parts.length === 1) return parts[0].slice(1, -1);
-    return parts.join(j === 'AND' ? ' && ' : ' || ');
-  }
-
-  function findTopLevelOp(src: string, op: string): number {
-    let depth = 0;
-    let inStr: string | null = null;
-    for (let i = 0; i < src.length; i++) {
-      const c = src[i];
-      if (inStr) {
-        if (c === '\\') { i++; continue; }
-        if (c === inStr) inStr = null;
-        continue;
-      }
-      if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
-      if (c === '(' || c === '[' || c === '{') depth++;
-      else if (c === ')' || c === ']' || c === '}') depth--;
-      else if (depth === 0 && src.startsWith(op, i)) return i;
-    }
-    return -1;
-  }
-
-  function parseStringLiteral(src: string): string | null {
-    if (src.length < 2) return null;
-    const q = src[0];
-    if ((q === '"' || q === "'") && src[src.length - 1] === q) {
-      try { return JSON.parse(q === "'" ? `"${src.slice(1, -1).replace(/"/g, '\\"')}"` : src); }
-      catch { return null; }
-    }
-    return null;
-  }
-
-  function decompileValue(src: string): string | null {
-    const trimmed = src.trim();
-    if (trimmed === 'true' || trimmed === 'false' || trimmed === 'null') return trimmed;
-    if (/^-?\d+(\.\d+)?$/.test(trimmed)) return trimmed;
-    const s = parseStringLiteral(trimmed);
-    if (s !== null) return s;
-    return null;
-  }
-
-  function tryParseSingleRule(expr: string): Rule | null {
-    const src = expr.trim();
-    if (!src) return null;
-    const stripped = src.startsWith('(') && src.endsWith(')') ? src.slice(1, -1).trim() : src;
-
-    let m: RegExpMatchArray | null;
-    m = stripped.match(/^!!\s*\((.+)\)$/);
-    if (m) return { field: m[1].trim(), op: 'is truthy', value: '' };
-    m = stripped.match(/^!\s*\((.+)\)$/);
-    if (m && !stripped.startsWith('!!')) return { field: m[1].trim(), op: 'is falsy', value: '' };
-    m = stripped.match(/^String\((.+?)\s*\?\?\s*""\)\.includes\((.+)\)$/);
-    if (m) {
-      const v = parseStringLiteral(m[2].trim());
-      if (v !== null) return { field: m[1].trim(), op: 'contains', value: v };
-    }
-    m = stripped.match(/^new RegExp\((.+?)\)\.test\(String\((.+?)\s*\?\?\s*""\)\)$/);
-    if (m) {
-      const v = parseStringLiteral(m[1].trim());
-      if (v !== null) return { field: m[2].trim(), op: 'matches', value: v };
-    }
-
-    const binOps: Operator[] = ['==', '!=', '<=', '>=', '<', '>'];
-    for (const op of binOps) {
-      const idx = findTopLevelOp(stripped, op);
-      if (idx >= 0) {
-        if (op === '==' && stripped[idx + 2] === '=') continue;
-        if (op === '!=' && stripped[idx + 2] === '=') continue;
-        const left = stripped.slice(0, idx).trim();
-        const right = stripped.slice(idx + op.length).trim();
-        const v = decompileValue(right);
-        if (v === null) continue;
-        return { field: left, op, value: v };
-      }
-    }
-    return null;
-  }
-
-  // ---------- Expression panel state -------------------------------------
-
-  const initialExpr = String(config.expression ?? '');
-  const parsedInitial = tryParseSingleRule(initialExpr);
-
-  let exprMode = $state<'rule' | 'advanced'>(
-    parsedInitial !== null || initialExpr.trim() === '' || initialExpr.trim() === 'true' || initialExpr.trim() === 'false'
-      ? 'rule'
-      : 'advanced',
-  );
-  let rules = $state<Rule[]>(
-    parsedInitial
-      ? [parsedInitial]
-      : [{ field: 'input.value', op: '==' as Operator, value: '' }],
-  );
-  let joiner = $state<'AND' | 'OR'>('AND');
-
-  const compiled = $derived(compileRules(rules, joiner));
-
-  function commitFromRules() {
-    onChange({ ...config, expression: compiled });
-  }
-
-  function setExpressionRaw(expr: string) {
-    onChange({ ...config, expression: expr });
-  }
-
-  function selectExprMode(next: 'rule' | 'advanced') {
-    if (exprMode === next) return;
-    exprMode = next;
-    if (next === 'rule') commitFromRules();
-  }
-
-  function updateRule(i: number, patch: Partial<Rule>) {
-    const next = rules.slice();
-    next[i] = { ...next[i], ...patch };
-    rules = next;
-    commitFromRules();
-  }
-  function addRule() {
-    rules = [...rules, { field: 'input.value', op: '==' as Operator, value: '' }];
-    commitFromRules();
-  }
-  function removeRule(i: number) {
-    const next = rules.slice();
-    next.splice(i, 1);
-    rules = next.length ? next : [{ field: 'input.value', op: '==' as Operator, value: '' }];
-    commitFromRules();
-  }
-  function setJoiner(j: 'AND' | 'OR') {
-    if (joiner === j) return;
-    joiner = j;
-    commitFromRules();
-  }
+  // ---------- Expression mode now provided by <ExpressionRuleBuilder/> ----------
 
   // ---------- Schema-builder helpers --------------------------------------
 
@@ -312,9 +95,7 @@
     | { ok: false; error: string }
   >(null);
 
-  const expressionForTest = $derived(
-    exprMode === 'rule' ? compiled : String(config.expression ?? ''),
-  );
+  const expressionForTest = $derived(String(config.expression ?? ''));
 
   function checkType(value: unknown, expectedType: string): boolean {
     if (expectedType === 'any') return true;
@@ -409,121 +190,13 @@
   </div>
 
   {#if mode === 'expression'}
-    <!-- Sub-mode toggle (rule builder vs raw expression) -->
-    <div class="va-submode-bar" role="tablist" aria-label="Expression editor mode">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={exprMode === 'rule'}
-        class="va-mode-btn"
-        class:va-mode-btn-active={exprMode === 'rule'}
-        onclick={() => selectExprMode('rule')}
-      >Rule builder</button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={exprMode === 'advanced'}
-        class="va-mode-btn"
-        class:va-mode-btn-active={exprMode === 'advanced'}
-        onclick={() => selectExprMode('advanced')}
-      >Advanced</button>
-    </div>
-
-    {#if exprMode === 'rule'}
-      <section class="va-sec">
-        <header class="va-sec-hdr">
-          <span class="sr-label-tight">Conditions</span>
-          <span class="va-sec-meta">{rules.length} {rules.length === 1 ? 'rule' : 'rules'}</span>
-        </header>
-
-        {#each rules as r, i (i)}
-          {#if i > 0}
-            <div class="va-joiner-row">
-              <div class="va-joiner-chip" role="group" aria-label="Combine with">
-                <button type="button" class="va-chip" class:va-chip-active={joiner === 'AND'} onclick={() => setJoiner('AND')}>AND</button>
-                <button type="button" class="va-chip" class:va-chip-active={joiner === 'OR'} onclick={() => setJoiner('OR')}>OR</button>
-              </div>
-            </div>
-          {/if}
-          <div class="va-rule-row">
-            <label class="va-field va-field-fld">
-              <UpstreamFieldPicker
-                label="Field"
-                value={r.field}
-                upstreamFields={upstreamWithInputPrefix}
-                placeholder="pick or type input.<path>"
-                allowCustom={true}
-                onChange={(v) => updateRule(i, { field: v })}
-              />
-            </label>
-            <label class="va-field va-field-op">
-              <span class="va-label">Operator</span>
-              <select
-                value={r.op}
-                onchange={(e) => updateRule(i, { op: (e.currentTarget as HTMLSelectElement).value as Operator })}
-              >
-                {#each ALL_OPS as op (op)}
-                  <option value={op}>{op}</option>
-                {/each}
-              </select>
-            </label>
-            {#if !isUnary(r.op)}
-              <label class="va-field va-field-val">
-                <span class="va-label">Value</span>
-                <input
-                  type="text"
-                  spellcheck="false"
-                  placeholder={r.op === 'matches' ? '^prefix' : '42, true, "text"'}
-                  value={r.value}
-                  oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-                />
-              </label>
-            {:else}
-              <div class="va-field va-field-val va-field-stub" aria-hidden="true">
-                <span class="va-label">&nbsp;</span>
-                <span class="va-stub">— no value —</span>
-              </div>
-            {/if}
-            <button
-              type="button"
-              class="va-rule-rm"
-              onclick={() => removeRule(i)}
-              aria-label="remove rule"
-            >×</button>
-          </div>
-        {/each}
-
-        <button type="button" class="va-add" onclick={addRule}>+ Add condition</button>
-        <p class="va-hint">
-          Numbers and <code>true</code>/<code>false</code> are auto-detected; everything else is treated as a string.
-        </p>
-      </section>
-
-      <section class="va-sec">
-        <header class="va-sec-hdr">
-          <span class="sr-label-tight">Compiled expression</span>
-          <span class="va-sec-meta">written to <code>config.expression</code></span>
-        </header>
-        <code class="va-compiled">{compiled}</code>
-      </section>
-    {:else}
-      <section class="va-sec">
-        <header class="va-sec-hdr">
-          <span class="sr-label-tight">Expression</span>
-        </header>
-        <textarea
-          class="va-code"
-          rows="4"
-          spellcheck="false"
-          placeholder="input.score >= 80 && input.tier === 'gold'"
-          value={String(config.expression ?? '')}
-          oninput={(e) => setExpressionRaw((e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-        <p class="va-hint">
-          Single boolean expression evaluated against <code>input</code>. Routes to <strong>pass</strong> when truthy, <strong>fail</strong> otherwise.
-        </p>
-      </section>
-    {/if}
+    <ExpressionRuleBuilder
+      value={String(config.expression ?? '')}
+      onChange={(expr) => set('expression', expr)}
+      upstreamFields={upstreamFields}
+      advancedPlaceholder="input.score >= 80 && input.tier === 'gold'"
+      advancedHint="Single boolean expression evaluated against <code>input</code>. Routes to <strong>pass</strong> when truthy, <strong>fail</strong> otherwise."
+    />
   {:else}
     <!-- Schema mode -->
     <section class="va-sec">
@@ -531,7 +204,7 @@
         <span class="sr-label-tight">Expected fields</span>
         <span class="va-sec-meta">{schemaRows.length} {schemaRows.length === 1 ? 'field' : 'fields'}</span>
       </header>
-      <SchemaBuilderField value={schemaRows} onChange={setSchemaRows} />
+      <SchemaFieldTable value={schemaRows} onChange={setSchemaRows} />
       <p class="va-hint">
         Each row asserts a property on <code>input</code>. Required fields must be present and non-null;
         present fields must match the declared type. Routes to <strong>pass</strong> if all checks succeed.
@@ -632,7 +305,7 @@
     color: var(--text-ghost); margin: 0 4px;
   }
 
-  .va-mode-bar, .va-submode-bar {
+  .va-mode-bar {
     display: flex; gap: 4px;
     border: 1px solid var(--card-border);
     padding: 3px;
@@ -661,73 +334,15 @@
   .va-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
   .va-sec-meta code { font-size: 10px; color: var(--text-muted); }
 
-  .va-rule-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1fr) 24px;
-    gap: 6px;
-    align-items: end;
-  }
   .va-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .va-field-stub { justify-content: center; }
-  .va-stub {
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-ghost);
-    padding: 6px 8px;
-    border: 1px dashed var(--card-border);
-    text-align: center;
-  }
   .va-label {
     font-family: var(--font-mono); font-size: 10px;
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .va-rule-rm {
-    background: transparent; color: var(--text-muted);
-    border: 1px solid var(--card-border); cursor: pointer;
-    height: 28px; align-self: end;
-  }
-  .va-rule-rm:hover { color: var(--status-error, #c0392b); }
-
-  .va-joiner-row { display: flex; justify-content: flex-start; }
-  .va-joiner-chip {
-    display: inline-flex; gap: 0;
-    border: 1px solid var(--card-border);
-  }
-  .va-chip {
-    background: transparent; color: var(--text-muted);
-    border: none;
-    font-family: var(--font-mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    padding: 3px 10px; cursor: pointer;
-  }
-  .va-chip:hover { color: var(--text-primary); }
-  .va-chip-active {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--accent);
-  }
-
-  .va-add {
-    align-self: flex-start;
-    padding: 4px 10px;
-    background: var(--bg); color: var(--text-muted);
-    border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    cursor: pointer;
-  }
-  .va-add:hover { color: var(--text-primary); }
 
   .va-hint { margin: 0; font-size: 11px; color: var(--text-ghost); }
   .va-hint code { font-size: 11px; color: var(--text-muted); }
-
-  .va-compiled {
-    display: block;
-    padding: 8px 10px;
-    background: var(--bg);
-    color: var(--accent);
-    border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
-    word-break: break-all;
-  }
 
   .va-code {
     width: 100%;

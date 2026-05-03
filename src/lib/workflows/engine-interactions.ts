@@ -8,6 +8,7 @@
 
 import { db } from '$lib/db';
 import { workflowInteractions } from '$lib/db/schema';
+import { emitWorkflowEvent } from './events';
 
 export interface CreateInteractionOpts {
   runId: string;
@@ -50,6 +51,16 @@ export async function createInteraction(opts: CreateInteractionOpts): Promise<nu
       expiresAt,
     })
     .returning({ id: workflowInteractions.id });
+
+  // Notify any open SSE subscribers so the canvas can refresh its
+  // interactions list immediately, instead of relying on a 3s poll.
+  emitWorkflowEvent({
+    type: 'interaction_pending',
+    runId,
+    nodeId,
+    data: { interactionId: row.id, mode },
+    timestamp: new Date().toISOString(),
+  });
 
   return row.id;
 }

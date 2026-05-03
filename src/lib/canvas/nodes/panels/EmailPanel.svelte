@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import ChipInputField from './widgets/ChipInputField.svelte';
+  import RecipientListBlock from './widgets/RecipientListBlock.svelte';
 
   let {
     config,
@@ -17,56 +17,6 @@
 
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
-  }
-
-  // The orchestrator may serialise to/cc/bcc as either a comma-separated
-  // string or an array of strings. We accept both shapes when reading; we
-  // always write back as a single comma-separated string because the email
-  // executor reads `to` verbatim as a string and runs template
-  // interpolation on it. cc/bcc aren't consumed today but we preserve them
-  // in the same shape for forward compatibility.
-  function readRecipientRaw(raw: unknown): string {
-    if (Array.isArray(raw)) {
-      return raw.map((v) => String(v ?? '').trim()).filter(Boolean).join(', ');
-    }
-    return String(raw ?? '');
-  }
-
-  function rawToChips(raw: string): string[] {
-    return raw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
-  function chipsToRaw(chips: string[]): string {
-    return chips.join(', ');
-  }
-
-  function detectMode(raw: string): 'chips' | 'template' {
-    return raw.includes('{{') ? 'template' : 'chips';
-  }
-
-  // ---------- Recipient state -------------------------------------------
-
-  const initialTo = readRecipientRaw(config.to);
-  const initialCc = readRecipientRaw(config.cc);
-  const initialBcc = readRecipientRaw(config.bcc);
-
-  let toMode = $state<'chips' | 'template'>(detectMode(initialTo));
-  let ccMode = $state<'chips' | 'template'>(detectMode(initialCc));
-  let bccMode = $state<'chips' | 'template'>(detectMode(initialBcc));
-
-  const toRaw = $derived(readRecipientRaw(config.to));
-  const ccRaw = $derived(readRecipientRaw(config.cc));
-  const bccRaw = $derived(readRecipientRaw(config.bcc));
-
-  const toChips = $derived(rawToChips(toRaw));
-  const ccChips = $derived(rawToChips(ccRaw));
-  const bccChips = $derived(rawToChips(bccRaw));
-
-  function setRecipient(key: 'to' | 'cc' | 'bcc', raw: string) {
-    set(key, raw);
   }
 
   // ---------- Body --------------------------------------------------------
@@ -107,132 +57,32 @@
     </label>
   </section>
 
-  <!-- To -->
-  <section class="em-sec">
-    <header class="em-sec-hdr">
-      <span class="sr-label-tight">To</span>
-      <div class="em-mode-toggle" role="tablist" aria-label="To input mode">
-        <button
-          type="button"
-          class="em-mode-btn"
-          class:em-mode-btn-active={toMode === 'chips'}
-          role="tab"
-          aria-selected={toMode === 'chips'}
-          onclick={() => (toMode = 'chips')}
-        >Chips</button>
-        <button
-          type="button"
-          class="em-mode-btn"
-          class:em-mode-btn-active={toMode === 'template'}
-          role="tab"
-          aria-selected={toMode === 'template'}
-          onclick={() => (toMode = 'template')}
-        >Template</button>
-      </div>
-    </header>
-    {#if toMode === 'chips'}
-      <ChipInputField
-        value={toChips}
-        placeholder="alice@example.com — Enter or , to add"
-        onChange={(v) => setRecipient('to', chipsToRaw(v))}
-      />
-      <span class="em-hint">One or more recipients. Use Template mode for <code>{`{{input.x}}`}</code> values.</span>
-    {:else}
-      <textarea
-        class="em-code"
-        rows="2"
-        spellcheck="false"
-        placeholder={`{{input.recipient}} or {{trigger.output.from}}`}
-        value={toRaw}
-        oninput={(e) => setRecipient('to', (e.currentTarget as HTMLTextAreaElement).value)}
-      ></textarea>
-      <span class="em-hint">Templates supported: <code>{`{{input.field}}`}</code>. Comma-separate for multiple.</span>
-    {/if}
-  </section>
+  <RecipientListBlock
+    label="To"
+    value={config.to}
+    onChange={(raw) => set('to', raw)}
+    placeholder="alice@example.com — Enter or , to add"
+    templatePlaceholder={`{{input.recipient}} or {{trigger.output.from}}`}
+    chipsHint={`One or more recipients. Use Template mode for <code>{{input.x}}</code> values.`}
+    templateHint={`Templates supported: <code>{{input.field}}</code>. Comma-separate for multiple.`}
+  />
 
-  <!-- Cc / Bcc (collapsed) -->
   <details class="em-cc">
     <summary><span class="sr-label-tight">Cc / Bcc</span></summary>
-
-    <section class="em-sec">
-      <header class="em-sec-hdr">
-        <span class="sr-label-tight">Cc</span>
-        <div class="em-mode-toggle" role="tablist" aria-label="Cc input mode">
-          <button
-            type="button"
-            class="em-mode-btn"
-            class:em-mode-btn-active={ccMode === 'chips'}
-            role="tab"
-            aria-selected={ccMode === 'chips'}
-            onclick={() => (ccMode = 'chips')}
-          >Chips</button>
-          <button
-            type="button"
-            class="em-mode-btn"
-            class:em-mode-btn-active={ccMode === 'template'}
-            role="tab"
-            aria-selected={ccMode === 'template'}
-            onclick={() => (ccMode = 'template')}
-          >Template</button>
-        </div>
-      </header>
-      {#if ccMode === 'chips'}
-        <ChipInputField
-          value={ccChips}
-          placeholder="cc@example.com"
-          onChange={(v) => setRecipient('cc', chipsToRaw(v))}
-        />
-      {:else}
-        <textarea
-          class="em-code"
-          rows="2"
-          spellcheck="false"
-          placeholder={`{{input.cc}}`}
-          value={ccRaw}
-          oninput={(e) => setRecipient('cc', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-      {/if}
-    </section>
-
-    <section class="em-sec">
-      <header class="em-sec-hdr">
-        <span class="sr-label-tight">Bcc</span>
-        <div class="em-mode-toggle" role="tablist" aria-label="Bcc input mode">
-          <button
-            type="button"
-            class="em-mode-btn"
-            class:em-mode-btn-active={bccMode === 'chips'}
-            role="tab"
-            aria-selected={bccMode === 'chips'}
-            onclick={() => (bccMode = 'chips')}
-          >Chips</button>
-          <button
-            type="button"
-            class="em-mode-btn"
-            class:em-mode-btn-active={bccMode === 'template'}
-            role="tab"
-            aria-selected={bccMode === 'template'}
-            onclick={() => (bccMode = 'template')}
-          >Template</button>
-        </div>
-      </header>
-      {#if bccMode === 'chips'}
-        <ChipInputField
-          value={bccChips}
-          placeholder="bcc@example.com"
-          onChange={(v) => setRecipient('bcc', chipsToRaw(v))}
-        />
-      {:else}
-        <textarea
-          class="em-code"
-          rows="2"
-          spellcheck="false"
-          placeholder={`{{input.bcc}}`}
-          value={bccRaw}
-          oninput={(e) => setRecipient('bcc', (e.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
-      {/if}
-    </section>
+    <RecipientListBlock
+      label="Cc"
+      value={config.cc}
+      onChange={(raw) => set('cc', raw)}
+      placeholder="cc@example.com"
+      templatePlaceholder={`{{input.cc}}`}
+    />
+    <RecipientListBlock
+      label="Bcc"
+      value={config.bcc}
+      onChange={(raw) => set('bcc', raw)}
+      placeholder="bcc@example.com"
+      templatePlaceholder={`{{input.bcc}}`}
+    />
   </details>
 
   <!-- Subject -->

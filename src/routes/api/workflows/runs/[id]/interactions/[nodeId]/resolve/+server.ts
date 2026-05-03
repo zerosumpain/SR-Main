@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { workflowInteractions, workflowRuns } from '$lib/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { resumeRun } from '$lib/workflows/engine-resume';
+import { emitWorkflowEvent } from '$lib/workflows/events';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const session = await locals.auth();
@@ -35,6 +36,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       formValues,
     })
     .where(eq(workflowInteractions.id, pending.id));
+
+  // Notify SSE subscribers so the canvas can drop the awaiting badge / close
+  // the modal without waiting for a poll tick.
+  emitWorkflowEvent({
+    type: 'interaction_resolved',
+    runId,
+    nodeId,
+    data: { interactionId: pending.id },
+    timestamp: new Date().toISOString(),
+  });
 
   // Two classes of interactions exist:
   //  1. interactive-step node paused the engine (run.status === 'awaiting_human').

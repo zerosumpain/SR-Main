@@ -238,21 +238,13 @@
     configSnapshot: { url?: string; fields?: Array<{ name: string; type: string; label: string; defaultValue?: string }> };
     vncSessionId: string | null;
     wsPort: number | null;
+    vncUrl: string | null;
     resolvedAt: string | null;
     cancelled: boolean;
   };
 
   let interactions = $state<InteractionRow[]>([]);
   let activeInteraction = $state<InteractionRow | null>(null);
-  // NOT $state: the timer handle is an internal implementation detail —
-  // nothing in the template/derived reads it. Making it reactive was the
-  // entire cause of effect_update_depth_exceeded on Run: the polling
-  // $effect reads runMeta/activeRunId/canvas.runStatus, calls
-  // startInteractionPolling → stopInteractionPolling which READS
-  // interactionPollTimer (adding it as an effect dep), then WRITES it.
-  // Svelte re-triggered the effect on every write, which called start/stop
-  // again, which wrote again — ~200 iterations before Svelte gave up.
-  let interactionPollTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Pending (unresolved, not cancelled) interaction rows keyed by nodeId. */
   const pendingInteractions = $derived<Record<string, InteractionRow>>(
@@ -291,25 +283,17 @@
     return () => clearInterval(id);
   });
 
+  // Fetch the full enriched interactions list for a run. Called once when
+  // we subscribe to a run's SSE stream (to hydrate state for runs that
+  // entered awaiting_human before page load) and then on receipt of
+  // interaction_pending / interaction_resolved events from the engine. No
+  // background polling — the event stream drives all updates.
   async function fetchInteractions(runId: string) {
     try {
       const res = await fetch(`/api/workflows/runs/${runId}/interactions`);
       if (res.ok) interactions = await res.json();
     } catch {
       /* non-fatal */
-    }
-  }
-
-  function startInteractionPolling(runId: string) {
-    stopInteractionPolling();
-    fetchInteractions(runId);
-    interactionPollTimer = setInterval(() => fetchInteractions(runId), 3000);
-  }
-
-  function stopInteractionPolling() {
-    if (interactionPollTimer) {
-      clearInterval(interactionPollTimer);
-      interactionPollTimer = null;
     }
   }
 
@@ -986,6 +970,10 @@
     }
     const es = new EventSource(`/api/workflows/${canvas.workflowId}/runs/${runId}/stream`);
     activeEventSource = es;
+    // One-shot hydrate in case the run is already awaiting_human (or has
+    // open interactions) before we subscribed — pending events for those
+    // fired before this EventSource opened.
+    fetchInteractions(runId);
     es.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data) as {
@@ -1101,6 +1089,13 @@
         error: evt.error ?? (evt.data?.error as string) ?? null,
       });
       scheduleLiveFlush();
+    } else if (evt.type === 'interaction_pending' || evt.type === 'interaction_resolved') {
+      // Engine emits these when createInteraction inserts a row or the
+      // resolve endpoint marks one done. Refresh the full enriched list
+      // (the GET endpoint joins live VNC session info — wsPort/vncUrl —
+      // that isn't trivially serialisable into the SSE payload).
+      const rid = activeRunId ?? canvas.latestRunId;
+      if (rid) fetchInteractions(rid);
     } else if (evt.type === 'log' && evt.data) {
       const kind = evt.data.kind as string | undefined;
       const chatNodeId = (evt.data.chatNodeId as string | undefined) ?? null;
@@ -2509,18 +2504,6 @@
       check(`messagesFor(${cid})`, data.canvas.messagesByChat[cid], (m) => m.id);
       check(`liveToolSteps[${cid}]`, liveToolSteps[cid], (s) => s.toolCallId);
     }
-  });
-
-  // Poll for interactions whenever a run is awaiting_human or actively running
-  $effect(() => {
-    const rid = activeRunId ?? canvas.latestRunId;
-    const status = runMeta.state !== 'idle' ? runMeta.state : (canvas.runStatus ?? '');
-    if (rid && (status === 'running' || canvas.runStatus === 'awaiting_human')) {
-      startInteractionPolling(rid);
-    } else {
-      stopInteractionPolling();
-    }
-    return () => stopInteractionPolling();
   });
 
   // Hydrate pending explorations — mark running so ResearchResultNode opens
@@ -4103,7 +4086,7 @@
                       <span class="chip chip-pill chip-failed">FAILED</span>
                     {:else if menuNode.status === 'running'}
                       <span class="chip chip-pill chip-accent chip-live">RUNNING</span>
-                    {:else if menuNode.status === 'ok' || menuNode.status === 'completed'}
+                    {:else if menuNode.status === 'ok'}
                       <span class="chip chip-pill chip-ok">OK</span>
                     {:else}
                       <span class="chip chip-pill">NEVER RUN</span>
@@ -4122,7 +4105,7 @@
                     </div>
                   {:else if !menuNode.error}
                     <div class="nm-field nm-field-read">
-                      <pre class="ghost">// no output produced by the last run{menuNode.status === 'ok' || menuNode.status === 'completed' ? ' (node completed without returning a payload)' : ''}</pre>
+                      <pre class="ghost">// no output produced by the last run{menuNode.status === 'ok' ? ' (node completed without returning a payload)' : ''}</pre>
                     </div>
                   {/if}
                 </section>
@@ -4498,7 +4481,7 @@
                 {@const _upstreamFields = computeUpstreamFields(
                   menuNode.id,
                   (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
-                  (canvas.edges ?? []) as Array<{ sourceNodeId: string; targetNodeId: string }>,
+                  (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
                 )}
                 <div class="menu-config-section">
                   <Panel
@@ -4670,7 +4653,6 @@
     interaction={activeInteraction}
     onComplete={() => {
       activeInteraction = null;
-      stopInteractionPolling();
       interactions = [];
       invalidateAll();
     }}

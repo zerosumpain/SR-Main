@@ -2,7 +2,7 @@
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import ResourcePicker from './shared/ResourcePicker.svelte';
-  import { fetchGmailAccountOptions } from './shared/gmailAccounts';
+  import GmailAccountPicker from './widgets/GmailAccountPicker.svelte';
   import ChipInputField from './widgets/ChipInputField.svelte';
 
   let {
@@ -38,24 +38,11 @@
     return [];
   }
 
-  // ---------- Account picker --------------------------------------------
-  // ResourcePicker works with string values; we round-trip via String/Number
-  // because the executor expects accountId as a number. Templated values
-  // (e.g. `{{input.accountId}}`) round-trip as strings.
-
+  // Numeric accountId is referenced below for label-list fetching (re-mount
+  // on change via `{#key accountId}`) and for the disabled-state of the
+  // add/remove pickers when no account is selected. The string<->number
+  // round-trip itself is encapsulated in <GmailAccountPicker/>.
   const accountId = $derived(Number(config.accountId ?? 0));
-  const accountValue = $derived(
-    typeof config.accountId === 'string' && config.accountId.includes('{{')
-      ? config.accountId
-      : accountId ? String(accountId) : '',
-  );
-
-  function setAccount(next: string) {
-    if (!next) { set('accountId', 0); return; }
-    if (next.includes('{{')) { set('accountId', next); return; }
-    const n = Number(next);
-    set('accountId', Number.isFinite(n) ? n : 0);
-  }
 
   // ---------- Action enum (add / remove / both) -------------------------
   // The executor accepts both `add` and `remove` arrays in a single call,
@@ -141,25 +128,11 @@
 </script>
 
 <div class="gl">
-  <!-- Account picker -->
-  <section class="gl-sec">
-    <header class="gl-sec-hdr">
-      <span class="sr-label-tight">Gmail account</span>
-      {#if !accountId}<span class="gl-warn">⚠ pick an account</span>{/if}
-    </header>
-    <ResourcePicker
-      label="Account"
-      value={accountValue}
-      fetcher={fetchGmailAccountOptions}
-      onChange={setAccount}
-      placeholder="pick an account"
-      emptyHint="No connected accounts — connect one at /admin/gmail."
-    />
-    <span class="gl-hint">
-      Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
-    </span>
-  </section>
+  <GmailAccountPicker
+    value={config.accountId as number | string | null | undefined}
+    onChange={(next) => set('accountId', next)}
+    title="Gmail account"
+  />
 
   <!-- Message id (the thing being labelled). The executor uses this
        single field; threadId isn't a separate config key in the executor,

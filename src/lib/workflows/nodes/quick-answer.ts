@@ -2,12 +2,7 @@ import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from 
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { quickAnswers } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { startQuickAnswer } from '$lib/quickanswer/worker';
-
-async function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+import { runQuickAnswerSync, requestStop } from '$lib/quickanswer/worker';
 
 export const quickAnswerExecutor: NodeExecutor = {
   type: 'quick-answer',
@@ -28,8 +23,6 @@ export const quickAnswerExecutor: NodeExecutor = {
       ? (goalsRaw as unknown[]).map((g) => interpolateTemplate(String(g), input))
       : [];
 
-    const pollIntervalMs =
-      typeof config.pollIntervalMs === 'number' ? (config.pollIntervalMs as number) : 1500;
     const maxWaitMs =
       typeof config.maxWaitMs === 'number' ? (config.maxWaitMs as number) : 180_000;
 
@@ -39,22 +32,15 @@ export const quickAnswerExecutor: NodeExecutor = {
       .returning({ id: quickAnswers.id });
     const id = inserted.id;
 
-    // Fire-and-forget worker.
-    startQuickAnswer(id).catch((err) => {
-      console.error('[quick-answer] worker failed:', err);
-    });
-
-    const deadline = Date.now() + maxWaitMs;
-    let last: typeof quickAnswers.$inferSelect | null = null;
-    while (Date.now() < deadline) {
-      const [row] = await db.select().from(quickAnswers).where(eq(quickAnswers.id, id)).limit(1);
-      if (row) last = row;
-      if (row && (row.status === 'complete' || row.status === 'failed')) break;
-      await sleep(pollIntervalMs);
-    }
-
-    if (!last) {
-      return { output: { ...input, success: false, error: 'No row after insert', researchSessionId: id }, rowCount: 1 };
+    // Run in-process and await directly. A wall-clock deadline still applies:
+    // if it elapses, signal the worker to stop and fall back to whatever the
+    // DB row currently holds.
+    const deadlineTimer = setTimeout(() => requestStop(id), maxWaitMs);
+    let last: typeof quickAnswers.$inferSelect;
+    try {
+      last = await runQuickAnswerSync(id);
+    } finally {
+      clearTimeout(deadlineTimer);
     }
 
     return {
@@ -93,12 +79,11 @@ export const quickAnswerDef: NodeDefinition = {
     properties: {
       topic: { type: 'string' },
       goals: { type: 'array', items: { type: 'string' } },
-      pollIntervalMs: { type: 'number' },
       maxWaitMs: { type: 'number' },
     },
     required: ['topic'],
   },
-  defaultConfig: { topic: '{{item.title}}', goals: [], pollIntervalMs: 1500, maxWaitMs: 180000 },
+  defaultConfig: { topic: '{{item.title}}', goals: [], maxWaitMs: 180000 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Answer' }],
   basicConfig: [

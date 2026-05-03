@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import ResourcePicker from './shared/ResourcePicker.svelte';
+  import ModelSelect from './widgets/ModelSelect.svelte';
+  import TemperatureField from './widgets/TemperatureField.svelte';
+  import MaxTokensField from './widgets/MaxTokensField.svelte';
 
   let {
     config,
@@ -62,15 +64,6 @@
     const n = typeof raw === 'number' ? raw : Number(raw);
     if (Number.isFinite(n) && n >= 1) return Math.floor(n);
     return 1024;
-  });
-
-  // Single-word descriptor that follows the temperature slider live.
-  // Same thresholds as LlmCallPanel for cross-panel consistency.
-  const tempDescriptor = $derived.by(() => {
-    if (temperature <= 0.3) return 'Focused';
-    if (temperature <= 1.0) return 'Balanced';
-    if (temperature < 1.5) return 'Adventurous';
-    return 'Creative';
   });
 
   const operationHint = $derived(
@@ -137,65 +130,25 @@
       </label>
     </section>
 
-    <!-- Model -->
-    <section class="or-sec">
-      <div class="or-field">
-        <span class="or-label">Model</span>
-        <ResourcePicker
-          value={model}
-          fetcher={fetchOpenRouterModels}
-          onChange={(v) => set('model', v)}
-          placeholder="pick an OpenRouter model"
-          allowCustom={true}
-          emptyHint="No OpenRouter models cached — refresh from /admin/models or type a slashed ID."
-        />
-        <span class="or-hint">
-          Loaded live from the OpenRouter catalogue. Leave blank to use the admin-configured alt model.
-          All IDs are slashed <code>provider/model</code> values.
-        </span>
-      </div>
-    </section>
+    <ModelSelect
+      value={model}
+      onChange={(v) => set('model', v)}
+      fetcher={fetchOpenRouterModels}
+      placeholder="pick an OpenRouter model"
+      emptyHint="No OpenRouter models cached — refresh from /admin/models or type a slashed ID."
+      hint="Loaded live from the OpenRouter catalogue. Leave blank to use the admin-configured alt model. All IDs are slashed <code>provider/model</code> values."
+    />
 
-    <!-- Temperature -->
-    <section class="or-sec">
-      <div class="or-field">
-        <div class="or-temp-hdr">
-          <span class="or-label">Temperature</span>
-          <span class="or-temp-readout">
-            <span class="or-temp-value">{temperature.toFixed(1)}</span>
-            <span class="or-temp-word">{tempDescriptor}</span>
-          </span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="2"
-          step="0.1"
-          value={temperature}
-          oninput={(e) => set('temperature', Number((e.currentTarget as HTMLInputElement).value))}
-          class="or-range"
-        />
-        <span class="or-hint">0 = focused / deterministic · 0.7 = balanced (default) · 1.5+ = creative.</span>
-      </div>
-    </section>
+    <TemperatureField
+      value={temperature}
+      onChange={(v) => set('temperature', v)}
+    />
 
-    <!-- Max tokens -->
-    <section class="or-sec">
-      <label class="or-field or-field-narrow">
-        <span class="or-label">Max Tokens</span>
-        <input
-          type="number"
-          min="1"
-          step="1"
-          value={maxTokens}
-          oninput={(e) => {
-            const v = Math.max(1, Math.floor(Number((e.currentTarget as HTMLInputElement).value) || 1));
-            set('maxTokens', v);
-          }}
-        />
-        <span class="or-hint">Maximum length of the AI response (roughly 4 characters per token). Default 1024.</span>
-      </label>
-    </section>
+    <MaxTokensField
+      value={maxTokens}
+      onChange={(v) => set('maxTokens', v)}
+      hint="Maximum length of the AI response (roughly 4 characters per token). Default 1024."
+    />
   {:else}
     <section class="or-sec or-info">
       <span class="or-hint">
