@@ -60,6 +60,10 @@ orchestrator.recoverOnStartup().catch((err) => {
   console.error('[jkai] Failed to recover build on startup:', err);
 });
 
+// Subscribe build orchestrator to workflow_completed events for push-back delivery
+import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';
+registerDeliveryListener();
+
 // Allowed email addresses
 function getAllowedEmails(): string[] {
   const emails = env.AUTH_ALLOWED_EMAILS || '';

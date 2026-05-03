@@ -12,6 +12,8 @@ import { emitLog } from './log-emitter';
 import type { ActionRecord, FailureEnvelope } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { runPi } from './pi-runner';
+import { consumePendingDeliveries } from './workflow-deliveries';
+import { buildAttachedWorkflowGrounding, buildDeliveriesBlock } from './workflow-grounding';
 
 // --- Section extraction (used by orchestrator for completion detection) ---
 
@@ -104,7 +106,17 @@ export async function executeIteration(
     iterationNumber,
     assignedPort,
   );
-  const userPrompt = contextMessages.map((m) => m.content).join('\n\n');
+
+  const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
+  const attachedGrounding = attachedIds.length > 0 ? await buildAttachedWorkflowGrounding(attachedIds) : '';
+  if (attachedGrounding) systemPrompt = `${systemPrompt}\n\n${attachedGrounding}`;
+
+  const deliveries = await consumePendingDeliveries(build.id, 10).catch(() => []);
+  const deliveriesBlock = buildDeliveriesBlock(deliveries);
+
+  const userPrompt = [deliveriesBlock, contextMessages.map((m) => m.content).join('\n\n')]
+    .filter((s) => s.length > 0)
+    .join('\n\n');
 
   await emitLog(
     build.id,

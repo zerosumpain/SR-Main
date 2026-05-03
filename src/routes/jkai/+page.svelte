@@ -15,6 +15,7 @@
   let activeMessages = $state<any[]>([]);
   let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
   let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
+  let activeBuild = $state<{ id: string; status: string } | null>(null);
   let sidebarOpen = $state(false);
 
   const INTEL_CONTEXT_STORAGE_KEY = 'jkai.useIntelContext';
@@ -83,11 +84,13 @@
         activeMessages = data.messages || [];
         activeConversation = data.conversation || null;
         activeModelCaps = data.modelCapabilities || null;
+        activeBuild = data.activeBuild || null;
       }
     } catch {
       activeMessages = [];
       activeConversation = null;
       activeModelCaps = null;
+      activeBuild = null;
     }
   }
 
@@ -247,6 +250,7 @@
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
         {useIntelContext}
+        {activeBuild}
         onmodelchange={(ctx: ModelContext) => {
           if (activeConversation) {
             activeConversation = {

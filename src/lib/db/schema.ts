@@ -12,6 +12,7 @@ import {
   jsonb,
   numeric,
   customType,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -562,10 +563,39 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),
   thinkingLevel: text('thinking_level').notNull().default('medium'),
   enabledToolsets: jsonb('enabled_toolsets').$type<string[]>().notNull().default(sql`'["all"]'::jsonb`),
+  conversationId: text('conversation_id'),
+  attachedWorkflowIds: jsonb('attached_workflow_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
 });
 
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
 export type NewJkaiBuild = typeof jkaiBuilds.$inferInsert;
+
+export const buildWorkflowSubscriptions = pgTable(
+  'build_workflow_subscriptions',
+  {
+    buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+    workflowId: text('workflow_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.buildId, t.workflowId] }),
+  }),
+);
+
+export type BuildWorkflowSubscription = typeof buildWorkflowSubscriptions.$inferSelect;
+
+export const pendingWorkflowDeliveries = pgTable('pending_workflow_deliveries', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  workflowId: text('workflow_id').notNull(),
+  runId: text('run_id').notNull(),
+  output: jsonb('output'),
+  source: text('source').notNull().default('subscription'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+});
+
+export type PendingWorkflowDelivery = typeof pendingWorkflowDeliveries.$inferSelect;
 
 export const jkaiIterations = pgTable('jkai_iterations', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),

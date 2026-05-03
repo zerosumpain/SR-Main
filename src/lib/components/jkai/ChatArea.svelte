@@ -14,6 +14,7 @@
   import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
+  import BuildPill from './BuildPill.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
@@ -29,6 +30,7 @@
     onmodelchange,
     modelCapabilities = null,
     useIntelContext = true,
+    activeBuild = null,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -46,7 +48,18 @@
     onmodelchange?: (ctx: ModelContext) => void;
     modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     useIntelContext?: boolean;
+    activeBuild?: { id: string; status: string } | null;
   } = $props();
+
+  function buildIdFromMessage(m: Message): string | null {
+    if (!m.toolSteps) return null;
+    for (const step of m.toolSteps) {
+      if (step.tool !== 'build_create' || step.status !== 'done') continue;
+      const r = step.result as { data?: { id?: string }; success?: boolean } | undefined;
+      if (r?.success && typeof r.data?.id === 'string') return r.data.id;
+    }
+    return null;
+  }
 
   interface ToolStep {
     id?: string;
@@ -1106,6 +1119,9 @@
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />
               {/if}
+              {#if buildIdFromMessage(msg)}
+                <BuildPill buildId={buildIdFromMessage(msg)!} variant="inline" />
+              {/if}
             </div>
           {/if}
         {/each}
@@ -1130,6 +1146,11 @@
         </div>
       {/if}
       <div class="max-w-3xl mx-auto">
+        {#if activeBuild?.id}
+          <div class="mb-2">
+            <BuildPill buildId={activeBuild.id} variant="sticky" />
+          </div>
+        {/if}
         <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
         <div class="flex gap-2 items-end">
           <button

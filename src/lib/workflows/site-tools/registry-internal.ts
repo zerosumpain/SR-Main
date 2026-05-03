@@ -12,6 +12,7 @@ export type ToolResult = { success: boolean; data?: unknown; error?: string };
 export interface ToolExecContext {
   emit: (text: string) => void;
   jobId?: string;
+  conversationId?: string;
 }
 
 export interface ToolDefinition {

@@ -776,9 +776,10 @@ register({
 register({
   name: 'workflow_run',
   description:
-    'Trigger a workflow run on behalf of the user. Creates a manual run, fires the engine, and returns the runId immediately. ' +
-    'Pair with workflow_get_run after a brief wait to inspect what happened. ' +
-    'Use for test runs and "run + repair" loops — do not use for production triggers (those have schedules / webhooks already).',
+    'Trigger a workflow run on behalf of the user. Creates a manual run, fires the engine, and returns the runId. ' +
+    'When `awaitMs` is set (max 600000 = 10 min), the call BLOCKS until the run completes/fails or the timeout elapses, ' +
+    'and returns the full run + node executions inline. When unset, returns immediately and the run continues in the background — ' +
+    'pair with workflow_get_run to inspect later, or call workflow_subscribe to receive results in a future iteration.',
   parameters: {
     type: 'object',
     properties: {
@@ -791,6 +792,10 @@ register({
         type: 'boolean',
         description: 'If true (default), the engine attempts to auto-heal node config errors. Set false for strict test runs.',
       },
+      awaitMs: {
+        type: 'number',
+        description: 'Max milliseconds to wait for completion (max 600000). When set, the call returns the full run result.',
+      },
     },
     required: ['id'],
   },
@@ -800,6 +805,7 @@ register({
     const id = args.id as string;
     const initialInput = (args.input as Record<string, unknown>) ?? {};
     const selfHealing = args.selfHealing !== false;
+    const awaitMs = typeof args.awaitMs === 'number' ? Math.min(Math.max(args.awaitMs, 0), 600_000) : 0;
 
     const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
     if (!workflow) return { success: false, error: 'Workflow not found' };
@@ -856,6 +862,50 @@ register({
       label: 'orchestrator-run',
     });
 
+    if (awaitMs > 0) {
+      const deadline = Date.now() + awaitMs;
+      const pollInterval = 1500;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        const [latest] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, run.id)).limit(1);
+        if (!latest) break;
+        if (latest.status === 'completed' || latest.status === 'completed_with_errors' || latest.status === 'failed' || latest.status === 'cancelled') {
+          const execs = await db
+            .select()
+            .from(nodeExecutions)
+            .where(eq(nodeExecutions.runId, run.id))
+            .orderBy(asc(nodeExecutions.startedAt));
+          return {
+            success: true,
+            data: {
+              runId: run.id,
+              status: latest.status,
+              awaited: true,
+              error: latest.error,
+              completedAt: latest.completedAt,
+              nodeExecutions: execs.map((e) => ({
+                nodeId: e.nodeId,
+                status: e.status,
+                inputData: e.inputData,
+                outputData: e.outputData,
+                error: e.error,
+              })),
+            },
+          };
+        }
+      }
+      return {
+        success: true,
+        data: {
+          runId: run.id,
+          status: 'running',
+          awaited: true,
+          timedOut: true,
+          message: `Run did not complete within ${awaitMs}ms. Subscribe via workflow_subscribe to receive the result in a future iteration, or poll with workflow_get_run.`,
+        },
+      };
+    }
+
     return {
       success: true,
       data: {
@@ -864,6 +914,62 @@ register({
         message: 'Run started in background. Wait a few seconds, then call workflow_get_run with this runId to see results.',
       },
     };
+  },
+});
+
+register({
+  name: 'workflow_subscribe',
+  description:
+    'Subscribe a JKAI build to a workflow. When the workflow next runs to completion (via schedule, manual trigger, event, or another tool call), ' +
+    'the result is queued as a pending delivery and surfaced at the top of the build\'s next iteration prompt. ' +
+    'Use this when the builder needs an asynchronous data source it can react to without blocking the current iteration.',
+  parameters: {
+    type: 'object',
+    properties: {
+      buildId: { type: 'string', description: 'Build ID to receive deliveries' },
+      workflowId: { type: 'string', description: 'Workflow whose run completions should be delivered' },
+    },
+    required: ['buildId', 'workflowId'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const buildId = args.buildId as string;
+    const workflowId = args.workflowId as string;
+    const { jkaiBuilds, buildWorkflowSubscriptions } = await import('$lib/db/schema');
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId)).limit(1);
+    if (!build) return { success: false, error: 'Build not found' };
+    const [wf] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
+    if (!wf) return { success: false, error: 'Workflow not found' };
+    await db
+      .insert(buildWorkflowSubscriptions)
+      .values({ buildId, workflowId })
+      .onConflictDoNothing();
+    return { success: true, data: { buildId, workflowId, message: 'Subscribed. Future completed runs of this workflow will deliver to the build.' } };
+  },
+});
+
+register({
+  name: 'workflow_unsubscribe',
+  description: 'Remove a workflow subscription from a build.',
+  parameters: {
+    type: 'object',
+    properties: {
+      buildId: { type: 'string' },
+      workflowId: { type: 'string' },
+    },
+    required: ['buildId', 'workflowId'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const buildId = args.buildId as string;
+    const workflowId = args.workflowId as string;
+    const { buildWorkflowSubscriptions } = await import('$lib/db/schema');
+    await db
+      .delete(buildWorkflowSubscriptions)
+      .where(and(eq(buildWorkflowSubscriptions.buildId, buildId), eq(buildWorkflowSubscriptions.workflowId, workflowId)));
+    return { success: true, data: { buildId, workflowId, message: 'Unsubscribed.' } };
   },
 });
 

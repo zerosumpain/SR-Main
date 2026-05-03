@@ -346,6 +346,7 @@ async function runSingleToolCall(
     const toolCtx = jobId
       ? {
           jobId,
+          conversationId: conversationId ?? undefined,
           emit: (text: string) => {
             const trimmed = text.trim().slice(0, 200);
             if (!trimmed) return;
@@ -353,7 +354,7 @@ async function runSingleToolCall(
             onStreamEvent?.({ type: 'status', text: trimmed });
           },
         }
-      : undefined;
+      : (conversationId ? { conversationId, emit: () => {} } : undefined);
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
     if (jobId && isDestructive(fnName)) {
       const prompt = describeDestructiveAction(fnName, fnArgs);

@@ -22,6 +22,7 @@ import { runTests } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { FailureEnvelope } from './types';
+import { emitStage } from './stage-events';
 
 export { onBuildLog } from './log-emitter';
 
@@ -97,10 +98,12 @@ class Orchestrator {
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build started');
+    await emitStage(buildId, { stage: 'planning' });
 
     // Run setup and planning asynchronously so the API returns immediately
     this.initAndPlan(buildId).catch(async (err) => {
       await emitLog(buildId, 'error', `Build init failed: ${err.message}`);
+      await emitStage(buildId, { stage: 'failed', failureKind: 'init_error', message: err.message });
     });
   }
 
@@ -119,6 +122,7 @@ class Orchestrator {
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build paused');
+    await emitStage(buildId, { stage: 'paused' });
   }
 
   /**
@@ -165,6 +169,7 @@ class Orchestrator {
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build resumed');
+    await emitStage(buildId, { stage: 'iterating' });
     this.scheduleNext(buildId);
   }
 
@@ -183,6 +188,7 @@ class Orchestrator {
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build stopped by user');
+    await emitStage(buildId, { stage: 'completed', message: 'Stopped by user' });
   }
 
   async continueBuild(
@@ -328,10 +334,12 @@ class Orchestrator {
         'system',
         'Plan ready — awaiting approval before iterations begin.',
       );
+      await emitStage(buildId, { stage: 'awaiting_plan_approval' });
       this.activeBuildId = null;
       return;
     }
 
+    await emitStage(buildId, { stage: 'iterating', iteration: 1 });
     this.scheduleNext(buildId);
   }
 
@@ -369,6 +377,7 @@ class Orchestrator {
       })
       .where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', `Plan approved — starting iterations (${milestones.length} milestones).`);
+    await emitStage(buildId, { stage: 'iterating', iteration: 1, totalEstimate: milestones.length });
     this.activeBuildId = buildId;
     this.stopped = false;
     this.scheduleNext(buildId);
@@ -390,6 +399,7 @@ class Orchestrator {
       })
       .where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', 'Plan skipped — proceeding without milestone tracking.');
+    await emitStage(buildId, { stage: 'iterating', iteration: 1 });
     this.activeBuildId = buildId;
     this.stopped = false;
     this.scheduleNext(buildId);
@@ -554,6 +564,11 @@ class Orchestrator {
         .returning();
 
       await emitLog(buildId, 'system', `━━━ Iteration #${iterationNumber} started ━━━`, iteration.id);
+      await emitStage(buildId, {
+        stage: 'iterating',
+        iteration: iterationNumber,
+        totalEstimate: (build.milestones as Array<{ done: boolean }> | undefined)?.length,
+      }, iteration.id);
 
       // Fetch the project plan (iteration #0) if it exists
       const [planIteration] = await db
@@ -759,6 +774,7 @@ class Orchestrator {
 
       // Run test suite
       await emitLog(buildId, 'system', 'Running tests...', iteration.id);
+      await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
       const testResult = await runTests(buildId, `/home/jkai/workspace/${buildId}/dev`);
       const testEmoji = testResult.passed ? 'PASS' : 'FAIL';
       const testSummary = `${testEmoji} Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? ` (${testResult.failCount} failed)` : ''}`;
@@ -809,6 +825,10 @@ class Orchestrator {
             .update(jkaiBuilds)
             .set({ status: 'completed', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
+          const previewUrl = (build.serveConfig as { port?: number } | null)?.port
+            ? `http://homeserv:${(build.serveConfig as { port: number }).port}`
+            : null;
+          await emitStage(buildId, { stage: 'completed', previewUrl });
           this.activeBuildId = null;
           return;
         }
@@ -828,6 +848,7 @@ class Orchestrator {
           `Iteration #${iterationNumber} complete — awaiting approval before iter #${iterationNumber + 1}.`,
           iteration.id,
         );
+        await emitStage(buildId, { stage: 'awaiting_iter_approval', iteration: iterationNumber }, iteration.id);
         this.activeBuildId = null;
         return;
       }
@@ -854,6 +875,7 @@ class Orchestrator {
       'error',
       `Build aborted: ${failure.kind} — ${failure.message}`,
     );
+    await emitStage(buildId, { stage: 'failed', failureKind: failure.kind, message: failure.message });
 
     this.activeBuildId = null;
     if (this.loopTimer) clearTimeout(this.loopTimer);
@@ -913,6 +935,7 @@ class Orchestrator {
 
     // Always promote dev to live after a successful iteration
     await emitLog(buildId, 'system', 'Promoting dev → live');
+    await emitStage(buildId, { stage: 'promoting' });
     await promoteDevToLive(buildId);
 
     if (configChanged) {
@@ -931,6 +954,7 @@ class Orchestrator {
           .set({ serveConfig: config, updatedAt: new Date() })
           .where(eq(jkaiBuilds.id, buildId));
         await emitLog(buildId, 'system', `Project server healthy at port ${config.port}`);
+        await emitStage(buildId, { stage: 'iterating', previewUrl: `http://homeserv:${config.port}` });
       } else {
         await emitLog(buildId, 'error', `Project server failed health check on port ${config.port}`);
       }
@@ -945,6 +969,7 @@ class Orchestrator {
       );
       if (healthy) {
         await emitLog(buildId, 'system', `Project server restarted from live`);
+        await emitStage(buildId, { stage: 'iterating', previewUrl: `http://homeserv:${config.port}` });
       }
     }
   }

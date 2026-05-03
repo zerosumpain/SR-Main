@@ -24,6 +24,8 @@ export const POST: RequestHandler = async ({ request }) => {
     planFirst,
     thinkingLevel,
     enabledToolsets,
+    conversationId,
+    attachedWorkflowIds,
   } = body;
   if (!prompt || typeof prompt !== 'string') {
     return json({ error: 'prompt is required' }, { status: 400 });
@@ -78,6 +80,12 @@ export const POST: RequestHandler = async ({ request }) => {
   }
   if (Array.isArray(enabledToolsets) && enabledToolsets.every((s) => typeof s === 'string') && enabledToolsets.length > 0) {
     insert.enabledToolsets = enabledToolsets;
+  }
+  if (typeof conversationId === 'string' && conversationId.length > 0) {
+    insert.conversationId = conversationId;
+  }
+  if (Array.isArray(attachedWorkflowIds) && attachedWorkflowIds.every((s) => typeof s === 'string')) {
+    insert.attachedWorkflowIds = attachedWorkflowIds;
   }
 
   const [build] = await db.insert(jkaiBuilds).values(insert as any).returning();

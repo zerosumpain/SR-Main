@@ -9,28 +9,42 @@ import { desc, eq, and, asc } from 'drizzle-orm';
 
 register({
   name: 'build_create',
-  description: 'Start a new JKAI autonomous build. Provide a prompt describing what to build.',
+  description:
+    'Start a new JKAI autonomous build. Provide a prompt describing what to build. ' +
+    'Optionally attach primary workflows the build should foreground in its planning context.',
   parameters: {
     type: 'object',
     properties: {
       prompt: { type: 'string', description: 'What to build (e.g. "a countdown timer app")' },
       title: { type: 'string', description: 'Build title (auto-generated if omitted)' },
+      attachedWorkflowIds: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Workflow IDs to attach as the build\'s primary workflow set (gets prominent grounding in the builder system prompt).',
+      },
     },
     required: ['prompt'],
   },
   category: 'JKAI Builder',
   toolset: 'builds',
-  handler: async (args) => {
+  handler: async (args, toolCtx) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
     const ctx = await resolveDefaultModel('builder');
-    const [build] = await db.insert(jkaiBuilds).values({
+    const attachedRaw = args.attachedWorkflowIds;
+    const attachedWorkflowIds = Array.isArray(attachedRaw) && attachedRaw.every((s) => typeof s === 'string')
+      ? (attachedRaw as string[])
+      : [];
+    const insertValues: Record<string, unknown> = {
       title: (args.title as string) || null,
       prompt: args.prompt as string,
       budgetConfig: {},
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
-    }).returning();
+    };
+    if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
+    if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
+    const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
     await orchestrator.startBuild(build.id);
     return { success: true, data: build };
   },

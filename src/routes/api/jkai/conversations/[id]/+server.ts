@@ -1,8 +1,8 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, openrouterModels, jkaiAttachments } from '$lib/db/schema';
-import { eq, asc, sql, inArray } from 'drizzle-orm';
+import { conversations, orchestratorChats, openrouterModels, jkaiAttachments, jkaiBuilds } from '$lib/db/schema';
+import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -58,10 +58,28 @@ export const GET: RequestHandler = async ({ params }) => {
 		modelId: conv.modelId,
 	});
 
+	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
+	const [activeBuild] = await db
+		.select({
+			id: jkaiBuilds.id,
+			title: jkaiBuilds.title,
+			status: jkaiBuilds.status,
+			createdAt: jkaiBuilds.createdAt,
+			serveConfig: jkaiBuilds.serveConfig,
+		})
+		.from(jkaiBuilds)
+		.where(and(
+			eq(jkaiBuilds.conversationId, params.id),
+			notInArray(jkaiBuilds.status, TERMINAL_BUILD_STATUSES as unknown as string[]),
+		))
+		.orderBy(desc(jkaiBuilds.createdAt))
+		.limit(1);
+
 	return json({
 		conversation: conv,
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
+		activeBuild: activeBuild ?? null,
 	});
 };
 
