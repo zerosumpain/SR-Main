@@ -12,6 +12,12 @@ import type { WorkflowGraph } from './graph';
 import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events';
 import { diagnoseAndFix } from './orchestrator/healing';
 import type { HealingContext, UndoEntry, NodeDefinition } from './types';
+import {
+  acquireRunSlot,
+  nodeTimeoutMs,
+  startHeartbeat,
+  withNodeTimeout,
+} from './engine-runtime';
 
 /** Thrown internally by the engine when a node returns a pause sentinel. */
 export class PauseForHumanSignal {
@@ -125,6 +131,14 @@ export class WorkflowEngine {
     const abortController = new AbortController();
     const healingHistory: UndoEntry[] = [];
 
+    // Concurrency cap: queue if MAX_CONCURRENT_RUNS already in-flight. Cheap
+    // when under cap, prevents starvation when bursts of webhook + scheduled
+    // + manual triggers land in the same minute.
+    const releaseSlot = await acquireRunSlot(runId);
+    // Heartbeat: writes workflow_runs.heartbeat_at every 10s so the reaper
+    // can distinguish a wedged run from a legitimately long-running one.
+    const stopHeartbeat = startHeartbeat(runId);
+
     // Merge breakpoints from setBreakpoints() with those passed directly
     const storedBreakpoints = this.activeBreakpoints.get(runId);
     const effectiveBreakpoints: Set<string> | undefined =
@@ -229,6 +243,13 @@ export class WorkflowEngine {
           const onErrorRetries = Math.max(0, Math.min(10, Number(onErrorCfg.retries ?? 0)));
           const onErrorDelayMs = Math.max(0, Number(onErrorCfg.retryDelayMs ?? 0));
 
+          // Per-node hard timeout: a hung node aborts and surfaces as a
+          // node-level failure rather than wedging the run forever. Optional
+          // per-instance override via config._timeoutMs (canvas advanced
+          // config), otherwise per-type default from engine-runtime.
+          const timeoutMs = nodeTimeoutMs(nodeDef.type, nodeDef.config?._timeoutMs);
+          console.log(`[engine] node.start run=${runId} node=${nodeId} type=${nodeDef.type} timeout=${Math.round(timeoutMs / 1000)}s`);
+
           try {
             // Retry wrapper: re-attempt up to `onErrorRetries` times before
             // letting the caught path run. Pause signals propagate immediately
@@ -238,7 +259,9 @@ export class WorkflowEngine {
             const maxAttempts = onErrorMode === 'retry' ? onErrorRetries + 1 : 1;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               try {
-                result = await executor.execute(mergedInput, nodeDef.config, context);
+                result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, abortController, () =>
+                  executor.execute(mergedInput, nodeDef.config, context),
+                );
                 attemptErr = null;
                 break;
               } catch (err) {
@@ -260,7 +283,9 @@ export class WorkflowEngine {
 
             const rowCount = typeof r.rowCount === 'number' ? r.rowCount : 1;
             nodeOutputs.set(nodeId, r.output);
-            emit('node_completed', nodeId, { ...r.output, _rowCount: rowCount, _durationMs: Date.now() - nodeStartedAt });
+            const _durationMs = Date.now() - nodeStartedAt;
+            console.log(`[engine] node.end run=${runId} node=${nodeId} type=${nodeDef.type} rows=${rowCount} duration=${_durationMs}ms`);
+            emit('node_completed', nodeId, { ...r.output, _rowCount: rowCount, _durationMs });
 
             // Handle conditional routing: if _selectedHandle is set, skip non-matching branches.
             // Edges with no sourceHandle (null/undefined) accept any selectedHandle — this keeps
@@ -282,6 +307,7 @@ export class WorkflowEngine {
             if (err instanceof PauseForHumanSignal) throw err;
 
             const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[engine] node.fail run=${runId} node=${nodeId} type=${nodeDef.type} duration=${Date.now() - nodeStartedAt}ms err=${message.slice(0, 200)}`);
 
             // User-configured failure handling takes precedence over self-
             // healing. mode='continue' swallows the error and moves on with
@@ -446,7 +472,10 @@ export class WorkflowEngine {
                 const retryStartedAt = Date.now();
                 emit('node_started', nodeId);
                 try {
-                  const retryResult: NodeResult = await executor.execute(mergedInput, currentConfig, context);
+                  const retryResult: NodeResult = await withNodeTimeout(
+                    nodeId, nodeDef.type, timeoutMs, abortController,
+                    () => executor.execute(mergedInput, currentConfig, context),
+                  );
                   const retryRowCount = typeof retryResult.rowCount === 'number' ? retryResult.rowCount : 1;
                   nodeOutputs.set(nodeId, retryResult.output);
                   emit('healing_succeeded', nodeId, { attempt });
@@ -514,6 +543,8 @@ export class WorkflowEngine {
       }
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
+      stopHeartbeat();
+      releaseSlot();
       return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, healingHistory };
     } catch (err: unknown) {
       // Human-in-the-loop pause: the run halts cleanly (no failure).
@@ -521,6 +552,8 @@ export class WorkflowEngine {
         emit('node_paused', err.nodeId, { interactionId: err.interactionId });
         cleanupRunEmitter(runId);
         this.activeBreakpoints.delete(runId);
+        stopHeartbeat();
+        releaseSlot();
         return {
           status: 'awaiting_human',
           nodeOutputs,
@@ -535,6 +568,8 @@ export class WorkflowEngine {
       emit('run_failed', undefined, { error: message });
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
+      stopHeartbeat();
+      releaseSlot();
       return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message, healingHistory };
     }
   }

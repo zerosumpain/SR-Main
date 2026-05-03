@@ -80,6 +80,7 @@ import { syncPrompts } from './prompts/loader';
 import { loadCustomTools } from './site-tools/custom-tool-loader';
 import { startMemoryReview } from './chat/memory-review';
 import { startScheduler } from './scheduler';
+import { startReaper, initEventLoopMonitor } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -293,6 +294,12 @@ startScheduler().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : 'Unknown error';
   console.error('[scheduler] Boot failed:', msg);
 });
+
+// Boot stale-run reaper (clears orphaned `running` rows from previous process
+// + sweeps every 5 min) and start the event-loop delay histogram so the
+// /api/health/workflow-engine probe can report blockage.
+startReaper();
+initEventLoopMonitor();
 
 export const engine = new WorkflowEngine(registry);
 

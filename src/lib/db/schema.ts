@@ -669,6 +669,11 @@ export const workflowRuns = pgTable('workflow_runs', {
   error: text('error'),
   healingHistory: jsonb('healing_history').default(sql`'[]'::jsonb`),
   pausedAtNodeId: text('paused_at_node_id'),
+  /** Liveness ping written by the engine every ~10s while the run is active.
+   *  The boot + periodic reaper marks runs whose heartbeat is &gt;5min stale as
+   *  failed/abandoned so a crash or deploy mid-run doesn't leave orphaned
+   *  `running` rows that block subsequent dispatch. */
+  heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
 });
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;

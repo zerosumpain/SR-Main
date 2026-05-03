@@ -48,6 +48,33 @@ export const stealthScrapeExecutor: NodeExecutor = {
   type: 'stealth-scrape',
 
   async execute(input, config, context): Promise<NodeResult> {
+    // Outer homeserv guard. Stealth scraping (in any of its four code paths
+    // below — script, playbook, auto-map, bare-scrape) MUST run from a
+    // residential IP. Forward the entire node call to homeserv when we're
+    // not on homeserv. The remote /api/scraper/node endpoint runs the
+    // executor there with a buffered emit, returns NodeResult + events, and
+    // we re-emit those events on this side so the canvas/chat see progress.
+    if (!process.env.SCRAPER_ALLOW_NON_HOMESERV && os.hostname() !== 'homeserv') {
+      const proxied = await proxyStealthScrapeToHomeserv(input, config, context);
+      if (proxied) return proxied;
+      // Falls through only when SCRAPER_SERVICE_URL is unset — in which case
+      // we DO NOT want to run locally on the VPS. Surface the misconfig.
+      const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId ?? '';
+      const message =
+        `stealth-scrape refuses to run on host '${os.hostname()}': not homeserv ` +
+        `and SCRAPER_SERVICE_URL is unset. Configure the proxy or run on homeserv.`;
+      context.emit({
+        type: 'log', runId: context.runId, nodeId,
+        data: { kind: 'scraper.host_guard_blocked', message },
+        timestamp: new Date().toISOString(),
+      } as any);
+      return {
+        output: { success: false, pages: [], pageCount: 0, error: message },
+        metadata: { _selectedHandle: 'output' },
+        rowCount: 1,
+      };
+    }
+
     const url = interpolateTemplateStrict((config.url as string) || '', input).result;
     const profile = (config.profile as string) || 'default';
     const waitFor = config.waitFor as ScrapeJob['waitFor'];
@@ -416,6 +443,75 @@ async function waitForInteractionResolution(
   throw new Error(
     `interaction ${interactionId} not resolved within ${Math.round(maxWaitMs / 1000)}s — human solve timed out`,
   );
+}
+
+/**
+ * Forward a whole stealth-scrape node call to homeserv. The remote endpoint
+ * runs `stealthScrapeExecutor.execute` with a buffered emit, returns the
+ * NodeResult + buffered events. We re-emit on the local bus so the
+ * VPS-hosted run still gets progress events. Returns `null` when
+ * SCRAPER_SERVICE_URL isn't set — caller surfaces the misconfig.
+ */
+async function proxyStealthScrapeToHomeserv(
+  input: Record<string, unknown>,
+  config: Record<string, unknown>,
+  context: { runId: string; workflowId: string; workspaceDir: string; dryRun: boolean; emit: (e: any) => void },
+): Promise<NodeResult | null> {
+  const baseRaw = process.env.SCRAPER_SERVICE_URL;
+  if (!baseRaw) return null;
+  const base = baseRaw.replace(/\/api\/scraper\/run\/?$/, '');
+  const proxyUrl = `${base}/api/scraper/node`;
+  const token = process.env.SCRAPER_SERVICE_TOKEN;
+  const nodeId = (context as unknown as { _currentNodeId?: string })._currentNodeId ?? '';
+
+  try {
+    const res = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        input, config,
+        runId: context.runId,
+        nodeId,
+        workflowId: context.workflowId,
+        workspaceDir: context.workspaceDir,
+        dryRun: context.dryRun,
+      }),
+      // Site-mapper can take 5-10 min on first-run sites, plus retry budget.
+      signal: AbortSignal.timeout(20 * 60 * 1000),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      const message = `stealth-scrape proxy ${proxyUrl} returned HTTP ${res.status}: ${text.slice(0, 400)}`;
+      context.emit({
+        type: 'log', runId: context.runId, nodeId,
+        data: { kind: 'scraper.proxy_error', message },
+        timestamp: new Date().toISOString(),
+      });
+      return {
+        output: { success: false, pages: [], pageCount: 0, error: message },
+        metadata: { _selectedHandle: 'output' },
+        rowCount: 1,
+      };
+    }
+    const body = (await res.json()) as { result: NodeResult; events: any[] };
+    for (const ev of body.events ?? []) context.emit(ev);
+    return body.result;
+  } catch (e) {
+    const message = `stealth-scrape proxy fetch failed: ${e instanceof Error ? e.message : String(e)}`;
+    context.emit({
+      type: 'log', runId: context.runId, nodeId,
+      data: { kind: 'scraper.proxy_error', message },
+      timestamp: new Date().toISOString(),
+    });
+    return {
+      output: { success: false, pages: [], pageCount: 0, error: message },
+      metadata: { _selectedHandle: 'output' },
+      rowCount: 1,
+    };
+  }
 }
 
 interface ScriptDispatchInput {

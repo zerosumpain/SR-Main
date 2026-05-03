@@ -86,6 +86,35 @@ echo "==> Updating systemd service (if needed)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo sed -i 's|ExecStart=.*index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/build/index.js|' /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload"
 
+echo "==> Installing workflow-engine watchdog timer..."
+# External watchdog: every 60s, curl /api/health/workflow-engine. If it's down
+# or the event loop has been blocked >5s the route returns 503 — restart the
+# main service. SvelteKit's node adapter doesn't speak sd_notify so we can't
+# use systemd's built-in WatchdogSec; this is the equivalent.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo tee /etc/systemd/system/${SERVICE}-watchdog.service > /dev/null" <<'EOF'
+[Unit]
+Description=Strange Ramblings workflow-engine watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'set -euo pipefail; code=$(curl -fsS -o /dev/null -w "%%{http_code}" --max-time 10 http://127.0.0.1:4173/api/health/workflow-engine || echo 000); if [ "$code" != "200" ]; then logger -t sr-watchdog "workflow-engine probe returned $code — restarting strange-rambling-svelte"; systemctl restart strange-rambling-svelte; fi'
+EOF
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo tee /etc/systemd/system/${SERVICE}-watchdog.timer > /dev/null" <<'EOF'
+[Unit]
+Description=Strange Ramblings workflow-engine watchdog timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+Unit=strange-rambling-svelte-watchdog.service
+
+[Install]
+WantedBy=timers.target
+EOF
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "sudo systemctl daemon-reload && sudo systemctl enable --now ${SERVICE}-watchdog.timer"
+
 echo "==> Ensuring image upload directory exists..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/strange-rambling/static/images/blog && sudo chmod 755 /opt/strange-rambling/static/images/blog && sudo chown $VPS_USER:$VPS_USER /opt/strange-rambling/static/images/blog"
 
@@ -93,6 +122,20 @@ echo "==> Ensuring workflow file-store directory exists..."
 # Default WORKFLOW_FILES_ROOT resolves to ~/.openclaw/workflow-files for the
 # service user. Pre-create it so the first upload doesn't fail with ENOENT.
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p ~/.openclaw/workflow-files && chmod 700 ~/.openclaw/workflow-files"
+
+echo "==> Draining in-flight runs (running -> paused) before restart..."
+# Avoid orphan-pending: if we restart while a run is mid-flight, the new
+# process inherits a row stuck in 'running' that the engine politely waits
+# on forever. Pausing them lets the reaper / resume-on-boot pick them up
+# cleanly. Best-effort — failure is logged but does not block the deploy.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (psql / .env not available)"
+set -e
+cd /opt/strange-rambling-svelte
+if [ -f .env ]; then set -a; . ./.env; set +a; fi
+if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null 2>&1; then
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE workflow_runs SET status='paused' WHERE status='running';" || true
+fi
+REMOTE
 
 echo "==> Restarting service..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
