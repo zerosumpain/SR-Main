@@ -42,12 +42,15 @@ rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/workflows/scraper/python/ \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/workflows/scraper/python/"
 
-# NOTE: the VPS is deliberately NOT running jkai-sandbox. Stealth scraping
-# requires a residential IP and must execute on homeserv. The VPS proxies
-# scrape requests to homeserv via SCRAPER_SERVICE_URL — see
-# `src/lib/workflows/scraper/runner.ts` and the `/api/scraper/run` endpoint.
-# If you see a jkai-sandbox container on the VPS, remove it:
-#   ssh johnk@VPS 'docker rm -f jkai-sandbox; docker image rm jkai-sandbox:latest'
+# NOTE: jkai-sandbox IS expected on the VPS — it's used by the jkai builder
+# (/jkai/builds), the `code-execute` workflow node, the `builds` site-tool,
+# and /api/agent/sandbox/exec. Do NOT remove it.
+#
+# What MUST NOT run on the VPS is stealth scraping (residential-IP requirement).
+# That's enforced by the outer host guard at the top of stealthScrapeExecutor
+# in `src/lib/workflows/nodes/stealth-scrape.ts`, which proxies the entire
+# node call to homeserv via /api/scraper/node. The legacy bare-scrape and
+# script-scrape paths additionally proxy via SCRAPER_SERVICE_URL.
 
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
