@@ -26,22 +26,23 @@
 
   // When the SvelteKit page-data store updates (after invalidateAll() refresh),
   // sync the local $state copies so derived values pick up the new plan/iters.
-  // We only react to identity changes — typing in the plan editor is local
-  // state, not page-data, so this won't clobber it.
   //
-  // The writes here are wrapped in untrack() so reassigning `build` (which
-  // would otherwise recreate the $state proxy and re-trigger the effect on
-  // its own writes) does NOT count as a tracked read. Without this guard
-  // Svelte 5 hits effect_update_depth_exceeded when something downstream
-  // reads `build` and the runtime decides the proxy churn warrants a
-  // retrack — recursive `#c` calls in the call stack until the limit hits.
+  // Track ONLY data.build / data.iterations — the props that signal a
+  // page-data refresh. All reads + writes of local `build`/`iterations`
+  // happen inside untrack so this effect doesn't subscribe to its own
+  // outputs. Earlier version still read build.id in the if-condition,
+  // which trapped Svelte 5 in a proxy-churn loop and tripped
+  // effect_update_depth_exceeded when downstream consumers (BuildSessionPanel)
+  // also read `build`.
   $effect(() => {
-    if (data.build && data.build.id === build.id) {
-      untrack(() => {
-        build = { ...build, ...data.build };
-        if (Array.isArray(data.iterations)) iterations = data.iterations;
-      });
-    }
+    const sourceBuild = data.build;
+    const sourceIters = data.iterations;
+    untrack(() => {
+      if (sourceBuild && sourceBuild.id === build.id) {
+        build = { ...build, ...sourceBuild };
+        if (Array.isArray(sourceIters)) iterations = sourceIters;
+      }
+    });
   });
   let mode = $state<'watch' | 'tinker' | 'drive'>('watch');
   let publishing = $state(false);
