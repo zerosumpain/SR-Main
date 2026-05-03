@@ -72,6 +72,15 @@ export const builderClient = {
   editPlan: (buildId: string, plan: string) => rpc<void>('editPlan', [buildId, plan]),
   approveIteration: (buildId: string) => rpc<void>('approveIteration', [buildId]),
   rejectIteration: (buildId: string, notes: string) => rpc<void>('rejectIteration', [buildId, notes]),
+
+  // Phase 5/6/7 session actions.
+  sessionInject: (buildId: string, content: string) => rpc<void>('sessionInject', [buildId, content]),
+  sessionInjectRemove: (buildId: string, id: number) => rpc<void>('sessionInjectRemove', [buildId, id]),
+  sessionInterrupt: (buildId: string) => rpc<{ ok: boolean }>('sessionInterrupt', [buildId]),
+  sessionAddNote: (buildId: string, content: string) => rpc<void>('sessionAddNote', [buildId, content]),
+  sessionRemoveNote: (buildId: string, id: number) => rpc<void>('sessionRemoveNote', [buildId, id]),
+  sessionShell: (buildId: string, command: string) => rpc<void>('sessionShell', [buildId, command]),
+  sessionSnapshot: (buildId: string) => rpc<{ queue: unknown[]; notes: unknown[] }>('sessionSnapshot', [buildId]),
 };
 
 export const BUILDER_SOCKET_PATH = SOCKET_PATH;

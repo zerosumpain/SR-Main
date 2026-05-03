@@ -56,12 +56,24 @@ export interface LiveEvent {
     | 'stream_tool_delta'
     | 'stream_tool_end'
     | 'stream_turn_end'
-    | 'plan_proposed';
+    | 'plan_proposed'
+    // Phase 5/6/7 session events — flow through the same SSE stream so
+    // BuildSessionPanel can render them without a separate WebSocket.
+    // Cloudflare's HTTP/2 layer doesn't proxy WS upgrades; SSE works fine.
+    | 'session_pending'   // queue snapshot after add/remove
+    | 'session_notes'     // notes snapshot after add/remove
+    | 'session_shell_start'
+    | 'session_shell_chunk'
+    | 'session_shell_end'
+    | 'session_interrupted';
   iterationId: string | null;
   streamId: string; // stable within one streaming segment
   delta?: string;   // incremental content for text / thinking / tool-delta
   full?: string;    // full snapshot at end of segment (plan body for plan_proposed)
   toolName?: string; // tool_start / tool_end
+  // Session-event payloads — typed as `unknown` since each variant carries
+  // different data; the panel narrows on `event.type`.
+  payload?: unknown;
 }
 
 export function onBuildLive(

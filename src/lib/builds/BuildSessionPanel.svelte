@@ -2,16 +2,19 @@
   /**
    * Phases 5/6/7 — bidirectional session panel rendered inside BuildDetailV2.
    *
-   * Connects to /api/jkai/builds/<id>/session via WebSocket. The custom
-   * server entry (scripts/server-with-ws.mjs) upgrades + proxies to the
-   * jkai-builder unix socket, where packages/jkai-builder/src/ws.ts handles
-   * the bidirectional protocol.
+   * Outbound state (queue, notes, shell output) arrives via the existing
+   * SSE stream at /api/jkai/builds/<id>/stream — the builder emits
+   * session_* live events that flow through the same channel as token deltas.
    *
-   * User input prefix routing in the prompt:
-   *   plain text  → {kind:'inject', content}     queue user message
-   *   # text      → {kind:'note_add', content}   pin a directive
-   *   $ command   → {kind:'shell', command}      run in workdir
-   *   Ctrl+C      → {kind:'interrupt'}           SIGTERM the active pi child
+   * Inbound (user typing) goes via POST /api/jkai/builds/<id>/session.
+   * SSE+POST works through Cloudflare; raw WebSocket upgrades don't (HTTP/2
+   * downgrades the upgrade header before it reaches our origin).
+   *
+   * Prefix routing in the input:
+   *   plain text  → inject (queue user message for next turn)
+   *   # text      → pin a note (re-injected every iteration)
+   *   $ command   → run in workdir
+   *   Ctrl+C      → interrupt the active pi child
    */
   import { onMount, onDestroy } from 'svelte';
 
@@ -21,7 +24,6 @@
   type NoteItem = { id: number; content: string; createdAt: string };
   type ShellChunk = { stream: 'stdout' | 'stderr'; text: string };
 
-  let ws = $state<WebSocket | null>(null);
   let connected = $state(false);
   let queue = $state<PendingItem[]>([]);
   let notes = $state<NoteItem[]>([]);
@@ -29,40 +31,71 @@
   let input = $state('');
   let busy = $state(false);
   let lastError = $state<string | null>(null);
+  let es: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function connect(): void {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/api/jkai/builds/${buildId}/session`;
-    const socket = new WebSocket(url);
-    socket.onopen = () => { connected = true; lastError = null; };
-    socket.onclose = () => {
-      connected = false;
-      // Auto-reconnect after 3s — covers transient web-app restarts.
-      setTimeout(() => { if (!connected) connect(); }, 3000);
-    };
-    socket.onerror = () => { lastError = 'session error'; };
-    socket.onmessage = (e) => {
-      let msg: { kind?: string; [k: string]: unknown };
-      try { msg = JSON.parse(e.data); } catch { return; }
-      if (msg.kind === 'pending') queue = (msg.queue as PendingItem[]) ?? [];
-      else if (msg.kind === 'notes') notes = (msg.notes as NoteItem[]) ?? [];
-      else if (msg.kind === 'shell_start') shellLine = { command: String(msg.command ?? ''), chunks: [], exitCode: null };
-      else if (msg.kind === 'shell_chunk' && shellLine) {
-        shellLine = { ...shellLine, chunks: [...shellLine.chunks, { stream: msg.stream as 'stdout' | 'stderr', text: String(msg.text ?? '') }] };
-      } else if (msg.kind === 'shell_end' && shellLine) {
-        shellLine = { ...shellLine, exitCode: Number(msg.exitCode ?? 0) };
-      } else if (msg.kind === 'interrupted') {
-        lastError = msg.ok ? null : 'no active iteration to interrupt';
-      } else if (msg.kind === 'error') {
-        lastError = String(msg.message ?? 'session error');
-      }
-    };
-    ws = socket;
+  async function fetchSnapshot(): Promise<void> {
+    try {
+      const r = await fetch(`/api/jkai/builds/${buildId}/session`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'snapshot' }),
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      queue = (data.queue ?? []) as PendingItem[];
+      notes = (data.notes ?? []) as NoteItem[];
+    } catch { /* silent — SSE will bring updates anyway */ }
   }
 
-  function send(payload: unknown): void {
-    if (!ws || ws.readyState !== WebSocket.OPEN) { lastError = 'not connected'; return; }
-    ws.send(JSON.stringify(payload));
+  function connect(): void {
+    if (es) try { es.close(); } catch { /* swallow */ }
+    es = new EventSource(`/api/jkai/builds/${buildId}/stream`);
+    es.onopen = () => { connected = true; lastError = null; };
+    es.onerror = () => {
+      connected = false;
+      // EventSource auto-reconnects; nothing else to do.
+    };
+    es.onmessage = (e) => {
+      let payload: { type?: string; [k: string]: unknown };
+      try { payload = JSON.parse(e.data); } catch { return; }
+      // Negative event IDs carry live (non-persisted) deltas — that's where
+      // session_* events arrive. Persisted events (positive IDs) are
+      // log/text/etc that the rest of the build UI already renders.
+      const id = parseInt(e.lastEventId || '0', 10);
+      if (id >= 0) return; // not a live event, skip
+      const t = payload.type;
+      const p = payload.payload as { queue?: PendingItem[]; notes?: NoteItem[]; ok?: boolean; command?: string; stream?: 'stdout' | 'stderr'; text?: string; exitCode?: number } | undefined;
+      if (t === 'session_pending' && p?.queue) queue = p.queue;
+      else if (t === 'session_notes' && p?.notes) notes = p.notes;
+      else if (t === 'session_shell_start' && p?.command) {
+        shellLine = { command: p.command, chunks: [], exitCode: null };
+      } else if (t === 'session_shell_chunk' && shellLine && p?.text) {
+        shellLine = { ...shellLine, chunks: [...shellLine.chunks, { stream: p.stream ?? 'stdout', text: p.text }] };
+      } else if (t === 'session_shell_end' && shellLine) {
+        shellLine = { ...shellLine, exitCode: p?.exitCode ?? 0 };
+      } else if (t === 'session_interrupted') {
+        if (p && !p.ok) lastError = 'no active iteration to interrupt';
+      }
+    };
+  }
+
+  async function post(payload: Record<string, unknown>): Promise<void> {
+    try {
+      const r = await fetch(`/api/jkai/builds/${buildId}/session`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        lastError = String(err?.error ?? `HTTP ${r.status}`);
+      } else {
+        lastError = null;
+      }
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   async function submit(): Promise<void> {
@@ -70,18 +103,18 @@
     if (!raw || busy) return;
     busy = true;
     try {
-      if (raw.startsWith('# ')) send({ kind: 'note_add', content: raw.slice(2).trim() });
-      else if (raw.startsWith('$ ')) send({ kind: 'shell', command: raw.slice(2).trim() });
-      else send({ kind: 'inject', content: raw });
+      if (raw.startsWith('# ')) await post({ kind: 'note_add', content: raw.slice(2).trim() });
+      else if (raw.startsWith('$ ')) await post({ kind: 'shell', command: raw.slice(2).trim() });
+      else await post({ kind: 'inject', content: raw });
       input = '';
     } finally {
       busy = false;
     }
   }
 
-  function interrupt(): void { send({ kind: 'interrupt' }); }
-  function removeNote(id: number): void { send({ kind: 'note_remove', id }); }
-  function removeQueued(id: number): void { send({ kind: 'inject_remove', id }); }
+  function interrupt(): void { void post({ kind: 'interrupt' }); }
+  function removeNote(id: number): void { void post({ kind: 'note_remove', id }); }
+  function removeQueued(id: number): void { void post({ kind: 'inject_remove', id }); }
 
   function onKey(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
@@ -95,14 +128,21 @@
     }
   }
 
-  onMount(connect);
-  onDestroy(() => { try { ws?.close(); } catch { /* swallow */ } });
+  onMount(() => {
+    connect();
+    void fetchSnapshot();
+  });
+
+  onDestroy(() => {
+    try { es?.close(); } catch { /* swallow */ }
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+  });
 </script>
 
 <section class="bsp">
   <header class="bsp-hdr">
     <span class="bsp-title">Session</span>
-    <span class="bsp-status" class:connected>{connected ? '● connected' : '○ connecting…'}</span>
+    <span class="bsp-status" class:connected>{connected ? '● live' : '○ connecting…'}</span>
     {#if lastError}<span class="bsp-err">{lastError}</span>{/if}
   </header>
 
@@ -124,7 +164,7 @@
         <li class="bsp-row">
           <span class="bsp-tag bsp-tag-queue">queued</span>
           <span class="bsp-content">{q.content}</span>
-          <button class="bsp-x" type="button" onclick={() => removeQueued(q.id)} title="Cancel injected message">×</button>
+          <button class="bsp-x" type="button" onclick={() => removeQueued(q.id)} title="Cancel queued message">×</button>
         </li>
       {/each}
     </ul>
@@ -149,11 +189,11 @@
       placeholder="Type to inject; prefix `# ` to pin a note; `$ ` to run a shell command; Ctrl+C to interrupt"
       rows="2"
       onkeydown={onKey}
-      disabled={!connected || busy}
+      disabled={busy}
     ></textarea>
     <div class="bsp-input-actions">
-      <button class="bsp-send" type="button" onclick={submit} disabled={!connected || busy || !input.trim()}>Send</button>
-      <button class="bsp-int" type="button" onclick={interrupt} disabled={!connected} title="Ctrl+C">Interrupt</button>
+      <button class="bsp-send" type="button" onclick={submit} disabled={busy || !input.trim()}>Send</button>
+      <button class="bsp-int" type="button" onclick={interrupt} title="Ctrl+C">Interrupt</button>
     </div>
   </div>
 </section>
