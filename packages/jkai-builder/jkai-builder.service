@@ -1,16 +1,25 @@
 [Unit]
 Description=JKAI builder sidecar — owns the build orchestrator loop, decoupled from the SvelteKit web app so deploys don't kill in-flight builds. See docs/plans/jkai-build-rewrite.md.
-After=docker.service
-Wants=docker.service
+After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/john/strange_rambling_svelte
-EnvironmentFile=/home/john/strange_rambling_svelte/.env
+User=johnk
+Group=johnk
+WorkingDirectory=/opt/strange-rambling-svelte
+EnvironmentFile=/opt/strange-rambling-svelte/.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node /home/john/strange_rambling_svelte/packages/jkai-builder/dist/start.js
+Environment=JKAI_BUILDER_SOCKET=/run/jkai-builder/jkai-builder.sock
+Environment=JKAI_BUILDS_ROOT=/opt/jkai-builds
+RuntimeDirectory=jkai-builder
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/node /opt/strange-rambling-svelte/packages/jkai-builder/dist/start.js
 Restart=always
 RestartSec=5
 
+# Resource caps — a runaway agent shouldn't eat the whole VPS.
+MemoryMax=4G
+CPUQuota=200%
+
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

@@ -7,9 +7,14 @@
  */
 import { startServer } from '../src/server';
 
+// Socket path resolution, in order:
+//   1. JKAI_BUILDER_SOCKET (explicit override — set by the systemd unit)
+//   2. $XDG_RUNTIME_DIR/jkai-builder.sock (interactive shell + user services)
+//   3. /run/jkai-builder/jkai-builder.sock (system service via RuntimeDirectory)
+const xdg = process.env.XDG_RUNTIME_DIR;
 const sock =
   process.env.JKAI_BUILDER_SOCKET ??
-  `${process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 1000}`}/jkai-builder.sock`;
+  (xdg ? `${xdg}/jkai-builder.sock` : '/run/jkai-builder/jkai-builder.sock');
 
 startServer(sock).catch((err) => {
   console.error('[jkai-builder] failed to start:', err);

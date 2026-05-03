@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Deploy the jkai-builder sidecar on homeserv. Independent from deploy.sh
-# (which only restarts strange-rambling-svelte). Phase 1: simple build +
-# restart. Phase 8 will add checkpoint-on-SIGTERM with resume on boot.
+# Deploy the jkai-builder sidecar on the VPS. Independent from deploy.sh
+# (which restarts strange-rambling-svelte). Builds run on the VPS;
+# the builder owns the orchestrator loop separately so deploys of the
+# SvelteKit app don't kill in-flight builds.
 set -euo pipefail
+
+VPS_HOST="157.180.19.38"
+VPS_USER="johnk"
+VPS_KEY="$HOME/.ssh/id_ed25519"
+VPS_DIR="/opt/strange-rambling-svelte"
+BUILDS_ROOT="/opt/jkai-builds"
+SERVICE="jkai-builder"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -10,32 +18,27 @@ cd "$ROOT"
 echo "==> Building jkai-builder bundle..."
 npm run build:builder
 
-echo "==> Installing systemd unit..."
-mkdir -p "$HOME/.config/systemd/user"
-# Unit lives in source; make sure the runtime symlink is in place.
-if [ ! -e "$HOME/.config/systemd/user/jkai-builder.service" ] && [ -e "$ROOT/packages/jkai-builder/jkai-builder.service" ]; then
-  cp "$ROOT/packages/jkai-builder/jkai-builder.service" "$HOME/.config/systemd/user/"
-fi
+echo "==> Syncing bundle + unit + sources to VPS..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/packages/jkai-builder/{bin,src,dist}"
+rsync -avz --delete \
+  -e "ssh -i $VPS_KEY" \
+  packages/jkai-builder/dist/ \
+  "$VPS_USER@$VPS_HOST:$VPS_DIR/packages/jkai-builder/dist/"
+rsync -avz \
+  -e "ssh -i $VPS_KEY" \
+  packages/jkai-builder/jkai-builder.service \
+  "$VPS_USER@$VPS_HOST:$VPS_DIR/packages/jkai-builder/"
 
-systemctl --user daemon-reload
-systemctl --user enable --now jkai-builder.service
-
-echo "==> Restarting jkai-builder..."
-systemctl --user restart jkai-builder.service
+echo "==> Ensuring builds root + installing systemd unit..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo install -d -m 755 -o $VPS_USER -g $VPS_USER $BUILDS_ROOT && sudo cp $VPS_DIR/packages/jkai-builder/jkai-builder.service /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload && sudo systemctl enable $SERVICE.service && sudo systemctl restart $SERVICE.service"
 
 echo "==> Verifying..."
 sleep 3
-SOCK="/run/user/$(id -u)/jkai-builder.sock"
-if [ ! -S "$SOCK" ]; then
-  echo "==> ERROR: socket $SOCK not present after restart"
-  systemctl --user status jkai-builder.service --no-pager | head -20
-  exit 1
-fi
-RESP=$(curl -fsS --unix-socket "$SOCK" --max-time 5 http://x/health || echo "FAILED")
+RESP=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo curl -fsS --unix-socket /run/jkai-builder/jkai-builder.sock --max-time 5 http://x/health" || echo "FAILED")
 if echo "$RESP" | grep -q '"ok":true'; then
   echo "==> jkai-builder healthy: $RESP"
 else
-  echo "==> ERROR: health probe failed: $RESP"
-  systemctl --user status jkai-builder.service --no-pager | head -20
+  echo "==> ERROR: health probe failed"
+  ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo systemctl status $SERVICE.service --no-pager | head -25; sudo journalctl -u $SERVICE.service --no-pager -n 30"
   exit 1
 fi
