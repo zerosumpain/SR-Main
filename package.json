@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"build:builder": "esbuild packages/jkai-builder/bin/start.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/jkai-builder/dist/start.js --packages=external",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

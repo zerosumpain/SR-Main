@@ -37,6 +37,9 @@ data/whatsapp-auth/
 services/webframe/node_modules
 services/webframe/dist
 
+# jkai-builder bundle — produced by `npm run build:builder` from packages/jkai-builder/{bin,src}/
+packages/jkai-builder/dist/
+
 # Scraper scripts — homeserv-local runtime state (LLM-authored per-domain
 # scrape scripts + metadata). Never synced to the VPS; see script-store.ts.
 scraper-scripts/

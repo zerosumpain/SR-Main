@@ -1,0 +1,16 @@
+[Unit]
+Description=JKAI builder sidecar — owns the build orchestrator loop, decoupled from the SvelteKit web app so deploys don't kill in-flight builds. See docs/plans/jkai-build-rewrite.md.
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/john/strange_rambling_svelte
+EnvironmentFile=/home/john/strange_rambling_svelte/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /home/john/strange_rambling_svelte/packages/jkai-builder/dist/start.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
