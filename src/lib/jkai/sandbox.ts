@@ -261,10 +261,19 @@ export async function syncJkaiExtension(buildId: string): Promise<string> {
   const { join } = await import('node:path');
   const dest = `/home/jkai/workspace/${buildId}/extensions/jkai-tools`;
   await execInSandbox(`mkdir -p ${dest}`);
-  const src = await readFile(
+  // Try the source path first (dev), then the production build artifact
+  // path that vite-build emits to. SvelteKit copies static/* into
+  // build/client/*, so on the deployed VPS only build/client/jkai-extensions
+  // exists.
+  const candidates = [
     join(process.cwd(), 'static/jkai-extensions/jkai-tools.js'),
-    'utf-8',
-  );
+    join(process.cwd(), 'build/client/jkai-extensions/jkai-tools.js'),
+  ];
+  let src = '';
+  for (const c of candidates) {
+    try { src = await readFile(c, 'utf-8'); break; } catch { /* try next */ }
+  }
+  if (!src) throw new Error(`jkai-tools.js not found in any of: ${candidates.join(', ')}`);
   await writeFileInSandbox(`${dest}/index.js`, src);
   return `${dest}/index.js`;
 }

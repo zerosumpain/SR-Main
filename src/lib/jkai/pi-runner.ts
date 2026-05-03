@@ -11,6 +11,7 @@ import { loadKeys } from '$lib/deepdive/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
 const CONTAINER_NAME = 'jkai-sandbox';
+const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
 // --- Pi JSON event shape (based on pi 0.68 actual output) ---
 //
@@ -176,25 +177,56 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   piParts.push('-p', sh(userPrompt));
   const piCmd = piParts.join(' ');
 
-  const dockerArgs = [
-    'exec',
-    '-i',
-    '-w', workdir,
-    '-e', `${envVar}=${apiKey}`,
-    '-e', 'PI_OFFLINE=1',
-    '-e', 'PI_TELEMETRY=0',
-  ];
-  for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
-    if (typeof v === 'string') {
-      dockerArgs.push('-e', `${k}=${v}`);
+  // Host-mode: run pi directly on the host shell with cwd=workdir. No
+  // docker. The pi binary must be installed on the host (npm install -g
+  // @mariozechner/pi-coding-agent). When deploying, deploy.sh ensures this.
+  //
+  // Container-mode (legacy): docker exec -i -w workdir jkai-sandbox bash -c '<piCmd>'.
+  // Workdir lives inside the container's jkai-workspace volume. Pi binary
+  // lives at /usr/bin/pi inside the container image.
+  let spawnCmd: string;
+  let spawnArgs: string[];
+  let spawnOpts: Parameters<typeof spawn>[2];
+  if (HOST_MODE) {
+    spawnCmd = 'bash';
+    spawnArgs = ['-c', piCmd];
+    spawnOpts = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: workdir,
+      env: {
+        ...process.env,
+        [envVar]: apiKey,
+        PI_OFFLINE: '1',
+        PI_TELEMETRY: '0',
+        ...Object.fromEntries(
+          Object.entries(opts.extraEnv ?? {}).filter(([, v]) => typeof v === 'string') as [string, string][],
+        ),
+      },
+    };
+  } else {
+    const dockerArgs = [
+      'exec',
+      '-i',
+      '-w', workdir,
+      '-e', `${envVar}=${apiKey}`,
+      '-e', 'PI_OFFLINE=1',
+      '-e', 'PI_TELEMETRY=0',
+    ];
+    for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
+      if (typeof v === 'string') {
+        dockerArgs.push('-e', `${k}=${v}`);
+      }
     }
+    dockerArgs.push(CONTAINER_NAME, 'bash', '-c', piCmd);
+    spawnCmd = 'docker';
+    spawnArgs = dockerArgs;
+    spawnOpts = { stdio: ['ignore', 'pipe', 'pipe'] };
   }
-  dockerArgs.push(CONTAINER_NAME, 'bash', '-c', piCmd);
 
   await emitLog(
     build.id,
     'system',
-    `Launching pi agent (${provider}/${modelId})`,
+    `Launching pi agent (${provider}/${modelId})${HOST_MODE ? ' on host' : ' in sandbox'}`,
     iteration.id,
   );
 
@@ -209,7 +241,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // toolCallId → {name, args} captured from the most recent assistant message
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
-  const child = spawn('docker', dockerArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(spawnCmd, spawnArgs, spawnOpts);
   // `docker exec -i` keeps the container's stdin attached to our pipe; if that
   // pipe never closes, pi with `--mode json -p` waits indefinitely for EOF
   // before emitting its first event. Using `stdio: 'ignore'` for stdin closes
