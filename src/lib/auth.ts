@@ -25,6 +25,7 @@ const PUBLIC_PATHS = [
   // workflow engine reaching homeserv over Tailscale, not a human.
   '/api/scraper/run',
   '/api/scraper/interactive',
+  '/api/scraper/node',
 ];
 
 export function isPublicPath(pathname: string): boolean {
