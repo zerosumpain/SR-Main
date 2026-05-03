@@ -11,6 +11,20 @@ const IMAGE_NAME = 'jkai-sandbox:latest';
 
 const SCRAPER_PROFILES_HOST = join(os.homedir(), '.openclaw', 'scraper-profiles');
 
+/**
+ * Host-mode dispatch: when JKAI_BUILDS_HOSTMODE=1, this module runs all
+ * `execInSandbox` / `writeFileInSandbox` calls directly on the host shell
+ * instead of through `docker exec jkai-sandbox …`. Used on the VPS where
+ * builds run as user johnk, no container, with the same workspace path
+ * (`/home/jkai/workspace/<id>/` — created on the host with the right
+ * ownership by deploy-builder.sh / deploy.sh).
+ *
+ * Scraper code paths (homeserv) leave HOST_MODE off so they keep talking
+ * to the jkai-sandbox container, where Chromium + Playwright + the
+ * residential-IP scraping environment lives.
+ */
+const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
+
 export interface SandboxStatus {
   running: boolean;
   containerId?: string;
@@ -27,6 +41,16 @@ export interface ExecResult {
 // --- Container Management ---
 
 export async function getSandboxStatus(): Promise<SandboxStatus> {
+  if (HOST_MODE) {
+    // No container — synthetic status so existing UI surfaces still render
+    // something sensible. Uptime is the parent process uptime as a proxy.
+    return {
+      running: true,
+      containerId: 'host-mode',
+      image: 'host',
+      uptime: formatUptime(process.uptime() * 1000),
+    };
+  }
   try {
     const { stdout } = await execAsync(
       `docker inspect --format '{{.State.Running}}|{{.Id}}|{{.Config.Image}}|{{.State.StartedAt}}' ${CONTAINER_NAME} 2>/dev/null`,
@@ -44,6 +68,9 @@ export async function getSandboxStatus(): Promise<SandboxStatus> {
 }
 
 export async function ensureSandboxRunning(): Promise<void> {
+  // Host mode: nothing to ensure — workspace is the host filesystem and the
+  // shell is already available. Idempotent.
+  if (HOST_MODE) return;
   // Verify-then-fix: trust nothing, always re-inspect before every launch.
   const status = await getSandboxStatus();
   if (status.running) return;
@@ -88,6 +115,10 @@ export async function buildSandboxImage(): Promise<void> {
 let cachedContainerIp: string | null = null;
 
 export async function getContainerIp(): Promise<string> {
+  // Host mode: the build's preview server runs on the VPS host; reach it via
+  // loopback. The /api/jkai/proxy/<id>/* route uses this to locate the build's
+  // preview server.
+  if (HOST_MODE) return '127.0.0.1';
   if (cachedContainerIp) return cachedContainerIp;
   const { stdout } = await execAsync(
     `docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${CONTAINER_NAME}`,
@@ -106,6 +137,24 @@ export async function execInSandbox(
   command: string,
   timeout = 120000,
 ): Promise<ExecResult> {
+  // Host mode: run directly on the host shell. The base-64 envelope still
+  // applies — agent-supplied commands have arbitrary newlines / quotes.
+  if (HOST_MODE) {
+    try {
+      const b64 = Buffer.from(command).toString('base64');
+      const { stdout, stderr } = await execAsync(
+        `bash -c "echo '${b64}' | base64 -d | bash"`,
+        { timeout, maxBuffer: 5 * 1024 * 1024 },
+      );
+      return { stdout, stderr, exitCode: 0 };
+    } catch (err: any) {
+      return {
+        stdout: err.stdout || '',
+        stderr: err.stderr || err.message,
+        exitCode: err.code || 1,
+      };
+    }
+  }
   try {
     // Base64-encode the command to preserve newlines and special characters
     const b64 = Buffer.from(command).toString('base64');
@@ -158,6 +207,19 @@ export async function writeFileInSandbox(
   content: string,
   timeout = 30000,
 ): Promise<ExecResult> {
+  // Host mode: skip the base-64 shell round-trip and use fs directly. Faster
+  // and handles content of any size without bash arg-list limits.
+  if (HOST_MODE) {
+    try {
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      const { dirname } = await import('node:path');
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, content, 'utf8');
+      return { stdout: `Successfully wrote ${Buffer.byteLength(content)} bytes to ${filePath}`, stderr: '', exitCode: 0 };
+    } catch (err: any) {
+      return { stdout: '', stderr: err.message ?? String(err), exitCode: 1 };
+    }
+  }
   // Use base64 encoding to safely pass any content through bash
   const b64 = Buffer.from(content).toString('base64');
   return execInSandbox(
@@ -534,13 +596,17 @@ export async function publishBuild(buildId: string, slug: string): Promise<strin
         rmSync(destDir, { recursive: true, force: true });
         mkdirSync(destDir, { recursive: true });
         const buildDir = `${liveDir}/${distCheck.stdout.trim()}`;
-        await execAsync(`docker cp ${CONTAINER_NAME}:${buildDir}/. ${destDir}/`, { timeout: 120000 });
+        if (HOST_MODE) {
+          await execAsync(`cp -a ${buildDir}/. ${destDir}/`, { timeout: 120000 });
+        } else {
+          await execAsync(`docker cp ${CONTAINER_NAME}:${buildDir}/. ${destDir}/`, { timeout: 120000 });
+        }
         // Also copy index.html from root if the build dir doesn't have one
         if (!existsSync(`${destDir}/index.html`)) {
-          await execAsync(
-            `docker cp ${CONTAINER_NAME}:${liveDir}/index.html ${destDir}/ 2>/dev/null`,
-            { timeout: 10000 },
-          ).catch(() => {});
+          const cpCmd = HOST_MODE
+            ? `cp ${liveDir}/index.html ${destDir}/ 2>/dev/null`
+            : `docker cp ${CONTAINER_NAME}:${liveDir}/index.html ${destDir}/ 2>/dev/null`;
+          await execAsync(cpCmd, { timeout: 10000 }).catch(() => {});
         }
         await injectBaseHref(destDir, slug);
         await syncToVps(destDir, slug);
@@ -559,7 +625,11 @@ export async function publishBuild(buildId: string, slug: string): Promise<strin
   // Full copy — the project is either static already or we can't easily extract just the frontend
   rmSync(destDir, { recursive: true, force: true });
   mkdirSync(destDir, { recursive: true });
-  await execAsync(`docker cp ${CONTAINER_NAME}:${liveDir}/. ${destDir}/`, { timeout: 120000 });
+  if (HOST_MODE) {
+    await execAsync(`cp -a ${liveDir}/. ${destDir}/`, { timeout: 120000 });
+  } else {
+    await execAsync(`docker cp ${CONTAINER_NAME}:${liveDir}/. ${destDir}/`, { timeout: 120000 });
+  }
 
   // Clean up server-side artifacts that won't work outside the sandbox
   rmSync(`${destDir}/node_modules`, { recursive: true, force: true });

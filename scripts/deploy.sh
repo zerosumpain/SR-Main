@@ -42,15 +42,20 @@ rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/workflows/scraper/python/ \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/workflows/scraper/python/"
 
-# NOTE: jkai-sandbox IS expected on the VPS — it's used by the jkai builder
-# (/jkai/builds), the `code-execute` workflow node, the `builds` site-tool,
-# and /api/agent/sandbox/exec. Do NOT remove it.
+# Builds run on the VPS in HOST MODE — directly on the host filesystem,
+# no jkai-sandbox container. Workspace path: /home/jkai/workspace/<id>/
+# (owned by johnk). The dispatch in src/lib/jkai/sandbox.ts branches on
+# JKAI_BUILDS_HOSTMODE=1 to skip docker exec and use host shell + fs.
 #
-# What MUST NOT run on the VPS is stealth scraping (residential-IP requirement).
-# That's enforced by the outer host guard at the top of stealthScrapeExecutor
-# in `src/lib/workflows/nodes/stealth-scrape.ts`, which proxies the entire
-# node call to homeserv via /api/scraper/node. The legacy bare-scrape and
-# script-scrape paths additionally proxy via SCRAPER_SERVICE_URL.
+# Stealth scraping must NOT run here — residential-IP required. Stealth
+# scrape proxies to homeserv via /api/scraper/node (the homeserv-side
+# strange-rambling-svelte service runs jkai-sandbox for chromium).
+echo "==> Ensuring host-mode build workspace exists (/home/jkai/workspace/)..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "sudo install -d -m 755 -o $VPS_USER -g $VPS_USER /home/jkai /home/jkai/workspace"
+
+echo "==> Ensuring JKAI_BUILDS_HOSTMODE=1 is set in VPS .env..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "grep -q '^JKAI_BUILDS_HOSTMODE=' $VPS_DIR/.env || echo 'JKAI_BUILDS_HOSTMODE=1' >> $VPS_DIR/.env"
 
 echo "==> Installing production deps..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \

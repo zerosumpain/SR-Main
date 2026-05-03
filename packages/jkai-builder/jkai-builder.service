@@ -11,6 +11,7 @@ EnvironmentFile=/opt/strange-rambling-svelte/.env
 Environment=NODE_ENV=production
 Environment=JKAI_BUILDER_SOCKET=/run/jkai-builder/jkai-builder.sock
 Environment=JKAI_BUILDS_ROOT=/opt/jkai-builds
+Environment=JKAI_BUILDS_HOSTMODE=1
 RuntimeDirectory=jkai-builder
 RuntimeDirectoryMode=0755
 ExecStart=/usr/bin/node /opt/strange-rambling-svelte/packages/jkai-builder/dist/start.js
