@@ -247,7 +247,12 @@ export async function listWorkspaceFiles(buildId: string): Promise<string> {
 
 export async function syncDesignAssets(buildId: string): Promise<string> {
   const { buildDesignAssets } = await import('./design-assets');
-  const dest = `/home/jkai/workspace/${buildId}/design-system`;
+  // Write inside dev/ so the agent's prompt (`./design-system/` relative to
+  // workdir, which is dev/) actually resolves. Pre-host-mode this used to
+  // live at <buildId>/design-system/ (one level up) — that worked in the
+  // container via the workspace volume mount, but on host filesystem the
+  // agent can only read paths inside its workdir.
+  const dest = `/home/jkai/workspace/${buildId}/dev/design-system`;
   // In host mode, use fs directly — execInSandbox roundtrip via base64 is
   // unnecessary and harder to debug if it ever fails. In container mode,
   // execInSandbox creates the dir inside the named volume.
