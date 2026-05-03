@@ -248,10 +248,25 @@ export async function listWorkspaceFiles(buildId: string): Promise<string> {
 export async function syncDesignAssets(buildId: string): Promise<string> {
   const { buildDesignAssets } = await import('./design-assets');
   const dest = `/home/jkai/workspace/${buildId}/design-system`;
-  await execInSandbox(`mkdir -p ${dest}/examples`);
+  // In host mode, use fs directly — execInSandbox roundtrip via base64 is
+  // unnecessary and harder to debug if it ever fails. In container mode,
+  // execInSandbox creates the dir inside the named volume.
+  if (HOST_MODE) {
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(`${dest}/examples`, { recursive: true });
+  } else {
+    await execInSandbox(`mkdir -p ${dest}/examples`);
+  }
   const assets = await buildDesignAssets(process.cwd());
+  let written = 0;
+  let failed = 0;
   for (const [rel, body] of Object.entries(assets)) {
-    await writeFileInSandbox(`${dest}/${rel}`, body);
+    const r = await writeFileInSandbox(`${dest}/${rel}`, body);
+    if (r.exitCode === 0) written++;
+    else failed++;
+  }
+  if (failed > 0) {
+    throw new Error(`syncDesignAssets: ${failed}/${written + failed} writes failed (dest=${dest})`);
   }
   return dest;
 }

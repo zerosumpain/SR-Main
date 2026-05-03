@@ -29,11 +29,21 @@ rsync -avz \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/data/"
 
 echo "==> Syncing DB schema files..."
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/src/lib/constants $VPS_DIR/src/lib/workflows/scraper/python"
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/src/lib/db $VPS_DIR/src/lib/constants $VPS_DIR/src/lib/workflows/scraper/python $VPS_DIR/src/lib/styles"
 rsync -avz -e "ssh -i $VPS_KEY" \
   src/lib/db/schema.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/db/"
 rsync -avz -e "ssh -i $VPS_KEY" \
   drizzle.config.ts "$VPS_USER@$VPS_HOST:$VPS_DIR/"
+
+# buildDesignAssets in src/lib/jkai/design-assets.ts reads these at runtime
+# to construct the design-system reference for each iteration's workspace.
+# Without them, the design-system dir gets written with empty token content
+# and the agent gets ENOENT when reading it.
+echo "==> Syncing design-token sources..."
+rsync -avz -e "ssh -i $VPS_KEY" \
+  src/app.css "$VPS_USER@$VPS_HOST:$VPS_DIR/src/" 2>/dev/null || true
+rsync -avz -e "ssh -i $VPS_KEY" \
+  src/lib/styles/ "$VPS_USER@$VPS_HOST:$VPS_DIR/src/lib/styles/" 2>/dev/null || true
 
 echo "==> Syncing runtime-read files (python scraper, etc)..."
 # These files are read at runtime by absolute path relative to the repo root,
