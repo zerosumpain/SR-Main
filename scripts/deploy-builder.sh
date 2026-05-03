@@ -32,6 +32,35 @@ rsync -avz \
 echo "==> Ensuring builds root + installing systemd unit..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo install -d -m 755 -o $VPS_USER -g $VPS_USER $BUILDS_ROOT && sudo cp $VPS_DIR/packages/jkai-builder/jkai-builder.service /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload && sudo systemctl enable $SERVICE.service && sudo systemctl restart $SERVICE.service"
 
+echo "==> Installing builder watchdog timer..."
+# External watchdog: every 60s, probe /health over the unix socket. If the
+# probe fails (socket missing, builder crashed, or RPC dispatcher hung), the
+# oneshot service restarts jkai-builder. Equivalent to the strange-rambling
+# watchdog wired in deploy.sh — Node's node:http server doesn't speak
+# sd_notify so this is the substitute.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo tee /etc/systemd/system/${SERVICE}-watchdog.service > /dev/null" <<'EOF'
+[Unit]
+Description=JKAI builder watchdog — restarts jkai-builder if /health stops responding
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'set -euo pipefail; code=$(curl -fsS -o /dev/null -w "%%{http_code}" --max-time 10 --unix-socket /run/jkai-builder/jkai-builder.sock http://x/health || echo 000); if [ "$code" != "200" ]; then logger -t jkai-builder-watchdog "health probe returned $code — restarting jkai-builder"; systemctl restart jkai-builder; fi'
+EOF
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo tee /etc/systemd/system/${SERVICE}-watchdog.timer > /dev/null" <<'EOF'
+[Unit]
+Description=JKAI builder watchdog timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+Unit=jkai-builder-watchdog.service
+
+[Install]
+WantedBy=timers.target
+EOF
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "sudo systemctl daemon-reload && sudo systemctl enable --now ${SERVICE}-watchdog.timer"
+
 echo "==> Verifying..."
 sleep 3
 RESP=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo curl -fsS --unix-socket /run/jkai-builder/jkai-builder.sock --max-time 5 http://x/health" || echo "FAILED")

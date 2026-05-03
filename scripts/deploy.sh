@@ -155,7 +155,12 @@ docker exec "$PG_CTR" psql -U app -d strange_rambling -v ON_ERROR_STOP=1 \
   -c "UPDATE workflow_runs SET status='paused' WHERE status='running' RETURNING id;" || true
 REMOTE
 
-echo "==> Restarting service..."
+# Phase 3 invariant: this deploy script restarts ONLY strange-rambling-svelte.
+# The jkai-builder sidecar (system unit, /run/jkai-builder/jkai-builder.sock)
+# owns build orchestrator state and stays running across web-app restarts —
+# so in-flight /jkai/builds keep iterating while the SvelteKit process
+# bounces. Only `scripts/deploy-builder.sh` should restart the builder.
+echo "==> Restarting service (builder is unaffected)..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo systemctl restart $SERVICE"
 
