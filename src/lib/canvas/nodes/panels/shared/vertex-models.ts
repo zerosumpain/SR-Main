@@ -64,6 +64,29 @@ export const THINK_MODEL_OPTIONS: ModelOption[] = [
  */
 export interface FetchedModel { value: string; label: string; meta?: string }
 
+/**
+ * Map a model's completion price (USD per token, as the OpenRouter catalogue
+ * stores it) to a 1–5 cost tier shown in the dropdown label. Bands are
+ * chosen against typical 2026-Q2 OpenRouter completion pricing so each
+ * tier carves out a meaningful slice of the catalogue.
+ *
+ *   [1/5] ≤ $0.50 / 1M tok   small / fast (gemini-flash, gpt-4o-mini, llama)
+ *   [2/5] ≤ $2.50            cheap mid    (haiku, llama-large, mistral)
+ *   [3/5] ≤ $10              mid          (gpt-4o, sonnet, gemini-pro)
+ *   [4/5] ≤ $30              expensive    (gpt-4-turbo, claude opus older)
+ *   [5/5] > $30              top tier     (opus 4.x, o1, premium frontier)
+ */
+function costTier(completionPricePerToken: number | null): 1 | 2 | 3 | 4 | 5 | null {
+  if (completionPricePerToken == null || !Number.isFinite(completionPricePerToken)) return null;
+  const perM = completionPricePerToken * 1_000_000;
+  if (perM <= 0) return null; // free / sponsored — no useful tier
+  if (perM <= 0.5) return 1;
+  if (perM <= 2.5) return 2;
+  if (perM <= 10) return 3;
+  if (perM <= 30) return 4;
+  return 5;
+}
+
 export async function fetchAllChatModels(staticPrefix: ModelOption[] = VERTEX_MODEL_OPTIONS): Promise<FetchedModel[]> {
   const prefix: FetchedModel[] = staticPrefix.map((o) => ({ value: o.value, label: o.label }));
   let live: FetchedModel[] = [];
@@ -71,13 +94,20 @@ export async function fetchAllChatModels(staticPrefix: ModelOption[] = VERTEX_MO
     const res = await fetch('/api/admin/models/openrouter?pageSize=500&sortBy=id&sortDir=asc');
     if (res.ok) {
       const data = (await res.json()) as {
-        rows?: Array<{ id: string; name: string | null; provider: string | null }>;
+        rows?: Array<{
+          id: string;
+          name: string | null;
+          provider: string | null;
+          completionPrice: string | number | null;
+        }>;
       };
-      live = (data.rows ?? []).map((r) => ({
-        value: r.id,
-        label: r.name && r.name !== r.id ? `${r.name} — ${r.id}` : r.id,
-        meta: r.provider ?? undefined,
-      }));
+      live = (data.rows ?? []).map((r) => {
+        const price = r.completionPrice == null ? null : Number(r.completionPrice);
+        const tier = costTier(price);
+        const display = r.name && r.name !== r.id ? `${r.name} — ${r.id}` : r.id;
+        const label = tier ? `[${tier}/5] ${display}` : display;
+        return { value: r.id, label, meta: r.provider ?? undefined };
+      });
     }
   } catch {
     // Network/auth failure → fall back to the static list silently. The
