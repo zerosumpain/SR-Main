@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
-import { orchestrator } from '$lib/jkai/orchestrator';
+import { builderClient } from '$lib/jkai/builder-client';
 
 export const GET: RequestHandler = async ({ params }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
@@ -56,7 +56,7 @@ export const DELETE: RequestHandler = async ({ params }) => {
   // Stop the build if it's currently running so the orchestrator loop tears down cleanly.
   if (build.status === 'running') {
     try {
-      await orchestrator.stopBuild(params.id);
+      await builderClient.stopBuild(params.id);
     } catch {
       // Ignore — we'll still delete the DB rows below.
     }

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { orchestrator } from '$lib/jkai/orchestrator';
+import { builderClient } from '$lib/jkai/builder-client';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   try {
@@ -13,7 +13,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       body.modelProvider || body.modelId
         ? { provider: body.modelProvider, modelId: body.modelId }
         : undefined;
-    await orchestrator.continueBuild(params.id, prompt, modelOverride);
+    await builderClient.continueBuild(params.id, prompt, modelOverride);
     return json({ ok: true });
   } catch (err: any) {
     return json({ error: err.message }, { status: 400 });

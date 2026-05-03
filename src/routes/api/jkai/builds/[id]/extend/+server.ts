@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { orchestrator } from '$lib/jkai/orchestrator';
+import { builderClient } from '$lib/jkai/builder-client';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   try {
@@ -9,7 +9,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 60) {
       return json({ error: 'minutes must be between 1 and 60' }, { status: 400 });
     }
-    const newDeadline = orchestrator.extendDeadline(params.id, minutes * 60 * 1000);
+    const newDeadline = await builderClient.extendDeadline(params.id, minutes * 60 * 1000);
     if (newDeadline === null) {
       return json({ error: 'No running iteration on this build' }, { status: 409 });
     }

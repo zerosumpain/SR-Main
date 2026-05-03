@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { orchestrator } from '$lib/jkai/orchestrator';
+import { builderClient } from '$lib/jkai/builder-client';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -30,13 +30,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!body || typeof body.action !== 'string') throw error(400, 'action required');
   try {
     if (body.action === 'approve') {
-      await orchestrator.approvePlan(buildId);
+      await builderClient.approvePlan(buildId);
     } else if (body.action === 'skip') {
-      await orchestrator.skipPlan(buildId);
+      await builderClient.skipPlan(buildId);
     } else if (body.action === 'replan') {
-      await orchestrator.replan(buildId, body.prompt);
+      await builderClient.replan(buildId, body.prompt);
     } else if (body.action === 'edit') {
-      await orchestrator.editPlan(buildId, String(body.plan ?? ''));
+      await builderClient.editPlan(buildId, String(body.plan ?? ''));
     } else {
       throw error(400, `unknown action: ${body.action}`);
     }

@@ -1,17 +1,17 @@
 /**
  * Unix-socket HTTP server for jkai-builder.
  *
- * Phase 1 surface — observation only:
- *   GET /health   → {ok, activeBuilds, pid, startedAt, uptimeMs}
- *
- * Phase 2+ will add session HTTP + WebSocket endpoints that the SvelteKit app
- * proxies into. Keeping the surface area minimal here so the deploy/restart
- * machinery can stabilise before any behaviour moves over.
+ * Phase 3 surface:
+ *   GET  /health           → {ok, pid, startedAt, uptimeMs, ...}
+ *   POST /rpc              → orchestrator method dispatch (see rpc.ts)
+ *   GET  /events/<buildId> → SSE stream of jkai_logs + live deltas (see events.ts)
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { unlinkSync, existsSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { handleRpc } from './rpc';
+import { handleEvents } from './events';
 
 const startedAt = new Date().toISOString();
 const startedAtMs = Date.now();
@@ -36,8 +36,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 function handle(req: IncomingMessage, res: ServerResponse): void {
+  const url = req.url ?? '';
   // Health probe — also doubles as the systemd watchdog target.
-  if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
+  if (req.method === 'GET' && (url === '/health' || url === '/')) {
     const body: HealthBody = {
       ok: true,
       service: 'jkai-builder',
@@ -47,6 +48,20 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
       activeBuilds: 0,
     };
     sendJson(res, 200, body);
+    return;
+  }
+
+  // Orchestrator method dispatch (Phase 3).
+  if (req.method === 'POST' && url === '/rpc') {
+    void handleRpc(req, res);
+    return;
+  }
+
+  // Build event SSE stream (Phase 3) — SvelteKit's stream endpoint pipes
+  // this into the browser SSE the user already sees.
+  const eventsMatch = url.match(/^\/events\/([0-9a-f-]+)$/i);
+  if (req.method === 'GET' && eventsMatch) {
+    handleEvents(eventsMatch[1], req, res);
     return;
   }
 

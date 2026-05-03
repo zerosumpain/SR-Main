@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
-import { orchestrator } from '$lib/jkai/orchestrator';
+import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { ModelContext } from '$lib/server/models/types';
 
@@ -91,7 +91,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const [build] = await db.insert(jkaiBuilds).values(insert as any).returning();
 
   try {
-    await orchestrator.startBuild(build.id);
+    await builderClient.startBuild(build.id);
   } catch (err: any) {
     // Build record created but orchestrator failed to start — update status
     await db.update(jkaiBuilds).set({ status: 'failed' }).where(

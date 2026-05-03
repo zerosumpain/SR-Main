@@ -6,6 +6,7 @@
  * Run via `node packages/jkai-builder/dist/start.js` (compiled by esbuild).
  */
 import { startServer } from '../src/server';
+import { orchestrator } from '$lib/jkai/orchestrator';
 
 // Socket path resolution, in order:
 //   1. JKAI_BUILDER_SOCKET (explicit override — set by the systemd unit)
@@ -16,7 +17,27 @@ const sock =
   process.env.JKAI_BUILDER_SOCKET ??
   (xdg ? `${xdg}/jkai-builder.sock` : '/run/jkai-builder/jkai-builder.sock');
 
-startServer(sock).catch((err) => {
+async function main(): Promise<void> {
+  // Bind the socket FIRST so the SvelteKit web app's RPC client doesn't
+  // ECONNREFUSED while we recover. The orchestrator's recovery scan can
+  // take a few hundred ms.
+  await startServer(sock);
+
+  // Phase 3: this process is now the authoritative owner of build state.
+  // recoverOnStartup picks up `running`/`paused` rows whose previous owner
+  // (the SvelteKit web app, pre-phase-3) died with the build still in
+  // flight, and either resumes them or marks them failed if they're truly
+  // abandoned.
+  try {
+    await orchestrator.recoverOnStartup();
+    console.log('[jkai-builder] orchestrator recovery complete');
+  } catch (err) {
+    console.error('[jkai-builder] recovery failed:', err);
+    // Don't exit — recovery failure shouldn't take down the RPC surface.
+  }
+}
+
+main().catch((err) => {
   console.error('[jkai-builder] failed to start:', err);
   process.exit(1);
 });

@@ -1,6 +1,9 @@
 import { startScheduler } from '$lib/health/scheduler';
 import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
-import { orchestrator } from '$lib/jkai/orchestrator';
+// JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
+// in the jkai-builder sidecar service (packages/jkai-builder/, system unit
+// jkai-builder.service). Build-control routes call it over the Unix socket
+// via $lib/jkai/builder-client. Phase 3 of docs/plans/jkai-build-rewrite.md.
 import { startOrphanSweep } from '$lib/jkai/media/sweep';
 import { isPublicPath } from '$lib/auth';
 import { rateLimit } from '$lib/server/rate-limit';
@@ -55,10 +58,9 @@ function gracefulShutdown() {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-// Recover any in-progress builds on server startup
-orchestrator.recoverOnStartup().catch((err) => {
-  console.error('[jkai] Failed to recover build on startup:', err);
-});
+// Build recovery moved to packages/jkai-builder/bin/start.ts.
+// hooks.server.ts intentionally does NOT call orchestrator.recoverOnStartup()
+// any more — the SvelteKit web app is no longer the build state owner.
 
 // Subscribe build orchestrator to workflow_completed events for push-back delivery
 import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';

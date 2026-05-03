@@ -1,101 +1,74 @@
+/**
+ * SSE bridge: forwards the builder's `/events/<buildId>` stream into the
+ * browser's SSE connection. Phase 3 moved authoritative event emission into
+ * the jkai-builder process, so the SvelteKit web app no longer has the
+ * in-process onBuildLog/onBuildLive event sources to subscribe to. This
+ * handler dials the Unix socket and pipes the SSE bytes through.
+ *
+ * Replay-on-reconnect: we forward Last-Event-ID upstream by passing it as a
+ * query param, the builder uses it to rewind the in-memory log replay (and
+ * the persisted-row scan still runs server-side). Behaviour the browser sees
+ * is unchanged.
+ */
 import type { RequestHandler } from './$types';
-import { db } from '$lib/db';
-import { jkaiLogs } from '$lib/db/schema';
-import { eq, gt, and, asc } from 'drizzle-orm';
-import { onBuildLog } from '$lib/jkai/orchestrator';
-import { onBuildLive } from '$lib/jkai/log-emitter';
+import { request as httpRequest } from 'node:http';
+import { BUILDER_SOCKET_PATH } from '$lib/jkai/builder-client';
 
 export const GET: RequestHandler = async ({ params, request }) => {
   const buildId = params.id;
-  const lastEventId = request.headers.get('Last-Event-ID');
+  const lastEventId = request.headers.get('Last-Event-ID') ?? '';
+  const path = `/events/${encodeURIComponent(buildId)}${lastEventId ? `?lastEventId=${encodeURIComponent(lastEventId)}` : ''}`;
 
-  let unsub: (() => void) | null = null;
-  let unsubLive: (() => void) | null = null;
-  let keepalive: ReturnType<typeof setInterval> | null = null;
+  let upstreamReq: ReturnType<typeof httpRequest> | null = null;
   let closed = false;
 
-  function cleanup() {
-    if (closed) return;
-    closed = true;
-    if (keepalive) clearInterval(keepalive);
-    if (unsub) unsub();
-    if (unsubLive) unsubLive();
-    keepalive = null;
-    unsub = null;
-    unsubLive = null;
-  }
-
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
       const encoder = new TextEncoder();
 
-      function send(id: number, data: any) {
+      function close(): void {
         if (closed) return;
+        closed = true;
+        try { upstreamReq?.destroy(); } catch { /* swallow */ }
+        try { controller.close(); } catch { /* already closed */ }
+      }
+
+      upstreamReq = httpRequest(
+        {
+          socketPath: BUILDER_SOCKET_PATH,
+          method: 'GET',
+          path,
+          headers: { 'Last-Event-ID': lastEventId },
+          // No timeout — SSE streams are long-lived. Keepalive frames every 15s
+          // (sent by the builder) keep the underlying socket alive.
+        },
+        (upstream) => {
+          upstream.on('data', (chunk: Buffer) => {
+            if (closed) return;
+            try { controller.enqueue(chunk); } catch { close(); }
+          });
+          upstream.on('end', close);
+          upstream.on('error', close);
+        },
+      );
+      upstreamReq.on('error', (err) => {
+        if (closed) return;
+        // Connection error to the builder — surface as a one-shot SSE
+        // comment so the client sees something rather than a silent close.
         try {
           controller.enqueue(
-            encoder.encode(`id: ${id}\ndata: ${JSON.stringify(data)}\n\n`),
+            encoder.encode(`: builder unreachable: ${err.message}\n\n`),
           );
-        } catch {
-          cleanup();
-        }
-      }
-
-      // Replay missed events
-      if (lastEventId) {
-        const parsedId = parseInt(lastEventId, 10);
-        if (!isNaN(parsedId) && parsedId > 0) {
-          const missed = await db
-            .select()
-            .from(jkaiLogs)
-            .where(
-              and(
-                eq(jkaiLogs.buildId, buildId),
-                gt(jkaiLogs.id, parsedId),
-              ),
-            )
-            .orderBy(asc(jkaiLogs.id))
-            .limit(500);
-
-          for (const log of missed) {
-            send(log.id, { type: log.type, content: log.content, iterationId: log.iterationId });
-          }
-        }
-      }
-
-      // Persisted log events (replayable via Last-Event-ID, positive IDs)
-      unsub = onBuildLog(buildId, (log) => {
-        send(log.id, { type: log.type, content: log.content, iterationId: log.iterationId });
+        } catch { /* swallow */ }
+        close();
       });
+      upstreamReq.end();
 
-      // Transient streaming events (not persisted, negative IDs so the client
-      // can distinguish them and never replay them on reconnect)
-      let liveSeq = 0;
-      unsubLive = onBuildLive(buildId, (ev) => {
-        liveSeq += 1;
-        send(-liveSeq, ev);
-      });
-
-      // Keepalive every 15s — also serves as liveness check
-      keepalive = setInterval(() => {
-        if (closed) {
-          cleanup();
-          return;
-        }
-        try {
-          controller.enqueue(encoder.encode(`: keepalive\n\n`));
-        } catch {
-          cleanup();
-        }
-      }, 15000);
-
-      // Cleanup on abort
-      request.signal.addEventListener('abort', () => {
-        cleanup();
-        try { controller.close(); } catch {}
-      });
+      request.signal.addEventListener('abort', close);
     },
     cancel() {
-      cleanup();
+      closed = true;
+      try { upstreamReq?.destroy(); } catch { /* swallow */ }
     },
   });
 
