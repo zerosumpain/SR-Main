@@ -1,5 +1,5 @@
 import type { ServeConfig } from './types';
-import { getContainerIp, clearContainerIpCache } from './sandbox';
+import { getContainerIp, clearContainerIpCache, execInSandbox } from './sandbox';
 
 export function validateServeConfig(raw: any): ServeConfig | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -15,6 +15,74 @@ export function validateServeConfig(raw: any): ServeConfig | null {
     healthCheck,
     description: typeof description === 'string' ? description : '',
   };
+}
+
+/**
+ * Best-effort serve config autodetection. Used when the agent hasn't yet
+ * written `dev/serve.json` but the project already has a runnable dev
+ * script — surfaces a preview link on the very first iteration where the
+ * code can boot, instead of waiting for the agent to formalise it.
+ *
+ * Looks at `<dev>/package.json` for a `dev` (preferred) or `start` script,
+ * tries to parse a port hint from the script, falls back to a sensible
+ * default per framework. Returns null if there's no package.json or no
+ * usable script.
+ */
+export async function autodetectServeConfig(buildId: string): Promise<ServeConfig | null> {
+  const dir = `/home/jkai/workspace/${buildId}/dev`;
+  const cat = await execInSandbox(`cat ${dir}/package.json 2>/dev/null`, 5000);
+  if (cat.exitCode !== 0 || !cat.stdout.trim()) return null;
+  let pkg: { scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } | null;
+  try { pkg = JSON.parse(cat.stdout); } catch { return null; }
+  if (!pkg) return null;
+
+  const script = pkg.scripts?.dev ?? pkg.scripts?.start ?? null;
+  if (!script || !script.trim()) return null;
+
+  const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+  const knownFramework =
+    'vite' in deps || 'next' in deps || '@sveltejs/kit' in deps ||
+    'react-scripts' in deps || 'astro' in deps || 'expo' in deps ||
+    /\b(vite|next|svelte-kit|astro|expo|react-scripts|nuxt)\b/.test(script) ||
+    /\b(node|tsx|ts-node|bun|deno)\b/.test(script);
+  if (!knownFramework) return null;
+
+  // Port: prefer an explicit --port / -p / PORT= flag in the script string.
+  // Otherwise pick a framework-typical default. The orchestrator's port
+  // allocator will reassign if it collides with another build, and rewrite
+  // the start command accordingly — so a wrong default here is recoverable.
+  let port: number | null = null;
+  const explicit = script.match(/(?:--port[\s=]|-p\s+|PORT=)(\d{2,5})/);
+  if (explicit) port = Number(explicit[1]);
+  if (!port) {
+    if ('next' in deps) port = 3000;
+    else if ('@sveltejs/kit' in deps) port = 5173;
+    else if ('vite' in deps) port = 5173;
+    else if ('react-scripts' in deps) port = 3000;
+    else if ('astro' in deps) port = 4321;
+    else if ('expo' in deps) port = 8081;
+    else port = 3000;
+  }
+
+  // Inject host + port flags so the server binds 0.0.0.0 (the proxy needs to
+  // reach it from outside the container) and listens where we expect.
+  const startCommand = injectHostPort(script, port);
+
+  return {
+    port,
+    startCommand,
+    healthCheck: '/',
+    description: '[autodetected] inferred from package.json scripts.dev — replace by writing dev/serve.json',
+  };
+}
+
+function injectHostPort(script: string, port: number): string {
+  // Already explicit? Trust the script.
+  if (/--port[\s=]|--host[\s=]|-p\s+\d/.test(script)) return script;
+  // npm/pnpm/yarn/bun run scripts need the `--` separator before flags.
+  const isRunScript = /^\s*(npm|pnpm|yarn|bun)\s+run\b/.test(script);
+  const sep = isRunScript ? ' --' : '';
+  return `${script}${sep} --host 0.0.0.0 --port ${port}`;
 }
 
 // Script injected into proxied HTML to rewrite fetch/XHR to route through the proxy

@@ -9,13 +9,14 @@ import {
   readServeJson,
   startProjectServer,
   killProjectServer,
+  readProjectServerLogTail,
   promoteDevToLive,
   seedDevFromLive,
   snapshotIteration,
   allocatePort,
   writeFileInSandbox,
 } from './sandbox';
-import { validateServeConfig } from './serve';
+import { validateServeConfig, autodetectServeConfig } from './serve';
 import { failOrphanedIterations } from './orchestrator-helpers';
 import { executeIteration } from './executor';
 import { runTests } from './test-runner';
@@ -883,12 +884,45 @@ class Orchestrator {
   }
 
   private async checkServeConfig(buildId: string): Promise<void> {
+    // Resolve a serve config from one of three sources, in order of trust:
+    //   1. dev/serve.json — agent-declared (highest authority)
+    //   2. dev/serve.json that fails validation — log loud + bail
+    //   3. autodetect from package.json scripts.dev/start — gives us a
+    //      preview link on iteration #1 even before the agent has formally
+    //      declared one. Marked with `[autodetected]` in description so the
+    //      agent knows to override it.
+    let config: ReturnType<typeof validateServeConfig> = null;
+    let source: 'serve.json' | 'autodetect' | 'none' = 'none';
     const raw = await readServeJson(buildId);
-    if (!raw) return;
+    if (raw) {
+      config = validateServeConfig(raw);
+      if (!config) {
+        await emitLog(buildId, 'error',
+          'Found dev/serve.json but it failed validation. Required fields: ' +
+          'port (1024-65535 number), startCommand (non-empty string), healthCheck (path starting with /).',
+        );
+        await emitStage(buildId, { stage: 'iterating', previewUrl: null });
+        return;
+      }
+      source = 'serve.json';
+    } else {
+      config = await autodetectServeConfig(buildId);
+      if (config) {
+        source = 'autodetect';
+        await emitLog(buildId, 'system',
+          `Preview: no dev/serve.json yet — autodetected from package.json. ` +
+          `Trying \`${config.startCommand}\` on port ${config.port}. ` +
+          `Write dev/serve.json to override.`,
+        );
+      }
+    }
 
-    const config = validateServeConfig(raw);
     if (!config) {
-      await emitLog(buildId, 'system', 'Found serve.json but it failed validation');
+      await emitLog(buildId, 'system',
+        'Preview: not started — no dev/serve.json and no recognised package.json scripts. ' +
+        'Write dev/serve.json with { port, startCommand, healthCheck } to enable the live preview.',
+      );
+      await emitStage(buildId, { stage: 'iterating', previewUrl: null });
       return;
     }
 
@@ -902,10 +936,6 @@ class Orchestrator {
     const currentConfig = build?.serveConfig as any;
     const keepExisting = currentConfig?.port === config.port;
     if (!keepExisting) {
-      const conflicts = await db
-        .select()
-        .from(jkaiBuilds)
-        .where(eq(jkaiBuilds.id, buildId));
       const allBuilds = await db.select().from(jkaiBuilds);
       const takenPorts = new Set(
         allBuilds
@@ -913,7 +943,6 @@ class Orchestrator {
           .map((b) => (b.serveConfig as any)?.port)
           .filter(Boolean),
       );
-      void conflicts;
       if (takenPorts.has(config.port)) {
         const assigned = await allocatePort(buildId);
         await emitLog(
@@ -921,56 +950,63 @@ class Orchestrator {
           'system',
           `Port ${config.port} already assigned to another build — reassigning to ${assigned}`,
         );
-        // Rewrite start command's port number if present
         const rewritten = config.startCommand.replace(new RegExp(`\\b${config.port}\\b`, 'g'), String(assigned));
         config.port = assigned;
         config.startCommand = rewritten;
-        // Persist the rewrite back to both dev/ and live/ serve.json so the agent sees it next turn
-        const payload = JSON.stringify(config, null, 2);
-        await writeFileInSandbox(`/home/jkai/workspace/${buildId}/dev/serve.json`, payload);
-        await writeFileInSandbox(`/home/jkai/workspace/${buildId}/live/serve.json`, payload).catch(() => {});
+        // Only persist the rewrite when the agent had declared serve.json
+        // — for autodetected configs we don't want to plant a file the
+        // agent didn't ask for; the orchestrator will re-derive next turn.
+        if (source === 'serve.json') {
+          const payload = JSON.stringify(config, null, 2);
+          await writeFileInSandbox(`/home/jkai/workspace/${buildId}/dev/serve.json`, payload);
+          await writeFileInSandbox(`/home/jkai/workspace/${buildId}/live/serve.json`, payload).catch(() => {});
+        }
       }
     }
     const configChanged = currentConfig?.port !== config.port || currentConfig?.startCommand !== config.startCommand;
 
-    // Always promote dev to live after a successful iteration
     await emitLog(buildId, 'system', 'Promoting dev → live');
     await emitStage(buildId, { stage: 'promoting' });
     await promoteDevToLive(buildId);
 
+    const previewUrl = `http://homeserv:${config.port}`;
+    const action = configChanged ? 'Starting' : 'Restarting';
     if (configChanged) {
       await emitLog(buildId, 'system', `Starting project server on port ${config.port}: ${config.startCommand}`);
-
-      const healthy = await startProjectServer(
-        buildId,
-        config.startCommand,
-        config.port,
-        config.healthCheck,
-      );
-
-      if (healthy) {
-        await db
-          .update(jkaiBuilds)
-          .set({ serveConfig: config, updatedAt: new Date() })
-          .where(eq(jkaiBuilds.id, buildId));
-        await emitLog(buildId, 'system', `Project server healthy at port ${config.port}`);
-        await emitStage(buildId, { stage: 'iterating', previewUrl: `http://homeserv:${config.port}` });
-      } else {
-        await emitLog(buildId, 'error', `Project server failed health check on port ${config.port}`);
-      }
     } else if (currentConfig) {
-      // Config unchanged but still promote and restart to pick up code changes
       await killProjectServer(buildId);
-      const healthy = await startProjectServer(
-        buildId,
-        config.startCommand,
-        config.port,
-        config.healthCheck,
+    } else {
+      // Should not happen — config matches stored but no stored row. Restart anyway.
+      await killProjectServer(buildId);
+    }
+
+    const healthy = await startProjectServer(
+      buildId,
+      config.startCommand,
+      config.port,
+      config.healthCheck,
+    );
+
+    if (healthy) {
+      // Persist serveConfig so subsequent iterations skip the costly cold-start.
+      // For autodetected runs we still persist so the next iteration's
+      // configChanged branch works (won't re-autodetect every turn).
+      await db
+        .update(jkaiBuilds)
+        .set({ serveConfig: config, updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, buildId));
+      await emitLog(buildId, 'system',
+        `Preview: live at ${previewUrl}${source === 'autodetect' ? ' (autodetected — override by writing dev/serve.json)' : ''}`,
       );
-      if (healthy) {
-        await emitLog(buildId, 'system', `Project server restarted from live`);
-        await emitStage(buildId, { stage: 'iterating', previewUrl: `http://homeserv:${config.port}` });
-      }
+      await emitStage(buildId, { stage: 'iterating', previewUrl });
+    } else {
+      const tail = (await readProjectServerLogTail(buildId, 30)).trim();
+      const tailMessage = tail
+        ? `Preview: ${action.toLowerCase()} failed health check on port ${config.port}. Last server log lines:\n${tail}`
+        : `Preview: ${action.toLowerCase()} failed health check on port ${config.port} and no server log was produced. ` +
+          `The start command may not have launched at all — check that '${config.startCommand}' runs in the workspace dir.`;
+      await emitLog(buildId, 'error', tailMessage);
+      await emitStage(buildId, { stage: 'iterating', previewUrl: null });
     }
   }
 

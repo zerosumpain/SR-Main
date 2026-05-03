@@ -324,6 +324,20 @@ export async function killProjectServer(buildId?: string): Promise<void> {
   await new Promise((r) => setTimeout(r, 300));
 }
 
+/**
+ * Read the tail of the per-build server log so callers can surface the
+ * last lines as a system log when the health check fails. Returns an
+ * empty string on missing file.
+ */
+export async function readProjectServerLogTail(buildId: string, lines = 30): Promise<string> {
+  const logFile = `/tmp/jkai-serve-${buildId}.log`;
+  const result = await execInSandbox(
+    `tail -n ${lines} ${logFile} 2>/dev/null || true`,
+    5000,
+  );
+  return result.stdout ?? '';
+}
+
 export async function startProjectServer(
   buildId: string,
   startCommand: string,
