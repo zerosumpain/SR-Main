@@ -58,14 +58,10 @@ export const openrouterDef: NodeDefinition = {
     },
     {
       key: 'model', label: 'Model', type: 'dropdown',
-      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model.',
+      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model. Full live OpenRouter catalog is available below.',
+      dynamicOptionsKey: 'openrouter-models',
       options: [
         { value: '', label: 'Default (use admin alt OpenRouter model)' },
-        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-        { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
-        { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
-        { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       ],
       visibleWhen: { key: 'operation', equals: 'chat_completion' },
     },

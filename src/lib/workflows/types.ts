@@ -54,7 +54,7 @@ export interface BasicConfigField {
   /** Language hint for `code` widget. */
   language?: 'json' | 'javascript' | 'jsonpath' | 'sql' | 'plaintext';
   /** For dropdown widgets, dynamic option resolver (resolved client-side at render time). */
-  dynamicOptionsKey?: 'gemini-models' | 'scraper-profiles' | 'workflow-vars';
+  dynamicOptionsKey?: 'gemini-models' | 'scraper-profiles' | 'workflow-vars' | 'openrouter-models';
   /** Cheatsheet shown beneath a `code` widget — variables in scope, etc. */
   cheatsheet?: string[];
 }
@@ -75,6 +75,9 @@ export interface SchemaFieldRow {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array';
   required: boolean;
+  /** Optional free-text description — surfaced as `description` in the
+   *  generated JSON Schema and shown to LLM extractors as a field hint. */
+  description?: string;
 }
 
 export interface NodeDefinition {
@@ -172,6 +175,8 @@ export type WorkflowEventType =
   | 'healing_succeeded'
   | 'healing_failed'
   | 'healing_blocked'
+  | 'interaction_pending'
+  | 'interaction_resolved'
   | 'log';
 
 export interface BaseWorkflowEvent {

@@ -40,17 +40,15 @@ export const llmCallDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override.',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). Otherwise pick any OpenRouter model — the list is fetched live.',
+      // Live OpenRouter catalog (resolved client-side via /api/openrouter/models).
+      // The baked options below are merged in front so the "Default" + GLM
+      // (Z.AI direct, not on OpenRouter) options stay available.
+      dynamicOptionsKey: 'openrouter-models',
       options: [
         { value: '', label: 'Default (site setting)' },
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
-        { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-        { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-        { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-        { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku (fast)' },
-        { value: 'google/gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash' },
-        { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (direct)' },
+        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI (direct)' },
       ],
     },
     {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BasicConfigField, NodeDefinition } from '$lib/workflows/types';
-  import SchemaBuilderField from './SchemaBuilderField.svelte';
+  import SchemaFieldTable from './widgets/SchemaFieldTable.svelte';
   import KeyValueTableField from './widgets/KeyValueTableField.svelte';
   import ChipInputField from './widgets/ChipInputField.svelte';
   import PhoneField from './widgets/PhoneField.svelte';
@@ -18,6 +18,47 @@
   let showAdvanced = $state(false);
   let showRawJson = $state(false);
   const fields = $derived(definition.basicConfig ?? []);
+
+  // Dynamic dropdown options (e.g. live OpenRouter model catalog). Populated
+  // on first paint per key, cached in memory for the panel's lifetime — the
+  // server route does its own 5-min cache, so a panel re-open is cheap.
+  const dynamicOptions = $state<Record<string, { value: string; label: string }[]>>({});
+  const dynamicLoading = $state<Record<string, boolean>>({});
+
+  async function loadDynamicOptions(key: string) {
+    if (dynamicOptions[key] || dynamicLoading[key]) return;
+    dynamicLoading[key] = true;
+    try {
+      const url =
+        key === 'openrouter-models' ? '/api/openrouter/models' :
+        key === 'scraper-profiles' ? '/api/scraper/profiles' :
+        '';
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const body = await res.json();
+      if (Array.isArray(body?.options)) dynamicOptions[key] = body.options;
+    } finally {
+      dynamicLoading[key] = false;
+    }
+  }
+
+  $effect(() => {
+    for (const f of fields) {
+      if (f.dynamicOptionsKey) void loadDynamicOptions(f.dynamicOptionsKey);
+    }
+  });
+
+  function optionsFor(field: BasicConfigField): { value: string; label: string }[] {
+    const dyn = field.dynamicOptionsKey ? dynamicOptions[field.dynamicOptionsKey] ?? [] : [];
+    const baked = field.options ?? [];
+    if (dyn.length === 0) return baked;
+    // Merge: baked entries first (default/site-setting placeholder), then any
+    // dyn ids not already present. Dedup by value so a hand-picked alias
+    // doesn't get overwritten by the catalog row.
+    const seen = new Set(baked.map((o) => o.value));
+    return [...baked, ...dyn.filter((o) => !seen.has(o.value))];
+  }
 
   function isVisible(field: BasicConfigField): boolean {
     if (field.advancedOnly && !showAdvanced) return false;
@@ -62,10 +103,13 @@
 
           {#if f.type === 'dropdown'}
             <select value={config[f.key] ?? ''} onchange={(e) => update(f.key, (e.currentTarget as HTMLSelectElement).value)}>
-              {#each f.options ?? [] as opt}
+              {#each optionsFor(f) as opt}
                 <option value={opt.value}>{opt.label}</option>
               {/each}
             </select>
+            {#if f.dynamicOptionsKey && dynamicLoading[f.dynamicOptionsKey]}
+              <span class="bcf-desc">Loading models…</span>
+            {/if}
           {:else if f.type === 'toggle'}
             <input type="checkbox" checked={Boolean(config[f.key])} onchange={(e) => update(f.key, (e.currentTarget as HTMLInputElement).checked)} />
           {:else if f.type === 'slider'}
@@ -92,7 +136,7 @@
               </details>
             {/if}
           {:else if f.type === 'schema-builder'}
-            <SchemaBuilderField value={(config[f.key] as unknown[]) ?? []} onChange={(v) => update(f.key, v)} />
+            <SchemaFieldTable value={(config[f.key] as unknown[]) ?? []} onChange={(v) => update(f.key, v)} />
           {:else if f.type === 'key-value-table'}
             <KeyValueTableField value={(config[f.key] as Record<string, string>) ?? {}} onChange={(v) => update(f.key, v)} />
           {:else if f.type === 'chip-input'}
