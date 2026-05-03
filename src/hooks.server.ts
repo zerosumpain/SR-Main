@@ -171,6 +171,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/health/workflow-engine is consumed by the systemd watchdog timer
+  // (curl from 127.0.0.1) — no user session, no service token. Restrict to
+  // loopback to prevent it being scraped externally for run counts.
+  if (pathname === '/api/health/workflow-engine') {
+    let clientAddr = '';
+    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
+    if (clientAddr === '127.0.0.1' || clientAddr === '::1') {
+      return resolve(event);
+    }
+  }
+
   // API routes return 401
   if (pathname.startsWith('/api/')) {
     const session = await event.locals.auth();

@@ -126,15 +126,15 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p ~/.openclaw/workflow-files && 
 echo "==> Draining in-flight runs (running -> paused) before restart..."
 # Avoid orphan-pending: if we restart while a run is mid-flight, the new
 # process inherits a row stuck in 'running' that the engine politely waits
-# on forever. Pausing them lets the reaper / resume-on-boot pick them up
-# cleanly. Best-effort — failure is logged but does not block the deploy.
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (psql / .env not available)"
+# on forever. Pausing them lets the reaper pick them up cleanly. The VPS
+# doesn't ship psql, so we run via docker exec on the strange-rambling
+# pgvector container. Best-effort — failure is logged but does not block.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (db container missing)"
 set -e
-cd /opt/strange-rambling-svelte
-if [ -f .env ]; then set -a; . ./.env; set +a; fi
-if [ -n "${DATABASE_URL:-}" ] && command -v psql >/dev/null 2>&1; then
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE workflow_runs SET status='paused' WHERE status='running';" || true
-fi
+PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1)
+if [ -z "$PG_CTR" ]; then echo "==> drain: no app-db container found"; exit 0; fi
+docker exec "$PG_CTR" psql -U app -d strange_rambling -v ON_ERROR_STOP=1 \
+  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' RETURNING id;" || true
 REMOTE
 
 echo "==> Restarting service..."
