@@ -1,5 +1,4 @@
 import type OpenAI from 'openai';
-import { getOpenRouterClient } from '$lib/deepdive/keys';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getLLMClient } from '$lib/jkai/llm-client';
 
@@ -53,8 +52,12 @@ export async function resolveLLMClient(
   }
 
   // OpenRouter-formatted model IDs always have a '/' (e.g. openai/gpt-4o).
+  // Route through the unified getLLMClient so the OpenRouter key is read
+  // from app_settings.openrouter.api_key (admin UI) AND keys.json/env. The
+  // legacy getOpenRouterClient() only saw keys.json/env, which made
+  // admin-UI-only configs silently fail with "OpenRouter API key not configured".
   if (m.includes('/')) {
-    return { client: getOpenRouterClient(), model: m };
+    return getLLMClient({ provider: 'openrouter', modelId: m });
   }
 
   // Bare id that clearly belongs to a foreign provider — don't pipe it
