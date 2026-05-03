@@ -40,11 +40,11 @@ export const llmCallDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Leave as "Default" to use the site-wide admin default (recommended). Otherwise pick any OpenRouter model — the list is fetched live.',
-      // Live OpenRouter catalog (resolved client-side via /api/openrouter/models).
-      // The baked options below are merged in front so the "Default" + GLM
-      // (Z.AI direct, not on OpenRouter) options stay available.
-      dynamicOptionsKey: 'openrouter-models',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). The picker shows the full live OpenRouter catalogue.',
+      // Note: the canvas renders this node via LlmCallPanel.svelte (custom),
+      // not BasicConfigForm — so the actual model picker lives in that panel
+      // and uses fetchAllChatModels(). The options below are kept for the
+      // orchestrator + admin /tools listing.
       options: [
         { value: '', label: 'Default (site setting)' },
         { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (direct)' },

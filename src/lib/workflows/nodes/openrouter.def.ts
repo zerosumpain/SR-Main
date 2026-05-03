@@ -58,8 +58,8 @@ export const openrouterDef: NodeDefinition = {
     },
     {
       key: 'model', label: 'Model', type: 'dropdown',
-      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model. Full live OpenRouter catalog is available below.',
-      dynamicOptionsKey: 'openrouter-models',
+      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model. Full live OpenRouter catalogue available in the picker.',
+      // Canvas renders via OpenRouterPanel.svelte (already uses fetcher mode).
       options: [
         { value: '', label: 'Default (use admin alt OpenRouter model)' },
       ],

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$(jq -r '.tool_input.file_path // empty')\"; case \"$f\" in *.ts|*.svelte|*.js) cd /home/john/strange_rambling_svelte && nohup bash -c 'npx svelte-check --tsconfig ./tsconfig.json --threshold error --output machine 2>&1 | tail -20 > /tmp/sr-svelte-check.log' >/dev/null 2>&1 & ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}

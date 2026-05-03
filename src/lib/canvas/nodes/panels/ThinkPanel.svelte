@@ -5,7 +5,8 @@
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
   import MaxTokensField from './widgets/MaxTokensField.svelte';
-  import { THINK_MODEL_OPTIONS } from './shared/vertex-models';
+  import { THINK_MODEL_OPTIONS, fetchAllChatModels } from './shared/vertex-models';
+  const fetchThinkModels = () => fetchAllChatModels(THINK_MODEL_OPTIONS);
 
   let {
     config,
@@ -71,8 +72,8 @@
   <ModelSelect
     value={model}
     onChange={(v) => set('model', v)}
-    options={THINK_MODEL_OPTIONS}
-    hint="Bare IDs (e.g. <code>glm-5-turbo</code>) route via the jkai default provider. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter."
+    fetcher={fetchThinkModels}
+    hint="Bare IDs (e.g. <code>glm-5-turbo</code>) route via the jkai default provider. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter — full live OpenRouter catalogue is in the picker."
   />
 
   <TemperatureField

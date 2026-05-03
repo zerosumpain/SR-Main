@@ -4,7 +4,7 @@
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
-  import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
+  import { fetchAllChatModels } from './shared/vertex-models';
 
   let {
     config,
@@ -233,8 +233,8 @@
   <ModelSelect
     value={model}
     onChange={(v) => set('model', v)}
-    options={VERTEX_MODEL_OPTIONS}
-    hint="Leave on Default to use the admin-configured site default. Routing benefits from a small fast model."
+    fetcher={fetchAllChatModels}
+    hint="Leave on Default to use the admin-configured site default. Routing benefits from a small fast model — full live OpenRouter catalogue available in the picker."
   />
 
   <TemperatureField

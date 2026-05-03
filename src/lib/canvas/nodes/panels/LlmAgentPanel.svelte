@@ -5,7 +5,7 @@
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
   import MaxTokensField from './widgets/MaxTokensField.svelte';
-  import { VERTEX_MODEL_OPTIONS } from './shared/vertex-models';
+  import { fetchAllChatModels } from './shared/vertex-models';
 
   let {
     config,
@@ -122,8 +122,8 @@
     <ModelSelect
       value={currentModel}
       onChange={(v) => set('model', v)}
-      options={VERTEX_MODEL_OPTIONS}
-      hint="Leave as <strong>Default</strong> to use the site-wide admin setting (recommended). Slashed IDs route via OpenRouter and require a key."
+      fetcher={fetchAllChatModels}
+      hint="Leave as <strong>Default</strong> to use the site-wide admin setting (recommended). Slashed IDs route via OpenRouter — full live OpenRouter catalogue is in the picker."
     />
 
     <TemperatureField
