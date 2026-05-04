@@ -15,6 +15,28 @@ SERVICE="jkai-builder"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+echo "==> Checking for in-flight builds..."
+# Phase 3's deploy-doesn't-kill-builds protection covers ONLY the SvelteKit
+# web-app deploy (deploy.sh). Restarting the builder DOES kill its child pi
+# process — true checkpoint-resume across builder restarts is the unfinished
+# half of phase 8 (deferred: needs setsid + fifo + reattach, non-trivial).
+# Until then: refuse to deploy the builder if a build is iterating, unless
+# explicitly forced via FORCE_DEPLOY=1.
+ACTIVE_COUNT=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "docker exec strange-rambling-app-db-1 psql -U app -d strange_rambling -tAc \"SELECT count(*) FROM jkai_builds WHERE status='running';\"" \
+  2>/dev/null | tr -d '[:space:]')
+if [ "${ACTIVE_COUNT:-0}" -gt 0 ] && [ -z "${FORCE_DEPLOY:-}" ]; then
+  echo "==> ABORT: $ACTIVE_COUNT build(s) currently iterating. Restarting jkai-builder will kill the active pi child."
+  echo "    Options:"
+  echo "      a) Wait for the build to finish or pause it via the UI, then re-run."
+  echo "      b) FORCE_DEPLOY=1 $0 — accept losing the in-flight iteration."
+  echo "         (The orchestrator will re-run that iteration on resume; cost = one wasted LLM call.)"
+  exit 2
+fi
+if [ "${ACTIVE_COUNT:-0}" -gt 0 ]; then
+  echo "==> WARNING: FORCE_DEPLOY set with $ACTIVE_COUNT active build(s) — proceeding, the in-flight iteration WILL be killed."
+fi
+
 echo "==> Building jkai-builder bundle..."
 npm run build:builder
 
