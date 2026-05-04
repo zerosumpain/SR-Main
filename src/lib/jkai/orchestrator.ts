@@ -688,12 +688,27 @@ class Orchestrator {
       // Run design-system linter (when enabled). If it finds issues, mark the
       // iteration failed so promotion is skipped and the next iteration's user
       // prompt receives the findings as required fixes.
+      //
+      // Scoping: the design system targets the SvelteKit personal site —
+      // `nm-*` classes, the warm-brutalist palette, no-Tailwind rule. Builds
+      // for unrelated projects (a graphing calculator, a python flask app,
+      // a static landing page) shouldn't be held to those rules. Skip the
+      // linter when the workspace contains no .svelte file.
       if ((build as any).enforceDesignSystem) {
         try {
           const { listDevFiles, readDevFile } = await import('./sandbox');
           const { lintDesignSystem } = await import('./design-lint');
           const targetExts = ['.css', '.svelte', '.html', '.tsx', '.jsx', '.vue'];
           const all = await listDevFiles(buildId);
+          const hasSvelte = all.some((f) => f.path.endsWith('.svelte'));
+          if (!hasSvelte) {
+            await emitLog(
+              buildId,
+              'system',
+              'Design-system linter skipped — no .svelte files in workspace (rules are warm-brutalist Svelte-specific).',
+              iteration.id,
+            );
+          } else {
           const files: Record<string, string> = {};
           for (const f of all) {
             if (!targetExts.some((e) => f.path.endsWith(e))) continue;
@@ -768,6 +783,7 @@ class Orchestrator {
             this.scheduleNext(buildId, 1000);
             return;
           }
+          } // close: else { ... lint findings block ... }
         } catch (err: any) {
           await emitLog(
             buildId,

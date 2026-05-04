@@ -85,7 +85,12 @@ export async function executeIteration(
   try {
     const extPath = await syncJkaiExtension(build.id);
     extensions.push(extPath);
-    extraEnv.JKAI_API_URL = process.env.JKAI_API_URL ?? 'http://host.docker.internal:5173';
+    // host.docker.internal only resolves inside the (now-retired) docker
+    // sandbox. Host mode talks to the local SvelteKit web app on loopback.
+    const HOST_DEFAULT = process.env.JKAI_BUILDS_HOSTMODE === '1'
+      ? 'http://127.0.0.1:4173'
+      : 'http://host.docker.internal:5173';
+    extraEnv.JKAI_API_URL = process.env.JKAI_API_URL ?? HOST_DEFAULT;
     extraEnv.JKAI_BRIDGE_TOKEN = signBridgeToken(build.id);
   } catch (err) {
     await emitLog(
