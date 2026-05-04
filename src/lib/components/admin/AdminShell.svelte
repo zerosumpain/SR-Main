@@ -122,6 +122,7 @@
     </nav>
 
     <div class="nav-foot">
+      <a href="https://docs.strangeramblings.com" target="_blank" rel="noopener" class="foot-link">Docs ↗</a>
       <a href="/" class="foot-link">← Back to site</a>
     </div>
   </aside>
