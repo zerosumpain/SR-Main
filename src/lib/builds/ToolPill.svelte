@@ -2,7 +2,11 @@
   import type { ToolEntry } from './feed';
 
   let { tool }: { tool: ToolEntry } = $props();
-  let open = $state(false);
+
+  // Auto-expand while a tool is streaming so the user sees the code being
+  // written in real time. Initial value is taken once at mount; the user
+  // can collapse manually after, and we keep their choice from then on.
+  let open = $state(tool.status === 'running');
 
   const status = $derived(
     tool.status === 'running'

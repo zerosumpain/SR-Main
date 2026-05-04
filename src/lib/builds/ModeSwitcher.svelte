@@ -3,10 +3,14 @@
     mode?: 'watch' | 'tinker' | 'drive';
   } = $props();
 
+  // Drive mode removed from the visible switcher — it's a coming-soon
+  // placeholder and just adds clutter. Watch + Tinker are the live modes.
+  // Tinker is also currently the same view as Watch with editing enabled,
+  // gated by build.status (the agent and the user shouldn't be writing the
+  // workspace concurrently — pause the build to edit).
   const MODES: Array<{ key: 'watch' | 'tinker' | 'drive'; label: string; enabled: boolean; tip?: string }> = [
     { key: 'watch', label: 'Watch', enabled: true },
-    { key: 'tinker', label: 'Tinker', enabled: true, tip: 'Edit files in the sandbox (pause the build first)' },
-    { key: 'drive', label: 'Drive', enabled: false, tip: 'Coming in Phase 3 — pi RPC take-over' },
+    { key: 'tinker', label: 'Tinker', enabled: true, tip: 'Edit files in the workspace (pause the build first)' },
   ];
 </script>
 

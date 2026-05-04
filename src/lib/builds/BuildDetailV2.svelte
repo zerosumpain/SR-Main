@@ -283,24 +283,8 @@
     {/if}
   </div>
 
-  {#if build.serveConfig || build.publishedSlug}
-    <section class="app-url">
-      <span class="app-url-label">App URL</span>
-      <code class="app-url-value">{build.publishedSlug
-        ? `https://strangeramblings.com/projects/jkai/${build.publishedSlug}/`
-        : `https://strangeramblings.com/api/jkai/proxy/${build.id}/`}</code>
-      <button
-        type="button"
-        class="row-link"
-        onclick={() => navigator.clipboard?.writeText(build.publishedSlug
-          ? `https://strangeramblings.com/projects/jkai/${build.publishedSlug}/`
-          : `https://strangeramblings.com/api/jkai/proxy/${build.id}/`)}
-      >copy</button>
-      {#if !build.publishedSlug}
-        <span class="dim">requires sign-in</span>
-      {/if}
-    </section>
-  {/if}
+  <!-- Duplicate App URL section removed — the sticky preview banner above
+       (preview-banner) already shows the URL with copy + open buttons. -->
 
   {#if build.status === 'failed'}
     <FailureRecovery

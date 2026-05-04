@@ -71,6 +71,78 @@ End your review with:
 ## Recommended Changes
 (concrete, actionable fixes for each critical issue — specific replacements, not vague suggestions)`;
 
+// --- Streaming helper ---
+//
+// All three planner LLM calls (Proposer, Critic, Proposer-revision) go
+// through this. Each chunk's content delta is emitted as a `stream_text` or
+// `stream_thinking` LiveEvent so the UI's existing per-token rendering
+// (LaneOutput / LaneThinking) lights up character-by-character. Without
+// streaming, the user stares at a "Round 1/3..." log line for ~30s before
+// the full block lands at once — phase 4 verified streaming worked for pi
+// iterations but the planner was still buffered.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LLMClient = any;
+
+async function streamPlannerCall(opts: {
+  client: LLMClient;
+  model: string;
+  planIteration: { id: string };
+  buildId: string;
+  systemPrompt: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  temperature: number;
+  max_tokens: number;
+  streamIdSuffix: string;
+  lane: 'text' | 'thinking';
+  priceSnapshot: PriceSnapshot | null;
+  onUsage: (totalTokens: number) => void;
+}): Promise<string> {
+  const streamId = `${opts.planIteration.id}:plan-${opts.streamIdSuffix}`;
+  const eventType = opts.lane === 'thinking' ? 'stream_thinking' : 'stream_text';
+  const stream = await opts.client.chat.completions.create({
+    model: opts.model,
+    messages: [
+      { role: 'system', content: opts.systemPrompt },
+      ...opts.messages,
+    ],
+    temperature: opts.temperature,
+    max_tokens: opts.max_tokens,
+    stream: true,
+    stream_options: { include_usage: true },
+  });
+
+  let acc = '';
+  let usageTokens = 0;
+  for await (const chunk of stream as AsyncIterable<{ choices?: Array<{ delta?: { content?: string } }>; usage?: { total_tokens?: number } }>) {
+    const delta = chunk.choices?.[0]?.delta?.content ?? '';
+    if (delta) {
+      acc += delta;
+      emitLive(opts.buildId, {
+        type: eventType,
+        iterationId: opts.planIteration.id,
+        streamId,
+        delta,
+      });
+    }
+    if (chunk.usage?.total_tokens) usageTokens = chunk.usage.total_tokens;
+  }
+  emitLive(opts.buildId, {
+    type: 'stream_turn_end',
+    iterationId: opts.planIteration.id,
+    streamId,
+    full: acc,
+  });
+  if (usageTokens > 0) {
+    await recordBuildUsage(
+      opts.buildId,
+      parseUsage({ total_tokens: usageTokens } as unknown as Parameters<typeof parseUsage>[0]),
+      opts.priceSnapshot,
+    );
+    opts.onUsage(usageTokens);
+  }
+  return acc;
+}
+
 // --- Planning Functions ---
 
 export async function planBuild(
@@ -112,20 +184,17 @@ export async function planBuild(
 
     const userPromptMsg = `Project objective:\n${prompt}\n\nProduce your initial delivery plan following the required format.`;
 
-    const r1 = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: PROPOSER_SYSTEM_PROMPT },
-        { role: 'user', content: userPromptMsg },
-      ],
+    const proposal = await streamPlannerCall({
+      client, model, planIteration, buildId,
+      systemPrompt: PROPOSER_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPromptMsg }],
       temperature: 0.7,
       max_tokens: 3000,
+      streamIdSuffix: 'r1',
+      lane: 'text',
+      priceSnapshot,
+      onUsage: (u) => { totalTokens += u; },
     });
-
-    await recordBuildUsage(buildId, parseUsage(r1.usage), priceSnapshot);
-
-    const proposal = r1.choices[0]?.message?.content || '';
-    totalTokens += r1.usage?.total_tokens || 0;
     debateMessages.push({ role: 'user', content: userPromptMsg });
     debateMessages.push({ role: 'assistant', content: proposal });
 
@@ -150,21 +219,18 @@ export async function planBuild(
     checkDeadline('Critic review');
     await emitLog(buildId, 'system', 'Round 2/3 — Critic reviewing plan...', planIteration.id);
 
-    // Critic gets its own system prompt but sees the proposal conversation
-    const r2 = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: CRITIC_SYSTEM_PROMPT },
-        ...debateMessages,
-      ],
+    // Critic gets its own system prompt but sees the proposal conversation.
+    const critique = await streamPlannerCall({
+      client, model, planIteration, buildId,
+      systemPrompt: CRITIC_SYSTEM_PROMPT,
+      messages: debateMessages,
       temperature: 0.6,
       max_tokens: 2500,
+      streamIdSuffix: 'r2',
+      lane: 'thinking',
+      priceSnapshot,
+      onUsage: (u) => { totalTokens += u; },
     });
-
-    await recordBuildUsage(buildId, parseUsage(r2.usage), priceSnapshot);
-
-    const critique = r2.choices[0]?.message?.content || '';
-    totalTokens += r2.usage?.total_tokens || 0;
 
     // Push critique as 'user' role — from the Proposer's perspective in Round 3,
     // the critique is external feedback, not its own prior output
@@ -199,20 +265,17 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
 
     debateMessages.push({ role: 'user', content: revisionInstruction });
 
-    const r3 = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: PROPOSER_SYSTEM_PROMPT },
-        ...debateMessages,
-      ],
+    const finalPlan = await streamPlannerCall({
+      client, model, planIteration, buildId,
+      systemPrompt: PROPOSER_SYSTEM_PROMPT,
+      messages: debateMessages,
       temperature: 0.7,
       max_tokens: 3000,
+      streamIdSuffix: 'r3',
+      lane: 'text',
+      priceSnapshot,
+      onUsage: (u) => { totalTokens += u; },
     });
-
-    await recordBuildUsage(buildId, parseUsage(r3.usage), priceSnapshot);
-
-    const finalPlan = r3.choices[0]?.message?.content || '';
-    totalTokens += r3.usage?.total_tokens || 0;
     bestPlan = finalPlan;
     debateMessages.push({ role: 'assistant', content: finalPlan });
 
