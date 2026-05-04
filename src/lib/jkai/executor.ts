@@ -103,6 +103,17 @@ export async function executeIteration(
   const thinkingLevel = (build as JkaiBuild & { thinkingLevel?: string }).thinkingLevel || undefined;
 
   const fileList = await listWorkspaceFiles(build.id);
+
+  // Build a structured codebase digest — file map + extracted signatures —
+  // injected into iteration context so the agent skips the rediscovery
+  // phase. listDevFiles returns rich entries (path, size, mtime); the
+  // digest helper picks the most-recently-modified relevant files,
+  // summarises each, and produces a markdown block under 8 KB.
+  const { listDevFiles } = await import('./sandbox');
+  const { buildCodebaseDigest } = await import('./codebase-digest');
+  const devFiles = await listDevFiles(build.id).catch(() => []);
+  const codebaseDigest = await buildCodebaseDigest(build.id, devFiles).catch(() => '');
+
   const contextMessages = buildIterationContext(
     build.prompt,
     prevIteration,
@@ -110,6 +121,7 @@ export async function executeIteration(
     projectPlan,
     iterationNumber,
     assignedPort,
+    codebaseDigest,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];

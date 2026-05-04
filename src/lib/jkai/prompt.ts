@@ -112,6 +112,7 @@ export function buildIterationContext(
   projectPlan: string | null = null,
   iterationNumber: number = 1,
   assignedPort: number = 8000,
+  codebaseDigest: string = '',
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
@@ -132,7 +133,14 @@ export function buildIterationContext(
     }
   }
 
-  if (fileList.trim()) {
+  // Codebase digest — see src/lib/jkai/codebase-digest.ts. Lists every
+  // relevant file with line count + extracted signatures (functions,
+  // classes, $state declarations, HTML ids, CSS tokens). The agent uses
+  // this to skip the tool-call discovery phase that previously ate the
+  // first 20-50 actions of every iteration.
+  if (codebaseDigest.trim()) {
+    contextMessage += `\n\n${codebaseDigest}\n\nDO NOT re-read or re-list these files unless you're about to modify one. Trust the digest for "what exists and where".`;
+  } else if (fileList.trim()) {
     contextMessage += `\n\n## Current Workspace Files\n\`\`\`\n${fileList}\n\`\`\``;
   } else {
     contextMessage += `\n\n## Current Workspace\nEmpty — this is a fresh project.`;
