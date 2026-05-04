@@ -317,7 +317,22 @@ class Orchestrator {
     await ensureWorkspace(buildId);
 
     const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-    if (buildRecord && !this.stopped) {
+    if (!buildRecord || this.stopped) return;
+
+    // Honour planStatus from the create-build form. When planFirst=false
+    // the API sets planStatus='approved' at insert time — meaning the user
+    // explicitly opted out of the proposer/critic/revision debate. Pre-fix,
+    // we ran planBuild() anyway and just threw the 90 seconds of output
+    // away because the gate didn't fire. Now: skip the planner entirely
+    // and go straight to iteration 1.
+    const skipPlanning = buildRecord.planStatus !== 'pending';
+    if (skipPlanning) {
+      await emitLog(
+        buildId,
+        'system',
+        'Skipping planner debate — going straight to iteration 1 (planFirst was off at create-time).',
+      );
+    } else {
       await planBuild(buildId, buildRecord.prompt);
     }
     if (this.stopped) return;

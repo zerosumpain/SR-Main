@@ -14,8 +14,15 @@
   let submitting = $state(false);
   let error = $state('');
   let builderModel = $state<ModelContext>({ ...data.defaultBuilderModel });
+  // Defaults: prefer the fast path. enforceDesignSystem only matters for
+  // SR-internal Svelte projects (the linter skips non-Svelte workspaces
+  // anyway as of the host-mode cutover), so leaving it on does no harm
+  // for static builds. planFirst, on the other hand, gates a 90-second
+  // proposer/critic/revision debate before iteration 1 even starts —
+  // unhelpful for 'build me a calculator' shape prompts. Off by default;
+  // user can opt in via the checkbox for genuinely complex builds.
   let enforceDesignSystem = $state(true);
-  let planFirst = $state(true);
+  let planFirst = $state(false);
   let thinkingLevel = $state<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
 
   async function submit() {
