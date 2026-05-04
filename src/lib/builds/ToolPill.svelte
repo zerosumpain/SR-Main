@@ -19,10 +19,18 @@
 </script>
 
 <div class="tool" class:open>
-  <button class="row-link" onclick={() => (open = !open)} type="button">
+  <button
+    class="tool-trigger"
+    onclick={() => (open = !open)}
+    type="button"
+    aria-expanded={open}
+    title={open ? 'Hide command' : 'Click to see the full command and output'}
+  >
+    <span class="caret">{open ? '▾' : '▸'}</span>
     <span class="status-dot" data-status={status}></span>
     <code class="name">{tool.name}</code>
     <span class="dim">{summary}{tool.argsRaw.length > 100 ? '…' : ''}</span>
+    <span class="cue">{open ? 'hide' : 'view command'}</span>
   </button>
   {#if open}
     <pre class="args">{tool.argsRaw}</pre>
@@ -40,16 +48,62 @@
   .tool.open {
     border-left-color: var(--accent);
   }
+  .tool-trigger {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 4px 6px;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 2px;
+    transition: background 0.12s ease;
+  }
+  .tool-trigger:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .tool.open .tool-trigger {
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+  }
+  .caret {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    width: 12px;
+    flex-shrink: 0;
+  }
   .name {
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--accent);
-    margin: 0 6px;
+    margin: 0 4px;
+    flex-shrink: 0;
   }
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+  .cue {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+    border: 1px solid var(--card-border);
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+  .tool-trigger:hover .cue {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   pre {
     font-family: var(--font-mono);

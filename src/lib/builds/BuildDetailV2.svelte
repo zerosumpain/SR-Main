@@ -49,6 +49,35 @@
   let unpublishing = $state(false);
   let acting = $state<string | null>(null);
   let showPreview = $state(false);
+
+  // Elapsed-time ticker — visible in the page kicker so the user knows
+  // how long the build has been running. Anchors on createdAt; stops
+  // ticking on terminal statuses but keeps showing the final duration.
+  let nowMs = $state(Date.now());
+  let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  const isTerminalStatus = $derived(
+    build.status === 'completed' || build.status === 'failed' || build.status === 'paused',
+  );
+  const startMs = $derived(
+    build.startedAt ? new Date(build.startedAt).getTime() : new Date(build.createdAt).getTime(),
+  );
+  const endMs = $derived(
+    build.completedAt ? new Date(build.completedAt).getTime() : null,
+  );
+  const elapsedMs = $derived(
+    isTerminalStatus
+      ? Math.max(0, (endMs ?? nowMs) - startMs)
+      : Math.max(0, nowMs - startMs),
+  );
+  function formatElapsed(ms: number): string {
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    if (m < 60) return `${m}m ${r}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
   // Live preview URL observed from the SSE stage stream — arrives as soon as
   // the orchestrator emits it, ~10s before the next page-data poll catches up.
   // Used to populate the App URL banner the moment a preview goes live.
@@ -131,6 +160,8 @@
     if (build.status === 'running' || build.status === 'awaiting_plan_approval') {
       connect();
     }
+    // Tick the elapsed clock once a second while the build is non-terminal.
+    elapsedTimer = setInterval(() => { nowMs = Date.now(); }, 1000);
     pollTimer = setInterval(async () => {
       try {
         const r = await fetch(`/api/jkai/builds/${build.id}`);
@@ -161,6 +192,7 @@
     closed = true;
     es?.close();
     if (pollTimer) clearInterval(pollTimer);
+    if (elapsedTimer) clearInterval(elapsedTimer);
   });
 
   async function refresh() {
@@ -238,7 +270,14 @@
   <header class="page-hdr">
     <div class="hdr-left">
       <a class="row-link" href="/jkai/builds">← all builds</a>
-      <div class="kicker">JKAI build · <span class="status-pill" data-status={build.status}>{build.status}</span></div>
+      <div class="kicker">
+        JKAI build ·
+        <span class="status-pill" data-status={build.status}>{build.status}</span>
+        ·
+        <span class="elapsed" class:running={!isTerminalStatus} title="Elapsed since the build started">
+          {formatElapsed(elapsedMs)}{!isTerminalStatus ? '' : ' (final)'}
+        </span>
+      </div>
       <h1>{build.title ?? build.prompt.slice(0, 60)}</h1>
     </div>
     <div class="hdr-right">
@@ -452,6 +491,22 @@
   }
   .status-pill[data-status='awaiting_plan_approval'] {
     color: var(--accent);
+  }
+  .elapsed {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .elapsed.running {
+    color: var(--text-primary);
+  }
+  .elapsed.running::before {
+    content: '⏱ ';
+    color: var(--accent);
+    animation: elapsed-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes elapsed-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
   }
   .actions-row {
     display: flex;
