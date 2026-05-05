@@ -22,6 +22,7 @@
   import { invalidateAll } from '$app/navigation';
   import BuildSessionPanel from './BuildSessionPanel.svelte';
   import StreamLine from './StreamLine.svelte';
+  import IterationHeader from './IterationHeader.svelte';
   import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 
   interface PageData {
@@ -159,6 +160,58 @@
     return out;
   });
 
+  // Group rendered events by iteration so we can drop an IterationHeader
+  // between groups. iterationId === null events (orphan / pre-iteration
+  // system logs) form their own anonymous group at the top. Group order is
+  // determined by the FIRST event id in each group, so iterations appear in
+  // the chronological order they actually started.
+  type Group = {
+    iterationId: string | null;
+    iter: JkaiIteration | null;
+    firstId: number;
+    events: typeof rendered;
+  };
+  const groups = $derived.by(() => {
+    const map = new Map<string, Group>();
+    for (let i = 0; i < rendered.length; i++) {
+      const ev = rendered[i];
+      const key = ev.iterationId ?? '__orphan__';
+      let g = map.get(key);
+      if (!g) {
+        const iter = ev.iterationId
+          ? data.iterations.find((x) => x.id === ev.iterationId) ?? null
+          : null;
+        g = {
+          iterationId: ev.iterationId,
+          iter,
+          firstId: ev.id ?? Number.MAX_SAFE_INTEGER - i, // live buffers go last
+          events: [],
+        };
+        map.set(key, g);
+      }
+      g.events.push(ev);
+    }
+    return Array.from(map.values()).sort((a, b) => a.firstId - b.firstId);
+  });
+
+  // Per-iteration expand/collapse state. Default: latest iteration is
+  // expanded, past iterations collapse to their summary line. The "orphan"
+  // group (build-level system logs) is always expanded since it's where
+  // 'Build started' / 'Plan approved' etc. live.
+  const expandedByIter = $state<Record<string, boolean>>({});
+  function isExpanded(g: Group): boolean {
+    const k = g.iterationId ?? '__orphan__';
+    if (k in expandedByIter) return expandedByIter[k];
+    if (g.iterationId === null) return true;
+    // Latest iteration = the LAST group with a non-null iterationId.
+    const lastIter = [...groups].reverse().find((x) => x.iterationId !== null);
+    return lastIter?.iterationId === g.iterationId;
+  }
+  function toggleGroup(g: Group): void {
+    const k = g.iterationId ?? '__orphan__';
+    expandedByIter[k] = !isExpanded(g);
+  }
+
   function onScroll(): void {
     if (!scroller) return;
     const slack = 80;
@@ -257,8 +310,24 @@
     {#if rendered.length === 0}
       <div class="bs-empty">Waiting for activity…</div>
     {/if}
-    {#each rendered as line (line.key)}
-      <StreamLine {line} buildId={build.id} />
+    {#each groups as g (g.iterationId ?? '__orphan__')}
+      {@const open = isExpanded(g)}
+      {@const lastIterGroup = [...groups].reverse().find((x) => x.iterationId !== null)}
+      {@const isLatest = g.iterationId !== null && g === lastIterGroup}
+      {#if g.iterationId !== null}
+        <IterationHeader
+          iter={g.iter}
+          eventCount={g.events.length}
+          expanded={open}
+          {isLatest}
+          onToggle={() => toggleGroup(g)}
+        />
+      {/if}
+      {#if open}
+        {#each g.events as line (line.key)}
+          <StreamLine {line} buildId={build.id} />
+        {/each}
+      {/if}
     {/each}
   </div>
 
