@@ -111,6 +111,95 @@
   const stravaState = $derived(data.syncStates.find((s) => s.service === 'strava'));
   const whoopState = $derived(data.syncStates.find((s) => s.service === 'whoop'));
 
+  type ActivityRow = (typeof data.recentActivities)[number];
+  let featured = $state<ActivityRow[]>(data.featuredActivities);
+  let recent = $state<ActivityRow[]>(data.recentActivities);
+  let featureBusyId = $state<number | null>(null);
+  let featureError = $state<string | null>(null);
+  let captionDraft = $state<Record<number, string>>({});
+
+  function fmtKm(m: number): string {
+    return (m / 1000).toFixed(1);
+  }
+  function fmtDur(s: number): string {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${m}m`;
+  }
+  function fmtDay(unix: number): string {
+    return new Date(unix * 1000).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  async function patchActivity(
+    id: number,
+    body: { featured?: boolean; featuredOrder?: number | null; featuredCaption?: string | null },
+  ): Promise<boolean> {
+    featureError = null;
+    featureBusyId = id;
+    try {
+      const res = await fetch(`/api/health/activity/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        featureError = errBody.error ?? `Error ${res.status}`;
+        return false;
+      }
+      return true;
+    } catch {
+      featureError = 'Network error';
+      return false;
+    } finally {
+      featureBusyId = null;
+    }
+  }
+
+  async function reloadActivities() {
+    const [allRes, featRes] = await Promise.all([
+      fetch('/api/health/activity?limit=60'),
+      fetch('/api/health/activity?featured=1&limit=200'),
+    ]);
+    if (allRes.ok) recent = (await allRes.json()).activities;
+    if (featRes.ok) featured = (await featRes.json()).activities;
+  }
+
+  async function toggleFeatured(activity: ActivityRow) {
+    const ok = await patchActivity(activity.id, { featured: !activity.featured });
+    if (ok) await reloadActivities();
+  }
+
+  async function saveCaption(activity: ActivityRow) {
+    const next = (captionDraft[activity.id] ?? activity.featuredCaption ?? '').trim();
+    const ok = await patchActivity(activity.id, { featuredCaption: next.length === 0 ? null : next });
+    if (ok) {
+      delete captionDraft[activity.id];
+      await reloadActivities();
+    }
+  }
+
+  async function moveFeatured(activity: ActivityRow, dir: -1 | 1) {
+    const idx = featured.findIndex((a) => a.id === activity.id);
+    const swapIdx = idx + dir;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= featured.length) return;
+    const ordered = [...featured];
+    [ordered[idx], ordered[swapIdx]] = [ordered[swapIdx], ordered[idx]];
+    // Persist 1-based order for everyone in the list to keep it deterministic.
+    for (let i = 0; i < ordered.length; i++) {
+      const a = ordered[i];
+      if (a.featuredOrder !== i + 1) {
+        const ok = await patchActivity(a.id, { featuredOrder: i + 1 });
+        if (!ok) return;
+      }
+    }
+    await reloadActivities();
+  }
+
   const activeStravaJob = $derived(
     recentJobs.find(
       (j) => (j.service === 'strava' || j.service === 'all') &&
@@ -270,6 +359,108 @@
     <p class="muted">HR + activity from the Apple device webhook. No backfill controls — data lands as the watch reports it.</p>
   </section>
 
+  <!-- Epic activities (featured) -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Epic Activities · /health</span>
+      <span class="nm-sec-meta">{featured.length} featured</span>
+    </div>
+    <p class="muted">Mark Strava activities as featured to surface them in the "Epic Activities" rail on the public /health page. Add an optional caption, reorder with the arrows.</p>
+
+    {#if featureError}
+      <div class="banner banner-error">{featureError}</div>
+    {/if}
+
+    {#if featured.length === 0}
+      <div class="nm-empty">Nothing featured yet. Pick one from the recent list below.</div>
+    {:else}
+      <ul class="ep-list">
+        {#each featured as a, i (a.id)}
+          <li class="ep-row">
+            <div class="ep-meta">
+              <p class="ep-title">{a.name}</p>
+              <p class="ep-sub">
+                <span>{a.sportType || a.type}</span>
+                <span>· {fmtDay(a.startDate)}</span>
+                <span>· {fmtKm(a.distance)} km</span>
+                <span>· {fmtDur(a.movingTime)}</span>
+                {#if a.totalElevationGain}<span>· {Math.round(a.totalElevationGain)} m</span>{/if}
+              </p>
+            </div>
+
+            <div class="ep-caption">
+              <input
+                class="nm-text-input"
+                type="text"
+                maxlength="280"
+                placeholder="Optional caption shown on /health"
+                value={captionDraft[a.id] ?? a.featuredCaption ?? ''}
+                oninput={(e) => (captionDraft[a.id] = (e.currentTarget as HTMLInputElement).value)}
+              />
+              <button
+                class="nm-link-btn"
+                disabled={featureBusyId === a.id}
+                onclick={() => saveCaption(a)}
+              >Save caption</button>
+            </div>
+
+            <div class="ep-actions">
+              <button class="nm-link-btn" onclick={() => moveFeatured(a, -1)} disabled={i === 0 || featureBusyId === a.id} title="Move up">↑</button>
+              <button class="nm-link-btn" onclick={() => moveFeatured(a, 1)} disabled={i === featured.length - 1 || featureBusyId === a.id} title="Move down">↓</button>
+              <button class="nm-link-btn danger" onclick={() => toggleFeatured(a)} disabled={featureBusyId === a.id}>Remove</button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <!-- Pick from recent -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Recent Strava Activities</span>
+      <span class="nm-sec-meta">{recent.length}</span>
+    </div>
+
+    {#if recent.length === 0}
+      <div class="nm-empty">No Strava activities synced yet. Connect Strava and run a backfill above.</div>
+    {:else}
+      <table class="nm-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Activity</th>
+            <th>Type</th>
+            <th>Distance</th>
+            <th>Time</th>
+            <th>Elev</th>
+            <th>Featured</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each recent as a (a.id)}
+            <tr>
+              <td>{fmtDay(a.startDate)}</td>
+              <td class="ep-name">{a.name}</td>
+              <td>{a.sportType || a.type}</td>
+              <td>{fmtKm(a.distance)} km</td>
+              <td>{fmtDur(a.movingTime)}</td>
+              <td>{a.totalElevationGain ? `${Math.round(a.totalElevationGain)}m` : '—'}</td>
+              <td>
+                <button
+                  class="nm-link-btn"
+                  class:on={a.featured}
+                  disabled={featureBusyId === a.id}
+                  onclick={() => toggleFeatured(a)}
+                >{a.featured ? '★ featured' : '☆ feature'}</button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </section>
+
   <!-- Recent jobs -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
@@ -344,5 +535,74 @@
     font-size: 10px;
     color: #c44;
     background: rgba(196, 68, 68, 0.05);
+  }
+
+  .ep-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.6rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .ep-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid var(--divider);
+    background: var(--card-bg, transparent);
+  }
+  .ep-meta { min-width: 0; }
+  .ep-title {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ep-sub {
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ep-caption {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    min-width: 0;
+  }
+  .ep-caption .nm-text-input {
+    flex: 1;
+    min-width: 0;
+  }
+  .ep-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .ep-name {
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nm-link-btn.on {
+    color: var(--accent);
+  }
+  .nm-link-btn.danger {
+    color: #c44;
+  }
+
+  @media (max-width: 720px) {
+    .ep-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

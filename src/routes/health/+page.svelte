@@ -5,6 +5,7 @@
   import PulseGrid from '$lib/components/health/v2/PulseGrid.svelte';
   import Breakdown from '$lib/components/health/v2/Breakdown.svelte';
   import Correlations from '$lib/components/health/v2/Correlations.svelte';
+  import EpicActivities from '$lib/components/health/v2/EpicActivities.svelte';
 
   let { data } = $props();
 </script>
@@ -101,6 +102,23 @@
       <Correlations items={data.correlations} />
     </div>
   </section>
+
+  {#if data.featuredActivities?.length}
+    <section class="h-section">
+      <div class="h-section-inner">
+        <div class="h-section-head">
+          <div>
+            <p class="h-section-num">06 / FIELD NOTES · GPS TRACES</p>
+            <h2 class="h-section-title">EPIC ACTIVITIES</h2>
+          </div>
+          <p class="h-section-strap">
+            The days that earned a name. Routes drawn from Strava.
+          </p>
+        </div>
+        <EpicActivities activities={data.featuredActivities} />
+      </div>
+    </section>
+  {/if}
 
   <footer class="h-footer">
     <p class="h-footer-mark">STRANGE RAMBLINGS · /HEALTH</p>

@@ -128,6 +128,11 @@ export const stravaActivities = pgTable('strava_activities', {
   startLatLng: text('start_latlng'), // JSON [lat, lng]
   endLatLng: text('end_latlng'), // JSON [lat, lng]
 
+  // Editorial: featured on public /health "epic activities" rail
+  featured: boolean('featured').notNull().default(false),
+  featuredOrder: integer('featured_order'), // lower = earlier; null = default by date desc
+  featuredCaption: text('featured_caption'), // optional editorial blurb shown under the title
+
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
 });
