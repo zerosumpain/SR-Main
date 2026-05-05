@@ -151,6 +151,46 @@ function classifyFile(
   return { kind: 'unchanged' };
 }
 
+/** For [CHANGED] files only: read both versions, compute a tiny line-based
+ *  diff summary so the agent sees what actually changed without a tool call.
+ *  Returns a short '[+N/-M]' tag plus a couple of headline added/removed
+ *  lines. Skips silently when either read fails or the diff is too noisy. */
+async function summariseDiff(currentPath: string, snapshotPath: string): Promise<string> {
+  try {
+    const [a, b] = await Promise.all([
+      readFile(snapshotPath, 'utf-8').catch(() => ''),
+      readFile(currentPath, 'utf-8').catch(() => ''),
+    ]);
+    if (!a || !b) return '';
+    const aLines = a.split('\n');
+    const bLines = b.split('\n');
+    const aSet = new Set(aLines);
+    const bSet = new Set(bLines);
+    const added: string[] = [];
+    const removed: string[] = [];
+    for (const line of bLines) {
+      if (line.trim() && !aSet.has(line)) added.push(line.trim());
+    }
+    for (const line of aLines) {
+      if (line.trim() && !bSet.has(line)) removed.push(line.trim());
+    }
+    if (added.length === 0 && removed.length === 0) return '';
+    // Headline lines worth showing: signature-shaped ones (function/class/
+    // export/<tag>/selector). Avoids 'wrote 200 lines of detail; here are
+    // 12 random ones'.
+    const sigShaped = (line: string): boolean =>
+      /^\s*(export\s|function\s|class\s|def\s|<[a-zA-Z]|\.[\w-]+\s*\{|#[\w-]+\s*\{|--[\w-]+:|"[\w-]+"\s*:)/.test(line);
+    const headlineAdded = added.filter(sigShaped).slice(0, 3);
+    const headlineRemoved = removed.filter(sigShaped).slice(0, 2);
+    const parts: string[] = [`[+${added.length}/-${removed.length}]`];
+    if (headlineAdded.length) parts.push(`new: ${headlineAdded.map((l) => l.slice(0, 60)).join(' | ')}`);
+    if (headlineRemoved.length) parts.push(`gone: ${headlineRemoved.map((l) => l.slice(0, 60)).join(' | ')}`);
+    return parts.join(' · ');
+  } catch {
+    return '';
+  }
+}
+
 /** Walk the workspace's listDevFiles output, read each candidate, summarise.
  *  Designed to be called every iteration before pi spawns. Cost: a few ms
  *  of disk I/O on a typical project. Returns a single markdown block to
@@ -208,9 +248,17 @@ export async function buildCodebaseDigest(buildId: string, files: FileEntry[]): 
       else if (tag === '[CHANGED]') changedCount++;
       const content = await readFile(fullPath, 'utf-8');
       const summary = summariseFile(f.path, content);
+      // For [CHANGED] files, append a tiny diff summary so the agent sees
+      // what actually changed without re-reading the full file. Only runs
+      // when we have a snapshot to diff against (= not iter 1, not isFresh).
+      let diffTag = '';
+      if (tag === '[CHANGED]' && snapshotDir) {
+        diffTag = await summariseDiff(fullPath, join(snapshotDir, f.path));
+        if (diffTag) diffTag = ` ${diffTag}`;
+      }
       const prefix = tag ? `${tag} ` : '';
-      lines.push(`- ${prefix}${summary}`);
-      totalBytes += summary.length + tag.length;
+      lines.push(`- ${prefix}${summary}${diffTag}`);
+      totalBytes += summary.length + tag.length + diffTag.length;
       if (totalBytes > MAX_SUMMARY_BYTES) {
         lines.push(`- … (${candidates.length - lines.length + 2} more files truncated to keep the digest under 8 KB)`);
         break;

@@ -26,7 +26,11 @@ export const load: PageServerLoad = async ({ params }) => {
     .orderBy(desc(jkaiLogs.id))
     .limit(200);
 
+  // V2 = pre-existing lanes-based view. V3 = single-pane terminal-style
+  // stream — opt in via PUBLIC_BUILDS_V3=true. V2 stays as the default
+  // until V3 has bedded in across a few real builds.
   const flagOn = publicEnv.PUBLIC_BUILDS_V2 === 'true';
+  const v3 = publicEnv.PUBLIC_BUILDS_V3 === 'true';
 
-  return { build, iterations, logs: logs.reverse(), flagOn };
+  return { build, iterations, logs: logs.reverse(), flagOn, v3 };
 };
