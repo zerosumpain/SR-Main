@@ -212,6 +212,45 @@
     expandedByIter[k] = !isExpanded(g);
   }
 
+  // Focus filter — when set to an iterationId (or '__orphan__'), only that
+  // group renders in the stream below. 'all' keeps the full view.
+  let focusedIter = $state<string | 'all'>('all');
+  const visibleGroups = $derived(
+    focusedIter === 'all'
+      ? groups
+      : groups.filter((g) => (g.iterationId ?? '__orphan__') === focusedIter),
+  );
+  // Selection of focusable iterations to render as chips. Includes Plan
+  // (iter 0) and orphan-system events when present, in chronological order.
+  const focusChips = $derived.by(() => {
+    const chips: Array<{ key: string; label: string; status: string; iterationId: string | null }> = [
+      { key: 'all', label: 'All', status: '', iterationId: null },
+    ];
+    for (const g of groups) {
+      if (g.iterationId === null) {
+        chips.push({ key: '__orphan__', label: 'Setup', status: '', iterationId: null });
+      } else if (g.iter) {
+        const label = g.iter.number === 0 ? 'Plan' : `Iter ${g.iter.number}`;
+        chips.push({
+          key: g.iterationId,
+          label,
+          status: g.iter.status,
+          iterationId: g.iterationId,
+        });
+      }
+    }
+    return chips;
+  });
+  function focusOn(key: string): void {
+    focusedIter = key as typeof focusedIter;
+    // When focusing on a specific iteration, force-expand it so the user
+    // sees its events right away (it might have been collapsed).
+    if (key !== 'all' && expandedByIter[key] === false) {
+      expandedByIter[key] = true;
+    }
+    requestAnimationFrame(() => scroller?.scrollTo({ top: 0 }));
+  }
+
   function onScroll(): void {
     if (!scroller) return;
     const slack = 80;
@@ -297,6 +336,31 @@
     </span>
   </header>
 
+  <!-- Focus chips: filter the stream to a single iteration (or 'All').
+       Lives outside the terminal stream so it's always reachable even
+       when the stream is filled. -->
+  {#if focusChips.length > 1}
+    <nav class="bs-focus" aria-label="Focus stream on iteration">
+      {#each focusChips as chip (chip.key)}
+        {@const active = focusedIter === chip.key}
+        <button
+          class="bs-chip"
+          class:active
+          data-status={chip.status}
+          onclick={() => focusOn(chip.key)}
+          type="button"
+          title={chip.label === 'All' ? 'Show every iteration' : `Show only ${chip.label}'s events`}
+        >
+          {chip.label}
+          {#if chip.status === 'running'}<span class="bs-chip-dot" aria-hidden="true"></span>{/if}
+        </button>
+      {/each}
+      {#if focusedIter !== 'all'}
+        <span class="bs-focus-hint">Filtered — only this iteration's events are shown.</span>
+      {/if}
+    </nav>
+  {/if}
+
   <!-- The stream itself: terminal aesthetic, monospace, fixed-height
        scrolling region. New events append at the bottom; we auto-scroll
        only when the user is within 80px of the tail (stickToBottom). -->
@@ -310,7 +374,7 @@
     {#if rendered.length === 0}
       <div class="bs-empty">Waiting for activity…</div>
     {/if}
-    {#each groups as g (g.iterationId ?? '__orphan__')}
+    {#each visibleGroups as g (g.iterationId ?? '__orphan__')}
       {@const open = isExpanded(g)}
       {@const lastIterGroup = [...groups].reverse().find((x) => x.iterationId !== null)}
       {@const isLatest = g.iterationId !== null && g === lastIterGroup}
@@ -447,6 +511,55 @@
   .bs-act:disabled { opacity: 0.4; cursor: not-allowed; }
   .bs-act:hover:not(:disabled) { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
+  .bs-focus {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    flex-shrink: 0;
+    font-family: var(--font-mono), monospace;
+  }
+  .bs-chip {
+    font-family: var(--font-mono), monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 3px 9px;
+    border: 1px solid var(--card-border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .bs-chip:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+  .bs-chip.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .bs-chip[data-status='completed'] { color: var(--status-success, #10b981); }
+  .bs-chip[data-status='failed'] { color: var(--status-error, #c0392b); }
+  .bs-chip.active[data-status='completed'] { background: var(--status-success, #10b981); color: var(--bg); border-color: var(--status-success, #10b981); }
+  .bs-chip.active[data-status='failed'] { background: var(--status-error, #c0392b); color: var(--bg); border-color: var(--status-error, #c0392b); }
+  .bs-chip-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    animation: bs-pulse 1.4s ease-in-out infinite;
+  }
+  .bs-focus-hint {
+    font-size: 10px;
+    color: var(--text-ghost);
+    margin-left: 0.5rem;
+    font-style: italic;
+  }
   .bs-stream {
     flex: 1;
     overflow-y: auto;
