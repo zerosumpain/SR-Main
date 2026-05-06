@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { heartbeatPulses } from '$lib/db/schema';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { heartbeatPulses, jkaiBuilds } from '$lib/db/schema';
+import { and, eq, gt, isNotNull, lt } from 'drizzle-orm';
 import { postHeartbeatNote } from '../llm';
 import type { ActivityHandler } from '../types';
 
@@ -36,22 +36,23 @@ export const buildProgressCheck: ActivityHandler = {
     const cooldownMs = cfg.perBuildCooldownMinutes * 60_000;
     const now = ctx.now;
 
-    // Pull builds that are running. The conversationId column exists on
-    // jkaiBuilds for the chat-linked builds; older builds may be null and
-    // we skip those (no place to post the nudge).
-    const builds = await db.execute(sql`
-      SELECT id, status, conversation_id, iterations_completed, updated_at
-      FROM jkai_builds
-      WHERE status = 'running'
-        AND conversation_id IS NOT NULL
-        AND updated_at < NOW() - INTERVAL '${sql.raw(String(cfg.staleMinutes))} minutes'
-    `) as unknown as Array<{
-      id: string;
-      status: string;
-      conversation_id: string;
-      iterations_completed: number;
-      updated_at: Date;
-    }>;
+    // Pull builds that are running with a linked conversation and stale
+    // updatedAt. Schema names are camelCase; raw column names not needed.
+    const builds = await db
+      .select({
+        id: jkaiBuilds.id,
+        conversationId: jkaiBuilds.conversationId,
+        iterationsCompleted: jkaiBuilds.iterationsCompleted,
+        updatedAt: jkaiBuilds.updatedAt,
+      })
+      .from(jkaiBuilds)
+      .where(
+        and(
+          eq(jkaiBuilds.status, 'running'),
+          isNotNull(jkaiBuilds.conversationId),
+          lt(jkaiBuilds.updatedAt, new Date(now - staleMs)),
+        ),
+      );
 
     if (builds.length === 0) {
       return { outcome: 'ok', summary: 'no slow running builds' };
@@ -79,13 +80,14 @@ export const buildProgressCheck: ActivityHandler = {
     for (const b of builds) {
       if (nudges >= cfg.maxNudgesPerTick) break;
       if (recentlyNudgedBuildIds.has(b.id)) continue;
-      const minsSilent = Math.round((now - new Date(b.updated_at).getTime()) / 60_000);
+      if (!b.conversationId) continue;
+      const minsSilent = Math.round((now - new Date(b.updatedAt).getTime()) / 60_000);
       await postHeartbeatNote({
-        conversationId: b.conversation_id,
-        text: `[heartbeat] build ${b.id.slice(0, 8)} still working — iteration ${b.iterations_completed}, last update ${minsSilent} min ago.`,
+        conversationId: b.conversationId,
+        text: `[heartbeat] build ${b.id.slice(0, 8)} still working — iteration ${b.iterationsCompleted}, last update ${minsSilent} min ago.`,
         activityName: NAME,
       });
-      acted.push({ buildId: b.id, convId: b.conversation_id, minsSilent });
+      acted.push({ buildId: b.id, convId: b.conversationId, minsSilent });
       nudges++;
     }
 
