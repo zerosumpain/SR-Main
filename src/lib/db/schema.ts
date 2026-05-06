@@ -665,26 +665,6 @@ export const jkaiBuildNotes = pgTable('jkai_build_notes', {
 export type JkaiBuildNote = typeof jkaiBuildNotes.$inferSelect;
 
 // ==========================================
-// CDO 100-Day Plan
-// ==========================================
-
-export const cdoPlans = pgTable('cdo_plans', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  sessionId: text('session_id').notNull().references(() => researchSessions.id),
-  version: integer('version').notNull().default(1),
-  title: text('title').notNull().default('First 100 Days — DfE CDO'),
-  structure: jsonb('structure'),
-  previousPlanId: text('previous_plan_id'),
-  changelog: jsonb('changelog'),
-  status: text('status').notNull().default('draft'), // draft | synthesizing | complete | failed
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type CdoPlan = typeof cdoPlans.$inferSelect;
-export type NewCdoPlan = typeof cdoPlans.$inferInsert;
-
-// ==========================================
 // Workflows — Visual Automation Engine
 // ==========================================
 

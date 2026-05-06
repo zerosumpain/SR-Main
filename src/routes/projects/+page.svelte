@@ -150,48 +150,6 @@
       </div>
     </a>
 
-    <!-- CDO 100-Day Plan -->
-    <a
-      href="/cdo-plan"
-      class="group block p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Strategic Planner
-        </p>
-        <span
-          class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
-          style="font-family: var(--font-mono); background: rgba(45, 125, 70, 0.12); color: #2d7d46;"
-        >
-          Live
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        100-DAY PLAN
-      </h2>
-      <p class="text-sm leading-relaxed mb-4" style="color: var(--text-secondary);">
-        Living research document for a CDO at the UK Department for Education. AI-powered
-        kanban board with themed actions, stakeholders, and milestones across 14 weeks.
-      </p>
-      <div class="flex gap-3 flex-wrap">
-        {#each ['Deep Dive', 'GLM-5.1', 'DfE', 'Kanban'] as tag}
-          <span
-            class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
-            style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-          >
-            {tag}
-          </span>
-        {/each}
-      </div>
-    </a>
-
     <!-- Health Dashboard -->
     <a
       href="/health"

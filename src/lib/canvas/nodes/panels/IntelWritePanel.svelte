@@ -147,7 +147,7 @@
           class="iw-code iw-line"
           rows="1"
           spellcheck="false"
-          placeholder="e.g. cdo-daily-briefing"
+          placeholder="e.g. daily-briefing"
           value={sourceTag}
           oninput={(e) => set('sourceTag', (e.currentTarget as HTMLTextAreaElement).value)}
         ></textarea>
@@ -183,7 +183,7 @@
           class="iw-code"
           rows="4"
           spellcheck="false"
-          placeholder={`{ "persona": "cdo-dfe", "score": {{input.score}} }`}
+          placeholder={`{ "persona": "researcher", "score": {{input.score}} }`}
           value={extraMetadata}
           oninput={(e) => set('extraMetadata', (e.currentTarget as HTMLTextAreaElement).value)}
         ></textarea>
