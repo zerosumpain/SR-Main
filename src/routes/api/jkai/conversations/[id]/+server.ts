@@ -1,9 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, openrouterModels, jkaiAttachments, jkaiBuilds } from '$lib/db/schema';
+import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { snapshotPrice } from '$lib/server/models/price-snapshot';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -119,21 +120,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		.where(eq(orchestratorChats.conversationId, params.id));
 	if (cnt > 0) throw error(409, 'model is locked after the first message');
 
-	// Re-snapshot the price if switching to an OpenRouter model.
-	let priceSnapshot: { promptPrice: number; completionPrice: number } | null = null;
-	if (modelProvider === 'openrouter') {
-		const [row] = await db
-			.select()
-			.from(openrouterModels)
-			.where(eq(openrouterModels.id, modelId))
-			.limit(1);
-		if (row) {
-			priceSnapshot = {
-				promptPrice: Number(row.promptPrice ?? 0),
-				completionPrice: Number(row.completionPrice ?? 0),
-			};
-		}
-	}
+	const priceSnapshot = await snapshotPrice({ provider: modelProvider, modelId });
 
 	const [updated] = await db
 		.update(conversations)

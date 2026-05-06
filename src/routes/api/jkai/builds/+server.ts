@@ -1,10 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { jkaiBuilds, openrouterModels } from '$lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { jkaiBuilds } from '$lib/db/schema';
+import { desc } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
 
 export const GET: RequestHandler = async () => {
@@ -49,20 +50,7 @@ export const POST: RequestHandler = async ({ request }) => {
     ctx = await resolveDefaultModel('builder');
   }
 
-  let priceSnapshot: { promptPrice: number; completionPrice: number } | null = null;
-  if (ctx.provider === 'openrouter') {
-    const [row] = await db
-      .select()
-      .from(openrouterModels)
-      .where(eq(openrouterModels.id, ctx.modelId))
-      .limit(1);
-    if (row) {
-      priceSnapshot = {
-        promptPrice: Number(row.promptPrice ?? 0),
-        completionPrice: Number(row.completionPrice ?? 0),
-      };
-    }
-  }
+  const priceSnapshot = await snapshotPrice(ctx);
 
   const insert: Record<string, unknown> = {
     title: title || null,
