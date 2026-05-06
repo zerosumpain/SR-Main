@@ -98,7 +98,7 @@
   let schedules = $state<Schedule[]>(data.schedules);
   let feed = $state<FeedItem[]>(data.feed);
 
-  let activeTab = $state<'live' | 'heartbeat' | 'actions' | 'scheduled' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+  let activeTab = $state<'live' | 'heartbeat' | 'scheduled' | 'background' | 'reference'>('live');
 
   type ScheduledCallback = {
     id: string;
@@ -334,8 +334,8 @@
 
   onMount(() => {
     liveTimer = setInterval(() => {
-      if (activeTab === 'live' || activeTab === 'heartbeat' || activeTab === 'systems') refreshLive();
-      if (activeTab === 'actions' && actionsLoaded) loadActions();
+      if (activeTab === 'live') refreshLive();
+      if (activeTab === 'heartbeat' && actionsLoaded) loadActions();
       if (activeTab === 'scheduled' && scheduledLoaded) loadScheduled();
     }, 3000);
     // Pre-load once even if user starts on a different tab.
@@ -476,73 +476,48 @@
   <div class={`banner banner-${banner.kind}`}>{banner.text}</div>
 {/if}
 
-<!-- Top stat strip -->
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="stat-card-label">Active jobs</div>
-    <div class="stat-card-value">{live.orchestratorJobs.length}</div>
-    <div class="stat-card-meta">orchestrator (in-memory)</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-label">Active runs</div>
-    <div class="stat-card-value">{live.activeRuns.length}</div>
-    <div class="stat-card-meta">workflow_runs running/paused</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-label">Cron jobs</div>
-    <div class="stat-card-value">{live.cronJobs.length}</div>
-    <div class="stat-card-meta">registered croner handles</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-label">Follow-ups</div>
-    <div class="stat-card-value">{live.followUps.length}</div>
-    <div class="stat-card-meta">pending re-check</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-label">Engine loop max</div>
-    <div class="stat-card-value">{live.engine.loopMaxMs.toFixed(0)}ms</div>
-    <div class="stat-card-meta">503 at ≥5000ms</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-label">Run slots</div>
-    <div class="stat-card-value">{live.engine.activeRuns}/{live.engine.cap}</div>
-    <div class="stat-card-meta">{live.engine.queued} queued</div>
-  </div>
+<!-- Lane-aligned stat strip -->
+<div class="lane-strip">
+  <button class="lane-card" class:active={activeTab === 'heartbeat'} onclick={() => activeTab = 'heartbeat'}>
+    <div class="lane-label">Heartbeat</div>
+    <div class="lane-value">{actions.filter((a) => a.status === 'active').length}</div>
+    <div class="lane-meta">{actions.length} total · {actions.reduce((s, a) => s + a.cost24hUsd, 0).toFixed(4) === '0.0000' ? '$0' : `$${actions.reduce((s, a) => s + a.cost24hUsd, 0).toFixed(4)}`} 24h</div>
+  </button>
+  <button class="lane-card" class:active={activeTab === 'scheduled'} onclick={() => activeTab = 'scheduled'}>
+    <div class="lane-label">Scheduled</div>
+    <div class="lane-value">{scheduled.filter((c) => c.status === 'pending').length}</div>
+    <div class="lane-meta">{scheduled.length} total</div>
+  </button>
+  <button class="lane-card" class:active={activeTab === 'background'} onclick={() => activeTab = 'background'}>
+    <div class="lane-label">Background</div>
+    <div class="lane-value">{live.activeRuns.length + live.orchestratorJobs.length}</div>
+    <div class="lane-meta">{live.cronJobs.length} cron · {live.engine.activeRuns}/{live.engine.cap} slots</div>
+  </button>
+  <button class="lane-card" class:active={activeTab === 'live'} onclick={() => activeTab = 'live'}>
+    <div class="lane-label">Engine</div>
+    <div class="lane-value">{live.engine.loopMaxMs.toFixed(0)}<span class="lane-unit">ms</span></div>
+    <div class="lane-meta">loop max · 503 at ≥5000</div>
+  </button>
 </div>
 
 <div class="nm-tabs">
   <button class="nm-tab" class:active={activeTab === 'live'} aria-current={activeTab === 'live' ? 'page' : undefined} onclick={() => activeTab = 'live'}>
     Live
-    <span class="tab-count">{live.orchestratorJobs.length + live.activeRuns.length + live.followUps.length}</span>
   </button>
   <button class="nm-tab" class:active={activeTab === 'heartbeat'} aria-current={activeTab === 'heartbeat' ? 'page' : undefined} onclick={() => activeTab = 'heartbeat'}>
     Heartbeat
-    <span class="tab-count">{live.recentPulses.length}</span>
-  </button>
-  <button class="nm-tab" class:active={activeTab === 'actions'} aria-current={activeTab === 'actions' ? 'page' : undefined} onclick={() => activeTab = 'actions'}>
-    Actions
-    <span class="tab-count">{actions.length}</span>
   </button>
   <button class="nm-tab" class:active={activeTab === 'scheduled'} aria-current={activeTab === 'scheduled' ? 'page' : undefined} onclick={() => activeTab = 'scheduled'}>
     Scheduled
-    <span class="tab-count">{scheduled.filter((c) => c.status === 'pending').length}</span>
   </button>
-  <button class="nm-tab" class:active={activeTab === 'schedules'} aria-current={activeTab === 'schedules' ? 'page' : undefined} onclick={() => activeTab = 'schedules'}>
-    Schedules
-    <span class="tab-count">{schedules.length}</span>
+  <button class="nm-tab" class:active={activeTab === 'background'} aria-current={activeTab === 'background' ? 'page' : undefined} onclick={() => activeTab = 'background'}>
+    Background
   </button>
-  <button class="nm-tab" class:active={activeTab === 'activity'} aria-current={activeTab === 'activity' ? 'page' : undefined} onclick={() => activeTab = 'activity'}>
-    Activity
-    <span class="tab-count">{feed.length}</span>
-  </button>
-  <button class="nm-tab" class:active={activeTab === 'systems'} aria-current={activeTab === 'systems' ? 'page' : undefined} onclick={() => activeTab = 'systems'}>
-    Systems
-    <span class="tab-count">{systemCatalogue.length}</span>
-  </button>
-  <button class="nm-tab" class:active={activeTab === 'process'} aria-current={activeTab === 'process' ? 'page' : undefined} onclick={() => activeTab = 'process'}>
-    Process
+  <button class="nm-tab" class:active={activeTab === 'reference'} aria-current={activeTab === 'reference' ? 'page' : undefined} onclick={() => activeTab = 'reference'}>
+    Reference
   </button>
 </div>
+
 
 {#if activeTab === 'live'}
   <div class="live-meta">
@@ -550,287 +525,92 @@
     <button class="link-btn" onclick={refreshLive}>refresh now</button>
   </div>
 
-  <h3 class="sec-title">Orchestrator jobs (in-memory)</h3>
-  {#if live.orchestratorJobs.length === 0}
-    <p class="empty">No active chat jobs.</p>
+  {#if live.orchestratorJobs.length === 0 && live.activeRuns.length === 0 && live.followUps.length === 0}
+    <p class="empty">Nothing in flight.</p>
   {:else}
-    <table class="nm-table">
-      <thead>
-        <tr>
-          <th>ID</th><th>Phase</th><th>Current step</th><th>Elapsed</th><th>Last event</th><th>Scope</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each live.orchestratorJobs as j (j.id)}
-          {@const k = rowKey('job', j.id)}
-          <tr>
-            <td class="mono-tiny">{j.id.slice(0, 8)}</td>
-            <td><span class={`pill ${statusClass(j.status === 'running' ? 'running' : j.status)}`}>{j.phase}</span></td>
-            <td>{j.currentStep ?? '—'}</td>
-            <td>{fmtDuration(j.elapsedMs)}</td>
-            <td>{fmtRelative(j.lastEventAt)}</td>
-            <td class="mono-tiny">
-              {#if j.conversationId}conv:{j.conversationId.slice(0, 6)}{/if}
-              {#if j.workflowId} wf:{j.workflowId.slice(0, 6)}{/if}
-              {#if j.chatNodeId} node:{j.chatNodeId.slice(0, 6)}{/if}
-            </td>
-            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === k ? null : k}>{openRowKey === k ? '−' : '+'}</button></td>
-          </tr>
-          {#if openRowKey === k}
-            <tr><td colspan="7" class="row-detail">
-              <div class="kv"><span>message:</span><span>{j.message}</span></div>
-              <div class="kv"><span>status:</span><span>{j.status}</span></div>
-              <div class="kv"><span>started:</span><span>{fmtTs(j.startedAt)}</span></div>
-              <div class="kv"><span>last heartbeat:</span><span>{fmtTs(j.lastHeartbeatAt)}</span></div>
-              {#if j.workflowId}<div class="kv"><span>workflow:</span><span><a class="row-link" href={`/jkai/canvas/${j.workflowId}`}>{j.workflowId}</a></span></div>{/if}
-            </td></tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Workflow runs in-flight</h3>
-  {#if live.activeRuns.length === 0}
-    <p class="empty">No workflow runs in-flight.</p>
-  {:else}
-    <table class="nm-table">
-      <thead>
-        <tr>
-          <th>Run</th><th>Workflow</th><th>Status</th><th>Trigger</th><th>Started</th><th>Heartbeat</th><th>Paused at</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each live.activeRuns as r (r.id)}
-          <tr>
-            <td class="mono-tiny">{r.id.slice(0, 8)}</td>
-            <td><a class="row-link" href={`/jkai/canvas/${r.workflowId}`}>{r.workflowName}</a></td>
-            <td><span class={`pill ${statusClass(r.status)}`}>{r.status}</span></td>
-            <td>{r.trigger}</td>
-            <td>{fmtTs(r.startedAt)}</td>
-            <td>{fmtRelative(r.heartbeatAt ? new Date(r.heartbeatAt).getTime() : 0)}</td>
-            <td class="mono-tiny">{r.pausedAtNodeId ?? '—'}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Pending follow-ups</h3>
-  {#if live.followUps.length === 0}
-    <p class="empty">Queue empty. (Worker stops itself when empty; lazy-restarts on next enqueue.)</p>
-  {:else}
-    <table class="nm-table">
-      <thead><tr><th>ID</th><th>Task</th><th>Conversation</th><th>Retries</th><th>Due</th></tr></thead>
-      <tbody>
-        {#each live.followUps as f (f.id)}
-          <tr>
-            <td class="mono-tiny">{f.id.slice(0, 8)}</td>
-            <td>{f.taskType}/{f.taskId.slice(0, 8)}</td>
-            <td class="mono-tiny">{f.conversationId.slice(0, 8)}</td>
-            <td>{f.retries}</td>
-            <td>{fmtRelative(f.dueAt)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Cron jobs registered</h3>
-  {#if live.cronJobs.length === 0}
-    <p class="empty">No cron jobs registered.</p>
-  {:else}
-    <table class="nm-table">
-      <thead><tr><th>Schedule ID</th><th>Workflow</th><th>State</th><th>Next run</th></tr></thead>
-      <tbody>
-        {#each live.cronJobs as c (c.scheduleId)}
-          {@const sch = schedules.find((s) => s.id === c.scheduleId)}
-          <tr>
-            <td class="mono-tiny">{c.scheduleId.slice(0, 8)}</td>
-            <td>{sch?.workflowName ?? '—'}</td>
-            <td><span class={`pill ${c.paused ? 'st-paused' : 'st-running'}`}>{c.paused ? 'paused' : 'running'}</span></td>
-            <td>{c.nextRunMs ? `${fmtTs(c.nextRunMs)} (${fmtRelative(c.nextRunMs)})` : '—'}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Health sync state</h3>
-  <table class="nm-table">
-    <thead><tr><th>Service</th><th>Status</th><th>Last sync</th><th>Last successful</th><th>Records</th><th>Error</th></tr></thead>
-    <tbody>
-      {#each live.healthSync as s (s.service)}
-        <tr>
-          <td>{s.service}</td>
-          <td><span class={`pill ${statusClass(s.status)}`}>{s.status}</span></td>
-          <td>{fmtTs(s.lastSyncAt * 1000)}</td>
-          <td>{s.lastSuccessfulSyncAt ? fmtRelative(s.lastSuccessfulSyncAt * 1000) : '—'}</td>
-          <td>{s.recordsSynced ?? 0}</td>
-          <td class="err-cell">{s.errorMessage ?? ''}</td>
-        </tr>
+    <ul class="flow-list">
+      {#each live.orchestratorJobs as j (j.id)}
+        <li class="flow-row">
+          <span class="flow-pip">●</span>
+          <span class="flow-kind">chat job</span>
+          <span class="flow-name">{j.currentStep ?? j.phase}</span>
+          <span class="flow-meta">{fmtDuration(j.elapsedMs)} · {j.idleKillInMs < 60_000 ? `kill in ${fmtDuration(j.idleKillInMs)}` : 'healthy'}</span>
+          <span class="flow-id mono-tiny">{j.id.slice(0, 8)}</span>
+        </li>
       {/each}
-    </tbody>
-  </table>
+      {#each live.activeRuns as r (r.id)}
+        <li class="flow-row">
+          <span class="flow-pip">▶</span>
+          <span class="flow-kind">workflow run</span>
+          <span class="flow-name"><a class="row-link" href={`/jkai/canvas/${r.workflowId}`}>{r.workflowName}</a></span>
+          <span class="flow-meta">{r.status} · {r.heartbeatAt ? fmtRelative(new Date(r.heartbeatAt).getTime()) : '—'}</span>
+          <span class="flow-id mono-tiny">{r.id.slice(0, 8)}</span>
+        </li>
+      {/each}
+      {#each live.followUps as f (f.id)}
+        <li class="flow-row">
+          <span class="flow-pip">⟳</span>
+          <span class="flow-kind">follow-up</span>
+          <span class="flow-name">{f.taskType}/{f.taskId.slice(0, 8)}</span>
+          <span class="flow-meta">{f.dueInMs > 0 ? `due in ${fmtDuration(f.dueInMs)}` : 'now'} · retry {f.retries}</span>
+          <span class="flow-id mono-tiny">{f.id.slice(0, 8)}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+
+  <details class="collapsible">
+    <summary>Pulse stream — last {live.recentPulses.length} events</summary>
+    {#if live.recentPulses.length === 0}
+      <p class="empty">None recorded yet.</p>
+    {:else}
+      <ol class="pulse-stream">
+        {#each live.recentPulses.slice(0, 50) as p, i (i)}
+          <li class={`pulse pulse-${p.kind}`}>
+            <span class="pulse-time">{fmtRelative(p.ts)}</span>
+            <span class="pulse-kind">{p.kind}</span>
+            <span class="pulse-job mono-tiny">{p.jobId.slice(0, 8)}</span>
+            <span class="pulse-summary">{p.summary}</span>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+  </details>
+
+  <details class="collapsible">
+    <summary>Health sync</summary>
+    <table class="nm-table">
+      <thead><tr><th>Service</th><th>Status</th><th>Last sync</th><th>Records</th></tr></thead>
+      <tbody>
+        {#each live.healthSync as s (s.service)}
+          <tr>
+            <td>{s.service}</td>
+            <td><span class={`pill ${statusClass(s.status)}`}>{s.status}</span></td>
+            <td>{fmtTs(s.lastSyncAt * 1000)}</td>
+            <td>{s.recordsSynced ?? 0}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </details>
 {/if}
 
 {#if activeTab === 'heartbeat'}
-  <p class="hint">
-    Short-term temporal handles — the layer between cron (minute+ recurrence) and content-driven status messages. Three mechanisms run here: <strong>job heartbeats</strong> (5s tick per active job), the <strong>idle watchdog</strong> (15s sweep, kills at 120s idle / 600s total), and the <strong>follow-up queue worker</strong> (15s tick, fires due re-checks with 1.2× exponential backoff). All three are in-memory only — restart wipes them.
-  </p>
-
-  <div class="layer-explainer">
-    <h3 class="sec-title">Four temporal layers</h3>
-    <div class="layer-grid">
-      <div class="layer-card layer-min">
-        <div class="layer-cad">≥ 1 min</div>
-        <div class="layer-name">Cron</div>
-        <div class="layer-desc">DB-backed (workflow_schedules), survives restart, drives full workflow runs. Croner instances live in memory.</div>
-      </div>
-      <div class="layer-card layer-sec">
-        <div class="layer-cad">5–15 s</div>
-        <div class="layer-name">Heartbeat</div>
-        <div class="layer-desc">Per-job ticker. UI-only "thinking 35s" indicator + watchdog feed. Not user-content; fires regardless of LLM activity.</div>
-      </div>
-      <div class="layer-card layer-actions">
-        <div class="layer-cad">30s – 30min</div>
-        <div class="layer-name">Actions queue</div>
-        <div class="layer-desc">Perpetual LLM turns the orchestrator wrote (or you wrote) for a specific conversation. Each tick runs a focused turn — make a step or reply <code>DONE:</code>. No retry limit.</div>
-      </div>
-      <div class="layer-card layer-poll">
-        <div class="layer-cad">30s → 5min</div>
-        <div class="layer-name">Follow-up poll</div>
-        <div class="layer-desc">Mechanical task-completion poller (<code>checkFn</code> against build/research IDs). Triggers an LLM follow-up message when the watched task reaches a terminal state.</div>
-      </div>
-      <div class="layer-card layer-content">
-        <div class="layer-cad">on event</div>
-        <div class="layer-name">Tool progress</div>
-        <div class="layer-desc">Content-driven, not time-driven. Tools call <code>onProgress</code>; <code>status_update</code> messages are inserted mid-conversation.</div>
-      </div>
-    </div>
-    <p class="layer-fill">
-      <strong>Filled:</strong> the heartbeat <strong>Actions</strong> queue covers the gap above. The orchestrator calls <code>register_heartbeat_action</code> with a goal, prompt and cadence; the engine ticks every 30s and runs the LLM turn against the conversation each time. Actions are perpetual until the LLM replies <code>DONE: …</code> or you mark them complete. See the Actions tab for live state.
+  <details class="collapsible">
+    <summary>About heartbeat</summary>
+    <p class="hint">
+      Perpetual agent watches. Each row pulses on its own cadence; the LLM tick reads injected live state of whatever it's watching and decides — post a status, mark <code>DONE:</code>, or stay silent. Rows attach automatically on <code>build_create</code> / <code>research_start</code> / <code>workflow_run</code>; the orchestrator can also register ad-hoc watchers via <code>register_heartbeat_action</code>.
     </p>
-  </div>
+  </details>
 
-  <h3 class="sec-title">Active jobs — watchdog countdown</h3>
-  <p class="hint">
-    Idle = ms since last non-heartbeat event. When idle exceeds 120s the watchdog aborts the AbortController and the job ends with <code>error</code>. The hard-timeout caps total elapsed at 600s regardless of activity.
-  </p>
-  {#if live.orchestratorJobs.length === 0}
-    <p class="empty">No active jobs.</p>
-  {:else}
-    <table class="nm-table">
-      <thead>
-        <tr><th>Job</th><th>Phase</th><th>Elapsed</th><th>Idle</th><th>Next heartbeat</th><th>Idle kill in</th><th>Hard kill in</th></tr>
-      </thead>
-      <tbody>
-        {#each live.orchestratorJobs as j (j.id)}
-          <tr>
-            <td class="mono-tiny">{j.id.slice(0, 8)}</td>
-            <td><span class="pill st-running">{j.phase}</span></td>
-            <td>{fmtDuration(j.elapsedMs)}</td>
-            <td class={j.idleMs > 60_000 ? 'warn' : ''}>{fmtDuration(j.idleMs)}</td>
-            <td>{fmtDuration(j.nextHeartbeatInMs)}</td>
-            <td class={j.idleKillInMs < 30_000 ? 'danger' : j.idleKillInMs < 60_000 ? 'warn' : ''}>
-              <div class="bar-row">
-                <span>{fmtDuration(j.idleKillInMs)}</span>
-                <div class="bar"><div class="bar-fill" style="width: {Math.max(0, Math.min(100, (j.idleKillInMs / 120_000) * 100)).toFixed(0)}%"></div></div>
-              </div>
-            </td>
-            <td>{fmtDuration(j.hardKillInMs)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Pulse stream — last {live.recentPulses.length} events</h3>
-  <p class="hint">
-    Each entry is one tick of the heartbeat layer. Cleared on service restart (in-memory ring, capped at 200 events). Start/done/error pulses bracket each job; phase_change fires on transitions; heartbeat fires every 5s while running; watchdog_kill is the watchdog firing.
-  </p>
-  {#if live.recentPulses.length === 0}
-    <p class="empty">No pulses recorded yet. Trigger a /jkai message to populate.</p>
-  {:else}
-    <ol class="pulse-stream">
-      {#each live.recentPulses as p, i (i)}
-        <li class={`pulse pulse-${p.kind}`}>
-          <span class="pulse-time">{fmtRelative(p.ts)}</span>
-          <span class="pulse-kind">{p.kind}</span>
-          <span class="pulse-job mono-tiny">{p.jobId.slice(0, 8)}</span>
-          <span class="pulse-phase">{p.phase}</span>
-          <span class="pulse-elapsed">{fmtDuration(p.elapsedMs)}</span>
-          <span class="pulse-summary">{p.summary}</span>
-        </li>
-      {/each}
-    </ol>
-  {/if}
-
-  <h3 class="sec-title">Follow-up queue — backoff schedule</h3>
-  <p class="hint">
-    Each row is a registered re-check. <code>dueAt</code> = next firing; on each unsuccessful check, <code>dueAt</code> shifts out by <code>30s × 1.2^retries</code> (capped at 5min). Worker stops itself when queue is empty; lazy-restarts on next enqueue.
-  </p>
-  {#if live.followUps.length === 0}
-    <p class="empty">Queue empty. Worker is stopped.</p>
-  {:else}
-    <table class="nm-table">
-      <thead><tr><th>ID</th><th>Task</th><th>Conversation</th><th>Retries</th><th>Due in</th><th>Next backoff if pending</th></tr></thead>
-      <tbody>
-        {#each live.followUps as f (f.id)}
-          <tr>
-            <td class="mono-tiny">{f.id.slice(0, 8)}</td>
-            <td>{f.taskType}/{f.taskId.slice(0, 8)}</td>
-            <td class="mono-tiny">{f.conversationId.slice(0, 8)}</td>
-            <td>{f.retries}</td>
-            <td class={f.dueInMs < 0 ? 'danger' : ''}>
-              <div class="bar-row">
-                <span>{f.dueInMs > 0 ? fmtDuration(f.dueInMs) : 'now'}</span>
-                <div class="bar"><div class="bar-fill" style="width: {Math.max(0, Math.min(100, 100 - (f.dueInMs / 60_000) * 100)).toFixed(0)}%"></div></div>
-              </div>
-            </td>
-            <td>{fmtDuration(f.projectedNextBackoffMs)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-
-  <h3 class="sec-title">Tickers (current configuration)</h3>
-  <table class="nm-table">
-    <thead><tr><th>Ticker</th><th>Cadence</th><th>Threshold</th><th>Source</th></tr></thead>
-    <tbody>
-      <tr><td>Job heartbeat</td><td>{fmtDuration(live.thresholds.heartbeatIntervalMs)}</td><td>—</td><td class="mono-tiny">job-store.ts:191</td></tr>
-      <tr><td>Idle watchdog</td><td>15s</td><td>{fmtDuration(live.thresholds.idleTimeoutMs)} idle / {fmtDuration(live.thresholds.hardTimeoutMs)} total</td><td class="mono-tiny">job-store.ts:142</td></tr>
-      <tr><td>Follow-up worker</td><td>{fmtDuration(live.thresholds.followupWorkerIntervalMs)}</td><td>{live.thresholds.followupMaxRetries} retries max</td><td class="mono-tiny">followup-queue.ts:124</td></tr>
-      <tr><td>Follow-up base interval</td><td>{fmtDuration(live.thresholds.followupBaseIntervalMs)}</td><td>1.2× backoff, cap 5min</td><td class="mono-tiny">followup-queue.ts:64</td></tr>
-    </tbody>
-  </table>
-{/if}
-
-{#if activeTab === 'actions'}
-  <p class="hint">
-    The action queue. The engine ticks every 30s and runs every active row whose <code>next_run_at</code> has passed. Actions are <strong>perpetual</strong> — no retry limit, no maximum runs. They keep firing until status flips to <code>done</code> (the LLM replied <code>DONE:</code> or you marked it complete), or you pause/delete them. <code>system-scan</code> rows are code-driven background scanners; <code>targeted</code> rows are LLM turns the orchestrator wrote (or you wrote) for a specific conversation.
-  </p>
   {#if !actionsLoaded}
     <p class="empty">Loading…</p>
   {:else if actions.length === 0}
-    <p class="empty">No actions. System-scan defaults seed on first boot — restart the service if this persists.</p>
+    <p class="empty">No actions.</p>
   {:else}
     <table class="nm-table">
       <thead>
-        <tr>
-          <th>Action</th>
-          <th>Kind / source</th>
-          <th>Cadence</th>
-          <th>Status</th>
-          <th>Last run</th>
-          <th>Next run</th>
-          <th>Runs</th>
-          <th>Cost (24h / total)</th>
-          <th>24h outcomes</th>
-          <th></th>
-          <th></th>
-        </tr>
+        <tr><th>Action</th><th>Status</th><th>Cadence</th><th>Next</th><th>Runs</th><th>Cost (24h)</th><th></th><th></th></tr>
       </thead>
       <tbody>
         {#each actions as a (a.id)}
@@ -838,45 +618,29 @@
           <tr>
             <td>
               <div class="act-name">{a.name}</div>
-              {#if a.goal}<div class="mono-tiny dim" title={a.goal}>goal: {a.goal.slice(0, 60)}{a.goal.length > 60 ? '…' : ''}</div>{/if}
-              {#if !a.handlerKnown}<div class="mono-tiny warn">no handler registered</div>{/if}
+              <div class="mono-tiny dim">{a.kind} · {a.source}</div>
             </td>
-            <td class="mono-tiny">{a.kind}<br/><span class="dim">{a.source}</span></td>
+            <td><span class={`pill st-${a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'err' : 'paused'}`}>{a.status}</span></td>
             <td>{fmtCadence(a.cadenceSeconds)}</td>
-            <td>
-              <span class={`pill st-${a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'err' : 'paused'}`}>{a.status}</span>
-            </td>
-            <td>{a.lastRunAt ? fmtRelative(new Date(a.lastRunAt).getTime()) : '—'}</td>
             <td>{a.nextRunAt && a.status === 'active' ? fmtRelative(new Date(a.nextRunAt).getTime()) : '—'}</td>
             <td>{a.totalRuns}</td>
-            <td class="mono-tiny">{fmtMoney(a.cost24hUsd)} / {fmtMoney(a.totalCostUsd)}</td>
-            <td class="mono-tiny">
-              {#each Object.entries(a.countsLast24h) as [k, v]}<span class={`pill st-${k === 'fired' || k === 'completed' ? 'ok' : k === 'error' ? 'err' : k === 'ok' ? 'info' : 'paused'}`}>{k}:{v}</span> {/each}
-              {#if Object.keys(a.countsLast24h).length === 0}<span class="dim">none</span>{/if}
-            </td>
+            <td class="mono-tiny">{fmtMoney(a.cost24hUsd)}</td>
             <td>
-              {#if a.status === 'active'}
-                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'paused' })}>pause</button>
-              {:else if a.status === 'paused'}
-                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>resume</button>
-              {:else if a.status === 'done'}
-                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>reactivate</button>
-              {/if}
+              {#if a.status === 'active'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'paused' })}>pause</button>
+              {:else if a.status === 'paused'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>resume</button>
+              {:else if a.status === 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>reactivate</button>{/if}
             </td>
-            <td>
-              <button class="link-btn" onclick={async () => { openActionId = isOpen ? null : a.id; if (!isOpen) { await loadActionPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button>
-            </td>
+            <td><button class="link-btn" onclick={async () => { openActionId = isOpen ? null : a.id; if (!isOpen) { await loadActionPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button></td>
           </tr>
           {#if isOpen}
-            <tr><td colspan="11" class="row-detail">
-              <p class="act-desc">{a.description}</p>
-
-              {#if a.kind === 'targeted'}
-                {#if a.goal}<div class="kv"><span>goal:</span><span>{a.goal}</span></div>{/if}
-                {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
-                {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
-                {#if a.completedAt}<div class="kv"><span>completed at:</span><span>{fmtTs(a.completedAt)}</span></div>{/if}
-              {/if}
+            <tr><td colspan="8" class="row-detail">
+              {#if a.description}<p class="act-desc">{a.description}</p>{/if}
+              {#if a.goal}<div class="kv"><span>goal:</span><span>{a.goal}</span></div>{/if}
+              {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
+              {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
+              <div class="kv"><span>active hours:</span><span class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</span></div>
+              <div class="kv"><span>last run:</span><span>{a.lastTickAt ?? a.lastRunAt ? fmtTs(a.lastRunAt) : '—'}</span></div>
+              <div class="kv"><span>total cost:</span><span>{fmtMoney(a.totalCostUsd)}</span></div>
 
               <div class="act-controls">
                 <label class="ctrl">
@@ -884,54 +648,28 @@
                   <input type="number" min="30" max="86400" bind:value={cadenceDraft[a.id]} class="nm-text-input small" />
                   <button class="link-btn" onclick={() => patchAction(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
                 </label>
-                <label class="ctrl">
-                  <span>Active hours</span>
-                  <input type="text" placeholder="07:00" value={a.activeHoursStart ?? ''} onchange={(e) => patchAction(a.id, { activeHoursStart: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
-                  <span class="dim">→</span>
-                  <input type="text" placeholder="23:00" value={a.activeHoursEnd ?? ''} onchange={(e) => patchAction(a.id, { activeHoursEnd: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
-                  <input type="text" placeholder="Europe/London" value={a.activeHoursTz ?? ''} onchange={(e) => patchAction(a.id, { activeHoursTz: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
-                </label>
                 <button class="link-btn" onclick={() => runActionNow(a.id)} disabled={runningActionId === a.id || !a.handlerKnown}>{runningActionId === a.id ? 'running…' : 'run now'}</button>
-                {#if a.status !== 'done'}
-                  <button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>
-                {/if}
+                {#if a.status !== 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>{/if}
                 <button class="link-btn" style="color: #c44;" onclick={() => deleteAction(a.id)}>delete</button>
               </div>
 
-              {#if Object.keys(a.config).length > 0}
-                <details class="act-config">
-                  <summary class="mono-tiny">config (read-only for now)</summary>
-                  <pre class="raw">{JSON.stringify(a.config, null, 2)}</pre>
+              {#if pulsesByAction[a.id] && pulsesByAction[a.id].length > 0}
+                <details class="collapsible">
+                  <summary>Recent pulses ({pulsesByAction[a.id].length})</summary>
+                  <table class="nm-table inset">
+                    <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Cost</th></tr></thead>
+                    <tbody>
+                      {#each pulsesByAction[a.id] as p (p.id)}
+                        <tr>
+                          <td>{fmtRelative(new Date(p.ts).getTime())}</td>
+                          <td><span class={`pill st-${p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
+                          <td class="summary-cell">{p.summary}</td>
+                          <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
                 </details>
-              {/if}
-
-              <h4 class="sec-title sec-title-tight">Recent pulses</h4>
-              {#if !pulsesByAction[a.id]}
-                <p class="empty">Loading pulses…</p>
-              {:else if pulsesByAction[a.id].length === 0}
-                <p class="empty">No pulses recorded yet.</p>
-              {:else}
-                <table class="nm-table inset">
-                  <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Cost</th><th>Duration</th><th></th></tr></thead>
-                  <tbody>
-                    {#each pulsesByAction[a.id] as p, i (p.id)}
-                      {@const detailKey = `${a.id}-pulse-${p.id}`}
-                      <tr>
-                        <td>{fmtRelative(new Date(p.ts).getTime())}</td>
-                        <td><span class={`pill st-${p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
-                        <td class="summary-cell">{p.summary}</td>
-                        <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
-                        <td>{p.durationMs ?? '—'}ms</td>
-                        <td>{#if p.details}<button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button>{/if}</td>
-                      </tr>
-                      {#if openRowKey === detailKey && p.details}
-                        <tr><td colspan="6" class="row-detail">
-                          <pre class="raw">{JSON.stringify(p.details, null, 2)}</pre>
-                        </td></tr>
-                      {/if}
-                    {/each}
-                  </tbody>
-                </table>
               {/if}
             </td></tr>
           {/if}
@@ -942,34 +680,21 @@
 {/if}
 
 {#if activeTab === 'scheduled'}
-  <p class="hint">
-    The OpenClaw "cron lane": one-shot time-based fires. Distinct from heartbeat (perpetual agent watches) and background tasks (long-running watched work). Three kinds:
-  </p>
-  <div class="layer-grid" style="margin-bottom: 1rem;">
-    <div class="layer-card layer-min">
-      <div class="layer-cad">reply</div>
-      <div class="layer-name">Fixed text</div>
-      <div class="layer-desc">Posts a pre-composed message at fire time. No LLM round.</div>
-    </div>
-    <div class="layer-card layer-poll">
-      <div class="layer-cad">tool</div>
-      <div class="layer-name">Direct tool call</div>
-      <div class="layer-desc">Calls a registered site-tool with args (e.g. <code>ha_call_service</code> to turn lights off). No LLM round.</div>
-    </div>
-    <div class="layer-card layer-actions">
-      <div class="layer-cad">orchestrator-turn</div>
-      <div class="layer-name">Re-engage</div>
-      <div class="layer-desc">Synthetic user message + LLM turn (with tools). The LLM can act, not just narrate.</div>
-    </div>
-  </div>
+  <details class="collapsible">
+    <summary>About scheduled callbacks</summary>
+    <p class="hint">
+      One-shot time-based fires. Three kinds: <strong>reply</strong> (post fixed text, no LLM), <strong>tool</strong> (call a registered tool with given args, no LLM), <strong>orchestrator-turn</strong> (synthetic user message + LLM turn with tools enabled). Engine ticks every 10s.
+    </p>
+  </details>
+
   {#if !scheduledLoaded}
     <p class="empty">Loading…</p>
   {:else if scheduled.length === 0}
-    <p class="empty">No scheduled callbacks. The orchestrator can register them via <code>schedule_reply_at</code>, <code>schedule_tool_call_at</code>, <code>schedule_orchestrator_turn_at</code>.</p>
+    <p class="empty">No scheduled callbacks.</p>
   {:else}
     <table class="nm-table">
       <thead>
-        <tr><th>Name</th><th>Kind</th><th>Status</th><th>Fire at</th><th>Conversation</th><th>Cost</th><th>Payload</th><th></th></tr>
+        <tr><th>Name</th><th>Kind</th><th>Status</th><th>Fire</th><th>Cost</th><th></th><th></th></tr>
       </thead>
       <tbody>
         {#each scheduled as c (c.id)}
@@ -980,31 +705,30 @@
               <div class="act-name">{c.name}</div>
               <div class="mono-tiny dim">{c.description.slice(0, 80)}</div>
             </td>
-            <td class="mono-tiny">{c.kind}<br><span class="dim">{c.source}</span></td>
+            <td class="mono-tiny">{c.kind}</td>
             <td><span class={`pill st-${c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'err'}`}>{c.status}</span></td>
             <td>
-              {#if c.status === 'pending'}
-                <span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
-                <div class="mono-tiny dim">{fmtTs(fireMs)}</div>
-              {:else}
-                <span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>
-              {/if}
+              {#if c.status === 'pending'}<span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
+              {:else}<span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>{/if}
             </td>
-            <td class="mono-tiny">{c.conversationId ? c.conversationId.slice(0, 8) : '—'}</td>
             <td class="mono-tiny">{fmtMoney(c.totalCostUsd)}</td>
-            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
             <td>
-              {#if c.status === 'pending'}
-                <button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
-                <button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>
-              {:else}
-                <button class="link-btn" style="color: #c44;" onclick={() => deleteScheduled(c.id)}>delete</button>
-              {/if}
+              {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
+              {:else}<button class="link-btn" style="color: #c44;" onclick={() => deleteScheduled(c.id)}>delete</button>{/if}
+              {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>{/if}
             </td>
+            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
           </tr>
           {#if openRowKey === detailKey}
-            <tr><td colspan="8" class="row-detail">
-              <pre class="raw">{JSON.stringify({ payload: c.payload, error: c.error, createdAt: c.createdAt }, null, 2)}</pre>
+            <tr><td colspan="7" class="row-detail">
+              {#if c.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${c.conversationId}`}>{c.conversationId.slice(0, 12)}…</a></span></div>{/if}
+              <div class="kv"><span>fire at:</span><span>{fmtTs(fireMs)}</span></div>
+              <div class="kv"><span>source:</span><span>{c.source}</span></div>
+              {#if c.error}<div class="kv"><span>error:</span><span class="err-cell">{c.error}</span></div>{/if}
+              <details class="collapsible">
+                <summary>payload</summary>
+                <pre class="raw">{JSON.stringify(c.payload, null, 2)}</pre>
+              </details>
             </td></tr>
           {/if}
         {/each}
@@ -1013,84 +737,56 @@
   {/if}
 {/if}
 
-{#if activeTab === 'schedules'}
-  <p class="hint">
-    Cron schedules drive workflow runs. Toggle <em>enabled</em> to pause/resume the in-memory cron handle without a service restart. To edit the cron expression, open the workflow on the canvas.
-  </p>
+{#if activeTab === 'background'}
+  <details class="collapsible">
+    <summary>About background tasks</summary>
+    <p class="hint">
+      Long-running watched work — workflow cron schedules and recent run history (workflow_runs / scraper / health sync). Heartbeat watchers attach to these automatically when the orchestrator kicks them off.
+    </p>
+  </details>
+
+  <h3 class="sec-title">Cron schedules</h3>
   {#if schedules.length === 0}
-    <p class="empty">No schedules configured.</p>
+    <p class="empty">No schedules.</p>
   {:else}
     <table class="nm-table">
-      <thead>
-        <tr>
-          <th>Workflow</th><th>Type</th><th>Expression</th><th>Last run</th><th>Next run</th><th>Enabled</th><th></th>
-        </tr>
-      </thead>
+      <thead><tr><th>Workflow</th><th>Expression</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
       <tbody>
         {#each schedules as s (s.id)}
-          {@const k = rowKey('sch', s.id)}
           <tr>
             <td><a class="row-link" href={`/jkai/canvas/${s.workflowId}`}>{s.workflowName}</a></td>
-            <td>{s.type}</td>
             <td class="mono-tiny">{s.expression ?? '(none)'}</td>
             <td>{s.lastRunAt ? fmtRelative(new Date(s.lastRunAt).getTime()) : '—'}</td>
             <td>{s.nextRunAt ? fmtRelative(new Date(s.nextRunAt).getTime()) : '—'}</td>
             <td>
-              <button
-                class="toggle-btn"
-                class:on={s.enabled}
-                onclick={() => toggleSchedule(s)}
-                aria-label={s.enabled ? 'Pause' : 'Enable'}
-              >
-                {s.enabled ? 'on' : 'off'}
-              </button>
+              <button class="toggle-btn" class:on={s.enabled} onclick={() => toggleSchedule(s)}>{s.enabled ? 'on' : 'off'}</button>
             </td>
-            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === k ? null : k}>{openRowKey === k ? '−' : '+'}</button></td>
           </tr>
-          {#if openRowKey === k}
-            <tr><td colspan="7" class="row-detail">
-              <div class="kv"><span>schedule id:</span><span class="mono-tiny">{s.id}</span></div>
-              <div class="kv"><span>workflow id:</span><span class="mono-tiny">{s.workflowId}</span></div>
-              <div class="kv"><span>last run at:</span><span>{fmtTs(s.lastRunAt)}</span></div>
-              <div class="kv"><span>next run at:</span><span>{fmtTs(s.nextRunAt)}</span></div>
-            </td></tr>
-          {/if}
         {/each}
       </tbody>
     </table>
   {/if}
-{/if}
 
-{#if activeTab === 'activity'}
-  <div class="live-meta">
-    <span>Latest {feed.length} events from workflow_runs / scraper_run_log / health_sync_state</span>
-    <button class="link-btn" onclick={refreshFeed}>refresh</button>
-  </div>
+  <h3 class="sec-title">Recent activity</h3>
   {#if feed.length === 0}
-    <p class="empty">No activity recorded.</p>
+    <p class="empty">No recent events.</p>
   {:else}
     <table class="nm-table">
-      <thead>
-        <tr><th>When</th><th>Kind</th><th>Source</th><th>Summary</th><th>Status</th><th>Duration</th><th></th></tr>
-      </thead>
+      <thead><tr><th>When</th><th>Source</th><th>Summary</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        {#each feed as f, i (i)}
+        {#each feed.slice(0, 30) as f, i (i)}
           {@const k = rowKey('feed', String(i))}
           <tr>
             <td>{fmtRelative(f.ts)}</td>
-            <td><span class="pill st-info">{f.kind}</span></td>
             <td>{f.source}</td>
             <td class="summary-cell">{f.summary}</td>
-            <td>{f.status ? `${f.status}` : '—'}</td>
-            <td>{fmtDuration(f.durationMs)}</td>
+            <td>{f.status ?? '—'}</td>
             <td>
               {#if f.link}<a class="row-link" href={f.link}>open</a>{:else}<button class="link-btn" onclick={() => openRowKey = openRowKey === k ? null : k}>{openRowKey === k ? '−' : '+'}</button>{/if}
             </td>
           </tr>
           {#if openRowKey === k}
-            <tr><td colspan="7" class="row-detail">
-              <pre class="raw">{JSON.stringify(f.raw, null, 2)}</pre>
-            </td></tr>
+            <tr><td colspan="5" class="row-detail"><pre class="raw">{JSON.stringify(f.raw, null, 2)}</pre></td></tr>
           {/if}
         {/each}
       </tbody>
@@ -1098,43 +794,52 @@
   {/if}
 {/if}
 
-{#if activeTab === 'systems'}
-  <p class="hint">
-    Recurring services on the server. These are <em>hardcoded</em> — to change cadence, edit the file and redeploy. The Live tab shows current activity from each.
-  </p>
-  <div class="sys-grid">
-    {#each systemCatalogue as sys}
-      <article class="sys-card">
-        <header>
-          <h3>{sys.name}</h3>
-          <span class="sys-cadence">{sys.cadence}</span>
-        </header>
-        <p>{sys.desc}</p>
-        <code class="sys-file">{sys.file}</code>
-      </article>
-    {/each}
-  </div>
-{/if}
+{#if activeTab === 'reference'}
+  <details class="collapsible">
+    <summary>Heartbeat lifecycle (8 stages)</summary>
+    <ol class="process-list">
+      {#each heartbeatProcess as p}
+        <li>
+          <div class="process-step-num">{p.step}</div>
+          <div class="process-step-body">
+            <div class="process-step-label">{p.label}</div>
+            <div class="process-step-detail">{p.detail}</div>
+          </div>
+        </li>
+      {/each}
+    </ol>
+  </details>
 
-{#if activeTab === 'process'}
-  <p class="hint">
-    The lifecycle a single chat-job heartbeat goes through. Phases are reported live to the UI; the watchdog kills the job if any one stage stalls for over 2 minutes.
-  </p>
-  <ol class="process-list">
-    {#each heartbeatProcess as p}
-      <li>
-        <div class="process-step-num">{p.step}</div>
-        <div class="process-step-body">
-          <div class="process-step-label">{p.label}</div>
-          <div class="process-step-detail">{p.detail}</div>
-        </div>
-      </li>
-    {/each}
-  </ol>
-  <h3 class="sec-title">Why "I'll check back in 2 minutes"</h3>
-  <p class="hint">
-    The follow-up queue lets the orchestrator defer mid-task. When a tool call returns a deferred status (e.g. a long-running scrape, an asynchronous workflow), <code>enqueueFollowUp()</code> drops a row into the in-memory queue. The worker (<code>followup-queue.ts:124</code>) wakes every 15s, finds rows whose <code>dueAt</code> has passed, runs the registered <code>checkFn</code>, and on completion re-enters the LLM with the result so it can write a follow-up message. The queue is in-memory only — restarts wipe it. Live state is on the Live tab.
-  </p>
+  <details class="collapsible">
+    <summary>System schedulers ({systemCatalogue.length})</summary>
+    <p class="hint">Recurring services with hardcoded cadences. To change, edit the file and redeploy.</p>
+    <div class="sys-grid">
+      {#each systemCatalogue as sys}
+        <article class="sys-card">
+          <header>
+            <h3>{sys.name}</h3>
+            <span class="sys-cadence">{sys.cadence}</span>
+          </header>
+          <p>{sys.desc}</p>
+          <code class="sys-file">{sys.file}</code>
+        </article>
+      {/each}
+    </div>
+  </details>
+
+  <details class="collapsible">
+    <summary>Tickers (current configuration)</summary>
+    <table class="nm-table">
+      <thead><tr><th>Ticker</th><th>Cadence</th><th>Threshold</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Job heartbeat</td><td>{fmtDuration(live.thresholds.heartbeatIntervalMs)}</td><td>—</td><td class="mono-tiny">job-store.ts:191</td></tr>
+        <tr><td>Idle watchdog</td><td>15s</td><td>{fmtDuration(live.thresholds.idleTimeoutMs)} idle / {fmtDuration(live.thresholds.hardTimeoutMs)} total</td><td class="mono-tiny">job-store.ts:142</td></tr>
+        <tr><td>Follow-up worker</td><td>{fmtDuration(live.thresholds.followupWorkerIntervalMs)}</td><td>{live.thresholds.followupMaxRetries} retries max</td><td class="mono-tiny">followup-queue.ts:124</td></tr>
+        <tr><td>Heartbeat engine</td><td>30s</td><td>per-action cadence_seconds</td><td class="mono-tiny">heartbeat/engine.ts</td></tr>
+        <tr><td>Scheduled engine</td><td>10s</td><td>fire_at &lt;= now</td><td class="mono-tiny">scheduled/engine.ts</td></tr>
+      </tbody>
+    </table>
+  </details>
 {/if}
 
 <style>
@@ -1248,4 +953,36 @@
   .nm-table.inset td, .nm-table.inset th { font-size: 10px; }
   .dim { color: var(--text-ghost); font-style: italic; }
   .pill + .pill { margin-left: 4px; }
+
+  /* Lane-aligned compact stat strip */
+  .lane-strip { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0 0 1.25rem; }
+  .lane-card { text-align: left; padding: 0.7rem 0.9rem; background: var(--bg-section); border: 1px solid var(--card-border); cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
+  .lane-card:hover { border-color: var(--accent); background: var(--bg-base); }
+  .lane-card.active { border-color: var(--accent); border-left-width: 3px; }
+  .lane-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-ghost); margin-bottom: 0.2rem; }
+  .lane-value { font-family: var(--font-brand); font-size: 1.6rem; font-weight: 500; color: var(--text-primary); line-height: 1; letter-spacing: -0.01em; }
+  .lane-unit { font-size: 0.7rem; color: var(--text-muted); margin-left: 2px; }
+  .lane-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 0.3rem; }
+
+  /* Flow list — compact 1-row-per-thing for the Live tab */
+  .flow-list { list-style: none; padding: 0; margin: 0 0 0.8rem; border: 1px solid var(--card-border); background: var(--bg-section); }
+  .flow-row { display: grid; grid-template-columns: 24px 90px 1fr 220px 80px; gap: 0.6rem; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--divider); font-family: var(--font-mono); font-size: 11px; }
+  .flow-row:last-child { border-bottom: none; }
+  .flow-pip { color: var(--accent); }
+  .flow-kind { color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+  .flow-name { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .flow-meta { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .flow-id { color: var(--text-ghost); text-align: right; }
+  @media (max-width: 720px) {
+    .flow-row { grid-template-columns: 24px 1fr; }
+    .flow-row > :nth-child(n+3) { display: none; }
+  }
+
+  /* Collapsibles */
+  .collapsible { margin: 0.8rem 0; border: 1px solid var(--card-border); background: var(--bg-section); }
+  .collapsible > summary { cursor: pointer; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); user-select: none; list-style: none; }
+  .collapsible > summary::-webkit-details-marker { display: none; }
+  .collapsible > summary::before { content: '▸ '; color: var(--text-ghost); margin-right: 4px; }
+  .collapsible[open] > summary::before { content: '▾ '; }
+  .collapsible > :not(summary) { padding: 0 12px 12px; }
 </style>
