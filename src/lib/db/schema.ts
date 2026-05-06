@@ -570,6 +570,14 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   enabledToolsets: jsonb('enabled_toolsets').$type<string[]>().notNull().default(sql`'["all"]'::jsonb`),
   conversationId: text('conversation_id'),
   attachedWorkflowIds: jsonb('attached_workflow_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  queuedAction: jsonb('queued_action').$type<{
+    kind: 'start' | 'resume' | 'restart' | 'approvePlan' | 'skipPlan' | 'approveIteration' | 'replan' | 'continue' | 'rejectIteration';
+    prompt?: string;
+    modelOverride?: { provider?: string; modelId?: string };
+    notes?: string;
+    revisedPrompt?: string;
+  } | null>(),
+  queuedAt: timestamp('queued_at', { withTimezone: true }),
 });
 
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;

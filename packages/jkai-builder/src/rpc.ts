@@ -39,6 +39,7 @@ const dispatchTable: Record<string, (args: AnyArgs) => Promise<unknown> | unknow
   editPlan: (a) => orchestrator.editPlan(a[0] as string, a[1] as string),
   approveIteration: (a) => orchestrator.approveIteration(a[0] as string),
   rejectIteration: (a) => orchestrator.rejectIteration(a[0] as string, a[1] as string),
+  cancelQueued: (a) => orchestrator.cancelQueued(a[0] as string),
 
   // Phase 5/6/7 session actions — POST /api/jkai/builds/<id>/session forwards
   // here. Outbound state changes are emitted via emitLive() so the existing

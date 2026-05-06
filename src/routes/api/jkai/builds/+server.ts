@@ -81,12 +81,16 @@ export const POST: RequestHandler = async ({ request }) => {
   try {
     await builderClient.startBuild(build.id);
   } catch (err: any) {
-    // Build record created but orchestrator failed to start — update status
-    await db.update(jkaiBuilds).set({ status: 'failed' }).where(
-      (await import('drizzle-orm')).eq(jkaiBuilds.id, build.id),
-    );
+    // Build record created but the builder couldn't be reached — surface as
+    // failed. (The orchestrator no longer throws when another build is active;
+    // it queues instead. So this catch only fires on transport/init errors.)
+    const { eq } = await import('drizzle-orm');
+    await db.update(jkaiBuilds).set({ status: 'failed' }).where(eq(jkaiBuilds.id, build.id));
     return json({ error: `Build created but failed to start: ${err.message}` }, { status: 500 });
   }
 
-  return json(build, { status: 201 });
+  // Re-read so the response reflects the orchestrator's decision (running vs queued).
+  const { eq } = await import('drizzle-orm');
+  const [refreshed] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, build.id));
+  return json(refreshed ?? build, { status: 201 });
 };

@@ -72,6 +72,7 @@ export const builderClient = {
   editPlan: (buildId: string, plan: string) => rpc<void>('editPlan', [buildId, plan]),
   approveIteration: (buildId: string) => rpc<void>('approveIteration', [buildId]),
   rejectIteration: (buildId: string, notes: string) => rpc<void>('rejectIteration', [buildId, notes]),
+  cancelQueued: (buildId: string) => rpc<void>('cancelQueued', [buildId]),
 
   // Phase 5/6/7 session actions.
   sessionInject: (buildId: string, content: string) => rpc<void>('sessionInject', [buildId, content]),

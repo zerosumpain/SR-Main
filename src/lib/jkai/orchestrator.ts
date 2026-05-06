@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc, isNotNull } from 'drizzle-orm';
 import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
@@ -59,6 +59,17 @@ function detectCompletion(evaluation: string | null): boolean {
 
 // --- Orchestrator Singleton ---
 
+type QueuedAction =
+  | { kind: 'start' }
+  | { kind: 'resume' }
+  | { kind: 'restart' }
+  | { kind: 'approvePlan' }
+  | { kind: 'skipPlan' }
+  | { kind: 'approveIteration' }
+  | { kind: 'replan'; revisedPrompt?: string }
+  | { kind: 'continue'; prompt: string; modelOverride?: { provider?: string; modelId?: string } }
+  | { kind: 'rejectIteration'; notes: string };
+
 class Orchestrator {
   private activeBuildId: string | null = null;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,6 +77,11 @@ class Orchestrator {
   // Mutable deadline for the currently-executing iteration's Pi process.
   // The UI can push this back via extendDeadline() to grant more time.
   private currentDeadline: { current: number } | null = null;
+  // Re-entrancy guard: when an entry-point is being called by dequeueNext()
+  // itself, we want to bypass the "queue if active" check. Without this,
+  // dequeueNext could see activeBuildId still set during an in-progress
+  // transition and re-queue the build it was trying to dispatch.
+  private dequeueing = false;
 
   extendDeadline(buildId: string, additionalMs: number): number | null {
     if (this.activeBuildId !== buildId || !this.currentDeadline) return null;
@@ -79,8 +95,9 @@ class Orchestrator {
   }
 
   async startBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId) {
-      throw new Error(`Build ${this.activeBuildId} is already active`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'start' });
+      return;
     }
 
     this.activeBuildId = buildId;
@@ -88,7 +105,7 @@ class Orchestrator {
 
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', updatedAt: new Date() })
+      .set({ status: 'running', queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build started');
@@ -98,25 +115,40 @@ class Orchestrator {
     this.initAndPlan(buildId).catch(async (err) => {
       await emitLog(buildId, 'error', `Build init failed: ${err.message}`);
       await emitStage(buildId, { stage: 'failed', failureKind: 'init_error', message: err.message });
+      await db
+        .update(jkaiBuilds)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, buildId));
+      if (this.activeBuildId === buildId) {
+        this.activeBuildId = null;
+        await this.dequeueNext();
+      }
     });
   }
 
   async pauseBuild(buildId: string): Promise<void> {
-    this.stopped = true;
-    if (this.loopTimer) clearTimeout(this.loopTimer);
-    this.loopTimer = null;
-    this.activeBuildId = null;
+    // Pause is also valid for queued builds — flip status to paused and clear
+    // the queue entry so the user sees a coherent state.
+    const wasActive = this.activeBuildId === buildId;
+    if (wasActive) {
+      this.stopped = true;
+      if (this.loopTimer) clearTimeout(this.loopTimer);
+      this.loopTimer = null;
+      this.activeBuildId = null;
+    }
 
     // Mark any running iterations as failed (they were interrupted)
     await failOrphanedIterations(buildId);
 
     await db
       .update(jkaiBuilds)
-      .set({ status: 'paused', updatedAt: new Date() })
+      .set({ status: 'paused', queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build paused');
     await emitStage(buildId, { stage: 'paused' });
+
+    if (wasActive) await this.dequeueNext();
   }
 
   /**
@@ -127,8 +159,9 @@ class Orchestrator {
    * whatever pi wrote before it was killed.
    */
   async restartBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'restart' });
+      return;
     }
     await failOrphanedIterations(buildId);
     await db
@@ -137,6 +170,8 @@ class Orchestrator {
         status: 'running',
         failure: null,
         consecutiveFailures: 0,
+        queuedAction: null,
+        queuedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(jkaiBuilds.id, buildId));
@@ -147,8 +182,9 @@ class Orchestrator {
   }
 
   async resumeBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId) {
-      throw new Error(`Build ${this.activeBuildId} is already active`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'resume' });
+      return;
     }
 
     // Clean up any orphaned running iterations before resuming
@@ -159,7 +195,7 @@ class Orchestrator {
 
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', updatedAt: new Date() })
+      .set({ status: 'running', queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build resumed');
@@ -168,21 +204,26 @@ class Orchestrator {
   }
 
   async stopBuild(buildId: string): Promise<void> {
-    this.stopped = true;
-    if (this.loopTimer) clearTimeout(this.loopTimer);
-    this.loopTimer = null;
-    this.activeBuildId = null;
+    const wasActive = this.activeBuildId === buildId;
+    if (wasActive) {
+      this.stopped = true;
+      if (this.loopTimer) clearTimeout(this.loopTimer);
+      this.loopTimer = null;
+      this.activeBuildId = null;
+    }
 
     // Mark any running iterations as failed
     await failOrphanedIterations(buildId);
 
     await db
       .update(jkaiBuilds)
-      .set({ status: 'completed', updatedAt: new Date() })
+      .set({ status: 'completed', queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build stopped by user');
     await emitStage(buildId, { stage: 'completed', message: 'Stopped by user' });
+
+    if (wasActive) await this.dequeueNext();
   }
 
   async continueBuild(
@@ -190,8 +231,9 @@ class Orchestrator {
     improvementPrompt: string,
     modelOverride?: { provider?: string; modelId?: string },
   ): Promise<void> {
-    if (this.activeBuildId) {
-      throw new Error(`Build ${this.activeBuildId} is already active`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'continue', prompt: improvementPrompt, modelOverride });
+      return;
     }
 
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
@@ -212,6 +254,8 @@ class Orchestrator {
       updatedAt: new Date(),
       failure: null,
       consecutiveFailures: 0,
+      queuedAction: null,
+      queuedAt: null,
     };
     if (modelOverride?.provider) updates.modelProvider = modelOverride.provider;
     if (modelOverride?.modelId) updates.modelId = modelOverride.modelId;
@@ -231,6 +275,7 @@ class Orchestrator {
         .set({ status: 'failed', updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, buildId));
       this.activeBuildId = null;
+      await this.dequeueNext();
     });
   }
 
@@ -281,6 +326,102 @@ class Orchestrator {
     return this.activeBuildId;
   }
 
+  /**
+   * Park a build behind the currently-active one. Called by every entry point
+   * that previously threw "another build is active". The recorded action is
+   * what the user actually wanted (start / resume / continue with prompt /
+   * etc.) — `dequeueNext` replays it when the active build clears.
+   */
+  private async enqueue(buildId: string, action: QueuedAction): Promise<void> {
+    await db
+      .update(jkaiBuilds)
+      .set({
+        status: 'queued',
+        queuedAction: action,
+        queuedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(jkaiBuilds.id, buildId));
+    const ahead = await db
+      .select()
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.status, 'queued'))
+      .orderBy(asc(jkaiBuilds.queuedAt));
+    const position = ahead.findIndex((b) => b.id === buildId);
+    const positionLabel = position >= 0 ? ` (#${position + 1} in queue)` : '';
+    const activeLabel = this.activeBuildId ? ` behind ${this.activeBuildId.slice(0, 8)}` : '';
+    await emitLog(buildId, 'system', `Queued${activeLabel}${positionLabel} — will start when the active build finishes.`);
+    await emitStage(buildId, { stage: 'queued' as any, message: `Queued${positionLabel}` } as any);
+  }
+
+  /**
+   * Pop the oldest queued build and re-issue the action the user originally
+   * requested. Called after every clean termination of the active build
+   * (paused / stopped / completed / failed / awaiting approval). Re-entry
+   * is guarded by `dequeueing` so the entry-point methods know to bypass
+   * their own enqueue check.
+   */
+  private async dequeueNext(): Promise<void> {
+    if (this.activeBuildId) return; // race guard — something else took the slot
+    const [next] = await db
+      .select()
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.status, 'queued'))
+      .orderBy(asc(jkaiBuilds.queuedAt))
+      .limit(1);
+    if (!next) return;
+    const action = (next.queuedAction as QueuedAction | null) ?? { kind: 'start' };
+    this.dequeueing = true;
+    try {
+      switch (action.kind) {
+        case 'start':       await this.startBuild(next.id); break;
+        case 'resume':      await this.resumeBuild(next.id); break;
+        case 'restart':     await this.restartBuild(next.id); break;
+        case 'approvePlan': await this.approvePlan(next.id); break;
+        case 'skipPlan':    await this.skipPlan(next.id); break;
+        case 'replan':      await this.replan(next.id, action.revisedPrompt); break;
+        case 'continue':    await this.continueBuild(next.id, action.prompt, action.modelOverride); break;
+        case 'approveIteration': await this.approveIteration(next.id); break;
+        case 'rejectIteration':  await this.rejectIteration(next.id, action.notes); break;
+        default: {
+          // Unknown action — clear the queue entry so we don't loop forever.
+          await db
+            .update(jkaiBuilds)
+            .set({ status: 'paused', queuedAction: null, queuedAt: null, updatedAt: new Date() })
+            .where(eq(jkaiBuilds.id, next.id));
+        }
+      }
+    } catch (err: any) {
+      await emitLog(next.id, 'error', `Dequeue failed: ${err.message}`);
+      await db
+        .update(jkaiBuilds)
+        .set({ status: 'failed', queuedAction: null, queuedAt: null, updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, next.id));
+      // Try the next one.
+      this.dequeueing = false;
+      await this.dequeueNext();
+      return;
+    } finally {
+      this.dequeueing = false;
+    }
+  }
+
+  /**
+   * Pull a build out of the queue without starting it. Status flips to
+   * paused so the user can resume manually (or delete) later.
+   */
+  async cancelQueued(buildId: string): Promise<void> {
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (!build) throw new Error('build not found');
+    if (build.status !== 'queued') return; // idempotent
+    await db
+      .update(jkaiBuilds)
+      .set({ status: 'paused', queuedAction: null, queuedAt: null, updatedAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId));
+    await emitLog(buildId, 'system', 'Removed from queue.');
+    await emitStage(buildId, { stage: 'paused' });
+  }
+
   async recoverOnStartup(): Promise<void> {
     // Mark every build that was mid-flight as failed. A pi subprocess lives
     // in our process tree, so a systemctl restart kills it mid-iteration —
@@ -303,6 +444,9 @@ class Orchestrator {
         'Service restarted mid-build — marked failed. Use Continue to pick up from the last good iteration.',
       );
     }
+
+    // Queued builds survive a restart — kick the next one in line.
+    await this.dequeueNext();
   }
 
   private async initAndPlan(buildId: string): Promise<void> {
@@ -345,6 +489,7 @@ class Orchestrator {
       );
       await emitStage(buildId, { stage: 'awaiting_plan_approval' });
       this.activeBuildId = null;
+      await this.dequeueNext();
       return;
     }
 
@@ -361,8 +506,9 @@ class Orchestrator {
       // Idempotent: silently no-op (double-click, already approved/skipped).
       return;
     }
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'approvePlan' });
+      return;
     }
 
     const [iter0] = await db
@@ -382,6 +528,8 @@ class Orchestrator {
         milestones,
         failure: null,
         consecutiveFailures: 0,
+        queuedAction: null,
+        queuedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(jkaiBuilds.id, buildId));
@@ -393,8 +541,9 @@ class Orchestrator {
   }
 
   async skipPlan(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'skipPlan' });
+      return;
     }
     await failOrphanedIterations(buildId);
     await db
@@ -404,6 +553,8 @@ class Orchestrator {
         planStatus: 'skipped',
         failure: null,
         consecutiveFailures: 0,
+        queuedAction: null,
+        queuedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(jkaiBuilds.id, buildId));
@@ -415,8 +566,9 @@ class Orchestrator {
   }
 
   async replan(buildId: string, revisedPrompt?: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'replan', revisedPrompt });
+      return;
     }
     await failOrphanedIterations(buildId);
     await db
@@ -436,6 +588,8 @@ class Orchestrator {
         failure: null,
         consecutiveFailures: 0,
         iterationsCompleted: 0,
+        queuedAction: null,
+        queuedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(jkaiBuilds.id, buildId));
@@ -455,15 +609,16 @@ class Orchestrator {
   // --- Iteration-approval API (Phase 2) ---
 
   async approveIteration(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'approveIteration' });
+      return;
     }
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!build) throw new Error('build not found');
-    if (build.status !== 'awaiting_iter_approval') return;
+    if (build.status !== 'awaiting_iter_approval' && build.status !== 'queued') return;
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', updatedAt: new Date() })
+      .set({ status: 'running', queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', 'Iteration approved — continuing.');
     this.activeBuildId = buildId;
@@ -472,19 +627,20 @@ class Orchestrator {
   }
 
   async rejectIteration(buildId: string, notes: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId) {
-      throw new Error(`another build is active: ${this.activeBuildId}`);
+    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+      await this.enqueue(buildId, { kind: 'rejectIteration', notes });
+      return;
     }
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!build) throw new Error('build not found');
-    if (build.status !== 'awaiting_iter_approval') return;
+    if (build.status !== 'awaiting_iter_approval' && build.status !== 'queued') return;
     const trimmed = (notes ?? '').trim();
     const combinedPrompt = trimmed
       ? `${build.prompt}\n\n--- Iteration rejected ---\n${trimmed}`
       : build.prompt;
     await db
       .update(jkaiBuilds)
-      .set({ status: 'running', prompt: combinedPrompt, updatedAt: new Date() })
+      .set({ status: 'running', prompt: combinedPrompt, queuedAction: null, queuedAt: null, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId));
     await emitLog(
       buildId,
@@ -525,6 +681,7 @@ class Orchestrator {
             .where(eq(jkaiBuilds.id, buildId));
           await emitLog(buildId, 'system', `Build completed: ${budget.reason}`);
           this.activeBuildId = null;
+          await this.dequeueNext();
           return;
         }
         await emitLog(buildId, 'system', `Cooling down: ${budget.reason}`);
@@ -867,6 +1024,7 @@ class Orchestrator {
             : null;
           await emitStage(buildId, { stage: 'completed', previewUrl });
           this.activeBuildId = null;
+          await this.dequeueNext();
           return;
         }
       }
@@ -887,6 +1045,7 @@ class Orchestrator {
         );
         await emitStage(buildId, { stage: 'awaiting_iter_approval', iteration: iterationNumber }, iteration.id);
         this.activeBuildId = null;
+        await this.dequeueNext();
         return;
       }
 
@@ -917,6 +1076,7 @@ class Orchestrator {
     this.activeBuildId = null;
     if (this.loopTimer) clearTimeout(this.loopTimer);
     this.loopTimer = null;
+    await this.dequeueNext();
   }
 }
 
