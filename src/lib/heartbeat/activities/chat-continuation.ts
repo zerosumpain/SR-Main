@@ -1,0 +1,231 @@
+import { db } from '$lib/db';
+import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
+import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
+import { listJobs } from '$lib/workflows/chat/job-store';
+import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
+import type { ActivityHandler } from '../types';
+
+const NAME = 'chat-continuation';
+
+/** Patterns that indicate the assistant is asking the user for input. */
+const QUESTION_PATTERNS: RegExp[] = [
+  /\?\s*$/m,                                // ends with a question mark
+  /\b(what|which|when|where|who|how|why)\b[^.!?\n]{0,80}\?/i,
+  /\b(let me know|let me know if|please share|can you (tell|provide|share))\b/i,
+];
+
+/** Patterns indicating a benign pause the orchestrator can self-resume. */
+const BENIGN_CONTINUATION_PATTERNS: RegExp[] = [
+  /\b(should i|shall i|want me to)\s+(continue|proceed|carry on|keep going|go ahead)\b/i,
+  /\b(i'?ll|i will|going to)\s+(wait|pause|hold)\b/i,
+  /\b(ready|happy)\s+to\s+(continue|proceed|carry on)\b/i,
+  /\bnext step\b[^.!?\n]{0,30}(\?|$)/im,
+];
+
+/** Patterns the orchestrator emits when it's blocked needing concrete user input. */
+const BLOCKED_PATTERNS: RegExp[] = [
+  /\b(needs|requires|need)\s+(additional|more|further)\s+(wiring|info|input|context|configuration)\b/i,
+  /\bcannot proceed without\b/i,
+  /\bplease (provide|share|specify|confirm|tell me)\b/i,
+];
+
+interface CCConfig {
+  /** Don't act on conversations whose last assistant message is older than this. */
+  maxStaleMinutes?: number;
+  /** Don't re-pulse the same conversation more than this often (minutes). */
+  perConversationCooldownMinutes?: number;
+  /** Cap for how many conversations one tick will touch. */
+  maxConversationsPerTick?: number;
+  /** Cap for total LLM continuations per conversation per 24h. */
+  maxLlmContinuationsPer24h?: number;
+}
+
+const DEFAULTS: Required<CCConfig> = {
+  maxStaleMinutes: 25,
+  perConversationCooldownMinutes: 5,
+  maxConversationsPerTick: 5,
+  maxLlmContinuationsPer24h: 6,
+};
+
+function classify(content: string): 'benign' | 'blocked' | 'questioning' | 'silent' {
+  if (BLOCKED_PATTERNS.some((r) => r.test(content))) return 'blocked';
+  if (BENIGN_CONTINUATION_PATTERNS.some((r) => r.test(content))) return 'benign';
+  if (QUESTION_PATTERNS.some((r) => r.test(content))) return 'questioning';
+  return 'silent';
+}
+
+export const chatContinuation: ActivityHandler = {
+  name: NAME,
+  description:
+    'Detects paused conversations and either auto-continues benign pauses (LLM call) or posts a single nudge for genuine blocks. Skipped while a job is running for the same conversation.',
+  defaultCadenceSeconds: 60,
+  defaultEnabled: true,
+  defaultActiveHours: { start: '07:00', end: '23:00', tz: 'Europe/London' },
+  defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
+
+  async run(ctx) {
+    const cfg = { ...DEFAULTS, ...(ctx.config as CCConfig) };
+    const cutoffMin = Math.max(2, Math.floor(cfg.maxStaleMinutes / 12)); // assistant message must be at least this old
+    const minStaleMs = 2 * 60_000;
+    const maxStaleMs = cfg.maxStaleMinutes * 60_000;
+    const cooldownMs = cfg.perConversationCooldownMinutes * 60_000;
+    const now = ctx.now;
+
+    // 1. Pull recent messages, group by conversation, keep the latest per
+    //    conversation. Volume bound is "messages in the last 24h" — typically
+    //    well under a few hundred — so JS-side grouping is fine.
+    void cutoffMin; // not currently used; threshold enforced via minStaleMs below
+    const recent = await db
+      .select({
+        msgId: orchestratorChats.id,
+        convId: orchestratorChats.conversationId,
+        role: orchestratorChats.role,
+        content: orchestratorChats.content,
+        metadata: orchestratorChats.metadata,
+        createdAt: orchestratorChats.createdAt,
+      })
+      .from(orchestratorChats)
+      .where(
+        and(
+          isNotNull(orchestratorChats.conversationId),
+          gt(orchestratorChats.createdAt, new Date(now - 24 * 3600_000)),
+        ),
+      )
+      .orderBy(desc(orchestratorChats.createdAt));
+
+    type Latest = (typeof recent)[number];
+    const latestByConv = new Map<string, Latest>();
+    for (const r of recent) {
+      if (!r.convId) continue;
+      if (!latestByConv.has(r.convId)) latestByConv.set(r.convId, r);
+    }
+    const latest = Array.from(latestByConv.values()).filter((r) => r.role === 'assistant');
+
+    if (latest.length === 0) {
+      return { outcome: 'ok', summary: 'no paused conversations' };
+    }
+
+    // 2. Filter out conversations with an active job in the in-memory job-store.
+    const activeJobConvIds = new Set(
+      listJobs()
+        .filter((j) => j.status === 'running' && j.conversationId)
+        .map((j) => j.conversationId as string),
+    );
+
+    // 3. Filter out conversations we've already pulsed within the cooldown.
+    const recentPulses = await db
+      .select({ conversationId: heartbeatPulses.conversationId, ts: heartbeatPulses.ts })
+      .from(heartbeatPulses)
+      .where(
+        and(
+          isNotNull(heartbeatPulses.conversationId),
+          gt(heartbeatPulses.ts, new Date(now - cooldownMs)),
+        ),
+      );
+    const recentlyPulsed = new Set(recentPulses.map((p) => p.conversationId));
+
+    // 4. Pulled the LLM-continuation 24h count too so we can rate-limit auto-continues.
+    const llm24h = await db
+      .select({ conversationId: heartbeatPulses.conversationId, c: sql<number>`count(*)::int` })
+      .from(heartbeatPulses)
+      .where(
+        and(
+          isNotNull(heartbeatPulses.conversationId),
+          gt(heartbeatPulses.ts, new Date(now - 24 * 3600_000)),
+          eq(heartbeatPulses.outcome, 'fired'),
+        ),
+      )
+      .groupBy(heartbeatPulses.conversationId);
+    const llmCountBy = new Map(llm24h.map((r) => [r.conversationId, r.c]));
+
+    let actedCount = 0;
+    const acted: Array<{ convId: string; mode: string; firstWords: string }> = [];
+    const skippedReasons: Record<string, number> = {};
+
+    for (const row of latest) {
+      if (actedCount >= cfg.maxConversationsPerTick) break;
+      if (!row.convId) continue;
+      const convId = row.convId;
+      const ageMs = now - new Date(row.createdAt).getTime();
+      if (ageMs > maxStaleMs) { skippedReasons.tooStale = (skippedReasons.tooStale ?? 0) + 1; continue; }
+      if (ageMs < minStaleMs) { skippedReasons.tooFresh = (skippedReasons.tooFresh ?? 0) + 1; continue; }
+      if (activeJobConvIds.has(convId)) { skippedReasons.activeJob = (skippedReasons.activeJob ?? 0) + 1; continue; }
+      if (recentlyPulsed.has(convId)) { skippedReasons.cooldown = (skippedReasons.cooldown ?? 0) + 1; continue; }
+      // Skip if the latest message is itself a heartbeat reply — avoid loops.
+      const meta = row.metadata as { heartbeat?: { activity?: string } } | null;
+      if (meta?.heartbeat?.activity === NAME) { skippedReasons.lastWasHeartbeat = (skippedReasons.lastWasHeartbeat ?? 0) + 1; continue; }
+
+      const cls = classify(row.content);
+      try {
+        if (cls === 'benign') {
+          const usedLlm24h = llmCountBy.get(convId) ?? 0;
+          if (usedLlm24h >= cfg.maxLlmContinuationsPer24h) {
+            await postHeartbeatNote({
+              conversationId: convId,
+              text: "[heartbeat] hit auto-continuation cap for the day — reply when ready and I'll pick it back up.",
+              activityName: NAME,
+            });
+            acted.push({ convId, mode: 'cap-nudge', firstWords: row.content.slice(0, 60) });
+          } else {
+            await runHeartbeatTurn({
+              conversationId: convId,
+              userText: '[heartbeat] continuing on your behalf — proceed with the next concrete step. If you genuinely need user input, prefix the reply with NEEDS-USER:',
+              activityName: NAME,
+              instruction:
+                'You previously paused. Take one small step forward; do not summarise the whole task. ' +
+                'If a tool is required, describe what you would do but do not invoke it (heartbeat turns have no tools).',
+              maxTokens: 700,
+            });
+            acted.push({ convId, mode: 'auto-continue', firstWords: row.content.slice(0, 60) });
+          }
+        } else if (cls === 'questioning' || cls === 'blocked') {
+          const minsAgo = Math.round(ageMs / 60_000);
+          await postHeartbeatNote({
+            conversationId: convId,
+            text: `[heartbeat] orchestrator paused ${minsAgo} min ago — waiting on your reply.`,
+            activityName: NAME,
+          });
+          acted.push({ convId, mode: 'nudge', firstWords: row.content.slice(0, 60) });
+        } else {
+          // Silent pause — model just stopped. Try a soft auto-continue.
+          const usedLlm24h = llmCountBy.get(convId) ?? 0;
+          if (usedLlm24h >= cfg.maxLlmContinuationsPer24h) {
+            skippedReasons.llmCap = (skippedReasons.llmCap ?? 0) + 1;
+            continue;
+          }
+          await runHeartbeatTurn({
+            conversationId: convId,
+            userText: '[heartbeat] checking in — anything more to do here, or have we landed?',
+            activityName: NAME,
+            instruction:
+              'If the previous turn appears to have completed the task, reply briefly confirming completion. ' +
+              'If there is a clear next step, take it.',
+            maxTokens: 350,
+          });
+          acted.push({ convId, mode: 'soft-checkin', firstWords: row.content.slice(0, 60) });
+        }
+        actedCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[heartbeat] chat-continuation failed for conv ${convId}: ${msg}`);
+        skippedReasons.error = (skippedReasons.error ?? 0) + 1;
+      }
+    }
+
+    if (acted.length === 0) {
+      return {
+        outcome: 'ok',
+        summary: `${latest.length} paused convs scanned, none actionable`,
+        details: { skippedReasons },
+      };
+    }
+
+    return {
+      outcome: 'fired',
+      summary: `${acted.length} action${acted.length === 1 ? '' : 's'}: ${acted.map((a) => a.mode).join(', ')}`,
+      details: { acted, skippedReasons },
+      // We can't attribute to one conversation when multiple were touched.
+      conversationId: acted.length === 1 ? acted[0].convId : null,
+    };
+  },
+};

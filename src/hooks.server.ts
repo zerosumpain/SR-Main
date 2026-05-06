@@ -41,12 +41,22 @@ import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail
 startGmailWatcher();
 registerGmailBridge();
 
+// Start the heartbeat engine — periodic autonomous activities (chat
+// continuation, build/job nudges, workflow review). Tickers are configured
+// in the heartbeat_activities table; the engine ticks every 30s and fires
+// any activity whose next_tick_at has passed.
+import { startHeartbeatEngine, stopHeartbeatEngine } from '$lib/heartbeat/engine';
+startHeartbeatEngine().catch((err) => {
+  console.error('[hooks.server] Heartbeat engine failed to start:', err);
+});
+
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
 
 function gracefulShutdown() {
   console.log('[hooks.server] Shutting down...');
+  stopHeartbeatEngine();
   stopHealthScheduler();
   stopWorkflowScheduler();
   stopGmailWatcher();

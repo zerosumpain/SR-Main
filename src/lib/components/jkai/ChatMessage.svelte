@@ -14,7 +14,15 @@
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
-    metadata?: { workflowGenerated?: boolean };
+    metadata?: {
+      workflowGenerated?: boolean;
+      heartbeat?: {
+        activity: string;
+        kind: 'note' | 'reply' | 'user-trigger';
+        replyToHeartbeatMessageId?: string;
+        tokens?: { prompt: number; completion: number };
+      };
+    };
     thinking?: OrchestratorThinking;
     showThinking?: boolean;
     conversationId?: string | null;
@@ -50,17 +58,34 @@
   let isUser = $derived(role === 'user');
   let thinkingOpen = $state(true);
   let hasThinking = $derived(showThinking && thinking && thinking.steps && thinking.steps.length > 0);
+  let heartbeat = $derived(metadata?.heartbeat ?? null);
+  let isHeartbeatTrigger = $derived(heartbeat?.kind === 'user-trigger');
+  let heartbeatLabel = $derived.by(() => {
+    if (!heartbeat) return '';
+    if (heartbeat.kind === 'note') return 'heartbeat note';
+    if (heartbeat.kind === 'reply') return `heartbeat reply (${heartbeat.activity})`;
+    if (heartbeat.kind === 'user-trigger') return `heartbeat trigger (${heartbeat.activity})`;
+    return 'heartbeat';
+  });
 </script>
 
 <div class="flex {isUser ? 'justify-end' : 'justify-start'} mb-3">
   <div
     class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
+    class:hb-msg={!!heartbeat}
+    class:hb-msg-trigger={isHeartbeatTrigger}
     style="
       background: {isUser ? 'var(--accent)' : 'var(--card-bg)'};
       color: {isUser ? 'white' : 'var(--text-primary)'};
       border: {isUser ? 'none' : '1px solid var(--card-border)'};
     "
   >
+    {#if heartbeat}
+      <div class="hb-badge">
+        <span class="hb-pulse" aria-hidden="true">●</span>
+        <span class="hb-label">{heartbeatLabel}</span>
+      </div>
+    {/if}
     {#if isUser}
       <p class="whitespace-pre-wrap">{content}</p>
     {:else}
@@ -158,4 +183,37 @@
     border-top: 1px solid var(--card-border);
     margin: 0.5em 0;
   }
+
+  /* Heartbeat-source message styling */
+  .hb-msg {
+    border-color: rgba(196, 60, 60, 0.18) !important;
+    background: linear-gradient(180deg, rgba(196, 60, 60, 0.04), var(--card-bg)) !important;
+  }
+  .hb-msg-trigger {
+    opacity: 0.7;
+    font-style: italic;
+    font-size: 0.85em;
+  }
+  .hb-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    margin-bottom: 0.4em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px dotted var(--card-border);
+  }
+  .hb-pulse {
+    color: #c44;
+    animation: hb-pulse-anim 2s ease-in-out infinite;
+  }
+  @keyframes hb-pulse-anim {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
+  .hb-label { color: var(--text-secondary); }
 </style>

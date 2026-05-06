@@ -1313,3 +1313,62 @@ export type WorkflowFilePermissions = {
   append: boolean;
   delete: boolean;
 };
+
+// ==========================================
+// Heartbeat — periodic autonomous activities
+// ==========================================
+// Inspired by OpenClaw's heartbeat system. Each row defines one recurring
+// activity (e.g. nudge stalled chats, review yesterday's workflow runs)
+// with its own cadence in seconds and optional active-hours window.
+// The engine ticks every 30s, fires whichever activities are due, and
+// records each tick to heartbeat_pulses for audit + admin visibility.
+
+export const heartbeatActivities = pgTable('heartbeat_activities', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  // Stable name matches a registered handler in src/lib/heartbeat/activities/.
+  // Built-ins: 'chat-continuation', 'conversation-checkin',
+  // 'build-progress-check', 'workflow-review'.
+  name: text('name').notNull().unique(),
+  description: text('description').notNull(),
+  cadenceSeconds: integer('cadence_seconds').notNull(), // 30 .. 86400
+  enabled: boolean('enabled').notNull().default(true),
+  // Optional active-hours window. HH:MM 24h. tz IANA. Null = 24/7.
+  activeHoursStart: text('active_hours_start'),
+  activeHoursEnd: text('active_hours_end'),
+  activeHoursTz: text('active_hours_tz'),
+  // Per-activity config (rate limits, target conversations, prompts, …).
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  lastTickAt: timestamp('last_tick_at', { withTimezone: true }),
+  nextTickAt: timestamp('next_tick_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type HeartbeatActivity = typeof heartbeatActivities.$inferSelect;
+export type NewHeartbeatActivity = typeof heartbeatActivities.$inferInsert;
+
+export const heartbeatPulses = pgTable(
+  'heartbeat_pulses',
+  {
+    id: serial('id').primaryKey(),
+    activityId: text('activity_id').notNull().references(() => heartbeatActivities.id, { onDelete: 'cascade' }),
+    ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
+    // 'fired'   — activity took an action (sent a nudge, ran a continuation)
+    // 'ok'      — ran but nothing required action (HEARTBEAT_OK in OpenClaw terms)
+    // 'skipped' — outside active hours, busy lane, rate-limited, etc.
+    // 'error'   — handler threw
+    outcome: text('outcome').notNull(),
+    summary: text('summary').notNull(),       // <= 200 chars
+    details: jsonb('details'),
+    durationMs: integer('duration_ms'),
+    conversationId: text('conversation_id'),  // if the pulse touched a conversation
+    jobId: text('job_id'),                    // if the pulse spawned/touched a chat job
+  },
+  (table) => ({
+    byActivity: index('heartbeat_pulses_activity_ts_idx').on(table.activityId, table.ts),
+    byTs: index('heartbeat_pulses_ts_idx').on(table.ts),
+  }),
+);
+
+export type HeartbeatPulse = typeof heartbeatPulses.$inferSelect;
+export type NewHeartbeatPulse = typeof heartbeatPulses.$inferInsert;

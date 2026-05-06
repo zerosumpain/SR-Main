@@ -98,7 +98,98 @@
   let schedules = $state<Schedule[]>(data.schedules);
   let feed = $state<FeedItem[]>(data.feed);
 
-  let activeTab = $state<'live' | 'heartbeat' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+  let activeTab = $state<'live' | 'heartbeat' | 'activities' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+
+  type Activity = {
+    id: string;
+    name: string;
+    description: string;
+    cadenceSeconds: number;
+    enabled: boolean;
+    activeHoursStart: string | null;
+    activeHoursEnd: string | null;
+    activeHoursTz: string | null;
+    config: Record<string, unknown>;
+    lastTickAt: string | null;
+    nextTickAt: string | null;
+    handlerKnown: boolean;
+    countsLast24h: Record<string, number>;
+  };
+  type ActivityPulse = {
+    id: number;
+    activityId: string;
+    ts: string;
+    outcome: 'fired' | 'ok' | 'skipped' | 'error';
+    summary: string;
+    details: Record<string, unknown> | null;
+    durationMs: number | null;
+    conversationId: string | null;
+    jobId: string | null;
+  };
+
+  let activities = $state<Activity[]>([]);
+  let activitiesLoaded = $state(false);
+  let pulsesByActivity = $state<Record<string, ActivityPulse[]>>({});
+  let openActivityId = $state<string | null>(null);
+  let cadenceDraft = $state<Record<string, number>>({});
+  let runningActivityId = $state<string | null>(null);
+
+  async function loadActivities() {
+    const res = await fetch('/api/admin/pulse/activities');
+    if (!res.ok) return;
+    const d = await res.json();
+    activities = d.activities;
+    activitiesLoaded = true;
+  }
+
+  async function loadPulses(activityId: string) {
+    const res = await fetch(`/api/admin/pulse/activities/${activityId}/pulses?limit=30`);
+    if (!res.ok) return;
+    const d = await res.json();
+    pulsesByActivity = { ...pulsesByActivity, [activityId]: d.pulses };
+  }
+
+  async function patchActivity(id: string, patch: Record<string, unknown>) {
+    try {
+      const res = await fetch('/api/admin/pulse/activities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        flash('error', d.message || `Update failed (${res.status})`);
+        return;
+      }
+      flash('success', 'Updated');
+      await loadActivities();
+    } catch (e) {
+      flash('error', e instanceof Error ? e.message : 'Update failed');
+    }
+  }
+
+  async function runActivityNow(id: string) {
+    runningActivityId = id;
+    try {
+      const res = await fetch(`/api/admin/pulse/activities/${id}/run`, { method: 'POST' });
+      if (!res.ok) {
+        flash('error', `Run failed (${res.status})`);
+        return;
+      }
+      const d = await res.json();
+      flash('success', `Ran: ${d.result.outcome} — ${d.result.summary}`);
+      await Promise.all([loadActivities(), loadPulses(id)]);
+    } finally {
+      runningActivityId = null;
+    }
+  }
+
+  function fmtCadence(sec: number): string {
+    if (sec < 60) return `${sec}s`;
+    if (sec < 3600) return `${Math.round(sec / 60)}m`;
+    if (sec < 86400) return `${(sec / 3600).toFixed(1)}h`;
+    return `${(sec / 86400).toFixed(1)}d`;
+  }
   let liveTimer: ReturnType<typeof setInterval> | null = null;
   let lastLiveAt = $state(Date.now());
   let banner = $state<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -158,7 +249,10 @@
   onMount(() => {
     liveTimer = setInterval(() => {
       if (activeTab === 'live' || activeTab === 'heartbeat' || activeTab === 'systems') refreshLive();
+      if (activeTab === 'activities' && activitiesLoaded) loadActivities();
     }, 3000);
+    // Pre-load activities once even if user starts on a different tab.
+    loadActivities();
   });
 
   onDestroy(() => {
@@ -336,6 +430,10 @@
   <button class="nm-tab" class:active={activeTab === 'heartbeat'} aria-current={activeTab === 'heartbeat' ? 'page' : undefined} onclick={() => activeTab = 'heartbeat'}>
     Heartbeat
     <span class="tab-count">{live.recentPulses.length}</span>
+  </button>
+  <button class="nm-tab" class:active={activeTab === 'activities'} aria-current={activeTab === 'activities' ? 'page' : undefined} onclick={() => activeTab = 'activities'}>
+    Activities
+    <span class="tab-count">{activities.length}</span>
   </button>
   <button class="nm-tab" class:active={activeTab === 'schedules'} aria-current={activeTab === 'schedules' ? 'page' : undefined} onclick={() => activeTab = 'schedules'}>
     Schedules
@@ -612,6 +710,113 @@
   </table>
 {/if}
 
+{#if activeTab === 'activities'}
+  <p class="hint">
+    Each row is one configurable autonomous activity the heartbeat engine fires on its own cadence. Toggle to enable/disable, set cadence (30s–24h), restrict to active hours, or expand for the description, recent pulses, and "run now" trigger. Cadence changes take effect immediately — <code>next_tick_at</code> is reset to <code>now + cadence</code>.
+  </p>
+  {#if !activitiesLoaded}
+    <p class="empty">Loading…</p>
+  {:else if activities.length === 0}
+    <p class="empty">No activities. The engine seeds defaults on first boot — restart the service if this persists.</p>
+  {:else}
+    <table class="nm-table">
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Cadence</th>
+          <th>Active hours</th>
+          <th>Last fire</th>
+          <th>Next fire</th>
+          <th>24h</th>
+          <th>Enabled</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each activities as a (a.id)}
+          {@const isOpen = openActivityId === a.id}
+          <tr>
+            <td>
+              <div class="act-name">{a.name}</div>
+              {#if !a.handlerKnown}<div class="mono-tiny warn">no handler registered</div>{/if}
+            </td>
+            <td>{fmtCadence(a.cadenceSeconds)}</td>
+            <td class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</td>
+            <td>{a.lastTickAt ? fmtRelative(new Date(a.lastTickAt).getTime()) : '—'}</td>
+            <td>{a.nextTickAt ? fmtRelative(new Date(a.nextTickAt).getTime()) : '—'}</td>
+            <td class="mono-tiny">
+              {#each Object.entries(a.countsLast24h) as [k, v]}<span class={`pill st-${k === 'fired' ? 'ok' : k === 'error' ? 'err' : k === 'ok' ? 'info' : 'paused'}`}>{k}:{v}</span> {/each}
+              {#if Object.keys(a.countsLast24h).length === 0}<span class="dim">none</span>{/if}
+            </td>
+            <td>
+              <button class="toggle-btn" class:on={a.enabled} onclick={() => patchActivity(a.id, { enabled: !a.enabled })}>{a.enabled ? 'on' : 'off'}</button>
+            </td>
+            <td>
+              <button class="link-btn" onclick={async () => { openActivityId = isOpen ? null : a.id; if (!isOpen) { await loadPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button>
+            </td>
+          </tr>
+          {#if isOpen}
+            <tr><td colspan="8" class="row-detail">
+              <p class="act-desc">{a.description}</p>
+
+              <div class="act-controls">
+                <label class="ctrl">
+                  <span>Cadence (s)</span>
+                  <input type="number" min="30" max="86400" bind:value={cadenceDraft[a.id]} class="nm-text-input small" />
+                  <button class="link-btn" onclick={() => patchActivity(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
+                </label>
+                <label class="ctrl">
+                  <span>Active hours</span>
+                  <input type="text" placeholder="07:00" value={a.activeHoursStart ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursStart: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                  <span class="dim">→</span>
+                  <input type="text" placeholder="23:00" value={a.activeHoursEnd ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursEnd: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                  <input type="text" placeholder="Europe/London" value={a.activeHoursTz ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursTz: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                </label>
+                <button class="link-btn" onclick={() => runActivityNow(a.id)} disabled={runningActivityId === a.id || !a.handlerKnown}>{runningActivityId === a.id ? 'running…' : 'run now'}</button>
+              </div>
+
+              {#if Object.keys(a.config).length > 0}
+                <details class="act-config">
+                  <summary class="mono-tiny">config (read-only for now)</summary>
+                  <pre class="raw">{JSON.stringify(a.config, null, 2)}</pre>
+                </details>
+              {/if}
+
+              <h4 class="sec-title sec-title-tight">Recent pulses</h4>
+              {#if !pulsesByActivity[a.id]}
+                <p class="empty">Loading pulses…</p>
+              {:else if pulsesByActivity[a.id].length === 0}
+                <p class="empty">No pulses recorded yet.</p>
+              {:else}
+                <table class="nm-table inset">
+                  <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Duration</th><th></th></tr></thead>
+                  <tbody>
+                    {#each pulsesByActivity[a.id] as p, i (p.id)}
+                      {@const detailKey = `${a.id}-pulse-${p.id}`}
+                      <tr>
+                        <td>{fmtRelative(new Date(p.ts).getTime())}</td>
+                        <td><span class={`pill st-${p.outcome === 'fired' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
+                        <td class="summary-cell">{p.summary}</td>
+                        <td>{p.durationMs ?? '—'}ms</td>
+                        <td>{#if p.details}<button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button>{/if}</td>
+                      </tr>
+                      {#if openRowKey === detailKey && p.details}
+                        <tr><td colspan="5" class="row-detail">
+                          <pre class="raw">{JSON.stringify(p.details, null, 2)}</pre>
+                        </td></tr>
+                      {/if}
+                    {/each}
+                  </tbody>
+                </table>
+              {/if}
+            </td></tr>
+          {/if}
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+{/if}
+
 {#if activeTab === 'schedules'}
   <p class="hint">
     Cron schedules drive workflow runs. Toggle <em>enabled</em> to pause/resume the in-memory cron handle without a service restart. To edit the cron expression, open the workflow on the canvas.
@@ -829,4 +1034,20 @@
     .pulse-stream .pulse { grid-template-columns: 70px 90px 1fr; }
     .pulse-stream .pulse > :nth-child(n+4) { display: none; }
   }
+
+  /* Activities tab */
+  .act-name { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text-primary); text-transform: lowercase; }
+  .act-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0 0 0.6rem; }
+  .act-controls { display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; padding: 0.4rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--divider); }
+  .ctrl { display: flex; gap: 0.4rem; align-items: center; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .ctrl > span { white-space: nowrap; }
+  .nm-text-input.small { font-size: 11px; padding: 3px 6px; max-width: 9rem; }
+  .nm-text-input { font-family: var(--font-mono); border: 1px solid var(--card-border); background: var(--bg-base); color: var(--text-primary); padding: 4px 8px; }
+  .act-config { margin: 0.4rem 0 0.6rem; }
+  .act-config summary { cursor: pointer; color: var(--text-muted); }
+  .sec-title-tight { margin-top: 0.5rem; }
+  .nm-table.inset { border: 1px solid var(--card-border); }
+  .nm-table.inset td, .nm-table.inset th { font-size: 10px; }
+  .dim { color: var(--text-ghost); font-style: italic; }
+  .pill + .pill { margin-left: 4px; }
 </style>
