@@ -64,6 +64,11 @@ export const updateNodeSchema = z.object({
   reason: z.string().min(10, 'Reason must explain what is being fixed and why'),
 });
 
+export const removeNodeSchema = z.object({
+  nodeId: z.string().min(1),
+  reason: z.string().min(10, 'Reason must explain why this node is unnecessary'),
+});
+
 export const verifyWorkflowSchema = z.object({
   initialInput: z.record(z.string(), z.unknown()).optional().describe('Optional input to seed the workflow with'),
 });
@@ -79,6 +84,7 @@ export const toolSchemas = {
   finalize_workflow: finalizeWorkflowSchema,
   set_trigger: setTriggerSchema,
   update_node: updateNodeSchema,
+  remove_node: removeNodeSchema,
   verify_workflow: verifyWorkflowSchema,
 } as const;
 
@@ -185,7 +191,7 @@ export const scraperTargetKnowledgeLookupTool: OpenAIFunctionDef = {
 
 export const openaiTools: OpenAIFunctionDef[] = [
   scraperTargetKnowledgeLookupTool,
-  zodToFunction('search_nodes', searchNodesSchema, 'Search the node registry for nodes matching a capability. ALWAYS call this before use_node to verify the node exists.'),
+  zodToFunction('search_nodes', searchNodesSchema, 'Search the node registry for nodes matching a capability. OPTIONAL — the full registry is already in your system prompt, so search is only needed when you are genuinely unsure which canonical type string a node uses.'),
   zodToFunction('use_node', useNodeSchema, 'Add an existing node to the workflow. Requires a reason and at least one alternative considered.'),
   zodToFunction('create_node', createNodeSchema, 'Create a new reusable node type for a service integration that does not exist yet. Generates definition + executor code.'),
   zodToFunction('connect_nodes', connectNodesSchema, 'Connect two nodes with an edge. Use sourceHandle/targetHandle for conditional routing.'),
@@ -193,6 +199,7 @@ export const openaiTools: OpenAIFunctionDef[] = [
   zodToFunction('finalize_workflow', finalizeWorkflowSchema, 'Signal that the workflow design is complete.'),
   zodToFunction('set_trigger', setTriggerSchema, 'Set the workflow trigger type. Use "manual" for user-initiated runs (this is the default; you can omit this tool call for manual workflows), "webhook" for HTTP-triggered, "cron" for scheduled (provide config.expression as a cron string like "0 9 * * *"), or "event" for event-driven.'),
   zodToFunction('update_node', updateNodeSchema, 'Update an existing node\'s config in the workflow by its ID. Use this to fix config issues (e.g. change a wrong template path, swap an operation, correct a URL). Does NOT change the node type — use create_node for that. Requires a reason explaining what issue is being fixed.'),
+  zodToFunction('remove_node', removeNodeSchema, 'Remove a node from the draft by its ID. Use this when the critic flags an UNNECESSARY node — also drops every edge involving the removed node so the graph stays consistent. Requires a reason (≥10 chars) explaining why the node is dispensable. Use sparingly — prefer not adding the node in the first place.'),
   zodToFunction(
     'verify_workflow',
     verifyWorkflowSchema,

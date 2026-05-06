@@ -9,14 +9,16 @@ export function buildToolUseSystemPrompt(nodeGrounding: string, workspaceResourc
 
 ## How You Work
 
-You have tools to search for nodes, add them to the workflow, create new ones, and connect them. Follow this EXACT sequence:
+The full node registry — every available node, its inputs/outputs, config fields, and usage examples — is in the **Node Registry** section below. **Read it once and design the whole workflow shape end-to-end** before adding nodes one by one. The point of a workflow architect is to see the shape, not to discover one node at a time.
+
+Sequence:
 
 1. **Announce your plan** in 1-2 sentences before calling any tools (e.g. "I'll build a 3-step flow: fetch the API, transform the response, then send it via WhatsApp"). Keep it short — the user wants to know the shape of what you're building, not a full spec.
-2. **Search** the node registry for each capability needed (ALWAYS search before assuming a node exists)
+2. **Design** the full graph from the registry above — pick the smallest set of nodes that does the job. Don't padded with defensive transforms, error-handlers, or "just in case" branches.
 3. **Decide** for each step: use an existing node, or create a new one?
    - Use existing primitives (http-request, transform, code-execute) for one-off operations
    - Create a new reusable node when you're integrating with a distinct service/API (Slack, GitHub, Notion, etc.)
-4. **Add** each node with use_node or create_node — note the node ID returned in each response
+4. **Add** each node with use_node or create_node — note the node ID returned in each response. \`search_nodes\` is OPTIONAL — only use it when you're unsure which canonical type string a node uses (most of the time the registry above is enough).
 5. **Connect ALL nodes** with connect_nodes — you MUST call connect_nodes for every pair of nodes that should be linked. Use the exact node IDs returned from step 4. Without edges, nodes cannot pass data to each other and the workflow will not execute.
 6. **Finalize** when ALL nodes are added AND ALL edges are connected
 
@@ -85,7 +87,8 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 ## Rules
 
 - Every workflow MUST start with exactly one trigger node (usually \`manual-trigger\`)
-- ALWAYS call search_nodes before use_node — never assume a node exists from memory
+- **Minimum viable graph.** Every node must earn its place. Before adding a transform / conditional / data-store / error-handler, ask: "would removing this still satisfy the user's request?" If yes, leave it out. A 5-node workflow that does the job is better than a 13-node one that's defensively over-engineered. The user can always ask to add hardening later — start lean.
+- \`search_nodes\` is optional. The full registry is already in your context above. Use search only to disambiguate when you're genuinely unsure which canonical type string to pass to use_node.
 - Every use_node call MUST include a reason (10+ chars) and at least one alternative considered
 - You MUST call connect_nodes to create edges between every pair of connected nodes — a workflow without edges is invalid and will not execute
 - When creating nodes: use kebab-case for type names, provide working executor code
@@ -109,12 +112,12 @@ You'll receive a workflow (nodes + edges) and the reasoning trace showing why ea
 
 ## Review Dimensions
 
-1. **Error handling** — What happens if an API call fails? Is there error handling where needed?
+1. **Unnecessary complexity (PRIMARY DIMENSION — be ruthless).** Could fewer nodes achieve the same result? Walk through the graph and identify EVERY node that isn't strictly load-bearing for the user's stated goal. Defensive error handlers, transform nodes that just rename or pass-through fields, conditionals that always evaluate the same way, redundant data-stores, "logging" nodes the user didn't ask for, fallback branches for failures the user is fine seeing — these are bloat. Flag every one with severity \`UNNECESSARY\` and a message saying which node to remove and why. Lean toward removing nodes; the user can always ask to add hardening later. A workflow with N nodes that ships is better than a workflow with N+5 nodes that's defensively over-engineered.
 2. **Data shape mismatches** — Does each node receive the data shape it expects from upstream nodes? Check the port schemas.
-3. **Unnecessary complexity** — Could fewer nodes achieve the same result? Are there redundant steps?
-4. **Missing steps** — Are there missing transform/parser nodes between incompatible outputs and inputs?
-5. **Node configuration** — Are all required config fields present and correct?
-6. **Edge completeness** — Are all nodes connected? Is there a clear path from trigger to every node?
+3. **Missing steps that ARE load-bearing** — Are there missing transform/parser nodes between genuinely incompatible outputs and inputs? Do not invent missing steps to add hardening the user didn't ask for — only flag what's required for the workflow to function.
+4. **Node configuration** — Are all required config fields present and correct?
+5. **Edge completeness** — Are all nodes connected? Is there a clear path from trigger to every node?
+6. **Error handling** — Only flag error handling as an issue when the failure mode is genuinely catastrophic (e.g. a payment, a destructive HA action). For a notification workflow that occasionally fails, the default \`stop\` behaviour is fine — don't demand error-handler nodes.
 7. **Reasoning quality** — Did the orchestrator make good node choices? Should any existing node have been used instead of creating a new one?
 
 ## Output Format
@@ -138,17 +141,18 @@ If no issues found, return: \`{ "issues": [], "verdict": "pass" }\``;
 }
 
 export function buildRevisionPrompt(): string {
-  return `Address each issue raised by the critic. You have the same tools available: search_nodes, use_node, update_node, create_node, connect_nodes, set_trigger, finalize_workflow.
+  return `Address each issue raised by the critic. You have the same tools available: search_nodes, use_node, update_node, remove_node, create_node, connect_nodes, set_trigger, finalize_workflow.
 
 For each issue:
 1. Acknowledge the specific problem
 2. Use the appropriate tool to fix it:
-   - **update_node** to change config on an existing node (most common — fixes template paths, operation types, URLs, etc.)
-   - **connect_nodes** to add missing edges
-   - **use_node** or **create_node** only when the fix requires adding a new node
+   - **remove_node** when the critic flags an UNNECESSARY node — strongly preferred when it applies. Drops the node and every edge touching it. After removing, you may need to call connect_nodes to bridge the gap (e.g. if you removed a transform that sat between two nodes, wire the upstream straight to the downstream).
+   - **update_node** to change config on an existing node — fixes template paths, operation types, URLs, etc.
+   - **connect_nodes** to add missing edges or rewire after a removal
+   - **use_node** or **create_node** only when the fix requires adding a genuinely missing node — never to add hardening the user didn't ask for
 3. Call finalize_workflow when all issues are addressed
 
-Fix only what the critic flagged — don't redesign the entire workflow.
+Fix only what the critic flagged — don't redesign the entire workflow. When in doubt between removing a node and adding more, prefer removing — leaner is better.
 
 Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first and review its capture log. You have at most 3 verification rounds.`;
 }

@@ -314,6 +314,37 @@ export function processToolCall(
       return { success: true, response: `Node "${existing.label}" (${nodeId}) config updated.${schemaInfo}` };
     }
 
+    case 'remove_node': {
+      const parsed = toolSchemas.remove_node.safeParse(args);
+      if (!parsed.success) {
+        return { success: false, error: `Validation failed: ${parsed.error.issues.map(i => i.message).join(', ')}` };
+      }
+      const { nodeId, reason } = parsed.data;
+
+      const existing = draft.nodes.get(nodeId);
+      if (!existing) {
+        return { success: false, error: `Node "${nodeId}" does not exist. Available nodes: ${Array.from(draft.nodes.keys()).join(', ')}` };
+      }
+
+      // Drop the node and any edges touching it so the graph stays consistent.
+      draft.nodes.delete(nodeId);
+      const droppedEdges = draft.edges.filter(e => e.source === nodeId || e.target === nodeId).length;
+      draft.edges = draft.edges.filter(e => e.source !== nodeId && e.target !== nodeId);
+
+      draft.decisions.push({
+        type: 'use_node',
+        summary: `Removed: ${existing.label} (\`${nodeId}\`)`,
+        detail: `Reason: ${reason}${droppedEdges > 0 ? ` — also dropped ${droppedEdges} edge${droppedEdges === 1 ? '' : 's'} involving it` : ''}`,
+        nodeId,
+        timestamp: now,
+      });
+
+      return {
+        success: true,
+        response: `Node "${existing.label}" (${nodeId}) removed${droppedEdges > 0 ? ` along with ${droppedEdges} edge${droppedEdges === 1 ? '' : 's'} that touched it` : ''}.`,
+      };
+    }
+
     default:
       return { success: false, error: `Unknown tool: ${toolName}` };
   }
