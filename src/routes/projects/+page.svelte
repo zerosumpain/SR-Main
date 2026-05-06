@@ -63,7 +63,7 @@
           class="group relative p-6 rounded-xl border transition-colors"
           style="background: var(--card-bg); border-color: var(--card-border);"
         >
-          <a href="/projects/jkai/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
+          <a href="/projects/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
 
           <div class="flex items-start justify-between mb-3">
             <p

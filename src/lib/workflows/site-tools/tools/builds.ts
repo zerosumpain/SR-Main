@@ -90,7 +90,7 @@ register({
       const slug = build.publishedSlug || build.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50) || id.slice(0, 8);
       await publishBuild(id, slug);
       await db.update(jkaiBuilds).set({ publishedSlug: slug, updatedAt: new Date() }).where(eq(jkaiBuilds.id, id));
-      return { success: true, data: { slug, url: `https://strangeramblings.com/projects/jkai/${slug}/` } };
+      return { success: true, data: { slug, url: `https://strangeramblings.com/projects/${slug}/` } };
     } else {
       return { success: false, error: `Unknown action: ${action}` };
     }
@@ -136,7 +136,7 @@ register({
         ...build,
         iterations,
         publishedUrl: build.publishedSlug
-          ? `https://strangeramblings.com/projects/jkai/${build.publishedSlug}/`
+          ? `https://strangeramblings.com/projects/${build.publishedSlug}/`
           : null,
       },
     };

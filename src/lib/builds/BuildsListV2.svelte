@@ -172,7 +172,7 @@
   async function copyPreviewLink(b: Build) {
     openMenuId = null;
     if (!b.publishedSlug) return;
-    const url = `${window.location.origin}/projects/jkai/${b.publishedSlug}/`;
+    const url = `${window.location.origin}/projects/${b.publishedSlug}/`;
     try {
       await navigator.clipboard.writeText(url);
       showToast('ok', 'Link copied');

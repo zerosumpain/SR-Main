@@ -12,7 +12,7 @@
   let cacheBust = $state(Date.now());
   let fullscreen = $state(false);
   const proxyUrl = $derived(`/api/jkai/proxy/${buildId}/?v=${cacheBust}`);
-  const liveUrl = $derived(publishedSlug ? `/projects/jkai/${publishedSlug}/` : null);
+  const liveUrl = $derived(publishedSlug ? `/projects/${publishedSlug}/` : null);
 
   function reload() {
     cacheBust = Date.now();

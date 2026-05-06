@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ params }) => {
       .set({ publishedSlug: finalSlug, updatedAt: new Date() })
       .where(eq(jkaiBuilds.id, params.id));
 
-    return json({ ok: true, slug: finalSlug, url: `/projects/jkai/${finalSlug}/` });
+    return json({ ok: true, slug: finalSlug, url: `/projects/${finalSlug}/` });
   } catch (err: any) {
     return json({ error: err.message }, { status: 500 });
   }

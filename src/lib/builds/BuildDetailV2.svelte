@@ -86,7 +86,7 @@
   // the persisted serveConfig (page load / 10s poll) OR a live stage event.
   const previewLink = $derived(
     build.publishedSlug
-      ? `/projects/jkai/${build.publishedSlug}/`
+      ? `/projects/${build.publishedSlug}/`
       : (build.serveConfig || livePreviewUrl)
         ? `/api/jkai/proxy/${build.id}/`
         : null,
@@ -315,7 +315,7 @@
       </button>
     {/if}
     {#if build.publishedSlug}
-      <a class="row-link" href={`/projects/jkai/${build.publishedSlug}/`} target="_blank" rel="noreferrer">↗ Live</a>
+      <a class="row-link" href={`/projects/${build.publishedSlug}/`} target="_blank" rel="noreferrer">↗ Live</a>
       <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
         {unpublishing ? 'Unpublishing…' : 'Unpublish'}
       </button>

@@ -571,7 +571,7 @@ async function removeFromVps(slug: string): Promise<void> {
 
 /**
  * Inject a <base href> into index.html so relative asset/data paths resolve correctly
- * when served from /projects/jkai/{slug}/
+ * when served from /projects/{slug}/
  */
 async function injectBaseHref(destDir: string, slug: string): Promise<void> {
   const { readFileSync, writeFileSync, existsSync } = await import('fs');
@@ -579,7 +579,7 @@ async function injectBaseHref(destDir: string, slug: string): Promise<void> {
   if (!existsSync(indexPath)) return;
 
   let html = readFileSync(indexPath, 'utf-8');
-  const baseTag = `<base href="/projects/jkai/${slug}/">`;
+  const baseTag = `<base href="/projects/${slug}/">`;
 
   // Don't double-inject
   if (html.includes('<base href=')) return;

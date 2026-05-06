@@ -48,7 +48,7 @@
   let livePreviewUrl = $state<string | null>(null);
   const previewLink = $derived(
     build.publishedSlug
-      ? `/projects/jkai/${build.publishedSlug}/`
+      ? `/projects/${build.publishedSlug}/`
       : (build.serveConfig || livePreviewUrl) ? `/api/jkai/proxy/${build.id}/` : null,
   );
 
