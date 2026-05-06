@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 import {
   loadCanvas,
   loadModelCatalogue,
@@ -42,11 +43,18 @@ export const load: PageServerLoad = async ({ params, url }) => {
     listCanvases(),
   ]);
 
+  // Slug doesn't match any canvas — 404 cleanly. Previously
+  // ensureCanvasWorkflow would silently seed a placeholder for unknown
+  // slugs, which leaked junk canvases whenever the chat orchestrator
+  // hallucinated a wrong /jkai/canvas/<slug> link.
+  if (!canvas) {
+    throw error(404, `Canvas "${params.slug}" not found.`);
+  }
+
   // Reap any zombie `awaiting_human` runs for this canvas AFTER loading it
-  // (so we use the workflowId already looked up instead of triggering a
-  // side-effecting `ensureCanvasWorkflow` that would silently seed a blank
-  // canvas for any slug that doesn't exist). Fire-and-forget so page load
-  // time isn't paid by the user — the next refresh picks up the reaped state.
+  // (so we use the workflowId already looked up). Fire-and-forget so page
+  // load time isn't paid by the user — the next refresh picks up the reaped
+  // state.
   if (canvas?.workflowId) {
     void reapExpiredInteractions(canvas.workflowId).catch((err) => {
       console.error('[canvas] reapExpiredInteractions failed', err);

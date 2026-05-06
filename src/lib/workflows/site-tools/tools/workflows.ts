@@ -27,11 +27,14 @@ register({
     'user is asking to build/extend it, use workflow_add_node / workflow_add_edge ' +
     'on the existing workflowId instead. ' +
     'The created canvas gets a trigger node + any generated nodes, and is available ' +
-    'at the returned /jkai/canvas/:slug URL. ' +
+    'at the returned `data.url`. ' +
     'Supported node types: trigger, chat, llm-call, llm-agent, text-parser, ' +
     'transform, http-request, conditional, delay, intel-write, intel-query, ' +
     'data-store, whatsapp, email, blog, home-assistant, and more. ' +
-    'After creating, share the returned URL as a clickable markdown link: [Open canvas](url).',
+    'CRITICAL: when you share a link to the canvas in your reply, paste the EXACT ' +
+    '`data.linkMarkdown` value verbatim. Do NOT construct your own URL, do NOT use ' +
+    'data.workflowId in a URL, do NOT invent a slug. The slug returned is the only ' +
+    'one that resolves — any other URL will 404.',
   parameters: {
     type: 'object',
     properties: {
@@ -207,6 +210,8 @@ register({
       return { success: false, error: `Failed to save canvas: ${dbMsg}` };
     }
 
+    const url = `https://strangeramblings.com/jkai/canvas/${slug}`;
+    const linkLabel = workflow.name || slug;
     return {
       success: true,
       data: {
@@ -216,7 +221,11 @@ register({
         description: workflow.description,
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
-        url: `https://strangeramblings.com/jkai/canvas/${slug}`,
+        url,
+        // Ready-to-paste markdown — model should use this verbatim in its reply.
+        // Avoids the class of bug where the model invents a slug or uses
+        // workflowId in the URL.
+        linkMarkdown: `[${linkLabel}](${url})`,
       },
     };
   },

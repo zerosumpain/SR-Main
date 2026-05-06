@@ -419,7 +419,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Idempotently ensure a workflow exists for this slug; return its id + title. */
 export async function ensureCanvasWorkflow(
   slugOrId: string,
-): Promise<{ workflowId: string; title: string }> {
+): Promise<{ workflowId: string; title: string } | null> {
   // Canvas-named lookup first (the post-migration happy path)
   const [byName] = await db
     .select()
@@ -439,45 +439,21 @@ export async function ensureCanvasWorkflow(
   const [legacy] = await db.select().from(workflows).where(eq(workflows.name, slugOrId));
   if (legacy) return { workflowId: legacy.id, title: legacy.description || legacy.name };
 
-  // Nothing matched — seed a fresh canvas under the slugified param.
-  const seedSlug = _slugify(slugOrId) || slugOrId;
-  const [created] = await db
-    .insert(workflows)
-    .values({
-      name: workflowNameFor(seedSlug),
-      description: SEED_TITLE,
-      trigger: { type: 'manual' },
-    })
-    .returning();
-
-  const idByLocal: Record<string, string> = {};
-  for (const n of SEED_NODES) {
-    const [row] = await db
-      .insert(workflowNodes)
-      .values({
-        workflowId: created.id,
-        type: n.type,
-        label: n.label,
-        position: { x: n.x, y: n.y },
-        config: n.config,
-      })
-      .returning();
-    idByLocal[n.localId] = row.id;
-  }
-  for (const e of SEED_EDGES) {
-    await db.insert(workflowEdges).values({
-      workflowId: created.id,
-      sourceNodeId: idByLocal[e.from],
-      targetNodeId: idByLocal[e.to],
-    });
-  }
-
-  return { workflowId: created.id, title: SEED_TITLE };
+  // Nothing matched. Previously this branch silently auto-seeded a fresh
+  // placeholder canvas for the unknown slug — but that turned out to be
+  // a footgun: every time the chat orchestrator's reply contained a wrong
+  // /jkai/canvas/<slug> URL (e.g. it hallucinated `generated-workflow-3`),
+  // visiting that link spawned a junk canvas with the seed nodes and the
+  // SEED_TITLE description. Now we return null and let the caller 404.
+  return null;
 }
 
-/** Load a canvas view of a workflow, including latest run's node states. */
-export async function loadCanvas(slug: string): Promise<Canvas> {
-  const { workflowId, title } = await ensureCanvasWorkflow(slug);
+/** Load a canvas view of a workflow, including latest run's node states.
+ *  Returns null when the slug doesn't match any existing canvas. */
+export async function loadCanvas(slug: string): Promise<Canvas | null> {
+  const found = await ensureCanvasWorkflow(slug);
+  if (!found) return null;
+  const { workflowId, title } = found;
 
   const nodes = await db
     .select()
