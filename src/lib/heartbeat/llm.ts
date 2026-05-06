@@ -4,6 +4,7 @@ import { eq, asc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { ModelContext } from '$lib/server/models/types';
+import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 
 export interface RunHeartbeatTurnOpts {
   conversationId: string;
@@ -174,6 +175,16 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
     })
     .returning({ id: orchestratorChats.id });
 
+  // Push the reply onto the live SSE stream so an open /jkai chat session
+  // sees the progress note in real time. Without this the message only
+  // appears on next page reload, which is what the user means by "the pulse
+  // didn't keep me posted with the build progress".
+  notifySubscribers(opts.conversationId, {
+    role: 'assistant',
+    content: finalReply || '(empty heartbeat reply)',
+    source: 'followup',
+  });
+
   return { reply: finalReply, promptTokens, completionTokens, messageId: asstMsg.id, toolsCalled };
 }
 
@@ -196,5 +207,11 @@ export async function postHeartbeatNote(opts: {
       metadata: { heartbeat: { activity: opts.activityName, kind: 'note' } },
     })
     .returning({ id: orchestratorChats.id });
+  // Live SSE push (same reason as the LLM-reply path above).
+  notifySubscribers(opts.conversationId, {
+    role: 'assistant',
+    content: opts.text,
+    source: 'followup',
+  });
   return { messageId: row.id };
 }
