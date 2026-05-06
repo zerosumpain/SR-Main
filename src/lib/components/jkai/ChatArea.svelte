@@ -18,6 +18,7 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
+  import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { onMount, tick } from 'svelte';
 
   let {
@@ -148,7 +149,7 @@
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let eventSource: EventSource | null = null;
-  let jobEventSource: EventSource | null = null;
+  let chatStream: ChatStreamHandle | null = null;
 
   onMount(() => {
     textareaEl?.focus();
@@ -407,10 +408,8 @@
     try {
       await fetch(`/api/workflows/orchestrator/chat?jobId=${currentJobId}`, { method: 'DELETE' });
     } catch { /* ignore */ }
-    if (jobEventSource) {
-      jobEventSource.close();
-      jobEventSource = null;
-    }
+    chatStream?.close();
+    chatStream = null;
   }
 
   function friendlyToolName(name: string): string {
@@ -512,76 +511,9 @@
       currentJobId = jobId;
 
       // Subscribe to live token + tool events via SSE.
-      await new Promise<void>((resolve) => {
-        let accumulatedContent = '';
-        let finished = false;
-        // Stale-connection detection: if no SSE event of any kind (including
-        // heartbeats which now fire every 5s) arrives for SSE_GAP_LIMIT, the
-        // connection is dead — reconnect. The server is the only source of
-        // truth for whether the job is still alive; we never inject a fake
-        // "timed out" message client-side.
-        const SSE_GAP_LIMIT_MS = 12_000;
-        const SSE_CHECK_INTERVAL_MS = 3_000;
-        let lastSseEventAt = Date.now();
-        let reconnectAttempts = 0;
-        const MAX_RECONNECTS = 5;
+      let accumulatedContent = '';
 
-        const cleanup = () => {
-          if (jobEventSource) {
-            jobEventSource.close();
-            jobEventSource = null;
-          }
-          if (gapTimer) clearInterval(gapTimer);
-        };
-
-        const finalize = () => {
-          if (finished) return;
-          finished = true;
-          cleanup();
-          connectionWarning = null;
-          resolve();
-        };
-
-        const openStream = () => {
-          const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
-          jobEventSource = es;
-          lastSseEventAt = Date.now();
-          es.onmessage = onSseMessage;
-          es.onerror = () => {
-            // Browser will auto-reconnect; just surface a quiet warning.
-            if (!finished) connectionWarning = 'Reconnecting…';
-          };
-        };
-
-        const gapTimer = setInterval(() => {
-          if (finished) return;
-          const gap = Date.now() - lastSseEventAt;
-          if (gap > SSE_GAP_LIMIT_MS) {
-            reconnectAttempts++;
-            if (reconnectAttempts > MAX_RECONNECTS) {
-              connectionWarning = 'Lost connection to orchestrator. The job may still be running — try refreshing.';
-              return;
-            }
-            connectionWarning = `No update for ${Math.round(gap / 1000)}s — reconnecting…`;
-            console.warn(`[chat] SSE gap ${gap}ms (attempt ${reconnectAttempts}/${MAX_RECONNECTS}) — reconnecting`);
-            if (jobEventSource) {
-              jobEventSource.close();
-              jobEventSource = null;
-            }
-            openStream();
-          }
-        }, SSE_CHECK_INTERVAL_MS);
-
-        const onSseMessage = (event: MessageEvent) => {
-          lastSseEventAt = Date.now();
-          if (connectionWarning) connectionWarning = null;
-          let data: any;
-          try { data = JSON.parse(event.data); } catch { return; }
-
-          processSseEvent(data);
-        };
-
-        const processSseEvent = (data: any) => {
+      const processSseEvent = (data: any) => {
           if (data.type === 'connected') return;
 
           if (data.type === 'token') {
@@ -781,7 +713,6 @@
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
             scrollToBottom();
-            finalize();
             return;
           }
 
@@ -796,13 +727,19 @@
                 : m,
             );
             scrollToBottom();
-            finalize();
             return;
           }
         };
 
-        openStream();
+      chatStream = streamChatJob(jobId, {
+        onEvent: processSseEvent,
+        onWarning: (w) => { connectionWarning = w; },
       });
+      try {
+        await chatStream.done;
+      } finally {
+        chatStream = null;
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       messages = messages.map((m) =>
