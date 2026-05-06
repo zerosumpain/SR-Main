@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listJobs, getRecentPulses } from '$lib/workflows/chat/job-store';
 import { getQueueStatus } from '$lib/workflows/chat/followup-queue';
 import { getRuntimeStats, readEventLoopMaxMs } from '$lib/workflows/engine-runtime';
 import { getActiveJobs } from '$lib/workflows/scheduler';
@@ -21,22 +21,49 @@ import { eq, desc, inArray } from 'drizzle-orm';
  *   6. Health sync state — latest tick per service from health_sync_state
  */
 export const GET: RequestHandler = async () => {
-  const orchestratorJobs = listJobs().map((j) => ({
-    id: j.id,
-    status: j.status,
-    phase: j.phase,
-    currentStep: j.currentStep ?? null,
-    elapsedMs: j.elapsed,
-    startedAt: j.startedAt,
-    lastEventAt: j.lastEventAt,
-    lastHeartbeatAt: j.lastHeartbeatAt,
-    workflowId: j.workflowId ?? null,
-    conversationId: j.conversationId ?? null,
-    chatNodeId: j.chatNodeId ?? null,
-    message: j.message.slice(0, 200),
-  }));
+  // Watchdog thresholds — kept in sync with job-store.ts. Surfacing them
+  // as data so the page can show a "X seconds until kill" countdown per job
+  // instead of having the user check the source.
+  const IDLE_TIMEOUT_MS = 120_000;
+  const HARD_TIMEOUT_MS = 600_000;
+  const HEARTBEAT_INTERVAL_MS = 5_000;
 
-  const followUps = getQueueStatus();
+  const nowMs = Date.now();
+  const orchestratorJobs = listJobs().map((j) => {
+    const idleMs = nowMs - j.lastEventAt;
+    const elapsedMs = j.elapsed;
+    const idleKillInMs = Math.max(0, IDLE_TIMEOUT_MS - idleMs);
+    const hardKillInMs = Math.max(0, HARD_TIMEOUT_MS - elapsedMs);
+    const nextHeartbeatInMs = Math.max(0, HEARTBEAT_INTERVAL_MS - (nowMs - j.lastHeartbeatAt));
+    return {
+      id: j.id,
+      status: j.status,
+      phase: j.phase,
+      currentStep: j.currentStep ?? null,
+      elapsedMs,
+      startedAt: j.startedAt,
+      lastEventAt: j.lastEventAt,
+      lastHeartbeatAt: j.lastHeartbeatAt,
+      idleMs,
+      idleKillInMs,
+      hardKillInMs,
+      nextHeartbeatInMs,
+      workflowId: j.workflowId ?? null,
+      conversationId: j.conversationId ?? null,
+      chatNodeId: j.chatNodeId ?? null,
+      message: j.message.slice(0, 200),
+    };
+  });
+
+  const followUps = getQueueStatus().map((f) => {
+    const dueInMs = f.dueAt - nowMs;
+    // Mirror followup-queue.ts: BACKOFF_MULTIPLIER 1.2, base interval 30s, cap 5min.
+    const baseMs = 30_000;
+    const projectedNextBackoffMs = Math.min(baseMs * Math.pow(1.2, f.retries + 1), 300_000);
+    return { ...f, dueInMs, projectedNextBackoffMs };
+  });
+
+  const recentPulses = getRecentPulses().slice(0, 100);
 
   const activeRunRows = await db
     .select()
@@ -79,11 +106,20 @@ export const GET: RequestHandler = async () => {
   const healthSyncs = await db.select().from(healthSyncState);
 
   return json({
-    now: Date.now(),
+    now: nowMs,
     orchestratorJobs,
     followUps,
     activeRuns,
     cronJobs,
+    recentPulses,
+    thresholds: {
+      heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+      idleTimeoutMs: IDLE_TIMEOUT_MS,
+      hardTimeoutMs: HARD_TIMEOUT_MS,
+      followupWorkerIntervalMs: 15_000,
+      followupBaseIntervalMs: 30_000,
+      followupMaxRetries: 40,
+    },
     engine: {
       activeRuns: stats.activeRuns,
       queued: stats.queued,

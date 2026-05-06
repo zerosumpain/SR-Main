@@ -15,6 +15,10 @@
       startedAt: number;
       lastEventAt: number;
       lastHeartbeatAt: number;
+      idleMs: number;
+      idleKillInMs: number;
+      hardKillInMs: number;
+      nextHeartbeatInMs: number;
       workflowId: string | null;
       conversationId: string | null;
       chatNodeId: string | null;
@@ -27,6 +31,8 @@
       conversationId: string;
       retries: number;
       dueAt: number;
+      dueInMs: number;
+      projectedNextBackoffMs: number;
     }>;
     activeRuns: Array<{
       id: string;
@@ -39,6 +45,22 @@
       pausedAtNodeId: string | null;
     }>;
     cronJobs: Array<{ scheduleId: string; nextRunMs: number | null; paused: boolean }>;
+    recentPulses: Array<{
+      ts: number;
+      jobId: string;
+      kind: 'heartbeat' | 'phase_change' | 'watchdog_kill' | 'job_start' | 'job_done' | 'job_error';
+      phase: string;
+      summary: string;
+      elapsedMs: number;
+    }>;
+    thresholds: {
+      heartbeatIntervalMs: number;
+      idleTimeoutMs: number;
+      hardTimeoutMs: number;
+      followupWorkerIntervalMs: number;
+      followupBaseIntervalMs: number;
+      followupMaxRetries: number;
+    };
     engine: { activeRuns: number; queued: number; cap: number; loopMaxMs: number };
     healthSync: Array<{
       service: string;
@@ -76,7 +98,7 @@
   let schedules = $state<Schedule[]>(data.schedules);
   let feed = $state<FeedItem[]>(data.feed);
 
-  let activeTab = $state<'live' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+  let activeTab = $state<'live' | 'heartbeat' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
   let liveTimer: ReturnType<typeof setInterval> | null = null;
   let lastLiveAt = $state(Date.now());
   let banner = $state<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -135,7 +157,7 @@
 
   onMount(() => {
     liveTimer = setInterval(() => {
-      if (activeTab === 'live' || activeTab === 'systems') refreshLive();
+      if (activeTab === 'live' || activeTab === 'heartbeat' || activeTab === 'systems') refreshLive();
     }, 3000);
   });
 
@@ -311,6 +333,10 @@
     Live
     <span class="tab-count">{live.orchestratorJobs.length + live.activeRuns.length + live.followUps.length}</span>
   </button>
+  <button class="nm-tab" class:active={activeTab === 'heartbeat'} aria-current={activeTab === 'heartbeat' ? 'page' : undefined} onclick={() => activeTab = 'heartbeat'}>
+    Heartbeat
+    <span class="tab-count">{live.recentPulses.length}</span>
+  </button>
   <button class="nm-tab" class:active={activeTab === 'schedules'} aria-current={activeTab === 'schedules' ? 'page' : undefined} onclick={() => activeTab = 'schedules'}>
     Schedules
     <span class="tab-count">{schedules.length}</span>
@@ -454,6 +480,134 @@
           <td class="err-cell">{s.errorMessage ?? ''}</td>
         </tr>
       {/each}
+    </tbody>
+  </table>
+{/if}
+
+{#if activeTab === 'heartbeat'}
+  <p class="hint">
+    Short-term temporal handles — the layer between cron (minute+ recurrence) and content-driven status messages. Three mechanisms run here: <strong>job heartbeats</strong> (5s tick per active job), the <strong>idle watchdog</strong> (15s sweep, kills at 120s idle / 600s total), and the <strong>follow-up queue worker</strong> (15s tick, fires due re-checks with 1.2× exponential backoff). All three are in-memory only — restart wipes them.
+  </p>
+
+  <div class="layer-explainer">
+    <h3 class="sec-title">Four temporal layers</h3>
+    <div class="layer-grid">
+      <div class="layer-card layer-min">
+        <div class="layer-cad">≥ 1 min</div>
+        <div class="layer-name">Cron</div>
+        <div class="layer-desc">DB-backed (workflow_schedules), survives restart, drives full workflow runs. Croner instances live in memory.</div>
+      </div>
+      <div class="layer-card layer-sec">
+        <div class="layer-cad">5–15 s</div>
+        <div class="layer-name">Heartbeat</div>
+        <div class="layer-desc">Per-job ticker. UI-only "thinking 35s" indicator + watchdog feed. Not user-content; fires regardless of LLM activity.</div>
+      </div>
+      <div class="layer-card layer-poll">
+        <div class="layer-cad">30s → 5min</div>
+        <div class="layer-name">Follow-up poll</div>
+        <div class="layer-desc">"I'll check back in 2 min" — per-task <code>dueAt</code> with 1.2× backoff. Fires content-update on completion, not on a fixed period.</div>
+      </div>
+      <div class="layer-card layer-content">
+        <div class="layer-cad">on event</div>
+        <div class="layer-name">Tool progress</div>
+        <div class="layer-desc">Content-driven, not time-driven. Tools call <code>onProgress</code>; <code>status_update</code> messages are inserted mid-conversation.</div>
+      </div>
+    </div>
+    <p class="layer-gap">
+      <strong>Gap:</strong> there's no generic "every N seconds, send the user an update during this conversation" primitive. The follow-up queue is the closest — you'd register a follow-up with a 30s <code>dueAt</code> and a <code>checkFn</code> that always returns <code>{`{done:true, ...}`}</code> to force re-engagement, but it isn't designed as a fixed-cadence ticker. If the LLM should ping the user every 30s during a slow operation, that needs a new primitive (per-conversation timer + tool call to register/cancel).
+    </p>
+  </div>
+
+  <h3 class="sec-title">Active jobs — watchdog countdown</h3>
+  <p class="hint">
+    Idle = ms since last non-heartbeat event. When idle exceeds 120s the watchdog aborts the AbortController and the job ends with <code>error</code>. The hard-timeout caps total elapsed at 600s regardless of activity.
+  </p>
+  {#if live.orchestratorJobs.length === 0}
+    <p class="empty">No active jobs.</p>
+  {:else}
+    <table class="nm-table">
+      <thead>
+        <tr><th>Job</th><th>Phase</th><th>Elapsed</th><th>Idle</th><th>Next heartbeat</th><th>Idle kill in</th><th>Hard kill in</th></tr>
+      </thead>
+      <tbody>
+        {#each live.orchestratorJobs as j (j.id)}
+          <tr>
+            <td class="mono-tiny">{j.id.slice(0, 8)}</td>
+            <td><span class="pill st-running">{j.phase}</span></td>
+            <td>{fmtDuration(j.elapsedMs)}</td>
+            <td class={j.idleMs > 60_000 ? 'warn' : ''}>{fmtDuration(j.idleMs)}</td>
+            <td>{fmtDuration(j.nextHeartbeatInMs)}</td>
+            <td class={j.idleKillInMs < 30_000 ? 'danger' : j.idleKillInMs < 60_000 ? 'warn' : ''}>
+              <div class="bar-row">
+                <span>{fmtDuration(j.idleKillInMs)}</span>
+                <div class="bar"><div class="bar-fill" style="width: {Math.max(0, Math.min(100, (j.idleKillInMs / 120_000) * 100)).toFixed(0)}%"></div></div>
+              </div>
+            </td>
+            <td>{fmtDuration(j.hardKillInMs)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+
+  <h3 class="sec-title">Pulse stream — last {live.recentPulses.length} events</h3>
+  <p class="hint">
+    Each entry is one tick of the heartbeat layer. Cleared on service restart (in-memory ring, capped at 200 events). Start/done/error pulses bracket each job; phase_change fires on transitions; heartbeat fires every 5s while running; watchdog_kill is the watchdog firing.
+  </p>
+  {#if live.recentPulses.length === 0}
+    <p class="empty">No pulses recorded yet. Trigger a /jkai message to populate.</p>
+  {:else}
+    <ol class="pulse-stream">
+      {#each live.recentPulses as p, i (i)}
+        <li class={`pulse pulse-${p.kind}`}>
+          <span class="pulse-time">{fmtRelative(p.ts)}</span>
+          <span class="pulse-kind">{p.kind}</span>
+          <span class="pulse-job mono-tiny">{p.jobId.slice(0, 8)}</span>
+          <span class="pulse-phase">{p.phase}</span>
+          <span class="pulse-elapsed">{fmtDuration(p.elapsedMs)}</span>
+          <span class="pulse-summary">{p.summary}</span>
+        </li>
+      {/each}
+    </ol>
+  {/if}
+
+  <h3 class="sec-title">Follow-up queue — backoff schedule</h3>
+  <p class="hint">
+    Each row is a registered re-check. <code>dueAt</code> = next firing; on each unsuccessful check, <code>dueAt</code> shifts out by <code>30s × 1.2^retries</code> (capped at 5min). Worker stops itself when queue is empty; lazy-restarts on next enqueue.
+  </p>
+  {#if live.followUps.length === 0}
+    <p class="empty">Queue empty. Worker is stopped.</p>
+  {:else}
+    <table class="nm-table">
+      <thead><tr><th>ID</th><th>Task</th><th>Conversation</th><th>Retries</th><th>Due in</th><th>Next backoff if pending</th></tr></thead>
+      <tbody>
+        {#each live.followUps as f (f.id)}
+          <tr>
+            <td class="mono-tiny">{f.id.slice(0, 8)}</td>
+            <td>{f.taskType}/{f.taskId.slice(0, 8)}</td>
+            <td class="mono-tiny">{f.conversationId.slice(0, 8)}</td>
+            <td>{f.retries}/{live.thresholds.followupMaxRetries}</td>
+            <td class={f.dueInMs < 0 ? 'danger' : ''}>
+              <div class="bar-row">
+                <span>{f.dueInMs > 0 ? fmtDuration(f.dueInMs) : 'now'}</span>
+                <div class="bar"><div class="bar-fill" style="width: {Math.max(0, Math.min(100, 100 - (f.dueInMs / 60_000) * 100)).toFixed(0)}%"></div></div>
+              </div>
+            </td>
+            <td>{fmtDuration(f.projectedNextBackoffMs)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+
+  <h3 class="sec-title">Tickers (current configuration)</h3>
+  <table class="nm-table">
+    <thead><tr><th>Ticker</th><th>Cadence</th><th>Threshold</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Job heartbeat</td><td>{fmtDuration(live.thresholds.heartbeatIntervalMs)}</td><td>—</td><td class="mono-tiny">job-store.ts:191</td></tr>
+      <tr><td>Idle watchdog</td><td>15s</td><td>{fmtDuration(live.thresholds.idleTimeoutMs)} idle / {fmtDuration(live.thresholds.hardTimeoutMs)} total</td><td class="mono-tiny">job-store.ts:142</td></tr>
+      <tr><td>Follow-up worker</td><td>{fmtDuration(live.thresholds.followupWorkerIntervalMs)}</td><td>{live.thresholds.followupMaxRetries} retries max</td><td class="mono-tiny">followup-queue.ts:124</td></tr>
+      <tr><td>Follow-up base interval</td><td>{fmtDuration(live.thresholds.followupBaseIntervalMs)}</td><td>1.2× backoff, cap 5min</td><td class="mono-tiny">followup-queue.ts:64</td></tr>
     </tbody>
   </table>
 {/if}
@@ -633,4 +787,46 @@
   .process-step-num { font-family: var(--font-brand); font-size: 1.4rem; font-weight: 500; color: var(--accent); width: 2rem; flex: none; line-height: 1; padding-top: 0.15rem; }
   .process-step-label { font-family: var(--font-mono); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-primary); }
   .process-step-detail { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin-top: 0.2rem; }
+
+  /* Heartbeat tab */
+  .layer-explainer { background: var(--bg-section); border: 1px solid var(--card-border); padding: 1rem 1.1rem; margin: 0.5rem 0 1.5rem; }
+  .layer-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0.5rem 0 0.8rem; }
+  .layer-card { padding: 0.7rem 0.8rem; border-left: 3px solid var(--card-border); background: var(--bg-base); }
+  .layer-card .layer-cad { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); margin-bottom: 0.3rem; }
+  .layer-card .layer-name { font-family: var(--font-brand); font-size: 1.1rem; font-weight: 500; text-transform: lowercase; letter-spacing: -0.005em; color: var(--text-primary); margin-bottom: 0.3rem; }
+  .layer-card .layer-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+  .layer-min { border-left-color: #2d7a3a; }
+  .layer-sec { border-left-color: #2d6cdf; }
+  .layer-poll { border-left-color: #b0892a; }
+  .layer-content { border-left-color: var(--accent); }
+  .layer-gap { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid #c44; background: var(--bg-base); }
+
+  .bar-row { display: flex; align-items: center; gap: 0.55rem; }
+  .bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-base); border: 1px solid var(--card-border); }
+  .bar-fill { height: 100%; background: var(--accent); transition: width 200ms ease; }
+  .warn { color: #b0892a; }
+  .warn .bar-fill { background: #b0892a; }
+  .danger { color: #c44; }
+  .danger .bar-fill { background: #c44; }
+
+  .pulse-stream { list-style: none; padding: 0; margin: 0; max-height: 480px; overflow-y: auto; border: 1px solid var(--card-border); background: var(--bg-base); }
+  .pulse-stream .pulse { display: grid; grid-template-columns: 80px 110px 80px 100px 60px 1fr; gap: 0.6rem; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--divider); font-family: var(--font-mono); font-size: 10px; }
+  .pulse-stream .pulse:last-child { border-bottom: none; }
+  .pulse-stream .pulse-time { color: var(--text-ghost); }
+  .pulse-stream .pulse-kind { font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; font-size: 9px; }
+  .pulse-stream .pulse-job { color: var(--text-muted); }
+  .pulse-stream .pulse-phase { color: var(--text-secondary); text-transform: lowercase; }
+  .pulse-stream .pulse-elapsed { color: var(--text-muted); text-align: right; }
+  .pulse-stream .pulse-summary { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pulse-heartbeat .pulse-kind { color: #2d6cdf; }
+  .pulse-phase_change .pulse-kind { color: var(--accent); }
+  .pulse-job_start .pulse-kind { color: #2d7a3a; }
+  .pulse-job_done .pulse-kind { color: #2d7a3a; }
+  .pulse-job_error .pulse-kind { color: #c44; }
+  .pulse-watchdog_kill { background: rgba(196, 68, 68, 0.06); }
+  .pulse-watchdog_kill .pulse-kind { color: #c44; }
+  @media (max-width: 720px) {
+    .pulse-stream .pulse { grid-template-columns: 70px 90px 1fr; }
+    .pulse-stream .pulse > :nth-child(n+4) { display: none; }
+  }
 </style>

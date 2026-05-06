@@ -83,6 +83,21 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   }
   if (event.type === 'done' || event.type === 'error') {
     stream.closed = true;
+    const job = jobs.get(jobId);
+    if (job) {
+      const elapsedMs = Date.now() - job.startedAt;
+      const summary = event.type === 'error'
+        ? (event.message ?? 'error').slice(0, 140)
+        : 'done';
+      recordPulse({
+        ts: Date.now(),
+        jobId,
+        kind: event.type === 'done' ? 'job_done' : 'job_error',
+        phase: job.phase,
+        summary,
+        elapsedMs,
+      });
+    }
     // Give late subscribers a moment to attach, then clean up
     setTimeout(() => streams.delete(jobId), 60_000);
   }
@@ -157,6 +172,7 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
         ? `Job exceeded max duration (${Math.round(HARD_TIMEOUT_MS / 1000)}s) while ${phaseLabel}`
         : `Job idle for ${Math.round(idle / 1000)}s while ${phaseLabel} — likely stuck`;
       console.warn(`[orchestrator] Watchdog terminating job ${jobId}: ${reason}`);
+      recordPulse({ ts: now, jobId, kind: 'watchdog_kill', phase: job.phase, summary: reason.slice(0, 140), elapsedMs: elapsed });
       job.abortController.abort();
       job.status = 'error';
       job.error = reason;
@@ -176,6 +192,27 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
 // to the previous tick. This removes the entire class of "did silence
 // detection miss an edge?" bugs.
 const HEARTBEAT_INTERVAL_MS = 5_000;
+
+// Ring buffer of recent pulse events across all jobs. Used by /admin/pulse to
+// render the live tick stream. Cap so a long-lived process doesn't grow it
+// unbounded. Each tick includes the jobId so the page can group by job.
+export interface PulseEvent {
+  ts: number;
+  jobId: string;
+  kind: 'heartbeat' | 'phase_change' | 'watchdog_kill' | 'job_start' | 'job_done' | 'job_error';
+  phase: JobPhase;
+  summary: string;
+  elapsedMs: number;
+}
+const PULSE_BUFFER_SIZE = 200;
+const recentPulses: PulseEvent[] = [];
+function recordPulse(p: PulseEvent): void {
+  recentPulses.push(p);
+  if (recentPulses.length > PULSE_BUFFER_SIZE) recentPulses.shift();
+}
+export function getRecentPulses(): PulseEvent[] {
+  return recentPulses.slice().reverse();
+}
 
 function phaseLabel(phase: JobPhase): string {
   switch (phase) {
@@ -204,12 +241,14 @@ function startHeartbeat(jobId: string, job: OrchestratorJob): void {
     const phase = job.phase;
     job.lastHeartbeatAt = now;
     job.lastHeartbeatPayload = { summary, phase };
-    console.log(`[hb] ${jobId} ${phase} ${Math.round((now - job.startedAt) / 1000)}s "${summary}"`);
+    const elapsedMs = now - job.startedAt;
+    console.log(`[hb] ${jobId} ${phase} ${Math.round(elapsedMs / 1000)}s "${summary}"`);
+    recordPulse({ ts: now, jobId, kind: 'heartbeat', phase, summary, elapsedMs });
     publishJobEvent(jobId, {
       type: 'heartbeat',
       summary,
       phase,
-      elapsedMs: now - job.startedAt,
+      elapsedMs,
     });
   }, HEARTBEAT_INTERVAL_MS);
 }
@@ -227,12 +266,14 @@ export function setJobPhase(jobId: string, phase: JobPhase, currentStep?: string
     const summary = (job.currentStep ?? phaseLabel(phase) + '…').trim().slice(0, 140);
     job.lastHeartbeatAt = now;
     job.lastHeartbeatPayload = { summary, phase };
-    console.log(`[hb] ${jobId} ${phase} ${Math.round((now - job.startedAt) / 1000)}s "${summary}" (phase change)`);
+    const elapsedMs = now - job.startedAt;
+    console.log(`[hb] ${jobId} ${phase} ${Math.round(elapsedMs / 1000)}s "${summary}" (phase change)`);
+    recordPulse({ ts: now, jobId, kind: 'phase_change', phase, summary, elapsedMs });
     publishJobEvent(jobId, {
       type: 'heartbeat',
       summary,
       phase,
-      elapsedMs: now - job.startedAt,
+      elapsedMs,
     });
   }
 }
@@ -258,6 +299,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     partialResponse: '',
   };
   jobs.set(jobId, job);
+  recordPulse({ ts: now, jobId, kind: 'job_start', phase: 'starting', summary: message.slice(0, 140), elapsedMs: 0 });
   startWatchdog(jobId, job);
   startHeartbeat(jobId, job);
   return { jobId, job };
