@@ -394,6 +394,21 @@ async function runSingleToolCall(
           delayMs: 30_000,
         });
       }
+
+      // Also register a perpetual heartbeat action so the user gets a
+      // status check every 30s, not just one message at terminal. The
+      // engine pre-injects latest task state on each tick; the LLM either
+      // posts a status line or replies "DONE: …" once the task settles.
+      try {
+        const { autoRegisterTaskWatcher } = await import('$lib/heartbeat/auto-register');
+        await autoRegisterTaskWatcher({
+          conversationId,
+          taskKind: autoConfig.type as 'build' | 'research',
+          taskId,
+        });
+      } catch (err) {
+        console.error('[heartbeat-auto] register failed:', err instanceof Error ? err.message : err);
+      }
     }
   }
 

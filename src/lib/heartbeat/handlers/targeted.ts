@@ -2,9 +2,47 @@ import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
 import type { ActivityResult } from '../types';
 import type { HeartbeatAction } from '$lib/db/schema';
 import { db } from '$lib/db';
-import { conversations } from '$lib/db/schema';
+import { conversations, jkaiBuilds, researchSessions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getModelDefaultPrice, costFromUsage } from '../cost';
+
+/**
+ * Pull the current state of the watched task from the DB and format it as
+ * a system-context block to be prepended to the action's prompt. Lets the
+ * LLM running the heartbeat see actual values without needing tool calls.
+ */
+async function buildTaskStateContext(action: HeartbeatAction): Promise<string | null> {
+  const config = (action.config as { taskKind?: string; taskId?: string } | null) ?? {};
+  if (!config.taskKind || !config.taskId) return null;
+  if (config.taskKind === 'build') {
+    const [b] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, config.taskId)).limit(1);
+    if (!b) return `(build ${config.taskId} not found)`;
+    return [
+      `LATEST BUILD STATE`,
+      `  id:                ${b.id}`,
+      `  status:            ${b.status}`,
+      `  iterations done:   ${b.iterationsCompleted}`,
+      `  active minutes:    ${b.activeMinutesUsed?.toFixed?.(1) ?? b.activeMinutesUsed}`,
+      `  cost so far:       $${b.costUsd}`,
+      `  consecutive fails: ${b.consecutiveFailures}`,
+      `  updated_at:        ${b.updatedAt}`,
+      b.failure ? `  failure:           ${JSON.stringify(b.failure).slice(0, 200)}` : '',
+      b.publishedSlug ? `  published:         /${b.publishedSlug}` : '',
+    ].filter(Boolean).join('\n');
+  }
+  if (config.taskKind === 'research') {
+    const [r] = await db.select().from(researchSessions).where(eq(researchSessions.id, config.taskId)).limit(1);
+    if (!r) return `(research ${config.taskId} not found)`;
+    return [
+      `LATEST RESEARCH STATE`,
+      `  id:      ${r.id}`,
+      `  status:  ${(r as { status?: string }).status ?? '(unknown)'}`,
+      `  topic:   ${(r as { topic?: string }).topic?.slice(0, 80) ?? ''}`,
+      `  updated: ${(r as { updatedAt?: unknown }).updatedAt ?? ''}`,
+    ].join('\n');
+  }
+  return null;
+}
 
 /**
  * Run one tick of a 'targeted' action: load the conversation history, run a
@@ -38,8 +76,11 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
   }
 
   const goal = action.goal?.trim() || '(no goal set — continue indefinitely until removed by orchestrator)';
+  const taskState = await buildTaskStateContext(action);
+
   const instruction =
     `You are running on heartbeat for action "${action.name}".\n\n` +
+    (taskState ? `${taskState}\n\n` : '') +
     `GOAL: ${goal}\n\n` +
     `On each tick (this is run #${(action.totalRuns ?? 0) + 1}), do exactly one of:\n` +
     `  • If the goal is now met, reply starting with "DONE: " followed by a one-sentence outcome. The action is removed from the queue.\n` +
