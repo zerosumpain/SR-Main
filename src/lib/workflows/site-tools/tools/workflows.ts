@@ -801,6 +801,7 @@ register({
   },
   category: 'Workflows',
   toolset: 'workflows',
+  producesLongRunningTask: { kind: 'workflow_run', idPath: 'runId', cadenceSeconds: 30 },
   handler: async (args) => {
     const id = args.id as string;
     const initialInput = (args.input as Record<string, unknown>) ?? {};

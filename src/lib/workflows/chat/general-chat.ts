@@ -20,8 +20,7 @@ import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
-import { enqueueFollowUp, notifySubscribers } from '$lib/workflows/chat/followup-queue';
-import { buildCheckFn } from '$lib/workflows/site-tools/tools/followup';
+import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
 import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
@@ -372,43 +371,28 @@ async function runSingleToolCall(
     toolResult = { error: `Unknown function: ${fnName}` };
   }
 
-  // Auto-register follow-ups for known async tools
-  const autoFollowUpTools: Record<string, { type: string; prompt: string }> = {
-    research_start: { type: 'research', prompt: 'The research is complete. Summarise the key findings for the user. If they asked for a blog post or other output, produce it now.' },
-    build_create: { type: 'build', prompt: 'The build is complete. Tell the user the result and provide the URL if it was published.' },
-  };
-  if (fnName in autoFollowUpTools) {
-    const resultData = toolResult?.data as Record<string, unknown> | undefined;
-    const taskId = resultData?.id as string | undefined;
-    console.log(`[followup-auto] Tool=${fnName} convId=${conversationId} success=${toolResult?.success} taskId=${taskId}`);
-    if (conversationId && toolResult?.success && taskId) {
-      const autoConfig = autoFollowUpTools[fnName];
-      const checkFn = buildCheckFn(autoConfig.type, taskId);
-      if (checkFn) {
-        enqueueFollowUp({
+  // Auto-register a perpetual heartbeat watcher for any tool that declares
+  // producesLongRunningTask. Generic, no per-tool special-casing in this
+  // file — adding new long-running task families means declaring metadata
+  // on the tool and adding a state-provider entry, not editing here.
+  if (conversationId && toolResult?.success) {
+    try {
+      const { getTool } = await import('$lib/workflows/site-tools/registry');
+      const def = getTool(fnName);
+      if (def?.producesLongRunningTask) {
+        const { autoRegisterFromToolResult } = await import('$lib/heartbeat/auto-register');
+        const outcome = await autoRegisterFromToolResult({
           conversationId,
-          taskType: autoConfig.type,
-          taskId,
-          checkFn,
-          completionPrompt: autoConfig.prompt,
-          delayMs: 30_000,
+          toolName: fnName,
+          produces: def.producesLongRunningTask,
+          resultData: toolResult.data,
         });
+        if (!outcome.registered) {
+          console.warn(`[heartbeat-auto] skipped ${fnName}: ${outcome.reason}`);
+        }
       }
-
-      // Also register a perpetual heartbeat action so the user gets a
-      // status check every 30s, not just one message at terminal. The
-      // engine pre-injects latest task state on each tick; the LLM either
-      // posts a status line or replies "DONE: …" once the task settles.
-      try {
-        const { autoRegisterTaskWatcher } = await import('$lib/heartbeat/auto-register');
-        await autoRegisterTaskWatcher({
-          conversationId,
-          taskKind: autoConfig.type as 'build' | 'research',
-          taskId,
-        });
-      } catch (err) {
-        console.error('[heartbeat-auto] register failed:', err instanceof Error ? err.message : err);
-      }
+    } catch (err) {
+      console.error('[heartbeat-auto] auto-register threw:', err instanceof Error ? err.message : err);
     }
   }
 

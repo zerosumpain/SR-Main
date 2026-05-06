@@ -20,6 +20,7 @@ register({
   },
   category: 'Deep Dive Research',
   toolset: 'research',
+  producesLongRunningTask: { kind: 'research', idPath: 'id', cadenceSeconds: 60 },
   handler: async (args) => {
     const { startResearch } = await import('$lib/deepdive/worker');
     const [session] = await db.insert(researchSessions).values({

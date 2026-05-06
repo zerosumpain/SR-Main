@@ -2,46 +2,23 @@ import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
 import type { ActivityResult } from '../types';
 import type { HeartbeatAction } from '$lib/db/schema';
 import { db } from '$lib/db';
-import { conversations, jkaiBuilds, researchSessions } from '$lib/db/schema';
+import { conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getModelDefaultPrice, costFromUsage } from '../cost';
+import { getTaskStateProvider, type TaskStateSnapshot } from '../state-providers';
 
 /**
- * Pull the current state of the watched task from the DB and format it as
- * a system-context block to be prepended to the action's prompt. Lets the
- * LLM running the heartbeat see actual values without needing tool calls.
+ * Pull the current state of the watched task using its kind-registered
+ * state provider. Lets the LLM running the heartbeat see actual values
+ * without needing tool calls. Returns null when the action has no task
+ * binding or the kind is unknown.
  */
-async function buildTaskStateContext(action: HeartbeatAction): Promise<string | null> {
+async function buildTaskStateContext(action: HeartbeatAction): Promise<TaskStateSnapshot | null> {
   const config = (action.config as { taskKind?: string; taskId?: string } | null) ?? {};
   if (!config.taskKind || !config.taskId) return null;
-  if (config.taskKind === 'build') {
-    const [b] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, config.taskId)).limit(1);
-    if (!b) return `(build ${config.taskId} not found)`;
-    return [
-      `LATEST BUILD STATE`,
-      `  id:                ${b.id}`,
-      `  status:            ${b.status}`,
-      `  iterations done:   ${b.iterationsCompleted}`,
-      `  active minutes:    ${b.activeMinutesUsed?.toFixed?.(1) ?? b.activeMinutesUsed}`,
-      `  cost so far:       $${b.costUsd}`,
-      `  consecutive fails: ${b.consecutiveFailures}`,
-      `  updated_at:        ${b.updatedAt}`,
-      b.failure ? `  failure:           ${JSON.stringify(b.failure).slice(0, 200)}` : '',
-      b.publishedSlug ? `  published:         /${b.publishedSlug}` : '',
-    ].filter(Boolean).join('\n');
-  }
-  if (config.taskKind === 'research') {
-    const [r] = await db.select().from(researchSessions).where(eq(researchSessions.id, config.taskId)).limit(1);
-    if (!r) return `(research ${config.taskId} not found)`;
-    return [
-      `LATEST RESEARCH STATE`,
-      `  id:      ${r.id}`,
-      `  status:  ${(r as { status?: string }).status ?? '(unknown)'}`,
-      `  topic:   ${(r as { topic?: string }).topic?.slice(0, 80) ?? ''}`,
-      `  updated: ${(r as { updatedAt?: unknown }).updatedAt ?? ''}`,
-    ].join('\n');
-  }
-  return null;
+  const provider = getTaskStateProvider(config.taskKind);
+  if (!provider) return { contextBlock: `(no state provider registered for kind '${config.taskKind}')`, terminal: false };
+  return provider(config.taskId);
 }
 
 /**
@@ -77,13 +54,17 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
 
   const goal = action.goal?.trim() || '(no goal set — continue indefinitely until removed by orchestrator)';
   const taskState = await buildTaskStateContext(action);
+  const terminalHint = taskState?.terminal
+    ? `THE TASK HAS REACHED A TERMINAL STATE. You MUST reply with "DONE: <one-sentence summary>" — no other output.\n\n`
+    : '';
 
   const instruction =
     `You are running on heartbeat for action "${action.name}".\n\n` +
-    (taskState ? `${taskState}\n\n` : '') +
+    (taskState ? `${taskState.contextBlock}\n\n` : '') +
+    terminalHint +
     `GOAL: ${goal}\n\n` +
     `On each tick (this is run #${(action.totalRuns ?? 0) + 1}), do exactly one of:\n` +
-    `  • If the goal is now met, reply starting with "DONE: " followed by a one-sentence outcome. The action is removed from the queue.\n` +
+    `  • If the goal is now met (or the live state above shows a terminal status), reply starting with "DONE: " followed by a one-sentence outcome. The action is removed from the queue.\n` +
     `  • Otherwise take one concrete step. Be specific — "still waiting" is only acceptable if you can describe what you're waiting on.\n\n` +
     `Be terse. ≤80 words for status updates, ≤30 words for DONE replies.`;
 

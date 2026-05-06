@@ -15,6 +15,28 @@ export interface ToolExecContext {
   conversationId?: string;
 }
 
+/**
+ * Declares that this tool kicks off a long-running asynchronous task. When
+ * set, the chat layer auto-registers a perpetual heartbeat watcher on
+ * success — the user gets periodic status updates plus a terminal summary
+ * without the orchestrator having to remember anything.
+ *
+ * The `kind` must have a registered state-provider in
+ * src/lib/heartbeat/state-providers.ts so the heartbeat engine can
+ * pre-inject live task state into each tick.
+ */
+export interface ProducesLongRunningTask {
+  kind: string;
+  /** Dot-path inside the tool result data envelope (e.g. 'id', 'runId'). Read from result.data. */
+  idPath: string;
+  /** How often the heartbeat runs. Defaults to 30s. */
+  cadenceSeconds?: number;
+  /** Goal the LLM uses to decide when to reply DONE: …. */
+  goal?: string;
+  /** Per-tick prompt. Defaults to a generic "report status / mark DONE" instruction. */
+  prompt?: string;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -29,6 +51,7 @@ export interface ToolDefinition {
     args: Record<string, unknown>,
     ctx?: ToolExecContext,
   ) => Promise<ToolResult>;
+  producesLongRunningTask?: ProducesLongRunningTask;
 }
 
 export const tools: ToolDefinition[] = [];

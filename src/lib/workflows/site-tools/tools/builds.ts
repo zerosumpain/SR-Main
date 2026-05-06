@@ -27,6 +27,7 @@ register({
   },
   category: 'JKAI Builder',
   toolset: 'builds',
+  producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args, toolCtx) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
