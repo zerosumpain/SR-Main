@@ -148,10 +148,13 @@ export interface OrchestratorJob {
 
 const jobs = new Map<string, OrchestratorJob>();
 
-// If no progress event of any kind (including heartbeats) for this long, the
-// job is considered stuck. Heartbeats fire every 5s, so anything past 120s
-// means the heartbeat ticker itself stopped — the job is genuinely dead.
-const IDLE_TIMEOUT_MS = 120_000; // 2 min idle (heartbeats include themselves now)
+// If no non-heartbeat progress event for this long, the job is considered
+// stuck. Heartbeats deliberately do NOT reset this timer (otherwise a job
+// stuck on "Calling LLM…" would never time out). The narration ticker in
+// general-chat.ts emits `status` events every 20s during silent reasoning,
+// which DO reset this — so genuine reasoning latency on GLM-5.x (60-180s
+// before first token) is tolerated, but a truly hung job still trips at 4min.
+const IDLE_TIMEOUT_MS = 240_000; // 4 min idle
 const HARD_TIMEOUT_MS = 600_000; // 10 min total
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {

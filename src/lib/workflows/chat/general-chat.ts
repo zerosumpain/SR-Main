@@ -84,7 +84,10 @@ async function emitOpeningAck(opts: {
           { role: 'user', content: opts.userMessage.slice(0, 2000) },
         ],
         temperature: 0.4,
-        max_tokens: 80,
+        // GLM-5.x deducts reasoning tokens from max_tokens; 80 was starving the
+        // visible-output budget so the call returned empty content. 800 leaves
+        // ~700 for reasoning + ~100 for the one-sentence reply.
+        max_tokens: 800,
       },
       opts.signal ? { signal: opts.signal } : undefined,
     );
@@ -869,6 +872,27 @@ export async function generalChat(
     let finishReason: string | null = null;
 
     if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Calling LLM…');
+
+    // Narration ticker — keeps the user informed during long reasoning phases
+    // before any token has been streamed. Reasoning models like GLM-5.x can
+    // sit silent for 60-180s on complex requests; without this the chat just
+    // shows "Working…" with no progress. Each tick is also a non-heartbeat
+    // SSE event, which resets the watchdog idle timer (defended-in-depth
+    // against the 120s watchdog kill).
+    let firstTokenSeen = false;
+    const turnStartedAt = Date.now();
+    const narrationTicker = options.jobId ? setInterval(() => {
+      if (firstTokenSeen) return;
+      const elapsedSec = Math.round((Date.now() - turnStartedAt) / 1000);
+      let text: string;
+      if (elapsedSec < 30) text = `Still thinking — model is reasoning through it (${elapsedSec}s).`;
+      else if (elapsedSec < 60) text = `Reasoning chain is long, working on it (${elapsedSec}s).`;
+      else if (elapsedSec < 120) text = `Deep reasoning — almost there (${elapsedSec}s).`;
+      else text = `This is a chunky one — bear with me (${elapsedSec}s).`;
+      options.onStreamEvent?.({ type: 'status', text });
+    }, 20_000) : undefined;
+    const clearNarration = () => { if (narrationTicker) clearInterval(narrationTicker); };
+
     try {
       const stream = await client.chat.completions.create({
         model,
@@ -880,7 +904,6 @@ export async function generalChat(
         stream_options: { include_usage: true },
       });
 
-      let firstTokenSeen = false;
       for await (const chunk of stream) {
         const choice = chunk.choices?.[0];
         if (!choice) {
@@ -891,6 +914,7 @@ export async function generalChat(
         if (typeof delta.content === 'string' && delta.content.length > 0) {
           if (!firstTokenSeen) {
             firstTokenSeen = true;
+            clearNarration();
             if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Streaming reply…');
             // Orchestrator is now producing its own assistant content — drop
             // the parallel opening ack so we don't render two "Working…"
@@ -917,7 +941,9 @@ export async function generalChat(
         if (choice.finish_reason) finishReason = choice.finish_reason;
         if (chunk.usage) lastUsage = chunk.usage;
       }
+      clearNarration();
     } catch (err: any) {
+      clearNarration();
       // Do not retry mid-stream. If the initial create() throws (or stream
       // errored before any iteration), do a single non-streaming retry on
       // 429 only — same shape as before but simpler.
