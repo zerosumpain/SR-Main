@@ -74,6 +74,12 @@
         { label: 'Biome', href: '/admin/biome' },
       ],
     },
+    {
+      label: 'Operations',
+      items: [
+        { label: 'Pulse', href: '/admin/pulse' },
+      ],
+    },
   ];
 </script>
 

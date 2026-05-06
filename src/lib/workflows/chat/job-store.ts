@@ -364,6 +364,13 @@ export function listJobs(): Array<{
   startedAt: number;
   progressCount: number;
   elapsed: number;
+  phase: JobPhase;
+  currentStep?: string;
+  lastEventAt: number;
+  lastHeartbeatAt: number;
+  workflowId?: string | null;
+  conversationId?: string | null;
+  chatNodeId?: string | null;
 }> {
   return Array.from(jobs.entries()).map(([id, job]) => ({
     id,
@@ -372,6 +379,13 @@ export function listJobs(): Array<{
     startedAt: job.startedAt,
     progressCount: job.progress.length,
     elapsed: Date.now() - job.startedAt,
+    phase: job.phase,
+    currentStep: job.currentStep,
+    lastEventAt: job.lastEventAt,
+    lastHeartbeatAt: job.lastHeartbeatAt,
+    workflowId: job.scope.workflowId ?? null,
+    conversationId: job.scope.conversationId ?? null,
+    chatNodeId: job.scope.chatNodeId ?? null,
   }));
 }
 
