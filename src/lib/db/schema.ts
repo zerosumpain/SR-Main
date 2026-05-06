@@ -1390,3 +1390,47 @@ export const heartbeatPulses = pgTable(
 
 export type HeartbeatPulse = typeof heartbeatPulses.$inferSelect;
 export type NewHeartbeatPulse = typeof heartbeatPulses.$inferInsert;
+
+// ==========================================
+// Scheduled callbacks — one-shot time-based fires
+// ==========================================
+// Distinct from heartbeat (periodic agent turns) and background tasks
+// (long-running work). This is the OpenClaw "cron lane": "do X at time Y",
+// either as a fixed reply, a direct tool call, or a re-engagement of the
+// orchestrator. One-shot for v1 (recurrence is a future addition).
+
+export const scheduledCallbacks = pgTable(
+  'scheduled_callbacks',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** Stable, human-readable name. Reusing a name on insert updates the row. */
+    name: text('name').notNull().unique(),
+    description: text('description').notNull(),
+    /** Wall-clock time when the callback should fire. */
+    fireAt: timestamp('fire_at', { withTimezone: true }).notNull(),
+    /**
+     * 'reply'              — post a fixed message into conversation_id
+     * 'tool'               — call a registered site-tool directly (no LLM)
+     * 'orchestrator-turn'  — re-engage conversation with a synthetic user message
+     */
+    kind: text('kind').notNull(),
+    conversationId: text('conversation_id'),
+    payload: jsonb('payload').notNull(),
+    /** 'pending' | 'fired' | 'failed' | 'cancelled' */
+    status: text('status').notNull().default('pending'),
+    /** 'orchestrator' | 'system' | 'manual' */
+    source: text('source').notNull().default('orchestrator'),
+    firedAt: timestamp('fired_at', { withTimezone: true }),
+    error: text('error'),
+    totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    byFireAt: index('scheduled_callbacks_fire_at_idx').on(table.fireAt),
+    byStatus: index('scheduled_callbacks_status_idx').on(table.status),
+  }),
+);
+
+export type ScheduledCallback = typeof scheduledCallbacks.$inferSelect;
+export type NewScheduledCallback = typeof scheduledCallbacks.$inferInsert;

@@ -50,6 +50,14 @@ startHeartbeatEngine().catch((err) => {
   console.error('[hooks.server] Heartbeat engine failed to start:', err);
 });
 
+// Scheduled-callbacks engine — the OpenClaw "cron lane". One-shot
+// time-based fires. Distinct from heartbeat (periodic agent turns) and
+// background tasks (long-running watched work).
+import { startScheduledEngine, stopScheduledEngine } from '$lib/scheduled/engine';
+startScheduledEngine().catch((err) => {
+  console.error('[hooks.server] Scheduled engine failed to start:', err);
+});
+
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
@@ -57,6 +65,7 @@ import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler
 function gracefulShutdown() {
   console.log('[hooks.server] Shutting down...');
   stopHeartbeatEngine();
+  stopScheduledEngine();
   stopHealthScheduler();
   stopWorkflowScheduler();
   stopGmailWatcher();

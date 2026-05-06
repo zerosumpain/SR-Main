@@ -7,10 +7,9 @@ import { eq } from 'drizzle-orm';
 import { register, unregister, isRegisteredTool } from './registry-internal';
 import { buildHandler } from './custom-tool-loader';
 
-const BUILTIN_TOOLSET_NAMES = [
-  'health', 'blog', 'builds', 'research',
-  'workflows', 'home', 'whatsapp', 'diagnostics', 'memory',
-] as const;
+// Built at module load. Safe because every importer of META_TOOL_DEFINITIONS
+// pulls `./registry` first, so all register() calls have completed.
+const LIVE_TOOLSET_LIST = getAvailableToolsets().slice().sort().join(', ');
 
 export const META_TOOL_DEFINITIONS = [
   {
@@ -18,7 +17,7 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'activate_toolset',
       description:
-        'Load a category of tools into the current conversation. Call this before using domain-specific tools. You can activate multiple toolsets by calling this multiple times in the same turn. Built-in toolsets: health, blog, builds, research, workflows, home, whatsapp, diagnostics, memory. Custom toolsets (from create_tool) are also supported — use list_custom_tools to discover them.',
+        `Load a category of tools into the current conversation. Call this before using domain-specific tools. You can activate multiple toolsets by calling this multiple times in the same turn. Built-in toolsets: ${LIVE_TOOLSET_LIST}. Custom toolsets (from create_tool) are also supported — use list_custom_tools to discover them.`,
       parameters: {
         type: 'object',
         properties: {

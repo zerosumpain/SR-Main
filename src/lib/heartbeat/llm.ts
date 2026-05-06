@@ -7,28 +7,27 @@ import type { ModelContext } from '$lib/server/models/types';
 
 export interface RunHeartbeatTurnOpts {
   conversationId: string;
-  /**
-   * The prompt the heartbeat is delivering as if from the user. Will be
-   * stored as a user-role message with metadata.heartbeat=true so the chat
-   * UI can render it as a system-driven nudge.
-   */
   userText: string;
-  /** Soft cap for the assistant reply. Heartbeat replies should be short. */
   maxTokens?: number;
-  /** Optional override; otherwise the conversation's pinned model is used. */
   model?: ModelContext;
-  /** Tag used on both messages' metadata.heartbeat.activity. */
   activityName: string;
-  /** System prompt suffix appended to a tight heartbeat preamble. */
   instruction: string;
+  /**
+   * If true, the LLM gets the system-toolset tool defs and may call them.
+   * Used by orchestrator-turn callbacks (where the agent might need to
+   * actually do something, e.g. turn off lights). Off for cheap watcher
+   * pulses. Up to 3 rounds of tool calling are supported.
+   */
+  toolsEnabled?: boolean;
 }
 
 export interface HeartbeatTurnResult {
   reply: string;
   promptTokens: number;
   completionTokens: number;
-  /** ID of the assistant message just persisted. */
   messageId: string;
+  /** Names of any tools the LLM called during this turn. */
+  toolsCalled: string[];
 }
 
 /**
@@ -40,6 +39,8 @@ export interface HeartbeatTurnResult {
  * Not a substitute for the full general-chat pipeline — no tools, no plan
  * phase, no follow-up queue, no streaming. Cheaper and predictable.
  */
+const MAX_TOOL_ROUNDS = 3;
+
 export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
   const [conv] = await db.select().from(conversations).where(eq(conversations.id, opts.conversationId)).limit(1);
   if (!conv) throw new Error(`conversation ${opts.conversationId} not found`);
@@ -58,7 +59,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
     .orderBy(asc(orchestratorChats.createdAt))
     .limit(40);
 
-  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+  const messages: Array<Record<string, unknown>> = [
     {
       role: 'system',
       content:
@@ -68,7 +69,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
         opts.instruction,
     },
     ...history.map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'system',
+      role: m.role,
       content: m.content,
     })),
     { role: 'user', content: opts.userText },
@@ -86,35 +87,94 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
     })
     .returning({ id: orchestratorChats.id });
 
-  const response = await client.chat.completions.create({
-    model,
-    messages,
-    temperature: 0.5,
-    max_tokens: opts.maxTokens ?? 600,
-  });
+  // Optional tool surface. The system toolset (heartbeat, scheduled,
+  // followup tools) is always available when toolsEnabled=true. Only one
+  // toolset is loaded — heartbeat agent turns shouldn't go on a tool
+  // shopping spree; they should act tightly on what was asked.
+  let toolDefs: Array<{ type: 'function'; function: { name: string; description: string; parameters: unknown } }> | undefined;
+  let toolsCalled: string[] = [];
+  if (opts.toolsEnabled) {
+    const { getToolsetDefinitions } = await import('$lib/workflows/site-tools/llm-tools');
+    toolDefs = getToolsetDefinitions('system');
+    // Add 'home' if the conversation context already references it. The
+    // heartbeat shouldn't auto-load arbitrary toolsets, but home + system
+    // covers the bulk of "do X at time Y" cases (lights, scenes, etc.).
+    try {
+      const homeDefs = getToolsetDefinitions('home');
+      toolDefs = [...toolDefs, ...homeDefs];
+    } catch { /* home toolset may not exist in dev */ }
+  }
 
-  const reply = response.choices[0]?.message?.content?.trim() ?? '';
-  const promptTokens = response.usage?.prompt_tokens ?? 0;
-  const completionTokens = response.usage?.completion_tokens ?? 0;
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let finalReply = '';
+
+  for (let round = 0; round < (opts.toolsEnabled ? MAX_TOOL_ROUNDS : 1); round++) {
+    const response = await client.chat.completions.create({
+      model,
+      messages: messages as any,
+      temperature: 0.5,
+      max_tokens: opts.maxTokens ?? 600,
+      ...(toolDefs && toolDefs.length > 0 ? { tools: toolDefs as any } : {}),
+    });
+
+    promptTokens += response.usage?.prompt_tokens ?? 0;
+    completionTokens += response.usage?.completion_tokens ?? 0;
+
+    const choice = response.choices[0];
+    const msg = choice?.message;
+    if (!msg) break;
+
+    const toolCalls = (msg as { tool_calls?: Array<{ id: string; function?: { name: string; arguments: string } }> }).tool_calls;
+    if (toolCalls && toolCalls.length > 0 && opts.toolsEnabled) {
+      // Push the assistant message with tool_calls and execute each.
+      messages.push({
+        role: 'assistant',
+        content: msg.content ?? '',
+        tool_calls: toolCalls,
+      });
+      const { executeSiteTool, isRegisteredTool } = await import('$lib/workflows/site-tools/executor');
+      for (const tc of toolCalls) {
+        const fnName = tc.function?.name ?? '';
+        toolsCalled.push(fnName);
+        let parsed: Record<string, unknown> = {};
+        try { parsed = JSON.parse(tc.function?.arguments ?? '{}'); } catch { /* keep empty */ }
+        let result: unknown = { error: 'tool not registered' };
+        if (isRegisteredTool(fnName)) {
+          result = await executeSiteTool(fnName, parsed, { emit: () => {}, conversationId: opts.conversationId });
+        }
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(result).slice(0, 4000),
+        });
+      }
+      continue; // next round — let the LLM produce a final summary
+    }
+
+    finalReply = (msg.content ?? '').trim();
+    break;
+  }
 
   const [asstMsg] = await db
     .insert(orchestratorChats)
     .values({
       conversationId: opts.conversationId,
       role: 'assistant',
-      content: reply || '(empty heartbeat reply)',
+      content: finalReply || '(empty heartbeat reply)',
       metadata: {
         heartbeat: {
           activity: opts.activityName,
           kind: 'reply',
           replyToHeartbeatMessageId: userMsg.id,
           tokens: { prompt: promptTokens, completion: completionTokens },
+          toolsCalled: toolsCalled.length > 0 ? toolsCalled : undefined,
         },
       },
     })
     .returning({ id: orchestratorChats.id });
 
-  return { reply, promptTokens, completionTokens, messageId: asstMsg.id };
+  return { reply: finalReply, promptTokens, completionTokens, messageId: asstMsg.id, toolsCalled };
 }
 
 /**

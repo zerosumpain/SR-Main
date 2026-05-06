@@ -98,7 +98,60 @@
   let schedules = $state<Schedule[]>(data.schedules);
   let feed = $state<FeedItem[]>(data.feed);
 
-  let activeTab = $state<'live' | 'heartbeat' | 'actions' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+  let activeTab = $state<'live' | 'heartbeat' | 'actions' | 'scheduled' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+
+  type ScheduledCallback = {
+    id: string;
+    name: string;
+    description: string;
+    kind: 'reply' | 'tool' | 'orchestrator-turn';
+    conversationId: string | null;
+    payload: Record<string, unknown>;
+    fireAt: string;
+    status: 'pending' | 'fired' | 'failed' | 'cancelled';
+    source: string;
+    firedAt: string | null;
+    error: string | null;
+    totalCostUsd: number;
+    createdAt: string;
+  };
+  let scheduled = $state<ScheduledCallback[]>([]);
+  let scheduledLoaded = $state(false);
+
+  async function loadScheduled() {
+    const res = await fetch('/api/admin/pulse/scheduled');
+    if (!res.ok) return;
+    const d = await res.json();
+    scheduled = d.callbacks;
+    scheduledLoaded = true;
+  }
+
+  async function patchScheduled(id: string, action: 'cancel' | 'fire-now') {
+    try {
+      const res = await fetch('/api/admin/pulse/scheduled', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        flash('error', d.message || `Action failed (${res.status})`);
+        return;
+      }
+      flash('success', action === 'cancel' ? 'Cancelled' : 'Fired');
+      await loadScheduled();
+    } catch (e) {
+      flash('error', e instanceof Error ? e.message : 'Action failed');
+    }
+  }
+
+  async function deleteScheduled(id: string) {
+    if (!confirm('Delete this callback permanently?')) return;
+    const res = await fetch(`/api/admin/pulse/scheduled?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) { flash('error', `Delete failed (${res.status})`); return; }
+    flash('success', 'Deleted');
+    await loadScheduled();
+  }
 
   type Action = {
     id: string;
@@ -283,9 +336,11 @@
     liveTimer = setInterval(() => {
       if (activeTab === 'live' || activeTab === 'heartbeat' || activeTab === 'systems') refreshLive();
       if (activeTab === 'actions' && actionsLoaded) loadActions();
+      if (activeTab === 'scheduled' && scheduledLoaded) loadScheduled();
     }, 3000);
     // Pre-load once even if user starts on a different tab.
     loadActions();
+    loadScheduled();
   });
 
   onDestroy(() => {
@@ -467,6 +522,10 @@
   <button class="nm-tab" class:active={activeTab === 'actions'} aria-current={activeTab === 'actions' ? 'page' : undefined} onclick={() => activeTab = 'actions'}>
     Actions
     <span class="tab-count">{actions.length}</span>
+  </button>
+  <button class="nm-tab" class:active={activeTab === 'scheduled'} aria-current={activeTab === 'scheduled' ? 'page' : undefined} onclick={() => activeTab = 'scheduled'}>
+    Scheduled
+    <span class="tab-count">{scheduled.filter((c) => c.status === 'pending').length}</span>
   </button>
   <button class="nm-tab" class:active={activeTab === 'schedules'} aria-current={activeTab === 'schedules' ? 'page' : undefined} onclick={() => activeTab = 'schedules'}>
     Schedules
@@ -874,6 +933,78 @@
                   </tbody>
                 </table>
               {/if}
+            </td></tr>
+          {/if}
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+{/if}
+
+{#if activeTab === 'scheduled'}
+  <p class="hint">
+    The OpenClaw "cron lane": one-shot time-based fires. Distinct from heartbeat (perpetual agent watches) and background tasks (long-running watched work). Three kinds:
+  </p>
+  <div class="layer-grid" style="margin-bottom: 1rem;">
+    <div class="layer-card layer-min">
+      <div class="layer-cad">reply</div>
+      <div class="layer-name">Fixed text</div>
+      <div class="layer-desc">Posts a pre-composed message at fire time. No LLM round.</div>
+    </div>
+    <div class="layer-card layer-poll">
+      <div class="layer-cad">tool</div>
+      <div class="layer-name">Direct tool call</div>
+      <div class="layer-desc">Calls a registered site-tool with args (e.g. <code>ha_call_service</code> to turn lights off). No LLM round.</div>
+    </div>
+    <div class="layer-card layer-actions">
+      <div class="layer-cad">orchestrator-turn</div>
+      <div class="layer-name">Re-engage</div>
+      <div class="layer-desc">Synthetic user message + LLM turn (with tools). The LLM can act, not just narrate.</div>
+    </div>
+  </div>
+  {#if !scheduledLoaded}
+    <p class="empty">Loading…</p>
+  {:else if scheduled.length === 0}
+    <p class="empty">No scheduled callbacks. The orchestrator can register them via <code>schedule_reply_at</code>, <code>schedule_tool_call_at</code>, <code>schedule_orchestrator_turn_at</code>.</p>
+  {:else}
+    <table class="nm-table">
+      <thead>
+        <tr><th>Name</th><th>Kind</th><th>Status</th><th>Fire at</th><th>Conversation</th><th>Cost</th><th>Payload</th><th></th></tr>
+      </thead>
+      <tbody>
+        {#each scheduled as c (c.id)}
+          {@const detailKey = `sch-${c.id}`}
+          {@const fireMs = new Date(c.fireAt).getTime()}
+          <tr>
+            <td>
+              <div class="act-name">{c.name}</div>
+              <div class="mono-tiny dim">{c.description.slice(0, 80)}</div>
+            </td>
+            <td class="mono-tiny">{c.kind}<br><span class="dim">{c.source}</span></td>
+            <td><span class={`pill st-${c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'err'}`}>{c.status}</span></td>
+            <td>
+              {#if c.status === 'pending'}
+                <span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
+                <div class="mono-tiny dim">{fmtTs(fireMs)}</div>
+              {:else}
+                <span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>
+              {/if}
+            </td>
+            <td class="mono-tiny">{c.conversationId ? c.conversationId.slice(0, 8) : '—'}</td>
+            <td class="mono-tiny">{fmtMoney(c.totalCostUsd)}</td>
+            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
+            <td>
+              {#if c.status === 'pending'}
+                <button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
+                <button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>
+              {:else}
+                <button class="link-btn" style="color: #c44;" onclick={() => deleteScheduled(c.id)}>delete</button>
+              {/if}
+            </td>
+          </tr>
+          {#if openRowKey === detailKey}
+            <tr><td colspan="8" class="row-detail">
+              <pre class="raw">{JSON.stringify({ payload: c.payload, error: c.error, createdAt: c.createdAt }, null, 2)}</pre>
             </td></tr>
           {/if}
         {/each}
