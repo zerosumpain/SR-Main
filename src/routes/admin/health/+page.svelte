@@ -118,6 +118,68 @@
   let featureError = $state<string | null>(null);
   let captionDraft = $state<Record<number, string>>({});
 
+  // ---------- Discovery filters ----------
+  type SortMode = 'epic' | 'date' | 'distance' | 'elevation' | 'duration';
+  let sortMode = $state<SortMode>('date');
+  let minKm = $state<number>(0);
+  let minElev = $state<number>(0);
+  let hideFeatured = $state<boolean>(false);
+  let activeSports = $state<Record<string, boolean>>({});
+
+  const allSports = $derived.by(() => {
+    const set = new Set<string>();
+    for (const a of recent) set.add(a.sportType || a.type);
+    return [...set].sort();
+  });
+
+  // Composite "epicness" — weighted to surface long, climby, lengthy efforts.
+  // 1 km ≈ 1 elev m ≈ 6 minutes of moving time on this scale.
+  function epicScore(a: ActivityRow): number {
+    const km = a.distance / 1000;
+    const elevM = a.totalElevationGain || 0;
+    const moveMin = a.movingTime / 60;
+    return km * 5 + elevM + moveMin / 6;
+  }
+
+  const filteredRecent = $derived.by(() => {
+    const anySportSelected = Object.values(activeSports).some(Boolean);
+    let rows = recent.filter((a) => {
+      if (hideFeatured && a.featured) return false;
+      if (a.distance / 1000 < minKm) return false;
+      if ((a.totalElevationGain || 0) < minElev) return false;
+      if (anySportSelected && !activeSports[a.sportType || a.type]) return false;
+      return true;
+    });
+    rows = rows.slice().sort((x, y) => {
+      switch (sortMode) {
+        case 'epic': return epicScore(y) - epicScore(x);
+        case 'distance': return y.distance - x.distance;
+        case 'elevation': return (y.totalElevationGain || 0) - (x.totalElevationGain || 0);
+        case 'duration': return y.movingTime - x.movingTime;
+        case 'date':
+        default: return y.startDate - x.startDate;
+      }
+    });
+    return rows;
+  });
+
+  function toggleSport(sport: string) {
+    activeSports = { ...activeSports, [sport]: !activeSports[sport] };
+  }
+  function clearFilters() {
+    minKm = 0;
+    minElev = 0;
+    hideFeatured = false;
+    activeSports = {};
+    sortMode = 'date';
+  }
+  function presetEpicCandidates() {
+    minKm = 15;
+    minElev = 500;
+    hideFeatured = true;
+    sortMode = 'epic';
+  }
+
   function fmtKm(m: number): string {
     return (m / 1000).toFixed(1);
   }
@@ -418,46 +480,89 @@
   <!-- Pick from recent -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Recent Strava Activities</span>
-      <span class="nm-sec-meta">{recent.length}</span>
+      <span class="sr-label-tight">Strava Activities · Picker</span>
+      <span class="nm-sec-meta">{filteredRecent.length} / {recent.length}</span>
     </div>
 
     {#if recent.length === 0}
       <div class="nm-empty">No Strava activities synced yet. Connect Strava and run a backfill above.</div>
     {:else}
-      <table class="nm-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Activity</th>
-            <th>Type</th>
-            <th>Distance</th>
-            <th>Time</th>
-            <th>Elev</th>
-            <th>Featured</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each recent as a (a.id)}
-            <tr>
-              <td>{fmtDay(a.startDate)}</td>
-              <td class="ep-name">{a.name}</td>
-              <td>{a.sportType || a.type}</td>
-              <td>{fmtKm(a.distance)} km</td>
-              <td>{fmtDur(a.movingTime)}</td>
-              <td>{a.totalElevationGain ? `${Math.round(a.totalElevationGain)}m` : '—'}</td>
-              <td>
-                <button
-                  class="nm-link-btn"
-                  class:on={a.featured}
-                  disabled={featureBusyId === a.id}
-                  onclick={() => toggleFeatured(a)}
-                >{a.featured ? '★ featured' : '☆ feature'}</button>
-              </td>
-            </tr>
+      <div class="ep-filters">
+        <div class="ep-filter-row">
+          <span class="sr-label-tight">Sort</span>
+          <select class="nm-text-input" bind:value={sortMode}>
+            <option value="date">Date (newest first)</option>
+            <option value="epic">Epicness (combined score)</option>
+            <option value="distance">Distance</option>
+            <option value="elevation">Elevation gain</option>
+            <option value="duration">Moving time</option>
+          </select>
+          <label class="ep-filter-num">
+            <span class="sr-label-tight">Min km</span>
+            <input class="nm-text-input" type="number" min="0" step="1" bind:value={minKm} />
+          </label>
+          <label class="ep-filter-num">
+            <span class="sr-label-tight">Min elev (m)</span>
+            <input class="nm-text-input" type="number" min="0" step="50" bind:value={minElev} />
+          </label>
+          <label class="ep-toggle">
+            <input type="checkbox" bind:checked={hideFeatured} />
+            <span>Hide already featured</span>
+          </label>
+          <button class="nm-link-btn" onclick={presetEpicCandidates} title="≥15 km · ≥500 m climb · sort by epicness">Epic candidates</button>
+          <button class="nm-link-btn" onclick={clearFilters}>Clear</button>
+        </div>
+        <div class="ep-filter-row ep-chips">
+          <span class="sr-label-tight">Sport</span>
+          {#each allSports as sport (sport)}
+            <button
+              class="nm-chip"
+              class:on={activeSports[sport]}
+              onclick={() => toggleSport(sport)}
+            >{sport}</button>
           {/each}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      {#if filteredRecent.length === 0}
+        <div class="nm-empty">No activities match the current filters.</div>
+      {:else}
+        <table class="nm-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Activity</th>
+              <th>Type</th>
+              <th>Distance</th>
+              <th>Time</th>
+              <th>Elev</th>
+              {#if sortMode === 'epic'}<th>Score</th>{/if}
+              <th>Featured</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filteredRecent as a (a.id)}
+              <tr>
+                <td>{fmtDay(a.startDate)}</td>
+                <td class="ep-name">{a.name}</td>
+                <td>{a.sportType || a.type}</td>
+                <td>{fmtKm(a.distance)} km</td>
+                <td>{fmtDur(a.movingTime)}</td>
+                <td>{a.totalElevationGain ? `${Math.round(a.totalElevationGain)}m` : '—'}</td>
+                {#if sortMode === 'epic'}<td class="ep-score">{Math.round(epicScore(a))}</td>{/if}
+                <td>
+                  <button
+                    class="nm-link-btn"
+                    class:on={a.featured}
+                    disabled={featureBusyId === a.id}
+                    onclick={() => toggleFeatured(a)}
+                  >{a.featured ? '★ featured' : '☆ feature'}</button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
     {/if}
   </section>
 
@@ -604,5 +709,69 @@
     .ep-row {
       grid-template-columns: 1fr;
     }
+  }
+
+  .ep-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.4rem 0 0.8rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--divider);
+    background: var(--card-bg, transparent);
+  }
+  .ep-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .ep-filter-row > .nm-text-input,
+  .ep-filter-row select {
+    width: auto;
+    min-width: 140px;
+  }
+  .ep-filter-num {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .ep-filter-num input {
+    width: 90px;
+  }
+  .ep-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .ep-chips {
+    gap: 0.35rem;
+  }
+  .nm-chip {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border: 1px solid var(--divider);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .nm-chip:hover {
+    border-color: var(--text-muted);
+  }
+  .nm-chip.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  .ep-score {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
   }
 </style>

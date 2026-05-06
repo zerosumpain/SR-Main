@@ -27,7 +27,10 @@ export const load: PageServerLoad = async ({ url }) => {
   const [syncStates, recentJobs, recentActivities, featuredActivities] = await Promise.all([
     db.select().from(healthSyncState),
     db.select().from(healthSyncJobs).orderBy(desc(healthSyncJobs.startedAt)).limit(10),
-    db.select(baseFields).from(stravaActivities).orderBy(desc(stravaActivities.startDate)).limit(60),
+    // Pull all activities for client-side filtering — payload is small (~200 KB
+    // for ~600 rows) and avoids round-trips when the user is hunting for an
+    // old "epic" candidate.
+    db.select(baseFields).from(stravaActivities).orderBy(desc(stravaActivities.startDate)),
     db
       .select(baseFields)
       .from(stravaActivities)
