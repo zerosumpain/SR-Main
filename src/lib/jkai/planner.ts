@@ -88,7 +88,8 @@ async function streamPlannerCall(opts: {
   model: string;
   planIteration: { id: string };
   buildId: string;
-  systemPrompt: string;
+  /** Optional system prompt. Omit (or pass empty) to skip the system message. */
+  systemPrompt?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature: number;
   max_tokens: number;
@@ -99,12 +100,12 @@ async function streamPlannerCall(opts: {
 }): Promise<string> {
   const streamId = `${opts.planIteration.id}:plan-${opts.streamIdSuffix}`;
   const eventType = opts.lane === 'thinking' ? 'stream_thinking' : 'stream_text';
+  const messages = opts.systemPrompt
+    ? [{ role: 'system', content: opts.systemPrompt }, ...opts.messages]
+    : opts.messages;
   const stream = await opts.client.chat.completions.create({
     model: opts.model,
-    messages: [
-      { role: 'system', content: opts.systemPrompt },
-      ...opts.messages,
-    ],
+    messages,
     temperature: opts.temperature,
     max_tokens: opts.max_tokens,
     stream: true,
@@ -359,6 +360,25 @@ export async function replanBuild(buildId: string): Promise<boolean> {
 
   const fileList = await listWorkspaceFiles(buildId);
 
+  // Fetch the plan iteration (#0) up-front. We need its id for the streaming
+  // event ids so the live tokens land on the same plan-stream the UI is
+  // already subscribed to, and we'll persist the new plan onto the same row.
+  const [planIteration] = await db
+    .select()
+    .from(jkaiIterations)
+    .where(
+      and(
+        eq(jkaiIterations.buildId, buildId),
+        eq(jkaiIterations.number, 0),
+      ),
+    )
+    .limit(1);
+
+  if (!planIteration) {
+    await emitLog(buildId, 'error', 'Re-planning: no plan iteration #0 found. Stopping build.');
+    return false;
+  }
+
   await emitLog(buildId, 'system', '━━━ Re-planning Phase ━━━ Reviewing outcomes and considering further improvements');
 
   const replanPrompt = `You are a senior software architect reviewing a completed project.
@@ -404,19 +424,18 @@ FORMAT B — Project complete:
 No further iterations are needed. The project meets the stated objectives.`;
 
   try {
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'user', content: replanPrompt },
-      ],
+    const content = await streamPlannerCall({
+      client, model, planIteration, buildId,
+      messages: [{ role: 'user', content: replanPrompt }],
       temperature: 0.7,
       max_tokens: 4096,
+      streamIdSuffix: 'replan',
+      lane: 'text',
+      priceSnapshot,
+      onUsage: () => {},
     });
 
-    await recordBuildUsage(buildId, parseUsage(response.usage), priceSnapshot);
-
-    const content = response.choices[0]?.message?.content || '';
-    await emitLog(buildId, 'text', content);
+    await emitLog(buildId, 'text', content, planIteration.id);
 
     // Check if the LLM says the project is complete
     const isComplete = content.includes('## Complete') ||
@@ -427,27 +446,12 @@ No further iterations are needed. The project meets the stated objectives.`;
       return false; // Don't continue
     }
 
-    // Extract the new plan and save it as an updated plan iteration
+    // Extract the new plan and save it onto the same plan iteration row.
     const newPlan = content.match(/## Iteration Plan[\s\S]*/)?.[0] || content;
-
-    // Update the plan iteration (#0) with the new plan
-    const [planIteration] = await db
-      .select()
-      .from(jkaiIterations)
-      .where(
-        and(
-          eq(jkaiIterations.buildId, buildId),
-          eq(jkaiIterations.number, 0),
-        ),
-      )
-      .limit(1);
-
-    if (planIteration) {
-      await db
-        .update(jkaiIterations)
-        .set({ plan: newPlan, evaluation: content })
-        .where(eq(jkaiIterations.id, planIteration.id));
-    }
+    await db
+      .update(jkaiIterations)
+      .set({ plan: newPlan, evaluation: content })
+      .where(eq(jkaiIterations.id, planIteration.id));
 
     await emitLog(buildId, 'system', '━━━ Re-planning Complete ━━━ New iterations proposed. Continuing build.');
     return true; // Continue with new plan
