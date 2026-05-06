@@ -26,13 +26,26 @@ const MAX_BEHAVIOURAL_VERIFY_ROUNDS = 3;
  * Plain-English status line for one generator tool call. Surfaces in the
  * heartbeat as `currentStep` so the user sees "Adding cron trigger node"
  * rather than "use_node: {nodeType: 'trigger', config: {...}, ...}".
+ *
+ * `draft` is optional — when supplied, IDs in connect/update calls are
+ * resolved to the human label of the node so the user sees
+ * "Wiring Every 5 minutes → Query TV State" instead of
+ * "Wiring trigger-1472b824-1 → home-assistant-1472b824-2".
  */
-function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>): string {
+function humaniseGeneratorStep(
+  fnName: string,
+  fnArgs: Record<string, unknown>,
+  draft?: WorkflowDraft,
+): string {
   const s = (k: string): string | undefined => {
     const v = fnArgs[k];
     return typeof v === 'string' && v.length > 0 ? v : undefined;
   };
   const trim = (txt: string, n = 60) => (txt.length > n ? txt.slice(0, n) + '…' : txt);
+  const labelOf = (id: string | undefined): string | undefined => {
+    if (!id || !draft) return id;
+    return draft.nodes.get(id)?.label ?? id;
+  };
   // Append the model's `reason` field to a step description when present —
   // turns "Adding Daily 9am Cron (trigger)" into
   // "Adding Daily 9am Cron (trigger) — to schedule the daily check".
@@ -52,7 +65,11 @@ function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>):
       return withReason(head);
     }
     case 'update_node': {
-      const head = s('id') ? `Updating node ${s('id')} — applying a config change` : 'Updating a node\'s config';
+      const id = s('id');
+      const label = labelOf(id);
+      const head = label
+        ? `Updating ${label} — applying a config change`
+        : 'Updating a node\'s config';
       return withReason(head);
     }
     case 'create_node': {
@@ -62,8 +79,10 @@ function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>):
       return withReason(head);
     }
     case 'connect_nodes': {
-      const head = (s('sourceId') && s('targetId'))
-        ? `Wiring ${s('sourceId')} → ${s('targetId')} so output flows downstream`
+      const sourceLabel = labelOf(s('sourceId'));
+      const targetLabel = labelOf(s('targetId'));
+      const head = (sourceLabel && targetLabel)
+        ? `Wiring ${sourceLabel} → ${targetLabel} so output flows downstream`
         : 'Wiring nodes so output flows downstream';
       return withReason(head);
     }
@@ -255,7 +274,7 @@ async function runToolLoop(
         continue;
       }
 
-      onChunk?.(`${humaniseGeneratorStep(fnName, fnArgs)}\n`);
+      onChunk?.(`${humaniseGeneratorStep(fnName, fnArgs, draft)}\n`);
 
       // --- Async tool: scraper_target_knowledge_lookup ---
       if (fnName === 'scraper_target_knowledge_lookup') {

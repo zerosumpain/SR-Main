@@ -49,7 +49,9 @@ register({
     const emit = ctx?.emit ?? (() => {});
 
     const description = args.description as string;
-    emit('Planning workflow structure — picking nodes and how they wire together.');
+    // Wrapper kickoff — kept distinct from the generator's "Planning workflow"
+    // line so the two don't read as a near-duplicate emission.
+    emit('Spinning up the workflow generator — about to plan the structure.');
     // generateWorkflow already emits internal chunks (Planning..., Reviewing...,
     // Revising..., Registering new node types...). Pipe each non-trivial chunk
     // up to the orchestrator as a `status` event so the user sees progress.
