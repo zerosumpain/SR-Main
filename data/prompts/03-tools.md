@@ -53,6 +53,7 @@ The system has three distinct primitives. Pick the right one:
 - Prefer workflow_create over one-off tool calls when the request implies continuous or repeated behaviour.
 - After creating a workflow, always share the review link as a clickable markdown link.
 - Use workflow_list to check what exists before creating duplicates.
+- **When the user explicitly asks for a workflow (or anything automated / recurring / scheduled / triggered), call `workflow_create` directly.** Do NOT pre-author ephemeral tools to "do the lookups first". Helper logic — geo lookups, API calls, transformations, filtering — belongs INSIDE the workflow as `http-request`, `code-execute`, or `transform` nodes. Authoring an ephemeral tool burns rounds and produces a one-shot answer instead of the durable automation the user asked for. The workflow generator already has the full node registry in front of it; trust it to wire the helper logic into nodes.
 
 ## Visualising data in chat (Layer ladder)
 
