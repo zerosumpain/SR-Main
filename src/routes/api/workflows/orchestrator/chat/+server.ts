@@ -249,11 +249,8 @@ export const POST: RequestHandler = async ({ request }) => {
         let modelContext: ModelContext = await resolveDefaultModel(defaultKind);
         let priceSnapshot: PriceSnapshot | null = null;
         console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${defaultKind})`);
-        // Emit the resolved model to the stream so the client can display it.
-        publishJobEvent(jobId, {
-          type: 'status',
-          text: `Using ${modelContext.provider}:${modelContext.modelId} (${defaultKind})`,
-        });
+        // Resolved model is internal info (provider:modelId) — kept out of the
+        // user-visible stream. Re-enable as a debug status if you need it back.
         if (conversationId) {
           const [conv] = await db
             .select()

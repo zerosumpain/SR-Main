@@ -14,32 +14,32 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
   const trim = (s: string, n = 60) => (s.length > n ? s.slice(0, n) + '…' : s);
 
   switch (tool) {
-    case 'activate_toolset': return str('toolset') ? `loading ${str('toolset')}` : '';
-    case 'jkai_help': return str('toolset') ? `help: ${str('toolset')}` : '';
+    case 'activate_toolset': return str('toolset') ? `loading the ${str('toolset')} toolset — making those tools available` : 'loading a toolset';
+    case 'jkai_help': return str('toolset') ? `getting help on ${str('toolset')} — checking what's available` : 'looking at available tools';
     case 'workflow_inspect':
-      return str('id') ? `inspecting canvas ${str('id')!.slice(0, 8)}…` : 'inspecting canvas';
+      return str('id') ? `inspecting canvas ${str('id')!.slice(0, 8)}… — reading current state` : 'inspecting the canvas';
     case 'workflow_get_run':
-      return str('id') ? `fetching run ${str('id')!.slice(0, 8)}…` : 'fetching run';
+      return str('id') ? `fetching run ${str('id')!.slice(0, 8)}… — pulling its result` : 'fetching a run result';
     case 'workflow_get_generation_log':
-      return str('id') ? `replaying canvas build ${str('id')!.slice(0, 8)}…` : 'replaying canvas build';
+      return str('id') ? `replaying how canvas ${str('id')!.slice(0, 8)}… was built` : 'replaying a canvas build';
     case 'workflow_lint':
-      return 'linting workflow';
+      return 'linting the workflow — checking config, edges and node types';
     case 'workflow_add_schedule':
-      return 'activating schedule';
+      return 'activating the schedule — enabling the cron trigger';
     case 'workflow_remove_schedule':
-      return 'pausing schedule';
+      return 'pausing the schedule — stopping the cron trigger';
     case 'workflow_run':
-      return str('id') ? `running canvas ${str('id')!.slice(0, 8)}…` : 'running canvas';
-    case 'workflow_list': return 'listing canvases';
-    case 'workflow_list_node_types': return 'fetching node types';
-    case 'workflow_create': return str('name') ? `creating ${str('name')}` : 'creating canvas';
-    case 'workflow_delete': return str('id') ? `deleting ${str('id')!.slice(0, 8)}…` : 'deleting canvas';
-    case 'workflow_update_metadata': return str('name') ? `→ ${str('name')}` : 'updating metadata';
-    case 'workflow_add_node': return str('type') ? `+${str('type')} node` : 'adding node';
-    case 'workflow_remove_node': return 'removing node';
-    case 'workflow_update_node': return str('id') ? `node ${str('id')!.slice(0, 8)}…` : 'updating node';
-    case 'workflow_add_edge': return 'wiring edge';
-    case 'workflow_remove_edge': return 'removing edge';
+      return str('id') ? `running canvas ${str('id')!.slice(0, 8)}… — kicking off the workflow` : 'running the canvas now';
+    case 'workflow_list': return 'listing existing canvases — checking what already exists';
+    case 'workflow_list_node_types': return 'fetching node types — needed before searching';
+    case 'workflow_create': return str('name') ? `creating canvas "${str('name')}" — about to plan its structure` : 'creating a new canvas';
+    case 'workflow_delete': return str('id') ? `deleting canvas ${str('id')!.slice(0, 8)}…` : 'deleting a canvas';
+    case 'workflow_update_metadata': return str('name') ? `renaming canvas to "${str('name')}"` : 'updating canvas metadata';
+    case 'workflow_add_node': return str('type') ? `adding a ${str('type')} node to the canvas` : 'adding a node to the canvas';
+    case 'workflow_remove_node': return 'removing a node from the canvas';
+    case 'workflow_update_node': return str('id') ? `updating node ${str('id')!.slice(0, 8)}… — applying a config change` : 'updating a node\'s config';
+    case 'workflow_add_edge': return 'wiring an edge — connecting two nodes';
+    case 'workflow_remove_edge': return 'removing an edge between two nodes';
     case 'file_list': return str('prefix') ? `prefix ${str('prefix')}` : 'listing files';
     case 'file_read': return str('name') ?? (str('id') ? `id ${str('id')!.slice(0, 8)}…` : 'reading file');
     case 'scraper_script_list': return 'listing scripts';

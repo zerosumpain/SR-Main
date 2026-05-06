@@ -49,7 +49,7 @@ register({
     const emit = ctx?.emit ?? (() => {});
 
     const description = args.description as string;
-    emit('Planning workflow structure…');
+    emit('Planning workflow structure — picking nodes and how they wire together.');
     // generateWorkflow already emits internal chunks (Planning..., Reviewing...,
     // Revising..., Registering new node types...). Pipe each non-trivial chunk
     // up to the orchestrator as a `status` event so the user sees progress.
@@ -83,7 +83,7 @@ register({
           'Could not generate a valid workflow. Try being more specific about triggers, inputs, and outputs.',
       };
     }
-    emit(`Saving canvas with ${workflow.nodes.length} nodes…`);
+    emit(`Saving the finished canvas with ${workflow.nodes.length} nodes — committing it to the database.`);
 
     // Canvas-compatible naming: pick a SHORT slug (≤ 24 chars, 3–4 words
     // max) from the generated title, ensure the "canvas:" prefix. If the

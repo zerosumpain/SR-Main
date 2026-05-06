@@ -42,41 +42,51 @@ function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>):
   };
   switch (fnName) {
     case 'search_nodes':
-      return s('query') ? `Searching node registry for "${trim(s('query')!, 40)}"` : 'Searching node registry';
+      return s('query')
+        ? `Searching the node registry for "${trim(s('query')!, 40)}" — looking for a node that fits`
+        : 'Searching the node registry for a fitting node';
     case 'use_node': {
       const head = s('label')
-        ? `Adding ${s('label')} (${s('nodeType') ?? 'node'})`
-        : (s('nodeType') ? `Adding ${s('nodeType')} node` : 'Adding node');
+        ? `Adding ${s('label')} (${s('nodeType') ?? 'node'}) to the canvas`
+        : (s('nodeType') ? `Adding a ${s('nodeType')} node to the canvas` : 'Adding a node to the canvas');
       return withReason(head);
     }
     case 'update_node': {
-      const head = s('id') ? `Updating node ${s('id')}` : 'Updating node';
+      const head = s('id') ? `Updating node ${s('id')} — applying a config change` : 'Updating a node\'s config';
       return withReason(head);
     }
     case 'create_node': {
-      const head = s('label') ? `Creating new node type "${s('label')}"` : 'Creating new node type';
+      const head = s('label')
+        ? `Creating a brand new node type "${s('label')}" — no existing one fits`
+        : 'Creating a brand new node type — no existing one fits';
       return withReason(head);
     }
     case 'connect_nodes': {
       const head = (s('sourceId') && s('targetId'))
-        ? `Wiring ${s('sourceId')} → ${s('targetId')}`
-        : 'Wiring nodes';
+        ? `Wiring ${s('sourceId')} → ${s('targetId')} so output flows downstream`
+        : 'Wiring nodes so output flows downstream';
       return withReason(head);
     }
     case 'set_trigger': {
-      const head = s('type') ? `Setting trigger to ${s('type')}` : 'Setting trigger';
+      const head = s('type')
+        ? `Setting trigger to ${s('type')} — that's what fires this workflow`
+        : 'Setting the trigger that fires this workflow';
       return withReason(head);
     }
     case 'finalize_workflow':
-      return s('name') ? `Finalising "${s('name')}"` : 'Finalising workflow';
+      return s('name')
+        ? `Finalising "${s('name')}" — workflow shape is done, ready for review`
+        : 'Finalising the workflow — ready for review';
     case 'ask_user':
-      return s('question') ? `Asking: ${trim(s('question')!, 50)}` : 'Asking the user';
+      return s('question')
+        ? `Asking the user a clarifying question: ${trim(s('question')!, 50)}`
+        : 'Asking the user a clarifying question';
     case 'scraper_target_knowledge_lookup': {
       const domains = fnArgs.domains;
       if (Array.isArray(domains) && typeof domains[0] === 'string') {
-        return `Looking up scraper target ${trim(domains[0] as string, 50)}`;
+        return `Looking up scraper target ${trim(domains[0] as string, 50)} — checking what's already known`;
       }
-      return 'Looking up scraper target';
+      return 'Looking up scraper target — checking what\'s already known';
     }
     default: {
       // Generic fallback: first short string arg, or just the tool name.
@@ -592,7 +602,7 @@ export async function generateWorkflow(
     }));
   }
 
-  onChunk?.('Planning workflow...\n');
+  onChunk?.('Planning workflow — picking the nodes and how they wire together.\n');
 
   // Check for a persisted draft from a previous ask_user turn.
   // NOTE: We take the most recent draftState. If the user completes a workflow
@@ -659,7 +669,7 @@ export async function generateWorkflow(
     onChunk?.(`Plan: "${name}" — ${draft.nodes.size} nodes (${typesPreview}), ${draft.edges.length} edges\n`);
   }
 
-  onChunk?.('Reviewing workflow...\n');
+  onChunk?.('Reviewing the workflow with the critic — checking for missing pieces and bad wiring.\n');
   const criticResult = await runCriticRound(workflow, draft);
 
   let revisions: RevisionDelta[] = [];
@@ -668,7 +678,7 @@ export async function generateWorkflow(
   let finalDraft = draft;
 
   if (criticResult.verdict === 'fail' && criticResult.issues.length > 0) {
-    onChunk?.('Revising based on critic feedback...\n');
+    onChunk?.('Revising the workflow based on the critic\'s feedback — fixing the issues raised.\n');
 
     const issuesSummary = criticResult.issues
       .map((i) => `- [${i.severity}] ${i.nodeId ? `Node ${i.nodeId}: ` : ''}${i.message}`)
@@ -704,7 +714,7 @@ export async function generateWorkflow(
             onChunk?.(`⚠️  ${warning}\n`);
           }
         }
-        onChunk?.('Revision complete.\n');
+        onChunk?.('Revision complete — workflow is ready to save.\n');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -719,7 +729,7 @@ export async function generateWorkflow(
   }
 
   if (finalDraft.newNodeTypes.length > 0) {
-    onChunk?.('Registering new node types...\n');
+    onChunk?.('Registering new node types — adding them to the registry before save.\n');
     await saveDynamicNodes(finalDraft);
   }
 

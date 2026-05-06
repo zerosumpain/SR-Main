@@ -1011,10 +1011,10 @@
               </div>
             {/if}
           {:else if msg.source === 'status_update'}
-            <!-- Mid-task working note — stylistically distinct from a real reply -->
+            <!-- Mid-task working note — stylistically distinct from a real reply.
+                 Label dropped: the content is descriptive enough on its own. -->
             <div class="flex justify-start mb-3">
               <div class="status-update-msg">
-                <div class="sr-label-tight status-update-label">Working...</div>
                 {msg.content}
               </div>
             </div>
