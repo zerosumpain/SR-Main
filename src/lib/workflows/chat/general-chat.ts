@@ -664,6 +664,13 @@ export async function generalChat(
   const activeTools: Array<any> = [...META_TOOL_DEFINITIONS];
   const activatedToolsets = new Set<string>();
 
+  // Always-on system toolset: heartbeat actions + follow-up scheduling.
+  // These need to be reachable on every turn so any "I'll check in" promise
+  // can be backed by an actual scheduled action without forcing the model
+  // to call activate_toolset first.
+  activeTools.push(...getToolsetDefinitions('system'));
+  activatedToolsets.add('system');
+
   // Include agent_spawn as a meta-tool available in all chats — but ONLY
   // when this IS a top-level orchestrator call (not itself a sub-agent).
   if ((options.subagentDepth ?? 0) === 0 && options.jobId) {

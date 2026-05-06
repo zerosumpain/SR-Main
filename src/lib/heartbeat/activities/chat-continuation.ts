@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
-import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { listJobs } from '$lib/workflows/chat/job-store';
 import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
 import type { ActivityHandler } from '../types';

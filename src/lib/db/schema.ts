@@ -1315,57 +1315,75 @@ export type WorkflowFilePermissions = {
 };
 
 // ==========================================
-// Heartbeat — periodic autonomous activities
+// Heartbeat — perpetual action queue
 // ==========================================
-// Inspired by OpenClaw's heartbeat system. Each row defines one recurring
-// activity (e.g. nudge stalled chats, review yesterday's workflow runs)
-// with its own cadence in seconds and optional active-hours window.
-// The engine ticks every 30s, fires whichever activities are due, and
-// records each tick to heartbeat_pulses for audit + admin visibility.
+// One perpetual ticker (default 30s). On each tick the engine looks at the
+// heartbeat_actions table and fires any active row whose next_run_at has
+// passed. There is NO retry limit — actions run forever until status flips
+// to 'done' (orchestrator marks the goal met) or 'paused' (admin disables).
+//
+// Two kinds:
+//   - 'system-scan'  — code-driven background scans like chat-continuation,
+//                      build-progress-check, workflow-review. Seeded by the
+//                      engine on first boot. Handler matches `name`.
+//   - 'targeted'     — dynamic actions written by the orchestrator via a
+//                      tool call (register_heartbeat_action). Each carries
+//                      a goal + prompt + conversation_id; the engine runs
+//                      a focused LLM turn, lets the LLM either take a step
+//                      (auto-continuing the conversation) or mark itself
+//                      done by replying with a DONE: prefix.
 
-export const heartbeatActivities = pgTable('heartbeat_activities', {
+export const heartbeatActions = pgTable('heartbeat_actions', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  // Stable name matches a registered handler in src/lib/heartbeat/activities/.
-  // Built-ins: 'chat-continuation', 'conversation-checkin',
-  // 'build-progress-check', 'workflow-review'.
   name: text('name').notNull().unique(),
   description: text('description').notNull(),
-  cadenceSeconds: integer('cadence_seconds').notNull(), // 30 .. 86400
-  enabled: boolean('enabled').notNull().default(true),
+  /** 'system-scan' | 'targeted' */
+  kind: text('kind').notNull().default('targeted'),
+  /** What "done" looks like — used for prompting + audit. */
+  goal: text('goal'),
+  /** For 'targeted' — the LLM prompt run on each tick. */
+  prompt: text('prompt'),
+  cadenceSeconds: integer('cadence_seconds').notNull(),
+  /** 'active' | 'done' | 'failed' | 'paused' */
+  status: text('status').notNull().default('active'),
+  /** For 'targeted' — the conversation that owns this action. */
+  conversationId: text('conversation_id'),
+  /** 'orchestrator' | 'system' | 'manual' */
+  source: text('source').notNull().default('system'),
   // Optional active-hours window. HH:MM 24h. tz IANA. Null = 24/7.
   activeHoursStart: text('active_hours_start'),
   activeHoursEnd: text('active_hours_end'),
   activeHoursTz: text('active_hours_tz'),
-  // Per-activity config (rate limits, target conversations, prompts, …).
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
-  lastTickAt: timestamp('last_tick_at', { withTimezone: true }),
-  nextTickAt: timestamp('next_tick_at', { withTimezone: true }),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+  totalRuns: integer('total_runs').notNull().default(0),
+  totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
 });
 
-export type HeartbeatActivity = typeof heartbeatActivities.$inferSelect;
-export type NewHeartbeatActivity = typeof heartbeatActivities.$inferInsert;
+export type HeartbeatAction = typeof heartbeatActions.$inferSelect;
+export type NewHeartbeatAction = typeof heartbeatActions.$inferInsert;
 
 export const heartbeatPulses = pgTable(
   'heartbeat_pulses',
   {
     id: serial('id').primaryKey(),
-    activityId: text('activity_id').notNull().references(() => heartbeatActivities.id, { onDelete: 'cascade' }),
+    actionId: text('action_id').notNull().references(() => heartbeatActions.id, { onDelete: 'cascade' }),
     ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
-    // 'fired'   — activity took an action (sent a nudge, ran a continuation)
-    // 'ok'      — ran but nothing required action (HEARTBEAT_OK in OpenClaw terms)
-    // 'skipped' — outside active hours, busy lane, rate-limited, etc.
-    // 'error'   — handler threw
+    /** 'fired' | 'ok' | 'skipped' | 'error' | 'completed' */
     outcome: text('outcome').notNull(),
-    summary: text('summary').notNull(),       // <= 200 chars
+    summary: text('summary').notNull(),
     details: jsonb('details'),
     durationMs: integer('duration_ms'),
-    conversationId: text('conversation_id'),  // if the pulse touched a conversation
-    jobId: text('job_id'),                    // if the pulse spawned/touched a chat job
+    conversationId: text('conversation_id'),
+    jobId: text('job_id'),
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   },
   (table) => ({
-    byActivity: index('heartbeat_pulses_activity_ts_idx').on(table.activityId, table.ts),
+    byAction: index('heartbeat_pulses_action_ts_idx').on(table.actionId, table.ts),
     byTs: index('heartbeat_pulses_ts_idx').on(table.ts),
   }),
 );

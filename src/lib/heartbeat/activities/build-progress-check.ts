@@ -63,7 +63,7 @@ export const buildProgressCheck: ActivityHandler = {
       .from(heartbeatPulses)
       .where(
         and(
-          eq(heartbeatPulses.activityId, ctx.activity.id),
+          eq(heartbeatPulses.actionId, ctx.action.id),
           gt(heartbeatPulses.ts, new Date(now - cooldownMs)),
         ),
       );

@@ -16,6 +16,7 @@ import './tools/workflows';
 import './tools/diagnostics';
 import './tools/memory';
 import './tools/followup';
+import './tools/heartbeat';
 import './tools/home-assistant';
 import './tools/visualise';
 import './tools/ephemeral-tools';

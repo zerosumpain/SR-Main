@@ -1,14 +1,14 @@
-import type { HeartbeatActivity } from '$lib/db/schema';
+import type { HeartbeatAction } from '$lib/db/schema';
 
-export type PulseOutcome = 'fired' | 'ok' | 'skipped' | 'error';
+export type PulseOutcome = 'fired' | 'ok' | 'skipped' | 'error' | 'completed';
 
 export interface ActivityContext {
   /** Wall-clock at the start of this tick. */
   now: number;
-  /** Per-activity config from heartbeat_activities.config. */
+  /** Per-action config from heartbeat_actions.config. */
   config: Record<string, unknown>;
-  /** The DB row driving this run; handlers may inspect last_tick_at etc. */
-  activity: HeartbeatActivity;
+  /** The DB row driving this run; handlers may inspect last_run_at etc. */
+  action: HeartbeatAction;
 }
 
 export interface ActivityResult {
@@ -17,10 +17,17 @@ export interface ActivityResult {
   details?: Record<string, unknown>;
   conversationId?: string | null;
   jobId?: string | null;
+  /** USD cost incurred by this run (LLM tokens). 0 if no LLM call. */
+  costUsd?: number;
+  /**
+   * Set true when the handler determined the action's goal is met. The
+   * engine will flip status to 'done' instead of rescheduling.
+   */
+  markDone?: boolean;
 }
 
 export interface ActivityHandler {
-  /** Stable name. Matches heartbeat_activities.name. */
+  /** Stable name. Matches heartbeat_actions.name for system-scans. */
   name: string;
   description: string;
   defaultCadenceSeconds: number;

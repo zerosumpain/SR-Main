@@ -9,8 +9,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
   const rows = await db
     .select()
     .from(heartbeatPulses)
-    .where(eq(heartbeatPulses.activityId, params.id))
+    .where(eq(heartbeatPulses.actionId, params.id))
     .orderBy(desc(heartbeatPulses.ts))
     .limit(limit);
-  return json({ pulses: rows });
+  return json({
+    pulses: rows.map((r) => ({ ...r, costUsd: Number(r.costUsd) })),
+  });
 };

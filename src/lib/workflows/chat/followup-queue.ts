@@ -219,7 +219,7 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
     }
 
-    const { response } = await generalChat(followUpMessage, recentHistory, {
+    const { response } = await generalChat({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
       priceSnapshot,

@@ -34,7 +34,7 @@ export const workflowReview: ActivityHandler = {
   description:
     'Periodic LLM analysis of recent workflow runs. Picks the latest unreviewed completed/failed run from the last 24h, looks at its node-execution timeline, and writes findings to the pulse audit log. Long cadence — autonomous review, not user-facing.',
   defaultCadenceSeconds: 1800,
-  defaultEnabled: false, // off by default — costs LLM tokens
+  defaultEnabled: true,
   defaultActiveHours: { start: '08:00', end: '22:00', tz: 'Europe/London' },
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
 
@@ -47,7 +47,7 @@ export const workflowReview: ActivityHandler = {
       .from(heartbeatPulses)
       .where(
         and(
-          eq(heartbeatPulses.activityId, ctx.activity.id),
+          eq(heartbeatPulses.actionId, ctx.action.id),
           gt(heartbeatPulses.ts, since),
         ),
       );

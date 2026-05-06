@@ -98,60 +98,70 @@
   let schedules = $state<Schedule[]>(data.schedules);
   let feed = $state<FeedItem[]>(data.feed);
 
-  let activeTab = $state<'live' | 'heartbeat' | 'activities' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
+  let activeTab = $state<'live' | 'heartbeat' | 'actions' | 'schedules' | 'activity' | 'systems' | 'process'>('live');
 
-  type Activity = {
+  type Action = {
     id: string;
     name: string;
     description: string;
+    kind: 'system-scan' | 'targeted';
+    goal: string | null;
+    prompt: string | null;
     cadenceSeconds: number;
-    enabled: boolean;
+    status: 'active' | 'paused' | 'done' | 'failed';
+    conversationId: string | null;
+    source: 'orchestrator' | 'system' | 'manual';
     activeHoursStart: string | null;
     activeHoursEnd: string | null;
     activeHoursTz: string | null;
     config: Record<string, unknown>;
-    lastTickAt: string | null;
-    nextTickAt: string | null;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+    totalRuns: number;
+    totalCostUsd: number;
+    cost24hUsd: number;
+    completedAt: string | null;
     handlerKnown: boolean;
     countsLast24h: Record<string, number>;
   };
-  type ActivityPulse = {
+  type ActionPulse = {
     id: number;
-    activityId: string;
+    actionId: string;
     ts: string;
-    outcome: 'fired' | 'ok' | 'skipped' | 'error';
+    outcome: 'fired' | 'ok' | 'skipped' | 'error' | 'completed';
     summary: string;
     details: Record<string, unknown> | null;
     durationMs: number | null;
     conversationId: string | null;
     jobId: string | null;
+    costUsd: number;
   };
 
-  let activities = $state<Activity[]>([]);
-  let activitiesLoaded = $state(false);
-  let pulsesByActivity = $state<Record<string, ActivityPulse[]>>({});
-  let openActivityId = $state<string | null>(null);
+  let actions = $state<Action[]>([]);
+  let actionsLoaded = $state(false);
+  let pulsesByAction = $state<Record<string, ActionPulse[]>>({});
+  let openActionId = $state<string | null>(null);
   let cadenceDraft = $state<Record<string, number>>({});
-  let runningActivityId = $state<string | null>(null);
+  let runningActionId = $state<string | null>(null);
 
-  async function loadActivities() {
-    const res = await fetch('/api/admin/pulse/activities');
+  async function loadActions() {
+    const res = await fetch('/api/admin/pulse/actions');
     if (!res.ok) return;
     const d = await res.json();
-    activities = d.activities;
-    activitiesLoaded = true;
+    actions = d.actions;
+    actionsLoaded = true;
   }
 
-  async function loadPulses(activityId: string) {
-    const res = await fetch(`/api/admin/pulse/activities/${activityId}/pulses?limit=30`);
+  async function loadActionPulses(actionId: string) {
+    const res = await fetch(`/api/admin/pulse/actions/${actionId}/pulses?limit=30`);
     if (!res.ok) return;
     const d = await res.json();
-    pulsesByActivity = { ...pulsesByActivity, [activityId]: d.pulses };
+    pulsesByAction = { ...pulsesByAction, [actionId]: d.pulses };
   }
 
-  async function patchActivity(id: string, patch: Record<string, unknown>) {
+  async function patchAction(id: string, patch: Record<string, unknown>) {
     try {
-      const res = await fetch('/api/admin/pulse/activities', {
+      const res = await fetch('/api/admin/pulse/actions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...patch }),
@@ -162,26 +172,49 @@
         return;
       }
       flash('success', 'Updated');
-      await loadActivities();
+      await loadActions();
     } catch (e) {
       flash('error', e instanceof Error ? e.message : 'Update failed');
     }
   }
 
-  async function runActivityNow(id: string) {
-    runningActivityId = id;
+  async function runActionNow(id: string) {
+    runningActionId = id;
     try {
-      const res = await fetch(`/api/admin/pulse/activities/${id}/run`, { method: 'POST' });
+      const res = await fetch(`/api/admin/pulse/actions/${id}/run`, { method: 'POST' });
       if (!res.ok) {
         flash('error', `Run failed (${res.status})`);
         return;
       }
       const d = await res.json();
       flash('success', `Ran: ${d.result.outcome} — ${d.result.summary}`);
-      await Promise.all([loadActivities(), loadPulses(id)]);
+      await Promise.all([loadActions(), loadActionPulses(id)]);
     } finally {
-      runningActivityId = null;
+      runningActionId = null;
     }
+  }
+
+  async function deleteAction(id: string) {
+    if (!confirm('Delete this action permanently? Pulse history is also removed.')) return;
+    try {
+      const res = await fetch(`/api/admin/pulse/actions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        flash('error', `Delete failed (${res.status})`);
+        return;
+      }
+      flash('success', 'Deleted');
+      await loadActions();
+    } catch (e) {
+      flash('error', e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
+  function fmtMoney(usd: number): string {
+    if (!Number.isFinite(usd)) return '—';
+    if (usd === 0) return '$0';
+    if (usd < 0.001) return `<$0.001`;
+    if (usd < 1) return `$${usd.toFixed(4)}`;
+    return `$${usd.toFixed(2)}`;
   }
 
   function fmtCadence(sec: number): string {
@@ -249,10 +282,10 @@
   onMount(() => {
     liveTimer = setInterval(() => {
       if (activeTab === 'live' || activeTab === 'heartbeat' || activeTab === 'systems') refreshLive();
-      if (activeTab === 'activities' && activitiesLoaded) loadActivities();
+      if (activeTab === 'actions' && actionsLoaded) loadActions();
     }, 3000);
-    // Pre-load activities once even if user starts on a different tab.
-    loadActivities();
+    // Pre-load once even if user starts on a different tab.
+    loadActions();
   });
 
   onDestroy(() => {
@@ -431,9 +464,9 @@
     Heartbeat
     <span class="tab-count">{live.recentPulses.length}</span>
   </button>
-  <button class="nm-tab" class:active={activeTab === 'activities'} aria-current={activeTab === 'activities' ? 'page' : undefined} onclick={() => activeTab = 'activities'}>
-    Activities
-    <span class="tab-count">{activities.length}</span>
+  <button class="nm-tab" class:active={activeTab === 'actions'} aria-current={activeTab === 'actions' ? 'page' : undefined} onclick={() => activeTab = 'actions'}>
+    Actions
+    <span class="tab-count">{actions.length}</span>
   </button>
   <button class="nm-tab" class:active={activeTab === 'schedules'} aria-current={activeTab === 'schedules' ? 'page' : undefined} onclick={() => activeTab = 'schedules'}>
     Schedules
@@ -600,10 +633,15 @@
         <div class="layer-name">Heartbeat</div>
         <div class="layer-desc">Per-job ticker. UI-only "thinking 35s" indicator + watchdog feed. Not user-content; fires regardless of LLM activity.</div>
       </div>
+      <div class="layer-card layer-actions">
+        <div class="layer-cad">30s – 30min</div>
+        <div class="layer-name">Actions queue</div>
+        <div class="layer-desc">Perpetual LLM turns the orchestrator wrote (or you wrote) for a specific conversation. Each tick runs a focused turn — make a step or reply <code>DONE:</code>. No retry limit.</div>
+      </div>
       <div class="layer-card layer-poll">
         <div class="layer-cad">30s → 5min</div>
         <div class="layer-name">Follow-up poll</div>
-        <div class="layer-desc">"I'll check back in 2 min" — per-task <code>dueAt</code> with 1.2× backoff. Fires content-update on completion, not on a fixed period.</div>
+        <div class="layer-desc">Mechanical task-completion poller (<code>checkFn</code> against build/research IDs). Triggers an LLM follow-up message when the watched task reaches a terminal state.</div>
       </div>
       <div class="layer-card layer-content">
         <div class="layer-cad">on event</div>
@@ -611,8 +649,8 @@
         <div class="layer-desc">Content-driven, not time-driven. Tools call <code>onProgress</code>; <code>status_update</code> messages are inserted mid-conversation.</div>
       </div>
     </div>
-    <p class="layer-gap">
-      <strong>Gap:</strong> there's no generic "every N seconds, send the user an update during this conversation" primitive. The follow-up queue is the closest — you'd register a follow-up with a 30s <code>dueAt</code> and a <code>checkFn</code> that always returns <code>{`{done:true, ...}`}</code> to force re-engagement, but it isn't designed as a fixed-cadence ticker. If the LLM should ping the user every 30s during a slow operation, that needs a new primitive (per-conversation timer + tool call to register/cancel).
+    <p class="layer-fill">
+      <strong>Filled:</strong> the heartbeat <strong>Actions</strong> queue covers the gap above. The orchestrator calls <code>register_heartbeat_action</code> with a goal, prompt and cadence; the engine ticks every 30s and runs the LLM turn against the conversation each time. Actions are perpetual until the LLM replies <code>DONE: …</code> or you mark them complete. See the Actions tab for live state.
     </p>
   </div>
 
@@ -684,7 +722,7 @@
             <td class="mono-tiny">{f.id.slice(0, 8)}</td>
             <td>{f.taskType}/{f.taskId.slice(0, 8)}</td>
             <td class="mono-tiny">{f.conversationId.slice(0, 8)}</td>
-            <td>{f.retries}/{live.thresholds.followupMaxRetries}</td>
+            <td>{f.retries}</td>
             <td class={f.dueInMs < 0 ? 'danger' : ''}>
               <div class="bar-row">
                 <span>{f.dueInMs > 0 ? fmtDuration(f.dueInMs) : 'now'}</span>
@@ -710,69 +748,95 @@
   </table>
 {/if}
 
-{#if activeTab === 'activities'}
+{#if activeTab === 'actions'}
   <p class="hint">
-    Each row is one configurable autonomous activity the heartbeat engine fires on its own cadence. Toggle to enable/disable, set cadence (30s–24h), restrict to active hours, or expand for the description, recent pulses, and "run now" trigger. Cadence changes take effect immediately — <code>next_tick_at</code> is reset to <code>now + cadence</code>.
+    The action queue. The engine ticks every 30s and runs every active row whose <code>next_run_at</code> has passed. Actions are <strong>perpetual</strong> — no retry limit, no maximum runs. They keep firing until status flips to <code>done</code> (the LLM replied <code>DONE:</code> or you marked it complete), or you pause/delete them. <code>system-scan</code> rows are code-driven background scanners; <code>targeted</code> rows are LLM turns the orchestrator wrote (or you wrote) for a specific conversation.
   </p>
-  {#if !activitiesLoaded}
+  {#if !actionsLoaded}
     <p class="empty">Loading…</p>
-  {:else if activities.length === 0}
-    <p class="empty">No activities. The engine seeds defaults on first boot — restart the service if this persists.</p>
+  {:else if actions.length === 0}
+    <p class="empty">No actions. System-scan defaults seed on first boot — restart the service if this persists.</p>
   {:else}
     <table class="nm-table">
       <thead>
         <tr>
-          <th>Activity</th>
+          <th>Action</th>
+          <th>Kind / source</th>
           <th>Cadence</th>
-          <th>Active hours</th>
-          <th>Last fire</th>
-          <th>Next fire</th>
-          <th>24h</th>
-          <th>Enabled</th>
+          <th>Status</th>
+          <th>Last run</th>
+          <th>Next run</th>
+          <th>Runs</th>
+          <th>Cost (24h / total)</th>
+          <th>24h outcomes</th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {#each activities as a (a.id)}
-          {@const isOpen = openActivityId === a.id}
+        {#each actions as a (a.id)}
+          {@const isOpen = openActionId === a.id}
           <tr>
             <td>
               <div class="act-name">{a.name}</div>
+              {#if a.goal}<div class="mono-tiny dim" title={a.goal}>goal: {a.goal.slice(0, 60)}{a.goal.length > 60 ? '…' : ''}</div>{/if}
               {#if !a.handlerKnown}<div class="mono-tiny warn">no handler registered</div>{/if}
             </td>
+            <td class="mono-tiny">{a.kind}<br/><span class="dim">{a.source}</span></td>
             <td>{fmtCadence(a.cadenceSeconds)}</td>
-            <td class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</td>
-            <td>{a.lastTickAt ? fmtRelative(new Date(a.lastTickAt).getTime()) : '—'}</td>
-            <td>{a.nextTickAt ? fmtRelative(new Date(a.nextTickAt).getTime()) : '—'}</td>
+            <td>
+              <span class={`pill st-${a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'err' : 'paused'}`}>{a.status}</span>
+            </td>
+            <td>{a.lastRunAt ? fmtRelative(new Date(a.lastRunAt).getTime()) : '—'}</td>
+            <td>{a.nextRunAt && a.status === 'active' ? fmtRelative(new Date(a.nextRunAt).getTime()) : '—'}</td>
+            <td>{a.totalRuns}</td>
+            <td class="mono-tiny">{fmtMoney(a.cost24hUsd)} / {fmtMoney(a.totalCostUsd)}</td>
             <td class="mono-tiny">
-              {#each Object.entries(a.countsLast24h) as [k, v]}<span class={`pill st-${k === 'fired' ? 'ok' : k === 'error' ? 'err' : k === 'ok' ? 'info' : 'paused'}`}>{k}:{v}</span> {/each}
+              {#each Object.entries(a.countsLast24h) as [k, v]}<span class={`pill st-${k === 'fired' || k === 'completed' ? 'ok' : k === 'error' ? 'err' : k === 'ok' ? 'info' : 'paused'}`}>{k}:{v}</span> {/each}
               {#if Object.keys(a.countsLast24h).length === 0}<span class="dim">none</span>{/if}
             </td>
             <td>
-              <button class="toggle-btn" class:on={a.enabled} onclick={() => patchActivity(a.id, { enabled: !a.enabled })}>{a.enabled ? 'on' : 'off'}</button>
+              {#if a.status === 'active'}
+                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'paused' })}>pause</button>
+              {:else if a.status === 'paused'}
+                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>resume</button>
+              {:else if a.status === 'done'}
+                <button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>reactivate</button>
+              {/if}
             </td>
             <td>
-              <button class="link-btn" onclick={async () => { openActivityId = isOpen ? null : a.id; if (!isOpen) { await loadPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button>
+              <button class="link-btn" onclick={async () => { openActionId = isOpen ? null : a.id; if (!isOpen) { await loadActionPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button>
             </td>
           </tr>
           {#if isOpen}
-            <tr><td colspan="8" class="row-detail">
+            <tr><td colspan="11" class="row-detail">
               <p class="act-desc">{a.description}</p>
+
+              {#if a.kind === 'targeted'}
+                {#if a.goal}<div class="kv"><span>goal:</span><span>{a.goal}</span></div>{/if}
+                {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
+                {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
+                {#if a.completedAt}<div class="kv"><span>completed at:</span><span>{fmtTs(a.completedAt)}</span></div>{/if}
+              {/if}
 
               <div class="act-controls">
                 <label class="ctrl">
                   <span>Cadence (s)</span>
                   <input type="number" min="30" max="86400" bind:value={cadenceDraft[a.id]} class="nm-text-input small" />
-                  <button class="link-btn" onclick={() => patchActivity(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
+                  <button class="link-btn" onclick={() => patchAction(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
                 </label>
                 <label class="ctrl">
                   <span>Active hours</span>
-                  <input type="text" placeholder="07:00" value={a.activeHoursStart ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursStart: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                  <input type="text" placeholder="07:00" value={a.activeHoursStart ?? ''} onchange={(e) => patchAction(a.id, { activeHoursStart: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
                   <span class="dim">→</span>
-                  <input type="text" placeholder="23:00" value={a.activeHoursEnd ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursEnd: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
-                  <input type="text" placeholder="Europe/London" value={a.activeHoursTz ?? ''} onchange={(e) => patchActivity(a.id, { activeHoursTz: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                  <input type="text" placeholder="23:00" value={a.activeHoursEnd ?? ''} onchange={(e) => patchAction(a.id, { activeHoursEnd: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
+                  <input type="text" placeholder="Europe/London" value={a.activeHoursTz ?? ''} onchange={(e) => patchAction(a.id, { activeHoursTz: (e.currentTarget as HTMLInputElement).value || null })} class="nm-text-input small" />
                 </label>
-                <button class="link-btn" onclick={() => runActivityNow(a.id)} disabled={runningActivityId === a.id || !a.handlerKnown}>{runningActivityId === a.id ? 'running…' : 'run now'}</button>
+                <button class="link-btn" onclick={() => runActionNow(a.id)} disabled={runningActionId === a.id || !a.handlerKnown}>{runningActionId === a.id ? 'running…' : 'run now'}</button>
+                {#if a.status !== 'done'}
+                  <button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>
+                {/if}
+                <button class="link-btn" style="color: #c44;" onclick={() => deleteAction(a.id)}>delete</button>
               </div>
 
               {#if Object.keys(a.config).length > 0}
@@ -783,25 +847,26 @@
               {/if}
 
               <h4 class="sec-title sec-title-tight">Recent pulses</h4>
-              {#if !pulsesByActivity[a.id]}
+              {#if !pulsesByAction[a.id]}
                 <p class="empty">Loading pulses…</p>
-              {:else if pulsesByActivity[a.id].length === 0}
+              {:else if pulsesByAction[a.id].length === 0}
                 <p class="empty">No pulses recorded yet.</p>
               {:else}
                 <table class="nm-table inset">
-                  <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Duration</th><th></th></tr></thead>
+                  <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Cost</th><th>Duration</th><th></th></tr></thead>
                   <tbody>
-                    {#each pulsesByActivity[a.id] as p, i (p.id)}
+                    {#each pulsesByAction[a.id] as p, i (p.id)}
                       {@const detailKey = `${a.id}-pulse-${p.id}`}
                       <tr>
                         <td>{fmtRelative(new Date(p.ts).getTime())}</td>
-                        <td><span class={`pill st-${p.outcome === 'fired' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
+                        <td><span class={`pill st-${p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
                         <td class="summary-cell">{p.summary}</td>
+                        <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
                         <td>{p.durationMs ?? '—'}ms</td>
                         <td>{#if p.details}<button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button>{/if}</td>
                       </tr>
                       {#if openRowKey === detailKey && p.details}
-                        <tr><td colspan="5" class="row-detail">
+                        <tr><td colspan="6" class="row-detail">
                           <pre class="raw">{JSON.stringify(p.details, null, 2)}</pre>
                         </td></tr>
                       {/if}
@@ -1002,9 +1067,11 @@
   .layer-card .layer-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
   .layer-min { border-left-color: #2d7a3a; }
   .layer-sec { border-left-color: #2d6cdf; }
+  .layer-actions { border-left-color: #c44; }
   .layer-poll { border-left-color: #b0892a; }
   .layer-content { border-left-color: var(--accent); }
   .layer-gap { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid #c44; background: var(--bg-base); }
+  .layer-fill { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid #2d7a3a; background: var(--bg-base); }
 
   .bar-row { display: flex; align-items: center; gap: 0.55rem; }
   .bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-base); border: 1px solid var(--card-border); }
