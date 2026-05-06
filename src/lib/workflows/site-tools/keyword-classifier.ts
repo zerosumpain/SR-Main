@@ -14,6 +14,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'media', pattern: /image|photo|picture|draw|render|illustrate|sketch|audio|voice|speak|say\s+out\s+loud|read\s+(?:this|aloud)|document|report|csv|save\s+as|export|write\s+(?:a\s+)?file|write\s+to\s+file|generate\s+(?:an\s+)?image|make\s+(?:an\s+)?image|generate\s+audio|make\s+(?:a\s+)?voice/i },
   { toolset: 'files', pattern: /\bfiles?\b|file\s*store|uploaded|attachment|\bpdf\b|\bdocx?\b|\bxlsx?\b|spreadsheet|transcribe|extract\s+(?:text|content)|read\s+(?:the\s+)?(?:file|pdf|doc|attachment|upload)/i },
   { toolset: 'web', pattern: /\bhttps?:\/\/\S+|\b(?:fetch|read|open|browse|visit|scrape|grab)\s+(?:this|that|the)?\s*(?:url|link|page|website|site)\b/i },
+  { toolset: 'scraper', pattern: /\bscrap(?:e|er|ing)\b|\bstealth\b|\bplaywright\b|\bjob\s*board|\blistings?\b|\bprices?\s+from\b|\bschedules?\s+from\b|\bcookie\s*wall|civilservicejobs/i },
 ];
 
 export function inferToolsets(message: string): string[] {

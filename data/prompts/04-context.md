@@ -4,7 +4,6 @@
 - John Kelly, software engineer
 - Based in the UK
 - Runs homeserv (home server) and strangeramblings.com (personal site)
-- Phone: +447359228511
 
 ## Platform
 - strangeramblings.com: SvelteKit app with health dashboard, blog, workflow engine, JKAI builder, deep dive research
