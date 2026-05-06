@@ -22,6 +22,55 @@ const MAX_TOOL_ROUNDS = 30;
 const MAX_VERIFY_ROUNDS = 3;
 const MAX_BEHAVIOURAL_VERIFY_ROUNDS = 3;
 
+/**
+ * Plain-English status line for one generator tool call. Surfaces in the
+ * heartbeat as `currentStep` so the user sees "Adding cron trigger node"
+ * rather than "use_node: {nodeType: 'trigger', config: {...}, ...}".
+ */
+function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>): string {
+  const s = (k: string): string | undefined => {
+    const v = fnArgs[k];
+    return typeof v === 'string' && v.length > 0 ? v : undefined;
+  };
+  const trim = (txt: string, n = 60) => (txt.length > n ? txt.slice(0, n) + '…' : txt);
+  switch (fnName) {
+    case 'search_nodes':
+      return s('query') ? `Searching node registry for "${trim(s('query')!, 40)}"` : 'Searching node registry';
+    case 'use_node':
+      return s('label')
+        ? `Adding ${s('label')} (${s('nodeType') ?? 'node'})`
+        : (s('nodeType') ? `Adding ${s('nodeType')} node` : 'Adding node');
+    case 'update_node':
+      return s('id') ? `Updating node ${s('id')}` : 'Updating node';
+    case 'create_node':
+      return s('label') ? `Creating new node type "${s('label')}"` : 'Creating new node type';
+    case 'connect_nodes':
+      return (s('sourceId') && s('targetId'))
+        ? `Wiring ${s('sourceId')} → ${s('targetId')}`
+        : 'Wiring nodes';
+    case 'set_trigger':
+      return s('type') ? `Setting trigger to ${s('type')}` : 'Setting trigger';
+    case 'finalize_workflow':
+      return s('name') ? `Finalising "${s('name')}"` : 'Finalising workflow';
+    case 'ask_user':
+      return s('question') ? `Asking: ${trim(s('question')!, 50)}` : 'Asking the user';
+    case 'scraper_target_knowledge_lookup': {
+      const domains = fnArgs.domains;
+      if (Array.isArray(domains) && typeof domains[0] === 'string') {
+        return `Looking up scraper target ${trim(domains[0] as string, 50)}`;
+      }
+      return 'Looking up scraper target';
+    }
+    default: {
+      // Generic fallback: first short string arg, or just the tool name.
+      for (const v of Object.values(fnArgs)) {
+        if (typeof v === 'string' && v.length > 0 && v.length < 80) return `${fnName}: ${trim(v, 50)}`;
+      }
+      return fnName;
+    }
+  }
+}
+
 async function getRecentExecutionExamples(): Promise<ExecutionExample[]> {
   try {
     const rows = await db
@@ -179,7 +228,7 @@ async function runToolLoop(
         continue;
       }
 
-      onChunk?.(`${fnName}: ${JSON.stringify(fnArgs).slice(0, 100)}...\n`);
+      onChunk?.(`${humaniseGeneratorStep(fnName, fnArgs)}\n`);
 
       // --- Async tool: scraper_target_knowledge_lookup ---
       if (fnName === 'scraper_target_knowledge_lookup') {
