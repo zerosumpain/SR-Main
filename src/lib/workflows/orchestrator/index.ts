@@ -33,23 +33,40 @@ function humaniseGeneratorStep(fnName: string, fnArgs: Record<string, unknown>):
     return typeof v === 'string' && v.length > 0 ? v : undefined;
   };
   const trim = (txt: string, n = 60) => (txt.length > n ? txt.slice(0, n) + '…' : txt);
+  // Append the model's `reason` field to a step description when present —
+  // turns "Adding Daily 9am Cron (trigger)" into
+  // "Adding Daily 9am Cron (trigger) — to schedule the daily check".
+  const withReason = (head: string): string => {
+    const reason = s('reason');
+    return reason ? `${head} — ${trim(reason, 80)}` : head;
+  };
   switch (fnName) {
     case 'search_nodes':
       return s('query') ? `Searching node registry for "${trim(s('query')!, 40)}"` : 'Searching node registry';
-    case 'use_node':
-      return s('label')
+    case 'use_node': {
+      const head = s('label')
         ? `Adding ${s('label')} (${s('nodeType') ?? 'node'})`
         : (s('nodeType') ? `Adding ${s('nodeType')} node` : 'Adding node');
-    case 'update_node':
-      return s('id') ? `Updating node ${s('id')}` : 'Updating node';
-    case 'create_node':
-      return s('label') ? `Creating new node type "${s('label')}"` : 'Creating new node type';
-    case 'connect_nodes':
-      return (s('sourceId') && s('targetId'))
+      return withReason(head);
+    }
+    case 'update_node': {
+      const head = s('id') ? `Updating node ${s('id')}` : 'Updating node';
+      return withReason(head);
+    }
+    case 'create_node': {
+      const head = s('label') ? `Creating new node type "${s('label')}"` : 'Creating new node type';
+      return withReason(head);
+    }
+    case 'connect_nodes': {
+      const head = (s('sourceId') && s('targetId'))
         ? `Wiring ${s('sourceId')} → ${s('targetId')}`
         : 'Wiring nodes';
-    case 'set_trigger':
-      return s('type') ? `Setting trigger to ${s('type')}` : 'Setting trigger';
+      return withReason(head);
+    }
+    case 'set_trigger': {
+      const head = s('type') ? `Setting trigger to ${s('type')}` : 'Setting trigger';
+      return withReason(head);
+    }
     case 'finalize_workflow':
       return s('name') ? `Finalising "${s('name')}"` : 'Finalising workflow';
     case 'ask_user':
@@ -631,6 +648,15 @@ export async function generateWorkflow(
     for (const warning of workflow.warnings) {
       onChunk?.(`⚠️  ${warning}\n`);
     }
+  }
+
+  // Plan summary — surface the proposed shape before the critic round so
+  // the user sees what's being built (not just a stream of "Adding…" lines).
+  // Format: Plan: "<name>" — N nodes (type1, type2, type3), M edges
+  {
+    const nodeTypes = Array.from(new Set(Array.from(draft.nodes.values()).map(n => n.type)));
+    const typesPreview = nodeTypes.slice(0, 6).join(', ') + (nodeTypes.length > 6 ? `, +${nodeTypes.length - 6} more` : '');
+    onChunk?.(`Plan: "${name}" — ${draft.nodes.size} nodes (${typesPreview}), ${draft.edges.length} edges\n`);
   }
 
   onChunk?.('Reviewing workflow...\n');

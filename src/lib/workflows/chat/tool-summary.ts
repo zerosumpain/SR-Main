@@ -17,9 +17,19 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
     case 'activate_toolset': return str('toolset') ? `loading ${str('toolset')}` : '';
     case 'jkai_help': return str('toolset') ? `help: ${str('toolset')}` : '';
     case 'workflow_inspect':
+      return str('id') ? `inspecting canvas ${str('id')!.slice(0, 8)}…` : 'inspecting canvas';
     case 'workflow_get_run':
+      return str('id') ? `fetching run ${str('id')!.slice(0, 8)}…` : 'fetching run';
     case 'workflow_get_generation_log':
-      return str('id') ? `id ${str('id')!.slice(0, 8)}…` : '';
+      return str('id') ? `replaying canvas build ${str('id')!.slice(0, 8)}…` : 'replaying canvas build';
+    case 'workflow_lint':
+      return 'linting workflow';
+    case 'workflow_add_schedule':
+      return 'activating schedule';
+    case 'workflow_remove_schedule':
+      return 'pausing schedule';
+    case 'workflow_run':
+      return str('id') ? `running canvas ${str('id')!.slice(0, 8)}…` : 'running canvas';
     case 'workflow_list': return 'listing canvases';
     case 'workflow_list_node_types': return 'fetching node types';
     case 'workflow_create': return str('name') ? `creating ${str('name')}` : 'creating canvas';
