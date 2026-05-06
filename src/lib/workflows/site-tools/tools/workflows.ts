@@ -58,10 +58,17 @@ register({
       const trimmed = text.trim();
       if (!trimmed) return;
       // Throttle to one emit per 800ms to avoid flooding when generateWorkflow
-      // chunks arrive in bursts.
-      const now = Date.now();
-      if (now - lastEmittedAt < 800) return;
-      lastEmittedAt = now;
+      // chunks arrive in bursts (search_nodes / use_node / connect_nodes can
+      // fire dozens of times in a few hundred ms during runToolLoop).
+      // BUT: bypass the throttle for post-loop summary signals — Plan,
+      // Reviewing, Revising, warnings — otherwise they get eaten because
+      // the runToolLoop burst exhausted the budget right before they fire.
+      const isHighPriority = /^(Plan:|Reviewing|Revising|Revision|⚠|Saving|Registering)/.test(trimmed);
+      if (!isHighPriority) {
+        const now = Date.now();
+        if (now - lastEmittedAt < 800) return;
+        lastEmittedAt = now;
+      }
       emit(trimmed);
     });
 
