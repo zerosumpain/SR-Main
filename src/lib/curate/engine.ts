@@ -334,6 +334,133 @@ const DISCOVERY_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  // ── Terminal tool: structured proposal submission ────────────────────────
+  // Calling this tool is the LLM's way of saying "I'm done researching, here
+  // is the proposal". The args are received as a parsed object — no regex,
+  // no JSON.parse from free-form text. After this tool fires the engine
+  // persists the args as session.proposal and transitions to awaiting-approval.
+  {
+    type: 'function',
+    function: {
+      name: 'submit_proposal',
+      description:
+        'Submit the final structured proposal once research is complete. ' +
+        'Calling this ENDS the discovery phase. Do not call any other tool after this.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            description: 'kebab-case node type identifier (e.g. "apple-calendar")',
+          },
+          label: { type: 'string', description: 'Human-readable label for the canvas node menu' },
+          category: {
+            type: 'string',
+            description: 'One of: data, ai, communication, calendar, utility, integrations',
+          },
+          description: { type: 'string', description: 'One-line canvas description' },
+          llmDescription: {
+            type: 'string',
+            description:
+              'Richer description for the orchestrator LLM, explaining when to choose this node',
+          },
+          approach: {
+            type: 'string',
+            description: '2-3 sentence explanation of the chosen implementation approach',
+          },
+          rejectedAlternatives: {
+            type: 'array',
+            description: 'Implementation approaches that were considered and rejected',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['name', 'reason'],
+            },
+          },
+          suggestedDeps: {
+            type: 'array',
+            description: 'npm packages the executor will need',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                version: { type: 'string' },
+              },
+              required: ['name', 'version'],
+            },
+          },
+          authMethod: {
+            type: 'string',
+            enum: ['oauth2', 'api-key', 'none', 'other'],
+            description: 'Authentication mechanism this integration requires',
+          },
+          configFields: {
+            type: 'array',
+            description: 'High-level config fields the node panel will expose',
+            items: {
+              type: 'object',
+              properties: {
+                key: { type: 'string', description: 'snake_case or camelCase identifier' },
+                label: { type: 'string' },
+                widget: {
+                  type: 'string',
+                  enum: [
+                    'string',
+                    'textarea',
+                    'dropdown',
+                    'toggle',
+                    'datetime',
+                    'credential-picker',
+                    'resource-picker',
+                    'template-string',
+                  ],
+                },
+                required: { type: 'boolean' },
+                description: { type: 'string' },
+              },
+              required: ['key', 'label', 'widget'],
+            },
+          },
+          outputShape: {
+            type: 'object',
+            properties: {
+              description: { type: 'string' },
+              example: { type: 'object', additionalProperties: true },
+            },
+            required: ['description', 'example'],
+          },
+          testCases: {
+            type: 'array',
+            description: '1-3 worked test cases for the live-testing phase',
+            items: {
+              type: 'object',
+              properties: {
+                scenario: { type: 'string' },
+                config: { type: 'object', additionalProperties: true },
+                notes: { type: 'string' },
+              },
+              required: ['scenario', 'config'],
+            },
+          },
+        },
+        required: [
+          'type',
+          'label',
+          'category',
+          'description',
+          'llmDescription',
+          'approach',
+          'authMethod',
+          'configFields',
+          'outputShape',
+          'testCases',
+        ],
+      },
+    },
+  },
 ];
 
 const MAX_DISCOVERY_TURNS = 20;
@@ -412,8 +539,9 @@ export interface RunDiscoveryOpts {
  *   - The LLM emits native OpenAI tool_use events (not text markers).
  *   - When a tool_use chunk arrives, the corresponding discovery tool runs.
  *   - The tool result is fed back as a 'user' message and the loop continues.
- *   - When finish_reason === 'stop', the accumulated text is scanned for
- *     a <proposal> block. Loop continues until one is found or MAX_DISCOVERY_TURNS.
+ *   - When the LLM calls the terminal `submit_proposal` tool, its arguments
+ *     are persisted as session.proposal and the loop ends. (No regex on text;
+ *     no JSON.parse from free-form output. Tool calls are atomic + parsed.)
  */
 export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {}): Promise<void> {
   const toolkit = defaultToolkit();
@@ -443,15 +571,15 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
     while (turns < MAX_DISCOVERY_TURNS && !proposalFound) {
       turns++;
 
-      // After enough research, push a user message asking the model to wrap
-      // up. Mid-budget nudge prevents the LLM from burning all turns on
-      // tool calls without ever emitting a proposal.
+      // Soft nudge if the LLM is taking a long time. Tool-call submission
+      // means we don't NEED this — but if the model wanders, this nudges
+      // it toward calling submit_proposal.
       if (turns === NUDGE_AFTER_TURN) {
         messages.push({
           role: 'user',
           content:
-            'You have enough research. Stop calling tools and emit the final ' +
-            '<proposal>...</proposal> JSON block now per the system prompt.',
+            'You have enough research. Stop calling research tools and call ' +
+            'submit_proposal with your final structured proposal now.',
         });
       }
 
@@ -471,22 +599,69 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
         }
       }
 
-      // After each turn, emit a single discovery line summarizing what the
-      // model said (if anything). UI doesn't do per-token streaming yet, so
-      // emitting deltas just floods the feed with empty rows.
+      // Stream a discovery feed line summarising the turn.
       if (turnText.trim()) {
         pushEvent(sessionId, { type: 'discovery', text: turnText.trim() });
       }
 
-      // Append assistant turn to conversation.
+      // Persist the assistant turn to iterationLog so future failures are
+      // debuggable without re-running. Tool calls are also recorded.
+      const turnEntry: Record<string, unknown> = {
+        kind: 'discovery-turn',
+        at: new Date().toISOString(),
+        turn: turns,
+        text: turnText,
+        toolCalls: pendingToolCalls.map((tc) => ({ name: tc.name, input: tc.input })),
+      };
+      const sessionForLog = await getSession(sessionId);
+      const existingLog = ((sessionForLog?.iterationLog ?? []) as unknown[]);
+      await updateSession(sessionId, { iterationLog: [...existingLog, turnEntry] });
+
+      // Append assistant turn to conversation context.
       if (turnText) {
         accumulatedText += turnText;
         messages.push({ role: 'assistant', content: turnText });
       }
 
-      // Execute any tool calls the LLM requested. Per-tool try/catch so
-      // a single failing tool doesn't kill the whole discovery flow — the
-      // LLM gets a structured error and can decide how to recover.
+      // ── Detect terminal tool: submit_proposal ──────────────────────────
+      // This is now the ONLY way the LLM can finalise — no regex on text.
+      const submitCall = pendingToolCalls.find((tc) => tc.name === 'submit_proposal');
+      if (submitCall) {
+        const proposal = submitCall.input as Record<string, unknown>;
+        // Minimum viability check.
+        if (
+          typeof proposal.type === 'string' &&
+          typeof proposal.label === 'string' &&
+          typeof proposal.description === 'string'
+        ) {
+          proposalFound = true;
+          await updateSession(sessionId, { proposal });
+          await transitionStatus(sessionId, 'discovering', 'awaiting-approval');
+          pushEvent(sessionId, { type: 'phase', status: 'awaiting-approval', proposal });
+          pushEvent(sessionId, {
+            type: 'discovery',
+            text: `[submit_proposal] received: ${proposal.type} / ${proposal.label}`,
+          });
+          return;
+        }
+        // Malformed submission — feed an error result back so the LLM retries.
+        messages.push({
+          role: 'user',
+          content:
+            `submit_proposal received but missing required fields ` +
+            `(type/label/description must all be non-empty strings). ` +
+            `Please call submit_proposal again with the correct shape.`,
+        });
+        pushEvent(sessionId, {
+          type: 'discovery',
+          text: '[submit_proposal] rejected — missing required fields. Asking model to retry.',
+        });
+        continue;
+      }
+
+      // Execute any non-terminal tool calls. Per-tool try/catch so a single
+      // failing tool doesn't kill the whole discovery flow — the LLM gets a
+      // structured error and can decide how to recover.
       for (const tc of pendingToolCalls) {
         let result: unknown;
         try {
@@ -497,7 +672,6 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
         }
         const resultText = JSON.stringify(result, null, 2);
 
-        // Feed tool result back as a user message (tool-result turn).
         messages.push({
           role: 'user',
           content: `Tool result for ${tc.name}:\n${resultText}`,
@@ -509,26 +683,24 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
         });
       }
 
-      // Check for proposal in accumulated text after each non-tool turn.
-      if (pendingToolCalls.length === 0) {
-        const proposal = extractProposal(accumulatedText);
-        if (proposal) {
-          proposalFound = true;
-          await updateSession(sessionId, { proposal });
-          await transitionStatus(sessionId, 'discovering', 'awaiting-approval');
-          pushEvent(sessionId, { type: 'phase', status: 'awaiting-approval', proposal });
-          return;
-        }
+      // Defensive: if the model emitted plain text but no tool call AND no
+      // submit_proposal, it's likely confused (thinks it submitted but
+      // didn't). Push a stronger nudge before next turn.
+      if (pendingToolCalls.length === 0 && turnText.trim()) {
+        messages.push({
+          role: 'user',
+          content:
+            'You replied with text but did not call submit_proposal. ' +
+            'To finalise, you MUST call the submit_proposal tool with the ' +
+            'structured arguments. Do that now.',
+        });
       }
     }
 
-    // Ran out of turns without a valid proposal. Persist the accumulated
-    // text to errorTrace so we can see what the LLM was actually saying.
     if (!proposalFound) {
-      const tail = accumulatedText.slice(-2000);
       throw new Error(
-        `Discovery ended without a valid proposal after ${turns} turns. ` +
-        `Accumulated assistant text (${accumulatedText.length} chars, last 2000):\n\n${tail}`,
+        `Discovery ended without a submit_proposal call after ${turns} turns. ` +
+        `Check iterationLog entries (kind='discovery-turn') for what the model did.`,
       );
     }
   } catch (err: unknown) {
