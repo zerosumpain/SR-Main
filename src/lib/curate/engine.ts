@@ -35,6 +35,7 @@ import { defaultToolkit } from './discovery/index';
 import { runGenerate } from './generate';
 import { runTestCases } from './live-test';
 import { runPromote } from './promote';
+import { materializeNodeSpec } from './materialize';
 import type OpenAI from 'openai';
 
 // ── Allowed transition graph ────────────────────────────────────────────
@@ -559,13 +560,33 @@ export async function runIteration(sessionId: string, userText: string): Promise
 export async function runGeneratePhase(sessionId: string): Promise<void> {
   try {
     pushEvent(sessionId, { type: 'phase', status: 'generating' });
+
+    // Materialize a full NodeSpec from the approved proposal if we don't
+    // already have one. The proposal is high-level; runGenerate needs a
+    // complete spec including executor body + full uiSchema.
+    const session = await getSession(sessionId);
+    if (session && !session.nodeSpec) {
+      pushEvent(sessionId, { type: 'discovery', text: '[engine] materializing NodeSpec from proposal…' });
+      await materializeNodeSpec(sessionId);
+      pushEvent(sessionId, { type: 'discovery', text: '[engine] NodeSpec ready, generating files…' });
+    }
+
     await runGenerate(sessionId);
     pushEvent(sessionId, { type: 'phase', status: 'live-testing' });
     await runLiveTest(sessionId);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     pushEvent(sessionId, { type: 'phase', status: 'error', error: message });
-    // runGenerate already transitions to error status on failure.
+    // Best-effort: persist the error and transition to 'error' so the user
+    // can see what went wrong. runGenerate handles its own error state on
+    // tsc/dep failures; this catch handles materialization + early throws.
+    try {
+      const current = await getSession(sessionId);
+      if (current && current.status === 'generating') {
+        await updateSession(sessionId, { errorTrace: message });
+        await transitionStatus(sessionId, 'generating', 'error');
+      }
+    } catch { /* swallow — best-effort */ }
   }
 }
 
