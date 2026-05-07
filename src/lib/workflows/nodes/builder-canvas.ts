@@ -73,6 +73,28 @@ export const builderChatExecutor: NodeExecutor = {
     config: Record<string, unknown>,
     _context: ExecutionContext,
   ): Promise<NodeResult> {
+    // Idempotent: if this chat node is already attached to a build (set
+    // interactively in the canvas, persisted in node.config.buildId), return
+    // that build's current snapshot instead of starting a fresh one. Prevents
+    // every workflow Run from kicking off a new build.
+    const attachedBuildId = String((config as { buildId?: unknown }).buildId ?? '').trim();
+    if (attachedBuildId) {
+      const [existing] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, attachedBuildId));
+      if (existing) {
+        return {
+          output: {
+            success: true,
+            buildId: existing.id,
+            status: existing.status,
+            title: existing.title,
+            reused: true,
+          },
+          rowCount: 1,
+        };
+      }
+      // buildId set but row missing → fall through to a fresh start.
+    }
+
     const prompt = tplString(config.prompt, input).trim();
     if (!prompt) {
       return { output: { success: false, error: 'prompt is required' }, rowCount: 1 };
@@ -175,10 +197,11 @@ export const builderPiDef: NodeDefinition = {
     },
     required: [],
   },
-  defaultConfig: { buildId: '', pollIntervalMs: 2000, maxWaitMs: 8 * 60 * 60 * 1000 },
+  defaultConfig: { buildId: '', waitForCompletion: false, pollIntervalMs: 2000, maxWaitMs: 8 * 60 * 60 * 1000 },
   inputs: [{ name: 'input', type: 'any', label: 'Input (expects { buildId } if not configured)' }],
-  outputs: [{ name: 'output', type: 'object', label: 'Final build snapshot' }],
-  llmDescription: 'Wait for a JKAI build to finish; returns the final snapshot.',
+  outputs: [{ name: 'output', type: 'object', label: 'Build snapshot' }],
+  llmDescription:
+    'Snapshot a JKAI build (default) or, with waitForCompletion, poll until terminal. Always emits buildId + status + iteration progress.',
 };
 
 export const builderPiExecutor: NodeExecutor = {
@@ -195,10 +218,34 @@ export const builderPiExecutor: NodeExecutor = {
     if (!buildId) {
       return { output: { success: false, error: 'buildId is required (set in config or upstream input)' }, rowCount: 1 };
     }
+    const waitForCompletion = config.waitForCompletion === true;
     const pollMs = Math.max(500, pickNumber(config.pollIntervalMs) ?? 2000);
     const maxWait = Math.max(5_000, pickNumber(config.maxWaitMs) ?? 8 * 60 * 60 * 1000);
 
     const start = Date.now();
+    // Default = snapshot mode: read once and emit. Workflow runs that simply
+    // want the current build state don't block waiting for terminal.
+    if (!waitForCompletion) {
+      const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+      if (!row) return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
+      return {
+        output: {
+          success: true,
+          buildId: row.id,
+          status: row.status,
+          iterationsCompleted: row.iterationsCompleted,
+          tokensUsed: row.tokensUsed,
+          costUsd: row.costUsd,
+          serveConfig: row.serveConfig,
+          publishedSlug: row.publishedSlug,
+          failure: row.failure,
+          terminal: TERMINAL_STATUSES.has(row.status),
+        },
+        rowCount: 1,
+      };
+    }
+
+    // waitForCompletion: poll until terminal or timeout.
     while (Date.now() - start < maxWait) {
       const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
       if (!row) {
@@ -217,6 +264,7 @@ export const builderPiExecutor: NodeExecutor = {
             publishedSlug: row.publishedSlug,
             failure: row.failure,
             elapsedMs: Date.now() - start,
+            terminal: true,
           },
           rowCount: 1,
         };
@@ -295,6 +343,13 @@ export const buildViewExecutor: NodeExecutor = {
       : row.serveConfig
         ? `/api/jkai/proxy/${row.id}/`
         : null;
+    // Captured postMessages from the iframe live in node.config.received
+    // (populated by BuildViewNode in the canvas while the user interacts).
+    // Emit that array as `value` so a downstream data-store(set,
+    // valuePath='value') stores it cleanly.
+    const received = Array.isArray((config as { received?: unknown[] }).received)
+      ? ((config as { received?: unknown[] }).received as unknown[])
+      : [];
     return {
       output: {
         success: true,
@@ -308,8 +363,13 @@ export const buildViewExecutor: NodeExecutor = {
         costUsd: row.costUsd,
         iterationsCompleted: row.iterationsCompleted,
         title: row.title,
+        // Captured iframe data from the canvas — usable by downstream
+        // data-store / whatsapp / transform via {{input.value}} and
+        // {{input.value.length}}.
+        value: received,
+        receivedCount: received.length,
       },
-      rowCount: 1,
+      rowCount: received.length || 1,
     };
   },
 
@@ -324,6 +384,8 @@ export const buildViewExecutor: NodeExecutor = {
         success: { type: 'boolean' },
         buildId: { type: 'string' },
         previewUrl: { type: 'string' },
+        value: { type: 'array' },
+        receivedCount: { type: 'number' },
       },
     };
   },

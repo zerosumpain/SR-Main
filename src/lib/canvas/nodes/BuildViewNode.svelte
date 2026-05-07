@@ -23,6 +23,10 @@
     expandable?: boolean;
     sendUpstream?: boolean;
     exposeOutputs?: boolean;
+    /** Captured postMessages from the iframe (capped at maxReceived). */
+    received?: unknown[];
+    /** Cap; default 100. */
+    maxReceived?: number;
   };
 
   let {
@@ -38,7 +42,6 @@
     inputData?: unknown;
     onConfigChange: (patch: Partial<ViewConfig>) => void;
   } = $props();
-  void onConfigChange;
   void nodeId;
 
   const buildId = $derived(
@@ -47,6 +50,34 @@
   const mode = $derived((config.mode ?? 'active') as 'active' | 'passive');
   const expandable = $derived(config.expandable !== false);
   const sendUpstream = $derived(config.sendUpstream === true);
+  const exposeOutputs = $derived(config.exposeOutputs !== false);
+  const maxReceived = $derived(
+    typeof config.maxReceived === 'number' && config.maxReceived > 0 ? config.maxReceived : 100,
+  );
+
+  // Live capture of postMessages from the running iframe app. Apps opt in by
+  // calling `window.parent.postMessage(value, '*')`. We accumulate up to
+  // maxReceived items and persist the array to node.config.received so the
+  // build-view workflow executor can emit it on a workflow run.
+  let received = $state<unknown[]>(Array.isArray(config.received) ? config.received.slice(-100) : []);
+  let receiveCount = $state(received.length);
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  function schedulePersist(): void {
+    if (!exposeOutputs) return;
+    if (persistTimer) clearTimeout(persistTimer);
+    // Debounce — postMessage bursts (e.g. RNG generating 100 in a tight loop)
+    // shouldn't fire 100 PATCHes. Coalesce into one persist per ~600ms idle.
+    persistTimer = setTimeout(() => {
+      persistTimer = null;
+      onConfigChange({ received: $state.snapshot(received) as unknown[] });
+    }, 600);
+  }
+  function clearReceived(): void {
+    received = [];
+    receiveCount = 0;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+    onConfigChange({ received: [] });
+  }
 
   let snapshot = $state<{
     status: string;
@@ -147,7 +178,29 @@
     setTimeout(post, 350);
   });
 
-  onDestroy(() => disconnect());
+  onDestroy(() => {
+    disconnect();
+    if (persistTimer) clearTimeout(persistTimer);
+  });
+
+  // postMessage listener — only accept messages whose source is our iframe's
+  // contentWindow so we don't pick up unrelated cross-window chatter (which
+  // is fine on canvas pages but means picky apps in other tabs can't pollute).
+  $effect(() => {
+    if (!exposeOutputs) return;
+    function onMessage(e: MessageEvent): void {
+      if (!iframe || e.source !== iframe.contentWindow) return;
+      // Skip null/undefined and structured-clone helpers (e.g. SvelteKit nav).
+      if (e.data === null || e.data === undefined) return;
+      const next = [...received, e.data];
+      const cap = maxReceived;
+      received = next.length > cap ? next.slice(-cap) : next;
+      receiveCount = received.length;
+      schedulePersist();
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  });
 
   function manualRefresh(): void {
     cacheBust = Date.now();
@@ -165,6 +218,12 @@
     {:else}
       <span class="bvn-pill" data-status={snapshot?.status ?? 'pending'}>{snapshot?.status ?? '…'}</span>
       <span class="bvn-meta">{mode}</span>
+      {#if exposeOutputs && receiveCount > 0}
+        <span class="bvn-meta bvn-recv" title={`Captured ${receiveCount} postMessage events from the iframe — flows to the out port`}>
+          ⤓ {receiveCount}
+        </span>
+        <button class="bvn-act bvn-act-quiet" type="button" onclick={clearReceived} title="Clear captured data">clear</button>
+      {/if}
       <a class="bvn-link" href={previewLink} target="_blank" rel="noreferrer" title="Open in new tab">↗ open</a>
       <button class="bvn-act" type="button" onclick={manualRefresh} title="Reload iframe">⟳ reload</button>
       {#if expandable}
@@ -253,6 +312,14 @@
     cursor: pointer;
   }
   .bvn-act:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .bvn-act-quiet {
+    border-color: var(--card-border);
+    color: var(--text-muted);
+  }
+  .bvn-recv {
+    color: var(--accent);
+    font-weight: 600;
+  }
 
   .bvn-frame {
     flex: 1; min-height: 0;
