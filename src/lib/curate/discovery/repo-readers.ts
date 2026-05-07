@@ -9,8 +9,17 @@ import path from 'node:path';
 
 // ── Project root resolution ───────────────────────────────────────────────
 
-/** Walk up from process.cwd() until package.json is found. */
+/**
+ * Resolve the source-tree root for repo readers.
+ *
+ * On dev (homeserv) this is the cwd or its package.json ancestor.
+ * On the prod VPS, the running app at /opt/strange-rambling-svelte/ has
+ * NO `src/` (deploy only rsyncs build output), so we must look at the
+ * dedicated curate workspace via CURATE_WORKSPACE_DIR.
+ */
 function projectRoot(): string {
+  const override = process.env.CURATE_WORKSPACE_DIR;
+  if (override) return override;
   let dir = process.cwd();
   while (dir !== '/') {
     if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
@@ -106,7 +115,15 @@ export async function listAvailableNodes(): Promise<string[]> {
   const root = projectRoot();
   const nodesDir = path.join(root, 'src', 'lib', 'workflows', 'nodes');
 
-  const entries = fs.readdirSync(nodesDir);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(nodesDir);
+  } catch (err) {
+    // ENOENT: the running app dir has no `src/` (rsync-based deploy).
+    // Skip gracefully — the LLM will see an empty list and proceed.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
   return entries
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.def.ts') && !f.endsWith('.test.ts'))
     .map((f) => f.replace(/\.ts$/, ''))

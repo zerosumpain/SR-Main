@@ -10,7 +10,7 @@
     | 'generating' | 'live-testing' | 'awaiting-promotion'
     | 'promoting' | 'promoted' | 'aborted' | 'error' | 'ended';
 
-  type ChatMsg = { role: 'user' | 'assistant'; text: string };
+  type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string };
   type DiscoveryLine = { text: string };
   type TestResult = { scenario: string; ok: boolean; output?: string; error?: string };
   type PromoteStep = { step: string; status: 'running' | 'ok' | 'failed'; detail?: string };
@@ -54,7 +54,10 @@
 
     es.addEventListener('msg', (e) => {
       const d = JSON.parse(e.data) as { role: string; text: string };
-      messages = [...messages, { role: d.role as 'user' | 'assistant', text: d.text }];
+      messages = [
+        ...messages,
+        { id: crypto.randomUUID(), role: d.role as 'user' | 'assistant', text: d.text },
+      ];
       scrollChat();
     });
 
@@ -155,7 +158,7 @@
         actionError = b.message ?? `HTTP ${res.status}`;
       } else {
         // Optimistic: add user message immediately; SSE echo will arrive shortly.
-        messages = [...messages, { role: 'user', text }];
+        messages = [...messages, { id: crypto.randomUUID(), role: 'user', text }];
         scrollChat();
       }
     } catch (err) {
@@ -237,7 +240,7 @@
           {/if}
         </div>
       {:else}
-        {#each messages as m (m.role + m.text)}
+        {#each messages as m (m.id)}
           <div class="chat-msg" class:user={m.role === 'user'} class:assistant={m.role === 'assistant'}>
             <span class="msg-role">{m.role}</span>
             <span class="msg-text">{m.text}</span>

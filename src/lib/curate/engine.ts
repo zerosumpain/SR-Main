@@ -418,9 +418,17 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
         messages.push({ role: 'assistant', content: turnText });
       }
 
-      // Execute any tool calls the LLM requested.
+      // Execute any tool calls the LLM requested. Per-tool try/catch so
+      // a single failing tool doesn't kill the whole discovery flow — the
+      // LLM gets a structured error and can decide how to recover.
       for (const tc of pendingToolCalls) {
-        const result = await executeDiscoveryTool(toolkit, tc.name, tc.input);
+        let result: unknown;
+        try {
+          result = await executeDiscoveryTool(toolkit, tc.name, tc.input);
+        } catch (toolErr) {
+          const msg = toolErr instanceof Error ? toolErr.message : String(toolErr);
+          result = { error: msg };
+        }
         const resultText = JSON.stringify(result, null, 2);
 
         // Feed tool result back as a user message (tool-result turn).
