@@ -264,7 +264,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
+  // Default policy: deny framing across the site. The jkai build proxy is
+  // explicitly designed to be embedded by our own canvas/build views, so it
+  // gets SAMEORIGIN — same-origin only, still blocks cross-origin embeds.
+  if (event.url.pathname.startsWith('/api/jkai/proxy/')) {
+    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  } else {
+    response.headers.set('X-Frame-Options', 'DENY');
+  }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set(
     'Permissions-Policy',

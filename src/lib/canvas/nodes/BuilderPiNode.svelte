@@ -247,6 +247,59 @@
     return `${Math.floor(m / 60)}h ${m % 60}m`;
   }
 
+  /**
+   * Split a content string on triple-backtick code fences. Prose chunks render
+   * as plain text; code chunks render as <pre><code> with a copy button.
+   * Tolerates an unclosed final fence (live streaming) by treating the
+   * remainder as code with the parsed language hint.
+   */
+  type Block = { kind: 'prose' | 'code'; content: string; lang?: string };
+  function parseBlocks(text: string): Block[] {
+    const out: Block[] = [];
+    let i = 0;
+    while (i < text.length) {
+      const fenceStart = text.indexOf('```', i);
+      if (fenceStart === -1) {
+        if (i < text.length) out.push({ kind: 'prose', content: text.slice(i) });
+        break;
+      }
+      if (fenceStart > i) out.push({ kind: 'prose', content: text.slice(i, fenceStart) });
+      const langEnd = text.indexOf('\n', fenceStart + 3);
+      if (langEnd === -1) {
+        // Fence opener with no newline — treat the trailing tokens as a code lang
+        out.push({ kind: 'code', content: '', lang: text.slice(fenceStart + 3).trim() || undefined });
+        break;
+      }
+      const lang = text.slice(fenceStart + 3, langEnd).trim();
+      const fenceEnd = text.indexOf('```', langEnd + 1);
+      if (fenceEnd === -1) {
+        out.push({ kind: 'code', content: text.slice(langEnd + 1), lang: lang || undefined });
+        break;
+      }
+      out.push({
+        kind: 'code',
+        content: text.slice(langEnd + 1, fenceEnd).replace(/\n$/, ''),
+        lang: lang || undefined,
+      });
+      i = fenceEnd + 3;
+      if (text[i] === '\n') i += 1;
+    }
+    return out;
+  }
+
+  let copiedKey = $state<string | null>(null);
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+  async function copyCode(key: string, content: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(content);
+      copiedKey = key;
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => { copiedKey = null; }, 1400);
+    } catch {
+      // Older browsers fall back to a transient textarea — not worth it here.
+    }
+  }
+
   const visibleLines = $derived.by(() => {
     const showThinking = config.showThinking !== false;
     const showTools = config.showTools !== false;
@@ -329,15 +382,66 @@
       <div class="bpn-empty">Listening for activity…</div>
     {:else}
       {#each visibleLines as line (line.id)}
+        {@const blocks = (line.type === 'text' || line.type === 'output' || line.type === 'tool') ? parseBlocks(line.content) : null}
         <div class="bpn-line" data-type={line.type}>
           <span class="bpn-tag">[{tagFor(line.type)}]</span>
-          <span class="bpn-content">{line.content}</span>
+          {#if blocks && blocks.some((b) => b.kind === 'code')}
+            <div class="bpn-content bpn-content-mixed">
+              {#each blocks as b, bi (`${line.id}:${bi}`)}
+                {#if b.kind === 'prose' && b.content.trim().length > 0}
+                  <span class="bpn-prose">{b.content}</span>
+                {:else if b.kind === 'code'}
+                  {@const ck = `${line.id}:${bi}`}
+                  <div class="bpn-code">
+                    <header class="bpn-code-hdr">
+                      <span class="bpn-code-lang">{b.lang ?? 'code'}</span>
+                      <button
+                        type="button"
+                        class="bpn-code-copy"
+                        onclick={() => copyCode(ck, b.content)}
+                        title="Copy"
+                      >{copiedKey === ck ? '✓ copied' : 'copy'}</button>
+                    </header>
+                    <pre class="bpn-code-pre"><code>{b.content}</code></pre>
+                  </div>
+                {/if}
+              {/each}
+            </div>
+          {:else}
+            <span class="bpn-content">{line.content}</span>
+          {/if}
         </div>
       {/each}
       {#each liveEntries as [k, b] (k)}
+        {@const lblocks = (b.type === 'text' || b.type === 'output' || b.type === 'tool') ? parseBlocks(b.content) : null}
         <div class="bpn-line bpn-live" data-type={b.type}>
           <span class="bpn-tag">[{tagFor(b.type)}]</span>
-          <span class="bpn-content">{b.content}<span class="bpn-cursor">▊</span></span>
+          {#if lblocks && lblocks.some((bl) => bl.kind === 'code')}
+            <div class="bpn-content bpn-content-mixed">
+              {#each lblocks as bl, bi (`${k}:${bi}`)}
+                {#if bl.kind === 'prose' && bl.content.trim().length > 0}
+                  <span class="bpn-prose">{bl.content}</span>
+                {:else if bl.kind === 'code'}
+                  {@const ck = `${k}:${bi}`}
+                  <div class="bpn-code">
+                    <header class="bpn-code-hdr">
+                      <span class="bpn-code-lang">{bl.lang ?? 'code'}</span>
+                      <button
+                        type="button"
+                        class="bpn-code-copy"
+                        onclick={() => copyCode(ck, bl.content)}
+                        title="Copy"
+                      >{copiedKey === ck ? '✓ copied' : 'copy'}</button>
+                    </header>
+                    <pre class="bpn-code-pre"><code>{bl.content}</code></pre>
+                  </div>
+                {/if}
+              {/each}
+              <span class="bpn-cursor">▊</span>
+            </div>
+          {:else}
+            <span class="bpn-content">{b.content}<span class="bpn-cursor">▊</span></span>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -455,4 +559,68 @@
     animation: bpn-blink 1s steps(1) infinite;
   }
   @keyframes bpn-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+  /* Mixed prose + code block rendering for text / tool / output lines. */
+  .bpn-content-mixed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+  .bpn-prose {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bpn-code {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    margin: 0.1rem 0;
+    overflow: hidden;
+  }
+  .bpn-code-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  }
+  .bpn-code-lang {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+  .bpn-code-copy {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .bpn-code-copy:hover { color: var(--accent); border-color: var(--accent); }
+  .bpn-code-pre {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono), 'Menlo', 'Monaco', monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .bpn-code-pre code {
+    font-family: inherit;
+    font-size: inherit;
+    background: transparent;
+    padding: 0;
+  }
 </style>

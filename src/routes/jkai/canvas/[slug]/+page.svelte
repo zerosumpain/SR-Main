@@ -1490,7 +1490,7 @@
     if (
       target &&
       target.closest(
-        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node',
+        '.chat-node-body, .chat-input, .nm-inline-body, .edge-inspector-body, .stats-node, .tab-pane, .rr-body, .intelligence-node, .research-result-node, .builder-node-body',
       )
     ) {
       return;
