@@ -372,6 +372,15 @@
         </span>
       </div>
 
+      {#if data.session.devServerPort}
+        <p class="preview-link">
+          Preview the generated node in the canvas:
+          <a class="row-link" href="/curate-preview/{data.session.id}/jkai/canvas" target="_blank" rel="noopener">
+            open preview ↗
+          </a>
+        </p>
+      {/if}
+
       {#if testResults.length === 0}
         <div class="feed-empty">Running test cases…</div>
       {:else}
@@ -690,6 +699,12 @@
     word-break: break-word;
   }
   .feed-empty { color: var(--text-ghost); }
+
+  .preview-link {
+    margin: 0.5rem 0 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
   .collapse-btn {
     font-family: var(--font-mono);
     font-size: 9px;
