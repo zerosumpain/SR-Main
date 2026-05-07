@@ -186,11 +186,45 @@ export function extractGoal(text: string): string | null {
  * Exported for unit testing.
  */
 export function extractProposal(text: string): Record<string, unknown> | null {
-  const match = text.match(/<proposal>([\s\S]*?)<\/proposal>/);
-  if (!match) return null;
+  // Preferred: <proposal>…</proposal> tags as the system prompt requests.
+  const tagMatch = text.match(/<proposal>([\s\S]*?)<\/proposal>/i);
+  if (tagMatch) {
+    try {
+      return JSON.parse(tagMatch[1].trim()) as Record<string, unknown>;
+    } catch { /* fall through to other strategies */ }
+  }
 
+  // Fallback 1: ```json … ``` fenced block whose JSON has the proposal shape.
+  const fenceRe = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+  let m: RegExpExecArray | null;
+  while ((m = fenceRe.exec(text))) {
+    const candidate = tryProposalJson(m[1]);
+    if (candidate) return candidate;
+  }
+
+  // Fallback 2: bare JSON object whose shape looks like a proposal.
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    const candidate = tryProposalJson(objMatch[0]);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
+function tryProposalJson(raw: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(match[1].trim()) as Record<string, unknown>;
+    const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
+    // A proposal at minimum has type + label + description — the model
+    // sometimes drops the <proposal> tags but keeps the shape.
+    if (
+      typeof parsed.type === 'string' &&
+      typeof parsed.label === 'string' &&
+      typeof parsed.description === 'string'
+    ) {
+      return parsed;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -302,7 +336,9 @@ const DISCOVERY_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-const MAX_DISCOVERY_TURNS = 12;
+const MAX_DISCOVERY_TURNS = 20;
+/** After this many turns, nudge the LLM to stop researching and emit. */
+const NUDGE_AFTER_TURN = 10;
 
 // ── runScopeChat ─────────────────────────────────────────────────────────
 
@@ -352,7 +388,12 @@ export async function runScopeChat(sessionId: string, userMessage: string): Prom
 
     // Kick off discovery — intentionally not awaited so this function returns
     // promptly. The caller fire-and-forgets runScopeChat from the API layer.
-    void runDiscovery(sessionId);
+    // The .catch is critical: runDiscovery can throw ("Discovery ended without
+    // a valid proposal after N turns"), and an unhandled rejection here crashes
+    // the entire SvelteKit process — the discovery already updates session
+    // state to 'error' inside its own catch before re-throwing, so swallowing
+    // is safe.
+    void runDiscovery(sessionId).catch(() => undefined);
   }
 }
 
@@ -401,6 +442,18 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
   try {
     while (turns < MAX_DISCOVERY_TURNS && !proposalFound) {
       turns++;
+
+      // After enough research, push a user message asking the model to wrap
+      // up. Mid-budget nudge prevents the LLM from burning all turns on
+      // tool calls without ever emitting a proposal.
+      if (turns === NUDGE_AFTER_TURN) {
+        messages.push({
+          role: 'user',
+          content:
+            'You have enough research. Stop calling tools and emit the final ' +
+            '<proposal>...</proposal> JSON block now per the system prompt.',
+        });
+      }
 
       let turnText = '';
       const pendingToolCalls: Array<{ name: string; input: unknown }> = [];
@@ -469,9 +522,14 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
       }
     }
 
-    // Ran out of turns without a valid proposal.
+    // Ran out of turns without a valid proposal. Persist the accumulated
+    // text to errorTrace so we can see what the LLM was actually saying.
     if (!proposalFound) {
-      throw new Error(`Discovery ended without a valid proposal after ${turns} turns`);
+      const tail = accumulatedText.slice(-2000);
+      throw new Error(
+        `Discovery ended without a valid proposal after ${turns} turns. ` +
+        `Accumulated assistant text (${accumulatedText.length} chars, last 2000):\n\n${tail}`,
+      );
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
