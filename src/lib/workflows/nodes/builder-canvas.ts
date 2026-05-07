@@ -11,7 +11,7 @@
 import type { NodeDefinition, NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
+import { jkaiBuilds, workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -326,7 +326,7 @@ export const buildViewExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const buildId =
       tplString(config.buildId, input).trim() ||
@@ -337,6 +337,13 @@ export const buildViewExecutor: NodeExecutor = {
     const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!row) {
       return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
+    }
+    // Friendly workflow name — strip the "canvas:" prefix so downstream
+    // templates (e.g. WhatsApp messages) read like a slug, not a uuid.
+    let workflowName = '';
+    if (context.workflowId) {
+      const [wf] = await db.select().from(workflows).where(eq(workflows.id, context.workflowId));
+      if (wf?.name) workflowName = wf.name.replace(/^canvas:/, '');
     }
     const previewUrl = row.publishedSlug
       ? `/projects/${row.publishedSlug}/`
@@ -354,6 +361,7 @@ export const buildViewExecutor: NodeExecutor = {
       output: {
         success: true,
         buildId: row.id,
+        workflowName,
         status: row.status,
         previewUrl,
         publishedSlug: row.publishedSlug,
