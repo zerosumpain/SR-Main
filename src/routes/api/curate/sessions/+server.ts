@@ -47,6 +47,11 @@ export const POST: RequestHandler = async ({ request }) => {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Homeserv-only guard hits this path on prod — return 400 with the helpful
+    // message rather than a generic 500.
+    if (msg.includes('Curate runs on homeserv only')) {
+      throw error(400, msg);
+    }
     throw error(500, `Failed to create curate session: ${msg}`);
   }
 

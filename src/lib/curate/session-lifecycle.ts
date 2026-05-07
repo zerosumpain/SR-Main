@@ -1,7 +1,32 @@
+import os from 'node:os';
 import { createSession, getSession, updateSession, markEnded } from './session-store';
 import { allocatePort, releasePort } from './port-allocator';
 import { createSessionWorktree, removeSessionWorktree } from './worktree';
 import { spawnDevServer, killDevServerByPid } from './dev-server';
+
+const HOMESERV_HOSTNAMES = ['homeserv'];
+
+function isOnHomeserv(): boolean {
+  return HOMESERV_HOSTNAMES.includes(os.hostname());
+}
+
+/**
+ * Curate requires a full git checkout (worktrees + branches) and a free
+ * port range for per-session dev servers. The production VPS is a stripped
+ * deploy without `.git` — curate cannot run there. Use the homeserv
+ * instance instead: http://homeserv:5173/jkai/curate.
+ */
+function assertHomeserv(): void {
+  if (process.env.CURATE_ALLOW_NON_HOMESERV) return;
+  if (!isOnHomeserv()) {
+    throw new Error(
+      `Curate runs on homeserv only (current host '${os.hostname()}'). ` +
+      `It needs a full git checkout for worktrees + branches, which the prod VPS does not have. ` +
+      `Visit http://homeserv:5173/jkai/curate from the local network instead. ` +
+      `(Override with CURATE_ALLOW_NON_HOMESERV=1 if you really mean to.)`,
+    );
+  }
+}
 
 interface CreateOpts {
   sessionId: string;
@@ -22,6 +47,8 @@ export interface CreatedSession {
 }
 
 export async function createCuratedSession(opts: CreateOpts): Promise<CreatedSession> {
+  assertHomeserv();
+
   // 1. Insert the session row first (id reserved).
   await createSession({
     id: opts.sessionId,
