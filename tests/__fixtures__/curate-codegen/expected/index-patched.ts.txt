@@ -1,0 +1,12 @@
+import { NodeRegistry } from './registry';
+import { gmailSendDef, gmailSendExecutor } from './nodes/gmail-send';
+import { stealthScrapeDef, stealthScrapeExecutor } from './nodes/stealth-scrape';
+import { appleCalendarDef, appleCalendarExecutor } from './nodes/apple-calendar';
+
+export const registry = new NodeRegistry();
+
+registry.register(gmailSendDef, gmailSendExecutor);
+registry.register(stealthScrapeDef, stealthScrapeExecutor);
+registry.register(appleCalendarDef, appleCalendarExecutor);
+
+export type { NodeRegistry };
