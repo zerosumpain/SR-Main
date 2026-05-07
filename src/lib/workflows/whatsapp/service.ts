@@ -354,7 +354,7 @@ export class WhatsAppService {
 				const jid = to.includes('@') ? to : this.toJid(to);
 				const buf = await readBuffer(att.diskPath);
 				const result = await this.sock.sendMessage(jid, { video: buf, mimetype: att.mimeType, caption });
-				return { sent: true, messageId: result?.key?.id };
+				return { sent: true, messageId: result?.key?.id || undefined };
 			} catch (err: unknown) {
 				return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
 			}
