@@ -15,10 +15,18 @@ afterEach(() => {
       .toString().trim().split('\n').filter(Boolean).map((s) => s.trim().replace(/^\* /, ''));
     for (const b of branches) {
       try { execFileSync('git', ['worktree', 'remove', '--force', `${TEST_BASE}/${b.replace('curate/', '')}`], { cwd: process.cwd() }); } catch { /* ignore */ }
-      try { execFileSync('git', ['branch', '-D', b], { cwd: process.cwd() }); } catch { /* ignore */ }
     }
   } catch { /* ignore */ }
   try { fs.rmSync(TEST_BASE, { recursive: true, force: true }); } catch { /* ignore */ }
+  // Prune stale worktree entries so branches can be deleted.
+  try { execFileSync('git', ['worktree', 'prune'], { cwd: process.cwd() }); } catch { /* ignore */ }
+  try {
+    const branches = execFileSync('git', ['branch', '--list', 'curate/test-*'], { cwd: process.cwd() })
+      .toString().trim().split('\n').filter(Boolean).map((s) => s.trim().replace(/^\* /, ''));
+    for (const b of branches) {
+      try { execFileSync('git', ['branch', '-D', b], { cwd: process.cwd() }); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
 });
 
 describe('per-session worktree', () => {

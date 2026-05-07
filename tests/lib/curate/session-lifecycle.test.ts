@@ -1,9 +1,34 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 
 const TEST_BASE = path.join(os.tmpdir(), `curate-life-${Date.now()}`);
 process.env.CURATE_SESSIONS_BASE_OVERRIDE = TEST_BASE;
+
+afterEach(() => {
+  // Clean up any test-life-* worktrees and branches that may have leaked.
+  try {
+    const branches = execFileSync('git', ['branch', '--list', 'curate/test-life-*'], { cwd: process.cwd() })
+      .toString().trim().split('\n').filter(Boolean).map((s) => s.trim().replace(/^\* /, ''));
+    for (const b of branches) {
+      const sessionId = b.replace('curate/', '');
+      const dir = path.join(TEST_BASE, sessionId);
+      try { execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: process.cwd() }); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  try { fs.rmSync(TEST_BASE, { recursive: true, force: true }); } catch { /* ignore */ }
+  // Prune stale worktree entries so branches can be deleted.
+  try { execFileSync('git', ['worktree', 'prune'], { cwd: process.cwd() }); } catch { /* ignore */ }
+  try {
+    const branches = execFileSync('git', ['branch', '--list', 'curate/test-life-*'], { cwd: process.cwd() })
+      .toString().trim().split('\n').filter(Boolean).map((s) => s.trim().replace(/^\* /, ''));
+    for (const b of branches) {
+      try { execFileSync('git', ['branch', '-D', b], { cwd: process.cwd() }); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+});
 
 beforeEach(async () => {
   const { db } = await import('$lib/db');

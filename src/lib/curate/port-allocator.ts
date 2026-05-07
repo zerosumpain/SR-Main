@@ -45,7 +45,9 @@ export async function allocatePort(sessionId: string): Promise<number> {
       return port;
     } catch (err) {
       // Unique-index violation: race lost; try next port.
-      if (String(err).includes('curate_sessions_port_uniq')) continue;
+      // Check both the error itself and its cause chain (Drizzle wraps PG errors).
+      const errStr = String(err) + String((err as any)?.cause ?? '');
+      if (errStr.includes('curate_sessions_port_uniq')) continue;
       throw err;
     }
   }
