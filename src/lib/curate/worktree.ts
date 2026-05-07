@@ -6,14 +6,42 @@ import { CURATE_SESSIONS_BASE, CURATE_TEMPLATE_WORKTREE } from './constants';
 
 const execFileAsync = promisify(execFile);
 
-/** Resolve the project root by walking up from process.cwd() until package.json. */
+/**
+ * Resolve the workspace dir curate operates against — a real git checkout
+ * that we can `git worktree add` from.
+ *
+ * Resolution order:
+ * 1. CURATE_WORKSPACE_DIR env var (set on prod VPS to /opt/curate-workspace)
+ * 2. Walk up from process.cwd() looking for `.git/`
+ *
+ * Throws clearly if neither path lands on a git checkout.
+ */
 function projectRoot(): string {
+  const override = process.env.CURATE_WORKSPACE_DIR;
+  if (override) {
+    if (!fs.existsSync(path.join(override, '.git'))) {
+      throw new Error(
+        `CURATE_WORKSPACE_DIR=${override} is not a git checkout (no .git/). ` +
+        `Clone the repo to that path and run \`npm install\` before starting a curate session.`,
+      );
+    }
+    return override;
+  }
   let dir = process.cwd();
   while (dir !== '/') {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    if (fs.existsSync(path.join(dir, '.git'))) return dir;
+    if (fs.existsSync(path.join(dir, 'package.json')) && !fs.existsSync(path.join(dir, '.git'))) {
+      // Found package.json but no .git — likely a deployed app dir on the VPS.
+      // Tell the user to set CURATE_WORKSPACE_DIR rather than walking past it.
+      throw new Error(
+        `Found a project at ${dir} but it's not a git checkout. ` +
+        `Curate needs a git working tree. ` +
+        `Set CURATE_WORKSPACE_DIR to a path with the cloned repo, or run from a checkout.`,
+      );
+    }
     dir = path.dirname(dir);
   }
-  throw new Error('Could not find project root');
+  throw new Error('Could not find a git checkout (no .git/ in any parent directory)');
 }
 
 /**

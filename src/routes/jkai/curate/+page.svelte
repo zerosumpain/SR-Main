@@ -63,15 +63,6 @@
     <a class="back-link" href="/jkai">← jkai</a>
   </header>
 
-  {#if !data.isHomeserv}
-    <div class="host-banner">
-      <strong>Curate is homeserv-only.</strong>
-      The production VPS doesn't have a git checkout, so worktrees + branches
-      can't be created here. Open this page from homeserv instead:
-      <a href="http://homeserv:5173/jkai/curate">http://homeserv:5173/jkai/curate</a>
-    </div>
-  {/if}
-
   <!-- New curate form -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
@@ -216,22 +207,6 @@
     font-size: 11px;
     color: var(--status-error);
     margin-top: 0.4rem;
-  }
-
-  .host-banner {
-    background: var(--surface-warn, #fff8e1);
-    color: var(--text-primary, #1a1008);
-    border: 1px solid var(--accent, #c9a96e);
-    border-radius: 4px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-  .host-banner strong { display: block; margin-bottom: 0.25rem; }
-  .host-banner a {
-    font-family: var(--font-mono);
-    color: var(--accent);
   }
 
   /* session list */
