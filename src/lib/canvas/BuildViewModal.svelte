@@ -8,6 +8,7 @@
    * Esc collapses; clicking the floating ✕ collapses.
    */
   import { onMount, onDestroy } from 'svelte';
+  import { portal } from './portal';
 
   let {
     src,
@@ -56,7 +57,7 @@
   }
 </script>
 
-<div class="bvm-fs" role="dialog" aria-modal="true" aria-label="Build preview">
+<div class="bvm-fs" use:portal role="dialog" aria-modal="true" aria-label="Build preview">
   <iframe
     bind:this={iframe}
     title="Build preview (full)"

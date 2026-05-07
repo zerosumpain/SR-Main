@@ -314,6 +314,31 @@
     return t;
   }
 
+  /**
+   * Default language hint for line types that go straight into a code block
+   * (no fence parsing). `tool` is JSON if the content parses as JSON,
+   * otherwise plain text — agent tools sometimes return plain prose.
+   */
+  function defaultLangFor(t: string, content: string): string {
+    if (t === 'output') return 'bash';
+    if (t === 'lint') return 'text';
+    if (t === 'error') return 'text';
+    if (t === 'tool' || t === 'code') {
+      const trimmed = content.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try { JSON.parse(trimmed); return 'json'; } catch { /* fall through */ }
+      }
+      return 'text';
+    }
+    return 'text';
+  }
+
+  /** Line types rendered as a single Shiki code block (no fence parsing). */
+  const CODE_BLOCK_TYPES = new Set(['output', 'tool', 'code', 'lint', 'error']);
+  /** Line types that mix prose + parsed code fences (agent narration). */
+  const MIXED_PROSE_TYPES = new Set(['text']);
+
   async function controlAction(action: 'pause' | 'resume' | 'stop' | 'restart'): Promise<void> {
     if (!buildId) return;
     acting = action;
@@ -371,39 +396,56 @@
       <div class="bpn-empty">Listening for activity…</div>
     {:else}
       {#each visibleLines as line (line.id)}
-        {@const blocks = (line.type === 'text' || line.type === 'output' || line.type === 'tool') ? parseBlocks(line.content) : null}
         <div class="bpn-line" data-type={line.type}>
           <span class="bpn-tag">[{tagFor(line.type)}]</span>
-          {#if blocks && blocks.some((b) => b.kind === 'code')}
+          {#if CODE_BLOCK_TYPES.has(line.type)}
             <div class="bpn-content bpn-content-mixed">
-              {#each blocks as b, bi (`${line.id}:${bi}`)}
-                {#if b.kind === 'prose' && b.content.trim().length > 0}
-                  <span class="bpn-prose">{b.content}</span>
-                {:else if b.kind === 'code'}
-                  <ShikiCodeBlock content={b.content} lang={b.lang} />
-                {/if}
-              {/each}
+              <ShikiCodeBlock content={line.content} lang={defaultLangFor(line.type, line.content)} />
             </div>
+          {:else if MIXED_PROSE_TYPES.has(line.type)}
+            {@const blocks = parseBlocks(line.content)}
+            {#if blocks.some((b) => b.kind === 'code')}
+              <div class="bpn-content bpn-content-mixed">
+                {#each blocks as b, bi (`${line.id}:${bi}`)}
+                  {#if b.kind === 'prose' && b.content.trim().length > 0}
+                    <span class="bpn-prose">{b.content}</span>
+                  {:else if b.kind === 'code'}
+                    <ShikiCodeBlock content={b.content} lang={b.lang} />
+                  {/if}
+                {/each}
+              </div>
+            {:else}
+              <span class="bpn-content">{line.content}</span>
+            {/if}
           {:else}
             <span class="bpn-content">{line.content}</span>
           {/if}
         </div>
       {/each}
       {#each liveEntries as [k, b] (k)}
-        {@const lblocks = (b.type === 'text' || b.type === 'output' || b.type === 'tool') ? parseBlocks(b.content) : null}
         <div class="bpn-line bpn-live" data-type={b.type}>
           <span class="bpn-tag">[{tagFor(b.type)}]</span>
-          {#if lblocks && lblocks.some((bl) => bl.kind === 'code')}
+          {#if CODE_BLOCK_TYPES.has(b.type)}
             <div class="bpn-content bpn-content-mixed">
-              {#each lblocks as bl, bi (`${k}:${bi}`)}
-                {#if bl.kind === 'prose' && bl.content.trim().length > 0}
-                  <span class="bpn-prose">{bl.content}</span>
-                {:else if bl.kind === 'code'}
-                  <ShikiCodeBlock content={bl.content} lang={bl.lang} />
-                {/if}
-              {/each}
+              <ShikiCodeBlock content={b.content} lang={defaultLangFor(b.type, b.content)} />
               <span class="bpn-cursor">▊</span>
             </div>
+          {:else if MIXED_PROSE_TYPES.has(b.type)}
+            {@const lblocks = parseBlocks(b.content)}
+            {#if lblocks.some((bl) => bl.kind === 'code')}
+              <div class="bpn-content bpn-content-mixed">
+                {#each lblocks as bl, bi (`${k}:${bi}`)}
+                  {#if bl.kind === 'prose' && bl.content.trim().length > 0}
+                    <span class="bpn-prose">{bl.content}</span>
+                  {:else if bl.kind === 'code'}
+                    <ShikiCodeBlock content={bl.content} lang={bl.lang} />
+                  {/if}
+                {/each}
+                <span class="bpn-cursor">▊</span>
+              </div>
+            {:else}
+              <span class="bpn-content">{b.content}<span class="bpn-cursor">▊</span></span>
+            {/if}
           {:else}
             <span class="bpn-content">{b.content}<span class="bpn-cursor">▊</span></span>
           {/if}
