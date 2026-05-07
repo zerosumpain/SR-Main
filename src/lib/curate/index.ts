@@ -5,3 +5,6 @@ export * from './worktree';
 export * from './dev-server';
 export * from './session-lifecycle';
 export * from './reaper';
+export * from './spec/types';
+export * from './spec/validate';
+export * from './codegen';
