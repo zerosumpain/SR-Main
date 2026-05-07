@@ -73,3 +73,79 @@ describe('integrations/credentials', () => {
     expect(await getCredential('00000000-0000-0000-0000-000000000000')).toBeNull();
   });
 });
+
+describe('ensureFreshAccessToken', () => {
+  it('returns the existing access token when not yet expired', async () => {
+    const { createCredential, ensureFreshAccessToken } = await import('$lib/integrations/credentials');
+    const id = await createCredential({
+      integrationType: `${TEST_TYPE_PREFIX}oauth-fresh`,
+      label: 'fresh',
+      kind: 'oauth2',
+      payload: {
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+        expiresAt: Date.now() + 60 * 60 * 1000,
+      },
+    });
+    const token = await ensureFreshAccessToken(id);
+    expect(token).toBe('access-1');
+  });
+
+  it('refreshes via the adapter when expired', async () => {
+    const { createCredential, ensureFreshAccessToken, getCredential } = await import('$lib/integrations/credentials');
+    const { registerIntegrationAdapter, __clearIntegrationAdapters } = await import('$lib/integrations/registry');
+    __clearIntegrationAdapters();
+    const integrationType = `${TEST_TYPE_PREFIX}oauth-stale`;
+    process.env.TEST_OAUTH_CLIENT_ID = 'cid';
+    process.env.TEST_OAUTH_CLIENT_SECRET = 'csecret';
+    let tokenUrlHit: string | undefined;
+    const originalFetch = global.fetch;
+    global.fetch = (async (url: RequestInfo | URL) => {
+      tokenUrlHit = String(url);
+      return new Response(
+        JSON.stringify({ access_token: 'access-2', refresh_token: 'refresh-2', expires_in: 3600 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+    try {
+      registerIntegrationAdapter({
+        integrationType,
+        oauthSpec: {
+          authorizationUrl: 'https://example.com/auth',
+          tokenUrl: 'https://example.com/token',
+          defaultScopes: [],
+          clientIdEnvVar: 'TEST_OAUTH_CLIENT_ID',
+          clientSecretEnvVar: 'TEST_OAUTH_CLIENT_SECRET',
+        },
+      });
+      const id = await createCredential({
+        integrationType,
+        label: 'stale',
+        kind: 'oauth2',
+        payload: {
+          accessToken: 'access-1',
+          refreshToken: 'refresh-1',
+          expiresAt: Date.now() - 1000,
+        },
+      });
+      const token = await ensureFreshAccessToken(id);
+      expect(token).toBe('access-2');
+      expect(tokenUrlHit).toBe('https://example.com/token');
+      const got = await getCredential(id);
+      expect(got!.payload).toMatchObject({ accessToken: 'access-2', refreshToken: 'refresh-2' });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('throws if credential is not oauth2', async () => {
+    const { createCredential, ensureFreshAccessToken } = await import('$lib/integrations/credentials');
+    const id = await createCredential({
+      integrationType: `${TEST_TYPE_PREFIX}wrong-kind`,
+      label: 'x',
+      kind: 'apikey',
+      payload: { key: 'k' },
+    });
+    await expect(ensureFreshAccessToken(id)).rejects.toThrow(/oauth2/);
+  });
+});
