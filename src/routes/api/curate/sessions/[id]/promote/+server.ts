@@ -7,7 +7,7 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSession } from '$lib/curate/session-store';
-import { transitionStatus } from '$lib/curate/engine';
+import { transitionStatus, runPromotePhase } from '$lib/curate/engine';
 
 export const POST: RequestHandler = async ({ params }) => {
   const session = await getSession(params.id);
@@ -24,9 +24,9 @@ export const POST: RequestHandler = async ({ params }) => {
     throw error(500, `State transition failed: ${msg}`);
   }
 
-  // TODO(curate-phase-7): kick the promote pipeline in the background
-  //   engine.runPromote(params.id).catch(() => undefined);
-  // promote-step events will stream via SSE (pushEvent calls in runPromote).
+  // Fire-and-forget: promote pipeline runs in the background and pushes
+  // promote-step SSE events via the event bus as it progresses.
+  void runPromotePhase(params.id).catch(() => undefined);
 
   return json({ sessionId: params.id, status: 'promoting' });
 };

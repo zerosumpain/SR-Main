@@ -8,7 +8,7 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSession } from '$lib/curate/session-store';
-import { transitionStatus } from '$lib/curate/engine';
+import { transitionStatus, runDiscovery } from '$lib/curate/engine';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const session = await getSession(params.id);
@@ -35,8 +35,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
     throw error(500, `State transition failed: ${msg}`);
   }
 
-  // TODO(curate-phase-7): re-run discovery with the redirect text
-  //   engine.runDiscovery(params.id, { redirectText: text }).catch(() => undefined);
+  // Fire-and-forget: discovery re-runs with the redirect text in the background.
+  void runDiscovery(params.id, { redirectText: text }).catch(() => undefined);
 
   return json({ sessionId: params.id, status: 'discovering', redirect: text });
 };

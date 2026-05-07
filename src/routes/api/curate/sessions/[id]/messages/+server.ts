@@ -7,6 +7,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSession } from '$lib/curate/session-store';
 import { subscribe } from '$lib/curate/event-bus';
+import { runScopeChat, runIteration } from '$lib/curate/engine';
 
 // ── GET — SSE stream ──────────────────────────────────────────────────────
 
@@ -94,14 +95,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const { status } = session;
 
   if (status === 'scoping') {
-    // TODO(curate-phase-7): route to scope chat
-    //   await engine.runScopeChat(params.id, text);
+    // Fire-and-forget: scope chat runs in the background.
+    void runScopeChat(params.id, text).catch(() => undefined);
     return json({ queued: true, routing: 'scope-chat' });
   }
 
   if (status === 'discovering') {
-    // TODO(curate-phase-7): interjection during discovery
-    //   await engine.runIteration(params.id, text);
+    // Fire-and-forget: interjection re-runs discovery in the background.
+    void runIteration(params.id, text).catch(() => undefined);
     return json({ queued: true, routing: 'discovery-interjection' });
   }
 

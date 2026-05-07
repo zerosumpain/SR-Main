@@ -6,7 +6,7 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSession } from '$lib/curate/session-store';
-import { transitionStatus } from '$lib/curate/engine';
+import { transitionStatus, runGeneratePhase } from '$lib/curate/engine';
 
 export const POST: RequestHandler = async ({ params }) => {
   const session = await getSession(params.id);
@@ -23,8 +23,9 @@ export const POST: RequestHandler = async ({ params }) => {
     throw error(500, `State transition failed: ${msg}`);
   }
 
-  // TODO(curate-phase-7): kick generate in the background
-  //   engine.runGenerate(params.id).catch(() => undefined);
+  // Fire-and-forget: generate + live-test chain runs in the background.
+  // The UI subscribes to SSE for phase and test-result events.
+  void runGeneratePhase(params.id).catch(() => undefined);
 
   return json({ sessionId: params.id, status: 'generating' });
 };

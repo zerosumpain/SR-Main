@@ -7,6 +7,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createCuratedSession } from '$lib/curate/session-lifecycle';
 import { listActiveSessions } from '$lib/curate/session-store';
+import { runScopeChat } from '$lib/curate/engine';
 import { randomUUID } from 'node:crypto';
 
 // ── GET ─────────────────────────────────────────────────────────────────
@@ -49,9 +50,11 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(500, `Failed to create curate session: ${msg}`);
   }
 
-  // TODO(curate-phase-7): if initialMessage is present, kick the scope chat:
-  //   engine.runScopeChat(sessionId, initialMessage)
-  // This will be wired once Phase 7 lands.
+  // Fire-and-forget: scope chat runs in the background while the HTTP
+  // response returns immediately. The UI subscribes to SSE for progress.
+  if (initialMessage) {
+    void runScopeChat(sessionId, initialMessage).catch(() => undefined);
+  }
 
   return json({ sessionId }, { status: 201 });
 };
