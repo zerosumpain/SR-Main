@@ -786,7 +786,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       size: { w: 380, h: 440 },
     },
     handles: {
-      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      inputs: [{ id: 'in', kinds: ['trigger-signal', 'text', 'json'] }],
       outputs: [{ id: 'session', kinds: ['build-session'] }],
     },
   },
