@@ -44,8 +44,8 @@ async function seedSession(
 // here to document the intended future option-a interface and to confirm
 // the function signature accepts a fetchFn without error.
 
-function makeMockFetch(responseBody: unknown) {
-  return async (_url: string, _init?: RequestInit): Promise<Response> => {
+function makeMockFetch(responseBody: unknown): typeof fetch {
+  return async (_url: Parameters<typeof fetch>[0], _init?: RequestInit): Promise<Response> => {
     return {
       ok: true,
       status: 200,
