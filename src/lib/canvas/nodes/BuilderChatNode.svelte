@@ -46,10 +46,13 @@
   let {
     nodeId,
     config,
+    emitSchemas = [],
     onConfigChange,
   }: {
     nodeId: string;
     config: ChatConfig;
+    /** Downstream build-view emit schemas, collected by the canvas. */
+    emitSchemas?: string[];
     onConfigChange: (patch: Partial<ChatConfig>) => void;
   } = $props();
   void nodeId;
@@ -136,6 +139,60 @@
     onConfigChange({ history: next });
   }
 
+  /**
+   * Build the data-emission contract block appended to a starting prompt.
+   *
+   * If any downstream build-view nodes have `config.emitSchema` set, that's
+   * the explicit, non-negotiable contract — agent emits exactly those
+   * fields.
+   *
+   * If no schemas are set, fall through to verbose-default — agent decides
+   * what to emit but is told to default to verbose, always include `type`
+   * and `ts`.
+   *
+   * If there's no build-view downstream at all, we don't append anything
+   * (no point asking the agent to emit data nobody's listening for).
+   */
+  function buildEmissionContract(): string {
+    if (!Array.isArray(emitSchemas) || emitSchemas.length === 0) {
+      // Heuristic: this prompt is being kicked off from a canvas with at
+      // least one BuilderChat connected to a BuildView (since this
+      // component only renders inside that context). Default to verbose.
+      return [
+        '',
+        '---',
+        '## Data emission (canvas capture)',
+        '',
+        'This app is rendered inside a canvas Build View that captures `window.parent.postMessage` calls and exposes them to downstream workflow nodes. To make this useful:',
+        '',
+        '- On every meaningful event (button click, state change, computed result, user submission, periodic update), call `window.parent.postMessage(obj, \'*\')`.',
+        '- `obj` must be a JSON-serialisable object with at minimum:',
+        '  - `type`: a short string naming the event (e.g. `"rng"`, `"assignment"`, `"submit"`).',
+        '  - `ts`: `Date.now()`.',
+        '- Plus any data that could plausibly be useful downstream — be **verbose**: include intermediate values, inputs, contextual state, anything you computed. The canvas captures, the workflow filters.',
+        '- Never throw if `window.parent === window` (when the app is opened standalone outside the canvas). Wrap in try/catch.',
+      ].join('\n');
+    }
+    const schemaBlock = emitSchemas
+      .map((s, i) => emitSchemas.length === 1 ? s : `### Schema ${i + 1}\n${s}`)
+      .join('\n\n');
+    return [
+      '',
+      '---',
+      '## Data emission contract (NON-NEGOTIABLE)',
+      '',
+      'This app is rendered inside a canvas Build View that captures `window.parent.postMessage` calls and pipes them to downstream workflow nodes. The downstream nodes expect exactly the following shape:',
+      '',
+      schemaBlock,
+      '',
+      'Implementation requirements:',
+      '- Call `window.parent.postMessage(obj, \'*\')` on every relevant event.',
+      '- `obj` must conform to the schema above. Always include a `ts: Date.now()` field if not already specified.',
+      '- Wrap calls in try/catch so the app still works when opened standalone outside the canvas.',
+      '- Do not omit fields. Do not invent additional top-level fields without good reason. Stick to the contract.',
+    ].join('\n');
+  }
+
   async function fetchSnapshot(): Promise<void> {
     if (!buildId) { snapshot = null; return; }
     try {
@@ -164,11 +221,15 @@
   onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
 
   async function startBuild(promptOverride: string): Promise<void> {
-    const finalPrompt = promptOverride.trim() || prompt.trim();
-    if (!finalPrompt) {
+    const userPrompt = promptOverride.trim() || prompt.trim();
+    if (!userPrompt) {
       lastError = 'Set a prompt in the panel or type one here before starting.';
       return;
     }
+    // Append the data-emission contract (explicit schema or verbose default)
+    // so the agent bakes in window.parent.postMessage emissions the canvas
+    // can capture downstream.
+    const finalPrompt = userPrompt + buildEmissionContract();
     busy = true;
     lastError = null;
     try {
@@ -197,14 +258,16 @@
         lastError = String(data.error ?? `HTTP ${r.status}`);
         return;
       }
-      // Build the new history locally first so we can persist buildId,
-      // prompt, and history in ONE patch — three separate onConfigChange
-      // calls would race against each other (each reads the cached config
-      // before the previous PATCH lands, last write wins, fields get
-      // dropped). That bug clobbered buildId in the first version.
-      let next = appendHistory('user', finalPrompt, 'start');
-      next = appendHistory('system', `Build started · ${data.id.slice(0, 8)}`, 'system');
-      onConfigChange({ buildId: data.id, prompt: finalPrompt, history: next });
+      // History + persisted prompt show the user's *original* outcome, not
+      // the augmented full prompt — keeps the chat scrollback readable and
+      // means the panel/composer pre-fill on next load won't carry the
+      // contract block.
+      let next = appendHistory('user', userPrompt, 'start');
+      const contractApplied = emitSchemas.length > 0
+        ? `Data emission contract applied (${emitSchemas.length} schema${emitSchemas.length === 1 ? '' : 's'})`
+        : 'Verbose-default emission instruction applied';
+      next = appendHistory('system', `${contractApplied} · build ${data.id.slice(0, 8)}`, 'system');
+      onConfigChange({ buildId: data.id, prompt: userPrompt, history: next });
       void fetchSnapshot();
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);

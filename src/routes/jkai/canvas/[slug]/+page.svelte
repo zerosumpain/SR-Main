@@ -584,6 +584,43 @@
   }
 
   /**
+   * Walk downstream from a builder-chat node and collect any non-empty
+   * `emitSchema` strings configured on connected build-view nodes. The
+   * BuilderChat composer auto-injects these as a "Data emission contract"
+   * section in the build prompt so the agent emits postMessage data the
+   * canvas can capture.
+   *
+   * Walks via BFS up to a small depth so the common chain
+   * Chat → Pi → View resolves; explicit Chat → View also works.
+   */
+  function collectDownstreamEmitSchemas(chatNodeId: string): string[] {
+    const out: string[] = [];
+    const visited = new Set<string>([chatNodeId]);
+    const frontier: string[] = [chatNodeId];
+    let depth = 0;
+    while (frontier.length && depth < 4) {
+      const next: string[] = [];
+      for (const cur of frontier) {
+        for (const e of canvas.edges) {
+          if (e.from !== cur || visited.has(e.to)) continue;
+          visited.add(e.to);
+          const downstream = byId[e.to];
+          if (!downstream) continue;
+          if (downstream.type === 'build-view') {
+            const schema = (downstream.config as Record<string, unknown> | undefined)?.emitSchema;
+            if (typeof schema === 'string' && schema.trim()) out.push(schema.trim());
+          }
+          next.push(e.to);
+        }
+      }
+      frontier.length = 0;
+      frontier.push(...next);
+      depth += 1;
+    }
+    return out;
+  }
+
+  /**
    * Upstream input data for a build-view node — last outputData of any
    * upstream node connected via the data input handle. Used when the node
    * is configured to forward upstream data into the iframe.
@@ -3323,6 +3360,7 @@
                 <BuilderChatNode
                   nodeId={n.id}
                   config={(n.config as Record<string, unknown>) ?? {}}
+                  emitSchemas={collectDownstreamEmitSchemas(n.id)}
                   onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
                 />
               {:else if n.type === 'builder-pi'}

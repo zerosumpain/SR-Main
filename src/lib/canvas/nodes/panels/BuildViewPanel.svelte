@@ -22,6 +22,7 @@
   const expandable = $derived(config.expandable !== false);
   const sendUpstream = $derived(config.sendUpstream === true);
   const exposeOutputs = $derived(config.exposeOutputs !== false);
+  const emitSchema = $derived(String(config.emitSchema ?? ''));
 
   let showRawJson = $state(false);
 </script>
@@ -99,12 +100,35 @@
     </label>
   </section>
 
+  <!-- Emit schema (data contract injected into the build prompt) -->
+  <section class="bvp-sec">
+    <header class="bvp-sec-hdr">
+      <span class="sr-label-tight">Emit schema</span>
+      <span class="bvp-sec-meta">leave blank for verbose default</span>
+    </header>
+    <label class="bvp-field">
+      <textarea
+        class="bvp-code"
+        rows="6"
+        spellcheck="false"
+        placeholder={'{ "type": "assignment", "day": "number", "sausage": "string", "darlingtonTempC": "number" }\n\nor freeform:\n  - day (1-31)\n  - sausage variety\n  - Darlington temperature in °C'}
+        value={emitSchema}
+        oninput={(e) => set('emitSchema', (e.currentTarget as HTMLTextAreaElement).value)}
+      ></textarea>
+      <span class="bvp-hint">
+        When set, this is auto-injected into the build prompt as a non-negotiable data-emission contract: the agent must call <code>window.parent.postMessage(obj, '*')</code> for every relevant event with this shape.
+        When blank, the prompt instructs the agent to emit verbosely on its own — include a <code>type</code>, a <code>ts</code>, and anything useful downstream.
+        JSON or freeform; the agent reads it as written.
+      </span>
+    </label>
+  </section>
+
   <!-- Notes -->
   <section class="bvp-sec bvp-sec-quiet">
     <header class="bvp-sec-hdr"><span class="sr-label-tight">Output shape</span></header>
     <p class="bvp-empty">
       Output handle <code>out</code> emits
-      <code>{`{ buildId, status, publishedSlug, previewUrl, serveConfig, completedAt, tokensUsed, costUsd, iterationsCompleted }`}</code> when the build is queried — useful for downstream nodes capturing the build's deliverables.
+      <code>{`{ buildId, workflowName, status, publishedSlug, previewUrl, serveConfig, updatedAt, tokensUsed, costUsd, iterationsCompleted, value, receivedCount }`}</code> when the build is queried — useful for downstream nodes capturing the build's deliverables.
       The iframe receives any upstream JSON via <code>window.postMessage(data, '*')</code> when <em>Forward upstream data</em> is on.
     </p>
   </section>
