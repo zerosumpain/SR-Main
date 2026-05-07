@@ -1,0 +1,26 @@
+import type { Component } from 'svelte';
+import GmailSendPanel from './GmailSendPanel.svelte';
+import StealthScrapePanel from './StealthScrapePanel.svelte';
+import BasicConfigForm from './BasicConfigForm.svelte';
+import GenericJsonPanel from './GenericJsonPanel.svelte';
+import AppleCalendarPanel from './AppleCalendarPanel.svelte';
+import type { NodeDefinition } from '$lib/workflows/types';
+
+export type PanelProps = {
+  config: Record<string, unknown>;
+  onChange: (config: Record<string, unknown>) => void;
+  definition?: NodeDefinition;
+  nodeId?: string;
+  workflowId?: string;
+  upstreamFields?: string[];
+};
+
+const specialized: Record<string, Component<PanelProps>> = {
+  'gmail-send': GmailSendPanel as unknown as Component<PanelProps>,
+  'stealth-scrape': StealthScrapePanel as unknown as Component<PanelProps>,
+  'apple-calendar': AppleCalendarPanel as unknown as Component<PanelProps>,
+};
+
+export function getPanel(type: string, definition?: NodeDefinition): Component<PanelProps> {
+  return specialized[type] ?? (definition?.basicConfig ? BasicConfigForm as unknown as Component<PanelProps> : GenericJsonPanel as unknown as Component<PanelProps>);
+}
