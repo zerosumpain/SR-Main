@@ -54,7 +54,12 @@ export class WhatsAppService {
 	}
 
 	toJid(phoneNumber: string): string {
-		const cleaned = phoneNumber.replace(/^\+/, '');
+		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7359228511",
+		// "+44 (0) 7359 228511", "+44-7359-228511") all collapse to the
+		// digits-only form Baileys/WhatsApp expects. Leaving a space in here
+		// produces an invalid JID — the server silently drops the send and
+		// Baileys logs "timed out waiting for message".
+		const cleaned = phoneNumber.replace(/\D+/g, '');
 		return `${cleaned}@s.whatsapp.net`;
 	}
 
