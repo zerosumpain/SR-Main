@@ -1,8 +1,11 @@
 <script lang="ts">
   /**
-   * Full-screen overlay for BuildViewNode. Renders the same iframe at viewport
-   * size so the user can interact with the in-progress app comfortably.
-   * Esc closes; clicking the dimmed backdrop closes; Close button closes.
+   * Full-screen overlay for BuildViewNode. Renders the iframe at the full
+   * viewport size with a single floating control cluster in the bottom-right
+   * (reload + open-in-tab + collapse). No header bar, no padding — gives
+   * the in-progress app the most room possible.
+   *
+   * Esc collapses; clicking the floating ✕ collapses.
    */
   import { onMount, onDestroy } from 'svelte';
 
@@ -53,106 +56,89 @@
   }
 </script>
 
-<div
-  class="bvm-backdrop"
-  role="dialog"
-  aria-modal="true"
-  aria-label="Build preview"
-  onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
->
-  <div class="bvm-shell">
-    <header class="bvm-bar">
-      <span class="bvm-label">BUILD VIEW</span>
-      <code class="bvm-id">{buildId.slice(0, 8)}</code>
-      <span class="bvm-spacer"></span>
-      <a class="bvm-link" href={src} target="_blank" rel="noreferrer" title="Open in new tab">↗ open in tab</a>
-      <button class="bvm-btn" type="button" onclick={reload} title="Reload">⟳ reload</button>
-      <button class="bvm-btn bvm-close" type="button" onclick={onClose} title="Close (Esc)">✕ close</button>
-    </header>
-    <div class="bvm-frame">
-      <iframe
-        bind:this={iframe}
-        title="Build preview (full)"
-        src={src}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-      ></iframe>
-    </div>
+<div class="bvm-fs" role="dialog" aria-modal="true" aria-label="Build preview">
+  <iframe
+    bind:this={iframe}
+    title="Build preview (full)"
+    src={src}
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+  ></iframe>
+
+  <!-- Floating control cluster, bottom-right. Tab order: reload, open, collapse. -->
+  <div class="bvm-fab">
+    <code class="bvm-id" title="Build id">{buildId.slice(0, 8)}</code>
+    <a class="bvm-iconlink" href={src} target="_blank" rel="noreferrer" title="Open in new tab">↗</a>
+    <button class="bvm-iconbtn" type="button" onclick={reload} title="Reload" aria-label="Reload">⟳</button>
+    <button
+      class="bvm-iconbtn bvm-collapse"
+      type="button"
+      onclick={onClose}
+      title="Collapse (Esc)"
+      aria-label="Collapse"
+    >▾ collapse</button>
   </div>
 </div>
 
 <style>
-  .bvm-backdrop {
+  .bvm-fs {
     position: fixed;
     inset: 0;
     z-index: 9000;
-    background: color-mix(in srgb, #000 70%, transparent);
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    padding: 1.5rem;
-    box-sizing: border-box;
-  }
-  .bvm-shell {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
     background: var(--bg, #ede4d4);
-    border: 2px solid var(--text-primary, #1f1c18);
-    box-shadow: 0 16px 48px color-mix(in srgb, #000 50%, transparent);
-    min-height: 0;
+    display: block; /* iframe fills via 100vw/100vh */
   }
-  .bvm-bar {
-    display: flex;
+  .bvm-fs iframe {
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    display: block;
+  }
+  .bvm-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    display: inline-flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--card-border);
-    flex-shrink: 0;
-  }
-  .bvm-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: var(--text-primary);
+    gap: 0.4rem;
+    padding: 6px 8px;
+    border: 1px solid var(--text-primary, #1f1c18);
+    background: var(--bg, #ede4d4);
+    box-shadow: 0 4px 18px color-mix(in srgb, #000 28%, transparent);
+    z-index: 9001;
   }
   .bvm-id {
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .bvm-spacer { flex: 1; }
-  .bvm-link {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent);
-    text-decoration: none;
-  }
-  .bvm-link:hover { text-decoration: underline; }
-  .bvm-btn {
-    font-family: var(--font-mono);
     font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 5px 11px;
+    color: var(--text-muted);
+    padding-right: 4px;
+    border-right: 1px dashed var(--card-border);
+  }
+  .bvm-iconlink,
+  .bvm-iconbtn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 9px;
     border: 1px solid var(--text-primary);
     background: var(--bg);
     color: var(--text-primary);
     cursor: pointer;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
-  .bvm-btn:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-  .bvm-close { color: var(--status-error, #c0392b); border-color: var(--status-error, #c0392b); }
-  .bvm-close:hover { background: var(--status-error, #c0392b); color: var(--bg); }
-  .bvm-frame {
-    flex: 1;
-    min-height: 0;
-    background: #fff;
-    position: relative;
+  .bvm-iconlink:hover,
+  .bvm-iconbtn:hover {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
   }
-  .bvm-frame iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    display: block;
+  .bvm-collapse {
+    color: var(--status-error, #c0392b);
+    border-color: var(--status-error, #c0392b);
+  }
+  .bvm-collapse:hover {
+    background: var(--status-error, #c0392b);
+    color: var(--bg);
   }
 </style>

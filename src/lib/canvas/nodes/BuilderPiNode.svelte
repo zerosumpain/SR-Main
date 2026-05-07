@@ -15,6 +15,7 @@
    * destroyed.
    */
   import { onDestroy } from 'svelte';
+  import ShikiCodeBlock from './ShikiCodeBlock.svelte';
 
   type PiConfig = {
     buildId?: string;
@@ -287,18 +288,6 @@
     return out;
   }
 
-  let copiedKey = $state<string | null>(null);
-  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
-  async function copyCode(key: string, content: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(content);
-      copiedKey = key;
-      if (copyResetTimer) clearTimeout(copyResetTimer);
-      copyResetTimer = setTimeout(() => { copiedKey = null; }, 1400);
-    } catch {
-      // Older browsers fall back to a transient textarea — not worth it here.
-    }
-  }
 
   const visibleLines = $derived.by(() => {
     const showThinking = config.showThinking !== false;
@@ -391,19 +380,7 @@
                 {#if b.kind === 'prose' && b.content.trim().length > 0}
                   <span class="bpn-prose">{b.content}</span>
                 {:else if b.kind === 'code'}
-                  {@const ck = `${line.id}:${bi}`}
-                  <div class="bpn-code">
-                    <header class="bpn-code-hdr">
-                      <span class="bpn-code-lang">{b.lang ?? 'code'}</span>
-                      <button
-                        type="button"
-                        class="bpn-code-copy"
-                        onclick={() => copyCode(ck, b.content)}
-                        title="Copy"
-                      >{copiedKey === ck ? '✓ copied' : 'copy'}</button>
-                    </header>
-                    <pre class="bpn-code-pre"><code>{b.content}</code></pre>
-                  </div>
+                  <ShikiCodeBlock content={b.content} lang={b.lang} />
                 {/if}
               {/each}
             </div>
@@ -422,19 +399,7 @@
                 {#if bl.kind === 'prose' && bl.content.trim().length > 0}
                   <span class="bpn-prose">{bl.content}</span>
                 {:else if bl.kind === 'code'}
-                  {@const ck = `${k}:${bi}`}
-                  <div class="bpn-code">
-                    <header class="bpn-code-hdr">
-                      <span class="bpn-code-lang">{bl.lang ?? 'code'}</span>
-                      <button
-                        type="button"
-                        class="bpn-code-copy"
-                        onclick={() => copyCode(ck, bl.content)}
-                        title="Copy"
-                      >{copiedKey === ck ? '✓ copied' : 'copy'}</button>
-                    </header>
-                    <pre class="bpn-code-pre"><code>{bl.content}</code></pre>
-                  </div>
+                  <ShikiCodeBlock content={bl.content} lang={bl.lang} />
                 {/if}
               {/each}
               <span class="bpn-cursor">▊</span>
@@ -570,57 +535,5 @@
   .bpn-prose {
     white-space: pre-wrap;
     word-break: break-word;
-  }
-  .bpn-code {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    margin: 0.1rem 0;
-    overflow: hidden;
-  }
-  .bpn-code-hdr {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--card-border);
-    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  }
-  .bpn-code-lang {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-  }
-  .bpn-code-copy {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 2px 8px;
-    border: 1px solid var(--card-border);
-    background: var(--bg);
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-  .bpn-code-copy:hover { color: var(--accent); border-color: var(--accent); }
-  .bpn-code-pre {
-    margin: 0;
-    padding: 8px 10px;
-    background: var(--bg);
-    color: var(--text-primary);
-    font-family: var(--font-mono), 'Menlo', 'Monaco', monospace;
-    font-size: 11px;
-    line-height: 1.55;
-    overflow-x: auto;
-    white-space: pre;
-  }
-  .bpn-code-pre code {
-    font-family: inherit;
-    font-size: inherit;
-    background: transparent;
-    padding: 0;
   }
 </style>
