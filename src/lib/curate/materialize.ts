@@ -9,7 +9,7 @@
 // runGenerate() takes over.
 
 import { getSession, updateSession } from './session-store';
-import { oneShot } from './llm-client';
+import { streamChat } from './llm-client';
 import { MATERIALIZE_SYSTEM_PROMPT } from './prompts/materialize';
 import { validateNodeSpec } from './spec/validate';
 import type { NodeSpec } from './spec/types';
@@ -18,6 +18,10 @@ import type { NodeSpec } from './spec/types';
  * Materialize a NodeSpec from the session's stored proposal. Saves the
  * resulting NodeSpec to session.nodeSpec on success. Throws on validation
  * or LLM failure (caller surfaces the error).
+ *
+ * Uses streamChat (not oneShot) — non-streaming returns are unreliable
+ * for very long outputs across some gateway models; the streamed pathway
+ * accumulates text deltas robustly.
  */
 export async function materializeNodeSpec(sessionId: string): Promise<NodeSpec> {
   const session = await getSession(sessionId);
@@ -27,19 +31,30 @@ export async function materializeNodeSpec(sessionId: string): Promise<NodeSpec> 
   }
 
   const proposalJson = JSON.stringify(session.proposal, null, 2);
-  const userPrompt = `Approved proposal:\n\n${proposalJson}\n\nProduce the full NodeSpec JSON now.`;
+  const userPrompt = `Approved proposal:\n\n${proposalJson}\n\nProduce the full NodeSpec JSON now. Output ONLY the JSON object, no prose, no fences.`;
 
-  const raw = await oneShot({
+  let raw = '';
+  for await (const chunk of streamChat({
     system: MATERIALIZE_SYSTEM_PROMPT,
-    prompt: userPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
     max_tokens: 8192,
-  });
+  })) {
+    if (chunk.type === 'text') raw += chunk.delta;
+  }
+
+  if (!raw.trim()) {
+    throw new Error(
+      `Materialize LLM returned empty content. Likely max_tokens hit by reasoning, ` +
+      `model unavailable, or content filter. Try again or check the gateway model setting.`,
+    );
+  }
 
   const spec = parseNodeSpecJson(raw);
   const validation = validateNodeSpec(spec);
   if (!validation.ok) {
     throw new Error(
-      `Materialized NodeSpec failed validation:\n${validation.errors.join('\n')}\n\nLLM output (first 500 chars):\n${raw.slice(0, 500)}`,
+      `Materialized NodeSpec failed validation:\n${validation.errors.join('\n')}\n\n` +
+      `Raw LLM output (${raw.length} chars, first 800):\n${raw.slice(0, 800)}`,
     );
   }
 
