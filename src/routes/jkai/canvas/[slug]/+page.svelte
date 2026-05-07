@@ -2520,6 +2520,21 @@
       } else if (e.key === '/' && !typing) {
         e.preventDefault();
         openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+      } else if (!typing && (e.key === 'f' || e.key === 'F') && !metaKey) {
+        // Fit canvas — recovery shortcut when the toolbar is hidden behind
+        // an extreme zoom level.
+        e.preventDefault();
+        fit();
+      } else if (!typing && e.key === '0' && !metaKey) {
+        // Reset pan + zoom to 1× / origin.
+        e.preventDefault();
+        reset();
+      } else if (!typing && (e.key === '+' || e.key === '=') && !metaKey) {
+        e.preventDefault();
+        zoomCentered(1.2);
+      } else if (!typing && (e.key === '-' || e.key === '_') && !metaKey) {
+        e.preventDefault();
+        zoomCentered(1 / 1.2);
       }
     }
     window.addEventListener('keydown', onGlobalKey);
