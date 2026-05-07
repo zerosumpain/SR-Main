@@ -140,7 +140,7 @@ async function persistAndEmitMessage(
   const existing = (session.iterationLog ?? []) as unknown[];
   await updateSession(sessionId, { iterationLog: [...existing, entry] });
 
-  pushEvent(sessionId, { type: 'msg', role, content });
+  pushEvent(sessionId, { type: 'msg', role, text: content });
 }
 
 /**
@@ -162,11 +162,14 @@ function buildChatHistory(iterationLog: unknown[]): ChatMessage[] {
  * Exported for unit testing.
  */
 export function extractGoal(text: string): string | null {
+  // Tolerates markdown bold (**GOAL:**), italics (*GOAL:*), bullet/list
+  // prefixes (-, *, >), and surrounding backticks. The model sometimes
+  // wraps the marker for emphasis even when the system prompt asks for
+  // plain text — match permissively, then strip the prefix.
+  const re = /^[\s>*\-`]*\**\s*GOAL\s*:\s*\**\s*(.+?)\s*\**\s*$/i;
   for (const line of text.split('\n')) {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith('GOAL:')) {
-      return trimmed.slice('GOAL:'.length).trim();
-    }
+    const m = line.match(re);
+    if (m && m[1]) return m[1].trim();
   }
   return null;
 }
@@ -320,7 +323,11 @@ export async function runScopeChat(sessionId: string, userMessage: string): Prom
 
   const history = buildChatHistory((session.iterationLog ?? []) as unknown[]);
 
-  // Stream the LLM response.
+  // Stream the LLM response. We accumulate deltas locally and only emit
+  // the full message at the end via persistAndEmitMessage — the UI doesn't
+  // do per-token streaming yet, so emitting partial deltas just produces
+  // empty chat rows. (A future delta-friendly UI can opt into msg-delta
+  // events.)
   let assistantText = '';
   for await (const chunk of streamChat({
     system: SCOPE_SYSTEM_PROMPT,
@@ -329,7 +336,6 @@ export async function runScopeChat(sessionId: string, userMessage: string): Prom
   })) {
     if (chunk.type === 'text') {
       assistantText += chunk.delta;
-      pushEvent(sessionId, { type: 'msg', role: 'assistant', delta: chunk.delta });
     }
   }
 
@@ -528,7 +534,7 @@ export async function runIteration(sessionId: string, userText: string): Promise
   const existing = (session.iterationLog ?? []) as unknown[];
   await updateSession(sessionId, { iterationLog: [...existing, entry] });
 
-  pushEvent(sessionId, { type: 'msg', role: 'user', content: userText });
+  pushEvent(sessionId, { type: 'msg', role: 'user', text: userText });
 
   await runDiscovery(sessionId, { redirectText: userText });
 }

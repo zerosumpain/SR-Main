@@ -39,6 +39,19 @@ GOAL: Fetch events from an Apple Calendar account using CalDAV.`;
     expect(extractGoal(text)).toBe('First goal.');
   });
 
+  it('tolerates markdown bold around the GOAL marker (**GOAL:**)', () => {
+    const text =
+      'Some clarifying preamble.\n\n**GOAL:** Read and write iCloud calendar events via CalDAV.';
+    expect(extractGoal(text)).toBe(
+      'Read and write iCloud calendar events via CalDAV.',
+    );
+  });
+
+  it('tolerates list/quote prefixes ("- GOAL:", "> GOAL:")', () => {
+    expect(extractGoal('- GOAL: Pull weather data.')).toBe('Pull weather data.');
+    expect(extractGoal('> GOAL: Pull weather data.')).toBe('Pull weather data.');
+  });
+
   it('trims trailing whitespace from the extracted goal', () => {
     const text = 'GOAL:   Lots of trailing spaces.   ';
     expect(extractGoal(text)).toBe('Lots of trailing spaces.');
