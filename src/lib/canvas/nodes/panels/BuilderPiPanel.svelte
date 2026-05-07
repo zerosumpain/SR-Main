@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
+  import { onMount, onDestroy } from 'svelte';
 
   let {
     config,
@@ -24,9 +25,132 @@
   const autoScroll = $derived(config.autoScroll !== false);
 
   let showRawJson = $state(false);
+
+  // ─── Live builds list ────────────────────────────────────────────────
+  // Polls /api/jkai/builds every 5s, filters to non-terminal builds, and
+  // renders a control panel inline so the user can pause/resume/stop/cancel
+  // any in-flight build without opening /jkai/builds.
+  type Build = {
+    id: string;
+    title: string | null;
+    prompt: string;
+    status: string;
+    iterationsCompleted: number;
+    createdAt: string;
+    queuedAt: string | null;
+  };
+  const NON_TERMINAL = new Set([
+    'pending', 'queued', 'running', 'paused',
+    'awaiting_plan_approval', 'awaiting_iter_approval',
+  ]);
+
+  let builds = $state<Build[]>([]);
+  let lastError = $state<string | null>(null);
+  let acting = $state<Record<string, string | null>>({}); // buildId → action in flight
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  async function refreshBuilds(): Promise<void> {
+    try {
+      const r = await fetch('/api/jkai/builds');
+      if (!r.ok) { lastError = `HTTP ${r.status}`; return; }
+      const all = await r.json() as Build[];
+      builds = all.filter((b) => NON_TERMINAL.has(b.status));
+      lastError = null;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function postAction(id: string, action: 'pause' | 'resume' | 'stop' | 'restart' | 'cancel-queue'): Promise<void> {
+    acting = { ...acting, [id]: action };
+    try {
+      const r = await fetch(`/api/jkai/builds/${id}/${action}`, { method: 'POST' });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        lastError = String(body?.error ?? `HTTP ${r.status}`);
+      } else {
+        lastError = null;
+      }
+      await refreshBuilds();
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    } finally {
+      acting = { ...acting, [id]: null };
+    }
+  }
+
+  function attach(id: string): void { set('buildId', id); }
+
+  function fmtRelative(iso: string | null): string {
+    if (!iso) return '—';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 0) return 'just now';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  onMount(() => {
+    void refreshBuilds();
+    pollTimer = setInterval(refreshBuilds, 5000);
+  });
+  onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
 </script>
 
 <div class="bpp">
+  <!-- Active builds — live list of non-terminal jobs the builder is processing -->
+  <section class="bpp-sec">
+    <header class="bpp-sec-hdr">
+      <span class="sr-label-tight">Active builds</span>
+      <span class="bpp-sec-meta">{builds.length} live · refresh ~5s{#if lastError} · <span class="bpp-err">{lastError}</span>{/if}</span>
+    </header>
+    {#if builds.length === 0}
+      <p class="bpp-empty">No running, queued, paused, or awaiting-approval builds.</p>
+    {:else}
+      <ul class="bpp-builds">
+        {#each builds as b (b.id)}
+          {@const active = acting[b.id] ?? null}
+          {@const attached = buildId === b.id}
+          <li class="bpp-build" class:attached>
+            <header class="bpp-build-hdr">
+              <span class="bpp-pill" data-status={b.status}>{b.status.replace(/_/g, ' ')}</span>
+              <code class="bpp-build-id" title={b.id}>{b.id.slice(0, 8)}</code>
+              <span class="bpp-build-iter">iter {b.iterationsCompleted}</span>
+              <span class="bpp-build-when">{fmtRelative(b.queuedAt ?? b.createdAt)}</span>
+              {#if attached}<span class="bpp-attached">● attached</span>{/if}
+            </header>
+            <div class="bpp-build-title">{b.title ?? b.prompt.slice(0, 70)}</div>
+            <div class="bpp-build-acts">
+              {#if !attached}
+                <button type="button" class="bpp-bbtn" onclick={() => attach(b.id)}>attach</button>
+              {/if}
+              {#if b.status === 'running'}
+                <button type="button" class="bpp-bbtn" disabled={active !== null} onclick={() => postAction(b.id, 'pause')}>pause</button>
+                <button type="button" class="bpp-bbtn bpp-bbtn-danger" disabled={active !== null} onclick={() => postAction(b.id, 'stop')}>stop</button>
+              {:else if b.status === 'paused'}
+                <button type="button" class="bpp-bbtn bpp-bbtn-primary" disabled={active !== null} onclick={() => postAction(b.id, 'resume')}>resume</button>
+                <button type="button" class="bpp-bbtn bpp-bbtn-danger" disabled={active !== null} onclick={() => postAction(b.id, 'stop')}>stop</button>
+              {:else if b.status === 'queued'}
+                <button type="button" class="bpp-bbtn bpp-bbtn-danger" disabled={active !== null} onclick={() => postAction(b.id, 'cancel-queue')}>cancel</button>
+              {:else if b.status === 'awaiting_plan_approval' || b.status === 'awaiting_iter_approval'}
+                <button type="button" class="bpp-bbtn bpp-bbtn-danger" disabled={active !== null} onclick={() => postAction(b.id, 'stop')}>stop</button>
+              {/if}
+              {#if active}<span class="bpp-build-spinner">{active}…</span>{/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <p class="bpp-hint">
+      Pause / Stop are graceful — the builder finishes the current tool call before parking, mid-write file edits are not destroyed.
+      Cancel is for queued builds that haven't started.
+    </p>
+  </section>
+
   <!-- Build target -->
   <section class="bpp-sec">
     <header class="bpp-sec-hdr">
@@ -171,4 +295,110 @@
     padding-top: 8px;
   }
   .bpp-raw summary { cursor: pointer; }
+
+  /* Active-builds list */
+  .bpp-err { color: var(--status-error, #c0392b); }
+  .bpp-builds {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bpp-build {
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bpp-build.attached {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .bpp-build-hdr {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .bpp-pill {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    color: var(--text-muted);
+  }
+  .bpp-pill[data-status='running'] { color: var(--accent); }
+  .bpp-pill[data-status='queued'] { color: var(--text-ghost); }
+  .bpp-pill[data-status='paused'] { color: var(--text-muted); }
+  .bpp-pill[data-status='awaiting_plan_approval'],
+  .bpp-pill[data-status='awaiting_iter_approval'] { color: #d28a3a; }
+  .bpp-build-id {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .bpp-build-iter,
+  .bpp-build-when {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    font-variant-numeric: tabular-nums;
+  }
+  .bpp-attached {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-left: auto;
+  }
+  .bpp-build-title {
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bpp-build-acts {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .bpp-bbtn {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 3px 8px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .bpp-bbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .bpp-bbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .bpp-bbtn-primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .bpp-bbtn-primary:hover { color: var(--bg); }
+  .bpp-bbtn-danger { border-color: var(--status-error, #c0392b); color: var(--status-error, #c0392b); }
+  .bpp-bbtn-danger:hover {
+    background: var(--status-error, #c0392b);
+    color: var(--bg);
+  }
+  .bpp-build-spinner {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    align-self: center;
+    margin-left: auto;
+  }
 </style>
