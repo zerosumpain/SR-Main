@@ -37,6 +37,7 @@
     { href: '/jkai/intel', label: 'Intel' },
     { href: '/jkai/research', label: 'Research' },
     { href: '/jkai/builds', label: 'Builds' },
+    { href: '/jkai/curate', label: 'Curate' },
     { href: '/jkai/prompts', label: 'Prompts' },
     { href: '/jkai/canvas', label: 'Canvases' },
     { href: '/jkai/channels', label: 'Channels' },
