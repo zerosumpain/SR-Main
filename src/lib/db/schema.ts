@@ -1442,3 +1442,43 @@ export const scheduledCallbacks = pgTable(
 
 export type ScheduledCallback = typeof scheduledCallbacks.$inferSelect;
 export type NewScheduledCallback = typeof scheduledCallbacks.$inferInsert;
+
+// ── Integrations ────────────────────────────────────────────────────────
+
+export const integrationCredentials = pgTable('integration_credentials', {
+  id: text('id').primaryKey(), // uuid (caller-provided via crypto.randomUUID())
+  integrationType: text('integration_type').notNull(),
+  label: text('label').notNull(),
+  kind: text('kind').notNull(), // 'apikey' | 'basic' | 'oauth2'
+  // Encrypted JSON: format `${iv-hex}:${tag-hex}:${ciphertext-hex}` produced
+  // by src/lib/integrations/crypto.ts. Shape of the decrypted JSON depends
+  // on `kind` — see CredentialPayload<K> in src/lib/integrations/types.ts.
+  payloadEnc: text('payload_enc').notNull(),
+  // Non-secret config (e.g. CalDAV server URL, OAuth callback override).
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  // Health tracking — written by /api/integrations/test/[integrationType].
+  lastTestedAt: timestamp('last_tested_at'),
+  lastTestStatus: text('last_test_status'), // 'ok' | 'failed' | null
+  lastTestError: text('last_test_error'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byType: index('integration_credentials_type_idx').on(t.integrationType),
+}));
+
+export const integrationOauthConfigs = pgTable('integration_oauth_configs', {
+  integrationType: text('integration_type').primaryKey(),
+  authorizationUrl: text('authorization_url').notNull(),
+  tokenUrl: text('token_url').notNull(),
+  defaultScopes: jsonb('default_scopes').$type<string[]>().notNull().default([]),
+  clientIdEnvVar: text('client_id_env_var').notNull(),
+  clientSecretEnvVar: text('client_secret_env_var').notNull(),
+  // Used to construct the absolute callback URL when redirecting to the
+  // provider. Defaults to env.PUBLIC_BASE_URL + the generic callback path.
+  callbackUrlOverride: text('callback_url_override'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type IntegrationCredentialRow = typeof integrationCredentials.$inferSelect;
+export type IntegrationOauthConfigRow = typeof integrationOauthConfigs.$inferSelect;
