@@ -41,20 +41,26 @@
 </script>
 
 <div class="bcp">
-  <!-- Build outcome -->
+  <!-- Build outcome — primary input is the chat body; this is the default. -->
   <section class="bcp-sec">
-    <header class="bcp-sec-hdr"><span class="sr-label-tight">Build outcome</span></header>
+    <header class="bcp-sec-hdr">
+      <span class="sr-label-tight">Default outcome</span>
+      <span class="bcp-sec-meta">edit in the chat node — this is the seed</span>
+    </header>
     <label class="bcp-field">
-      <span class="bcp-label">Prompt <span class="bcp-req">required</span></span>
+      <span class="bcp-label">Prompt</span>
       <textarea
         class="bcp-code"
-        rows="6"
+        rows="5"
         spellcheck="false"
         placeholder={'Build me a calculator with history…'}
         value={prompt}
         oninput={(e) => set('prompt', (e.currentTarget as HTMLTextAreaElement).value)}
       ></textarea>
-      <span class="bcp-hint">Sent to the build engine on Start. Edit anytime before starting.</span>
+      <span class="bcp-hint">
+        The chat node pre-fills its composer with this. Edit there and press ⏎ to start.
+        This field is also what programmatic workflow runs send (with template support).
+      </span>
     </label>
     {#if buildId}
       <div class="bcp-buildid">

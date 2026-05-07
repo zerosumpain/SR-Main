@@ -15,7 +15,7 @@
    * canvas is open; closing/reopening the canvas re-attaches via buildId
    * persisted on this node's config.
    */
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
 
   type ChatConfig = {
     prompt?: string;
@@ -88,7 +88,36 @@
     Array.isArray(config.history) ? config.history.slice(-50) : [],
   );
 
-  function pushHistory(role: 'user' | 'system', content: string, kind?: string): void {
+  // Pre-fill the composer with the configured prompt so users see the outcome
+  // they're about to start. Only runs once on mount (when no buildId yet and
+  // the input is empty). Writes are wrapped in untrack so reassigning the
+  // input $state doesn't retrack the new proxy and re-fire the effect on
+  // its own output (Svelte-5 proxy churn).
+  let prefilledOnce = false;
+  $effect(() => {
+    const p = prompt;
+    const bId = buildId;
+    untrack(() => {
+      if (prefilledOnce) return;
+      if (bId) { prefilledOnce = true; return; }
+      if (input.length === 0 && p.trim()) {
+        input = p;
+        prefilledOnce = true;
+      }
+    });
+  });
+
+  /**
+   * Append to history *and* persist atomically with any other config changes.
+   * Returns the new history array so callers can pass it along with their
+   * own patch in a single onConfigChange — avoids the
+   * read-cached-config-then-patch race that drops fields.
+   */
+  function appendHistory(
+    role: 'user' | 'system',
+    content: string,
+    kind?: string,
+  ): typeof history {
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role,
@@ -96,9 +125,15 @@
       createdAt: new Date().toISOString(),
       kind,
     };
-    history = [...history, entry].slice(-50);
-    // Persist to node config so reopens see the trace.
-    onConfigChange({ history });
+    const next = [...history, entry].slice(-50);
+    history = next;
+    return next;
+  }
+
+  /** Single-call pushHistory for inject/note/shell paths (not racing). */
+  function pushHistory(role: 'user' | 'system', content: string, kind?: string): void {
+    const next = appendHistory(role, content, kind);
+    onConfigChange({ history: next });
   }
 
   async function fetchSnapshot(): Promise<void> {
@@ -162,9 +197,14 @@
         lastError = String(data.error ?? `HTTP ${r.status}`);
         return;
       }
-      onConfigChange({ buildId: data.id, prompt: finalPrompt });
-      pushHistory('user', finalPrompt, 'start');
-      pushHistory('system', `Build started · ${data.id.slice(0, 8)}`, 'system');
+      // Build the new history locally first so we can persist buildId,
+      // prompt, and history in ONE patch — three separate onConfigChange
+      // calls would race against each other (each reads the cached config
+      // before the previous PATCH lands, last write wins, fields get
+      // dropped). That bug clobbered buildId in the first version.
+      let next = appendHistory('user', finalPrompt, 'start');
+      next = appendHistory('system', `Build started · ${data.id.slice(0, 8)}`, 'system');
+      onConfigChange({ buildId: data.id, prompt: finalPrompt, history: next });
       void fetchSnapshot();
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
