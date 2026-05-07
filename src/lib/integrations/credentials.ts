@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { integrationCredentials } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { encryptPayload, decryptPayload } from './crypto';
+import { getIntegrationAdapter } from './registry';
 import type {
   CredentialKind,
   CredentialPayload,
@@ -104,8 +105,6 @@ export async function updateCredential(id: string, patch: UpdateInput): Promise<
 export async function deleteCredential(id: string): Promise<void> {
   await db.delete(integrationCredentials).where(eq(integrationCredentials.id, id));
 }
-
-import { getIntegrationAdapter } from './registry';
 
 const REFRESH_BUFFER_MS = 60 * 1000; // refresh 1 minute before expiry
 
