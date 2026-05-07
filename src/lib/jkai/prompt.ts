@@ -95,7 +95,34 @@ TESTING (LAYER IT IN, DON'T FRONT-LOAD IT):
 
 ERROR RECOVERY:
 - If a tool call fails, diagnose before retrying. Don't re-run the same command hoping for different output — change something.
-- If you're stuck after two attempts, switch approach entirely.`;
+- If you're stuck after two attempts, switch approach entirely.
+
+DATA EMISSION — every app you build must do this:
+The proxy injects two globals into every served HTML page:
+  - window.JKAI_BUILD_ID    — this build's id
+  - window.JKAI_EVENTS_URL  — the events endpoint for this build, same-origin
+
+On every meaningful client-side event (button click, form submit, computed result, periodic state change, completed user action), the app MUST emit BOTH of:
+
+  1. POST to the events endpoint so the row is persisted in the database for future iterations / workflows / queries:
+       fetch(window.JKAI_EVENTS_URL, {
+         method: 'POST',
+         headers: { 'content-type': 'application/json' },
+         credentials: 'same-origin',
+         body: JSON.stringify({ type: '<event-name>', ts: Date.now(), ...payload }),
+       }).catch(() => {});
+
+  2. Forward to the canvas (no-op when the app isn't embedded):
+       try { window.parent.postMessage({ type: '<event-name>', ts: Date.now(), ...payload }, '*'); } catch {}
+
+REQUIREMENTS:
+  - "type" must be a short snake-or-kebab-case string naming the event (e.g. 'rng', 'assignment', 'submit_clicked').
+  - "ts: Date.now()" is required — gives downstream consumers ordering even if the server-side timestamp clock skews.
+  - Default to verbose: include intermediate values, inputs, contextual state, anything that could plausibly be useful later. Storage is cheap, the canvas / DB filters at read time.
+  - Wrap calls in .catch() / try-catch so the app still works when JKAI_EVENTS_URL is undefined (e.g. published apps under /projects/<slug>/) or the network blips.
+  - Never block the UI on emission. Fire-and-forget; never await.
+
+If the user's prompt specifies an explicit emission shape ("Data emission contract" section), THAT shape supersedes the verbose default — emit exactly the fields named, plus type+ts.`;
 
 export function buildSystemPrompt(buildId: string, assignedPort: number): string {
   return (

@@ -154,24 +154,12 @@
    * (no point asking the agent to emit data nobody's listening for).
    */
   function buildEmissionContract(): string {
+    // The system prompt already tells every build to emit on every meaningful
+    // event via fetch(window.JKAI_EVENTS_URL,...) + window.parent.postMessage.
+    // We only need to convey the *schema* if the user explicitly set one.
     if (!Array.isArray(emitSchemas) || emitSchemas.length === 0) {
-      // Heuristic: this prompt is being kicked off from a canvas with at
-      // least one BuilderChat connected to a BuildView (since this
-      // component only renders inside that context). Default to verbose.
-      return [
-        '',
-        '---',
-        '## Data emission (canvas capture)',
-        '',
-        'This app is rendered inside a canvas Build View that captures `window.parent.postMessage` calls and exposes them to downstream workflow nodes. To make this useful:',
-        '',
-        '- On every meaningful event (button click, state change, computed result, user submission, periodic update), call `window.parent.postMessage(obj, \'*\')`.',
-        '- `obj` must be a JSON-serialisable object with at minimum:',
-        '  - `type`: a short string naming the event (e.g. `"rng"`, `"assignment"`, `"submit"`).',
-        '  - `ts`: `Date.now()`.',
-        '- Plus any data that could plausibly be useful downstream — be **verbose**: include intermediate values, inputs, contextual state, anything you computed. The canvas captures, the workflow filters.',
-        '- Never throw if `window.parent === window` (when the app is opened standalone outside the canvas). Wrap in try/catch.',
-      ].join('\n');
+      // Verbose default lives in the system prompt; nothing to add here.
+      return '';
     }
     const schemaBlock = emitSchemas
       .map((s, i) => emitSchemas.length === 1 ? s : `### Schema ${i + 1}\n${s}`)
@@ -181,15 +169,11 @@
       '---',
       '## Data emission contract (NON-NEGOTIABLE)',
       '',
-      'This app is rendered inside a canvas Build View that captures `window.parent.postMessage` calls and pipes them to downstream workflow nodes. The downstream nodes expect exactly the following shape:',
+      'The canvas this app is embedded in expects every emission to match the following shape:',
       '',
       schemaBlock,
       '',
-      'Implementation requirements:',
-      '- Call `window.parent.postMessage(obj, \'*\')` on every relevant event.',
-      '- `obj` must conform to the schema above. Always include a `ts: Date.now()` field if not already specified.',
-      '- Wrap calls in try/catch so the app still works when opened standalone outside the canvas.',
-      '- Do not omit fields. Do not invent additional top-level fields without good reason. Stick to the contract.',
+      'This **supersedes** the default emission shape from the system prompt. Emit exactly these fields (plus the required `type` and `ts: Date.now()`). Do not omit fields. Do not invent additional top-level fields. The transport (fetch to `window.JKAI_EVENTS_URL` + `window.parent.postMessage`) and frequency (every meaningful event, fire-and-forget, never blocking) follow the system-prompt rules.',
     ].join('\n');
   }
 
@@ -265,7 +249,7 @@
       let next = appendHistory('user', userPrompt, 'start');
       const contractApplied = emitSchemas.length > 0
         ? `Data emission contract applied (${emitSchemas.length} schema${emitSchemas.length === 1 ? '' : 's'})`
-        : 'Verbose-default emission instruction applied';
+        : 'Default emission rules from system prompt';
       next = appendHistory('system', `${contractApplied} · build ${data.id.slice(0, 8)}`, 'system');
       onConfigChange({ buildId: data.id, prompt: userPrompt, history: next });
       void fetchSnapshot();

@@ -142,7 +142,14 @@ export async function proxyToSandbox(
     // For HTML responses, inject <base> tag and fetch/XHR proxy rewrite script
     if (baseHref && contentType.includes('text/html')) {
       let html = await resp.text();
-      const injection = `<base href="${baseHref}">${proxyRewriteScript(baseHref)}`;
+      // Extract buildId from baseHref ("/api/jkai/proxy/<id>/") so the
+      // running app can address the events endpoint without guessing.
+      const buildIdMatch = baseHref.match(/\/api\/jkai\/proxy\/([^/]+)/);
+      const buildId = buildIdMatch ? buildIdMatch[1] : '';
+      const buildIdScript = buildId
+        ? `<script>window.JKAI_BUILD_ID=${JSON.stringify(buildId)};window.JKAI_EVENTS_URL=${JSON.stringify(`/api/jkai/builds/${buildId}/events`)};</script>`
+        : '';
+      const injection = `<base href="${baseHref}">${buildIdScript}${proxyRewriteScript(baseHref)}`;
 
       if (html.includes('<head>')) {
         html = html.replace('<head>', `<head>${injection}`);

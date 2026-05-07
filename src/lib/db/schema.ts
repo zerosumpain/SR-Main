@@ -583,6 +583,25 @@ export const jkaiBuilds = pgTable('jkai_builds', {
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
 export type NewJkaiBuild = typeof jkaiBuilds.$inferInsert;
 
+/**
+ * Per-event log written by every JKAI-built app. The app POSTs to
+ * /api/jkai/builds/<id>/events (same-origin from the proxy iframe; uses the
+ * user's session cookie). One row per emission — gives every app a
+ * database backing without each canvas needing a data-store wired up.
+ */
+export const jkaiBuildEvents = pgTable('jkai_build_events', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  payload: jsonb('payload').notNull().default(sql`'{}'::jsonb`),
+  // Server-side timestamp — always set, no matter what the client sent.
+  // Client-reported `ts` (Date.now() etc.) survives inside `payload`.
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiBuildEvent = typeof jkaiBuildEvents.$inferSelect;
+export type NewJkaiBuildEvent = typeof jkaiBuildEvents.$inferInsert;
+
 export const buildWorkflowSubscriptions = pgTable(
   'build_workflow_subscriptions',
   {
