@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "$lib": ["../src/lib"],
+      "$lib/*": ["../src/lib/*"],
+      "$env/dynamic/private": ["./stubs/env-dynamic-private.ts"],
+      "$env/static/private": ["./stubs/env-dynamic-private.ts"],
+      "$env/dynamic/public": ["./stubs/env-dynamic-public.ts"],
+      "$env/static/public": ["./stubs/env-dynamic-public.ts"]
+    }
+  }
+}
