@@ -412,10 +412,16 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
       })) {
         if (chunk.type === 'text') {
           turnText += chunk.delta;
-          pushEvent(sessionId, { type: 'discovery', delta: chunk.delta });
         } else if (chunk.type === 'tool_use') {
           pendingToolCalls.push({ name: chunk.name, input: chunk.input });
         }
+      }
+
+      // After each turn, emit a single discovery line summarizing what the
+      // model said (if anything). UI doesn't do per-token streaming yet, so
+      // emitting deltas just floods the feed with empty rows.
+      if (turnText.trim()) {
+        pushEvent(sessionId, { type: 'discovery', text: turnText.trim() });
       }
 
       // Append assistant turn to conversation.
@@ -445,7 +451,7 @@ export async function runDiscovery(sessionId: string, opts: RunDiscoveryOpts = {
 
         pushEvent(sessionId, {
           type: 'discovery',
-          toolCall: { name: tc.name, result: resultText.slice(0, 500) },
+          text: `[tool] ${tc.name} → ${resultText.slice(0, 200).replace(/\s+/g, ' ').trim()}${resultText.length > 200 ? '…' : ''}`,
         });
       }
 

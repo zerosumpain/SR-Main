@@ -251,13 +251,19 @@
 
     {#if CHAT_ACTIVE.has(status)}
       <form onsubmit={sendChat} class="chat-form">
-        <input
-          type="text"
-          class="nm-text-input"
-          placeholder="Reply…"
+        <textarea
+          class="nm-text-input chat-textarea"
+          placeholder="Reply… (Enter to send, Shift+Enter for newline)"
           bind:value={chatInput}
           disabled={chatBusy}
-        />
+          rows="2"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+              e.preventDefault();
+              (e.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+            }
+          }}
+        ></textarea>
         <button type="submit" class="nm-save-btn" disabled={chatBusy || !chatInput.trim()}>
           {chatBusy ? '…' : 'Send'}
         </button>
@@ -266,12 +272,18 @@
 
     {#if REDIRECT_ACTIVE.has(status)}
       <form onsubmit={sendRedirect} class="chat-form">
-        <input
-          type="text"
-          class="nm-text-input"
-          placeholder="Redirect discovery…"
+        <textarea
+          class="nm-text-input chat-textarea"
+          placeholder="Redirect discovery… (Enter to send, Shift+Enter for newline)"
           bind:value={redirectInput}
-        />
+          rows="2"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+              e.preventDefault();
+              (e.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+            }
+          }}
+        ></textarea>
         <button type="submit" class="nm-save-btn" disabled={!redirectInput.trim() || actionBusy}>
           Redirect
         </button>
@@ -683,6 +695,12 @@
     gap: 0.5rem;
     align-items: stretch;
     margin-top: 0.5rem;
+  }
+  .chat-textarea {
+    flex: 1;
+    resize: vertical;
+    min-height: 2.5rem;
+    font-family: inherit;
   }
 
   /* ── Discovery feed ── */
