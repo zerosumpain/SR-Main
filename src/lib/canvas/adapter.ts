@@ -13,6 +13,7 @@ export type NodeKind =
   | 'stats'
   | 'intelligence'
   | 'webpage'
+  | 'builder'
   | 'postit'
   | 'annotation';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
@@ -77,6 +78,7 @@ export const CANVAS_NODE_GROUPS = [
   'Intelligence',
   'Intel & Web',
   'Integrations',
+  'Builder',
   'Observability',
   'Annotations',
 ] as const;
@@ -760,6 +762,78 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
 
+  // ————————————————————————— Builder (jkai autonomous build, brought into the canvas)
+  {
+    type: 'builder-chat',
+    label: 'Builder Chat',
+    kind: 'builder',
+    group: 'Builder',
+    description:
+      'Set the build outcome and config; injects mid-build messages (/btw queue, /wtf interrupt). Wire to Builder Pi to drive a build.',
+    defaultConfig: {
+      prompt: '',
+      thinkingLevel: 'medium',
+      enforceDesignSystem: true,
+      planFirst: false,
+      modelProvider: '',
+      modelId: '',
+      minIterations: null,
+      maxIterations: 25,
+      maxTotalMinutes: 120,
+      maxTokensPerHour: 1_000_000,
+      activeMinutesPerHour: 15,
+      buildId: '',
+      size: { w: 380, h: 440 },
+    },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json'] }],
+      outputs: [{ id: 'session', kinds: ['build-session'] }],
+    },
+  },
+  {
+    type: 'builder-pi',
+    label: 'Builder Pi',
+    kind: 'builder',
+    group: 'Builder',
+    description:
+      'Live terminal for an active build. Visible elapsed timer + iteration ETA. Pause / Stop are graceful (work-in-progress is preserved).',
+    defaultConfig: {
+      buildId: '',
+      showThinking: true,
+      showTools: true,
+      showLint: true,
+      autoScroll: true,
+      size: { w: 520, h: 460 },
+    },
+    handles: {
+      inputs: [{ id: 'session', kinds: ['build-session'] }],
+      outputs: [{ id: 'preview', kinds: ['build-preview', 'json'] }],
+    },
+  },
+  {
+    type: 'build-view',
+    label: 'Build View',
+    kind: 'builder',
+    group: 'Builder',
+    description:
+      'iframe of the in-progress app. Passive (snapshot) or Active (live, refreshes on stage events). Expand to a modal. Connect data ports to feed or capture app data.',
+    defaultConfig: {
+      buildId: '',
+      mode: 'active',
+      expandable: true,
+      sendUpstream: false,
+      exposeOutputs: true,
+      size: { w: 540, h: 420 },
+    },
+    handles: {
+      inputs: [
+        { id: 'preview', kinds: ['build-preview'] },
+        { id: 'data', kinds: ['json', 'text'] },
+      ],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+
   // ————————————————————————— Annotations (inert, no data flow)
   {
     type: 'postit',
@@ -814,6 +888,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
   if (type === 'webpage') return 'webpage';
+  if (type === 'builder-chat' || type === 'builder-pi' || type === 'build-view') return 'builder';
   return 'output';
 }
 

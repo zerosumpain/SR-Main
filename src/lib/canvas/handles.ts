@@ -7,6 +7,8 @@ export type HandleKind =
   | 'research-result'
   | 'intel-session'
   | 'trigger-signal'
+  | 'build-session'
+  | 'build-preview'
   | 'any';
 
 export type HandleSpec = {

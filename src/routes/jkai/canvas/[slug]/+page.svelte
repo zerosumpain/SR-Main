@@ -13,6 +13,9 @@
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
+  import BuilderChatNode from '$lib/canvas/nodes/BuilderChatNode.svelte';
+  import BuilderPiNode from '$lib/canvas/nodes/BuilderPiNode.svelte';
+  import BuildViewNode from '$lib/canvas/nodes/BuildViewNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
   import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
@@ -72,6 +75,9 @@
     'sub-workflow',
     'openrouter',
     'jkai',
+    'builder-chat',
+    'builder-pi',
+    'build-view',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new
@@ -315,6 +321,7 @@
       stats: { w: 420, h: 360 },
       intelligence: { w: 340, h: 420 },
       webpage: { w: 720, h: 480 },
+      builder: { w: 480, h: 440 },
       postit: { w: 220, h: 180 },
       annotation: { w: 360, h: 220 },
     };
@@ -534,6 +541,65 @@
     Object.fromEntries(viewNodes.map((n) => [n.id, n])),
   );
 
+  /**
+   * Resolve the build target for a builder-pi or build-view node.
+   *
+   * Resolution order:
+   *   1. node.config.buildId (explicit override, set in panel)
+   *   2. upstream builder-chat / builder-pi node that already owns a buildId
+   *      (walked breadth-first up to a small depth — covers the common
+   *      Chat → Pi → View chain plus a one-hop relay).
+   *
+   * Returns null when no build is attached.
+   */
+  function resolveBuilderBuildId(nodeId: string): string | null {
+    const me = byId[nodeId];
+    if (!me) return null;
+    const ownBuildId = (me.config as Record<string, unknown> | undefined)?.buildId;
+    if (typeof ownBuildId === 'string' && ownBuildId.trim()) return ownBuildId.trim();
+
+    const visited = new Set<string>([nodeId]);
+    const frontier: string[] = [nodeId];
+    let depth = 0;
+    while (frontier.length && depth < 4) {
+      const next: string[] = [];
+      for (const cur of frontier) {
+        for (const e of canvas.edges) {
+          if (e.to !== cur || visited.has(e.from)) continue;
+          visited.add(e.from);
+          const upstream = byId[e.from];
+          if (!upstream) continue;
+          if (upstream.type === 'builder-chat' || upstream.type === 'builder-pi') {
+            const id = (upstream.config as Record<string, unknown> | undefined)?.buildId;
+            if (typeof id === 'string' && id.trim()) return id.trim();
+          }
+          next.push(e.from);
+        }
+      }
+      frontier.length = 0;
+      frontier.push(...next);
+      depth += 1;
+    }
+    return null;
+  }
+
+  /**
+   * Upstream input data for a build-view node — last outputData of any
+   * upstream node connected via the data input handle. Used when the node
+   * is configured to forward upstream data into the iframe.
+   */
+  function resolveUpstreamInputData(nodeId: string): unknown {
+    for (const e of canvas.edges) {
+      if (e.to !== nodeId) continue;
+      const upstream = byId[e.from];
+      if (!upstream) continue;
+      // Skip the build-session/build-preview handle pairs — only data ports.
+      if (upstream.type === 'builder-chat' || upstream.type === 'builder-pi') continue;
+      if (upstream.outputData !== undefined && upstream.outputData !== null) return upstream.outputData;
+    }
+    return undefined;
+  }
+
   const chatNodeIds = $derived(viewNodes.filter((n) => n.kind === 'chat').map((n) => n.id));
   const firstChatId = $derived(chatNodeIds[0] ?? null);
 
@@ -574,12 +640,12 @@
   );
 
   function nodeW(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).w;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage' || n.kind === 'builder') return resizableSize(n as CanvasNode).w;
     if (n.kind === 'trigger') return 188;
     return NODE_W;
   }
   function nodeH(n: CanvasNode | { kind: string }) {
-    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage') return resizableSize(n as CanvasNode).h;
+    if (n.kind === 'chat' || n.kind === 'inspector' || n.kind === 'stats' || n.kind === 'intelligence' || n.kind === 'webpage' || n.kind === 'builder') return resizableSize(n as CanvasNode).h;
     return NODE_H;
   }
 
@@ -648,6 +714,7 @@
     inspector: '#567',
     stats: '#7a6cd4',
     intelligence: '#5dbea3',
+    builder: '#d28a3a',
   };
 
   const peerCanvases = $derived(
@@ -3179,6 +3246,86 @@
                 onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
                 onOutput={(handleId, value) => webpageNodeOutput(n.id, handleId, value)}
               />
+            </div>
+            <div
+              class="chat-node-resize"
+              title="Drag to resize"
+              onpointerdown={(e) => onChatResizeDown(e, n)}
+              onpointermove={onChatResizeMove}
+              onpointerup={onChatResizeUp}
+              onpointercancel={onChatResizeUp}
+            ></div>
+            <div
+              class="node-handle"
+              title="Drag to connect to another node"
+              onpointerdown={(e) => onHandlePointerDown(e, n)}
+            ></div>
+          </div>
+        {:else if n.kind === 'builder'}
+          {@const bsize = resizableSize(n)}
+          {@const builderBuildId = resolveBuilderBuildId(n.id)}
+          <div
+            class="chat-node builder-node-wrapper"
+            class:is-selected={selectedId === n.id}
+            class:drop-target={edgeDrag?.hoverTargetId === n.id}
+            class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
+            class:active={isRunning && n.status === 'running'}
+            class:failed={isRunning && n.status === 'failed'}
+            style:left="{n.x}px"
+            style:top="{n.y}px"
+            style:width="{bsize.w}px"
+            style:height="{bsize.h}px"
+            role="group"
+            aria-label={n.type === 'builder-chat' ? 'Builder Chat node' : n.type === 'builder-pi' ? 'Builder Pi node' : 'Build View node'}
+            onpointerdown={(e) => e.stopPropagation()}
+          >
+            {#if (byNodeType(n.type)?.handles.inputs.length ?? 0) > 0}
+              <div
+                class="node-handle node-handle-input"
+                title={`Inputs: ${allKinds(inputsFor(n.type)).join(', ')}`}
+              ></div>
+            {/if}
+            <div
+              class="chat-node-hdr builder-hdr"
+              onpointerdown={(e) => onNodePointerDown(e, n)}
+              onpointermove={onNodePointerMove}
+              onpointerup={(e) => onNodePointerUp(e, n)}
+              onpointercancel={(e) => onNodePointerUp(e, n)}
+              ondblclick={(e) => openMenu(e, n.id)}
+              role="button"
+              tabindex="0"
+              title="Drag to move · double-click to edit settings"
+            >
+              <span class="builder-bar"></span>
+              <span class="chat-node-title">
+                {#if n.type === 'builder-chat'}BUILDER{:else if n.type === 'builder-pi'}PI{:else}VIEW{/if}
+              </span>
+              <span class="sr-sep">/</span>
+              <span class="chat-node-label">{n.name}</span>
+            </div>
+            <div class="builder-node-body" onpointerdown={(e) => e.stopPropagation()}>
+              {#if n.type === 'builder-chat'}
+                <BuilderChatNode
+                  nodeId={n.id}
+                  config={(n.config as Record<string, unknown>) ?? {}}
+                  onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+                />
+              {:else if n.type === 'builder-pi'}
+                <BuilderPiNode
+                  nodeId={n.id}
+                  config={(n.config as Record<string, unknown>) ?? {}}
+                  resolvedBuildId={builderBuildId}
+                  onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+                />
+              {:else if n.type === 'build-view'}
+                <BuildViewNode
+                  nodeId={n.id}
+                  config={(n.config as Record<string, unknown>) ?? {}}
+                  resolvedBuildId={builderBuildId}
+                  inputData={resolveUpstreamInputData(n.id)}
+                  onConfigChange={(patch) => saveNodeConfig(n.id, patch as Record<string, unknown>)}
+                />
+              {/if}
             </div>
             <div
               class="chat-node-resize"
@@ -6684,6 +6831,30 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  /* ——— Builder nodes (chat / pi / view) ——— */
+  .builder-bar {
+    display: inline-block;
+    width: 4px;
+    height: 1em;
+    background: #d28a3a;
+    margin-right: 6px;
+    border-radius: 1px;
+  }
+  .builder-node-wrapper .chat-node-hdr { gap: 4px; }
+  .builder-node-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .builder-node-wrapper.active {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .builder-node-wrapper.failed {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-error, #c0392b) 35%, transparent);
   }
 
   /* Flash animation for scrollToNode */

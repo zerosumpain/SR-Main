@@ -27,6 +27,11 @@ import { homeAssistantDef, homeAssistantExecutor } from './nodes/home-assistant'
 import { healthQueryDef, healthQueryExecutor } from './nodes/health-query';
 import { blogDef, blogExecutor } from './nodes/blog';
 import { jkaiDef, jkaiExecutor } from './nodes/jkai';
+import {
+  builderChatDef, builderChatExecutor,
+  builderPiDef, builderPiExecutor,
+  buildViewDef, buildViewExecutor,
+} from './nodes/builder-canvas';
 import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
 import { intelligenceDef, intelligenceExecutor } from './nodes/intelligence';
 import { researchResultDef, researchResultExecutor } from './nodes/research-result';
@@ -121,6 +126,9 @@ registry.register(homeAssistantDef, homeAssistantExecutor);
 registry.register(healthQueryDef, healthQueryExecutor);
 registry.register(blogDef, blogExecutor);
 registry.register(jkaiDef, jkaiExecutor);
+registry.register(builderChatDef, builderChatExecutor);
+registry.register(builderPiDef, builderPiExecutor);
+registry.register(buildViewDef, buildViewExecutor);
 registry.register(deepDiveDef, deepDiveExecutor);
 registry.register(intelligenceDef, intelligenceExecutor);
 registry.register(researchResultDef, researchResultExecutor);
