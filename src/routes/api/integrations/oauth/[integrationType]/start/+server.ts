@@ -5,8 +5,6 @@ import { getIntegrationAdapter } from '$lib/integrations';
 import { pendingState, pruneExpired } from '$lib/integrations/oauth-pending-state';
 import { env as publicEnv } from '$env/dynamic/public';
 
-export { pendingState } from '$lib/integrations/oauth-pending-state';
-
 export const POST: RequestHandler = async ({ params, request }) => {
   pruneExpired();
   const integrationType = params.integrationType;
