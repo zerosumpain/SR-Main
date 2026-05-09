@@ -276,7 +276,7 @@ Signature you are completing:
     // YOUR CODE GOES HERE
   }
 
-Hard rules:
+Hard rules for the code:
 - Output ONLY the function body. No \`function\` keyword. No \`async\` keyword.
 - No import statements — assume \`getCredential\` from '$lib/integrations/credentials' is in scope, plus a namespace import for each declared dep (e.g. \`tsdav\` is the \`tsdav\` package, \`googleapis\` is the \`googleapis\` package).
 - Use \`config\` for user-configured fields. Branch on a primary operation field if the node supports multiple operations.
@@ -284,7 +284,11 @@ Hard rules:
 - Throw on errors with descriptive messages.
 - Return the result object.
 
-Output ONLY raw TypeScript code (no markdown, no fences, no commentary).
+Output format:
+Return a JSON object of shape: {"executor_body": "<the typescript code>"}.
+The "executor_body" string must contain only TypeScript source — no markdown
+fences, no commentary. Newlines and double-quotes inside the code must be
+JSON-escaped (\\n, \\"). Do not return anything except the JSON object.
 `;
 
 async function generateExecutorBody(
@@ -316,30 +320,32 @@ Now write the function body.`;
   const ctx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(ctx);
 
-  // Mirrors src/lib/jkai/intel/extract.ts, which works against the same
-  // gateway + model. max_tokens=16384 with no temperature caused the z.ai
-  // gateway to hang indefinitely on this call (TCP idle 4+ min, no SDK
-  // timeout). 8192 is plenty for reasoning + a 4-operation executor body,
-  // and the explicit 90s timeout prevents future gateway hangs from
-  // blocking the SDK for the default 10-minute window.
+  // Mirrors src/lib/jkai/intel/extract.ts, which works reliably against
+  // this same gateway + model. Earlier non-streaming free-text variants
+  // hung the z.ai gateway indefinitely on this exact call shape; wrapping
+  // the output in JSON via response_format unsticks it. max_tokens=16384
+  // matches extract.ts. The 90s SDK timeout + maxRetries:0 fail fast if
+  // the gateway hangs again, instead of pinning the SDK for the 10-min
+  // default × 3 retries.
   const response = await client.chat.completions.create(
     {
       model,
       temperature: 0.3,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: EXECUTOR_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 8192,
+      max_tokens: 16384,
       stream: false,
     },
-    { timeout: 90_000 },
+    { timeout: 90_000, maxRetries: 0 },
   );
 
   const choice = response.choices[0];
-  let raw = (choice?.message?.content ?? '').trim();
+  const rawContent = (choice?.message?.content ?? '').trim();
 
-  if (!raw) {
+  if (!rawContent) {
     console.error(
       '[curate.materialize] executor body LLM returned empty content',
       {
@@ -359,9 +365,28 @@ Now write the function body.`;
     );
   }
 
-  // Strip code fences if the model added them.
-  const fenceMatch = raw.match(/^```(?:ts|typescript|javascript|js)?\s*([\s\S]*?)\s*```$/);
-  if (fenceMatch) raw = fenceMatch[1].trim();
+  // Parse JSON envelope and extract the executor_body field.
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawContent) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(
+      `Executor body JSON parse failed: ${err instanceof Error ? err.message : String(err)}. ` +
+      `First 300 chars: ${rawContent.slice(0, 300)}`,
+    );
+  }
 
-  return raw;
+  let body = typeof parsed.executor_body === 'string' ? parsed.executor_body.trim() : '';
+  if (!body) {
+    throw new Error(
+      `Executor body LLM returned JSON without executor_body field. ` +
+      `Got keys: ${Object.keys(parsed).join(', ') || '(empty)'}`,
+    );
+  }
+
+  // Defensive: strip code fences if the model wrapped the body anyway.
+  const fenceMatch = body.match(/^```(?:ts|typescript|javascript|js)?\s*([\s\S]*?)\s*```$/);
+  if (fenceMatch) body = fenceMatch[1].trim();
+
+  return body;
 }
