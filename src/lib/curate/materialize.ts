@@ -316,15 +316,25 @@ Now write the function body.`;
   const ctx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(ctx);
 
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: EXECUTOR_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: 16384,
-    stream: false,
-  });
+  // Mirrors src/lib/jkai/intel/extract.ts, which works against the same
+  // gateway + model. max_tokens=16384 with no temperature caused the z.ai
+  // gateway to hang indefinitely on this call (TCP idle 4+ min, no SDK
+  // timeout). 8192 is plenty for reasoning + a 4-operation executor body,
+  // and the explicit 90s timeout prevents future gateway hangs from
+  // blocking the SDK for the default 10-minute window.
+  const response = await client.chat.completions.create(
+    {
+      model,
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: EXECUTOR_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: 8192,
+      stream: false,
+    },
+    { timeout: 90_000 },
+  );
 
   const choice = response.choices[0];
   let raw = (choice?.message?.content ?? '').trim();
