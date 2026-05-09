@@ -12,7 +12,6 @@
 
 import { getSession, updateSession } from './session-store';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { validateNodeSpec } from './spec/validate';
 import type {
   NodeSpec,
@@ -311,22 +310,21 @@ Output shape: ${JSON.stringify(proposal.outputShape ?? { example: {} })}
 
 Now write the function body.`;
 
-  // Non-streaming call: streaming with GLM-5.x + large max_tokens + reasoning
-  // was hanging indefinitely (the gateway opened the SSE stream but never
-  // emitted the first content chunk). One-shot is fine here — the UI doesn't
-  // render partial executor body, so we get nothing from streaming except
-  // failure modes. Non-streaming also gives us finish_reason + usage for
-  // diagnostics on empty content.
-  const ctx = await resolveDefaultModel('builder');
-  const { client, model } = await getLLMClient(ctx);
-
-  // Mirrors src/lib/jkai/intel/extract.ts, which works reliably against
-  // this same gateway + model. Earlier non-streaming free-text variants
-  // hung the z.ai gateway indefinitely on this exact call shape; wrapping
-  // the output in JSON via response_format unsticks it. max_tokens=16384
-  // matches extract.ts. The 90s SDK timeout + maxRetries:0 fail fast if
-  // the gateway hangs again, instead of pinning the SDK for the 10-min
-  // default × 3 retries.
+  // Route this call to OpenRouter (claude-haiku-4.5), NOT the configured
+  // builder default. Empirically the z.ai gateway hangs indefinitely on
+  // free-text code-generation requests against GLM-5.x — observed across
+  // streaming, non-streaming, with/without temperature, with/without JSON
+  // response_format, max_tokens 4k–16k. The same gateway works fine for
+  // structured-extraction shapes (see src/lib/jkai/intel/extract.ts) but
+  // not for emitting verbose code. OpenRouter + claude-haiku-4.5 is fast,
+  // cheap (~$0.01/call), and reliable for codegen.
+  //
+  // Discovery, scope, and other curate calls remain on the admin-configured
+  // builder default — only this one materialize call is routed elsewhere.
+  const { client, model } = await getLLMClient({
+    provider: 'openrouter',
+    modelId: 'anthropic/claude-haiku-4.5',
+  });
   const response = await client.chat.completions.create(
     {
       model,
