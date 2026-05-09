@@ -268,21 +268,35 @@ function buildDocs(p: Proposal): string {
 
 // ── Executor body via focused LLM call ───────────────────────────────────
 
-const EXECUTOR_SYSTEM_PROMPT = `\
+const EXECUTOR_SYSTEM_PROMPT_BASE = `\
 You are writing the BODY of an async function in TypeScript.
 
 Signature you are completing:
-  async function execute(input: any, config: any, _ctx: any): Promise<any> {
+  async function execute(
+    input: any,
+    config: Record<string, any>,
+    _ctx: any,
+  ): Promise<{ output: Record<string, unknown>; rowCount?: number }> {
     // YOUR CODE GOES HERE
   }
 
 Hard rules for the code:
 - Output ONLY the function body. No \`function\` keyword. No \`async\` keyword.
-- No import statements — assume \`getCredential\` from '$lib/integrations/credentials' is in scope, plus a namespace import for each declared dep (e.g. \`tsdav\` is the \`tsdav\` package, \`googleapis\` is the \`googleapis\` package).
-- Use \`config\` for user-configured fields. Branch on a primary operation field if the node supports multiple operations.
-- For credentialed nodes, fetch with \`await getCredential<KIND>(config.credentialId)\` (KIND = 'basic' | 'apikey' | 'oauth2'). Throw if null.
-- Throw on errors with descriptive messages.
-- Return the result object.
+- No import statements. The available identifiers are listed in the AVAILABLE
+  IMPORTS section below — use those exact names verbatim.
+- Use \`config\` for user-configured fields. Branch on a primary operation field
+  (config.operation, config.action, etc.) if the node supports multiple ops.
+- For credentialed nodes, fetch via \`await getCredential<KIND>(config.credentialId)\`
+  where KIND is 'basic' | 'apikey' | 'oauth2'. Throw if null.
+- Throw on errors with descriptive messages. Catch blocks must type the error
+  as 'unknown' and use \`String(err)\` (or \`err instanceof Error ? err.message : String(err)\`)
+  before referencing properties.
+- Type EVERY callback parameter (e.g. \`.map((item: any) => ...)\`) — TypeScript
+  strict mode rejects implicit any.
+- Return shape: \`return { output: { ...your data... } };\` — the wrapping
+  function expects the project's NodeResult shape, which has an \`output\`
+  field. Do NOT return \`{ success: true, ... }\` or raw data — wrap it inside
+  \`output\`. Optional: include \`rowCount\` (a number) when returning a list.
 
 Output format:
 Return a JSON object of shape: {"executor_body": "<the typescript code>"}.
@@ -291,10 +305,28 @@ fences, no commentary. Newlines and double-quotes inside the code must be
 JSON-escaped (\\n, \\"). Do not return anything except the JSON object.
 `;
 
+// Mirrors the camel() + depImportName() functions in codegen/executor.ts
+// so the prompt advertises the exact namespace names the codegen will emit.
+function depImportNamespace(depName: string): string {
+  if (depName === 'tsdav') return 'tsdav';
+  const dashed = depName.replace(/[^a-z0-9]/gi, '-');
+  return dashed.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
 async function generateExecutorBody(
   proposal: Proposal,
   deps: NodeDep[],
 ): Promise<string> {
+  const importsList = [
+    '- getCredential — from $lib/integrations/credentials (always available)',
+    ...deps.map((d) => `- ${depImportNamespace(d.name)} — from ${d.name}`),
+  ];
+
+  const systemPrompt = `${EXECUTOR_SYSTEM_PROMPT_BASE}
+AVAILABLE IMPORTS (use these exact identifiers):
+${importsList.join('\n')}
+`;
+
   const userPrompt = `Node type: ${proposal.type}
 Label: ${proposal.label}
 Description: ${proposal.description}
@@ -302,14 +334,14 @@ Approach: ${proposal.approach ?? proposal.llmDescription}
 
 Auth method: ${proposal.authMethod ?? 'none'}
 
-Available deps: ${deps.length === 0 ? '(none — use stdlib + global fetch)' : deps.map((d) => d.name).join(', ')}
-
 Config fields:
 ${(proposal.configFields ?? []).map((f) => `- ${f.key} (${f.widget ?? 'string'}${f.required ? ', required' : ''}): ${f.label}`).join('\n')}
 
 Output shape: ${JSON.stringify(proposal.outputShape ?? { example: {} })}
 
-Now write the function body.`;
+Now write the function body. Remember: return { output: {...} }, type all
+callback parameters, and use the namespace identifiers listed in the system
+prompt's AVAILABLE IMPORTS section.`;
 
   // Stay on the admin-configured builder default (GLM-5.1 on z.ai).
   // Empirically GLM-5.1 with thinking enabled was hanging indefinitely
@@ -332,7 +364,7 @@ Now write the function body.`;
       temperature: 0.3,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: EXECUTOR_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       max_tokens: 16384,
