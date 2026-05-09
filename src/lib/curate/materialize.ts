@@ -10,6 +10,10 @@
 // This avoids the "empty LLM content" failure mode that we hit when
 // asking the model to emit an entire NodeSpec JSON in one go.
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { getSession, updateSession } from './session-store';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -24,6 +28,8 @@ import type {
   NodeExample,
 } from './spec/types';
 
+const execFileAsync = promisify(execFile);
+
 // ── Public entry ─────────────────────────────────────────────────────────
 
 export async function materializeNodeSpec(sessionId: string): Promise<NodeSpec> {
@@ -32,6 +38,9 @@ export async function materializeNodeSpec(sessionId: string): Promise<NodeSpec> 
   const proposal = session.proposal as Proposal | null;
   if (!proposal) {
     throw new Error(`Session ${sessionId} has no proposal — cannot materialize spec`);
+  }
+  if (!session.worktreePath) {
+    throw new Error(`Session ${sessionId} has no worktreePath — cannot read library types`);
   }
 
   // 1. Mechanical derivations.
@@ -42,8 +51,11 @@ export async function materializeNodeSpec(sessionId: string): Promise<NodeSpec> 
   const llmExamples = (proposal.testCases ?? []).map(toLlmExample);
   const deps: NodeDep[] = proposal.suggestedDeps ?? [];
 
-  // 2. Focused LLM call for the executor body only.
-  const executorBody = await generateExecutorBody(proposal, deps);
+  // 2. Focused LLM call for the executor body only. We install the proposal's
+  //    new deps into the worktree first so we can read the actual .d.ts files
+  //    and feed them into the prompt — without that the LLM hallucinates
+  //    library APIs (e.g. ICAL.Component, tsdav.fetchEventsByTimeRange).
+  const executorBody = await generateExecutorBody(proposal, deps, session.worktreePath);
 
   // 3. Auto-stub docs from proposal fields. The user can polish post-promotion.
   const docs = buildDocs(proposal);
@@ -334,10 +346,87 @@ function depImportNamespace(depName: string): string {
   return dashed.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+/**
+ * Read the main .d.ts file for each declared dep from the worktree's
+ * node_modules. Returns a markdown block formatted for the LLM prompt.
+ *
+ * Truncates each file to MAX_DTS_CHARS_PER_DEP (raw count, not tokens) to
+ * keep the prompt size bounded. Falls back gracefully if a dep has no
+ * types or the file can't be read — the LLM still gets the names of the
+ * remaining deps and can use general knowledge.
+ */
+const MAX_DTS_CHARS_PER_DEP = 6000;
+
+function readDepTypeDefs(deps: NodeDep[], worktreeDir: string): string {
+  const blocks: string[] = [];
+
+  for (const dep of deps) {
+    const depDir = path.join(worktreeDir, 'node_modules', dep.name);
+    const block = readSingleDepDts(dep.name, depDir);
+    if (block) blocks.push(block);
+  }
+  return blocks.join('\n\n');
+}
+
+function readSingleDepDts(depName: string, depDir: string): string | null {
+  // Find the entry .d.ts file via package.json's `types` / `typings` field,
+  // falling back to common conventions.
+  let dtsRel: string | null = null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(depDir, 'package.json'), 'utf8')) as {
+      types?: string;
+      typings?: string;
+      main?: string;
+    };
+    dtsRel = pkg.types ?? pkg.typings ?? null;
+    if (!dtsRel && pkg.main) {
+      // Try replacing .js extension with .d.ts.
+      const candidate = pkg.main.replace(/\.(js|cjs|mjs)$/i, '.d.ts');
+      if (fs.existsSync(path.join(depDir, candidate))) dtsRel = candidate;
+    }
+    if (!dtsRel && fs.existsSync(path.join(depDir, 'index.d.ts'))) {
+      dtsRel = 'index.d.ts';
+    }
+  } catch {
+    // Couldn't read package.json — fall through.
+  }
+
+  if (!dtsRel) return `### ${depName}\n(no type declarations found)`;
+
+  let content: string;
+  try {
+    content = fs.readFileSync(path.join(depDir, dtsRel), 'utf8');
+  } catch (err) {
+    return `### ${depName}\n(could not read ${dtsRel}: ${err instanceof Error ? err.message : err})`;
+  }
+
+  if (content.length > MAX_DTS_CHARS_PER_DEP) {
+    content = content.slice(0, MAX_DTS_CHARS_PER_DEP) + '\n// ... (truncated for prompt size)';
+  }
+
+  return `### ${depName} (from ${dtsRel}):\n\`\`\`ts\n${content}\n\`\`\``;
+}
+
 async function generateExecutorBody(
   proposal: Proposal,
   deps: NodeDep[],
+  worktreeDir: string,
 ): Promise<string> {
+  // Install proposal deps into the worktree so we can read their actual .d.ts
+  // files. This is the same install that runGenerate would do later — running
+  // it here is idempotent (npm install --save with already-present deps is a
+  // fast no-op the second time around).
+  if (deps.length > 0) {
+    const pkgSpecs = deps.map((d) => `${d.name}@${d.version}`);
+    await execFileAsync(
+      'npm',
+      ['install', '--save', '--no-audit', '--no-fund', ...pkgSpecs],
+      { cwd: worktreeDir, timeout: 5 * 60 * 1000 },
+    );
+  }
+
+  const dtsReference = readDepTypeDefs(deps, worktreeDir);
+
   const importsList = [
     '- getCredential — from $lib/integrations/credentials (always available)',
     ...deps.map((d) => `- ${depImportNamespace(d.name)} — from ${d.name}`),
@@ -346,7 +435,13 @@ async function generateExecutorBody(
   const systemPrompt = `${EXECUTOR_SYSTEM_PROMPT_BASE}
 AVAILABLE IMPORTS (use these exact identifiers):
 ${importsList.join('\n')}
-`;
+
+${dtsReference ? `LIBRARY TYPE REFERENCE — these are the ACTUAL type declarations
+of each declared dep (read directly from node_modules). Match these names
+and signatures exactly; do not invent methods or properties not shown here.
+
+${dtsReference}
+` : ''}`;
 
   const userPrompt = `Node type: ${proposal.type}
 Label: ${proposal.label}
