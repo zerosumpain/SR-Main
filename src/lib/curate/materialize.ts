@@ -227,12 +227,25 @@ function toLlmExample(tc: { scenario: string; config: Record<string, unknown>; n
 
 function deriveOutputSchema(shape: Proposal['outputShape']): JsonSchema {
   if (!shape || !shape.example) return { type: 'object', additionalProperties: true };
-  // Build a permissive schema from the example keys.
+  // Build a permissive schema from the example keys. Each property must
+  // carry a `type` field — JsonSchema rejects bare { description } objects.
   const properties: Record<string, JsonSchema> = {};
-  for (const key of Object.keys(shape.example)) {
-    properties[key] = { description: shape.description ?? '' };
+  for (const [key, value] of Object.entries(shape.example)) {
+    properties[key] = {
+      type: jsonTypeForExampleValue(value),
+      description: shape.description ?? '',
+    };
   }
   return { type: 'object', properties, additionalProperties: true };
+}
+
+function jsonTypeForExampleValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  return 'string';
 }
 
 function buildDocs(p: Proposal): string {
@@ -287,7 +300,15 @@ Hard rules for the code:
 - Use \`config\` for user-configured fields. Branch on a primary operation field
   (config.operation, config.action, etc.) if the node supports multiple ops.
 - For credentialed nodes, fetch via \`await getCredential<KIND>(config.credentialId)\`
-  where KIND is 'basic' | 'apikey' | 'oauth2'. Throw if null.
+  where KIND is 'basic' | 'apikey' | 'oauth2'. Throw if null. The credential
+  object's secret fields live under \`.payload\` (NOT \`.data\`):
+    * basic   → cred.payload.username, cred.payload.password
+    * apikey  → cred.payload.apiKey
+    * oauth2  → cred.payload.accessToken, cred.payload.refreshToken, cred.payload.expiresAt
+  Non-secret config (e.g. base URL) lives under \`.metadata\`.
+- When a library exposes a class with a private constructor, do NOT use
+  \`new ClassName()\` — look for a static factory like \`ClassName.create()\`,
+  a top-level helper like \`createClient()\`, or a function-style export.
 - Throw on errors with descriptive messages. Catch blocks must type the error
   as 'unknown' and use \`String(err)\` (or \`err instanceof Error ? err.message : String(err)\`)
   before referencing properties.

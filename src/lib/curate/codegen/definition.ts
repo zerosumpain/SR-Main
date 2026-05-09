@@ -62,7 +62,9 @@ function fieldToBasicConfig(field: UISchemaField): string | null {
   if ('description' in field && field.description) {
     parts.push(`description: ${tsString(field.description)}`);
   }
-  if (field.required) parts.push(`required: true`);
+  // BasicConfigField has no `required` field — required-ness lives on the
+  // JSON configSchema's `required` array. Don't emit it on the basicConfig
+  // entry or tsc rejects the literal.
   return `${parts.join(', ')} }`;
 }
 
