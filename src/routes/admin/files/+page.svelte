@@ -443,13 +443,61 @@
       <code>drive/</code> prefix; workflow files outside <code>drive/</code> stay invisible to the mount.
     </p>
 
-    <details class="dav-howto">
+    <details class="dav-howto" open>
       <summary>How to mount</summary>
       <div class="howto-body">
-        <div><strong>macOS</strong> — Finder → <kbd>Cmd</kbd>+<kbd>K</kbd> → <code>https://strangeramblings.com/dav/</code>. Username = the device label, password = the secret below.</div>
-        <div><strong>Windows</strong> — File Explorer → <em>Add a network location</em> → <code>https://strangeramblings.com/dav/</code>. (Windows requires HTTPS, which we already use.)</div>
-        <div><strong>Linux</strong> — <code>gio mount davs://strangeramblings.com/dav/</code>, or add a <code>davfs2</code> entry to <code>/etc/fstab</code>.</div>
-        <div class="howto-warn"><em>Permissions reminder:</em> the per-file R/W/A/D map shown above gates workflow nodes only. The mount has full read/write regardless.</div>
+
+        <div class="howto-os">
+          <strong>Windows 10 / 11</strong>
+          <p>
+            Windows ships two settings that block HTTPS WebDAV by default. Do these once before mounting:
+          </p>
+          <ol>
+            <li><strong>Start the WebClient service.</strong> Press <kbd>Win</kbd>+<kbd>R</kbd> → <code>services.msc</code> → find <em>WebClient</em> → right-click → <em>Properties</em> → set <em>Startup type</em> to <strong>Automatic</strong> → click <em>Start</em> → OK.</li>
+            <li><strong>Enable Basic Auth on HTTPS.</strong> Open PowerShell as Administrator and run:<br>
+              <code class="block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" /v BasicAuthLevel /t REG_DWORD /d 2 /f</code><br>
+              Then restart the service:<br>
+              <code class="block">net stop webclient &amp;&amp; net start webclient</code>
+            </li>
+          </ol>
+          <p>Now mount it. Either path works:</p>
+          <p><strong>Option A — Map network drive (recommended, gives you a Z: drive).</strong></p>
+          <ol>
+            <li>Open <em>File Explorer</em> → <em>This PC</em> → ribbon <em>Map network drive</em>.</li>
+            <li>Drive letter: any free letter (e.g. <code>Z:</code>).</li>
+            <li>Folder: <code>https://strangeramblings.com/dav/</code></li>
+            <li>Tick <em>Connect using different credentials</em> and <em>Reconnect at sign-in</em>.</li>
+            <li>Click <em>Finish</em>. Username = the device label, password = the secret.</li>
+          </ol>
+          <p><strong>Option B — single command in an elevated terminal:</strong></p>
+          <code class="block">net use Z: https://strangeramblings.com/dav/ /user:LABEL "SECRET" /persistent:yes</code>
+          <p>Replace <code>LABEL</code> and <code>SECRET</code> with the values from this page.</p>
+        </div>
+
+        <div class="howto-os">
+          <strong>macOS</strong>
+          <p>Finder → <kbd>⌘</kbd>+<kbd>K</kbd> → <code>https://strangeramblings.com/dav/</code> → username = the device label, password = the secret. Tick <em>Remember this password in my keychain</em> for persistence.</p>
+        </div>
+
+        <div class="howto-os">
+          <strong>Linux</strong>
+          <p>Quick: <code>gio mount davs://strangeramblings.com/dav/</code></p>
+          <p>Persistent (<code>davfs2</code>): add to <code>/etc/fstab</code>:</p>
+          <code class="block">https://strangeramblings.com/dav/  /mnt/sr-drive  davfs  user,rw,_netdev  0  0</code>
+          <p>Store credentials in <code>~/.davfs2/secrets</code>:</p>
+          <code class="block">/mnt/sr-drive  LABEL  SECRET</code>
+        </div>
+
+        <div class="howto-warn">
+          <strong>Common Windows errors:</strong>
+          <ul>
+            <li><em>"The folder you entered does not appear to be valid"</em> — almost always <code>BasicAuthLevel</code> is still 1. Re-run step 2 above and restart the WebClient service.</li>
+            <li><em>"0x80070043 – the network name cannot be found"</em> — WebClient service isn't running, or you typed <code>http://</code> instead of <code>https://</code>.</li>
+            <li><em>50 MB upload limit</em> — Windows caps WebDAV at 50 MB out of the box. Raise it: <code>reg add "HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" /v FileSizeLimitInBytes /t REG_DWORD /d 0xffffffff /f</code> then restart WebClient.</li>
+          </ul>
+        </div>
+
+        <div class="howto-warn"><em>Permissions reminder:</em> the per-file R/W/A/D map shown in the file list gates workflow nodes only. The mount has full read/write regardless.</div>
       </div>
     </details>
 
@@ -1041,6 +1089,41 @@
   .howto-body code {
     font-size: 11px;
   }
+  .howto-body code.block {
+    display: block;
+    padding: 6px 8px;
+    margin: 4px 0;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    overflow-x: auto;
+    white-space: nowrap;
+    user-select: all;
+  }
+  .howto-os {
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .howto-os:last-of-type { border-bottom: none; }
+  .howto-os > strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+    margin-bottom: 0.3rem;
+  }
+  .howto-os p { margin: 0.3rem 0; }
+  .howto-os ol, .howto-os ul {
+    margin: 0.3rem 0 0.4rem 1.2rem;
+    padding: 0;
+  }
+  .howto-os li { margin-bottom: 0.2rem; }
+  .howto-warn ul {
+    margin: 0.3rem 0 0 1.2rem;
+    padding: 0;
+  }
+  .howto-warn li { margin-bottom: 0.25rem; }
   .howto-body kbd {
     font-family: var(--font-mono);
     font-size: 10px;
