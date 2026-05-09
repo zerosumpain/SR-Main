@@ -12,6 +12,7 @@
 
 import { getSession, updateSession } from './session-store';
 import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { validateNodeSpec } from './spec/validate';
 import type {
   NodeSpec,
@@ -310,21 +311,21 @@ Output shape: ${JSON.stringify(proposal.outputShape ?? { example: {} })}
 
 Now write the function body.`;
 
-  // Route this call to OpenRouter (claude-haiku-4.5), NOT the configured
-  // builder default. Empirically the z.ai gateway hangs indefinitely on
-  // free-text code-generation requests against GLM-5.x — observed across
-  // streaming, non-streaming, with/without temperature, with/without JSON
-  // response_format, max_tokens 4k–16k. The same gateway works fine for
-  // structured-extraction shapes (see src/lib/jkai/intel/extract.ts) but
-  // not for emitting verbose code. OpenRouter + claude-haiku-4.5 is fast,
-  // cheap (~$0.01/call), and reliable for codegen.
+  // Stay on the admin-configured builder default (GLM-5.1 on z.ai).
+  // Empirically GLM-5.1 with thinking enabled was hanging indefinitely
+  // on free-text code-generation against this gateway — TCP connection
+  // open, no response body, SDK timeout fires after 90s. The same model
+  // + same gateway works fine for structured extraction (see extract.ts);
+  // the failure mode is specific to verbose code emission with thinking.
   //
-  // Discovery, scope, and other curate calls remain on the admin-configured
-  // builder default — only this one materialize call is routed elsewhere.
-  const { client, model } = await getLLMClient({
-    provider: 'openrouter',
-    modelId: 'anthropic/claude-haiku-4.5',
-  });
+  // Disable GLM thinking for this call via the z.ai-specific `thinking`
+  // parameter (Anthropic-style: { type: 'disabled' }). This skips the
+  // reasoning chain that was timing out and lets the model emit content
+  // directly. Keeps the JSON envelope + response_format as defensive
+  // belt-and-braces — extract.ts confirms that path works on this gateway.
+  const ctx = await resolveDefaultModel('builder');
+  const { client, model } = await getLLMClient(ctx);
+
   const response = await client.chat.completions.create(
     {
       model,
@@ -336,6 +337,11 @@ Now write the function body.`;
       ],
       max_tokens: 16384,
       stream: false,
+      // z.ai-specific extension: disable GLM-5 thinking to skip the
+      // reasoning chain that hangs on this prompt shape. Forwarded by
+      // the openai SDK as-is in the request body.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...({ thinking: { type: 'disabled' } } as any),
     },
     { timeout: 90_000, maxRetries: 0 },
   );
