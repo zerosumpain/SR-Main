@@ -11,7 +11,8 @@
 // asking the model to emit an entire NodeSpec JSON in one go.
 
 import { getSession, updateSession } from './session-store';
-import { streamChat } from './llm-client';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { validateNodeSpec } from './spec/validate';
 import type {
   NodeSpec,
@@ -306,42 +307,44 @@ Output shape: ${JSON.stringify(proposal.outputShape ?? { example: {} })}
 
 Now write the function body.`;
 
-  let raw = '';
-  let textChunks = 0;
-  let toolChunks = 0;
-  for await (const chunk of streamChat({
-    system: EXECUTOR_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
-    // Reasoning models (GLM-5.x) deduct chain-of-thought tokens from
-    // max_tokens. A 4-operation executor body easily reaches ~6-8k output
-    // tokens; bumping to 16k gives reasoning headroom plus the body itself.
-    max_tokens: 16384,
-  })) {
-    if (chunk.type === 'text') {
-      raw += chunk.delta;
-      textChunks++;
-    } else {
-      toolChunks++;
-    }
-  }
+  // Non-streaming call: streaming with GLM-5.x + large max_tokens + reasoning
+  // was hanging indefinitely (the gateway opened the SSE stream but never
+  // emitted the first content chunk). One-shot is fine here — the UI doesn't
+  // render partial executor body, so we get nothing from streaming except
+  // failure modes. Non-streaming also gives us finish_reason + usage for
+  // diagnostics on empty content.
+  const ctx = await resolveDefaultModel('builder');
+  const { client, model } = await getLLMClient(ctx);
 
-  raw = raw.trim();
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: EXECUTOR_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: 16384,
+    stream: false,
+  });
+
+  const choice = response.choices[0];
+  let raw = (choice?.message?.content ?? '').trim();
+
   if (!raw) {
-    // Diagnostic: surface what we *did* receive so the next failure is
-    // debuggable from prod logs without instrumenting again.
     console.error(
       '[curate.materialize] executor body LLM returned empty content',
       {
         proposalType: proposal.type,
         promptChars: userPrompt.length,
-        textChunks,
-        toolChunks,
-        rawLengthPreTrim: raw.length,
+        finishReason: choice?.finish_reason,
+        usage: response.usage,
+        contentRaw: choice?.message?.content,
       },
     );
     throw new Error(
-      `Executor body LLM returned empty content (textChunks=${textChunks}, ` +
-      `toolChunks=${toolChunks}, promptChars=${userPrompt.length}). ` +
+      `Executor body LLM returned empty content ` +
+      `(finish_reason=${choice?.finish_reason ?? 'unknown'}, ` +
+      `prompt_tokens=${response.usage?.prompt_tokens ?? '?'}, ` +
+      `completion_tokens=${response.usage?.completion_tokens ?? '?'}). ` +
       `Check gateway model setting / max_tokens.`,
     );
   }
