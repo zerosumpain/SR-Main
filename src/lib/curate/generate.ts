@@ -57,19 +57,64 @@ async function installDeps(packages: string[], cwd: string, exec: ExecFn): Promi
   });
 }
 
-/** Run tsc --noEmit --skipLibCheck. Returns ok + output regardless of exit. */
-async function runTsc(cwd: string, exec: ExecFn): Promise<{ ok: boolean; output: string }> {
+/**
+ * Run tsc --noEmit --skipLibCheck against the worktree, then filter the
+ * output: only fail if errors land in `ourFiles` (the files curate just
+ * wrote / patched). Pre-existing repo-wide tsc tech debt — the project's
+ * vite build doesn't tsc-check, so unrelated tsc errors have accumulated —
+ * gets logged as informational instead of blocking the curate phase.
+ */
+async function runTsc(
+  cwd: string,
+  ourFiles: string[],
+  exec: ExecFn,
+): Promise<{ ok: boolean; output: string }> {
+  let raw: string;
   try {
     const { stdout, stderr } = await exec('npx', ['tsc', '--noEmit', '--skipLibCheck'], {
       cwd,
       timeout: 2 * 60 * 1000,
     });
-    return { ok: true, output: (stdout + stderr).trim() };
+    raw = (stdout + stderr).trim();
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; message?: string };
-    const output = ((e.stdout ?? '') + (e.stderr ?? '')).trim() || (e.message ?? 'tsc failed');
-    return { ok: false, output };
+    raw = ((e.stdout ?? '') + (e.stderr ?? '')).trim() || (e.message ?? 'tsc failed');
   }
+
+  // Each tsc error line looks like: `path/to/file.ts(line,col): error TS....`.
+  // We split on lines and keep only those naming a path that's in our
+  // newly-generated set. If raw contained a non-tsc message (timeout, etc.)
+  // and no error lines parse, we surface it as failure to be safe.
+  const errorLines = raw.split('\n').filter((l) => /\(\d+,\d+\):\s*error\sTS\d+/.test(l));
+  const ours = new Set(ourFiles);
+  const ourErrors = errorLines.filter((l) => {
+    const fileMatch = l.match(/^([^(]+)\(\d+,\d+\)/);
+    return fileMatch ? ours.has(fileMatch[1]) : false;
+  });
+
+  if (ourErrors.length > 0) {
+    return { ok: false, output: ourErrors.join('\n') };
+  }
+
+  if (errorLines.length > 0) {
+    return {
+      ok: true,
+      output:
+        `[tsc] ${errorLines.length} pre-existing repo errors (none in newly-generated files). ` +
+        `These are tech debt unrelated to this curate session and do not block generate.`,
+    };
+  }
+
+  // No tsc errors at all — but if `raw` had a non-error fatal message
+  // (e.g. command not found, exit-on-init), surface it as failure.
+  if (raw && !raw.match(/Found \d+ errors?/i) && !raw.match(/^$/)) {
+    // Heuristic: tsc on success is silent; non-empty output without parsed
+    // error lines suggests something else went wrong.
+    if (raw.length > 0 && raw.toLowerCase().includes('error')) {
+      return { ok: false, output: raw };
+    }
+  }
+  return { ok: true, output: raw };
 }
 
 // ── Log entry type ───────────────────────────────────────────────────────
@@ -133,10 +178,11 @@ export async function runGenerate(
       logEntry.depsInstalled = pkgSpecs;
     }
 
-    // 4. Run tsc --noEmit --skipLibCheck.
-    const tscResult = await runTsc(worktreeDir, exec);
+    // 4. Run tsc --noEmit --skipLibCheck. Filter errors to only the files
+    //    we just wrote; pre-existing repo tech debt doesn't block curate.
+    const tscResult = await runTsc(worktreeDir, writeResult.written, exec);
     logEntry.tscOk = tscResult.ok;
-    if (!tscResult.ok) {
+    if (tscResult.output) {
       logEntry.tscOutput = tscResult.output;
     }
 
