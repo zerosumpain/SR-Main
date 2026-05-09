@@ -182,6 +182,27 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // WebDAV mount endpoint. Auth is HTTP Basic against webdav_credentials,
+  // not Google OAuth — Finder/Explorer/davfs can't do federated auth. The
+  // credential row is recorded in event.locals.davAuth and verb handlers
+  // attribute writes to its ownerEmail.
+  if (pathname === '/dav' || pathname.startsWith('/dav/')) {
+    const { parseBasicAuth, verifySecret } = await import('$lib/webdav/auth');
+    const creds = parseBasicAuth(event.request.headers.get('authorization'));
+    const ctx = creds ? await verifySecret(creds.pass) : null;
+    if (!ctx) {
+      return new Response('Unauthorized', {
+        status: 401,
+        headers: {
+          'WWW-Authenticate': 'Basic realm="strangeramblings.com webdav"',
+          'content-type': 'text/plain',
+        },
+      });
+    }
+    event.locals.davAuth = ctx;
+    return resolve(event);
+  }
+
   // /api/scraper/script is service-to-service when called on homeserv (the
   // host that owns the scrape scripts) and user-authenticated when called on
   // the VPS (the panel proxies through). Whitelist on homeserv only — its

@@ -7,6 +7,11 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			auth(): Promise<Session | null>;
+			davAuth?: {
+				credentialId: string;
+				ownerEmail: string;
+				label: string;
+			};
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -18,6 +18,20 @@
 
   let files = $state<FileRow[]>(data.files as FileRow[]);
 
+  type Credential = {
+    id: string;
+    label: string;
+    ownerEmail: string;
+    lastUsedAt: string | Date | null;
+    createdAt: string | Date;
+  };
+  let credentials = $state<Credential[]>(data.credentials as Credential[]);
+  let credLabel = $state('');
+  let credBusy = $state(false);
+  let credError = $state<string | null>(null);
+  let newCredSecret = $state<{ id: string; label: string; secret: string } | null>(null);
+  let showSecret = $state(false);
+
   let fileInput: HTMLInputElement | null = $state(null);
   let folderInput: HTMLInputElement | null = $state(null);
   let uploadName = $state('');
@@ -245,6 +259,48 @@
     }
   }
 
+  async function refreshCredentials() {
+    const res = await fetch('/api/admin/webdav-credentials');
+    if (res.ok) {
+      const body = await res.json();
+      credentials = body.credentials;
+    }
+  }
+
+  async function createCredential(ev: SubmitEvent) {
+    ev.preventDefault();
+    credError = null;
+    if (!credLabel.trim()) { credError = 'Label required.'; return; }
+    credBusy = true;
+    try {
+      const res = await fetch('/api/admin/webdav-credentials', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label: credLabel.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) { credError = body.error || `HTTP ${res.status}`; return; }
+      newCredSecret = { id: body.id, label: body.label, secret: body.secret };
+      showSecret = false;
+      credLabel = '';
+      await refreshCredentials();
+    } finally {
+      credBusy = false;
+    }
+  }
+
+  async function revokeCredential(c: Credential) {
+    if (!confirm(`Revoke "${c.label}"? Devices using this credential will stop working immediately.`)) return;
+    const res = await fetch(`/api/admin/webdav-credentials/${c.id}`, { method: 'DELETE' });
+    if (!res.ok) { alert(`Revoke failed (${res.status})`); return; }
+    credentials = credentials.filter((x) => x.id !== c.id);
+  }
+
+  function copySecret() {
+    if (!newCredSecret) return;
+    navigator.clipboard.writeText(newCredSecret.secret).catch(() => {});
+  }
+
   async function deleteRow(f: FileRow) {
     if (!confirm(`Delete "${f.name}"? This removes the file from disk and cannot be undone.`)) return;
     const res = await fetch(`/api/files/${f.id}`, { method: 'DELETE' });
@@ -374,6 +430,84 @@
         </button>
       </div>
     </form>
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">WebDAV access</span>
+      <span class="nm-sec-meta">{credentials.length} {credentials.length === 1 ? 'credential' : 'credentials'}</span>
+    </div>
+
+    <p class="dav-blurb">
+      Mount this file store as a network drive. Files dropped into the mount appear here under the
+      <code>drive/</code> prefix; workflow files outside <code>drive/</code> stay invisible to the mount.
+    </p>
+
+    <details class="dav-howto">
+      <summary>How to mount</summary>
+      <div class="howto-body">
+        <div><strong>macOS</strong> — Finder → <kbd>Cmd</kbd>+<kbd>K</kbd> → <code>https://strangeramblings.com/dav/</code>. Username = the device label, password = the secret below.</div>
+        <div><strong>Windows</strong> — File Explorer → <em>Add a network location</em> → <code>https://strangeramblings.com/dav/</code>. (Windows requires HTTPS, which we already use.)</div>
+        <div><strong>Linux</strong> — <code>gio mount davs://strangeramblings.com/dav/</code>, or add a <code>davfs2</code> entry to <code>/etc/fstab</code>.</div>
+        <div class="howto-warn"><em>Permissions reminder:</em> the per-file R/W/A/D map shown above gates workflow nodes only. The mount has full read/write regardless.</div>
+      </div>
+    </details>
+
+    {#if newCredSecret}
+      <div class="secret-card">
+        <div class="secret-hd">
+          <strong>Secret for "{newCredSecret.label}" — copy now, this is shown only once.</strong>
+          <button type="button" class="row-link" onclick={() => (newCredSecret = null)}>Done</button>
+        </div>
+        <div class="secret-row">
+          <code class="secret-val">{showSecret ? newCredSecret.secret : '•'.repeat(43)}</code>
+          <button type="button" class="row-link" onclick={() => (showSecret = !showSecret)}>
+            {showSecret ? 'Hide' : 'Show'}
+          </button>
+          <button type="button" class="row-link" onclick={copySecret}>Copy</button>
+        </div>
+      </div>
+    {/if}
+
+    <form class="form" onsubmit={createCredential}>
+      <div class="row">
+        <label class="field">
+          <span class="sr-label-tight">Device label <em>— e.g. "MacBook", "iPhone Files"</em></span>
+          <input type="text" bind:value={credLabel} placeholder="MacBook" class="nm-text-input" maxlength="64" />
+        </label>
+        <div class="field cred-submit">
+          <span class="sr-label-tight">&nbsp;</span>
+          <button type="submit" class="nm-save-btn" disabled={credBusy || !credLabel.trim()}>
+            {credBusy ? 'Generating…' : 'Generate credential'}
+          </button>
+        </div>
+      </div>
+      {#if credError}<div class="err-line">{credError}</div>{/if}
+    </form>
+
+    {#if credentials.length > 0}
+      <div class="cred-list">
+        {#each credentials as c (c.id)}
+          <div class="cred-card">
+            <div class="cred-main">
+              <div class="cred-label">{c.label}</div>
+              <div class="cred-meta">
+                <span>{c.ownerEmail}</span>
+                <span class="dot">·</span>
+                <span>Created {fmtDate(c.createdAt)}</span>
+                <span class="dot">·</span>
+                {#if c.lastUsedAt}
+                  <span>Last used {fmtDate(c.lastUsedAt)}</span>
+                {:else}
+                  <span class="cred-muted">Never used</span>
+                {/if}
+              </div>
+            </div>
+            <button type="button" class="row-link danger" onclick={() => revokeCredential(c)}>Revoke</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </section>
 
   <section class="nm-sec">
@@ -871,5 +1005,129 @@
   @media (max-width: 640px) {
     .file-card { grid-template-columns: 1fr; align-items: flex-start; }
     .file-perms, .file-actions { justify-content: flex-start; }
+  }
+
+  /* ——— WebDAV section ——— */
+  .dav-blurb {
+    margin: 0 0 0.6rem;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .dav-howto {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 0.6rem;
+    padding: 6px 10px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+  }
+  .dav-howto summary {
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+  }
+  .howto-body {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .howto-body code {
+    font-size: 11px;
+  }
+  .howto-body kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    border: 1px solid var(--card-border);
+    border-bottom-width: 2px;
+    padding: 1px 5px;
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .howto-warn {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-top: 0.15rem;
+  }
+  .secret-card {
+    border: 1px solid var(--accent);
+    background: rgba(255, 196, 96, 0.08);
+    padding: 0.75rem 0.9rem;
+    margin-bottom: 0.7rem;
+  }
+  .secret-hd {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+  .secret-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 5px 8px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+  }
+  .secret-val {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: none;
+    padding: 0;
+  }
+  .cred-submit { align-self: end; }
+  .cred-list {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+  }
+  .cred-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+  }
+  .cred-card:hover { border-color: var(--text-primary); }
+  .cred-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .cred-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .cred-meta .dot { color: var(--text-ghost); }
+  .cred-muted { font-style: italic; color: var(--text-ghost); }
+
+  @media (max-width: 640px) {
+    .cred-card { grid-template-columns: 1fr; }
+    .cred-submit { align-self: stretch; }
   }
 </style>

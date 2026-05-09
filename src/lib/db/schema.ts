@@ -1341,6 +1341,32 @@ export type WorkflowFilePermissions = {
   delete: boolean;
 };
 
+// One row per provisioned WebDAV mount credential. The mount client uses
+// HTTP Basic Auth — username is informational (we use the label), password
+// is the raw token whose sha256 is stored in `secretHash`. The token is
+// shown to the user once at creation and never retrievable after.
+// Drive operations are gated only by an unrevoked credential — they do NOT
+// honour the per-file workflow_files.permissions map (that map exists to
+// gate workflow nodes, not the human mount).
+
+export const webdavCredentials = pgTable(
+  'webdav_credentials',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    label: text('label').notNull(),
+    secretHash: text('secret_hash').notNull(),
+    ownerEmail: text('owner_email').notNull(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    bySecret: uniqueIndex('webdav_credentials_secret_hash_idx').on(t.secretHash),
+  }),
+);
+
+export type WebdavCredentialRow = typeof webdavCredentials.$inferSelect;
+
 // ==========================================
 // Heartbeat — perpetual action queue
 // ==========================================
