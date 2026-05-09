@@ -307,17 +307,43 @@ Output shape: ${JSON.stringify(proposal.outputShape ?? { example: {} })}
 Now write the function body.`;
 
   let raw = '';
+  let textChunks = 0;
+  let toolChunks = 0;
   for await (const chunk of streamChat({
     system: EXECUTOR_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userPrompt }],
-    max_tokens: 4096,
+    // Reasoning models (GLM-5.x) deduct chain-of-thought tokens from
+    // max_tokens. A 4-operation executor body easily reaches ~6-8k output
+    // tokens; bumping to 16k gives reasoning headroom plus the body itself.
+    max_tokens: 16384,
   })) {
-    if (chunk.type === 'text') raw += chunk.delta;
+    if (chunk.type === 'text') {
+      raw += chunk.delta;
+      textChunks++;
+    } else {
+      toolChunks++;
+    }
   }
 
   raw = raw.trim();
   if (!raw) {
-    throw new Error('Executor body LLM returned empty content. Check gateway model setting.');
+    // Diagnostic: surface what we *did* receive so the next failure is
+    // debuggable from prod logs without instrumenting again.
+    console.error(
+      '[curate.materialize] executor body LLM returned empty content',
+      {
+        proposalType: proposal.type,
+        promptChars: userPrompt.length,
+        textChunks,
+        toolChunks,
+        rawLengthPreTrim: raw.length,
+      },
+    );
+    throw new Error(
+      `Executor body LLM returned empty content (textChunks=${textChunks}, ` +
+      `toolChunks=${toolChunks}, promptChars=${userPrompt.length}). ` +
+      `Check gateway model setting / max_tokens.`,
+    );
   }
 
   // Strip code fences if the model added them.
