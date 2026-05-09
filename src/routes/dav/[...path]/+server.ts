@@ -95,29 +95,133 @@ export const OPTIONS: RequestHandler = async () => {
 
 // ──────── verb: GET / HEAD ─────────────────────────────────────────────
 
+function htmlEscape(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+// Browser-friendly index page for a collection. WebDAV clients use
+// PROPFIND, not GET, so this is purely for humans who paste the URL into
+// a browser tab — gives them a directory listing and a hint that the URL
+// is meant to be mounted, not browsed.
+async function renderCollectionIndex(rel: string): Promise<string> {
+  const all = await descendants(rel);
+  const baseName = relToName(rel);
+  const stripLen = baseName === DRIVE_PREFIX.replace(/\/$/, '') ? DRIVE_PREFIX.length : baseName.length + 1;
+  const seenFolders = new Set<string>();
+  const folders: string[] = [];
+  const files: { name: string; size: number; updated: Date; mime: string }[] = [];
+  for (const r of all) {
+    const after = r.name.slice(stripLen);
+    if (!after) continue;
+    const slash = after.indexOf('/');
+    if (slash === -1) {
+      if (after === FOLDER_MARKER) continue;
+      files.push({ name: after, size: r.sizeBytes, updated: new Date(r.updatedAt), mime: r.mimeType });
+    } else {
+      const sub = after.slice(0, slash);
+      if (!seenFolders.has(sub)) {
+        seenFolders.add(sub);
+        folders.push(sub);
+      }
+    }
+  }
+  folders.sort();
+  files.sort((a, b) => a.name.localeCompare(b.name));
+
+  const crumbs = rel ? rel.split('/').filter(Boolean) : [];
+  const breadcrumb = ['<a href="/dav/">/</a>']
+    .concat(crumbs.map((seg, i) => {
+      const path = crumbs.slice(0, i + 1).map(encodeURIComponent).join('/');
+      return `<a href="/dav/${path}/">${htmlEscape(seg)}</a>`;
+    }))
+    .join(' / ');
+
+  const parentLink = rel
+    ? `<a href="/dav/${crumbs.slice(0, -1).map(encodeURIComponent).join('/')}${crumbs.length > 1 ? '/' : ''}">..</a>`
+    : '';
+
+  const folderRows = folders.map((f) =>
+    `<tr><td><a href="/dav/${rel ? encodeURIComponent(rel) + '/' : ''}${encodeURIComponent(f)}/">${htmlEscape(f)}/</a></td><td>—</td><td>folder</td></tr>`
+  ).join('');
+  const fileRows = files.map((f) =>
+    `<tr><td><a href="/dav/${rel ? encodeURIComponent(rel) + '/' : ''}${encodeURIComponent(f.name)}">${htmlEscape(f.name)}</a></td><td>${fmtSize(f.size)}</td><td>${htmlEscape(f.mime)}</td></tr>`
+  ).join('');
+  const emptyRow = !folders.length && !files.length
+    ? '<tr><td colspan="3" class="empty">empty</td></tr>'
+    : '';
+
+  return `<!doctype html>
+<html><head><title>WebDAV — /dav/${htmlEscape(rel)}</title>
+<style>
+  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; color: #1a1008; }
+  h1 { font-size: 1.2rem; font-weight: 500; margin: 0 0 0.5rem; }
+  .hint { background: #fff8e8; border-left: 3px solid #d99836; padding: 0.6rem 0.9rem; font-size: 13px; margin: 0 0 1rem; }
+  .crumb { font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 0 0 1rem; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; font-size: 13px; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; }
+  td.empty { color: #999; font-style: italic; text-align: center; }
+  a { color: #b8500e; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .parent { font-family: ui-monospace, Menlo, monospace; }
+</style></head><body>
+<h1>/dav/${htmlEscape(rel)}</h1>
+<div class="hint">This URL is a WebDAV mount, not a browser destination. Mount it in Finder (⌘K), Windows Explorer (Add a network location), or <code>davs://strangeramblings.com/dav/</code> in Linux. Manage credentials at <a href="/admin/files">/admin/files</a>.</div>
+<div class="crumb">${breadcrumb}</div>
+${parentLink ? `<div class="parent">${parentLink}</div>` : ''}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Type</th></tr></thead>
+  <tbody>${folderRows}${fileRows}${emptyRow}</tbody>
+</table>
+</body></html>`;
+}
+
 export const GET: RequestHandler = async ({ params, request }) => {
   const headOnly = request.method === 'HEAD';
-  const { rel } = urlToRel('/dav/' + (params.path ?? ''));
+  const { rel, isCollection: trailingSlash } = urlToRel('/dav/' + (params.path ?? ''));
   const name = relToName(rel);
-  const row = await rowByName(name);
-  if (!row || isFolderMarker(row.name)) throw error(404, 'not found');
+  const row = rel ? await rowByName(name) : null;
+  const isFile = row && !isFolderMarker(row.name);
+
+  // Resolve as a collection when: it's the mount root, the URL has a
+  // trailing slash, or no file row exists but there are descendants
+  // (virtual folder).
+  if (!isFile) {
+    const folder = rel === '' || trailingSlash || (await isVirtualFolder(rel));
+    if (!folder) throw error(404, 'not found');
+    if (headOnly) {
+      return new Response(null, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
+    const html = await renderCollectionIndex(rel);
+    return new Response(html, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'private, no-store' },
+    });
+  }
 
   if (headOnly) {
     return new Response(null, {
       status: 200,
       headers: {
-        'content-type': row.mimeType || 'application/octet-stream',
-        'content-length': String(row.sizeBytes),
-        'last-modified': new Date(row.updatedAt).toUTCString(),
-        etag: `"${row.id}-${new Date(row.updatedAt).getTime()}"`,
+        'content-type': row!.mimeType || 'application/octet-stream',
+        'content-length': String(row!.sizeBytes),
+        'last-modified': new Date(row!.updatedAt).toUTCString(),
+        etag: `"${row!.id}-${new Date(row!.updatedAt).getTime()}"`,
       },
     });
   }
 
-  // Stream from disk to avoid buffering big files in RAM.
+  // Stream file from disk to avoid buffering big files in RAM.
   let stream: Readable;
   try {
-    stream = createReadStream(row.diskPath);
+    stream = createReadStream(row!.diskPath);
   } catch {
     throw error(410, 'file content missing');
   }
@@ -125,10 +229,10 @@ export const GET: RequestHandler = async ({ params, request }) => {
   return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
     status: 200,
     headers: {
-      'content-type': row.mimeType || 'application/octet-stream',
-      'content-length': String(row.sizeBytes),
-      'last-modified': new Date(row.updatedAt).toUTCString(),
-      etag: `"${row.id}-${new Date(row.updatedAt).getTime()}"`,
+      'content-type': row!.mimeType || 'application/octet-stream',
+      'content-length': String(row!.sizeBytes),
+      'last-modified': new Date(row!.updatedAt).toUTCString(),
+      etag: `"${row!.id}-${new Date(row!.updatedAt).getTime()}"`,
       'cache-control': 'private, no-store',
     },
   });
