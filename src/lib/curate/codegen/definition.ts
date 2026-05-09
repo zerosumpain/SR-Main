@@ -27,6 +27,8 @@ export const ${camel(spec.type)}Def: NodeDefinition = {
   label: '${escape(spec.label)}',
   category: '${normalizeCategory(spec.category)}',
   description: '${escape(spec.description)}',
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: '${escape(spec.label)} result' }],
   llmDescription: ${tsString(spec.llmDescription)},
   llmExamples: ${json(spec.llmExamples, 2)},
   configSchema: ${json(spec.configSchema, 2)},
