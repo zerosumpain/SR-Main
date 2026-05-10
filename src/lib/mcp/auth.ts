@@ -15,18 +15,45 @@ export type VerifyResult =
 
 const SEPARATOR = '.';
 
-function payloadString(scope: TokenScope): string {
-  return [scope.sessionId, scope.kind, scope.kindId, String(scope.expiresAt)].join('|');
+const VALID_KINDS: TokenKind[] = ['build', 'canvas_chat', 'curate', 'manual'];
+
+function encodePayload(scope: TokenScope): string {
+  return Buffer.from(
+    JSON.stringify({
+      sessionId: scope.sessionId,
+      kind: scope.kind,
+      kindId: scope.kindId,
+      expiresAt: scope.expiresAt,
+    }),
+    'utf8',
+  ).toString('base64url');
 }
 
-function sign(payload: string, secret: string): string {
-  return createHmac('sha256', secret).update(payload).digest('base64url');
+function decodePayload(encoded: string): TokenScope | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    if (
+      typeof parsed.sessionId !== 'string' ||
+      typeof parsed.kind !== 'string' ||
+      typeof parsed.kindId !== 'string' ||
+      typeof parsed.expiresAt !== 'number' ||
+      !VALID_KINDS.includes(parsed.kind)
+    )
+      return null;
+    return parsed as TokenScope;
+  } catch {
+    return null;
+  }
+}
+
+function sign(encodedPayload: string, secret: string): string {
+  return createHmac('sha256', secret).update(encodedPayload).digest('base64url');
 }
 
 export function mintBridgeToken(scope: TokenScope, secret: string): string {
-  const payload = payloadString(scope);
-  const sig = sign(payload, secret);
-  return Buffer.from(payload, 'utf8').toString('base64url') + SEPARATOR + sig;
+  const encoded = encodePayload(scope);
+  const sig = sign(encoded, secret);
+  return encoded + SEPARATOR + sig;
 }
 
 export function verifyBridgeToken(
@@ -34,37 +61,32 @@ export function verifyBridgeToken(
   expectedScope: TokenScope,
   secret: string,
 ): VerifyResult {
-  const [encodedPayload, sig] = token.split(SEPARATOR);
+  const parts = token.split(SEPARATOR);
+  if (parts.length !== 2) return { ok: false, reason: 'malformed' };
+  const [encodedPayload, sig] = parts;
   if (!encodedPayload || !sig) return { ok: false, reason: 'malformed' };
 
-  let payload: string;
-  try {
-    payload = Buffer.from(encodedPayload, 'base64url').toString('utf8');
-  } catch {
-    return { ok: false, reason: 'malformed' };
-  }
-
-  const expectedSig = sign(payload, secret);
+  const expectedSig = sign(encodedPayload, secret);
   const a = Buffer.from(sig, 'utf8');
   const b = Buffer.from(expectedSig, 'utf8');
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return { ok: false, reason: 'signature_mismatch' };
   }
 
-  const [sessionId, kind, kindId, expiresAtStr] = payload.split('|');
-  const expiresAt = Number(expiresAtStr);
+  const scope = decodePayload(encodedPayload);
+  if (!scope) return { ok: false, reason: 'malformed' };
 
   if (
-    sessionId !== expectedScope.sessionId ||
-    kind !== expectedScope.kind ||
-    kindId !== expectedScope.kindId
+    scope.sessionId !== expectedScope.sessionId ||
+    scope.kind !== expectedScope.kind ||
+    scope.kindId !== expectedScope.kindId
   ) {
     return { ok: false, reason: 'scope_mismatch' };
   }
 
-  if (Number.isNaN(expiresAt) || Date.now() > expiresAt) {
+  if (Number.isNaN(scope.expiresAt) || Date.now() > scope.expiresAt) {
     return { ok: false, reason: 'expired' };
   }
 
-  return { ok: true, scope: { sessionId, kind: kind as TokenKind, kindId, expiresAt } };
+  return { ok: true, scope };
 }

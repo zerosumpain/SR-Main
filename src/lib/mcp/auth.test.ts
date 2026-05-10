@@ -55,4 +55,20 @@ describe('mcp/auth bridge tokens', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe('signature_mismatch');
   });
+
+  it('rejects a token with extra separator segments', () => {
+    const token = mintBridgeToken(scope, SECRET);
+    const broken = token + '.junk';
+    const result = verifyBridgeToken(broken, scope, SECRET);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('malformed');
+  });
+
+  it('rejects a token whose kindId contains the legacy pipe separator', () => {
+    const tricky: TokenScope = { ...scope, kindId: 'wf|99' };
+    const token = mintBridgeToken(tricky, SECRET);
+    const result = verifyBridgeToken(token, tricky, SECRET);
+    // After the JSON payload migration, this MUST verify cleanly:
+    expect(result.ok).toBe(true);
+  });
 });
