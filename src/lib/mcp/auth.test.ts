@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mintBridgeToken, verifyBridgeToken, type TokenScope } from './auth';
 
 const SECRET = 'test-secret-do-not-use-in-prod-32-bytes-please';

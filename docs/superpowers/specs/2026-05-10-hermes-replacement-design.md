@@ -102,7 +102,7 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 - `SOUL.md` — assistant identity ("you are jkai's engine; you act through MCP tools; you never expose Hermes-specific terminology to user-facing strings")
 - `MEMORY.md` — agent-curated memory (Hermes-managed)
 - `USER.md` — facts about John (seeded from `~/.claude/projects/-home-john/memory/MEMORY.md`)
-- `.hermes.md` — providers, default model, MCP server URL
+- `config.yaml` — providers, default model, MCP server URL
 - `sessions.db` — Hermes' SQLite (Phase 0 verifies the option-D hook)
 - `skills/` — see 4.2
 
@@ -292,7 +292,7 @@ Five phases, each independently shippable, each with a feature flag, each with a
 ### Phase 0 — Install standalone + verify (2–3 days)
 
 **Deliverables:**
-- `~/.hermes-jkai/` profile with `.hermes.md`, seed `SOUL.md`, seed `USER.md`.
+- `~/.hermes-jkai/` profile with `config.yaml`, seed `SOUL.md`, seed `USER.md`.
 - Providers configured for z.ai, OpenRouter, Anthropic.
 - `hermes -p jkai` CLI works against each provider.
 - MCP smoke test: stub `echo_tool` MCP server, Hermes calls it with bridge-token auth.

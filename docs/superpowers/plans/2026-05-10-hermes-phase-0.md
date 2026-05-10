@@ -18,7 +18,7 @@
 |---|---|---|
 | `~/hermes-agent/` | Hermes source tree (cloned, pip-installed editable) | New (outside repo) |
 | `~/.hermes-jkai/` | Hermes profile dir (HERMES_HOME) | New (outside repo) |
-| `~/.hermes-jkai/.hermes.md` | Profile config: providers, default model, MCP server URL | New |
+| `~/.hermes-jkai/config.yaml` | Profile config: providers, default model, MCP server URL | New |
 | `~/.hermes-jkai/SOUL.md` | Assistant identity prompt | New |
 | `~/.hermes-jkai/USER.md` | Facts about John | New |
 | `~/.hermes-jkai/MEMORY.md` | Empty initially; Hermes-managed thereafter | New |
@@ -117,7 +117,7 @@ Hermes lives outside the repo — no commit. Continue to Task 2.
 ## Task 2: Create the `jkai` Hermes profile
 
 **Files:**
-- Create: `~/.hermes-jkai/.hermes.md`
+- Create: `~/.hermes-jkai/config.yaml`
 - Create: `~/.hermes-jkai/SOUL.md`
 - Create: `~/.hermes-jkai/USER.md`
 - Create: `~/.hermes-jkai/MEMORY.md` (empty — Hermes-managed thereafter)
@@ -183,16 +183,16 @@ Run:
 
 Expected: file exists, is empty. Hermes will populate it via agent-curated memory once sessions start.
 
-- [ ] **Step 5: Write minimal `.hermes.md` (config skeleton)**
+- [ ] **Step 5: Write minimal `config.yaml` (config skeleton)**
 
 The exact format depends on `<HERMES_TAG>`. Read the canonical example:
 ```bash
 ls ~/hermes-agent/examples/ ~/hermes-agent/docs/ 2>/dev/null
 # locate the profile config example, then:
-cat ~/hermes-agent/<path-to-example>/.hermes.md  # or equivalent
+cat ~/hermes-agent/<path-to-example>/config.yaml  # or equivalent
 ```
 
-Create `~/.hermes-jkai/.hermes.md` matching that format, with **placeholder provider blocks only** (real keys are added in Task 3). The file must declare:
+Create `~/.hermes-jkai/config.yaml` matching that format, with **placeholder provider blocks only** (real keys are added in Task 3). The file must declare:
 - profile name: `jkai`
 - default provider/model (placeholder for now)
 - providers section with three placeholder entries: `zai`, `openrouter`, `anthropic`
@@ -218,7 +218,7 @@ This profile lives outside the repo. Continue.
 ## Task 3: Configure providers (z.ai, OpenRouter, Anthropic)
 
 **Files:**
-- Modify: `~/.hermes-jkai/.hermes.md`
+- Modify: `~/.hermes-jkai/config.yaml`
 - Create: `~/.hermes-jkai/.env` (mode 600)
 
 - [ ] **Step 1: Locate API keys for the three providers**
@@ -248,9 +248,9 @@ ls -l ~/.hermes-jkai/.env
 
 Expected: perms `-rw-------`.
 
-- [ ] **Step 3: Update `.hermes.md` to reference the env keys**
+- [ ] **Step 3: Update `config.yaml` to reference the env keys**
 
-Edit `~/.hermes-jkai/.hermes.md`. Replace placeholders so each provider entry references the env variable for its key. (Exact YAML/TOML keys depend on Hermes' format from Task 2 Step 5 — match its conventions.)
+Edit `~/.hermes-jkai/config.yaml`. Replace placeholders so each provider entry references the env variable for its key. (Exact YAML/TOML keys depend on Hermes' format from Task 2 Step 5 — match its conventions.)
 
 For each provider, set:
 - z.ai: model `glm-4.6`, base url `https://api.z.ai/api/coding/paas/v4`, api key from `ZAI_API_KEY`
@@ -732,7 +732,7 @@ SvelteKit MCP server in Phase 1.
     npm test
 
 ## Wire into Hermes
-See `~/.hermes-jkai/.hermes.md` MCP block (Task 7).
+See `~/.hermes-jkai/config.yaml` MCP block (Task 7).
 This stub is removed once Phase 1 lands the real MCP server.
 ```
 
@@ -753,12 +753,12 @@ bridge shape end-to-end. Removed when Phase 1 lands the real server."
 ## Task 7: End-to-end MCP smoke test (Hermes → echo-stub)
 
 **Files:**
-- Modify: `~/.hermes-jkai/.hermes.md` (add MCP server block)
+- Modify: `~/.hermes-jkai/config.yaml` (add MCP server block)
 - Append to: `docs/superpowers/research/2026-05-10-hermes-phase-0-acceptance.md`
 
 - [ ] **Step 1: Add the MCP block to the profile config**
 
-Edit `~/.hermes-jkai/.hermes.md` and add an MCP server entry pointing at the stub. Exact syntax depends on `<HERMES_TAG>` — match Hermes' MCP config format (see `~/hermes-agent/docs/` or example configs).
+Edit `~/.hermes-jkai/config.yaml` and add an MCP server entry pointing at the stub. Exact syntax depends on `<HERMES_TAG>` — match Hermes' MCP config format (see `~/hermes-agent/docs/` or example configs).
 
 The entry must launch the stub via stdio:
 - command: `npx`
@@ -1060,7 +1060,7 @@ git log --oneline -10  # confirm the tag points at the acceptance commit
 (To be performed by the executing agent before declaring Phase 0 complete.)
 
 **Spec coverage** — every Phase 0 deliverable in the spec section 6.0 has a corresponding task above:
-- Profile created with `.hermes.md`, `SOUL.md`, `USER.md` → Task 2
+- Profile created with `config.yaml`, `SOUL.md`, `USER.md` → Task 2
 - Providers configured for z.ai, OpenRouter, Anthropic → Task 3
 - `hermes -p jkai` works against each provider → Task 4
 - MCP smoke test with stub `echo_tool` → Tasks 5–7
