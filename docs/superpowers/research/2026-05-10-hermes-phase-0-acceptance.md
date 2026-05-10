@@ -399,3 +399,23 @@ Service is **disabled** and **inactive**. Phase 1 will `systemctl --user enable 
   still accepts it without complaint).
 - The unit file lives at `~/.config/systemd/user/jkai-hermes.service` and is
   **not** committed to the repo (it's a host-local config artefact).
+
+---
+
+## Final acceptance
+
+- Provider smoke tests: PASS / PASS / PASS (z.ai, openrouter, anthropic)
+- Bridge-token unit tests: PASS (8/8) [original 6 + 2 hardening regression tests]
+- MCP echo end-to-end (Hermes → stub → response): PASS
+- MCP crash-recovery behaviour: Hermes spawns the stdio MCP server fresh per
+  invocation; if it dies during startup, Hermes retries up to 3 times (1s
+  back-off) and then registers the tool successfully (observed: attempt 1
+  failed, attempt 2 succeeded, session completed normally). Mid-call kill was
+  not observable due to <1s response time, but the 3-retry architecture is
+  confirmed.
+- Session-backend verdict: A (option D not pluggable in v2026.5.7 without
+  forking — no ABC, no backend registry, ~30 direct `SessionDB()` call sites,
+  SQLite-only FTS5/WAL/trigger semantics throughout)
+- systemd unit prepared, validated, NOT enabled: PASS
+
+Phase 0 is complete. Phase 1 (canvas orchestrator chat) can begin.
