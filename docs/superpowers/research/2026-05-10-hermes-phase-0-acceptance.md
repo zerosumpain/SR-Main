@@ -302,3 +302,100 @@ invocation, the real Phase 1 MCP server should be designed to be stateless
 across connections (or use an external store for any state it needs to persist
 between tool calls). Crash recovery at the Hermes level (3 retries + back-off)
 is already present and functional.
+
+---
+
+## Task 9: systemd unit
+
+### Hermes gateway command discovery
+
+v2026.5.7 exposes a first-class `gateway run` subcommand intended for use as
+a foreground daemon (the `--replace` flag kills any existing gateway instance
+before starting, which is the recommended pattern for systemd). This is
+confirmed by the Hermes source itself at
+`~/hermes-agent/hermes_cli/gateway.py` line 1914, where every auto-generated
+`ExecStart` uses exactly:
+
+```
+<python> -m hermes_cli.main gateway run --replace
+```
+
+The `~/.local/bin/hermes` wrapper (`exec ~/hermes-agent/venv/bin/hermes "$@"`)
+exposes the same invocation as `hermes gateway run --replace`.
+
+**Note on UNIX socket gateway:** v2026.5.7 does not expose a UNIX-socket
+gateway natively. The `gateway run` command starts the messaging gateway
+(Telegram / WhatsApp / Slack bridge), not a UNIX-socket RPC server. A
+UNIX-socket RPC server (for SvelteKit `hermes-client.ts`) is a Phase 1
+concern; it will require either (a) a purpose-built Python wrapper around
+`AIAgent`, or (b) using the `hermes acp` subcommand (ACP = Agent Client
+Protocol, for editor integration) if it turns out to expose a socket. Phase 0
+only needs a syntactically valid unit — `hermes gateway run --replace` is the
+correct long-running process shape and is used here.
+
+**Chosen ExecStart:**
+
+```
+%h/.local/bin/hermes gateway run --replace
+```
+
+`%h` expands to the user's home directory in systemd user context (confirmed
+by `systemd-analyze --user verify` returning exit 0 / no warnings).
+`HERMES_HOME` is set via `Environment=` to point at the `~/.hermes-jkai`
+profile so the daemon uses the jkai-specific config and credentials.
+
+### Unit file (`~/.config/systemd/user/jkai-hermes.service`)
+
+```ini
+[Unit]
+Description=jkai Hermes agent runtime
+After=network.target
+
+[Service]
+Type=simple
+Environment=HERMES_HOME=%h/.hermes-jkai
+EnvironmentFile=%h/.hermes-jkai/.env
+ExecStart=%h/.local/bin/hermes gateway run --replace
+Restart=on-failure
+RestartSec=5s
+RuntimeDirectory=jkai-hermes
+RuntimeDirectoryMode=0700
+
+[Install]
+WantedBy=default.target
+```
+
+### Validation output
+
+```
+$ systemctl --user daemon-reload
+(no output)
+
+$ systemd-analyze --user verify ~/.config/systemd/user/jkai-hermes.service
+(no output — zero warnings, exit 0)
+```
+
+### Enabled / active status
+
+```
+$ systemctl --user is-enabled jkai-hermes.service
+disabled
+
+$ systemctl --user is-active jkai-hermes.service
+inactive
+```
+
+Service is **disabled** and **inactive**. Phase 1 will `systemctl --user enable --now jkai-hermes.service`.
+
+### Notes
+
+- `%h` in `EnvironmentFile` and `ExecStart` expands correctly in the user
+  systemd context (verified by `systemd-analyze --user verify` passing with
+  zero output).
+- `RuntimeDirectory=jkai-hermes` causes systemd to create and own
+  `/run/user/1000/jkai-hermes/` — the intended future location for
+  `jkai-hermes.sock` once Phase 1 adds a UNIX-socket RPC layer.
+- `Type=simple` produced no deprecation warnings (systemd 255 on this host
+  still accepts it without complaint).
+- The unit file lives at `~/.config/systemd/user/jkai-hermes.service` and is
+  **not** committed to the repo (it's a host-local config artefact).
