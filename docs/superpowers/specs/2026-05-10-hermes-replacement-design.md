@@ -29,44 +29,50 @@ The two motivations, ranked:
 
 ## 3. Architecture
 
+> **Transport update — 2026-05-11.** Phase 0 discovered that Hermes v2026.5.7 has no native UNIX-socket RPC gateway; `hermes gateway run` is the messaging-platform multiplexer. Rather than building a custom socket gateway, jkai integrates as a **Hermes platform** alongside Telegram/Slack/WhatsApp/Discord/Signal. The transport between SvelteKit and Hermes is therefore HTTP inbound + SSE outbound, mediated by a `JkaiPlatformAdapter` plugin registered with Hermes' `PlatformRegistry`. The architecture diagram and component lists below reflect this design. The original UNIX-socket framing is superseded.
+
 Three planes:
 
 ```
-┌──────────────── homeserv ────────────────┐
-│                                           │
-│  ┌─── SvelteKit (TS, port 5173) ───┐     │
-│  │   /jkai, /jkai/builds,           │     │
-│  │   /jkai/canvas, /jkai/curate     │◄────┼─── user (UI unchanged)
-│  │   /admin/hermes (new)            │     │
-│  │                                  │     │
-│  │   HermesClient.ts                │     │
-│  │   MCP server (132 tools)         │     │
-│  └────────┬────────────┬────────────┘     │
-│           ▲            ▼                  │
-│           │   ┌────────────────────┐      │
-│           │   │ jkai-hermes.service│      │
-│           └───┤ (Python, systemd)  │      │
-│   /run/user/  │   AIAgent loop     │      │
-│   1000/jkai-  │   SQLite (sessions,│      │
-│   hermes.sock │   skills, memory)  │      │
-│               │   skills/          │      │
-│               │   ├ jkai-build     │      │
-│               │   ├ jkai-canvas    │      │
-│               │   ├ jkai-curate    │      │
-│               │   └ design-system  │      │
-│               └─────────┬──────────┘      │
-│                         │ MCP             │
-│                         ▼                 │
-│                Postgres (app state)       │
-│                                           │
-└───────────────────────────────────────────┘
+┌──────────────── homeserv ────────────────────────────┐
+│                                                       │
+│  ┌─── SvelteKit (TS, port 5173) ───────────────┐     │
+│  │   /jkai, /jkai/builds,                       │     │
+│  │   /jkai/canvas, /jkai/curate                 │◄────┼── user (UI unchanged)
+│  │   /admin/hermes (new)                        │     │
+│  │                                              │     │
+│  │   hermes-client.ts  (HTTP/SSE)               │     │
+│  │   MCP server (132 tools)                     │     │
+│  └─────────┬─────────────────────┬──────────────┘     │
+│            │ HTTP POST           ▲ MCP                │
+│            │ (user msg)          │ (tool calls)       │
+│            ▼                     │                    │
+│  ┌──────────────────────────────────────────────┐     │
+│  │ jkai-hermes.service  (systemd, Python)       │     │
+│  │   hermes gateway run --replace               │     │
+│  │   ┌─ JkaiPlatformAdapter (plugin)            │     │
+│  │   │    inbound:  POST  /platforms/jkai/msg   │     │
+│  │   │    outbound: SSE   /platforms/jkai/out   │     │
+│  │   ├─ AIAgent loop (per-session)              │     │
+│  │   ├─ SQLite (sessions, skills, memory)       │     │
+│  │   └─ skills/                                 │     │
+│  │       ├ jkai-build                           │     │
+│  │       ├ jkai-canvas                          │     │
+│  │       ├ jkai-curate                          │     │
+│  │       └ design-system                        │     │
+│  └──────────────────────┬───────────────────────┘     │
+│                         │ MCP                         │
+│                         ▼                             │
+│                Postgres (app state)                   │
+│                                                       │
+└───────────────────────────────────────────────────────┘
 ```
 
-**Presentation plane** — SvelteKit. Unchanged user UX. Adds `/admin/hermes` for config/inspection. Talks to Hermes via socket-RPC mirroring the existing `builder-client.ts` pattern.
+**Presentation plane** — SvelteKit. Unchanged user UX. Adds `/admin/hermes` for config/inspection. Talks to Hermes through `hermes-client.ts`: HTTP POST for inbound user messages, SSE for outbound stream from the platform adapter.
 
-**Agent plane** — `jkai-hermes.service`. Python systemd user service running Hermes' `AIAgent`. Owns session state, skills, agent-curated memory in SQLite under `~/.hermes-jkai/`. Single Hermes profile (`jkai`) with one Hermes session per build / canvas-orchestrator-conversation / curate-session.
+**Agent plane** — `jkai-hermes.service`. Python systemd user service running `hermes gateway run --replace` with the `JkaiPlatformAdapter` plugin registered. The adapter is a `BasePlatformAdapter` subclass that treats SvelteKit as another messaging channel (just like Telegram or Slack). One Hermes session per chat_id, where chat_id is bound to a jkai resource (`workflow_id` for canvas chats, `build_id` for builds, `curate_session_id` for curate sessions). Hermes' SQLite remains canonical for session, skill, and agent-curated memory state.
 
-**Tool plane** — MCP server inside SvelteKit, exposing all 132 site-tools (existing TS registry — no porting). Hermes calls tools via MCP to mutate Postgres; SvelteKit subscribes to DB changes for SSE to the UI.
+**Tool plane** — MCP server inside SvelteKit, exposing all 132 site-tools (existing TS registry — no porting). Hermes calls tools via MCP to mutate Postgres; SvelteKit subscribes to DB changes for SSE to the UI. The two outbound streams to a browser are therefore: (a) Postgres change SSE for DAG/build/curate state, (b) platform-adapter SSE for conversational state.
 
 ### State boundary
 
@@ -80,8 +86,8 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 - `llm-client.ts` and `llm-helpers.ts` (replaced by Hermes' `runtime_provider.py`)
 - `src/lib/workflows/orchestrator/loop.ts` (replaced by `jkai-canvas` skill)
 - `src/lib/curate/engine.ts` orchestration logic (replaced by `jkai-curate` skill); the data-shell event mirror remains
-- `builder-client.ts` (replaced by `hermes-client.ts`)
-- `jkai-builder.service` (replaced by `jkai-hermes.service`)
+- `builder-client.ts` (replaced by `hermes-client.ts`; HTTP/SSE shape, not RPC-over-socket)
+- `jkai-builder.service` (replaced by `jkai-hermes.service` running `hermes gateway run --replace`)
 
 ### What stays
 
@@ -96,7 +102,14 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 
 ### 4.1 New artefacts
 
-**`jkai-hermes.service` (systemd user unit)** — `~/.config/systemd/user/jkai-hermes.service`. Runs Hermes' socket-gateway; `WantedBy=default.target`; `Restart=on-failure`. Replaces `jkai-builder.service` only after Phase 4.
+**`jkai-hermes.service` (systemd user unit)** — `~/.config/systemd/user/jkai-hermes.service`. Runs `hermes gateway run --replace` with the `JkaiPlatformAdapter` plugin loaded. `WantedBy=default.target`; `Restart=on-failure`. Replaces `jkai-builder.service` only after Phase 4.
+
+**`JkaiPlatformAdapter`** — Python plugin under `~/.hermes-jkai/extensions/jkai_platform/`. Subclasses Hermes' `BasePlatformAdapter` (`gateway/platforms/base.py`). Registers via `PlatformRegistry.register(PlatformEntry(name="jkai", ...))` at gateway startup. Implements:
+- `connect()` — opens an HTTP listener on a localhost port (default `:18790`) for SvelteKit POSTs.
+- `send(chat_id, content, metadata)` — pushes a frame to the chat_id's outbound SSE queue.
+- `edit_message(chat_id, message_id, content)` — pushes a `replace` frame for progressive token streaming.
+- Inbound POST handler turns each request into a `MessageEvent(platform="jkai", chat_id, text)` and calls the registered message handler (which routes to AIAgent + session).
+- All requests carry a `Bridge-Token` header verified by the same HMAC primitive used for MCP (`src/lib/mcp/auth.ts` shape, mirrored in Python).
 
 **Hermes profile** — `HERMES_HOME=~/.hermes-jkai/`:
 - `SOUL.md` — assistant identity ("you are jkai's engine; you act through MCP tools; you never expose Hermes-specific terminology to user-facing strings")
@@ -113,8 +126,8 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 - `skills/design-system/` — static reference of tokens/type-ramp/brand-mark rules, lifted from `~/strange-ramblings-design/`
 
 **SvelteKit additions:**
-- `src/lib/jkai/hermes-client.ts` — typed RPC client over the socket. Mirror of `builder-client.ts`: `{method, args} → {ok, result/error}`. Methods: `createSession`, `sendMessage`, `streamEvents`, `injectMessage`, `getSession`, `closeSession`, `listSkills`, `setSkillEnabled`, `complete` (Phase 4).
-- `src/lib/mcp/server.ts` — adapter from `site-tools/registry.ts` to MCP's tool-listing/tool-call shape. Mounted at `/api/mcp/tools` (HTTP) or as a UNIX-socket MCP listener (decision in Phase 0).
+- `src/lib/jkai/hermes-client.ts` — typed HTTP/SSE client to the platform adapter. Methods: `sendMessage(chatId, text)` (POST), `openStream(chatId)` (SSE ReadableStream), `closeSession(chatId)`, `listSkills()`, `setSkillEnabled()`, `complete()` (Phase 4, used by the stateless completion endpoint). Sessions are implicit — established by the first message on a `chat_id`.
+- `src/lib/mcp/server.ts` — adapter from `site-tools/registry.ts` to MCP's tool-listing/tool-call shape. HTTP-mounted (Phase 0 decision confirmed by Task 7's working stdio-style MCP round-trip with the echo-stub; the real server uses HTTP since Hermes spawns stdio MCPs per-connection and the SvelteKit MCP needs to be long-lived).
 - `src/lib/mcp/auth.ts` — bridge auth (HMAC token, mirror of existing `tool-bridge.ts`). Hermes presents the token; SvelteKit verifies signature and *scopes* the call to the session/build context (`kind` + `kind_id`).
 - `src/routes/admin/hermes/+page.svelte` — admin UI. Tabs: Sessions, Skills, Memory, Providers, Health.
 - `src/routes/api/admin/hermes/[...path]/+server.ts` — thin proxy.
@@ -147,27 +160,34 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 
 ### 5.1 Session lifecycle
 
+Sessions are **implicit** under the platform-adapter model: the first inbound message on a `chat_id` triggers Hermes' gateway to instantiate (or resume) a session for that chat_id. SvelteKit doesn't call an explicit `createSession`; it picks a `chat_id` (derived from the relevant jkai resource) and sends a message.
+
 ```
-SvelteKit                    jkai-hermes.service       Postgres
-─────────                    ───────────────────       ────────
-hermes-client.createSession(
-  kind="canvas_chat",
-  kind_id=workflowId,
-  skill="jkai-canvas",
-  context={workflow_id, ...}
+SvelteKit                                jkai-hermes.service              Postgres
+─────────                                ───────────────────              ────────
+hermes-client.sendMessage(
+  chatId=workflow_id,           POST /platforms/jkai/msg
+  text="...user msg...",        Bridge-Token: <HMAC>
+  kind="canvas_chat"            { chat_id, text, kind, kind_id, skill="jkai-canvas" }
 )
+        │                       │
+        └──HTTP POST───────────►│
+                                ├─► JkaiPlatformAdapter.inbound_handler
+                                │     │
+                                │     └─► MessageEvent → gateway router
+                                │           │
+                                │           └─► AIAgent.advance(session(chat_id), text)
+                                │                 │
+                                │                 └─► writes to sessions.db
+                                │
+                                ◄── 202 Accepted (session_id, message_id)
         │
-        ├──RPC──► AIAgent.new_session(skill=jkai-canvas, bridge_token=<HMAC>)
-        │              │
-        │              └──► writes to sessions.db
-        │◄──────hermes_session_id──┘
+        └──INSERT INTO hermes_sessions (first time only) ───────────►  row created
         │
-        └──INSERT INTO hermes_sessions ────────────►  row created
-        │
-        ◄── { sessionId, hermesSessionId } returned to caller
+        ◄── SvelteKit opens SSE: GET /platforms/jkai/out?chat_id=...
 ```
 
-Sessions are persisted and survive `jkai-hermes.service` restarts. On restart, Hermes reloads from `sessions.db`; SvelteKit reloads its rows from `hermes_sessions`.
+Sessions are persisted and survive `jkai-hermes.service` restarts. On restart, Hermes reloads from `sessions.db`; SvelteKit reconciles its `hermes_sessions` join rows on next message.
 
 ### 5.2 Phase 1: canvas chat → DAG mutation
 
@@ -178,34 +198,39 @@ Browser ──POST──► /api/workflows/orchestrator/chat
                   { workflowId, message }
                             │
                             ▼
-            hermes-client.sendMessage(sessionId, message)
+            hermes-client.sendMessage(chatId=workflowId, text=message)
                             │
-                            └─ socket RPC ─► AIAgent.advance(session, message)
-                                                       │
-                                                       │ (Hermes ReAct loop:
-                                                       │   1. compose prompt with
-                                                       │      jkai-canvas skill +
-                                                       │      live workflow JSON
-                                                       │   2. call LLM)
-                                                       │
-                                                       ├──► tool_call: search_nodes("scrape")
-                                                       │       │
-                                                       │       ▼
-                                                       │   /api/mcp/tools  ◄──Hermes
-                                                       │       │ verifies bridge_token
-                                                       │       │ executes site-tools/registry.ts:executeTool
-                                                       │       ◄──── matches
-                                                       │
-                                                       ├──► tool_call: create_node({type:"scrape",...})
-                                                       │       └──INSERT INTO workflow_nodes──►
-                                                       │
-                                                       ├──► tool_call: add_edge({from, to})
-                                                       │       └──INSERT INTO workflow_edges──►
-                                                       │
-                                                       └──► assistant message: "Added scrape node ..."
+                            └─ HTTP POST ──► JkaiPlatformAdapter
+                                                │
+                                                ├─► AIAgent.advance(session(workflowId), message)
+                                                │   (ReAct loop:
+                                                │    1. prompt = jkai-canvas skill + live workflow JSON
+                                                │    2. call LLM)
+                                                │     │
+                                                │     ├──► tool_call: search_nodes("scrape")
+                                                │     │       │
+                                                │     │       ▼
+                                                │     │   /api/mcp/tools  ◄── Hermes (MCP client)
+                                                │     │       │ verifies bridge_token
+                                                │     │       │ executes registry.ts:executeTool
+                                                │     │       ◄──── matches
+                                                │     │
+                                                │     ├──► tool_call: create_node({type:"scrape",...})
+                                                │     │       └──INSERT INTO workflow_nodes──►
+                                                │     │
+                                                │     ├──► tool_call: add_edge({from, to})
+                                                │     │       └──INSERT INTO workflow_edges──►
+                                                │     │
+                                                │     └──► assistant message: "Added scrape node ..."
+                                                │            (streamed as tokens)
+                                                │
+                                                └─► JkaiPlatformAdapter.send(workflowId, frame)
+                                                      └─► pushed to chat_id's outbound SSE queue
 
-SvelteKit endpoint pipes Hermes' event stream back as SSE to the browser.
-Canvas re-fetches workflow_nodes/edges (existing SSE on those tables) → graph re-renders.
+SvelteKit endpoint pipes the SSE outbound back to the browser as the assistant's
+streaming reply. Canvas separately receives DAG mutations via the existing
+Postgres SSE on workflow_nodes / workflow_edges, so the graph re-renders as
+tool calls land — independent of the conversational stream.
 ```
 
 The bespoke ReAct loop in `loop.ts` is gone. The "knowledge of when to call which tool" lives in the `jkai-canvas` skill markdown. The DAG-mutation tools stay where they always were.
@@ -224,9 +249,11 @@ SvelteKit executor.ts
         ├─ build plan + last iteration eval
         └─ deadline
 
-      hermes-client.sendMessage(sessionId, ctx)
+      hermes-client.sendMessage(chatId=buildId, text=ctx)
         │
-        └──► AIAgent.advance(session, ctx)
+        └──HTTP POST──► JkaiPlatformAdapter
+                          │
+                          └──► AIAgent.advance(session(buildId), ctx)
                │
                ├─ skill: jkai-build (system prompt, identity, "you are
                │   coding agent for build N, your sandbox is at /workspace")
@@ -254,29 +281,37 @@ User sends message via UI mid-iteration:
 The next iteration's buildIterationContext() drains pending messages, includes
 them in the user-message payload to Hermes. No special primitive needed.
 
-For "interrupt the current iteration": SvelteKit calls
-hermes-client.injectMessage(sessionId, message), which Hermes routes through
-its existing user-input-mid-flight callback (the same primitive that handles
-CLI interjection). The current tool call completes; the next reasoning step
-sees the new message.
+For "interrupt the current iteration": SvelteKit POSTs a normal message with
+the same chat_id while a session is mid-call. The platform adapter accepts
+the inbound, queues it, and Hermes' gateway delivers it at the next message-
+handler tick. The current tool call completes; the next reasoning step sees
+the new message. (Platform-level injection is the natural behaviour of the
+gateway's per-chat message ordering; no custom primitive needed.)
 ```
 
 This maps jkai's bespoke "soft-delete consumed messages" pattern directly onto Hermes' existing CLI-injection callback. The Postgres tables for pending messages and pinned notes survive — they're the *queue*; Hermes consumes them through MCP tools.
 
 ### 5.4 Auth: bridge token
 
-Mirror of the existing `tool-bridge.ts` HMAC pattern.
+Mirror of the existing `tool-bridge.ts` HMAC pattern. Implemented in Phase 0 at `src/lib/mcp/auth.ts` (JSON+base64url payload, 8/8 tests).
 
-- Session creation mints a token: `HMAC(sharedSecret, sessionId|kind|kind_id|expiry)`.
-- The token is passed to Hermes at session creation and stored in Hermes' session record.
-- Every MCP tool call from Hermes presents the token; the MCP server verifies the signature and that the call's target matches the scope (`kind_id`).
+Two carrying surfaces:
+
+- **Platform-inbound token** — SvelteKit mints a token for each chat_id and includes it as a `Bridge-Token` header on every POST to `/platforms/jkai/msg`. The platform adapter verifies before queuing the message. Scope: `(sessionId, kind, kind_id)` matches the chat_id's resource.
+- **MCP tool-call token** — Hermes attaches the same token to every MCP tool call back to SvelteKit. The MCP server verifies signature and that the call's target matches the scope (`kind`, `kind_id`). Token storage on Hermes' side is session-keyed via Hermes' existing per-session metadata mechanism.
+
 - Token expiry = session lifetime + grace; rotate on rollover.
 
 Hermes can't escape its scope: a canvas chat session can mutate *its* workflow's nodes/edges; it cannot start a build, edit blog posts, or call gmail tools (different `kind`, different scope, different secret).
 
 ### 5.5 Streaming
 
-Hermes emits typed events: `tool_call_started`, `tool_call_completed`, `assistant_message`, `model_call_started`, `error`, `done`. The SvelteKit endpoint subscribes via the socket, translates to the existing UI's expected SSE shapes (build log lines, canvas mutation events, curate phase updates), and forwards to the browser. Existing UI surfaces are untouched.
+Two outbound streams reach the browser:
+
+- **Platform-adapter SSE** (conversational): the `JkaiPlatformAdapter` pushes streamed assistant tokens and final-message frames to `/platforms/jkai/out?chat_id=...`. SvelteKit's chat endpoint pipes this directly to the browser. Frame shapes mirror what Telegram/Slack adapters already produce — initial-send, edit, finalize.
+- **Postgres-change SSE** (structural): Hermes' MCP tool calls (create_node, log_iteration, curate_advance_phase, etc.) write to Postgres; the existing per-table SSE channels (`workflow_nodes`, `workflow_edges`, `jkaiIterations`, etc.) deliver DAG/build/curate state to the browser independently. The two streams are intentionally decoupled — the UI re-renders structural state from the database, not from inference-time messages.
+
+This decoupling is the core trade for adopting the platform-adapter design: the platform layer doesn't see discrete tool-call events as separate frames (only streamed text), but it doesn't need to, because MCP writes are already the canonical structural signal.
 
 ### 5.6 Error path
 
@@ -309,8 +344,9 @@ Five phases, each independently shippable, each with a feature flag, each with a
 ### Phase 1 — Canvas orchestrator chat (1–2 weeks)
 
 **Deliverables:**
-- `jkai-hermes.service` enabled; socket reachable.
-- `src/lib/jkai/hermes-client.ts`.
+- `jkai-hermes.service` enabled; `hermes gateway run --replace` with `JkaiPlatformAdapter` plugin loaded; HTTP listener on `:18790` (or chosen port) reachable.
+- `~/.hermes-jkai/extensions/jkai_platform/` — Python plugin: `BasePlatformAdapter` subclass + `PlatformRegistry` registration; bridge-token verification (Python mirror of `src/lib/mcp/auth.ts`); per-chat outbound queue.
+- `src/lib/jkai/hermes-client.ts` — HTTP+SSE client.
 - `src/lib/mcp/server.ts` — **initial scope: only the 22 `workflows` domain tools**. Other 110 tools not exposed yet.
 - `src/lib/mcp/auth.ts`.
 - `~/.hermes-jkai/skills/jkai-canvas/SKILL.md`.
@@ -368,7 +404,7 @@ Five phases, each independently shippable, each with a feature flag, each with a
 ### Phase 4 — LLM gateway cleanup (1 week)
 
 **Deliverables:**
-- Hermes exposes stateless `complete({messages, tools, model, stream}) → {message, tool_calls, usage}` via socket.
+- Hermes exposes stateless `complete({messages, tools, model, stream}) → {message, tool_calls, usage}` via a dedicated HTTP endpoint on the gateway (alongside but separate from the platform adapter — completions are session-less so they don't need a chat_id).
 - `llm-client.ts`, `llm-helpers.ts` replaced with shims over `complete(...)`.
 - Remaining direct callers (`/api/quickanswer`, `/api/deepdive`, `llm-call` workflow nodes) — no code change if shim signatures match.
 - `jkai-builder.service` retired.
@@ -443,7 +479,7 @@ Implementation plans are written **per-phase**, not for the whole migration at o
 | Capability regression: Hermes-with-bash performs worse than Pi on coding tasks | Medium | High (Phase 2) | Fixed prompt-set comparison vs Pi baseline. Below threshold → tune skill, change coding model, or expose richer tools. Fallback: keep Pi alive longer, partial swap. |
 | Skill-prompt quality variance | Medium | Medium | Skills in git, reviewed alongside test runs. Skill rollback = `git revert`. |
 | MCP bridge bugs leak scope | Low | High (data integrity) | Token scope verified inline on every MCP call. Adversarial test cases. Audit log. Phase 1 starts on smallest tool surface. |
-| Hermes single-threaded ⇒ concurrency bottleneck | Medium | Medium | First measure, then mitigate. Most LLM time is network-wait (cooperative async). If observed, shard at session granularity behind one socket via a small dispatcher. Hermes' profile isolation enables multi-process if needed. |
+| Hermes single-threaded ⇒ concurrency bottleneck | Medium | Medium | First measure, then mitigate. Most LLM time is network-wait (cooperative async); the platform-adapter HTTP layer is async by default. If observed, Hermes' profile isolation enables multi-process (run multiple `hermes gateway run` instances on different ports, SvelteKit routes by chat_id hash). |
 | Service unavailability | Medium | Medium | systemd `Restart=on-failure`. SvelteKit surfaces "engine offline." Build executor pauses. Health check at `/admin/hermes`. Re-enable `jkai-builder.service` as emergency fallback. |
 | Two-datastore drift (option A) | Medium | Low | `hermes_sessions` join table canonical; cleanup job reconciles. Risk vanishes if option D succeeds in Phase 0. |
 | Hermes upstream changes break us | Low | Medium | Pin to a tag; explicit upgrade path with full Phase 1–3 acceptance re-run. No auto-update. |
@@ -453,7 +489,7 @@ Implementation plans are written **per-phase**, not for the whole migration at o
 ### 7.3 Reversibility budget
 
 - **End of Phase 1:** Reversibility intact. Restoring `loop.ts` from git.
-- **End of Phase 2:** Reversibility costly but possible. Restoring `pi-runner.ts`, `builder-client.ts`, plus `jkai-builder.service` config — about 1 day's work.
+- **End of Phase 2:** Reversibility costly but possible. Restoring `pi-runner.ts`, the old `builder-client.ts` shape, plus `jkai-builder.service` config — about 1 day's work.
 - **End of Phase 3:** Reversibility moderate. Restoring `engine.ts` orchestration logic — about half a day.
 - **End of Phase 4:** Effectively irreversible without significant work. By this point Hermes has been running three phases of production load — if rollback is needed, the answer is "fix Hermes."
 
@@ -471,10 +507,11 @@ The structure puts the highest-risk phase (Phase 2) at the point where reversibi
 
 ## 8. Open questions and follow-ups
 
-- **Coding-model default for Phase 2.** Decide at Phase 2 kickoff (likely `claude-opus-4-7`, `glm-4.6`, or `gpt-5`). Log decision and benchmark.
-- **MCP transport: HTTP vs UNIX-socket.** Phase 0 prototypes both, picks one for Phase 1.
+- **Coding-model default for Phase 2.** Decide at Phase 2 kickoff (likely `claude-opus-4-7`, `glm-5.1`, or `gpt-5`). Log decision and benchmark.
+- **Platform adapter port number.** Default `:18790` proposed; confirm against existing port usage on homeserv during Phase 1 kickoff.
+- **Plugin packaging.** Does Hermes' `PlatformRegistry` accept plugins via Python entry-points (per `pyproject.toml`) or only via in-tree imports? If entry-points: the `~/.hermes-jkai/extensions/jkai_platform/` becomes a small pip-installable package. If in-tree: a startup hook loads the plugin from a config path. Verify in Phase 1.
 - **Profile sharding strategy if concurrency bottlenecks emerge.** Defer to observation; document threshold (e.g. >3 concurrent sessions causing >2× latency).
-- **`USER.md` strategy.** Symlink to `~/.claude/projects/-home-john/memory/MEMORY.md`? One-way sync? Independent? Decide during Phase 0.
+- **`USER.md` strategy.** Symlink to `~/.claude/projects/-home-john/memory/MEMORY.md`? One-way sync? Independent? Decided during Phase 0: independent file, seeded from MEMORY.md but Hermes-managed thereafter.
 
 ## 9. Appendix: terminology
 
