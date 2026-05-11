@@ -65,5 +65,7 @@ describe('mcp/server', () => {
     expect(result).toBeDefined();
     expect(Array.isArray(result.content)).toBe(true);
     expect(result.content[0].type).toBe('text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(Array.isArray(parsed.data)).toBe(true);
   });
 });

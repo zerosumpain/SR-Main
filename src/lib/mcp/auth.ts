@@ -56,6 +56,16 @@ export function mintBridgeToken(scope: TokenScope, secret: string): string {
   return encoded + SEPARATOR + sig;
 }
 
+// Public: read the token's claimed scope WITHOUT verifying the signature.
+// Use only for scope-binding decisions (e.g. inferring sessionId before
+// passing the token+expected scope to verifyBridgeToken). The signature
+// check is still mandatory before trusting any payload contents.
+export function peekTokenPayload(token: string): TokenScope | null {
+  const parts = token.split(SEPARATOR);
+  if (parts.length !== 2) return null;
+  return decodePayload(parts[0]);
+}
+
 export function verifyBridgeToken(
   token: string,
   expectedScope: TokenScope,

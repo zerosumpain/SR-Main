@@ -7,7 +7,7 @@
 // the MCP layer — multiple browser tabs / processes can share a workflow_id
 // and they each mint their own session-scoped token.
 
-import { verifyBridgeToken, type TokenKind, type TokenScope } from './auth';
+import { peekTokenPayload, verifyBridgeToken, type TokenScope } from './auth';
 import {
   getToolsByToolset,
   executeTool,
@@ -49,28 +49,12 @@ export async function listMcpTools(): Promise<McpTool[]> {
 }
 
 /**
- * Parse the bridge token's payload to extract the actual scope embedded in it.
- * We need this because `verifyBridgeToken` requires us to supply the expected
- * sessionId — but at the MCP layer we don't pin a sessionId (multiple tabs can
- * share a workflow_id). So we read the sessionId from the payload, then call
- * verify with the parsed sessionId + the call's workflow_id/kind so the
- * signature + kind + kindId checks still run.
+ * Accept either `workflow_id` (plan-spec name) or `workflowId` (actual tool
+ * schema name). The MCP server uses it for scope binding only; arguments pass
+ * through to the handler untouched.
  */
-function decodeBridgeTokenPayload(token: string): TokenScope | null {
-  const parts = token.split('.');
-  if (parts.length !== 2) return null;
-  try {
-    const json = Buffer.from(parts[0], 'base64url').toString('utf-8');
-    const payload = JSON.parse(json);
-    return {
-      sessionId: String(payload.sessionId ?? ''),
-      kind: String(payload.kind ?? '') as TokenKind,
-      kindId: String(payload.kindId ?? ''),
-      expiresAt: Number(payload.expiresAt ?? 0),
-    };
-  } catch {
-    return null;
-  }
+function resolveWorkflowId(args: Record<string, unknown>): string {
+  return String(args.workflow_id ?? args.workflowId ?? '');
 }
 
 export function createMcpToolHandler() {
@@ -84,19 +68,14 @@ export function createMcpToolHandler() {
       throw new Error('HERMES_BRIDGE_SECRET not configured');
     }
 
-    // Accept either `workflow_id` (plan-spec name) or `workflowId` (actual tool
-    // schema name). The MCP server uses it for scope binding only; arguments
-    // pass through to the handler untouched.
-    const workflowId = String(
-      (req.arguments.workflow_id ?? req.arguments.workflowId ?? '') as string,
-    );
+    const workflowId = resolveWorkflowId(req.arguments);
     if (!workflowId) {
       throw new Error(
         'workflow_id argument required for workflows-domain MCP calls (it binds the bridge-token scope)',
       );
     }
 
-    const tokenPayload = decodeBridgeTokenPayload(req.bridgeToken);
+    const tokenPayload = peekTokenPayload(req.bridgeToken);
     if (!tokenPayload) {
       throw new Error('malformed bridge token payload');
     }
