@@ -153,7 +153,7 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 - `src/lib/curate/discover.ts`, `generate.ts`, `promote.ts` — kept, exposed as MCP tools.
 
 **Phase 4 (LLM gateway):**
-- `src/lib/jkai/llm-client.ts`, `src/lib/workflows/nodes/llm-helpers.ts` — replaced with thin shims over Hermes' `complete(...)` socket method.
+- `src/lib/jkai/llm-client.ts`, `src/lib/workflows/nodes/llm-helpers.ts` — replaced with thin shims over Hermes' `complete(...)` HTTP endpoint (alongside but separate from the platform adapter — completions are session-less so they don't need a chat_id).
 - `tool-bridge.ts` — retired (legacy Pi-specific bridge); all bridge auth via `mcp/auth.ts`.
 
 ## 5. Data flow
@@ -291,18 +291,25 @@ gateway's per-chat message ordering; no custom primitive needed.)
 
 This maps jkai's bespoke "soft-delete consumed messages" pattern directly onto Hermes' existing CLI-injection callback. The Postgres tables for pending messages and pinned notes survive — they're the *queue*; Hermes consumes them through MCP tools.
 
-### 5.4 Auth: bridge token
+### 5.4 Auth
 
-Mirror of the existing `tool-bridge.ts` HMAC pattern. Implemented in Phase 0 at `src/lib/mcp/auth.ts` (JSON+base64url payload, 8/8 tests).
+> **Layered model — updated 2026-05-11.** The initial design assumed a single per-call HMAC bridge-token in both directions. Phase 1 implementation discovered Hermes' MCP client does not support per-session/per-call header injection — `mcp_servers[*].headers` is gateway-scoped, applied to every call. The two directions therefore use different auth shapes, with scope binding handled at the layer that can actually see it.
 
-Two carrying surfaces:
+**Direction 1 — Platform-inbound (SvelteKit → Hermes):** per-call scoped HMAC bridge token.
 
-- **Platform-inbound token** — SvelteKit mints a token for each chat_id and includes it as a `Bridge-Token` header on every POST to `/platforms/jkai/msg`. The platform adapter verifies before queuing the message. Scope: `(sessionId, kind, kind_id)` matches the chat_id's resource.
-- **MCP tool-call token** — Hermes attaches the same token to every MCP tool call back to SvelteKit. The MCP server verifies signature and that the call's target matches the scope (`kind`, `kind_id`). Token storage on Hermes' side is session-keyed via Hermes' existing per-session metadata mechanism.
+- Implemented in Phase 0 at `src/lib/mcp/auth.ts` (JSON+base64url payload, 8/8 tests). Python mirror at `~/.hermes-jkai/extensions/jkai_platform/auth.py` (cross-validated byte-equivalent).
+- SvelteKit mints a token for each chat_id and includes it as a `Bridge-Token` header on every POST to `/platforms/jkai/msg`.
+- The platform adapter verifies before queuing the message. Scope: `(sessionId, kind, kind_id)` matches the chat_id's resource. Token expiry: session lifetime + grace; rotate on rollover.
+- SvelteKit cannot forge a scope it shouldn't have because it's the trusted mint side: this gate ensures only legitimate SvelteKit routes can speak to Hermes on behalf of a given chat.
 
-- Token expiry = session lifetime + grace; rotate on rollover.
+**Direction 2 — MCP outbound (Hermes → SvelteKit):** static shared bearer.
 
-Hermes can't escape its scope: a canvas chat session can mutate *its* workflow's nodes/edges; it cannot start a build, edit blog posts, or call gmail tools (different `kind`, different scope, different secret).
+- Hermes' `mcp_servers.jkai.headers.Authorization` is set to `Bearer ${HERMES_BRIDGE_SECRET}` (env-interpolated from `~/.hermes-jkai/.env` at gateway startup).
+- SvelteKit's `/api/mcp` JSON-RPC dispatcher does a constant-time compare against `env.HERMES_BRIDGE_SECRET` (loaded via `$env/dynamic/private`, falling back to `process.env` for tests). On mismatch → JSON-RPC error `-32001` (auth-shaped).
+- `initialize`, `tools/list`, `ping`, `notifications/*` are unauthenticated (MCP discovery is public). Only `tools/call` requires the bearer.
+- **Scope binding moves to the tool layer:** every workflow-domain tool accepts a `workflow_id` (or `workflowId`) argument. Hermes' skill prompt constrains the agent to call tools only with the workflow_id from its current session context. Tools themselves can enforce business rules (workflow exists, user owns it, etc.).
+
+**Why the asymmetry is OK for Phase 1:** Hermes is single-user on a single machine; the worst a confused agent can do is mutate the wrong workflow on a system where only one user has access. The risk surface is "Hermes' skill prompt fails to constrain the agent" — mitigated by skill review and Task 14's acceptance scenarios. A stricter model (session-bound MCP proxy, or upstream Hermes patch for per-session headers) is recommended for Phase 1.5 if multi-user use ever lands.
 
 ### 5.5 Streaming
 

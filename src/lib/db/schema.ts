@@ -1557,4 +1557,19 @@ export const curateSessions = pgTable('curate_sessions', {
   byPort: uniqueIndex('curate_sessions_port_uniq').on(t.devServerPort),
 }));
 
+// ── Hermes sessions ──────────────────────────────────────────────────────
+
+export const hermesSessions = pgTable('hermes_sessions', {
+  id: serial('id').primaryKey(),
+  hermesSessionId: text('hermes_session_id').notNull(),
+  kind: text('kind', { enum: ['build', 'canvas_chat', 'curate', 'manual'] }).notNull(),
+  kindId: text('kind_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+}, (t) => ({
+  uniqueByKind: uniqueIndex('hermes_sessions_kind_kind_id_idx').on(t.kind, t.kindId).where(sql`closed_at IS NULL`),
+}));
+
+export type HermesSessionRow = typeof hermesSessions.$inferSelect;
+
 export type CurateSessionRow = typeof curateSessions.$inferSelect;

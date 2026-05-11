@@ -1,0 +1,109 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HermesClient } from './hermes-client';
+
+describe('HermesClient', () => {
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+
+  it('sends a message with bridge token header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ accepted: true, chat_id: 'wf_42' }),
+    });
+    global.fetch = fetchMock as any;
+
+    const client = new HermesClient({
+      baseUrl: 'http://localhost:18790',
+      bridgeSecret: 'test-secret-32-bytes-long-please-yes-please',
+    });
+    const result = await client.sendMessage({
+      chatId: 'wf_42',
+      text: 'add a scrape node',
+      kind: 'canvas_chat',
+      kindId: 'wf_42',
+      sessionId: 'sess_x',
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:18790/platforms/jkai/msg');
+    expect(init.method).toBe('POST');
+    expect(init.headers['Bridge-Token']).toBeTruthy();
+
+    global.fetch = originalFetch;
+  });
+
+  it('surfaces a non-2xx response as a rejected promise', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'signature_mismatch' }),
+    }) as any;
+
+    const client = new HermesClient({
+      baseUrl: 'http://localhost:18790',
+      bridgeSecret: 'wrong-secret',
+    });
+
+    await expect(client.sendMessage({
+      chatId: 'wf_42',
+      text: 'x',
+      kind: 'canvas_chat',
+      kindId: 'wf_42',
+      sessionId: 'sess_x',
+    })).rejects.toThrow(/403/);
+
+    global.fetch = originalFetch;
+  });
+
+  it('openStream returns a ReadableStream<SseFrame>', async () => {
+    // SSE consumption requires a real HTTP server or fetch mock with body streaming.
+    // For unit tests, mock the body's getReader() to yield two events.
+    const encoder = new TextEncoder();
+    const chunks = [
+      encoder.encode('event: send\ndata: {"kind":"send","chat_id":"wf_42","message_id":"m1","content":"hi","metadata":{},"ts":1}\n\n'),
+      encoder.encode('event: replace\ndata: {"kind":"replace","chat_id":"wf_42","message_id":"m1","content":"hi there","metadata":{},"ts":2}\n\n'),
+    ];
+    let i = 0;
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'text/event-stream' }),
+      body: {
+        getReader: () => ({
+          read: async () => i < chunks.length
+            ? { done: false, value: chunks[i++] }
+            : { done: true, value: undefined },
+        }),
+      },
+    }) as any;
+
+    const client = new HermesClient({
+      baseUrl: 'http://localhost:18790',
+      bridgeSecret: 'test-secret-32-bytes-long-please-yes-please',
+    });
+
+    const frames: any[] = [];
+    for await (const frame of client.openStream({
+      chatId: 'wf_42',
+      kind: 'canvas_chat',
+      kindId: 'wf_42',
+      sessionId: 'sess_x',
+    })) {
+      frames.push(frame);
+      if (frames.length >= 2) break;
+    }
+
+    expect(frames).toHaveLength(2);
+    expect(frames[0].kind).toBe('send');
+    expect(frames[1].kind).toBe('replace');
+
+    global.fetch = originalFetch;
+  });
+});

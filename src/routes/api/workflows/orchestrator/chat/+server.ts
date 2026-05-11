@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
@@ -14,10 +15,263 @@ import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
+import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
+import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 
 const MAX_MESSAGE_LEN = 20_000;
 
-export const POST: RequestHandler = async ({ request }) => {
+// Feature flag (Hermes Phase 1). When `JKAI_HERMES_CANVAS_CHAT=1`, canvas
+// orchestrator chat is proxied through the Hermes gateway via HermesClient +
+// JkaiPlatformAdapter; otherwise we keep running the legacy generalChat /
+// ReAct loop here in-process. The flag is OFF by default — Task 14 is the
+// soak that flips it.
+const HERMES_ENABLED = env.JKAI_HERMES_CANVAS_CHAT === '1';
+const HERMES_URL = env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790';
+const HERMES_SECRET = env.HERMES_BRIDGE_SECRET ?? '';
+
+export const POST: RequestHandler = async (event) => {
+  if (HERMES_ENABLED) {
+    return handleWithHermes(event);
+  }
+  return handleWithLoop(event);
+};
+
+// ---------------------------------------------------------------------------
+// Hermes branch (flag ON)
+// ---------------------------------------------------------------------------
+
+/**
+ * Map the Hermes platform-adapter outbound frame shape (send / replace /
+ * finalize) to the legacy SSE event shape the canvas UI already consumes
+ * (`{ type: 'token', delta }` + a terminating `{ type: 'done' }`).
+ *
+ * The canvas UI subscribes via `/api/workflows/orchestrator/chat/stream`
+ * which speaks the legacy `JobEvent` shape — so this proxy mints a fresh
+ * `jobId`, fires `publishJobEvent(jobId, {type:'token', delta:...})` for
+ * every send/replace frame, and ends with `{type:'done'}` on `finalize`.
+ *
+ * Frame semantics:
+ *   - send:     a brand-new bubble. Treat content as a delta.
+ *   - replace:  an edit to an existing bubble. We replay the new content as
+ *               a delta — the consumer concatenates deltas, so a replace
+ *               appends the latest copy. (Task 14 may swap this to a proper
+ *               diff once acceptance testing demands it.)
+ *   - finalize: terminal frame. Emit a 'done' with the final content under
+ *               `result.message`.
+ */
+function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
+  switch (frame.kind) {
+    case 'send':
+    case 'replace':
+      return [{ type: 'token', delta: frame.content }];
+    case 'finalize':
+      // The jkai adapter emits a synthetic `finalize` with empty content
+      // once `handle_message` finishes — the actual reply text has already
+      // been delivered via prior `send` frames. The pump below uses
+      // `job.partialResponse` (accumulated from those `send` frames) for
+      // the final `message` field, so we don't return a `done` event here.
+      // Returning empty so the pump's own finalize handling fires.
+      return [];
+    default:
+      return [];
+  }
+}
+
+async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
+  const { request } = reqEvent;
+  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, { status: 400 });
+  }
+  const { message, workflowId, conversationId, chatNodeId } = body;
+  if (!message || typeof message !== 'string') {
+    return json({ error: 'message is required' }, { status: 400 });
+  }
+  if (message.length > MAX_MESSAGE_LEN) {
+    return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
+  }
+  if (!HERMES_SECRET) {
+    return json({ error: 'HERMES_BRIDGE_SECRET not configured' }, { status: 500 });
+  }
+
+  // Supersede any in-flight job on the same scope BEFORE we start the new
+  // one. Mirrors legacy semantics: a new message on the same canvas cancels
+  // the old one (issue #2 from the Phase 1 cross-cutting review).
+  if (workflowId || conversationId) {
+    cancelForScope({ workflowId, conversationId }, 'Superseded by new request');
+  }
+  cleanOldJobs();
+
+  // chatId = the workflow we're chatting against (or a synthetic id when no
+  // workflow context yet). sessionId names the per-user/per-workflow tab.
+  const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId ?? Date.now()}`;
+  const userKey = conversationId ?? chatNodeId ?? 'anon';
+  const sessionId = `sess_${userKey}_${chatId}`;
+  const kindId = chatId;
+
+  const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
+  const { abortController } = job;
+
+  // Persist the user message before kicking off Hermes so canvas reload
+  // mid-conversation restores the just-sent bubble. Mirrors legacy
+  // handleWithLoop persistence (issue #1 from the cross-cutting review).
+  // Schema cols: workflowId, conversationId, role, content, metadata (jsonb).
+  const userMetadata = chatNodeId ? { chatNodeId } : undefined;
+  if (conversationId) {
+    await db.insert(orchestratorChats).values({
+      conversationId,
+      workflowId: workflowId ?? null,
+      role: 'user',
+      content: message,
+      metadata: userMetadata,
+    });
+  } else if (workflowId) {
+    await db.insert(orchestratorChats).values({
+      workflowId,
+      role: 'user',
+      content: message,
+      metadata: userMetadata,
+    });
+  }
+
+  const client = new HermesClient({
+    baseUrl: HERMES_URL,
+    bridgeSecret: HERMES_SECRET,
+  });
+
+  // Subscribe to tool-step events for THIS workflow's canvas. The MCP
+  // dispatcher publishes a started/completed/failed event for every
+  // tools/call carrying a matching workflow_id argument; we forward them as
+  // legacy `tool_start` / `tool_result` JobEvents so the canvas UI's panel
+  // works identically on the Hermes branch. Skip when there's no workflowId
+  // (general /jkai chats don't have a canvas to render against anyway, and
+  // the bus is keyed by workflowId).
+  let unsubscribeToolSteps: (() => void) | null = null;
+  if (workflowId) {
+    unsubscribeToolSteps = subscribeToolSteps(workflowId, (e: ToolStepEvent) => {
+      if (abortController.signal.aborted) return;
+      if (e.phase === 'started') {
+        publishJobEvent(jobId, {
+          type: 'tool_start',
+          tool: e.tool,
+          args: e.args ?? {},
+          toolCallId: e.stepId,
+          summary: e.summary,
+        });
+        return;
+      }
+      // completed | failed → tool_result
+      publishJobEvent(jobId, {
+        type: 'tool_result',
+        tool: e.tool,
+        result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
+        status: e.phase === 'failed' ? 'error' : 'done',
+        toolCallId: e.stepId,
+        summary: e.summary,
+      });
+    });
+  }
+
+  // Fire-and-forget: pump Hermes frames into the legacy SSE buffer keyed by
+  // jobId. The canvas UI then reads them off `/chat/stream?jobId=...` exactly
+  // as it always has.
+  (async () => {
+    console.log(`[hermes-chat] Job ${jobId} started — workflowId=${workflowId ?? 'none'} chatId=${chatId} message="${message.slice(0, 100)}"`);
+    try {
+      await client.sendMessage({
+        chatId,
+        text: message,
+        kind: 'canvas_chat',
+        kindId,
+        sessionId,
+      });
+
+      for await (const frame of client.openStream({
+        chatId,
+        kind: 'canvas_chat',
+        kindId,
+        sessionId,
+      })) {
+        if (abortController.signal.aborted) break;
+        for (const ev of adaptFrameToCanvasSse(frame)) {
+          if (ev.type === 'token' && typeof ev.delta === 'string') {
+            job.partialResponse += ev.delta;
+          }
+          publishJobEvent(jobId, ev);
+        }
+        if (frame.kind === 'finalize') {
+          // Use the accumulated partialResponse as the final message
+          // because the adapter's finalize content is intentionally empty
+          // (delivery already happened via prior `send` frames).
+          job.status = 'done';
+          const finalMessage = frame.content || job.partialResponse || '';
+          job.result = { success: true, workflow: null, message: finalMessage };
+          publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
+          break;
+        }
+      }
+
+      if (job.status !== 'done') {
+        // Stream ended without a finalize (timeout, server hang-up, etc.).
+        // Surface what we got so the UI can render it.
+        job.status = 'done';
+        job.result = {
+          success: true,
+          workflow: null,
+          message: job.partialResponse || '',
+        };
+        publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
+      }
+
+      // Persist the assistant reply so canvas reload restores history.
+      // Mirrors legacy handleWithLoop. Tool steps aren't tracked on the
+      // Hermes branch (yet), so we only record chatNodeId in metadata when
+      // present.
+      const finalText =
+        (job.result && typeof (job.result as Record<string, unknown>).message === 'string'
+          ? ((job.result as Record<string, unknown>).message as string)
+          : '') || job.partialResponse || '';
+      if (finalText && (conversationId || workflowId)) {
+        try {
+          const assistantMeta: Record<string, unknown> = {};
+          if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
+          const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
+          await db.insert(orchestratorChats).values({
+            conversationId: conversationId ?? null,
+            workflowId: workflowId ?? null,
+            role: 'assistant',
+            content: finalText,
+            metadata: assistantMetadata,
+          });
+        } catch (persistErr) {
+          console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);
+        }
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[hermes-chat] Job failed:', errorMessage);
+      job.status = 'error';
+      job.error = errorMessage;
+      job.result = { success: false, error: errorMessage };
+      publishJobEvent(jobId, { type: 'error', message: errorMessage });
+    } finally {
+      // Drop the bus subscription so the listener Set doesn't leak across
+      // jobs — the bus would otherwise keep a reference to this closure for
+      // the lifetime of the process.
+      if (unsubscribeToolSteps) unsubscribeToolSteps();
+    }
+  })();
+
+  return json({ jobId });
+}
+
+// ---------------------------------------------------------------------------
+// Legacy branch (flag OFF) — unchanged behaviour, body lifted into a helper.
+// ---------------------------------------------------------------------------
+
+async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const body = await request.json();
   const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId } = body as {
     message: string;
@@ -405,7 +659,7 @@ export const POST: RequestHandler = async ({ request }) => {
   })();
 
   return json({ jobId });
-};
+}
 
 // GET: poll job status OR list active jobs
 export const GET: RequestHandler = async ({ url }) => {

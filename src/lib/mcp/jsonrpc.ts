@@ -1,0 +1,338 @@
+// MCP Streamable HTTP transport — JSON-RPC dispatcher.
+//
+// Hermes' MCP client (Python `mcp` SDK) speaks the Streamable HTTP transport
+// from the MCP spec, not our previous bespoke {name, arguments} POST shape.
+// The protocol is JSON-RPC 2.0 over HTTP:
+//
+//   POST /api/mcp   body { jsonrpc: "2.0", id, method, params }
+//
+// This module owns the wire-format dispatch. The SvelteKit route at
+// src/routes/api/mcp/+server.ts adapts SvelteKit's Request/Response to
+// dispatchJsonRpc(); keeping the logic here means we can unit-test the full
+// initialize / tools/list / tools/call lifecycle without booting Vite.
+//
+// Stateless mode: we don't issue an `Mcp-Session-Id`, don't track sessions,
+// and don't open server-initiated SSE streams. Each POST is self-contained.
+
+import { timingSafeEqual } from 'node:crypto';
+import { listMcpTools } from './server';
+import { executeTool, getToolsByToolset } from '$lib/workflows/site-tools/registry';
+import { publishToolStep } from '$lib/jkai/tool-step-bus';
+import { summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+
+// Phase 1 scope: only the workflows toolset is exposed over MCP. The
+// underlying registry has ~132 site-tools registered; without this
+// allowlist the bearer-holder could call any of them. Build the Set once
+// at module load (registry is static after init).
+const WORKFLOWS_TOOLSET = 'workflows';
+const ALLOWED_TOOLS = new Set(
+  getToolsByToolset(WORKFLOWS_TOOLSET).map((t) => t.name),
+);
+
+// SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
+// it so unit tests (which use plain process.env via beforeAll) don't need to
+// stub the $env module. In SvelteKit runtime, env.HERMES_BRIDGE_SECRET wins;
+// in vitest, process.env.HERMES_BRIDGE_SECRET is the fallback.
+async function resolveSecret(): Promise<string> {
+  if (process.env.HERMES_BRIDGE_SECRET) return process.env.HERMES_BRIDGE_SECRET;
+  try {
+    const mod = await import('$env/dynamic/private');
+    return mod.env.HERMES_BRIDGE_SECRET ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// Echo back whatever protocol version the client requests, as long as it
+// looks like an MCP date-stamped version. Per spec, the server MUST respond
+// with the same version if it supports it, else its latest. We support the
+// full stable protocol surface, so echoing is the safe default for forward
+// and backward compat (e.g. Hermes' bundled SDK sends 2025-11-25 today, but
+// older clients may send 2025-03-26).
+const FALLBACK_PROTOCOL_VERSION = '2025-03-26';
+const MCP_PROTOCOL_VERSION_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id?: number | string | null;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface JsonRpcResponseOk {
+  jsonrpc: '2.0';
+  id: number | string | null;
+  result: unknown;
+}
+
+export interface JsonRpcResponseErr {
+  jsonrpc: '2.0';
+  id: number | string | null;
+  error: { code: number; message: string; data?: unknown };
+}
+
+export type JsonRpcResponse = JsonRpcResponseOk | JsonRpcResponseErr;
+
+export interface DispatchContext {
+  /**
+   * Authorization-bearer value (the part after `Bearer `), or empty if absent.
+   * Required for tools/call; verified by constant-time compare against
+   * `HERMES_BRIDGE_SECRET`. Discovery methods (initialize, tools/list, ping,
+   * notifications/*) are unauthenticated.
+   */
+  authBearer: string;
+}
+
+export interface DispatchResult {
+  /**
+   * The JSON-RPC response envelope, or null if this was a pure notification
+   * (no id field). Callers should map null to HTTP 202 Accepted with empty
+   * body, and a populated envelope to HTTP 200 + application/json.
+   */
+  response: JsonRpcResponse | null;
+}
+
+// JSON-RPC standard error codes — see https://www.jsonrpc.org/specification
+const PARSE_ERROR = -32700;
+const INVALID_REQUEST = -32600;
+const METHOD_NOT_FOUND = -32601;
+const INVALID_PARAMS = -32602;
+const INTERNAL_ERROR = -32603;
+
+function isRequest(msg: unknown): msg is JsonRpcRequest {
+  if (typeof msg !== 'object' || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return m.jsonrpc === '2.0' && typeof m.method === 'string';
+}
+
+function isNotification(msg: JsonRpcRequest): boolean {
+  return msg.id === undefined;
+}
+
+function errResponse(
+  id: number | string | null,
+  code: number,
+  message: string,
+  data?: unknown,
+): JsonRpcResponseErr {
+  return { jsonrpc: '2.0', id, error: data === undefined ? { code, message } : { code, message, data } };
+}
+
+function negotiateProtocolVersion(requested: unknown): string {
+  if (typeof requested === 'string' && MCP_PROTOCOL_VERSION_PATTERN.test(requested)) {
+    return requested;
+  }
+  return FALLBACK_PROTOCOL_VERSION;
+}
+
+async function verifyBearer(bearer: string): Promise<boolean> {
+  const secret = await resolveSecret();
+  if (!secret || !bearer) return false;
+  const a = Buffer.from(bearer, 'utf8');
+  const b = Buffer.from(secret, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
+ * Dispatch a parsed JSON-RPC envelope. Returns either a response envelope or
+ * null (notification — no response). The route layer is responsible for the
+ * HTTP wrapper (status + Content-Type).
+ *
+ * Auth model:
+ *   - initialize, tools/list, ping, notifications/*   → unauthenticated
+ *   - tools/call                                       → Authorization: Bearer
+ *                                                        with constant-time match
+ *                                                        against HERMES_BRIDGE_SECRET.
+ *                                                        Scope binding happens at
+ *                                                        the tool layer via the
+ *                                                        workflow_id argument.
+ */
+export async function dispatchJsonRpc(
+  msg: unknown,
+  ctx: DispatchContext,
+): Promise<DispatchResult> {
+  if (!isRequest(msg)) {
+    return {
+      response: errResponse(null, INVALID_REQUEST, 'Invalid JSON-RPC request'),
+    };
+  }
+
+  const id = msg.id ?? null;
+  const isNotif = isNotification(msg);
+
+  try {
+    switch (msg.method) {
+      case 'initialize': {
+        const requested = (msg.params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
+        const result = {
+          protocolVersion: negotiateProtocolVersion(requested),
+          // Tools-only server; no prompts/resources/logging. listChanged=false
+          // because our tool registry is static at process start.
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: {
+            name: 'strange-rambling-svelte',
+            version: '0.0.1',
+          },
+        };
+        return { response: { jsonrpc: '2.0', id, result } };
+      }
+
+      case 'notifications/initialized':
+      case 'notifications/cancelled':
+      case 'notifications/progress':
+      case 'notifications/roots/list_changed': {
+        // Pure notifications — no response. The HTTP layer maps this to 202.
+        return { response: null };
+      }
+
+      case 'ping': {
+        // Per spec, ping returns an empty result object.
+        return { response: { jsonrpc: '2.0', id, result: {} } };
+      }
+
+      case 'tools/list': {
+        const tools = await listMcpTools();
+        return { response: { jsonrpc: '2.0', id, result: { tools } } };
+      }
+
+      case 'tools/call': {
+        const params = msg.params as { name?: unknown; arguments?: unknown } | undefined;
+        const name = typeof params?.name === 'string' ? params.name : '';
+        const args =
+          params?.arguments && typeof params.arguments === 'object'
+            ? (params.arguments as Record<string, unknown>)
+            : {};
+
+        if (!name) {
+          return {
+            response: errResponse(id, INVALID_PARAMS, 'tools/call: params.name required'),
+          };
+        }
+
+        // Toolset gate: only the workflows toolset is exposed in this
+        // profile. Without this, any of the ~132 registered site-tools
+        // would be reachable via MCP. Matches the Phase 1 spec scope.
+        if (!ALLOWED_TOOLS.has(name)) {
+          return {
+            response: errResponse(id, INVALID_PARAMS, `tool '${name}' is not exposed in this profile`),
+          };
+        }
+
+        if (!(await verifyBearer(ctx.authBearer))) {
+          // Auth-shaped JSON-RPC error: -32001 lets clients (incl. Hermes')
+          // distinguish auth failure from "tool itself errored".
+          return {
+            response: errResponse(id, -32001, 'unauthorized: invalid or missing bearer token'),
+          };
+        }
+
+        // Surface this tool call to any canvas SSE subscribers listening on
+        // this workflow_id. The Hermes branch of /api/workflows/orchestrator/
+        // chat subscribes for the duration of its SSE response and forwards
+        // these as `tool_start`/`tool_result` events so the canvas UI's
+        // tool-step panel mirrors what the legacy loop.ts path already shows.
+        const workflowId = String(args.workflow_id ?? args.workflowId ?? '');
+        const stepId = `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const startSummary = workflowId ? summarizeRunningTool(name, args) : '';
+        if (workflowId) {
+          publishToolStep({
+            workflowId,
+            stepId,
+            phase: 'started',
+            tool: name,
+            args,
+            summary: startSummary || undefined,
+            ts: Date.now(),
+          });
+        }
+
+        try {
+          const out = await executeTool(name, args, { emit: () => {} });
+          if (workflowId) {
+            const raw = typeof out === 'string' ? out : JSON.stringify(out);
+            const preview = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
+            const status: 'done' | 'error' =
+              out && typeof out === 'object' && 'error' in (out as Record<string, unknown>) ? 'error' : 'done';
+            const completionSummary = summarizeToolResult({
+              tool: name,
+              toolCallId: stepId,
+              args,
+              result: out,
+              status,
+            });
+            publishToolStep({
+              workflowId,
+              stepId,
+              phase: status === 'error' ? 'failed' : 'completed',
+              tool: name,
+              resultPreview: preview,
+              result: out,
+              summary: completionSummary || undefined,
+              ts: Date.now(),
+            });
+          }
+          return {
+            response: {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: typeof out === 'string' ? out : JSON.stringify(out),
+                  },
+                ],
+              },
+            },
+          };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'unknown error';
+          if (workflowId) {
+            publishToolStep({
+              workflowId,
+              stepId,
+              phase: 'failed',
+              tool: name,
+              error: message,
+              ts: Date.now(),
+            });
+          }
+          return {
+            response: errResponse(id, INTERNAL_ERROR, message),
+          };
+        }
+      }
+
+      default: {
+        if (isNotif) {
+          // Unknown notification — silently accept. Clients sending unknown
+          // notifications (e.g. future spec additions) shouldn't be told off.
+          return { response: null };
+        }
+        return {
+          response: errResponse(id, METHOD_NOT_FOUND, `Method not found: ${msg.method}`),
+        };
+      }
+    }
+  } catch (err) {
+    if (isNotif) return { response: null };
+    const message = err instanceof Error ? err.message : 'unknown error';
+    return { response: errResponse(id, INTERNAL_ERROR, message) };
+  }
+}
+
+/**
+ * Parse a JSON string into a JSON-RPC message. Returns either a parsed value
+ * or a parse-error response envelope ready to ship back to the client.
+ */
+export function parseJsonRpcBody(raw: string): { ok: true; value: unknown } | { ok: false; error: JsonRpcResponseErr } {
+  try {
+    return { ok: true, value: JSON.parse(raw) };
+  } catch {
+    return {
+      ok: false,
+      error: errResponse(null, PARSE_ERROR, 'Parse error'),
+    };
+  }
+}
