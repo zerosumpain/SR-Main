@@ -1,0 +1,228 @@
+// MCP Streamable HTTP transport — JSON-RPC dispatcher.
+//
+// Hermes' MCP client (Python `mcp` SDK) speaks the Streamable HTTP transport
+// from the MCP spec, not our previous bespoke {name, arguments} POST shape.
+// The protocol is JSON-RPC 2.0 over HTTP:
+//
+//   POST /api/mcp   body { jsonrpc: "2.0", id, method, params }
+//
+// This module owns the wire-format dispatch. The SvelteKit route at
+// src/routes/api/mcp/+server.ts adapts SvelteKit's Request/Response to
+// dispatchJsonRpc(); keeping the logic here means we can unit-test the full
+// initialize / tools/list / tools/call lifecycle without booting Vite.
+//
+// Stateless mode: we don't issue an `Mcp-Session-Id`, don't track sessions,
+// and don't open server-initiated SSE streams. Each POST is self-contained.
+
+import { createMcpToolHandler, listMcpTools } from './server';
+
+// Echo back whatever protocol version the client requests, as long as it
+// looks like an MCP date-stamped version. Per spec, the server MUST respond
+// with the same version if it supports it, else its latest. We support the
+// full stable protocol surface, so echoing is the safe default for forward
+// and backward compat (e.g. Hermes' bundled SDK sends 2025-11-25 today, but
+// older clients may send 2025-03-26).
+const FALLBACK_PROTOCOL_VERSION = '2025-03-26';
+const MCP_PROTOCOL_VERSION_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id?: number | string | null;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface JsonRpcResponseOk {
+  jsonrpc: '2.0';
+  id: number | string | null;
+  result: unknown;
+}
+
+export interface JsonRpcResponseErr {
+  jsonrpc: '2.0';
+  id: number | string | null;
+  error: { code: number; message: string; data?: unknown };
+}
+
+export type JsonRpcResponse = JsonRpcResponseOk | JsonRpcResponseErr;
+
+export interface DispatchContext {
+  /** Bridge-Token header value, or empty if absent. Required for tools/call. */
+  bridgeToken: string;
+}
+
+export interface DispatchResult {
+  /**
+   * The JSON-RPC response envelope, or null if this was a pure notification
+   * (no id field). Callers should map null to HTTP 202 Accepted with empty
+   * body, and a populated envelope to HTTP 200 + application/json.
+   */
+  response: JsonRpcResponse | null;
+}
+
+// JSON-RPC standard error codes — see https://www.jsonrpc.org/specification
+const PARSE_ERROR = -32700;
+const INVALID_REQUEST = -32600;
+const METHOD_NOT_FOUND = -32601;
+const INVALID_PARAMS = -32602;
+const INTERNAL_ERROR = -32603;
+
+function isRequest(msg: unknown): msg is JsonRpcRequest {
+  if (typeof msg !== 'object' || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return m.jsonrpc === '2.0' && typeof m.method === 'string';
+}
+
+function isNotification(msg: JsonRpcRequest): boolean {
+  return msg.id === undefined;
+}
+
+function errResponse(
+  id: number | string | null,
+  code: number,
+  message: string,
+  data?: unknown,
+): JsonRpcResponseErr {
+  return { jsonrpc: '2.0', id, error: data === undefined ? { code, message } : { code, message, data } };
+}
+
+function negotiateProtocolVersion(requested: unknown): string {
+  if (typeof requested === 'string' && MCP_PROTOCOL_VERSION_PATTERN.test(requested)) {
+    return requested;
+  }
+  return FALLBACK_PROTOCOL_VERSION;
+}
+
+const toolHandler = createMcpToolHandler();
+
+/**
+ * Dispatch a parsed JSON-RPC envelope. Returns either a response envelope or
+ * null (notification — no response). The route layer is responsible for the
+ * HTTP wrapper (status + Content-Type).
+ *
+ * Auth model:
+ *   - initialize, tools/list, ping, notifications/*   → unauthenticated
+ *   - tools/call                                       → Bridge-Token required;
+ *                                                        scope check is delegated
+ *                                                        to createMcpToolHandler.
+ */
+export async function dispatchJsonRpc(
+  msg: unknown,
+  ctx: DispatchContext,
+): Promise<DispatchResult> {
+  if (!isRequest(msg)) {
+    return {
+      response: errResponse(null, INVALID_REQUEST, 'Invalid JSON-RPC request'),
+    };
+  }
+
+  const id = msg.id ?? null;
+  const isNotif = isNotification(msg);
+
+  try {
+    switch (msg.method) {
+      case 'initialize': {
+        const requested = (msg.params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
+        const result = {
+          protocolVersion: negotiateProtocolVersion(requested),
+          // Tools-only server; no prompts/resources/logging. listChanged=false
+          // because our tool registry is static at process start.
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: {
+            name: 'strange-rambling-svelte',
+            version: '0.0.1',
+          },
+        };
+        return { response: { jsonrpc: '2.0', id, result } };
+      }
+
+      case 'notifications/initialized':
+      case 'notifications/cancelled':
+      case 'notifications/progress':
+      case 'notifications/roots/list_changed': {
+        // Pure notifications — no response. The HTTP layer maps this to 202.
+        return { response: null };
+      }
+
+      case 'ping': {
+        // Per spec, ping returns an empty result object.
+        return { response: { jsonrpc: '2.0', id, result: {} } };
+      }
+
+      case 'tools/list': {
+        const tools = await listMcpTools();
+        return { response: { jsonrpc: '2.0', id, result: { tools } } };
+      }
+
+      case 'tools/call': {
+        const params = msg.params as { name?: unknown; arguments?: unknown } | undefined;
+        const name = typeof params?.name === 'string' ? params.name : '';
+        const args =
+          params?.arguments && typeof params.arguments === 'object'
+            ? (params.arguments as Record<string, unknown>)
+            : {};
+
+        if (!name) {
+          return {
+            response: errResponse(id, INVALID_PARAMS, 'tools/call: params.name required'),
+          };
+        }
+
+        try {
+          const out = await toolHandler({
+            name,
+            arguments: args,
+            bridgeToken: ctx.bridgeToken,
+          });
+          return { response: { jsonrpc: '2.0', id, result: out } };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'unknown error';
+          // Tool errors (including bridge-token rejection) are surfaced as a
+          // JSON-RPC error so the client can distinguish "the call failed"
+          // from "the transport itself broke". MCP clients (incl. Hermes')
+          // map this onto an exception in the caller's tool dispatch.
+          // Auth-shaped errors get a distinct code so callers can detect
+          // them programmatically; everything else is INTERNAL_ERROR.
+          const isAuthErr = /scope|token|missing|signature|expired|malformed/i.test(message);
+          return {
+            response: errResponse(
+              id,
+              isAuthErr ? -32001 : INTERNAL_ERROR,
+              message,
+            ),
+          };
+        }
+      }
+
+      default: {
+        if (isNotif) {
+          // Unknown notification — silently accept. Clients sending unknown
+          // notifications (e.g. future spec additions) shouldn't be told off.
+          return { response: null };
+        }
+        return {
+          response: errResponse(id, METHOD_NOT_FOUND, `Method not found: ${msg.method}`),
+        };
+      }
+    }
+  } catch (err) {
+    if (isNotif) return { response: null };
+    const message = err instanceof Error ? err.message : 'unknown error';
+    return { response: errResponse(id, INTERNAL_ERROR, message) };
+  }
+}
+
+/**
+ * Parse a JSON string into a JSON-RPC message. Returns either a parsed value
+ * or a parse-error response envelope ready to ship back to the client.
+ */
+export function parseJsonRpcBody(raw: string): { ok: true; value: unknown } | { ok: false; error: JsonRpcResponseErr } {
+  try {
+    return { ok: true, value: JSON.parse(raw) };
+  } catch {
+    return {
+      ok: false,
+      error: errResponse(null, PARSE_ERROR, 'Parse error'),
+    };
+  }
+}
