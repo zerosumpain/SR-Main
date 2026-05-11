@@ -316,3 +316,104 @@ This three-tier flag set lets us ship the visible Pill first (immediate UX win),
 - Cross-conversation memory analytics ("which topics is the user asking about most?"). That's a separate analytics feature.
 - Auto-deletion of stale memories. We only flag for review.
 - Replacing followup-queue.ts. Distinct concern.
+
+---
+
+## Two-week review (2026-05-11)
+
+> **How to fill this in:** run `scripts/pulse-review.mjs` on the VPS, then paste findings into each subsection.
+>
+> ```
+> ssh johnk@157.180.19.38 \
+>   'cd /opt/strange-rambling-svelte && set -a && . ./.env && set +a && node scripts/pulse-review.mjs'
+> ```
+
+### Implementation delta vs spec
+
+The shipped implementation diverged from the spec in a few important ways.
+Acknowledge these when reading the script output:
+
+| Spec concept | What shipped |
+|---|---|
+| `pulse_events` table | `heartbeat_pulses` table (joined with `heartbeat_actions`) |
+| `pulse_settings` singleton | Per-row `cadence_seconds` + `status` on `heartbeat_actions` |
+| `health_check` (10 min) | **Not shipped** — no DB-ping or gmail-cursor-age check |
+| `audit_digest` (4 h) | `workflow-review` (30 min) — reviews individual workflow runs, not a digest |
+| `workflow_efficiency` (24 h) | **Not shipped** — p95 latency / error-rate query not implemented |
+| `chat_log_review` (6 h) | `chat-continuation` (1 min) — live conversation auto-resume (wider scope) |
+| `memory_update_review` (24 h) | **Not shipped** — no stale-memory flagging activity |
+| `self_prod` inline in `general-chat.ts` | `chat-continuation` heartbeat activity (runs independently) |
+| Cap: 2 self-prods / job | Cap: 6 LLM continuations / conversation / day |
+| `self_prod` SSE event | `orchestrator_chats` rows with `metadata.heartbeat.activity = 'chat-continuation'` |
+
+The unshipped items (`health_check`, `workflow_efficiency`, `memory_update_review`) are noted in the cadence proposals below as candidates for a follow-up sprint.
+
+---
+
+### Volume / cadence findings
+
+> _To be filled in by John after running `scripts/pulse-review.mjs` — see §2 and §3 of output._
+
+Questions to answer:
+- How many total pulses in 14 days? Does it look proportionate to each cadence?
+- Any action showing a much higher inter-arrival than configured (engine contention, active-hours window narrower than expected)?
+- Are there long gaps (e.g. > 2× configured cadence) that suggest the engine stalled?
+
+**Draft suggestion (not data-driven):** `chat-continuation` at 60 s will dominate volume — expect thousands of ticks. Most should be `ok` (no paused conversations). If the ratio of `fired` to `ok+skipped` is below 1 %, consider raising the cadence to 5 min to reduce DB query pressure. `workflow-review` at 30 min should produce one `fired` row per distinct completed workflow run in any rolling 24 h window; if you rarely run workflows, expect mostly `ok`.
+
+---
+
+### Noise vs signal — which activities had the most low-value rows
+
+> _To be filled in after running the script — see §12 of output._
+
+Questions to answer:
+- Which activity has the worst signal% (fired / total)?
+- Did `conversation-checkin` fire on real long-running jobs or mostly hit "no long-running jobs"?
+- Did `build-progress-check` fire at all? (Only fires when builds are both running and stale.)
+
+**Draft suggestion (not data-driven):** `build-progress-check` and `conversation-checkin` are expected to be near-silent in a low-activity week (both require a job/build to already be running). If signal% for these is 0 or close to 0, they are not causing harm but their ticks are pure noise in the audit log. Consider a 10–15 min cadence instead of 5 min.
+
+---
+
+### chat-continuation effectiveness (spec's "self-prod outcomes")
+
+> _To be filled in after running the script — see §5 of output._
+
+Questions to answer:
+- What fraction of fired pulses were `auto-continue` vs `soft-checkin` vs `nudge` vs `cap-nudge`?
+- How many distinct conversations were touched? Does that feel right given your usage patterns?
+- Did any conversation hit the 6/day LLM cap? If so, did those conversations actually need that many continuations, or was the activity firing spuriously?
+- Looking at a few `auto-continue` or `soft-checkin` replies in the chat UI — did the LLM actually make progress, or did it produce hollow "I'll continue…" non-answers?
+- The `benign` classifier triggers on phrases like "should I continue / shall I proceed" — are false positives common?
+
+**Draft suggestion (not data-driven):** The 6/day LLM cap is a safety rail, not a target. If several conversations are routinely hitting it, the classifier may be too aggressive at treating pauses as benign. Consider tightening the `BENIGN_CONTINUATION_PATTERNS` list or reducing `maxLlmContinuationsPer24h` to 3 until the false-positive rate is understood. The `maxStaleMinutes = 25` window (default) means the activity catches conversations the user walked away from mid-session; if most auto-continues are on conversations the user already considered done, the window is too wide.
+
+---
+
+### memory_update_review accuracy
+
+> _This activity was not shipped. Filling in from the direct `jkai_memories` snapshot instead — see §11 of output._
+
+Questions to answer:
+- Are there memories that are 30+ days old and still marked `active` (`superseded_by IS NULL`)?
+- Do any look factually outdated given what you know now?
+- Is the total memory count growing, shrinking, or stable?
+
+**Draft suggestion (not data-driven):** The `memory_update_review` activity from the spec was the most clearly missing piece. A minimal version (query `jkai_memories` for rows where `updated_at < NOW() - 60 days` and ask the LLM to flag suspicious ones) could be added as a new handler in `src/lib/heartbeat/activities/` in a small follow-up. Cadence suggestion: once per day, active hours only.
+
+---
+
+### Cadence proposals
+
+> _Fill in the "Data" column after running the script. Override draft suggestions with what you actually see._
+
+| Activity | Current cadence | Draft suggestion (not data-driven) | Data | Decision |
+|---|---|---|---|---|
+| `chat-continuation` | 60 s | If signal% < 1 %: raise to 5 min. If cap-nudge > 10 % of fired: reduce LLM cap to 3/day. Otherwise keep. | | |
+| `conversation-checkin` | 5 min | Raise to 10 min if signal% < 5 % — this only fires during long jobs and the extra frequency adds no value. | | |
+| `build-progress-check` | 5 min | Raise to 15 min. Builds are rare; per-build cooldown (10 min) already rate-limits nudges anyway. | | |
+| `workflow-review` | 30 min | Reasonable. If you run < 2 workflows/day, raise to 1 h to reduce "no unreviewed runs" ok rows. | | |
+| `health_check` | not shipped | Add at 10 min. Even a simple `SELECT 1` + gmail cursor age check would catch DB/auth issues early. | | |
+| `memory_update_review` | not shipped | Add at 24 h (active hours). Low cost; high value for long-running personal AI. | | |
+| `workflow_efficiency` | not shipped | Lower priority. Add only after `workflow-review` has accumulated enough reviewed runs to notice patterns. | | |
