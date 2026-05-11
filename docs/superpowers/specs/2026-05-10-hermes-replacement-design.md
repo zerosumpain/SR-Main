@@ -153,7 +153,7 @@ A new join table `hermes_sessions(id, hermes_session_id, kind, kind_id, created_
 - `src/lib/curate/discover.ts`, `generate.ts`, `promote.ts` — kept, exposed as MCP tools.
 
 **Phase 4 (LLM gateway):**
-- `src/lib/jkai/llm-client.ts`, `src/lib/workflows/nodes/llm-helpers.ts` — replaced with thin shims over Hermes' `complete(...)` socket method.
+- `src/lib/jkai/llm-client.ts`, `src/lib/workflows/nodes/llm-helpers.ts` — replaced with thin shims over Hermes' `complete(...)` HTTP endpoint (alongside but separate from the platform adapter — completions are session-less so they don't need a chat_id).
 - `tool-bridge.ts` — retired (legacy Pi-specific bridge); all bridge auth via `mcp/auth.ts`.
 
 ## 5. Data flow

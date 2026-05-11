@@ -96,6 +96,14 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     return json({ error: 'HERMES_BRIDGE_SECRET not configured' }, { status: 500 });
   }
 
+  // Supersede any in-flight job on the same scope BEFORE we start the new
+  // one. Mirrors legacy semantics: a new message on the same canvas cancels
+  // the old one (issue #2 from the Phase 1 cross-cutting review).
+  if (workflowId || conversationId) {
+    cancelForScope({ workflowId, conversationId }, 'Superseded by new request');
+  }
+  cleanOldJobs();
+
   // chatId = the workflow we're chatting against (or a synthetic id when no
   // workflow context yet). sessionId names the per-user/per-workflow tab.
   const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId ?? Date.now()}`;
@@ -105,6 +113,28 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
 
   const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
+
+  // Persist the user message before kicking off Hermes so canvas reload
+  // mid-conversation restores the just-sent bubble. Mirrors legacy
+  // handleWithLoop persistence (issue #1 from the cross-cutting review).
+  // Schema cols: workflowId, conversationId, role, content, metadata (jsonb).
+  const userMetadata = chatNodeId ? { chatNodeId } : undefined;
+  if (conversationId) {
+    await db.insert(orchestratorChats).values({
+      conversationId,
+      workflowId: workflowId ?? null,
+      role: 'user',
+      content: message,
+      metadata: userMetadata,
+    });
+  } else if (workflowId) {
+    await db.insert(orchestratorChats).values({
+      workflowId,
+      role: 'user',
+      content: message,
+      metadata: userMetadata,
+    });
+  }
 
   const client = new HermesClient({
     baseUrl: HERMES_URL,
@@ -193,6 +223,31 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           message: job.partialResponse || '',
         };
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
+      }
+
+      // Persist the assistant reply so canvas reload restores history.
+      // Mirrors legacy handleWithLoop. Tool steps aren't tracked on the
+      // Hermes branch (yet), so we only record chatNodeId in metadata when
+      // present.
+      const finalText =
+        (job.result && typeof (job.result as Record<string, unknown>).message === 'string'
+          ? ((job.result as Record<string, unknown>).message as string)
+          : '') || job.partialResponse || '';
+      if (finalText && (conversationId || workflowId)) {
+        try {
+          const assistantMeta: Record<string, unknown> = {};
+          if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
+          const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
+          await db.insert(orchestratorChats).values({
+            conversationId: conversationId ?? null,
+            workflowId: workflowId ?? null,
+            role: 'assistant',
+            content: finalText,
+            metadata: assistantMetadata,
+          });
+        } catch (persistErr) {
+          console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);
+        }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';

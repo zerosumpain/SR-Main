@@ -16,9 +16,18 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools } from './server';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { executeTool, getToolsByToolset } from '$lib/workflows/site-tools/registry';
 import { publishToolStep } from '$lib/jkai/tool-step-bus';
 import { summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+
+// Phase 1 scope: only the workflows toolset is exposed over MCP. The
+// underlying registry has ~132 site-tools registered; without this
+// allowlist the bearer-holder could call any of them. Build the Set once
+// at module load (registry is static after init).
+const WORKFLOWS_TOOLSET = 'workflows';
+const ALLOWED_TOOLS = new Set(
+  getToolsByToolset(WORKFLOWS_TOOLSET).map((t) => t.name),
+);
 
 // SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
 // it so unit tests (which use plain process.env via beforeAll) don't need to
@@ -198,6 +207,15 @@ export async function dispatchJsonRpc(
         if (!name) {
           return {
             response: errResponse(id, INVALID_PARAMS, 'tools/call: params.name required'),
+          };
+        }
+
+        // Toolset gate: only the workflows toolset is exposed in this
+        // profile. Without this, any of the ~132 registered site-tools
+        // would be reachable via MCP. Matches the Phase 1 spec scope.
+        if (!ALLOWED_TOOLS.has(name)) {
+          return {
+            response: errResponse(id, INVALID_PARAMS, `tool '${name}' is not exposed in this profile`),
           };
         }
 

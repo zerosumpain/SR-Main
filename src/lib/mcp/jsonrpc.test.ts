@@ -165,6 +165,24 @@ describe('mcp/jsonrpc', () => {
     expect(events.length).toBe(0);
   });
 
+  it('rejects tools/call for a tool outside the workflows toolset', async () => {
+    // Phase 1 scope is "workflows toolset only" (22 tools). The registry has
+    // ~132 tools total — without the toolset gate, blog_create or any other
+    // would be reachable. blog_create lives in the `blog` toolset.
+    const { response } = await dispatchJsonRpc(
+      {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: { name: 'blog_create', arguments: { workflow_id: 'wf_99' } },
+      },
+      { authBearer: SECRET },
+    );
+    const err = response as { error: { code: number; message: string } };
+    expect(err.error.code).toBe(-32602);
+    expect(err.error.message).toMatch(/not exposed/i);
+  });
+
   it('returns method-not-found error for unknown request methods', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 5, method: 'totally/made/up' },
