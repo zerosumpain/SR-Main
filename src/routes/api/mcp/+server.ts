@@ -11,7 +11,11 @@
 //
 // Auth model:
 //   - initialize, tools/list, ping, notifications/*   → unauthenticated
-//   - tools/call                                       → Bridge-Token required
+//   - tools/call                                       → Authorization: Bearer
+//                                                        <HERMES_BRIDGE_SECRET>
+//                                                        (constant-time compare;
+//                                                        scope binding happens at
+//                                                        the tool layer)
 //
 // Stateless: we don't issue Mcp-Session-Id, don't track sessions, and don't
 // open server-initiated SSE streams. Single POST → single response.
@@ -38,8 +42,14 @@ export const DELETE: RequestHandler = () => {
   return new Response('Method Not Allowed', { status: 405 });
 };
 
+function extractBearer(authHeader: string | null): string {
+  if (!authHeader) return '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
 export const POST: RequestHandler = async ({ request }) => {
-  const bridgeToken = request.headers.get('Bridge-Token') ?? '';
+  const authBearer = extractBearer(request.headers.get('Authorization'));
   const raw = await request.text();
   const parsed = parseJsonRpcBody(raw);
   if (!parsed.ok) {
@@ -57,7 +67,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (Array.isArray(parsed.value)) {
     const responses = [];
     for (const entry of parsed.value) {
-      const result = await dispatchJsonRpc(entry, { bridgeToken });
+      const result = await dispatchJsonRpc(entry, { authBearer });
       if (result.response) responses.push(result.response);
     }
     if (responses.length === 0) {
@@ -69,7 +79,7 @@ export const POST: RequestHandler = async ({ request }) => {
     });
   }
 
-  const result = await dispatchJsonRpc(parsed.value, { bridgeToken });
+  const result = await dispatchJsonRpc(parsed.value, { authBearer });
   if (!result.response) {
     // Pure notification (no id) — spec requires 202 Accepted with no body.
     return new Response(null, { status: 202 });

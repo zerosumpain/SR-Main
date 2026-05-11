@@ -1,15 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { dispatchJsonRpc, parseJsonRpcBody } from './jsonrpc';
-import { mintBridgeToken, type TokenScope } from './auth';
 
 const SECRET = 'mcp-jsonrpc-test-secret-32-bytes-long-please-thanks';
-
-const scope: TokenScope = {
-  sessionId: 'sess_jsonrpc',
-  kind: 'canvas_chat',
-  kindId: 'wf_99',
-  expiresAt: Date.now() + 60_000,
-};
 
 beforeAll(() => {
   process.env.HERMES_BRIDGE_SECRET = SECRET;
@@ -27,7 +19,7 @@ describe('mcp/jsonrpc', () => {
 
   it('responds to initialize without auth and echoes a compatible protocolVersion', async () => {
     // This is the exact shape Hermes' MCP client probes with first; previously
-    // got rejected with 403 because the route required a Bridge-Token header.
+    // got rejected with 403 because the route required an Authorization header.
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',
@@ -39,7 +31,7 @@ describe('mcp/jsonrpc', () => {
           clientInfo: { name: 'hermes-test', version: '0.0.0' },
         },
       },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).not.toBeNull();
     expect(response).toHaveProperty('result');
@@ -52,7 +44,7 @@ describe('mcp/jsonrpc', () => {
   it('falls back to a default protocol version for malformed requests', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 'not-a-date' } },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     const ok = response as { result: { protocolVersion: string } };
     expect(ok.result.protocolVersion).toBe('2025-03-26');
@@ -61,7 +53,7 @@ describe('mcp/jsonrpc', () => {
   it('accepts notifications/initialized as a pure notification (null response → 202)', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', method: 'notifications/initialized' },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).toBeNull();
   });
@@ -69,7 +61,7 @@ describe('mcp/jsonrpc', () => {
   it('responds to ping with empty result', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 'ping-1', method: 'ping' },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).toMatchObject({ jsonrpc: '2.0', id: 'ping-1', result: {} });
   });
@@ -77,7 +69,7 @@ describe('mcp/jsonrpc', () => {
   it('lists tools without auth (discovery is public)', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 2, method: 'tools/list' },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).not.toBeNull();
     const ok = response as { result: { tools: Array<{ name: string }> } };
@@ -86,7 +78,7 @@ describe('mcp/jsonrpc', () => {
     expect(ok.result.tools.find((t) => t.name === 'workflow_add_node')).toBeTruthy();
   });
 
-  it('rejects tools/call without a Bridge-Token (auth-shaped JSON-RPC error)', async () => {
+  it('rejects tools/call without a bearer token (auth-shaped JSON-RPC error)', async () => {
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',
@@ -94,16 +86,15 @@ describe('mcp/jsonrpc', () => {
         method: 'tools/call',
         params: { name: 'workflow_list_node_types', arguments: { workflow_id: 'wf_99' } },
       },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).not.toBeNull();
     const err = response as { error: { code: number; message: string } };
     expect(err.error.code).toBe(-32001);
-    expect(err.error.message).toMatch(/token/i);
+    expect(err.error.message).toMatch(/bearer/i);
   });
 
-  it('executes tools/call when scope-matched bridge token is supplied', async () => {
-    const token = mintBridgeToken(scope, SECRET);
+  it('executes tools/call when bearer matches HERMES_BRIDGE_SECRET', async () => {
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',
@@ -111,7 +102,7 @@ describe('mcp/jsonrpc', () => {
         method: 'tools/call',
         params: { name: 'workflow_list_node_types', arguments: { workflow_id: 'wf_99' } },
       },
-      { bridgeToken: token },
+      { authBearer: SECRET },
     );
     expect(response).not.toBeNull();
     const ok = response as { result: { content: Array<{ type: string; text: string }> } };
@@ -124,7 +115,7 @@ describe('mcp/jsonrpc', () => {
   it('returns method-not-found error for unknown request methods', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 5, method: 'totally/made/up' },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     const err = response as { error: { code: number } };
     expect(err.error.code).toBe(-32601);
@@ -133,13 +124,13 @@ describe('mcp/jsonrpc', () => {
   it('silently accepts unknown notifications (no response, no error)', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', method: 'notifications/some/future/thing' },
-      { bridgeToken: '' },
+      { authBearer: "" },
     );
     expect(response).toBeNull();
   });
 
   it('returns INVALID_REQUEST for non-JSON-RPC objects', async () => {
-    const { response } = await dispatchJsonRpc({ hello: 'world' }, { bridgeToken: '' });
+    const { response } = await dispatchJsonRpc({ hello: 'world' }, { authBearer: "" });
     const err = response as { error: { code: number }; id: null };
     expect(err.error.code).toBe(-32600);
     expect(err.id).toBeNull();

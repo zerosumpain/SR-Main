@@ -14,7 +14,23 @@
 // Stateless mode: we don't issue an `Mcp-Session-Id`, don't track sessions,
 // and don't open server-initiated SSE streams. Each POST is self-contained.
 
-import { createMcpToolHandler, listMcpTools } from './server';
+import { timingSafeEqual } from 'node:crypto';
+import { listMcpTools } from './server';
+import { executeTool } from '$lib/workflows/site-tools/registry';
+
+// SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
+// it so unit tests (which use plain process.env via beforeAll) don't need to
+// stub the $env module. In SvelteKit runtime, env.HERMES_BRIDGE_SECRET wins;
+// in vitest, process.env.HERMES_BRIDGE_SECRET is the fallback.
+async function resolveSecret(): Promise<string> {
+  if (process.env.HERMES_BRIDGE_SECRET) return process.env.HERMES_BRIDGE_SECRET;
+  try {
+    const mod = await import('$env/dynamic/private');
+    return mod.env.HERMES_BRIDGE_SECRET ?? '';
+  } catch {
+    return '';
+  }
+}
 
 // Echo back whatever protocol version the client requests, as long as it
 // looks like an MCP date-stamped version. Per spec, the server MUST respond
@@ -47,8 +63,13 @@ export interface JsonRpcResponseErr {
 export type JsonRpcResponse = JsonRpcResponseOk | JsonRpcResponseErr;
 
 export interface DispatchContext {
-  /** Bridge-Token header value, or empty if absent. Required for tools/call. */
-  bridgeToken: string;
+  /**
+   * Authorization-bearer value (the part after `Bearer `), or empty if absent.
+   * Required for tools/call; verified by constant-time compare against
+   * `HERMES_BRIDGE_SECRET`. Discovery methods (initialize, tools/list, ping,
+   * notifications/*) are unauthenticated.
+   */
+  authBearer: string;
 }
 
 export interface DispatchResult {
@@ -93,7 +114,14 @@ function negotiateProtocolVersion(requested: unknown): string {
   return FALLBACK_PROTOCOL_VERSION;
 }
 
-const toolHandler = createMcpToolHandler();
+async function verifyBearer(bearer: string): Promise<boolean> {
+  const secret = await resolveSecret();
+  if (!secret || !bearer) return false;
+  const a = Buffer.from(bearer, 'utf8');
+  const b = Buffer.from(secret, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 /**
  * Dispatch a parsed JSON-RPC envelope. Returns either a response envelope or
@@ -102,9 +130,12 @@ const toolHandler = createMcpToolHandler();
  *
  * Auth model:
  *   - initialize, tools/list, ping, notifications/*   → unauthenticated
- *   - tools/call                                       → Bridge-Token required;
- *                                                        scope check is delegated
- *                                                        to createMcpToolHandler.
+ *   - tools/call                                       → Authorization: Bearer
+ *                                                        with constant-time match
+ *                                                        against HERMES_BRIDGE_SECRET.
+ *                                                        Scope binding happens at
+ *                                                        the tool layer via the
+ *                                                        workflow_id argument.
  */
 export async function dispatchJsonRpc(
   msg: unknown,
@@ -168,28 +199,34 @@ export async function dispatchJsonRpc(
           };
         }
 
+        if (!(await verifyBearer(ctx.authBearer))) {
+          // Auth-shaped JSON-RPC error: -32001 lets clients (incl. Hermes')
+          // distinguish auth failure from "tool itself errored".
+          return {
+            response: errResponse(id, -32001, 'unauthorized: invalid or missing bearer token'),
+          };
+        }
+
         try {
-          const out = await toolHandler({
-            name,
-            arguments: args,
-            bridgeToken: ctx.bridgeToken,
-          });
-          return { response: { jsonrpc: '2.0', id, result: out } };
+          const out = await executeTool(name, args, { emit: () => {} });
+          return {
+            response: {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: typeof out === 'string' ? out : JSON.stringify(out),
+                  },
+                ],
+              },
+            },
+          };
         } catch (err) {
           const message = err instanceof Error ? err.message : 'unknown error';
-          // Tool errors (including bridge-token rejection) are surfaced as a
-          // JSON-RPC error so the client can distinguish "the call failed"
-          // from "the transport itself broke". MCP clients (incl. Hermes')
-          // map this onto an exception in the caller's tool dispatch.
-          // Auth-shaped errors get a distinct code so callers can detect
-          // them programmatically; everything else is INTERNAL_ERROR.
-          const isAuthErr = /scope|token|missing|signature|expired|malformed/i.test(message);
           return {
-            response: errResponse(
-              id,
-              isAuthErr ? -32001 : INTERNAL_ERROR,
-              message,
-            ),
+            response: errResponse(id, INTERNAL_ERROR, message),
           };
         }
       }
