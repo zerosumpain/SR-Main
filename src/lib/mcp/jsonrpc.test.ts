@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { dispatchJsonRpc, parseJsonRpcBody } from './jsonrpc';
+import { subscribeToolSteps, _resetToolStepBusForTests, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 
 const SECRET = 'mcp-jsonrpc-test-secret-32-bytes-long-please-thanks';
 
 beforeAll(() => {
   process.env.HERMES_BRIDGE_SECRET = SECRET;
+});
+
+beforeEach(() => {
+  _resetToolStepBusForTests();
 });
 
 describe('mcp/jsonrpc', () => {
@@ -110,6 +115,54 @@ describe('mcp/jsonrpc', () => {
     expect(ok.result.content[0].type).toBe('text');
     const parsed = JSON.parse(ok.result.content[0].text);
     expect(Array.isArray(parsed.data)).toBe(true);
+  });
+
+  it('publishes started + completed tool-step events to the bus on a successful tools/call', async () => {
+    // The Hermes branch of /api/workflows/orchestrator/chat subscribes to
+    // this bus to surface tool-step events into the canvas SSE stream.
+    // Carry-over #1 from Phase 1 acceptance log.
+    const events: ToolStepEvent[] = [];
+    const unsub = subscribeToolSteps('wf_test_99', (e) => events.push(e));
+
+    await dispatchJsonRpc(
+      {
+        jsonrpc: '2.0',
+        id: 99,
+        method: 'tools/call',
+        params: { name: 'workflow_list_node_types', arguments: { workflow_id: 'wf_test_99' } },
+      },
+      { authBearer: SECRET },
+    );
+
+    unsub();
+
+    expect(events.length).toBe(2);
+    expect(events[0].phase).toBe('started');
+    expect(events[0].tool).toBe('workflow_list_node_types');
+    expect(events[0].stepId).toMatch(/^step_/);
+    expect(events[1].phase).toBe('completed');
+    expect(events[1].stepId).toBe(events[0].stepId);
+    expect(events[1].resultPreview).toBeTruthy();
+  });
+
+  it('does not publish tool-step events when the call carries no workflow_id', async () => {
+    // workflow_id is the bus key; without one we can't route the event to
+    // any subscriber, so don't bother publishing.
+    const events: ToolStepEvent[] = [];
+    const unsub = subscribeToolSteps('wf_should_not_fire', (e) => events.push(e));
+
+    await dispatchJsonRpc(
+      {
+        jsonrpc: '2.0',
+        id: 100,
+        method: 'tools/call',
+        params: { name: 'workflow_list_node_types', arguments: {} },
+      },
+      { authBearer: SECRET },
+    );
+
+    unsub();
+    expect(events.length).toBe(0);
   });
 
   it('returns method-not-found error for unknown request methods', async () => {

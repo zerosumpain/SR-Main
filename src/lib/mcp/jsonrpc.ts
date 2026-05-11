@@ -17,6 +17,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools } from './server';
 import { executeTool } from '$lib/workflows/site-tools/registry';
+import { publishToolStep } from '$lib/jkai/tool-step-bus';
+import { summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 
 // SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
 // it so unit tests (which use plain process.env via beforeAll) don't need to
@@ -207,8 +209,51 @@ export async function dispatchJsonRpc(
           };
         }
 
+        // Surface this tool call to any canvas SSE subscribers listening on
+        // this workflow_id. The Hermes branch of /api/workflows/orchestrator/
+        // chat subscribes for the duration of its SSE response and forwards
+        // these as `tool_start`/`tool_result` events so the canvas UI's
+        // tool-step panel mirrors what the legacy loop.ts path already shows.
+        const workflowId = String(args.workflow_id ?? args.workflowId ?? '');
+        const stepId = `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const startSummary = workflowId ? summarizeRunningTool(name, args) : '';
+        if (workflowId) {
+          publishToolStep({
+            workflowId,
+            stepId,
+            phase: 'started',
+            tool: name,
+            args,
+            summary: startSummary || undefined,
+            ts: Date.now(),
+          });
+        }
+
         try {
           const out = await executeTool(name, args, { emit: () => {} });
+          if (workflowId) {
+            const raw = typeof out === 'string' ? out : JSON.stringify(out);
+            const preview = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
+            const status: 'done' | 'error' =
+              out && typeof out === 'object' && 'error' in (out as Record<string, unknown>) ? 'error' : 'done';
+            const completionSummary = summarizeToolResult({
+              tool: name,
+              toolCallId: stepId,
+              args,
+              result: out,
+              status,
+            });
+            publishToolStep({
+              workflowId,
+              stepId,
+              phase: status === 'error' ? 'failed' : 'completed',
+              tool: name,
+              resultPreview: preview,
+              result: out,
+              summary: completionSummary || undefined,
+              ts: Date.now(),
+            });
+          }
           return {
             response: {
               jsonrpc: '2.0',
@@ -225,6 +270,16 @@ export async function dispatchJsonRpc(
           };
         } catch (err) {
           const message = err instanceof Error ? err.message : 'unknown error';
+          if (workflowId) {
+            publishToolStep({
+              workflowId,
+              stepId,
+              phase: 'failed',
+              tool: name,
+              error: message,
+              ts: Date.now(),
+            });
+          }
           return {
             response: errResponse(id, INTERNAL_ERROR, message),
           };

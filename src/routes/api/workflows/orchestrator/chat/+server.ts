@@ -16,6 +16,7 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
+import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -110,6 +111,39 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     bridgeSecret: HERMES_SECRET,
   });
 
+  // Subscribe to tool-step events for THIS workflow's canvas. The MCP
+  // dispatcher publishes a started/completed/failed event for every
+  // tools/call carrying a matching workflow_id argument; we forward them as
+  // legacy `tool_start` / `tool_result` JobEvents so the canvas UI's panel
+  // works identically on the Hermes branch. Skip when there's no workflowId
+  // (general /jkai chats don't have a canvas to render against anyway, and
+  // the bus is keyed by workflowId).
+  let unsubscribeToolSteps: (() => void) | null = null;
+  if (workflowId) {
+    unsubscribeToolSteps = subscribeToolSteps(workflowId, (e: ToolStepEvent) => {
+      if (abortController.signal.aborted) return;
+      if (e.phase === 'started') {
+        publishJobEvent(jobId, {
+          type: 'tool_start',
+          tool: e.tool,
+          args: e.args ?? {},
+          toolCallId: e.stepId,
+          summary: e.summary,
+        });
+        return;
+      }
+      // completed | failed → tool_result
+      publishJobEvent(jobId, {
+        type: 'tool_result',
+        tool: e.tool,
+        result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
+        status: e.phase === 'failed' ? 'error' : 'done',
+        toolCallId: e.stepId,
+        summary: e.summary,
+      });
+    });
+  }
+
   // Fire-and-forget: pump Hermes frames into the legacy SSE buffer keyed by
   // jobId. The canvas UI then reads them off `/chat/stream?jobId=...` exactly
   // as it always has.
@@ -167,6 +201,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       job.error = errorMessage;
       job.result = { success: false, error: errorMessage };
       publishJobEvent(jobId, { type: 'error', message: errorMessage });
+    } finally {
+      // Drop the bus subscription so the listener Set doesn't leak across
+      // jobs — the bus would otherwise keep a reference to this closure for
+      // the lifetime of the process.
+      if (unsubscribeToolSteps) unsubscribeToolSteps();
     }
   })();
 
