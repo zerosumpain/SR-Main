@@ -64,10 +64,13 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
     case 'replace':
       return [{ type: 'token', delta: frame.content }];
     case 'finalize':
-      return [{
-        type: 'done',
-        result: { success: true, message: frame.content, workflow: null },
-      }];
+      // The jkai adapter emits a synthetic `finalize` with empty content
+      // once `handle_message` finishes — the actual reply text has already
+      // been delivered via prior `send` frames. The pump below uses
+      // `job.partialResponse` (accumulated from those `send` frames) for
+      // the final `message` field, so we don't return a `done` event here.
+      // Returning empty so the pump's own finalize handling fires.
+      return [];
     default:
       return [];
   }
@@ -135,8 +138,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           publishJobEvent(jobId, ev);
         }
         if (frame.kind === 'finalize') {
+          // Use the accumulated partialResponse as the final message
+          // because the adapter's finalize content is intentionally empty
+          // (delivery already happened via prior `send` frames).
           job.status = 'done';
-          job.result = { success: true, workflow: null, message: frame.content };
+          const finalMessage = frame.content || job.partialResponse || '';
+          job.result = { success: true, workflow: null, message: finalMessage };
+          publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
         }
       }
