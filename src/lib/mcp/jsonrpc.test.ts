@@ -165,22 +165,39 @@ describe('mcp/jsonrpc', () => {
     expect(events.length).toBe(0);
   });
 
-  it('rejects tools/call for a tool outside the workflows toolset', async () => {
-    // Phase 1 scope is "workflows toolset only" (22 tools). The registry has
-    // ~132 tools total — without the toolset gate, blog_create or any other
-    // would be reachable. blog_create lives in the `blog` toolset.
+  it('exposes the full tool registry to MCP callers (no SvelteKit-side toolset gate)', async () => {
+    // Phase 1.5: skill-system-based constraint, not SvelteKit-side gating.
+    // Hermes' active skill restricts which tools the agent considers; the
+    // MCP server is permissive.
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',
         id: 7,
         method: 'tools/call',
-        params: { name: 'blog_create', arguments: { workflow_id: 'wf_99' } },
+        params: { name: 'blog_list', arguments: {} },
       },
       { authBearer: SECRET },
     );
-    const err = response as { error: { code: number; message: string } };
-    expect(err.error.code).toBe(-32602);
-    expect(err.error.message).toMatch(/not exposed/i);
+    // Either success or a tool-layer error — what we don't want is the old
+    // -32602 "not exposed in this profile" rejection.
+    if ('error' in (response as Record<string, unknown>)) {
+      const err = response as { error: { code: number; message: string } };
+      expect(err.error.message).not.toMatch(/not exposed/i);
+    }
+  });
+
+  it('tools/list returns the full registry (not just workflows)', async () => {
+    // Phase 1.5: tools/list must reflect the full registry. Hermes skills do
+    // the filtering; the MCP server is permissive. Catches regressions of the
+    // server.ts listMcpTools() widening (getTools() vs getToolsByToolset('workflows')).
+    const { response } = await dispatchJsonRpc(
+      { jsonrpc: '2.0', id: 8, method: 'tools/list' },
+      { authBearer: '' }, // discovery is unauth'd
+    );
+    const ok = response as { result: { tools: Array<{ name: string }> } };
+    expect(ok.result.tools.length).toBeGreaterThan(50); // 130ish; use a loose floor
+    expect(ok.result.tools.find((t) => t.name === 'blog_list')).toBeTruthy();
+    expect(ok.result.tools.find((t) => t.name === 'workflow_add_node')).toBeTruthy();
   });
 
   it('returns method-not-found error for unknown request methods', async () => {

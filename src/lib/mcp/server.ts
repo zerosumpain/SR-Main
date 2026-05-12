@@ -1,12 +1,11 @@
-// Exposes the 22 workflows-domain site-tools to Hermes over MCP. See
+// Exposes the full site-tools registry to Hermes over MCP. See
 // jsonrpc.ts for the JSON-RPC dispatcher and auth model.
+// Toolset-level filtering is handled by Hermes skills, not here.
 
 import {
-  getToolsByToolset,
+  getTools,
 } from '$lib/workflows/site-tools/registry';
 import type { ToolDefinition } from '$lib/workflows/site-tools/registry-internal';
-
-const WORKFLOWS_TOOLSET = 'workflows';
 
 export interface McpTool {
   name: string;
@@ -36,7 +35,7 @@ function toolToMcp(def: ToolDefinition): McpTool {
 }
 
 export async function listMcpTools(): Promise<McpTool[]> {
-  const tools = getToolsByToolset(WORKFLOWS_TOOLSET);
+  const tools = getTools();
   return tools.map(toolToMcp);
 }
 
