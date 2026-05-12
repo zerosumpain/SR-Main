@@ -846,6 +846,26 @@ loaded → site-tool call succeeds) needs `JKAI_HERMES_CANVAS_CHAT=1` flipped
 on a deployed instance to observe. The soak instructions above call this
 out explicitly.
 
+**Update — 2026-05-12 (autonomous verification, pre-soak):** Direct platform-adapter
+POSTs were used to verify the half of this chain that doesn't require flipping
+the prod flag (skill auto-load on `kind`). Two probes via the worktree:
+
+```
+POST /platforms/jkai/msg  kind=manual         → 202
+agent.log: Auto-loaded skill(s) ['jkai-general'] for session agent:main:jkai:dm:probe_*
+
+POST /platforms/jkai/msg  kind=canvas_chat    → 202
+agent.log: Auto-loaded skill(s) ['jkai-canvas'] for session agent:main:jkai:dm:wf_canvas_probe_*
+```
+
+`auto_skill` propagation works end-to-end from the platform-adapter POST shape
+into Hermes' router. The only piece still deferred to soak is "agent then calls
+site-tools through the bridge and gets real results back" — that's the
+SvelteKit `/api/mcp` half, and that's already exercised by the Phase 1 acceptance
+scenarios (which used `tools/list` and `workflow_*` calls successfully). The
+two halves are independently confirmed; the soak just observes them together
+under real usage.
+
 ### Phase 1.5 closing notes
 
 - All 11 skills are deployed and enabled in `~/.hermes-jkai/skills/`.
