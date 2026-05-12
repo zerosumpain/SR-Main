@@ -369,6 +369,29 @@ Five phases, each independently shippable, each with a feature flag, each with a
 
 **Rollback:** flip flag; or `git revert` after deletion.
 
+### Phase 1.5 — General chat via skills (1–2 weeks)
+
+**Scope:** Extend Hermes coverage from canvas-only to the `/jkai` general chat hub. After Phase 1, Hermes handles workflow-graph editing; every other user query (blog, email, health, research, scheduling, scraping, home automation, files, utilities) still hits the legacy chat path. Phase 1.5 closes that gap without waiting for Phase 2's build-loop work.
+
+**Mechanism:** Phase 1.5 makes Hermes' built-in skill system load-bearing. Rather than a hand-rolled SvelteKit allowlist that gates which tools the agent may call, constraint responsibility shifts entirely to Hermes-native skill scope declarations. Nine per-domain skills (`jkai-general`, `jkai-blog`, `jkai-gmail`, `jkai-health`, `jkai-research`, `jkai-scheduled`, `jkai-scraper`, `jkai-home-assistant`, `jkai-files`, `jkai-utility`) each declare their trigger conditions and tool inventory in `SKILL.md`. Hermes' native router selects the appropriate skill for each incoming chat based on session metadata (`kind`/`kind_id`) and query content; the agent self-selects from there. The `workflows`-only toolset gate in `jsonrpc.ts` is removed — the MCP layer becomes permissive and trusts the skill system to fence scope. `kind`/`kind_id` are propagated through the `JkaiPlatformAdapter` into Hermes session metadata so the router has the context it needs.
+
+**Deliverables:**
+- 9 new Hermes skills under `~/.hermes-jkai/skills/` covering all general-chat-relevant tool domains (~64 tools).
+- 1 update to `jkai-canvas/SKILL.md`: add cross-skill yield notes so the canvas agent gracefully declines off-topic requests.
+- `src/lib/mcp/jsonrpc.ts` — `workflows`-only toolset gate removed; replaced with a comment explaining the skill-system model.
+- `src/lib/mcp/jsonrpc.test.ts` — gate test replaced with a positive "full registry callable" assertion.
+- `~/.hermes-jkai/extensions/jkai_platform/adapter.py` — confirm `kind` + `kind_id` propagate into `MessageEvent.raw_message` for skill-router consumption.
+- Acceptance log (`docs/superpowers/research/2026-05-11-hermes-phase-1-acceptance.md`) extended with 5 general-chat scenarios.
+
+**Exit criteria:**
+- 5 additional acceptance scenarios pass on `JKAI_HERMES_CANVAS_CHAT=1`: blog draft, Gmail search, health summary, multi-domain (scheduled + WhatsApp), ambiguous-query clarification.
+- All 5 Phase 1 canvas scenarios still pass (regression check).
+- One-week soak now covers both canvas and general chat with no regressions in either path.
+- Agent routes to the correct domain skill on ≥90% of representative prompts (manual verification).
+- `jsonrpc.ts` contains no reference to `getToolsByToolset('workflows')` for gating purposes.
+
+**Rollback:** flip `JKAI_HERMES_CANVAS_CHAT` off — both canvas and general chat revert to legacy paths. Or `git revert` the Phase 1.5 merge commit: the in-repo change (gate removal + test update) reverts, which fences the agent back to canvas-only; the skill files under `~/.hermes-jkai/skills/` (outside the repo) should be removed manually.
+
 ### Phase 2 — Pi-runner / build loop (3–4 weeks)
 
 **Deliverables:**
