@@ -186,6 +186,20 @@ describe('mcp/jsonrpc', () => {
     }
   });
 
+  it('tools/list returns the full registry (not just workflows)', async () => {
+    // Phase 1.5: tools/list must reflect the full registry. Hermes skills do
+    // the filtering; the MCP server is permissive. Catches regressions of the
+    // server.ts listMcpTools() widening (getTools() vs getToolsByToolset('workflows')).
+    const { response } = await dispatchJsonRpc(
+      { jsonrpc: '2.0', id: 8, method: 'tools/list' },
+      { authBearer: '' }, // discovery is unauth'd
+    );
+    const ok = response as { result: { tools: Array<{ name: string }> } };
+    expect(ok.result.tools.length).toBeGreaterThan(50); // 130ish; use a loose floor
+    expect(ok.result.tools.find((t) => t.name === 'blog_list')).toBeTruthy();
+    expect(ok.result.tools.find((t) => t.name === 'workflow_add_node')).toBeTruthy();
+  });
+
   it('returns method-not-found error for unknown request methods', async () => {
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 5, method: 'totally/made/up' },
