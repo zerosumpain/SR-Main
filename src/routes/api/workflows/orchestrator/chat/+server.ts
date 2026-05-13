@@ -179,18 +179,22 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // as it always has.
   (async () => {
     console.log(`[hermes-chat] Job ${jobId} started — workflowId=${workflowId ?? 'none'} chatId=${chatId} message="${message.slice(0, 100)}"`);
+    // kind drives Hermes' auto_skill: 'canvas_chat' → jkai-canvas (workflow DAG
+    // edits); 'manual' → jkai-general (top-level chat router for /jkai). Without
+    // a workflowId we're in the general chat hub, not the canvas.
+    const kind = workflowId ? 'canvas_chat' as const : 'manual' as const;
     try {
       await client.sendMessage({
         chatId,
         text: message,
-        kind: 'canvas_chat',
+        kind,
         kindId,
         sessionId,
       });
 
       for await (const frame of client.openStream({
         chatId,
-        kind: 'canvas_chat',
+        kind,
         kindId,
         sessionId,
       })) {
