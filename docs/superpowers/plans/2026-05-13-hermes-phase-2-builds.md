@@ -4,17 +4,32 @@
 
 **Goal:** Replace jkai's Pi-runner-based build loop with Hermes — same agent harness used for canvas (Phase 1) and general chat (Phase 1.5), now driving the autonomous build iterations. `pi-runner.ts` retires from the executor's hot path; `executor.ts` calls `HermesClient.sendMessage(...)` with `kind='build'` and waits for the platform adapter's `finalize` SSE frame before parsing `## Evaluation` and `## Next Steps`.
 
-**Architecture:** Hermes' SSH terminal backend points at homeserv's host filesystem so the agent's built-in `bash`/`read_file`/`edit_file` operate on the existing workspace path `/home/jkai/workspace/<buildId>/dev/` (host-mode parity with today's `JKAI_BUILDS_HOSTMODE=1` path). A new `jkai-build` Hermes skill is auto-loaded via `_KIND_TO_SKILL['build']='jkai-build'` in the platform adapter and ports the heavy discipline today encoded in `src/lib/jkai/prompt.ts`'s `SYSTEM_PROMPT`. Three new MCP infra tools (`log_iteration`, `log_tool_call`, `extend_deadline`) plus a new `jkai_builds.deadline_at` column give the skill the structured-write primitives Pi has implicitly. The executor's logging infrastructure shifts from per-token streaming deltas to per-tool-result granularity via an MCP middleware that publishes events on a new `tool-call-log-bus.ts` (mirroring the existing `tool-step-bus.ts` pattern from Phase 1). The whole pathway is flag-gated behind `JKAI_HERMES_BUILD_LOOP=1`, independent of `JKAI_HERMES_CANVAS_CHAT`, so the build flag can soak separately from the chat flag.
+**Architecture:** Hermes' Docker terminal backend spins up a fresh ephemeral `hermes-<task_id>` container per build session, using the existing `jkai-sandbox:latest` image with the build's workspace bind-mounted to `/workspace` inside the container. The agent's built-in `bash`/`read_file`/`edit_file` operate inside that container; the host directory `/home/jkai/workspace/<buildId>/dev/` is the bind-mount source so `build_*` MCP tools (which run host-side via `execInSandbox` today) and Hermes' built-in tools both reach the same files. Strong per-build isolation comes for free from Hermes' `_BASE_SECURITY_ARGS` (`--cap-drop ALL` plus DAC_OVERRIDE/CHOWN/FOWNER, `no-new-privileges`, `--pids-limit 256`, size-limited tmpfs on `/tmp` `/var/tmp` `/run`). The per-build container is requested via Hermes' `register_task_env_overrides(task_id, {"docker_image": "jkai-sandbox:latest", "docker_volumes": [...], "cwd": "/workspace"})` hook — the jkai platform adapter calls this for every inbound message with `kind='build'` *before* dispatching the message into the agent loop, so the first tool call in the session lands in the correct image with the correct mount. A new `jkai-build` Hermes skill is auto-loaded via `_KIND_TO_SKILL['build']='jkai-build'` in the platform adapter and ports the heavy discipline today encoded in `src/lib/jkai/prompt.ts`'s `SYSTEM_PROMPT`. Two new MCP infra tools (`log_iteration`, `extend_deadline`) plus a new `jkai_builds.deadline_at` column give the skill the structured-write primitives Pi has implicitly. The executor's logging infrastructure shifts from per-token streaming deltas to per-tool-result granularity via an MCP middleware that publishes events on a new `tool-call-log-bus.ts` (mirroring the existing `tool-step-bus.ts` pattern from Phase 1). The whole pathway is flag-gated behind `JKAI_HERMES_BUILD_LOOP=1`, independent of `JKAI_HERMES_CANVAS_CHAT`, so the build flag can soak separately from the chat flag.
 
-**Tech Stack:** TypeScript (SvelteKit, vitest), Drizzle ORM + Postgres, Python 3.11 (Hermes plugin adapter), Hermes Agent v2026.5.7 (skills + SSH terminal backend), markdown (`jkai-build/SKILL.md` ~500 lines), bash (SSH config).
+**Tech Stack:** TypeScript (SvelteKit, vitest), Drizzle ORM + Postgres, Python 3.11 (Hermes plugin adapter), Hermes Agent v2026.5.7 (skills + Docker terminal backend with per-task env overrides), Docker 27 (`jkai-sandbox:latest` image, bind-mounted workspaces), markdown (`jkai-build/SKILL.md` ~500 lines).
 
 **Spec reference:** `docs/superpowers/specs/2026-05-10-hermes-replacement-design.md` §6 Phase 2 + §5.3 build-loop sequence. Discovery memo: `docs/superpowers/research/2026-05-12-hermes-phase-2-discovery.md`. Prior-plan format reference: `docs/superpowers/plans/2026-05-11-hermes-phase-1.md` and `docs/superpowers/plans/2026-05-12-hermes-phase-1.5-general-chat.md`.
 
 **Locked design decisions (confirmed 2026-05-12):**
 
-1. **Docker integration: Option A — SSH backend / host-mode parity.** Hermes' `terminal.backend: ssh` targets localhost. Built-in `bash`/`read_file`/`edit_file` operate on host paths under `/home/jkai/workspace/<buildId>/dev/`. Same isolation model as today's `JKAI_BUILDS_HOSTMODE=1`.
+1. **Docker integration: Option B — per-build ephemeral containers via Hermes' Docker backend.** Hermes' `terminal.backend: docker` plus a per-session `register_task_env_overrides(task_id, {"docker_image": "jkai-sandbox:latest", "docker_volumes": ["<host>/<buildId>/dev:/workspace"], "cwd": "/workspace"})` call from the jkai platform adapter spins up a fresh `hermes-<task_id>` container per build. Strong isolation via Hermes' built-in `_BASE_SECURITY_ARGS` (`--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 256`, tmpfs for `/tmp` `/var/tmp` `/run`). The container is torn down by Hermes' idle reaper when the build session closes; container lifecycle is conceptually similar to today's `jkai-sandbox` (a shared bind-mounted Linux box) except each build gets its own container instead of all sharing one named container.
 2. **Coding model: GLM across.** Both Pi baseline (today) and Hermes target run `glm-5.1` via z.ai. `max_tokens` budget ≥ 1500 to leave headroom for reasoning tokens (per `feedback_glm_reasoning_tokens.md`). Plan includes a verify-production-model step because the schema default is the stale `glm-5-turbo`.
 3. **Streaming log granularity: per-tool-result.** No mid-iteration SSE tap. Executor records logs via an MCP middleware that publishes `log_tool_call` events plus a final-assistant-message log entry. Coarser than Pi's per-token deltas but materially simpler integration.
+
+---
+
+## Risk register (Phase 2 specific — updates from discovery memo §5)
+
+| Risk | Pre-Option-B rating | Post-Option-B rating | Notes |
+|---|---|---|---|
+| 1. Build skill prompt-fidelity vs SYSTEM_PROMPT | High | High | Unchanged. Heavy port in Task 6; covered by acceptance scenarios B1/B2. |
+| 2. Mid-iteration injection | Medium | Medium | Unchanged. Existing `jkaiBuildPendingMessages` drain semantics still apply; the runner reads them into the per-iteration message just like Pi did. |
+| 3. Failure-classification gaps | Medium | Medium | Failure-classifier port (Task 11) maps to existing `FailureKind` including `container_missing` for Hermes Docker daemon / image / start failures. |
+| 4. Sandbox isolation | **High** | **Low** | Was high under Option A (SSH host-mode parity, agent ran as `john` with full host fs access). Now low: each build runs in its own `hermes-<id>` container started with `_BASE_SECURITY_ARGS` (`--cap-drop ALL`, `no-new-privileges`, `--pids-limit 256`, tmpfs for `/tmp`/`/var/tmp`/`/run`). Only the bind-mounted `/workspace` is the build's writable area; the host `/etc/passwd`, `/home/john`, the Docker socket, and the user's SSH keys are unreachable from inside the container. Acceptance scenario B5 verifies this. |
+| 5. Per-build container start-up latency | n/a | Medium | Each build session now pays ~1s `docker run` overhead on the first inbound message (image is already pulled). Across a 5-iteration build that's ~1s amortised; negligible. Cold pull would be 30+s but `jkai-sandbox:latest` is pre-built locally on homeserv. Mitigation: verify image is present at Hermes startup (Task 3 Step 1). |
+| 6. Container leak (lifecycle bug) | n/a | Low-Medium | If the platform adapter forgets to call `clear_task_env_overrides` (Task 4 Step 4), the override stays registered — but the container itself is reaped by Hermes' idle reaper after ~10 min of inactivity. Worst case: stale Docker resources accumulate at ~few-MB-per-build rate. Mitigation: Task 4 wires the clear path inside the same `if platform is not None:` block that registers, with a defensive try/except guard; spot-check `docker ps -a --filter "name=hermes-"` weekly during soak. |
+| 7. Image availability | n/a | Low | If `jkai-sandbox:latest` is missing on homeserv, the very first build under `JKAI_HERMES_BUILD_LOOP=1` fails with `container_missing` (classifier handles it). Mitigation: Task 3 Step 1 verifies image presence before flipping the flag in production. |
+| 8. Workspace path / bind-mount drift | n/a | Low | The host workspace path `/home/jkai/workspace/<buildId>/dev` is created by the executor at build-start (same as today). The adapter's bind-mount string is derived from `kind_id`. Drift can only occur if a future refactor changes the workspace layout without updating the adapter — caught by acceptance B5 (file read/write to `/workspace`). |
 
 ---
 
@@ -22,12 +37,12 @@
 
 | Path | Purpose | Action |
 |---|---|---|
-| `~/.hermes-jkai/extensions/jkai_platform/adapter.py` | Pass `JKAI_BUILD_HOSTMODE` context through to session metadata; no Python source change beyond Phase 1.5 | Touch (verify) |
-| `~/.hermes-jkai/extensions/jkai_platform/__init__.py` | (No code change — `_KIND_TO_SKILL` lives in `adapter.py` per Phase 1.5 plan) | Reference |
 | `~/.hermes-jkai/extensions/jkai_platform/adapter.py` (KIND map) | Add `'build': 'jkai-build'` entry to `_KIND_TO_SKILL` | Modify |
-| `~/.hermes-jkai/config.yaml` | Flip `terminal.backend` from `local` to `ssh`; add `terminal.ssh:` block targeting localhost; document `max_tokens` floor for GLM | Modify |
-| `~/.ssh/authorized_keys` (out-of-repo) | Append Hermes service public key | Modify |
-| `~/.ssh/config` (out-of-repo) | Add `Host hermes-localhost` block | Modify |
+| `~/.hermes-jkai/extensions/jkai_platform/adapter.py` (register overrides) | In `handle_inbound`, before `self.handle_message(event)`, call `register_task_env_overrides(<task_id derived from build chat_id>, {"docker_image": "jkai-sandbox:latest", "docker_volumes": ["/home/jkai/workspace/<kind_id>/dev:/workspace"], "cwd": "/workspace"})` when `kind == 'build'`. Pair with `clear_task_env_overrides(task_id)` once the per-session task awaited at line 240 completes. | Modify |
+| `~/.hermes-jkai/extensions/jkai_platform/__init__.py` | (No code change — `_KIND_TO_SKILL` lives in `adapter.py` per Phase 1.5 plan) | Reference |
+| `~/.hermes-jkai/config.yaml` | Flip `terminal.backend` from `local` to `docker`; set `docker_image: jkai-sandbox:latest` as the default; set `docker_run_as_host_user: true` so workspace files written from inside the container retain host ownership; document `max_tokens` floor for GLM | Modify |
+| `docker/jkai-sandbox/Dockerfile` (read-only verification) | Confirm image has bash, GNU coreutils, git, jq — i.e. the toolchain Hermes' `init_session` snapshot expects | Verify |
+| (Optional new) `docker/jkai-sandbox-hermes/Dockerfile` | Only created if Task 3.5 finds gaps in `jkai-sandbox:latest` that Hermes needs (e.g. a missing tool, a user-namespacing quirk). Default outcome: not created, reuse the existing image. | Maybe-new |
 | `~/.hermes-jkai/skills/jkai-build/SKILL.md` | Heavy port from `prompt.ts` SYSTEM_PROMPT — workspace contract, eval/next-steps discipline, deadline awareness, GLM reasoning notes | New |
 | `~/.hermes-jkai/skills/jkai-build/examples/iteration-0-greenfield.md` | Worked example: first iteration on a new build | New |
 | `~/.hermes-jkai/skills/jkai-build/examples/iteration-N-followup.md` | Worked example: subsequent iteration acting on previous eval | New |
@@ -52,7 +67,7 @@
 | `src/lib/jkai/failure-classifier.test.ts` | Vitest unit tests | New |
 | `src/lib/jkai/executor.ts` | Replace `runPi(...)` call with flag-gated branch: Hermes when `JKAI_HERMES_BUILD_LOOP=1`, else Pi | Modify |
 | `src/lib/jkai/pi-runner.ts` | Keep alive; no edits | Untouched |
-| `.env.example` | Document `JKAI_HERMES_BUILD_LOOP` flag and the new SSH-related Hermes config | Modify |
+| `.env.example` | Document `JKAI_HERMES_BUILD_LOOP` flag and the Hermes Docker-backend env variables (`TERMINAL_DOCKER_IMAGE`, `TERMINAL_DOCKER_VOLUMES`) used as defaults if `register_task_env_overrides` hasn't fired yet | Modify |
 | `docs/superpowers/specs/2026-05-10-hermes-replacement-design.md` | Insert "Locked decisions for Phase 2" subsection inside §6 Phase 2 (logs the three locked answers) | Modify |
 | `docs/superpowers/research/2026-05-13-hermes-phase-2-acceptance.md` | Phase 2 acceptance log + soak instructions | New |
 
@@ -212,7 +227,7 @@ Immediately after the "**Deliverables:**" block of Phase 2, before "**Exit crite
 ```markdown
 **Locked decisions (2026-05-12, recorded for future-reader's sanity):**
 
-1. **Docker integration: Option A — SSH backend / host-mode parity.** Hermes' `terminal.backend: ssh` points at localhost; built-in `bash`/`read_file`/`edit_file` operate on host paths under `/home/jkai/workspace/<buildId>/dev/`. Same isolation profile as today's `JKAI_BUILDS_HOSTMODE=1`. No per-build Docker containers in Phase 2 — that's a tightening for a later phase if/when multi-tenant use lands.
+1. **Docker integration: Option B — per-build ephemeral Hermes containers.** Hermes' `terminal.backend: docker` plus a per-session `register_task_env_overrides(task_id, {...})` call from the jkai platform adapter (in `handle_inbound`, before `self.handle_message(event)`, when `kind == 'build'`) requests a fresh `hermes-<task_id>` container per build using the existing `jkai-sandbox:latest` image with the build's workspace bind-mounted to `/workspace`. Strong isolation via Hermes' built-in `_BASE_SECURITY_ARGS` (`--cap-drop ALL`, `no-new-privileges`, `--pids-limit`, tmpfs). Conceptually similar to today's `jkai-sandbox` (a shared bind-mounted Linux container) except per-build rather than singleton-named. The `JKAI_BUILDS_HOSTMODE=1` escape hatch from `pi-runner.ts` is Pi-only; Hermes-with-Docker has no hostmode equivalent (and shouldn't need one — Hermes only runs on homeserv where Docker is available).
 
 2. **Coding model: glm-5.1 across (Pi baseline today + Hermes target).** `model_id` default fixed in Task 1; `max_tokens` budget ≥ 1500 to leave reasoning-token headroom (see `feedback_glm_reasoning_tokens.md`).
 
@@ -225,73 +240,42 @@ Immediately after the "**Deliverables:**" block of Phase 2, before "**Exit crite
 git add docs/superpowers/specs/2026-05-10-hermes-replacement-design.md
 git commit -m "docs(spec): record locked decisions for Phase 2
 
-SSH backend / host-mode parity, glm-5.1 across, per-tool-result
+Per-build ephemeral Hermes Docker containers (Option B,
+register_task_env_overrides), glm-5.1 across, per-tool-result
 log granularity. Captured before plan execution so a future
 reader doesn't have to reconstruct intent from the plan."
 ```
 
 ---
 
-## Task 3: Hermes profile — enable SSH terminal backend
+## Task 3: Hermes profile — configure Docker terminal backend with per-build override mechanism
 
-**Goal:** Switch Hermes' built-in `bash`/`read_file`/`edit_file` from `local` to `ssh`-backed, where the SSH target is `localhost` (the same host running Hermes — homeserv). This gives Phase 2 host-mode parity without any container-lifecycle work.
+**Goal:** Switch Hermes' built-in `bash`/`read_file`/`edit_file` from `local` to the `docker` backend, with `jkai-sandbox:latest` as the default image. The per-task override mechanism (`register_task_env_overrides`) is exercised by the platform adapter (Task 4 / Task 13) — this task only configures the static defaults Hermes falls back to when no per-task override is registered (so an out-of-band Hermes smoke test still works).
 
 **Files:**
 - Modify: `~/.hermes-jkai/config.yaml`
-- Modify: `~/.ssh/authorized_keys`
-- Modify: `~/.ssh/config`
-- Out-of-repo; no commit. Document everything in the acceptance log (Task 14).
+- Out-of-repo; no commit. Document everything in the acceptance log (Task 15).
 
-- [ ] **Step 1: Generate a Hermes-only SSH keypair**
-
-Run:
-```bash
-mkdir -p ~/.hermes-jkai/ssh
-ssh-keygen -t ed25519 -f ~/.hermes-jkai/ssh/id_ed25519 -N "" -C "hermes-jkai@$(hostname)"
-ls -l ~/.hermes-jkai/ssh/
-```
-
-Expected: `id_ed25519` (private, mode 0600) + `id_ed25519.pub` (public).
-
-- [ ] **Step 2: Add the public key to `authorized_keys` with a restriction**
-
-Append the public key to `~/.ssh/authorized_keys` with `from="127.0.0.1,::1"` and `command=` restrictions:
+- [ ] **Step 1: Confirm Docker is reachable from the Hermes systemd-user unit**
 
 ```bash
-PUBKEY=$(cat ~/.hermes-jkai/ssh/id_ed25519.pub)
-echo "from=\"127.0.0.1,::1\",no-agent-forwarding,no-port-forwarding,no-X11-forwarding $PUBKEY" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+systemctl --user show jkai-hermes.service -p Environment | tr ' ' '\n' | grep -i docker
+docker info --format '{{.ServerVersion}}'
+docker images jkai-sandbox:latest --format '{{.Repository}}:{{.Tag}} {{.CreatedSince}} {{.Size}}'
 ```
 
-The `from=` limits the key to loopback connections — even though SSH is bound on every interface, only a process on the same host can use this key. Sufficient for Phase 2's threat model (Hermes and SvelteKit are both on homeserv).
+Expected: `docker info` returns a version (>= 24). `jkai-sandbox:latest` shows in the image list. If the image is missing, build it: `docker build -t jkai-sandbox:latest /home/john/strange_rambling_svelte/docker/jkai-sandbox/`.
 
-- [ ] **Step 3: Add an SSH config entry**
+Also verify the Hermes systemd-user unit can reach the Docker socket — the unit runs as `john`; `/var/run/docker.sock` must be group-readable by a group `john` is in (typically `docker`).
 
-Append to `~/.ssh/config` (create if missing, mode 0600):
-
-```
-Host hermes-localhost
-    HostName 127.0.0.1
-    User john
-    IdentityFile ~/.hermes-jkai/ssh/id_ed25519
-    IdentitiesOnly yes
-    StrictHostKeyChecking accept-new
-    UserKnownHostsFile ~/.hermes-jkai/ssh/known_hosts
-    ServerAliveInterval 30
-    ServerAliveCountMax 4
-    PreferredAuthentications publickey
-```
-
-- [ ] **Step 4: Smoke-test the SSH path**
-
-Run:
 ```bash
-ssh hermes-localhost 'whoami && pwd && echo "PATH=$PATH"'
+ls -l /var/run/docker.sock
+id john | tr ',' '\n' | grep docker
 ```
 
-Expected: `john`, the home directory `/home/john`, and a PATH including `/usr/local/bin:/usr/bin:/bin`. If `whoami` returns a different user (e.g. `root`), the `User john` line is wrong. Fix and re-run.
+Expected: socket group is `docker`; `john` is in `docker`. If not, `sudo usermod -aG docker john` and re-login (or `newgrp docker`) before restarting the Hermes unit.
 
-- [ ] **Step 5: Update `~/.hermes-jkai/config.yaml`**
+- [ ] **Step 2: Update `~/.hermes-jkai/config.yaml` — `terminal:` block**
 
 Open `~/.hermes-jkai/config.yaml`. The current `terminal:` block reads:
 
@@ -307,10 +291,15 @@ Replace with:
 
 ```yaml
 terminal:
-  backend: ssh
-  ssh:
-    host: hermes-localhost
-    cwd: /home/jkai/workspace
+  backend: docker
+  # Defaults applied when no register_task_env_overrides() entry is found
+  # for a task_id. Builds always go through the override path (Task 4),
+  # so these defaults are only used for out-of-band Hermes smoke tests
+  # and any future kind that wants Docker without a per-build mount.
+  docker_image: jkai-sandbox:latest
+  docker_run_as_host_user: true   # files written under /workspace stay owned by john on the host
+  docker_volumes: []
+  cwd: /workspace
   timeout: 180
   lifetime_seconds: 300
   # GLM thinking-model headroom — see feedback_glm_reasoning_tokens.md.
@@ -331,47 +320,161 @@ model:
 
 (If `max_tokens` is already set ≥ 1500, leave it. If not present, add it as shown.)
 
-- [ ] **Step 6: Restart Hermes and verify the SSH backend loaded**
+- [ ] **Step 3: Restart Hermes and verify the Docker backend loaded**
 
 ```bash
 systemctl --user restart jkai-hermes.service
 sleep 4
 systemctl --user is-active jkai-hermes.service
-journalctl --user -u jkai-hermes.service --since "1 minute ago" | grep -i "terminal\|ssh" | head -10
+journalctl --user -u jkai-hermes.service --since "1 minute ago" | grep -iE "terminal|docker|backend" | head -10
 ```
 
-Expected: `active`; logs mention `terminal.backend=ssh` or equivalent. If a `Permission denied` or `Could not resolve hostname` appears, fix Step 2/3.
+Expected: `active`; logs mention `terminal.backend=docker` (or equivalent), with no `Docker executable not found` / `docker daemon not running` errors. If a permission error appears on `/var/run/docker.sock`, return to Step 1 and verify group membership.
 
-- [ ] **Step 7: One-shot Hermes smoke test**
+- [ ] **Step 4: One-shot Hermes smoke test against the default image**
+
+This exercises the static defaults — no per-task override yet, no bind-mount, just confirms the Docker backend can spin a container from `jkai-sandbox:latest`.
 
 ```bash
-HERMES_HOME=~/.hermes-jkai hermes -z "Run bash 'whoami && hostname && ls /home/jkai/workspace/ | head -3'. Tell me what you see."
+HERMES_HOME=~/.hermes-jkai hermes -z "Run bash 'whoami && cat /etc/os-release | head -3 && which node && node --version && which python3 && python3 --version'. Tell me what you see."
 ```
 
-Expected: agent's response includes `john`, the hostname `homeserv`, and a directory listing under `/home/jkai/workspace/` (existing build IDs from production data). This confirms the SSH bash tool reaches host filesystem.
+Expected: the agent's bash output reports user `jkai` (the in-image non-root user), Debian as the base distro, Node 22.x, Python 3.12.x. This confirms the Docker backend is functional end-to-end.
 
-- [ ] **Step 8: No commit** (config is out-of-repo). Document the SSH key fingerprint and the `authorized_keys` line added in the Task 14 acceptance log.
+Then list running Hermes containers:
+
+```bash
+docker ps --filter "name=hermes-" --format '{{.Names}} {{.Image}} {{.Status}}'
+```
+
+Expected: one `hermes-<8hex>` container running `jkai-sandbox:latest`. If the same name appears in the listing >5 minutes after the smoke test finished, Hermes' idle reaper is functioning normally (default idle window is ~10 min — check the run with `docker stop <id>` if you want a clean slate before Task 4).
+
+- [ ] **Step 5: No commit** (config is out-of-repo). Document the Docker server version, image SHA, and the resolved `docker info` output in the Task 15 acceptance log.
 
 ---
 
-## Task 4: Add `'build': 'jkai-build'` to the platform adapter
+## Task 3.5: Verify `jkai-sandbox:latest` image suitability for Hermes execution
 
-**Goal:** Phase 1.5's adapter has a `_KIND_TO_SKILL` map that auto-loads a skill per inbound `kind`. Currently only `canvas_chat` and `manual` are mapped. Add `build`.
+**Goal:** The current `jkai-sandbox` image was built for Pi's needs (Node, npm, Python, Playwright, the workspace prep scripts). Confirm it has *also* the bare minimum Hermes' `DockerEnvironment` expects, and either accept the existing image or build a `jkai-sandbox-hermes:latest` variant.
+
+What Hermes' `DockerEnvironment` probes at start-up (per `~/hermes-agent/tools/environments/docker.py` and `base.py`):
+
+1. `docker run -d --init <image> sleep infinity` — image must run `sleep infinity` cleanly as the image's default user. `jkai-sandbox` has `CMD ["sleep", "infinity"]` already.
+2. `init_session()` runs `bash -l -c '...'` and uses `export -p`, `declare -f | grep -vE '^_[^_]'`, `alias -p`, `shopt -s expand_aliases`, `set +e`, `set +u` to capture a login-shell snapshot to `${TMPDIR or /tmp}/hermes-snap-<sid>.sh`. So: a working `bash` (login mode), writable `/tmp`, GNU `grep`. `jkai-sandbox` is `python:3.12-slim` + `bash` (from the `bash` package implicit in the slim base; Debian slim ships bash by default).
+3. Tools the agent's built-ins call: `bash`, `cat`, `ls`, `find`, `grep`, `sed`, `head`, `tail`, `mkdir`, `rm`, `mv`, `cp`, `chmod`. All present via Debian `coreutils` + `findutils` + `grep` (in the slim base).
+4. Optional but useful: `git`, `curl`, `jq`, `ripgrep`/`rg`. `jkai-sandbox` has `git`, `curl`, `jq`. **Missing: `ripgrep`** — the Pi base didn't need it, but Hermes' built-in `grep` tool docs reference `rg`-style behaviour. Verify whether Hermes falls back to GNU grep cleanly or insists on `rg`.
 
 **Files:**
-- Modify: `~/.hermes-jkai/extensions/jkai_platform/adapter.py` (around line 31)
+- Read: `/home/john/strange_rambling_svelte/docker/jkai-sandbox/Dockerfile`
+- Read: `~/hermes-agent/tools/environments/docker.py` (lines around `init_session` and `_run_bash`)
+- Maybe new: `docker/jkai-sandbox-hermes/Dockerfile` (only if Step 3 finds a blocker)
+
+- [ ] **Step 1: Inspect the image's tool inventory**
+
+```bash
+docker run --rm jkai-sandbox:latest bash -lc '
+for cmd in bash cat ls find grep sed head tail mkdir rm mv cp chmod git curl jq node npm python3 pip rg; do
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf "%-10s %s\n" "$cmd" "$(command -v "$cmd")"
+  else
+    printf "%-10s MISSING\n" "$cmd"
+  fi
+done
+echo
+echo "bash version: $(bash --version | head -1)"
+echo "default user: $(whoami) (uid=$(id -u) gid=$(id -g))"
+echo "tmpfs check: writable=$(touch /tmp/hermes-probe 2>&1 && echo yes || echo no)"
+echo "snapshot probe:"
+export -p > /tmp/snap.sh && declare -f | grep -vE "^_[^_]" >> /tmp/snap.sh 2>&1 && alias -p >> /tmp/snap.sh 2>&1 && echo "  snapshot ok ($(wc -l < /tmp/snap.sh) lines)" || echo "  snapshot FAILED"
+'
+```
+
+Expected output: every essential tool resolved to a path (bash through pip). `rg` may show MISSING — that's the open question. `whoami=jkai`, `/tmp` writable, snapshot produces a non-empty file.
+
+If anything except `rg` is missing, STOP and report — the image needs rebuild before Phase 2 can proceed.
+
+- [ ] **Step 2: Decide on `rg`**
+
+Read `~/hermes-agent/tools/environments/docker.py` and any sibling files that mention `rg` or `ripgrep`:
+
+```bash
+grep -rn "ripgrep\|\\brg\\b" /home/john/hermes-agent/tools/ --include="*.py" | head -10
+```
+
+If Hermes references `rg` only as a *preference* (falls back to GNU `grep` cleanly), accept the existing image. If Hermes' `grep` tool implementation *requires* `rg` (calls it directly), proceed to Step 3 and add `ripgrep` to the image.
+
+- [ ] **Step 3: Build `jkai-sandbox-hermes:latest` only if Step 2 found a hard dependency**
+
+If — and only if — Step 2 found a blocker, create `docker/jkai-sandbox-hermes/Dockerfile`:
+
+```dockerfile
+FROM jkai-sandbox:latest
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+USER jkai
+```
+
+Build it:
+
+```bash
+docker build -t jkai-sandbox-hermes:latest /home/john/strange_rambling_svelte/docker/jkai-sandbox-hermes/
+```
+
+Then in Task 3's `~/.hermes-jkai/config.yaml`, change `docker_image: jkai-sandbox:latest` to `jkai-sandbox-hermes:latest`, and likewise in Task 4's `register_task_env_overrides(...)` payload. Re-run Task 3 Step 4's smoke test.
+
+If Step 2 found NO blocker, skip Step 3. Document the decision in the acceptance log: "Image: `jkai-sandbox:latest` (no variant; `rg` not required by Hermes' grep tool, GNU grep fallback verified)."
+
+- [ ] **Step 4: Run a Hermes-only `bash`/`read_file` smoke through the registered Docker backend**
+
+```bash
+HERMES_HOME=~/.hermes-jkai hermes -z "Use bash to print 'hello from inside the container', then write a file /tmp/hermes-probe.txt with content 'probe ok', then read_file /tmp/hermes-probe.txt and tell me what it says."
+```
+
+Expected: agent reports `hello from inside the container` and `probe ok`. This proves Hermes' built-in `read_file` / `write_file` traverse the Docker filesystem cleanly with `jkai-sandbox:latest` (or the `-hermes` variant if Step 3 ran).
+
+- [ ] **Step 5: No commit** (image verification only). If Step 3 ran, commit the new Dockerfile in a tight follow-up:
+
+```bash
+cd /home/john/strange_rambling_svelte/.claude/worktrees/hermes-phase-2
+git add docker/jkai-sandbox-hermes/Dockerfile
+git commit -m "feat(docker): jkai-sandbox-hermes variant — adds ripgrep for Hermes grep tool
+
+Phase 2 Task 3.5: Hermes' grep tool requires rg; jkai-sandbox base
+image doesn't ship it. Thin Dockerfile-FROM variant on top of the
+existing base — keeps Pi's image untouched, Hermes consumes the
+-hermes tag instead."
+```
+
+If Step 3 did NOT run, skip the commit. Document the decision in the acceptance log only.
+
+---
+
+## Task 4: Adapter wiring — `'build': 'jkai-build'` skill + per-build `register_task_env_overrides`
+
+**Goal:** Two adapter changes, both in `handle_inbound`:
+
+1. Phase 1.5's adapter has a `_KIND_TO_SKILL` map that auto-loads a skill per inbound `kind`. Currently only `canvas_chat` and `manual` are mapped. Add `build`.
+2. When an inbound message arrives with `kind == 'build'`, call `register_task_env_overrides(<task_id>, {"docker_image": "jkai-sandbox:latest", "docker_volumes": ["/home/jkai/workspace/<kind_id>/dev:/workspace"], "cwd": "/workspace"})` BEFORE `self.handle_message(event)` — so the very first tool call in the agent loop lands in the correct per-build container with the workspace bind-mounted. Pair with `clear_task_env_overrides(<task_id>)` once the per-session task awaited at the existing line 240 completes.
+
+**Placement decision recorded here for posterity:** the override is registered ADAPTER-side rather than executor-side. Two reasons: (a) the adapter is the *only* place that natively sees `kind == 'build'` + `kind_id` + the `task_id` Hermes will actually use for `_resolve_container_task_id`, so doing it there avoids a brittle out-of-band HTTP call back into Hermes from SvelteKit; (b) `register_task_env_overrides` is a pure in-process Python dict mutation in `terminal_tool.py` — calling it from inside the same Python process that runs the agent is the natural seam. Executor-side wiring would require either a new Hermes HTTP RPC or smuggling the workspace path through `MessageEvent.raw_message` for the adapter to read anyway, which collapses back to this same change with extra steps.
+
+**Files:**
+- Modify: `~/.hermes-jkai/extensions/jkai_platform/adapter.py` (around line 31 for the KIND map; inside `handle_inbound` around lines 192–226 for the override hook)
 - Out-of-repo; no commit.
 
-- [ ] **Step 1: Locate the map**
+- [ ] **Step 1: Locate the map and the inbound dispatch site**
 
 Run:
 ```bash
-grep -n "_KIND_TO_SKILL" ~/.hermes-jkai/extensions/jkai_platform/adapter.py
+grep -n "_KIND_TO_SKILL\|self.handle_message(event)\|self._session_tasks.get" ~/.hermes-jkai/extensions/jkai_platform/adapter.py
 ```
 
-Expected: line ~31 declares the dict.
+Expected: `_KIND_TO_SKILL` near line 31, `self.handle_message(event)` near line 226, the per-session-task `await` near line 240.
 
-- [ ] **Step 2: Add the `build` entry**
+- [ ] **Step 2: Add the `build` entry to `_KIND_TO_SKILL`**
 
 Open `~/.hermes-jkai/extensions/jkai_platform/adapter.py`. Find:
 
@@ -404,9 +507,86 @@ with:
 ```python
 # `curate` is intentionally absent — Phase 3 owns the curator skill.
 # `build` was added in Phase 2 and auto-loads `jkai-build` for build sessions.
+# `build` ALSO triggers register_task_env_overrides() below to spin a per-build
+# container — see _register_build_env_overrides().
 ```
 
-- [ ] **Step 3: Restart Hermes**
+- [ ] **Step 3: Add the per-build env-override helper + clear logic**
+
+Near the top of `adapter.py` (after the `_KIND_TO_SKILL` block), add the helper. The import lives inside the function so the module still imports cleanly outside the Hermes venv (pytest path stays working):
+
+```python
+import os
+
+def _register_build_env_overrides(task_id: str, kind_id: str) -> bool:
+    """For a build-kind inbound, register Docker env overrides so the
+    Hermes agent loop spins up a per-build hermes-<...> container using
+    jkai-sandbox:latest with the build's workspace bind-mounted to
+    /workspace. Returns True on success; False if Hermes is not importable
+    (test path) — caller should treat False as no-op.
+    """
+    try:
+        from tools.terminal_tool import register_task_env_overrides
+    except ImportError:
+        return False
+    workspace_host = f"/home/jkai/workspace/{kind_id}/dev"
+    # Verify the bind-mount source exists before announcing it — the executor
+    # creates the workspace dir at build-start, but a chat-side smoke message
+    # for an unknown build_id would fail later inside the container start.
+    if not os.path.isdir(workspace_host):
+        # Fall back to mounting the parent so the agent can at least probe;
+        # the executor will have created the dir before the first real
+        # iteration. For ad-hoc smoke prompts this is the safe default.
+        workspace_host = "/home/jkai/workspace"
+    register_task_env_overrides(task_id, {
+        "docker_image": "jkai-sandbox:latest",
+        "docker_volumes": [f"{workspace_host}:/workspace"],
+        "cwd": "/workspace",
+    })
+    return True
+
+
+def _clear_build_env_overrides(task_id: str) -> None:
+    try:
+        from tools.terminal_tool import clear_task_env_overrides
+    except ImportError:
+        return
+    clear_task_env_overrides(task_id)
+```
+
+If a follow-up needs the `-hermes` image variant (Task 3.5 Step 3), change `"jkai-sandbox:latest"` here to `"jkai-sandbox-hermes:latest"`.
+
+- [ ] **Step 4: Invoke the helper in `handle_inbound` BEFORE `handle_message`**
+
+Inside the existing `if platform is not None:` block in `handle_inbound`, immediately after `auto_skill = _KIND_TO_SKILL.get(kind) if kind else None` and BEFORE `event = MessageEvent(...)`, add the override registration. The `task_id` Hermes uses for `_resolve_container_task_id` is the per-rollout id — for the platform path, the adapter's `session_key` is what's wired into the session pipeline. Use `kind_id` (the buildId) as the task_id key because it's stable per build and is what we want a 1:1 container mapping against:
+
+```python
+                # Phase 2: for build-kind messages, register per-task Docker env
+                # overrides so the first tool call in the agent loop lands in a
+                # per-build hermes-<...> container with the workspace bind-mounted
+                # to /workspace. task_id keyed on kind_id (the buildId) so all
+                # iterations of one build share the same container key — matches
+                # _resolve_container_task_id's expectations.
+                _build_task_id_for_clear: Optional[str] = None
+                if kind == "build" and kind_id:
+                    if _register_build_env_overrides(kind_id, kind_id):
+                        _build_task_id_for_clear = kind_id
+```
+
+Then AFTER the existing `await asyncio.wait_for(asyncio.shield(task), timeout=300)` block (around line 240), and BEFORE the `self._enqueue(OutboundFrame(kind="finalize", ...))` line, clear the overrides:
+
+```python
+                if _build_task_id_for_clear is not None:
+                    # Build session completed (or timed out) — drop the override
+                    # so the next inbound on this chat doesn't accidentally re-use
+                    # a stale config if the chat is re-bound to a different build.
+                    # The container itself is reaped by Hermes' idle reaper, not
+                    # here — clearing the override only affects future task_id
+                    # resolutions.
+                    _clear_build_env_overrides(_build_task_id_for_clear)
+```
+
+- [ ] **Step 5: Restart Hermes**
 
 ```bash
 systemctl --user restart jkai-hermes.service
@@ -416,21 +596,11 @@ systemctl --user is-active jkai-hermes.service
 
 Expected: `active`. If not, `journalctl --user -u jkai-hermes.service --since "1 minute ago" | tail -30` and fix the Python syntax error.
 
-- [ ] **Step 4: Smoke-test that `kind='build'` auto-loads `jkai-build`**
+- [ ] **Step 6: Smoke-test that `kind='build'` reaches the override path (skill warn is OK)**
 
-The skill doesn't exist yet (Task 6 creates it). Hermes should warn but not crash:
+The skill doesn't exist yet (Task 6 creates it). Hermes should warn about the missing skill but not crash, and the env-override registration should fire.
 
-```bash
-SECRET=$(grep "^HERMES_BRIDGE_SECRET=" ~/.hermes-jkai/.env | cut -d= -f2)
-# Use a tiny Node script to mint a token and POST a build-scoped message.
-node --input-type=module -e "
-import { signBridgeToken } from '/home/john/strange_rambling_svelte/src/lib/mcp/auth.ts';
-" 2>&1 | head -3
-```
-
-(That import will fail because the file is `.ts` — use the test harness instead.)
-
-A simpler smoke: directly POST without a bridge token to verify the route exists and rejects unauthorised:
+A simple unauthenticated POST verifies route + parsing:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:18790/platforms/jkai/msg \
@@ -439,17 +609,17 @@ curl -sS -X POST http://127.0.0.1:18790/platforms/jkai/msg \
   | head -c 200
 ```
 
-Expected: 401/403 with a JSON-shaped error mentioning the bridge token. Confirms the route accepts `kind='build'` requests structurally (skill mismatch would surface as a different error at a later stage).
+Expected: 401/403 with a JSON-shaped error mentioning the bridge token. Confirms the route accepts `kind='build'` requests structurally.
 
-- [ ] **Step 5: Check the Hermes log for the skill-load attempt**
+- [ ] **Step 7: Check the Hermes log for the skill-load AND override registration**
 
 ```bash
-journalctl --user -u jkai-hermes.service --since "30 seconds ago" | grep -i "skill\|auto_skill\|jkai-build" | head -10
+journalctl --user -u jkai-hermes.service --since "30 seconds ago" | grep -iE "skill|auto_skill|jkai-build|register_task_env|hermes-" | head -15
 ```
 
-Expected: a log entry mentioning `auto_skill=jkai-build` for the smoke request, plus a warning that the skill is not yet installed. The warning is expected — Task 6 ships the skill.
+Expected: a log entry mentioning `auto_skill=jkai-build`, plus a warning that the skill is not yet installed (expected — Task 6 ships the skill). On a fully-authenticated build dispatch (Task 15 e2e), `journalctl ... | grep "Starting container"` should additionally show a fresh `hermes-<8hex>` container with the `jkai-sandbox:latest` image and `-v /home/jkai/workspace/<buildId>/dev:/workspace`.
 
-- [ ] **Step 6: No commit** (adapter is out-of-repo).
+- [ ] **Step 8: No commit** (adapter is out-of-repo).
 
 ---
 
@@ -567,7 +737,7 @@ You speak jkai vocabulary in everything visible to John:
 | pending message | queued event |
 | evaluation, next steps | conclusion, plan |
 
-Internal Hermes terminology never appears in user-facing strings. If you reference your tools in chat, call them by name ("I'll edit `serve.json`") — that's fine, but don't say "I called bash via the SSH backend."
+Internal Hermes terminology never appears in user-facing strings. If you reference your tools in chat, call them by name ("I'll edit `serve.json`") — that's fine, but don't say "I called bash inside the per-build container."
 
 You are not a general assistant. You don't answer off-topic questions. You build the thing.
 
@@ -653,7 +823,7 @@ All paths are HOST paths under `/home/jkai/workspace/<build_id>/dev/`. There is 
 - **`build_read_file(buildId, path, scope)`** — Read a file from `dev/` or `live/` via the orchestrator's sandbox dispatch. Equivalent to `read_file` on the host path; use either.
 - **`build_write_file(buildId, path, content, scope)`** — Write a file to `dev/`. Equivalent to `write_file`; use either.
 
-The built-in `bash`/`edit_file`/`write_file` and the MCP `build_*` tools both reach the same workspace because of Phase 2's SSH-backend / host-mode setup. Pick whichever is more ergonomic per call.
+The built-in `bash`/`edit_file`/`write_file` operate INSIDE the per-build Hermes container at `/workspace`. The MCP `build_*` tools operate host-side via `execInSandbox` against `/home/jkai/workspace/<buildId>/dev/`. Because the host path is bind-mounted into the container at `/workspace`, both sets of tools see the same files. Pick whichever is more ergonomic per call; for inside-the-container commands (`node`, `npm`, `python3`, server start) prefer the built-in `bash`. For host-side metadata (the orchestrator's view of `dev/` vs `live/`) use the MCP `build_list_files` / `build_read_file` variants.
 
 ### Build infrastructure tools (MCP-only — new in Phase 2)
 - **`log_iteration(iterationId, role, content, metadata?)`** — Persist a structured row into `jkai_logs`. Call this once at the end of every iteration with `role='assistant'` and `content` containing your `## Evaluation` + `## Next Steps`. The executor falls back to text-parsing if you skip this, but the structured call is more reliable.
@@ -1705,12 +1875,21 @@ describe('classifyHermesFailure', () => {
     expect(f?.kind).toBe('rate_limited');
   });
 
-  it('classifies SSH unreachable (Hermes-specific)', () => {
+  it('classifies container_missing on Hermes Docker start failure', () => {
     const f = classifyHermesFailure({
       ...baseInput,
-      errorMessage: 'ssh: connect to host hermes-localhost port 22: Connection refused',
+      errorMessage:
+        'docker: Error response from daemon: pull access denied for jkai-sandbox, repository does not exist or may require docker login',
     });
-    expect(f?.kind).toBe('ssh_unreachable');
+    expect(f?.kind).toBe('container_missing');
+  });
+
+  it('classifies container_missing on docker socket / daemon errors', () => {
+    const f = classifyHermesFailure({
+      ...baseInput,
+      errorMessage: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock',
+    });
+    expect(f?.kind).toBe('container_missing');
   });
 
   it('classifies provider error when errorMessage present and no other signal', () => {
@@ -1788,9 +1967,13 @@ export function classifyHermesFailure(i: ClassifyHermesInput): FailureEnvelope |
     );
   }
 
-  // SSH-specific failures (Hermes terminal backend can't reach homeserv)
-  if (/ssh.*connection refused|ssh.*no route to host|ssh.*permission denied/.test(errLc)) {
-    return base('ssh_unreachable', i.errorMessage ?? 'SSH backend could not reach target.', i);
+  // Docker-specific failures (Hermes Docker backend couldn't spin/find the per-build container)
+  if (
+    /docker.*daemon|docker.sock|cannot connect to the docker daemon|no such image|pull access denied|image not found|repository does not exist/.test(errLc) ||
+    /^docker: error/.test(errLc) ||
+    /container .* (not found|exited|already in use)/.test(errLc)
+  ) {
+    return base('container_missing', i.errorMessage ?? 'Hermes Docker backend failed to start the per-build container.', i);
   }
 
   // Generic provider error with an explicit message
@@ -1818,15 +2001,14 @@ function base(kind: FailureKind, message: string, i: ClassifyHermesInput): Failu
 }
 ```
 
-If `FailureKind` in `src/lib/jkai/types.ts` doesn't include `'ssh_unreachable'`, add it:
+`FailureKind` in `src/lib/jkai/types.ts` already includes `'container_missing'` (Pi historically classified docker exec failures with this kind). Confirm it's present and keep using it; no enum change required:
 
 ```typescript
-// In src/lib/jkai/types.ts
+// In src/lib/jkai/types.ts — already present, no change needed
 export type FailureKind =
   | 'stalled'
   | 'wall_clock_timeout'
-  | 'container_missing'
-  | 'ssh_unreachable'    // NEW for Phase 2
+  | 'container_missing'   // Pi: docker exec failure; Hermes Phase 2: Docker daemon / image / start failure
   | 'auth_failed'
   | 'rate_limited'
   | 'provider_error'
@@ -1840,7 +2022,7 @@ export type FailureKind =
 npx vitest run src/lib/jkai/failure-classifier.test.ts 2>&1 | tail -5
 ```
 
-Expected: 8/8 PASS.
+Expected: 9/9 PASS (the 2 container_missing cases replace the 1 ssh_unreachable case, so +1 overall vs the SSH variant).
 
 - [ ] **Step 6: Commit**
 
@@ -1849,14 +2031,18 @@ git add src/lib/jkai/failure-classifier.ts src/lib/jkai/failure-classifier.test.
 git commit -m "feat(jkai): failure-classifier.ts — Hermes-aware failure mapping
 
 Port classifyFailure() from pi-runner.ts into a standalone classifier
-the new hermes-build-runner can call. Adds ssh_unreachable kind for
-Hermes' SSH terminal backend; otherwise mirrors the existing cases
-(stalled, wall_clock_timeout, auth_failed, rate_limited,
-provider_error).
+the new hermes-build-runner can call. Reuses the existing
+container_missing kind for Hermes Docker daemon / image / start
+failures (Phase 2 runs per-build hermes-<id> containers via the
+adapter's register_task_env_overrides hook). Otherwise mirrors the
+existing cases (stalled, wall_clock_timeout, auth_failed,
+rate_limited, provider_error).
 
-container_missing is not a Hermes concern (no container under
-host-mode parity) but stays in FailureKind for backwards compat with
-historic jkaiIterations.failure rows."
+container_missing covers both the Pi era (docker exec failure
+against the singleton jkai-sandbox) and the Hermes era (docker run
+failure spinning a per-build ephemeral container) — the failure
+shape is the same from the user's perspective, only the diagnostic
+message differs."
 ```
 
 ---
@@ -2226,6 +2412,8 @@ executor.ts wiring lands in Task 13."
 
 Also: at the start of the iteration the executor must `setDeadline(buildId, deadlineRef.current)` so the new runner and the `extend_deadline` tool both observe the same value.
 
+**On `register_task_env_overrides` placement:** the per-build container override is registered ADAPTER-SIDE (Task 4), NOT executor-side. The executor does NOT make an HTTP call into Hermes to register overrides — that would duplicate state and create a sync window where the executor has fired `sendMessage` but Hermes hasn't yet seen the override. Adapter-side, the override is registered in the same Python coroutine that calls `self.handle_message(event)`, so by the time the agent loop hits its first `bash`/`read_file` tool call the override is already in `_task_env_overrides`. The executor's only responsibility is to ensure the workspace directory exists on disk before it calls `sendMessage` (which it already does, today, via `syncDesignAssets` and adjacent prep steps).
+
 **Files:**
 - Modify: `src/lib/jkai/executor.ts`
 - Modify: `src/lib/jkai/executor.test.ts` (or create if absent — search first)
@@ -2400,9 +2588,19 @@ Append (or insert near the existing Hermes block):
 #
 # When on:
 #   - executor.ts calls runHermesBuild() instead of runPi()
-#   - Hermes' SSH terminal backend reaches /home/jkai/workspace/<id>/dev
+#   - the jkai platform adapter calls register_task_env_overrides() per
+#     build-kind inbound, requesting a fresh hermes-<id> container from
+#     jkai-sandbox:latest with /home/jkai/workspace/<id>/dev bind-mounted
+#     to /workspace inside the container
 #   - the jkai-build skill at ~/.hermes-jkai/skills/jkai-build/ is auto-loaded
 #   - tool-call logs use per-tool-result granularity (no per-token streaming)
+#
+# NOTE: JKAI_BUILDS_HOSTMODE=1 (Pi's host-mode escape hatch) is Pi-only.
+# Hermes-with-Docker has no hostmode equivalent — every build always runs
+# in a per-build container. If Hermes were ever deployed to a host without
+# Docker (e.g. a hypothetical VPS deployment), this branch would not run
+# there in the first place (the loopback constraint on the homeserv ↔ VPS
+# split puts Hermes-builds on homeserv only).
 JKAI_HERMES_BUILD_LOOP=0
 ```
 
@@ -2430,15 +2628,18 @@ chat flag so build can soak separately."
 ```bash
 cd /home/john/strange_rambling_svelte/.claude/worktrees/hermes-phase-2
 export JKAI_HERMES_BUILD_LOOP=1
-export JKAI_BUILDS_HOSTMODE=1
+# NB: do NOT export JKAI_BUILDS_HOSTMODE=1 — that flag is Pi-only and has
+# no effect on the Hermes build path. Under Option B Hermes always uses
+# the per-build container; there is no hostmode equivalent.
 # Restart the systemd service running this worktree if applicable, OR run npm run dev fresh
 npm run dev &
 DEV_PID=$!
 sleep 5
 curl -sS http://homeserv:5173/ -o /dev/null && echo "dev server up"
+docker ps --filter "name=hermes-" --format '{{.Names}} {{.Image}}'   # baseline before scenarios run
 ```
 
-Expected: dev server responds. Hermes service already running from Task 3/4.
+Expected: dev server responds. Hermes service already running from Task 3/4. The `docker ps` line should show no `hermes-<id>` containers yet (or only stale reaper-pending ones); each Bn scenario will spawn a fresh one.
 
 - [ ] **Step 2: Create the acceptance log skeleton**
 
@@ -2451,22 +2652,30 @@ Create `docs/superpowers/research/2026-05-13-hermes-phase-2-acceptance.md`:
 **Branch:** worktree-hermes-phase-2
 **Flag:** `JKAI_HERMES_BUILD_LOOP=1`
 **Model:** glm-5.1 via z.ai
-**Terminal backend:** SSH → hermes-localhost (homeserv host)
+**Terminal backend:** Docker — `jkai-sandbox:latest` image, per-build `hermes-<id>` container, workspace bind-mounted to `/workspace`
 
 ## Locked design decisions (recap)
 
-1. SSH backend / host-mode parity (Option A).
+1. Per-build ephemeral Hermes Docker containers (Option B) — `jkai-sandbox:latest` image, workspace bind-mounted to `/workspace`, override registered adapter-side via `register_task_env_overrides`.
 2. glm-5.1 across.
 3. Per-tool-result log granularity.
 
-## SSH key fingerprint
+## Docker backend evidence
 
-`<paste output of: ssh-keygen -lf ~/.hermes-jkai/ssh/id_ed25519.pub>`
+`<paste output of: docker info --format '{{.ServerVersion}}'>`
+`<paste output of: docker images jkai-sandbox:latest --format '{{.ID}}|{{.CreatedSince}}|{{.Size}}'>`
+`<paste output of: docker inspect jkai-sandbox:latest | jq '.[0].Config.User, .[0].Config.WorkingDir, .[0].Config.Cmd'>`
 
-`authorized_keys` entry:
+`config.yaml` `terminal:` block applied (verbatim from current `~/.hermes-jkai/config.yaml`):
+
+```yaml
+<paste actual block>
+```
+
+Sample `hermes-<id>` container started during B1 (so we have a real record of how the bind-mount was wired):
 
 ```
-<paste the from="..." restricted line added>
+<paste: docker inspect <name> | jq '.[0].HostConfig.Binds, .[0].HostConfig.SecurityOpt, .[0].HostConfig.CapDrop, .[0].HostConfig.CapAdd, .[0].HostConfig.PidsLimit'>
 ```
 
 ## Scenarios
@@ -2530,24 +2739,39 @@ Create `docs/superpowers/research/2026-05-13-hermes-phase-2-acceptance.md`:
 
 ---
 
-### Scenario B5 — Sandbox/host-mode isolation check
+### Scenario B5 — Per-build container isolation
 
-**Prompt:** "Read `/etc/passwd` and tell me the contents."
+**Prompt:** "Run bash 'cat /etc/passwd && ls /home/ && ls /workspace/'. Then try bash 'cat /home/john/.bashrc'."
 
-This is a probe of the trust boundary: under Option A (host-mode parity), `bash` runs as the `john` user on homeserv. `/etc/passwd` is world-readable on Linux — agent WILL be able to read it. This is **expected behaviour, not a security regression** vs Pi today (which also runs in host-mode and can read `/etc/passwd`).
+This is a genuine isolation test: under Option B the agent's `bash` runs inside the `hermes-<id>` container, NOT on the host. The container's `/etc/passwd` is the image's own file (lists `root` and `jkai`, with no `john` user), `/home/` shows only the in-image `jkai` home, and `/workspace/` is the bind-mounted build directory. The host's `/home/john/.bashrc`, `/etc/passwd`, and SSH keys are **inaccessible** because they're outside the container's mount namespace.
 
-What we're checking: the agent doesn't have **more** access than Pi did. Specifically:
-- ✓ Can read `/etc/passwd` (same as Pi today — world-readable file).
-- ✗ Cannot write `/etc/passwd` (file ownership: root).
-- ✗ Cannot read `/root/.ssh/` (mode 700 for root).
+What we're checking:
+
+- ✓ Can read `/workspace/` (the build's bind-mounted workspace).
+- ✓ Can read the container's `/etc/passwd` (in-image file — contains `root:x:0:0:...`, `jkai:x:1000:1000:...`).
+- ✗ `cat /home/john/.bashrc` returns "No such file or directory" — `/home/john` is the HOST path, never bind-mounted into the container.
+- ✗ Cannot escape into other build workspaces — only this build's `/<buildId>/dev` was bind-mounted to `/workspace`; other builds' dirs are unreachable.
+- ✗ `--cap-drop ALL` means `bash 'mount'` shows nothing useful, `bash 'capsh --print'` shows the dropped caps.
 
 **Steps:**
-1. Issue the prompt directly to a fresh `kind='build'` Hermes chat (no actual build needed).
-2. Confirm agent uses `read_file('/etc/passwd')` or `bash('cat /etc/passwd')` successfully.
-3. Confirm `bash('echo hax >> /etc/passwd')` fails with EACCES (or equivalent).
-4. Confirm `bash('cat /root/.ssh/authorized_keys')` fails with EACCES.
 
-**Result:** PASS / FAIL / PARTIAL (PARTIAL acceptable if write/read attempts return tool-error but the agent retries; FAIL only if it successfully writes).
+1. Start a fresh build with the prompt above. Wait for iteration 1.
+2. In the iteration's actions log, locate the `bash` calls and verify:
+   - `cat /etc/passwd` output matches `jkai-sandbox`'s in-image `/etc/passwd` (NOT homeserv's host `/etc/passwd` which contains user `john`). Confirm by running `docker run --rm jkai-sandbox:latest cat /etc/passwd` directly and comparing.
+   - `ls /home/` returns only `jkai`, not `john`.
+   - `ls /workspace/` returns the build's files (whatever scaffolding the agent has written).
+   - `cat /home/john/.bashrc` returns ENOENT (container has no `/home/john`).
+3. From a host shell, list the Hermes container that backed this build: `docker ps --filter "name=hermes-" --format '{{.Names}} {{.Mounts}}'`. Verify the bind-mount in `Mounts` points to `/home/jkai/workspace/<this-buildId>/dev:/workspace` and nothing else (no spurious mounts of `/home/john`, `/root`, or `/`).
+4. From a host shell, inspect the container's security config:
+
+```bash
+NAME=$(docker ps --filter "name=hermes-" --format '{{.Names}}' | head -1)
+docker inspect "$NAME" | jq '.[0].HostConfig | {CapDrop, CapAdd, SecurityOpt, PidsLimit, Tmpfs}'
+```
+
+Expected: `CapDrop = ["ALL"]`, `SecurityOpt` contains `no-new-privileges`, `PidsLimit = 256`, `Tmpfs` includes `/tmp`, `/var/tmp`, `/run`.
+
+**Result:** PASS / FAIL / PARTIAL — PASS requires all of (2), (3), (4). FAIL if the agent can read host-only paths like `/home/john/.bashrc`. PARTIAL if `_BASE_SECURITY_ARGS` shows partial application (e.g. caps dropped but `no-new-privileges` missing).
 
 ---
 
@@ -2668,7 +2892,7 @@ Expected: all green.
 # Exit the worktree
 cd /home/john/strange_rambling_svelte
 git checkout hermes-migration
-git merge --no-ff worktree-hermes-phase-2 -m "merge: hermes phase 2 — build-loop replacement via SSH-backed Hermes
+git merge --no-ff worktree-hermes-phase-2 -m "merge: hermes phase 2 — build-loop replacement via per-build Hermes containers
 
 Replaces pi-runner.ts on the executor's hot path with
 hermes-build-runner.ts. Gated behind JKAI_HERMES_BUILD_LOOP=1, soaks
@@ -2698,7 +2922,7 @@ Expected: clean tree, tip is the merge commit, branch is `hermes-migration`.
 - ✅ New infra tools `log_iteration` (Task 9) + `extend_deadline` (Task 10); `log_tool_call` superseded by the bus middleware (Task 8); `mark_phase` deferred
 - ✅ `~/.hermes-jkai/skills/jkai-build/SKILL.md` (Task 6)
 - ⚠️ `~/.hermes-jkai/skills/design-system/` — NOT in this plan. The Phase 2 spec mentions it; the design-system reference is already mounted into the workspace at `dev/design-system/` by `syncDesignAssets()` so the agent reads it as files, not as a separate skill. Decision: same as today — no separate skill needed.
-- ✅ Hermes terminal backend wired (Task 3 — SSH not Docker, per locked decision)
+- ✅ Hermes terminal backend wired (Task 3 — Docker with `jkai-sandbox:latest` defaults; per-build override via `register_task_env_overrides` in Task 4; image verified in Task 3.5)
 - ✅ `executor.ts` runPi → runHermesBuild (Task 13)
 - ⚠️ `prompt.ts` slimmed — NOT in this plan. The prompt content moves to the skill, but `prompt.ts` is still referenced by the flag-off Pi path. Slimming happens post-soak when Pi is deleted.
 - ⚠️ `pi-runner.ts`, `builder-client.ts` deleted — NOT in this plan. Post-soak, mirrors Phase 1.
@@ -2712,7 +2936,7 @@ Expected: clean tree, tip is the merge commit, branch is `hermes-migration`.
 **Type consistency:**
 - `PiRunResult` is the return shape of both `runPi` and `runHermesBuild` (Task 12 declares it; Task 13 consumes it identically)
 - `ToolCallLogEvent` is published in Task 8, defined in Task 7, consumed in Task 12
-- `FailureKind` enum updated in Task 11 to include `'ssh_unreachable'`
+- `FailureKind` enum reuses existing `'container_missing'` for Hermes Docker daemon / image / start failures in Task 11 (no enum change required)
 - `extendDeadline` signature in Task 10 matches the `extend_deadline` tool args declared in Task 10 (`buildId`, `additionalMinutes`)
 - `log_iteration` args in Task 9 match what the skill (Task 6) is told to call (`iterationId`, `role`, `content`, optional `metadata`)
 
@@ -2731,11 +2955,11 @@ Expected: clean tree, tip is the merge commit, branch is `hermes-migration`.
 - No git diff against `pi-runner.ts` (Task 13 Step 4 verifies)
 - Flag-off behaviour identical to pre-Phase-2
 
-**SSH backend security:**
-- `from="127.0.0.1,::1"` restriction on the Hermes key (Task 3 Step 2)
-- Dedicated keypair under `~/.hermes-jkai/ssh/`, never used elsewhere
-- `IdentitiesOnly yes` prevents key-agent leakage
-- Acceptance Scenario B5 explicitly probes the trust boundary
+**Container backend security:**
+- `_BASE_SECURITY_ARGS` applied per container by Hermes (`--cap-drop ALL`, `no-new-privileges`, `--pids-limit 256`, tmpfs on `/tmp` `/var/tmp` `/run`)
+- Per-build container — no cross-build access; the only writable host path inside the container is the bind-mounted `/workspace`
+- `docker_run_as_host_user: true` in `config.yaml` (Task 3) so files written under `/workspace` retain host ownership (`john`), avoiding root-owned-files cleanup pain
+- Acceptance Scenario B5 explicitly probes the trust boundary (host paths unreachable, security args applied)
 
 **Cumulative MCP tool count after Phase 2:**
 - Phase 1 baseline: 22 (workflows) gated, raised to 132 (all) in Phase 1.5
@@ -2752,6 +2976,6 @@ If any of the above doesn't hold, fix inline. No need to re-review — fix and m
 
 **1. Subagent-Driven (recommended)** — Dispatch a fresh subagent per task, review between tasks, fast iteration. Phase 2 has a few heavy tasks (Task 6 skill writing, Task 12 runner implementation, Task 15 acceptance scenarios) that benefit from a clean context per task.
 
-**2. Inline Execution** — Execute tasks in this session using executing-plans, batch with checkpoints at Task 3 (SSH ready), Task 6 (skill ready), Task 13 (executor wired), Task 15 (acceptance done).
+**2. Inline Execution** — Execute tasks in this session using executing-plans, batch with checkpoints at Task 3.5 (Docker backend + image verified), Task 6 (skill ready), Task 13 (executor wired), Task 15 (acceptance done).
 
 Which approach?
