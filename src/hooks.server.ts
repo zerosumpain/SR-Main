@@ -160,11 +160,15 @@ const { handle: authHandle } = SvelteKitAuth({
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
 
-  // Dev-only bypass for local-network admin access. The dev server runs on
-  // homeserv and is reachable only on the LAN; Google's OAuth rules refuse
-  // private-network redirect URIs so standard sign-in isn't available. Gate
-  // strictly on dev build AND a private RFC1918/loopback client.
-  if (import.meta.env.DEV) {
+  // Local-network bypass for admin access on homeserv. The dev server (and
+  // the homeserv systemd prod build when AUTH_BYPASS=1) are reachable only
+  // on the LAN; Google's OAuth rules refuse private-network redirect URIs
+  // and prod-build cookies are scoped to .strangeramblings.com so standard
+  // sign-in isn't viable from those hosts. Double gate: either it's a dev
+  // build OR the AUTH_BYPASS=1 env var is set, AND the client is on a
+  // private RFC1918 / loopback address. Public clients on prod still go
+  // through Google even if AUTH_BYPASS leaks to that env.
+  if (import.meta.env.DEV || env.AUTH_BYPASS === '1') {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     const isPrivate =
@@ -172,7 +176,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       clientAddr === '::1' ||
       clientAddr.startsWith('10.') ||
       clientAddr.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(clientAddr);
+      /^172\.(1[6-9]|2\d|3[01])\./.test(clientAddr) ||
+      // Tailscale CGNAT range (100.64.0.0/10) — covers homeserv's Tailscale clients.
+      /^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(clientAddr);
     if (isPrivate) {
       return resolve(event);
     }
