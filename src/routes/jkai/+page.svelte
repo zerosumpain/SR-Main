@@ -188,11 +188,13 @@
       <div class="flex items-center gap-3">
         <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
         <a
-          href="/admin/hermes"
+          href="https://homeserv.tail668b8c.ts.net:8443/"
+          target="_blank"
+          rel="noopener"
           class="hermes-admin-link"
-          title="Hermes engine admin (sessions, health, flag)"
+          title="Hermes app — sessions, skills, providers, MCP, chat"
         >
-          Hermes admin →
+          Hermes ↗
         </a>
       </div>
     {/snippet}
