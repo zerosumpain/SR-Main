@@ -1,6 +1,9 @@
 <svelte:head><title>Hermes — Admin</title></svelte:head>
 <script lang="ts">
-  let { data } = $props();
+  import { enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+
+  let { data, form } = $props();
 
   type SessionRow = {
     id: number;
@@ -9,14 +12,42 @@
     kindId: string;
     createdAt: string | Date;
   };
+  type ServiceState = 'active' | 'inactive' | 'failed' | 'activating' | 'unknown';
+  type ActionForm = {
+    action?: string;
+    ok?: boolean;
+    stdout?: string;
+    stderr?: string;
+    durationMs?: number;
+    exitCode?: number | null;
+  } | null;
 
-  const openSessions = data.openSessions as SessionRow[];
-  const health = data.health as { ok: boolean; ts: number } | null;
-  const flagEnabled = data.flagEnabled as boolean;
+  let pending = $state<string | null>(null);
+  const result = $derived(form as ActionForm);
 
   function fmtDate(d: string | Date): string {
     const dt = typeof d === 'string' ? new Date(d) : d;
     return dt.toLocaleString();
+  }
+  function fmtMs(ms: number): string {
+    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+  }
+  function stateLabel(s: ServiceState): string {
+    return s === 'active' ? 'running' : s === 'inactive' ? 'stopped' : s;
+  }
+
+  // SvelteKit's `enhance` calls the callback with { formData, ... } and returns
+  // a fn that runs after the response is received. We use it to flip `pending`
+  // and refresh `load` so the service-state pills update post-action.
+  function submitFn(action: string) {
+    return () => {
+      pending = action;
+      return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
+        await update({ reset: false });
+        await invalidateAll();
+        pending = null;
+      };
+    };
   }
 </script>
 
@@ -24,11 +55,14 @@
   <header class="page-hdr">
     <div>
       <div class="kicker">Hermes</div>
-      <h1>Engine sessions, health, flag state</h1>
+      <h1>Engine sessions, health, service control</h1>
       <p class="sub">
-        Read-only view of the <code>jkai-hermes</code> gateway. Open sessions are
-        tracked in Postgres (<code>hermes_sessions</code>); platform health is
-        probed live against <code>{'/platforms/jkai/health'}</code>.
+        {#if data.canManage}
+          Running on <code>{data.hostname}</code>. Service-control actions are live.
+        {:else}
+          Read-only view (host <code>{data.hostname}</code> is not the Hermes runtime).
+          Visit <code>http://homeserv:5173/admin/hermes</code> to manage services.
+        {/if}
       </p>
     </div>
     <a class="back-link" href="/admin">← Admin</a>
@@ -36,13 +70,88 @@
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
+      <span class="sr-label-tight">Service control</span>
+      <span class="nm-sec-meta">
+        {data.version ?? 'unknown version'}
+      </span>
+    </div>
+
+    <div class="svc-grid">
+      <div class="svc">
+        <span class="svc-name mono">jkai-hermes</span>
+        <span class="dot {data.services.gateway === 'active' ? 'ok' : data.services.gateway === 'failed' ? 'bad' : 'off'}"></span>
+        <span class="svc-state mono">{stateLabel(data.services.gateway)}</span>
+      </div>
+      <div class="svc">
+        <span class="svc-name mono">jkai-hermes-dashboard</span>
+        <span class="dot {data.services.dashboard === 'active' ? 'ok' : data.services.dashboard === 'failed' ? 'bad' : 'off'}"></span>
+        <span class="svc-state mono">{stateLabel(data.services.dashboard)}</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <form method="POST" action="?/restart_gateway" use:enhance={submitFn('restart_gateway')}>
+        <button class="nm-save-btn" disabled={!data.canManage || pending !== null}>
+          {pending === 'restart_gateway' ? '…' : 'Restart gateway'}
+        </button>
+      </form>
+      <form method="POST" action="?/restart_dashboard" use:enhance={submitFn('restart_dashboard')}>
+        <button class="nm-save-btn" disabled={!data.canManage || pending !== null}>
+          {pending === 'restart_dashboard' ? '…' : 'Restart dashboard'}
+        </button>
+      </form>
+      <form method="POST" action="?/restart_all" use:enhance={submitFn('restart_all')}>
+        <button class="nm-save-btn" disabled={!data.canManage || pending !== null}>
+          {pending === 'restart_all' ? '…' : 'Restart all'}
+        </button>
+      </form>
+      <span class="btn-sep"></span>
+      <form method="POST" action="?/update_check" use:enhance={submitFn('update_check')}>
+        <button class="nm-save-btn ghost" disabled={!data.canManage || pending !== null}>
+          {pending === 'update_check' ? '…' : 'Check update'}
+        </button>
+      </form>
+      <form method="POST" action="?/update_hermes" use:enhance={submitFn('update_hermes')}>
+        <button
+          class="nm-save-btn primary"
+          disabled={!data.canManage || pending !== null}
+          onclick={(e) => {
+            if (!confirm('Run `hermes update --yes --no-backup` and restart both services? This can take 1–3 minutes.')) e.preventDefault();
+          }}
+        >
+          {pending === 'update_hermes' ? 'updating…' : 'Update Hermes'}
+        </button>
+      </form>
+    </div>
+
+    {#if result?.action}
+      <div class="result {result.ok ? 'ok' : 'bad'}">
+        <div class="result-hd mono">
+          <span class="dot {result.ok ? 'ok' : 'bad'}"></span>
+          <span>{result.action}</span>
+          <span class="result-meta">
+            {result.ok ? 'ok' : `exit ${result.exitCode ?? '?'}`} · {fmtMs(result.durationMs ?? 0)}
+          </span>
+        </div>
+        {#if result.stdout}
+          <pre class="result-out">{result.stdout}</pre>
+        {/if}
+        {#if result.stderr && result.stderr.trim()}
+          <pre class="result-err">{result.stderr}</pre>
+        {/if}
+      </div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
       <span class="sr-label-tight">Health</span>
       <span class="nm-sec-meta">jkai platform</span>
     </div>
-    {#if health}
+    {#if data.health}
       <div class="line ok">
         <span class="dot ok"></span>
-        <span class="mono">platform: OK (ts={health.ts})</span>
+        <span class="mono">platform: OK (ts={data.health.ts})</span>
       </div>
     {:else}
       <div class="line bad">
@@ -52,9 +161,9 @@
     {/if}
 
     <div class="line">
-      <span class="dot {flagEnabled ? 'ok' : 'off'}"></span>
+      <span class="dot {data.flagEnabled ? 'ok' : 'off'}"></span>
       <span class="mono">
-        flag <code>JKAI_HERMES_CANVAS_CHAT</code>: {flagEnabled ? 'on' : 'off'}
+        flag <code>JKAI_HERMES_CANVAS_CHAT</code>: {data.flagEnabled ? 'on' : 'off'}
       </span>
     </div>
   </section>
@@ -63,15 +172,15 @@
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Open sessions</span>
       <span class="nm-sec-meta">
-        {openSessions.length} {openSessions.length === 1 ? 'session' : 'sessions'}
+        {data.openSessions.length} {data.openSessions.length === 1 ? 'session' : 'sessions'}
       </span>
     </div>
 
-    {#if openSessions.length === 0}
+    {#if data.openSessions.length === 0}
       <div class="empty mono">No open Hermes sessions.</div>
     {:else}
       <ul class="rows">
-        {#each openSessions as s (s.id)}
+        {#each data.openSessions as s (s.id)}
           <li class="row">
             <span class="kind-pill mono">{s.kind}</span>
             <span class="mono kind-id">{s.kindId}</span>
@@ -81,15 +190,6 @@
         {/each}
       </ul>
     {/if}
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Skills / Memory / Providers</span>
-    </div>
-    <p class="stub">
-      Phase 1 read-only stub. Full management UI lands in later phases.
-    </p>
   </section>
 </div>
 
@@ -188,6 +288,119 @@
   .dot.off { background: var(--text-ghost); }
   .line.bad .mono { color: #c44; }
 
+  /* --- Service control --- */
+  .svc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.9rem;
+  }
+  .svc {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 6px 10px;
+    background: rgba(26, 16, 8, 0.04);
+    border: 1px solid var(--card-border);
+  }
+  .svc-name { flex: 1; min-width: 0; }
+  .svc-state {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+  }
+
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .btn-row form { margin: 0; }
+  .btn-sep {
+    width: 1px;
+    height: 24px;
+    background: var(--card-border);
+    margin: 0 0.3rem;
+  }
+  .nm-save-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 6px 11px;
+    background: var(--text-primary);
+    color: var(--bg);
+    border: 1px solid var(--text-primary);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nm-save-btn:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .nm-save-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .nm-save-btn.ghost {
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .nm-save-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .nm-save-btn.primary:hover:not(:disabled) {
+    background: var(--accent-hover, #a84808);
+    border-color: var(--accent-hover, #a84808);
+  }
+
+  /* --- Action result panel --- */
+  .result {
+    margin-top: 1rem;
+    border: 1px solid var(--card-border);
+    background: rgba(26, 16, 8, 0.03);
+    padding: 8px 10px;
+  }
+  .result.ok { border-color: var(--accent-tint-35, var(--card-border)); }
+  .result.bad { border-color: #c44; }
+  .result-hd {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .result-meta {
+    margin-left: auto;
+    color: var(--text-ghost);
+    font-size: 10px;
+  }
+  .result-out, .result-err {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    background: var(--code-bg);
+    color: var(--code-text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.45;
+    border-radius: 2px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 360px;
+    overflow: auto;
+  }
+  .result-err {
+    background: #2a0a0a;
+    color: #f4cfcf;
+  }
+
   .empty {
     color: var(--text-ghost);
     padding: 6px 0;
@@ -238,13 +451,5 @@
       grid-template-columns: 1fr;
       gap: 2px;
     }
-  }
-
-  .stub {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-ghost);
-    padding: 4px 0;
   }
 </style>
