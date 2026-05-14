@@ -304,7 +304,12 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     'Permissions-Policy',
     'geolocation=(self), microphone=(), camera=(), payment=(), usb=()',
   );
-  if (import.meta.env.PROD) {
+  // HSTS only for hosts that actually serve HTTPS. The homeserv systemd build
+  // is a prod build but serves plain HTTP on the LAN / Tailscale, and a stray
+  // HSTS header there poisons the browser cache for the hostname — every
+  // subsequent http://homeserv... request gets force-upgraded to https://...
+  // which has no listener, so the page silently breaks (no JS, no API calls).
+  if (import.meta.env.PROD && event.url.hostname.endsWith('strangeramblings.com')) {
     response.headers.set(
       'Strict-Transport-Security',
       'max-age=31536000; includeSubDomains',
