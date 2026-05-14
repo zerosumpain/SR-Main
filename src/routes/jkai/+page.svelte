@@ -185,7 +185,16 @@
       </button>
     {/snippet}
     {#snippet meta()}
-      <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
+      <div class="flex items-center gap-3">
+        <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
+        <a
+          href="/admin/hermes"
+          class="hermes-admin-link"
+          title="Hermes engine admin (sessions, health, flag)"
+        >
+          Hermes admin →
+        </a>
+      </div>
     {/snippet}
   </PageHeader>
 
@@ -264,3 +273,22 @@
     </div>
   </div>
 </div>
+
+<style>
+  .hermes-admin-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border: 1px solid var(--card-border);
+    border-radius: 3px;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .hermes-admin-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+</style>
