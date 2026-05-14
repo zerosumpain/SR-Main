@@ -59,8 +59,9 @@ export const POST: RequestHandler = async (event) => {
  *   - finalize: terminal frame. Emit a 'done' with the final content under
  *               `result.message`.
  */
-/** Shape of an image attachment carried on an SSE `image` frame. Mirrors the
- * `Message['attachments']` element shape ChatArea.svelte consumes on `done`. */
+/** Shape of a media attachment carried on an SSE media frame
+ * (`image`/`audio`/`pdf`/`document`). Mirrors the `Message['attachments']`
+ * element shape ChatArea.svelte consumes on `done`. */
 type AssistantAttachment = {
   id: string;
   kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
@@ -84,7 +85,10 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
       // Returning empty so the pump's own finalize handling fires.
       return [];
     case 'image':
-      // Image frames carry an attachment id that was uploaded by the
+    case 'audio':
+    case 'pdf':
+    case 'document':
+      // Media frames carry an attachment id that was uploaded by the
       // jkai_platform plugin to `/api/jkai/attachments`. The chat UI's
       // attachment-render path keys off `result.attachments` on the
       // terminating `done` event — so we don't emit a per-frame JobEvent
@@ -97,7 +101,10 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
 }
 
 function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
-  if (frame.kind !== 'image') return null;
+  // Any frame that carries a media attachment row qualifies — gating on
+  // `frame.attachment` rather than `frame.kind === 'image'` is what lets
+  // audio / pdf / document frames flow through alongside the original
+  // image path without enumerating every kind here.
   const att = frame.attachment;
   if (!att || typeof att.id !== 'string') return null;
   return {
@@ -239,10 +246,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       })) {
         if (abortController.signal.aborted) break;
-        if (frame.kind === 'image') {
-          const att = extractAttachmentFromFrame(frame);
-          if (att) turnAttachments.push(att);
-        }
+        // Try every frame — `extractAttachmentFromFrame` returns null when
+        // `frame.attachment` is absent, so text-bubble frames (send / replace /
+        // finalize) are no-ops here, while image / audio / pdf / document
+        // frames contribute their attachment row to `turnAttachments`.
+        const att = extractAttachmentFromFrame(frame);
+        if (att) turnAttachments.push(att);
         for (const ev of adaptFrameToCanvasSse(frame)) {
           if (ev.type === 'token' && typeof ev.delta === 'string') {
             job.partialResponse += ev.delta;

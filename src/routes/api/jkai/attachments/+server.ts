@@ -43,7 +43,13 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!sniffed && file.type && file.type.startsWith('text/')) mime = file.type;
   else if (!sniffed && (file.type === 'application/json' || file.type === 'application/x-yaml')) mime = file.type;
 
-  if (!isAllowedMime(mime)) throw error(415, `unsupported mime type: ${mime}`);
+  // `file-type` reports Opus-in-Ogg with a codec parameter (`audio/ogg;
+  // codecs=opus`) which doesn't match the bare-MIME allowlist. Strip any
+  // RFC 6838 parameters (everything after the first `;`) before lookup —
+  // the kind/extension tables only key on the canonical type/subtype.
+  const baseMime = mime.split(';', 1)[0].trim();
+  if (!isAllowedMime(baseMime)) throw error(415, `unsupported mime type: ${mime}`);
+  mime = baseMime;
 
   const kind = kindFromMime(mime)!;
   const limit = LIMITS_BY_KIND[kind];
