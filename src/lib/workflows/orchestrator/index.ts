@@ -196,6 +196,7 @@ async function runToolLoop(
   onChunk?: (text: string) => void,
   existingDraft?: WorkflowDraft,
   workflowId?: string | null,
+  opts?: { skipVerification?: boolean },
 ): Promise<{
   draft: WorkflowDraft;
   name: string;
@@ -207,6 +208,9 @@ async function runToolLoop(
   const draft = existingDraft ?? createEmptyDraft();
   if (!existingDraft) resetNodeCounter();
   const deps = getToolCallDeps();
+  const tools = opts?.skipVerification
+    ? openaiTools.filter((t) => t.function?.name !== 'verify_workflow')
+    : openaiTools;
 
   const messages: Array<any> = [
     { role: 'system', content: systemPrompt },
@@ -227,7 +231,7 @@ async function runToolLoop(
         response = await client.chat.completions.create({
           model,
           messages,
-          tools: openaiTools as any,
+          tools: tools as any,
           tool_choice: 'auto',
           temperature: 0.7,
           max_tokens: 4096,
@@ -598,6 +602,7 @@ export async function generateWorkflow(
   userMessage: string,
   workflowId: string | null,
   onChunk?: (text: string) => void,
+  opts?: { skipVerification?: boolean },
 ): Promise<{
   workflow: GeneratedWorkflow | null;
   followUp?: string;
@@ -607,7 +612,7 @@ export async function generateWorkflow(
   const grounding = await buildGrounding();
   const workspaceResources = await buildWorkspaceResources(workflowId);
   const personalityPrompt = await getCompiledPrompt();
-  const basePrompt = buildToolUseSystemPrompt(grounding, workspaceResources);
+  const basePrompt = buildToolUseSystemPrompt(grounding, workspaceResources, opts);
   const systemPrompt = personalityPrompt
     ? `${personalityPrompt}\n\n---\n\n${basePrompt}`
     : basePrompt;
@@ -652,6 +657,7 @@ export async function generateWorkflow(
     onChunk,
     existingDraft,
     workflowId,
+    opts,
   );
 
   if (followUp) {
@@ -709,7 +715,7 @@ export async function generateWorkflow(
       edges: workflow.edges.map(e => ({ source: e.sourceNodeId, target: e.targetNodeId, sourceHandle: e.sourceHandle })),
     }, null, 2);
 
-    const revisionPrompt = buildRevisionPrompt();
+    const revisionPrompt = buildRevisionPrompt(opts);
     const workspaceSection = workspaceResources && workspaceResources.trim().length > 0
       ? `\n\n## Workspace Resources\n\n${workspaceResources}`
       : '';
@@ -723,6 +729,7 @@ export async function generateWorkflow(
         onChunk,
         draft, // Pass the existing draft so revision builds on it
         workflowId,
+        opts,
       );
 
       if (revisionResult.draft.nodes.size > 0) {

@@ -75,7 +75,7 @@ register({
         lastEmittedAt = now;
       }
       emit(trimmed);
-    });
+    }, { skipVerification: true });
 
     if (followUp) {
       return { success: true, data: { needsMoreInfo: true, question: followUp } };
@@ -210,7 +210,8 @@ register({
       return { success: false, error: `Failed to save canvas: ${dbMsg}` };
     }
 
-    const url = `https://strangeramblings.com/jkai/canvas/${slug}`;
+    const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
+    const url = `${baseUrl}/jkai/canvas/${slug}`;
     const linkLabel = workflow.name || slug;
     return {
       success: true,

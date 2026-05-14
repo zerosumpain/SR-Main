@@ -1,10 +1,18 @@
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 import { getPatternsForOrchestrator } from './patterns';
 
-export function buildToolUseSystemPrompt(nodeGrounding: string, workspaceResources?: string): string {
+export function buildToolUseSystemPrompt(
+  nodeGrounding: string,
+  workspaceResources?: string,
+  opts?: { skipVerification?: boolean },
+): string {
   const workspaceSection = workspaceResources && workspaceResources.trim().length > 0
     ? `\n\n## Workspace Resources\n\n${workspaceResources}`
     : '';
+  const verifyRule = opts?.skipVerification
+    ? `- Do NOT call finalize_workflow until all nodes are connected with edges`
+    : `- Do NOT call finalize_workflow until all nodes are connected with edges
+- Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first. Inspect the returned \`captureLog\` carefully — does each captured \`would_send\` / \`would_publish\` / \`would_call\` / \`would_write\` actually meet the user's stated goal (correct phone number, sensible message body, right entity, right slug)? If not, call \`update_node\` to fix the issue and call \`verify_workflow\` again. You have at most 3 verification rounds per workflow.`;
   return `You are a workflow automation architect. You design automation workflows by choosing from available nodes and connecting them into a directed graph.
 
 ## How You Work
@@ -94,8 +102,7 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 - When creating nodes: use kebab-case for type names, provide working executor code
 - If you need information you don't have (API keys, URLs, preferences), call ask_user
 - Do NOT guess API endpoints — if unsure, ask the user
-- Do NOT call finalize_workflow until all nodes are connected with edges
-- Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first. Inspect the returned \`captureLog\` carefully — does each captured \`would_send\` / \`would_publish\` / \`would_call\` / \`would_write\` actually meet the user's stated goal (correct phone number, sensible message body, right entity, right slug)? If not, call \`update_node\` to fix the issue and call \`verify_workflow\` again. You have at most 3 verification rounds per workflow.
+${verifyRule}
 - After connecting nodes with connect_nodes, review the upstream schema in the response. Every {{input.X}} reference in your node config MUST match a path listed in that schema. If a path doesn't exist, update the node's config to use the correct path.
 - Do NOT call finalize_workflow if any node (other than the trigger) has zero incoming edges.
 - When using {{input.X}} templates, prefer specific paths from the upstream schema over guessing. If the schema says "input.body.data", use "input.body.data" — not "input.data" or "input.result".
@@ -140,7 +147,10 @@ Respond with a JSON object:
 If no issues found, return: \`{ "issues": [], "verdict": "pass" }\``;
 }
 
-export function buildRevisionPrompt(): string {
+export function buildRevisionPrompt(opts?: { skipVerification?: boolean }): string {
+  const verifyTail = opts?.skipVerification
+    ? ''
+    : `\n\nBefore calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first and review its capture log. You have at most 3 verification rounds.`;
   return `Address each issue raised by the critic. You have the same tools available: search_nodes, use_node, update_node, remove_node, create_node, connect_nodes, set_trigger, finalize_workflow.
 
 For each issue:
@@ -152,9 +162,7 @@ For each issue:
    - **use_node** or **create_node** only when the fix requires adding a genuinely missing node — never to add hardening the user didn't ask for
 3. Call finalize_workflow when all issues are addressed
 
-Fix only what the critic flagged — don't redesign the entire workflow. When in doubt between removing a node and adding more, prefer removing — leaner is better.
-
-Before calling finalize_workflow, if the workflow contains any side-effecting nodes (\`whatsapp\`, \`email\`, \`gmail-send\`, \`gmail-reply\`, \`gmail-label\`, \`home-assistant\`, \`blog\`, \`data-store\`, \`intel-write\`), you MUST call \`verify_workflow\` first and review its capture log. You have at most 3 verification rounds.`;
+Fix only what the critic flagged — don't redesign the entire workflow. When in doubt between removing a node and adding more, prefer removing — leaner is better.${verifyTail}`;
 }
 
 export function buildModifySystemPrompt(
