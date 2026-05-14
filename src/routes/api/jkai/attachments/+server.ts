@@ -21,10 +21,18 @@ function sanitizeFilename(name: string | null | undefined): string | null {
   return stripped.slice(0, 255);
 }
 
+const ALLOWED_SOURCES = new Set(['web', 'generated']);
+
 export const POST: RequestHandler = async ({ request }) => {
   const form = await request.formData();
   const file = form.get('file');
   const conversationId = form.get('conversationId') as string | null;
+  const sourceField = (form.get('source') as string | null) || 'web';
+  // Hermes plugin uploads agent-produced screenshots / image-gen output with
+  // `source=generated` so the chat UI can label them and rate-limits in
+  // `$lib/jkai/media/rate-limits` keep tracking them. Anything else falls back
+  // to `web` (the original user-upload semantics).
+  const source = ALLOWED_SOURCES.has(sourceField) ? sourceField : 'web';
   if (!(file instanceof File)) throw error(400, 'file is required');
   if (file.size === 0) throw error(400, 'file is empty');
 
@@ -47,7 +55,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const [row] = await db.insert(jkaiAttachments).values({
     conversationId: conversationId || null,
     messageId: null,
-    source: 'web',
+    source,
     kind,
     mimeType: mime,
     originalName: sanitizeFilename(file.name),

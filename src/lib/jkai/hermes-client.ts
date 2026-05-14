@@ -22,13 +22,29 @@ export interface SendMessageResponse {
   chatId: string;
 }
 
+/** Outbound attachment metadata emitted by the jkai_platform plugin on
+ * `image` (and future audio/video/document) frames. Matches the row shape
+ * returned by `POST /api/jkai/attachments`. */
+export interface SseFrameAttachment {
+  id: string;
+  kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
+  mimeType: string;
+  originalName: string | null;
+  sizeBytes: number;
+  source: 'web' | 'whatsapp' | 'generated';
+}
+
 export interface SseFrame {
-  kind: 'send' | 'replace' | 'finalize';
+  /** `send`/`replace`/`finalize` are text-bubble frames; `image` carries an
+   *  attachment uploaded to `/api/jkai/attachments` so the chat UI can render
+   *  the bytes inline instead of the legacy `🖼️ Image: file://...` placeholder. */
+  kind: 'send' | 'replace' | 'finalize' | 'image';
   chat_id: string;
   message_id: string;
   content: string;
   metadata: Record<string, unknown>;
   ts: number;
+  attachment?: SseFrameAttachment;
 }
 
 export class HermesClient {

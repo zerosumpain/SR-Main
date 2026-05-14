@@ -59,6 +59,17 @@ export const POST: RequestHandler = async (event) => {
  *   - finalize: terminal frame. Emit a 'done' with the final content under
  *               `result.message`.
  */
+/** Shape of an image attachment carried on an SSE `image` frame. Mirrors the
+ * `Message['attachments']` element shape ChatArea.svelte consumes on `done`. */
+type AssistantAttachment = {
+  id: string;
+  kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
+  mimeType: string;
+  originalName: string | null;
+  sizeBytes: number;
+  source: 'web' | 'whatsapp' | 'generated';
+};
+
 function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
   switch (frame.kind) {
     case 'send':
@@ -72,9 +83,31 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
       // the final `message` field, so we don't return a `done` event here.
       // Returning empty so the pump's own finalize handling fires.
       return [];
+    case 'image':
+      // Image frames carry an attachment id that was uploaded by the
+      // jkai_platform plugin to `/api/jkai/attachments`. The chat UI's
+      // attachment-render path keys off `result.attachments` on the
+      // terminating `done` event — so we don't emit a per-frame JobEvent
+      // here; the pump below collects the attachment metadata and folds
+      // it into `job.result.attachments` before dispatching `done`.
+      return [];
     default:
       return [];
   }
+}
+
+function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
+  if (frame.kind !== 'image') return null;
+  const att = frame.attachment;
+  if (!att || typeof att.id !== 'string') return null;
+  return {
+    id: att.id,
+    kind: att.kind,
+    mimeType: att.mimeType,
+    originalName: att.originalName ?? null,
+    sizeBytes: att.sizeBytes,
+    source: att.source,
+  };
 }
 
 async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
@@ -192,6 +225,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       });
 
+      // Attachments emitted by the jkai_platform plugin during this turn.
+      // Folded into the final `done` event's `result.attachments` so the chat
+      // UI's `MessageAttachments` renders them inline; their `messageId` is
+      // back-filled below so a page reload still surfaces them via the
+      // `jkaiAttachments.messageId` join in /api/jkai/conversations/[id].
+      const turnAttachments: AssistantAttachment[] = [];
+
       for await (const frame of client.openStream({
         chatId,
         kind,
@@ -199,6 +239,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       })) {
         if (abortController.signal.aborted) break;
+        if (frame.kind === 'image') {
+          const att = extractAttachmentFromFrame(frame);
+          if (att) turnAttachments.push(att);
+        }
         for (const ev of adaptFrameToCanvasSse(frame)) {
           if (ev.type === 'token' && typeof ev.delta === 'string') {
             job.partialResponse += ev.delta;
@@ -211,7 +255,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           // (delivery already happened via prior `send` frames).
           job.status = 'done';
           const finalMessage = frame.content || job.partialResponse || '';
-          job.result = { success: true, workflow: null, message: finalMessage };
+          job.result = {
+            success: true,
+            workflow: null,
+            message: finalMessage,
+            attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
         }
@@ -225,6 +274,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           success: true,
           workflow: null,
           message: job.partialResponse || '',
+          attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
         };
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
       }
@@ -237,18 +287,29 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         (job.result && typeof (job.result as Record<string, unknown>).message === 'string'
           ? ((job.result as Record<string, unknown>).message as string)
           : '') || job.partialResponse || '';
-      if (finalText && (conversationId || workflowId)) {
+      const shouldPersist = (finalText || turnAttachments.length > 0) && (conversationId || workflowId);
+      if (shouldPersist) {
         try {
           const assistantMeta: Record<string, unknown> = {};
           if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
+          if (turnAttachments.length > 0) {
+            assistantMeta.attachments = turnAttachments.map((a) => a.id);
+          }
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
-          await db.insert(orchestratorChats).values({
+          const [insertedAssistant] = await db.insert(orchestratorChats).values({
             conversationId: conversationId ?? null,
             workflowId: workflowId ?? null,
             role: 'assistant',
             content: finalText,
             metadata: assistantMetadata,
-          });
+          }).returning({ id: orchestratorChats.id });
+          // Back-fill messageId on the attachments uploaded by the plugin so
+          // the conversation-reload endpoint joins them onto this message.
+          if (insertedAssistant && turnAttachments.length > 0) {
+            await db.update(jkaiAttachments)
+              .set({ messageId: insertedAssistant.id, conversationId: conversationId ?? null })
+              .where(inArray(jkaiAttachments.id, turnAttachments.map((a) => a.id)));
+          }
         } catch (persistErr) {
           console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);
         }
