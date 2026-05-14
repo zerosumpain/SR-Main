@@ -60,8 +60,8 @@ export const POST: RequestHandler = async (event) => {
  *               `result.message`.
  */
 /** Shape of a media attachment carried on an SSE media frame
- * (`image`/`audio`/`pdf`/`document`). Mirrors the `Message['attachments']`
- * element shape ChatArea.svelte consumes on `done`. */
+ * (`image`/`audio`/`video`/`pdf`/`document`). Mirrors the
+ * `Message['attachments']` element shape ChatArea.svelte consumes on `done`. */
 type AssistantAttachment = {
   id: string;
   kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
@@ -86,6 +86,7 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
       return [];
     case 'image':
     case 'audio':
+    case 'video':
     case 'pdf':
     case 'document':
       // Media frames carry an attachment id that was uploaded by the
@@ -103,8 +104,8 @@ function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
 function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
   // Any frame that carries a media attachment row qualifies — gating on
   // `frame.attachment` rather than `frame.kind === 'image'` is what lets
-  // audio / pdf / document frames flow through alongside the original
-  // image path without enumerating every kind here.
+  // audio / video / pdf / document frames flow through alongside the
+  // original image path without enumerating every kind here.
   const att = frame.attachment;
   if (!att || typeof att.id !== 'string') return null;
   return {
@@ -248,8 +249,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         if (abortController.signal.aborted) break;
         // Try every frame — `extractAttachmentFromFrame` returns null when
         // `frame.attachment` is absent, so text-bubble frames (send / replace /
-        // finalize) are no-ops here, while image / audio / pdf / document
-        // frames contribute their attachment row to `turnAttachments`.
+        // finalize) are no-ops here, while image / audio / video / pdf /
+        // document frames contribute their attachment row to `turnAttachments`.
         const att = extractAttachmentFromFrame(frame);
         if (att) turnAttachments.push(att);
         for (const ev of adaptFrameToCanvasSse(frame)) {

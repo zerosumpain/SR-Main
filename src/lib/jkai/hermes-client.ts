@@ -23,9 +23,8 @@ export interface SendMessageResponse {
 }
 
 /** Outbound attachment metadata emitted by the jkai_platform plugin on
- * media frames (`image` / `audio` / `pdf` / `document`). Matches the row
- * shape returned by `POST /api/jkai/attachments`. Video is out of scope
- * for now but the kind union already permits it for forward-compat. */
+ * media frames (`image` / `audio` / `video` / `pdf` / `document`). Matches
+ * the row shape returned by `POST /api/jkai/attachments`. */
 export interface SseFrameAttachment {
   id: string;
   kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
@@ -37,11 +36,12 @@ export interface SseFrameAttachment {
 
 export interface SseFrame {
   /** `send`/`replace`/`finalize` are text-bubble frames; `image`/`audio`/
-   *  `pdf`/`document` carry an attachment uploaded to `/api/jkai/attachments`
-   *  so the chat UI can render the bytes inline instead of the legacy
-   *  `🖼️ Image: …` / `🔊 Audio: …` / `📎 File: …` text placeholders the
-   *  Hermes BasePlatformAdapter falls back to. */
-  kind: 'send' | 'replace' | 'finalize' | 'image' | 'audio' | 'pdf' | 'document';
+   *  `video`/`pdf`/`document` carry an attachment uploaded to
+   *  `/api/jkai/attachments` so the chat UI can render the bytes inline
+   *  instead of the legacy `🖼️ Image: …` / `🔊 Audio: …` / `🎬 Video: …` /
+   *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
+   *  back to. */
+  kind: 'send' | 'replace' | 'finalize' | 'image' | 'audio' | 'video' | 'pdf' | 'document';
   chat_id: string;
   message_id: string;
   content: string;
