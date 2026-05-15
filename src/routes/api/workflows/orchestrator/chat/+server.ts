@@ -196,38 +196,69 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     defaultMcpUrl: HERMES_MCP_URL,
   });
 
-  // Subscribe to tool-step events for THIS workflow's canvas. The MCP
-  // dispatcher publishes a started/completed/failed event for every
-  // tools/call carrying a matching workflow_id argument; we forward them as
-  // legacy `tool_start` / `tool_result` JobEvents so the canvas UI's panel
-  // works identically on the Hermes branch. Skip when there's no workflowId
-  // (general /jkai chats don't have a canvas to render against anyway, and
-  // the bus is keyed by workflowId).
-  let unsubscribeToolSteps: (() => void) | null = null;
-  if (workflowId) {
-    unsubscribeToolSteps = subscribeToolSteps(workflowId, (e: ToolStepEvent) => {
-      if (abortController.signal.aborted) return;
-      if (e.phase === 'started') {
-        publishJobEvent(jobId, {
-          type: 'tool_start',
-          tool: e.tool,
-          args: e.args ?? {},
-          toolCallId: e.stepId,
-          summary: e.summary,
-        });
-        return;
-      }
-      // completed | failed → tool_result
+  // Attachments produced by site-tools (e.g. write_document) during this
+  // turn. Hoisted here so the tool-step subscriber (below) and the stream
+  // pump (async IIFE) can both access it. The pump folds these into the
+  // final `done` event's `result.attachments` so MessageAttachments renders
+  // them inline.
+  const turnAttachments: AssistantAttachment[] = [];
+
+  // Subscribe to tool-step events for this chat. The MCP dispatcher publishes
+  // a started/completed/failed event for every tools/call carrying a
+  // matching workflow_id argument (= chatId for general /jkai chats, or the
+  // canvas workflowId for canvas chats). We forward them as legacy
+  // `tool_start` / `tool_result` JobEvents so the canvas UI's panel works
+  // identically on the Hermes branch.
+  // Additionally, when a site-tool result contains inline attachments (e.g.
+  // write_document returns `{ attachments: [row] }`), we promote those into
+  // `turnAttachments` so the chat UI renders a download link.
+  const toolStepKey = chatId; // Hermes sends kindId (= chatId) as workflow_id
+  const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
+    if (abortController.signal.aborted) return;
+    if (e.phase === 'started') {
       publishJobEvent(jobId, {
-        type: 'tool_result',
+        type: 'tool_start',
         tool: e.tool,
-        result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
-        status: e.phase === 'failed' ? 'error' : 'done',
+        args: e.args ?? {},
         toolCallId: e.stepId,
         summary: e.summary,
       });
+      return;
+    }
+    // completed | failed → tool_result
+    publishJobEvent(jobId, {
+      type: 'tool_result',
+      tool: e.tool,
+      result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
+      status: e.phase === 'failed' ? 'error' : 'done',
+      toolCallId: e.stepId,
+      summary: e.summary,
     });
-  }
+    // Promote inline attachments from site-tool results into turnAttachments
+    // so the chat UI renders download links. write_document (and similar)
+    // site-tools save to DB and return { attachments: [row] } in their tool
+    // result — but unlike adapter-emitted media frames, those never go
+    // through the SSE OutboundFrame path. We bridge that gap here.
+    if (e.phase === 'completed' && e.result && typeof e.result === 'object') {
+      const result = e.result as Record<string, unknown>;
+      const atts = result.attachments;
+      if (Array.isArray(atts)) {
+        for (const a of atts) {
+          if (a && typeof a === 'object' && typeof (a as Record<string, unknown>).id === 'string') {
+            const row = a as Record<string, unknown>;
+            turnAttachments.push({
+              id: String(row.id),
+              kind: (String(row.kind ?? 'text') as AssistantAttachment['kind']),
+              mimeType: String(row.mimeType ?? 'application/octet-stream'),
+              originalName: row.originalName != null ? String(row.originalName) : null,
+              sizeBytes: typeof row.sizeBytes === 'number' ? row.sizeBytes : 0,
+              source: (String(row.source ?? 'generated') as AssistantAttachment['source']),
+            });
+          }
+        }
+      }
+    }
+  });
 
   // Fire-and-forget: pump Hermes frames into the legacy SSE buffer keyed by
   // jobId. The canvas UI then reads them off `/chat/stream?jobId=...` exactly
@@ -247,12 +278,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       });
 
-      // Attachments emitted by the jkai_platform plugin during this turn.
-      // Folded into the final `done` event's `result.attachments` so the chat
-      // UI's `MessageAttachments` renders them inline; their `messageId` is
-      // back-filled below so a page reload still surfaces them via the
-      // `jkaiAttachments.messageId` join in /api/jkai/conversations/[id].
-      const turnAttachments: AssistantAttachment[] = [];
+      // NOTE: turnAttachments is hoisted above (outer scope) so both the
+      // tool-step subscriber and this stream pump can contribute to it.
 
       for await (const frame of client.openStream({
         chatId,
@@ -349,7 +376,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // Drop the bus subscription so the listener Set doesn't leak across
       // jobs — the bus would otherwise keep a reference to this closure for
       // the lifetime of the process.
-      if (unsubscribeToolSteps) unsubscribeToolSteps();
+      unsubscribeToolSteps();
     }
   })();
 
