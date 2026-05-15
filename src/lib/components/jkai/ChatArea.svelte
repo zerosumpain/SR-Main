@@ -32,6 +32,7 @@
     modelCapabilities = null,
     useIntelContext = true,
     activeBuild = null,
+    approvalUi,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -50,6 +51,7 @@
     modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
+    approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -150,6 +152,115 @@
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let eventSource: EventSource | null = null;
   let chatStream: ChatStreamHandle | null = null;
+
+  // Index of the most recent assistant message — drives whether the in-chat
+  // slash-command button bar runs the auto-select timer (only the latest
+  // unanswered approval prompt should). Iterates from the tail so we skip
+  // the typing-indicator placeholders that the streaming path appends.
+  const lastAssistantMessageIndex = $derived.by(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && !messages[i].isProgress) return i;
+    }
+    return -1;
+  });
+
+  /**
+   * Fire a slash command (e.g. `/approve`) to Hermes WITHOUT recording it as
+   * a visible user bubble. Backend honours `silent: true` to skip the
+   * orchestratorChats user-row insert (chat/+server.ts).
+   *
+   * Called by SlashCommandButtonBar via the per-message `onSilentSend` prop.
+   * Reuses the same chat endpoint and SSE stream pipeline so Hermes' follow-
+   * up response (e.g. "✅ Command approved …") flows in as a normal
+   * assistant token stream — no special handling required on the recv side.
+   */
+  async function silentSend(command: string): Promise<void> {
+    if (!conversationId) return;
+    if (loading) return;
+
+    loading = true;
+    heartbeat = null;
+
+    const progressId = crypto.randomUUID();
+    messages = [...messages, {
+      id: progressId,
+      role: 'assistant',
+      content: '',
+      isProgress: true,
+      progressSteps: [],
+      toolSteps: [],
+    }];
+    scrollToBottom();
+
+    try {
+      const postRes = await fetch('/api/workflows/orchestrator/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: command,
+          conversationId,
+          silent: true,
+          useIntelContext,
+        }),
+      });
+      const postData = await postRes.json().catch(() => null);
+      if (!postRes.ok) throw new Error(postData?.error || `Server error (${postRes.status})`);
+      const jobId = postData?.jobId;
+      if (!jobId) throw new Error('No job ID returned');
+      currentJobId = jobId;
+
+      let accumulatedContent = '';
+      const onSilentEvent = (data: any) => {
+        if (data.type === 'connected') return;
+        if (data.type === 'token') {
+          accumulatedContent += data.delta;
+          messages = messages.map((m) =>
+            m.id === progressId ? { ...m, content: accumulatedContent, isProgress: false } : m,
+          );
+          scrollToBottom();
+          return;
+        }
+        if (data.type === 'done') {
+          const result = data.result ?? {};
+          const finalMessage = (result.message as string) ?? accumulatedContent;
+          messages = messages.map((m) =>
+            m.id === progressId
+              ? { ...m, isProgress: false, content: finalMessage || m.content }
+              : m,
+          );
+          scrollToBottom();
+          return;
+        }
+        if (data.type === 'error') {
+          messages = messages.map((m) =>
+            m.id === progressId
+              ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown'}` }
+              : m,
+          );
+          return;
+        }
+      };
+
+      chatStream = streamChatJob(jobId, {
+        onEvent: onSilentEvent,
+        onWarning: (w) => { connectionWarning = w; },
+      });
+      try {
+        await chatStream.done;
+      } finally {
+        chatStream = null;
+        loading = false;
+        currentJobId = null;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[silentSend]', errMsg);
+      loading = false;
+      messages = messages.map((m) =>
+        m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
+      );
+    }
+  }
 
   onMount(() => {
     textareaEl?.focus();
@@ -1052,6 +1163,9 @@
                 thinking={msg.thinking}
                 {showThinking}
                 {conversationId}
+                {approvalUi}
+                onSilentSend={msg.role === 'assistant' ? silentSend : undefined}
+                isLatest={msgIndex === lastAssistantMessageIndex}
               />
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />

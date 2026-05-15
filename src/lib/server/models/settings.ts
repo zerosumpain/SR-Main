@@ -79,6 +79,31 @@ export async function resolveChatGlmModel(): Promise<ModelContext> {
   return resolveDefaultModel('chat');
 }
 
+/** /jkai approval-prompt UI behaviour — drives the inline Approve / Deny
+ *  buttons that appear under Hermes' "dangerous command requires approval"
+ *  messages. `defaultAction` is what auto-fires after `autoSelectMs` if the
+ *  user doesn't click; `'none'` disables auto-select (buttons still render,
+ *  user must click). */
+export interface ApprovalUiSettings {
+  defaultAction: 'approve' | 'approve_always' | 'deny' | 'none';
+  autoSelectMs: number;
+}
+
+const APPROVAL_UI_KEY = 'jkai.approval_ui';
+const DEFAULT_APPROVAL_UI: ApprovalUiSettings = {
+  defaultAction: 'none',
+  autoSelectMs: 20_000,
+};
+
+export async function getApprovalUiSettings(): Promise<ApprovalUiSettings> {
+  const v = await getSetting<Partial<ApprovalUiSettings> | null>(APPROVAL_UI_KEY);
+  return { ...DEFAULT_APPROVAL_UI, ...(v ?? {}) };
+}
+
+export async function setApprovalUiSettings(value: ApprovalUiSettings): Promise<void> {
+  await setSetting(APPROVAL_UI_KEY, value);
+}
+
 export async function getOpenRouterApiKey(): Promise<string | undefined> {
   const v = await getSetting<{ value?: string }>('openrouter.api_key');
   if (v?.value) return v.value;

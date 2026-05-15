@@ -1,8 +1,10 @@
 <script lang="ts">
   import { Marked } from 'marked';
   import ThinkingTimeline from './ThinkingTimeline.svelte';
+  import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
+  import type { ApprovalUiSettings } from '$lib/server/models/settings';
 
   let {
     role,
@@ -11,6 +13,9 @@
     thinking,
     showThinking = false,
     conversationId = null,
+    onSilentSend,
+    approvalUi,
+    isLatest = false,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -26,6 +31,9 @@
     thinking?: OrchestratorThinking;
     showThinking?: boolean;
     conversationId?: string | null;
+    onSilentSend?: (command: string) => void | Promise<void>;
+    approvalUi?: ApprovalUiSettings;
+    isLatest?: boolean;
   } = $props();
 
   const marked = new Marked({ gfm: true, breaks: true });
@@ -90,6 +98,14 @@
       <p class="whitespace-pre-wrap">{content}</p>
     {:else}
       <div class="chat-markdown">{@html renderedContent}</div>
+      {#if onSilentSend}
+        <SlashCommandButtonBar
+          {content}
+          {onSilentSend}
+          autoSelect={approvalUi}
+          {isLatest}
+        />
+      {/if}
     {/if}
 
     {#if hasThinking}

@@ -260,6 +260,7 @@
         defaultGlmModelId={data.defaultChatModel.modelId}
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
+        approvalUi={data.approvalUi}
         {useIntelContext}
         {activeBuild}
         onmodelchange={(ctx: ModelContext) => {

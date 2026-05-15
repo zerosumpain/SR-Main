@@ -3,7 +3,7 @@ import { conversations, jkaiBuilds, workflowRuns, workflowSchedules, orchestrato
 import { desc, eq, sql, gte, asc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
-import { resolveDefaultModel, resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
+import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
 
 export const load: PageServerLoad = async () => {
   // Load conversations with preview
@@ -70,9 +70,10 @@ export const load: PageServerLoad = async () => {
     .from(jkaiBuilds);
   const totalSpendUsd = Number(convCostRow?.convCost ?? 0) + Number(buildCostRow?.buildCost ?? 0);
 
-  const [defaultChatModel, chatAltOpenRouterModel] = await Promise.all([
+  const [defaultChatModel, chatAltOpenRouterModel, approvalUi] = await Promise.all([
     resolveDefaultModel('chat'),
     resolveChatAltOpenRouterModel(),
+    getApprovalUiSettings(),
   ]);
 
   return {
@@ -82,5 +83,6 @@ export const load: PageServerLoad = async () => {
     defaultChatModel,
     chatAltOpenRouterModel,
     totalSpendUsd,
+    approvalUi,
   };
 };
