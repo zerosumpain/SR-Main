@@ -4,6 +4,11 @@ export interface HermesClientConfig {
   baseUrl: string;
   bridgeSecret: string;
   defaultExpiryMs?: number;
+  /** Default origin to stamp on outgoing messages when the caller doesn't
+   * pass one. Tells the Hermes-side MCP routing proxy which SvelteKit
+   * host owns this chat's data. */
+  defaultOrigin?: 'vps' | 'homeserv';
+  defaultMcpUrl?: string;
 }
 
 export interface SessionContext {
@@ -15,6 +20,12 @@ export interface SessionContext {
 
 export interface SendMessageRequest extends SessionContext {
   text: string;
+  /** Where this chat originated. Hermes uses it to route MCP tool calls
+   * back to the correct SvelteKit host (VPS or homeserv). Defaults to
+   * the host running this client (see `defaultOrigin` / `defaultMcpUrl`
+   * on the HermesClient config). */
+  origin?: 'vps' | 'homeserv';
+  mcpUrl?: string;
 }
 
 export interface SendMessageResponse {
@@ -77,6 +88,8 @@ export class HermesClient {
         kind: req.kind,
         kind_id: req.kindId,
         session_id: req.sessionId,
+        origin: req.origin ?? this.config.defaultOrigin ?? 'homeserv',
+        mcp_url: req.mcpUrl ?? this.config.defaultMcpUrl ?? 'http://127.0.0.1:5173/api/mcp/local',
       }),
     });
 

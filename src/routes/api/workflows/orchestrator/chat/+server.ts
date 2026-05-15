@@ -29,6 +29,13 @@ const HERMES_ENABLED = env.JKAI_HERMES_CANVAS_CHAT === '1';
 const HERMES_URL = env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790';
 const HERMES_SECRET = env.HERMES_BRIDGE_SECRET ?? '';
 
+// Per-host origin metadata. Hermes runs on homeserv only; when the VPS
+// forwards chats it must tell Hermes "I'm VPS — when you make tool calls,
+// route them back to https://strangeramblings.com/api/mcp/local". The
+// homeserv-local SvelteKit defaults to its own loopback MCP endpoint.
+const HERMES_ORIGIN = (env.JKAI_HERMES_ORIGIN as 'vps' | 'homeserv') ?? 'homeserv';
+const HERMES_MCP_URL = env.JKAI_HERMES_MCP_URL ?? 'http://127.0.0.1:5173/api/mcp/local';
+
 export const POST: RequestHandler = async (event) => {
   if (HERMES_ENABLED) {
     return handleWithHermes(event);
@@ -120,13 +127,13 @@ function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null
 
 async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
   const { request } = reqEvent;
-  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string };
+  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string; silent?: boolean };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const { message, workflowId, conversationId, chatNodeId } = body;
+  const { message, workflowId, conversationId, chatNodeId, silent } = body;
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
   }
@@ -159,8 +166,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // mid-conversation restores the just-sent bubble. Mirrors legacy
   // handleWithLoop persistence (issue #1 from the cross-cutting review).
   // Schema cols: workflowId, conversationId, role, content, metadata (jsonb).
+  //
+  // `silent: true` skips this insert. It's set by UI affordances that send
+  // a slash command on the user's behalf (e.g. the in-chat Approve / Deny
+  // buttons) — the command must reach Hermes but should not clutter the
+  // visible history with `/approve` bubbles the user never typed.
   const userMetadata = chatNodeId ? { chatNodeId } : undefined;
-  if (conversationId) {
+  if (!silent && conversationId) {
     await db.insert(orchestratorChats).values({
       conversationId,
       workflowId: workflowId ?? null,
@@ -168,7 +180,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       content: message,
       metadata: userMetadata,
     });
-  } else if (workflowId) {
+  } else if (!silent && workflowId) {
     await db.insert(orchestratorChats).values({
       workflowId,
       role: 'user',
@@ -180,6 +192,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   const client = new HermesClient({
     baseUrl: HERMES_URL,
     bridgeSecret: HERMES_SECRET,
+    defaultOrigin: HERMES_ORIGIN,
+    defaultMcpUrl: HERMES_MCP_URL,
   });
 
   // Subscribe to tool-step events for THIS workflow's canvas. The MCP

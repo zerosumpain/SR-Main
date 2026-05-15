@@ -226,6 +226,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/mcp* are service-to-service: the routing proxy and the local
+  // dispatcher both authenticate via `Authorization: Bearer
+  // HERMES_BRIDGE_SECRET` inside the handlers themselves. They must
+  // bypass the Auth.js gate so the VPS-originated tool calls from
+  // homeserv's Hermes can land here on the VPS.
+  if (pathname === '/api/mcp' || pathname.startsWith('/api/mcp/')) {
+    return resolve(event);
+  }
+
   // /api/health/workflow-engine is consumed by the systemd watchdog timer
   // (curl from 127.0.0.1) — no user session, no service token. Restrict to
   // loopback to prevent it being scraped externally for run counts.

@@ -1,32 +1,116 @@
-// MCP Streamable HTTP transport endpoint.
+// MCP routing proxy — decides whether a tool call dispatches locally or
+// forwards to a remote SvelteKit host based on the chat's origin.
 //
-// Hermes' MCP client (Python `mcp` SDK ≥ 1.24) speaks JSON-RPC 2.0 over the
-// Streamable HTTP transport per the MCP spec (2025-03-26). The previous
-// hand-rolled GET/POST shape rejected Hermes' `initialize` probe with 403,
-// because it required a Bridge-Token header that the MCP discovery flow
-// quite reasonably doesn't send.
+// Phase 3 of docs/superpowers/plans/2026-05-14-hermes-multi-origin-routing.md.
 //
-// The wire-format logic lives in $lib/mcp/jsonrpc; this file is the SvelteKit
-// adapter that maps Request → dispatchJsonRpc(...) → Response.
+// Hermes runs on homeserv and connects to ONE MCP server at this URL. But a
+// chat can originate from either:
 //
-// Auth model:
-//   - initialize, tools/list, ping, notifications/*   → unauthenticated
-//   - tools/call                                       → Authorization: Bearer
-//                                                        <HERMES_BRIDGE_SECRET>
-//                                                        (constant-time compare;
-//                                                        scope binding happens at
-//                                                        the tool layer)
+//   - homeserv SvelteKit (port 5173 — direct /jkai access on the LAN /
+//     Tailscale) — tools must write to homeserv Postgres
+//   - VPS SvelteKit (strangeramblings.com — production /jkai users) — tools
+//     must write to VPS Postgres
 //
-// Stateless: we don't issue Mcp-Session-Id, don't track sessions, and don't
-// open server-initiated SSE streams. Single POST → single response.
+// Hermes's MCP client doesn't natively distinguish origins. We solve this by:
+//   1. The `jkai_platform` plugin captures `chat_id` from the gateway's
+//      session contextvar and injects it via MCP `params._meta.chat_id`
+//      on every tool call (see Phase 2).
+//   2. The `_meta.chat_id` value lands in this proxy's request body.
+//   3. This proxy looks up the chat's origin in `hermes_chat_origin`
+//      (upserted by the plugin on inbound) and forwards the JSON-RPC to
+//      either `/api/mcp/local` here, or `<vps mcp_url>` on strangeramblings.com.
+//
+// For unauthenticated traffic (initialize, tools/list, ping, notifications/*)
+// or any request without a `_meta.chat_id`, the proxy short-circuits to
+// the local dispatcher — no forwarding overhead on the hot startup path.
 
 import type { RequestHandler } from './$types';
-import { dispatchJsonRpc, parseJsonRpcBody } from '$lib/mcp/jsonrpc';
+import { env } from '$env/dynamic/private';
+import { db } from '$lib/db';
+import { hermesChatOrigin } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 
-// Server-initiated SSE (the GET branch of the Streamable HTTP spec) is
-// optional — clients MUST handle a 405 here and fall back to POST-only.
-// Hermes' client does. Returning 405 keeps the surface honest about what
-// we actually do.
+const LOCAL_DISPATCH_URL =
+  env.JKAI_HERMES_MCP_LOCAL_URL ?? 'http://127.0.0.1:5173/api/mcp/local';
+
+// Per-process LRU cache for chat_id → origin lookups. The proxy lookup is
+// keyed by primary key and runs once per tool call; cache because a chat
+// can fire many tools in quick succession.
+const ORIGIN_CACHE_MAX = 1000;
+const ORIGIN_CACHE_TTL_MS = 5 * 60 * 1000;
+type CacheEntry = { mcpUrl: string; expiresAt: number };
+const originCache = new Map<string, CacheEntry>();
+
+function readCache(chatId: string): string | null {
+  const hit = originCache.get(chatId);
+  if (!hit) return null;
+  if (hit.expiresAt < Date.now()) {
+    originCache.delete(chatId);
+    return null;
+  }
+  // Refresh LRU position.
+  originCache.delete(chatId);
+  originCache.set(chatId, hit);
+  return hit.mcpUrl;
+}
+
+function writeCache(chatId: string, mcpUrl: string): void {
+  if (originCache.size >= ORIGIN_CACHE_MAX) {
+    const oldest = originCache.keys().next().value;
+    if (oldest !== undefined) originCache.delete(oldest);
+  }
+  originCache.set(chatId, { mcpUrl, expiresAt: Date.now() + ORIGIN_CACHE_TTL_MS });
+}
+
+async function lookupMcpUrl(chatId: string): Promise<string | null> {
+  const cached = readCache(chatId);
+  if (cached) return cached;
+  const [row] = await db
+    .select({ mcpUrl: hermesChatOrigin.mcpUrl })
+    .from(hermesChatOrigin)
+    .where(eq(hermesChatOrigin.chatId, chatId))
+    .limit(1);
+  if (!row) return null;
+  writeCache(chatId, row.mcpUrl);
+  return row.mcpUrl;
+}
+
+// Best-effort extraction of `params._meta.chat_id` from the raw body. We
+// avoid throwing on malformed JSON — that case is the local dispatcher's
+// problem to surface as a 400.
+function extractChatId(raw: string): string | null {
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v)) {
+      for (const entry of v) {
+        const cid = entry?.params?._meta?.chat_id;
+        if (typeof cid === 'string' && cid) return cid;
+      }
+      return null;
+    }
+    const cid = v?.params?._meta?.chat_id;
+    return typeof cid === 'string' && cid ? cid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function forwardRaw(targetUrl: string, headers: Headers, body: string): Promise<Response> {
+  // Forward the bearer + content-type. Everything else (cookies, X-Forwarded-*, etc.)
+  // is stripped — this is server-to-server over Tailscale.
+  const fwdHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+  const auth = headers.get('Authorization');
+  if (auth) fwdHeaders['Authorization'] = auth;
+  const resp = await fetch(targetUrl, { method: 'POST', headers: fwdHeaders, body });
+  // Preserve status and content-type from the upstream so JSON-RPC error
+  // shapes round-trip cleanly.
+  const respBody = await resp.text();
+  return new Response(respBody, {
+    status: resp.status,
+    headers: { 'Content-Type': resp.headers.get('content-type') ?? 'application/json' },
+  });
+}
+
 export const GET: RequestHandler = () => {
   return new Response('Method Not Allowed', {
     status: 405,
@@ -34,58 +118,24 @@ export const GET: RequestHandler = () => {
   });
 };
 
-// Stateless mode: there are no sessions to delete, but the spec says clients
-// MAY send DELETE on shutdown; we acknowledge with 405 (per spec, this means
-// "the server does not allow clients to terminate sessions" — accurate here
-// since we don't have any to terminate).
 export const DELETE: RequestHandler = () => {
   return new Response('Method Not Allowed', { status: 405 });
 };
 
-function extractBearer(authHeader: string | null): string {
-  if (!authHeader) return '';
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : '';
-}
-
 export const POST: RequestHandler = async ({ request }) => {
-  const authBearer = extractBearer(request.headers.get('Authorization'));
   const raw = await request.text();
-  const parsed = parseJsonRpcBody(raw);
-  if (!parsed.ok) {
-    return new Response(JSON.stringify(parsed.error), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const chatId = extractChatId(raw);
+
+  // No chat context (initialize, tools/list, ping, etc.) → straight to local.
+  if (!chatId) return forwardRaw(LOCAL_DISPATCH_URL, request.headers, raw);
+
+  const mcpUrl = await lookupMcpUrl(chatId);
+  if (!mcpUrl) {
+    // chat_id present but unknown — likely a chat that started before the
+    // plugin began recording origins, or a stale cache miss. Fall back to
+    // local; this matches the pre-Phase-3 behaviour.
+    return forwardRaw(LOCAL_DISPATCH_URL, request.headers, raw);
   }
 
-  // The spec also permits a JSON-RPC batch (array) of requests/notifications.
-  // Hermes' SDK does not currently batch the initialize handshake, and our
-  // single-request path covers everything Hermes sends today. Handle batch
-  // by dispatching each entry and concatenating responses; pure-notification
-  // batches still collapse to 202.
-  if (Array.isArray(parsed.value)) {
-    const responses = [];
-    for (const entry of parsed.value) {
-      const result = await dispatchJsonRpc(entry, { authBearer });
-      if (result.response) responses.push(result.response);
-    }
-    if (responses.length === 0) {
-      return new Response(null, { status: 202 });
-    }
-    return new Response(JSON.stringify(responses), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const result = await dispatchJsonRpc(parsed.value, { authBearer });
-  if (!result.response) {
-    // Pure notification (no id) — spec requires 202 Accepted with no body.
-    return new Response(null, { status: 202 });
-  }
-  return new Response(JSON.stringify(result.response), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return forwardRaw(mcpUrl, request.headers, raw);
 };

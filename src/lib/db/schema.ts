@@ -1572,4 +1572,21 @@ export const hermesSessions = pgTable('hermes_sessions', {
 
 export type HermesSessionRow = typeof hermesSessions.$inferSelect;
 
+// ── Hermes chat origin ───────────────────────────────────────────────────
+// Records which SvelteKit host a given chat_id originated on so the
+// homeserv-side `/api/mcp` routing proxy can forward tool calls back to
+// the correct backend. Written on inbound by the jkai_platform plugin
+// (Phase 3 of docs/superpowers/plans/2026-05-14-hermes-multi-origin-routing.md);
+// read by `/api/mcp/+server.ts`.
+
+export const hermesChatOrigin = pgTable('hermes_chat_origin', {
+  chatId: text('chat_id').primaryKey(),
+  origin: text('origin', { enum: ['vps', 'homeserv'] }).notNull(),
+  mcpUrl: text('mcp_url').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type HermesChatOriginRow = typeof hermesChatOrigin.$inferSelect;
+
 export type CurateSessionRow = typeof curateSessions.$inferSelect;
