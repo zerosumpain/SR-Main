@@ -193,11 +193,17 @@ export async function dispatchJsonRpc(
       }
 
       case 'tools/call': {
-        const params = msg.params as { name?: unknown; arguments?: unknown } | undefined;
+        const params = msg.params as
+          | { name?: unknown; arguments?: unknown; _meta?: unknown }
+          | undefined;
         const name = typeof params?.name === 'string' ? params.name : '';
         const args =
           params?.arguments && typeof params.arguments === 'object'
             ? (params.arguments as Record<string, unknown>)
+            : {};
+        const meta =
+          params?._meta && typeof params._meta === 'object'
+            ? (params._meta as Record<string, unknown>)
             : {};
 
         if (!name) {
@@ -214,17 +220,22 @@ export async function dispatchJsonRpc(
           };
         }
 
-        // Surface this tool call to any canvas SSE subscribers listening on
-        // this workflow_id. The Hermes branch of /api/workflows/orchestrator/
-        // chat subscribes for the duration of its SSE response and forwards
-        // these as `tool_start`/`tool_result` events so the canvas UI's
-        // tool-step panel mirrors what the legacy loop.ts path already shows.
-        const workflowId = String(args.workflow_id ?? args.workflowId ?? '');
+        // Surface this tool call to SSE subscribers (the canvas tool-step
+        // panel + the general /jkai chat's attachment promoter). Canvas
+        // chats pass `workflow_id` in the tool args; general /jkai chats
+        // have no canvas, so Hermes' jkai_platform plugin injects the
+        // chat_id into `params._meta.chat_id` (Phase 2 of the multi-origin
+        // routing work). The chat-handler's `subscribeToolSteps(chatId,…)`
+        // matches the latter; canvas subscribers continue to match the
+        // former.
+        const busKey = String(
+          args.workflow_id ?? args.workflowId ?? meta.chat_id ?? '',
+        );
         const stepId = `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const startSummary = workflowId ? summarizeRunningTool(name, args) : '';
-        if (workflowId) {
+        const startSummary = busKey ? summarizeRunningTool(name, args) : '';
+        if (busKey) {
           publishToolStep({
-            workflowId,
+            workflowId: busKey,
             stepId,
             phase: 'started',
             tool: name,
@@ -236,7 +247,7 @@ export async function dispatchJsonRpc(
 
         try {
           const out = await executeTool(name, args, { emit: () => {} });
-          if (workflowId) {
+          if (busKey) {
             const raw = typeof out === 'string' ? out : JSON.stringify(out);
             const preview = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
             const status: 'done' | 'error' =
@@ -249,7 +260,7 @@ export async function dispatchJsonRpc(
               status,
             });
             publishToolStep({
-              workflowId,
+              workflowId: busKey,
               stepId,
               phase: status === 'error' ? 'failed' : 'completed',
               tool: name,
@@ -275,9 +286,9 @@ export async function dispatchJsonRpc(
           };
         } catch (err) {
           const message = err instanceof Error ? err.message : 'unknown error';
-          if (workflowId) {
+          if (busKey) {
             publishToolStep({
-              workflowId,
+              workflowId: busKey,
               stepId,
               phase: 'failed',
               tool: name,
