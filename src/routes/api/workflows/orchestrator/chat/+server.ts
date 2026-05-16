@@ -281,6 +281,17 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // NOTE: turnAttachments is hoisted above (outer scope) so both the
       // tool-step subscriber and this stream pump can contribute to it.
 
+      // Hermes' framework injects a one-time "📬 No home channel is set
+      // for Jkai…" onboarding notice at the start of any chat whose
+      // platform isn't wired into the cron / cross-platform delivery map.
+      // It's a meta-notification, not an agent reply — but it arrives as a
+      // plain `send` frame and would otherwise (a) be streamed to the chat
+      // UI as a token bubble, (b) get concatenated into `partialResponse`
+      // and persisted as the *start* of the assistant row, and (c) drag any
+      // turn-emitted attachments onto that row instead of the actual reply.
+      // Suppress it.
+      const HERMES_HOME_CHANNEL_NOTICE_PREFIX = '📬 No home channel is set for Jkai';
+
       for await (const frame of client.openStream({
         chatId,
         kind,
@@ -288,6 +299,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       })) {
         if (abortController.signal.aborted) break;
+        if (
+          (frame.kind === 'send' || frame.kind === 'replace') &&
+          frame.content.startsWith(HERMES_HOME_CHANNEL_NOTICE_PREFIX)
+        ) {
+          continue;
+        }
         // Try every frame — `extractAttachmentFromFrame` returns null when
         // `frame.attachment` is absent, so text-bubble frames (send / replace /
         // finalize) are no-ops here, while image / audio / video / pdf /
