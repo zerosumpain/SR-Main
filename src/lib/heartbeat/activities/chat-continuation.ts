@@ -29,6 +29,17 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\bplease (provide|share|specify|confirm|tell me)\b/i,
 ];
 
+/** Patterns indicating the assistant is mid-task (subagent loop / streaming
+ *  status / "still working" interleaves). These turns aren't paused — they're
+ *  in the middle of a long-running iteration the user can see is progressing,
+ *  so the heartbeat must not nudge them as if the orchestrator had stopped. */
+const IN_PROGRESS_PATTERNS: RegExp[] = [
+  /⏳\s*still working/i,
+  /\biter(?:ation)?\s+\d+\s*\/\s*\d+\b/i,
+  /\bwaiting for provider response\b/i,
+  /\b(running|processing|generating|fetching|streaming)\b[^.\n!?]{0,80}(\.\.\.|…)\s*$/im,
+];
+
 interface CCConfig {
   /** Don't act on conversations whose last assistant message is older than this. */
   maxStaleMinutes?: number;
@@ -47,7 +58,19 @@ const DEFAULTS: Required<CCConfig> = {
   maxLlmContinuationsPer24h: 6,
 };
 
-function classify(content: string): 'benign' | 'blocked' | 'questioning' | 'silent' {
+/** A 'silent' pause this short almost always means the user is reading the
+ *  assistant's reply. The user-trigger LLM call is expensive (~1500 prompt
+ *  tokens) and the visible "[heartbeat] checking in…" turn-pair clutters the
+ *  thread for no benefit. 6 minutes is the floor before we'll consider a
+ *  closed-looking turn to be genuinely waiting. */
+const SILENT_MIN_STALE_MS = 6 * 60_000;
+/** Recent tool-step or token activity on a job for this conversation means
+ *  Hermes is actively working in the background. Skip pulse even if the most
+ *  recent SvelteKit chat job has finalised. */
+const RECENT_ACTIVITY_WINDOW_MS = 90_000;
+
+export function classify(content: string): 'benign' | 'blocked' | 'questioning' | 'silent' | 'in_progress' {
+  if (IN_PROGRESS_PATTERNS.some((r) => r.test(content))) return 'in_progress';
   if (BLOCKED_PATTERNS.some((r) => r.test(content))) return 'blocked';
   if (BENIGN_CONTINUATION_PATTERNS.some((r) => r.test(content))) return 'benign';
   if (QUESTION_PATTERNS.some((r) => r.test(content))) return 'questioning';
@@ -106,11 +129,19 @@ export const chatContinuation: ActivityHandler = {
     }
 
     // 2. Filter out conversations with an active job in the in-memory job-store.
-    const activeJobConvIds = new Set(
-      listJobs()
-        .filter((j) => j.status === 'running' && j.conversationId)
-        .map((j) => j.conversationId as string),
-    );
+    // We also treat *recently active* jobs (any status, lastEventAt within
+    // RECENT_ACTIVITY_WINDOW_MS) as in-flight: Hermes may have finalised a
+    // SvelteKit-side job while still iterating on a subagent internally, and
+    // a flurry of tool-step events through the bus updates `lastEventAt`
+    // even after the formal `status === 'running'` window ends.
+    const allJobs = listJobs();
+    const activeJobConvIds = new Set<string>();
+    for (const j of allJobs) {
+      if (!j.conversationId) continue;
+      const isRunning = j.status === 'running';
+      const isRecentlyActive = now - j.lastEventAt < RECENT_ACTIVITY_WINDOW_MS;
+      if (isRunning || isRecentlyActive) activeJobConvIds.add(j.conversationId);
+    }
 
     // 3. Filter out conversations we've already pulsed within the cooldown.
     const recentPulses = await db
@@ -156,6 +187,17 @@ export const chatContinuation: ActivityHandler = {
       if (meta?.heartbeat?.activity === NAME) { skippedReasons.lastWasHeartbeat = (skippedReasons.lastWasHeartbeat ?? 0) + 1; continue; }
 
       const cls = classify(row.content);
+      // Silent pauses need a longer reading window than question/blocked
+      // nudges. If the user's been quiet for less than SILENT_MIN_STALE_MS,
+      // they're almost certainly still reading the previous reply.
+      if (cls === 'silent' && ageMs < SILENT_MIN_STALE_MS) {
+        skippedReasons.silentTooFresh = (skippedReasons.silentTooFresh ?? 0) + 1;
+        continue;
+      }
+      if (cls === 'in_progress') {
+        skippedReasons.inProgress = (skippedReasons.inProgress ?? 0) + 1;
+        continue;
+      }
       try {
         if (cls === 'benign') {
           const usedLlm24h = llmCountBy.get(convId) ?? 0;

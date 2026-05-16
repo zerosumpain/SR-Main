@@ -227,6 +227,14 @@
           scrollToBottom();
           return;
         }
+        if (data.type === 'replace_bubble') {
+          accumulatedContent = data.content;
+          messages = messages.map((m) =>
+            m.id === progressId ? { ...m, content: accumulatedContent, isProgress: false } : m,
+          );
+          scrollToBottom();
+          return;
+        }
         if (data.type === 'done') {
           const result = data.result ?? {};
           const finalMessage = (result.message as string) ?? accumulatedContent;
@@ -643,6 +651,16 @@
           if (data.type === 'token') {
             heartbeat = null;
             accumulatedContent += data.delta;
+            messages = messages.map((m) =>
+              m.id === progressId ? { ...m, content: accumulatedContent } : m,
+            );
+            scrollToBottom();
+            return;
+          }
+
+          if (data.type === 'replace_bubble') {
+            heartbeat = null;
+            accumulatedContent = data.content;
             messages = messages.map((m) =>
               m.id === progressId ? { ...m, content: accumulatedContent } : m,
             );

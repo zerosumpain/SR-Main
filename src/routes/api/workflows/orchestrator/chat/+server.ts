@@ -81,8 +81,9 @@ type AssistantAttachment = {
 function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
   switch (frame.kind) {
     case 'send':
-    case 'replace':
       return [{ type: 'token', delta: frame.content }];
+    case 'replace':
+      return [{ type: 'replace_bubble', content: frame.content }];
     case 'finalize':
       // The jkai adapter emits a synthetic `finalize` with empty content
       // once `handle_message` finishes — the actual reply text has already
@@ -314,6 +315,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         for (const ev of adaptFrameToCanvasSse(frame)) {
           if (ev.type === 'token' && typeof ev.delta === 'string') {
             job.partialResponse += ev.delta;
+          } else if (ev.type === 'replace_bubble') {
+            // Hermes asked us to swap out the in-flight bubble. The previous
+            // `partialResponse` is now obsolete — reset to the new content so
+            // the eventual finalize doesn't carry stacked duplicates.
+            job.partialResponse = ev.content;
           }
           publishJobEvent(jobId, ev);
         }
