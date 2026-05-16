@@ -246,7 +246,27 @@ export async function dispatchJsonRpc(
         }
 
         try {
-          const out = await executeTool(name, args, { emit: () => {} });
+          const out = await executeTool(name, args, {
+            emit: (msg: string) => {
+              // Heavyweight tools (workflow_create, generateWorkflow's internal
+              // loop) can run for minutes. The Streamable HTTP transport buffers
+              // the JSON-RPC response, so without this bridge every emit() call
+              // would be invisible to the user. Forwarding emits as `progress`
+              // events onto the in-process bus lets the chat-route subscriber
+              // turn them into live `status` SSE frames.
+              if (!busKey) return;
+              const text = typeof msg === 'string' ? msg.trim() : '';
+              if (!text) return;
+              publishToolStep({
+                workflowId: busKey,
+                stepId,
+                phase: 'progress',
+                tool: name,
+                summary: text,
+                ts: Date.now(),
+              });
+            },
+          });
           if (busKey) {
             const raw = typeof out === 'string' ? out : JSON.stringify(out);
             const preview = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;

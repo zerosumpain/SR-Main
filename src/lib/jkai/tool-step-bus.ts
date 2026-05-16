@@ -21,8 +21,14 @@
 
 export interface ToolStepEvent {
   workflowId: string;
-  stepId: string;          // unique per call, used to correlate started ↔ completed/failed
-  phase: 'started' | 'completed' | 'failed';
+  stepId: string;          // unique per call, used to correlate started ↔ progress*/completed/failed
+  // `progress` is emitted mid-call from inside the tool handler (via the ctx.emit
+  // channel) so the chat UI can stream "Planning workflow…", "Reviewing…",
+  // "Saving the finished canvas…" updates while a long-running tool is still in
+  // flight. The MCP Streamable HTTP transport buffers the JSON-RPC response, but
+  // this in-process bus bypasses it — subscribers on the same Node process see
+  // progress events the moment they fire.
+  phase: 'started' | 'progress' | 'completed' | 'failed';
   tool: string;
   args?: Record<string, unknown>;
   resultPreview?: string;   // truncated for UI display

@@ -52,9 +52,11 @@ register({
     const emit = ctx?.emit ?? (() => {});
 
     const description = args.description as string;
-    // Wrapper kickoff — kept distinct from the generator's "Planning workflow"
-    // line so the two don't read as a near-duplicate emission.
-    emit('Spinning up the workflow generator — about to plan the structure.');
+    // Wrapper kickoff — fires before any LLM call so the user sees activity
+    // immediately. generateWorkflow runs a multi-stage LLM loop that can take
+    // 30-90s; without this pre-emit the chat sits silent until the first
+    // internal "Planning workflow" chunk lands.
+    emit('Generating a new workflow — planning structure now. This usually takes 30-90 seconds.');
     // generateWorkflow already emits internal chunks (Planning..., Reviewing...,
     // Revising..., Registering new node types...). Pipe each non-trivial chunk
     // up to the orchestrator as a `status` event so the user sees progress.

@@ -226,6 +226,16 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       });
       return;
     }
+    if (e.phase === 'progress') {
+      // Long-running tools (workflow_create + generateWorkflow's internal loop)
+      // emit free-text progress chunks via ctx.emit. The MCP dispatcher routes
+      // them onto the bus as `progress` events; surface them as `status` so the
+      // chat UI's existing status-bubble path renders them inline.
+      if (e.summary) {
+        publishJobEvent(jobId, { type: 'status', text: e.summary });
+      }
+      return;
+    }
     // completed | failed → tool_result
     publishJobEvent(jobId, {
       type: 'tool_result',
