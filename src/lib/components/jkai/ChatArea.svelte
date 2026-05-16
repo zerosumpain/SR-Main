@@ -108,6 +108,12 @@
     progressSteps?: string[];
     toolSteps?: ToolStep[];
     source?: string;
+    /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
+     *  reloaded history, `new Date().toISOString()` stamped at the moment
+     *  the message lands in the in-memory list for live turns). Used by
+     *  ChatMessage.svelte to render a per-bubble timestamp and inter-bubble
+     *  gaps so John can eyeball response latency. */
+    createdAt?: string;
     attachments?: Array<{
       id: string;
       kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
@@ -189,6 +195,7 @@
       isProgress: true,
       progressSteps: [],
       toolSteps: [],
+      createdAt: new Date().toISOString(),
     }];
     scrollToBottom();
 
@@ -446,6 +453,10 @@
         // Hydrate tool steps from stored metadata so the drawer persists across reloads
         toolSteps: meta?.toolSteps,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
+        // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
+        // mark + an inter-bubble gap. Falls back to undefined for legacy
+        // rows without createdAt.
+        createdAt: m.createdAt,
       };
     });
     // Jump instantly to the latest message on initial load / conversation switch.
@@ -583,6 +594,7 @@
       content: text,
       source: 'web',
       attachments: userAttachments.length > 0 ? userAttachments : undefined,
+      createdAt: new Date().toISOString(),
     };
     messages = [...messages, userMsg];
     scrollToBottom();
@@ -596,6 +608,7 @@
       isProgress: true,
       progressSteps: [],
       toolSteps: [],
+      createdAt: new Date().toISOString(),
     }];
     scrollToBottom();
 
@@ -681,6 +694,7 @@
               role: 'assistant',
               content: data.text,
               source: 'status_update',
+              createdAt: new Date().toISOString(),
             };
             const progressIdx = messages.findIndex((m) => m.isProgress);
             if (progressIdx >= 0) {
@@ -821,6 +835,11 @@
               source: 'web',
               toolSteps: prior?.toolSteps,
               attachments: result.attachments ?? undefined,
+              // Preserve the moment the progress bubble first appeared (set
+              // when the user pressed send) so the rendered "↳ Xs" gap
+              // reflects round-trip latency, not the moment the final
+              // message was assembled.
+              createdAt: prior?.createdAt ?? new Date().toISOString(),
             };
             messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
             scrollToBottom();
@@ -1166,6 +1185,8 @@
                 {approvalUi}
                 onSilentSend={msg.role === 'assistant' ? silentSend : undefined}
                 isLatest={msgIndex === lastAssistantMessageIndex}
+                createdAt={msg.createdAt}
+                prevCreatedAt={msgIndex > 0 ? messages[msgIndex - 1].createdAt : undefined}
               />
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />

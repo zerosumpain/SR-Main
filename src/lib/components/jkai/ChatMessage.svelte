@@ -16,6 +16,8 @@
     onSilentSend,
     approvalUi,
     isLatest = false,
+    createdAt,
+    prevCreatedAt,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -34,7 +36,48 @@
     onSilentSend?: (command: string) => void | Promise<void>;
     approvalUi?: ApprovalUiSettings;
     isLatest?: boolean;
+    /** ISO timestamp the bubble was created. Drives the "10:42:13" wall-clock
+     *  mark rendered under each bubble. */
+    createdAt?: string;
+    /** ISO timestamp of the bubble immediately before this one in the
+     *  thread. Used to render an "↳ Xs after" gap so John can eyeball
+     *  response latency between consecutive bubbles without doing the
+     *  subtraction in his head. */
+    prevCreatedAt?: string;
   } = $props();
+
+  function formatClockTime(iso: string | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function formatGap(prev: string | undefined, curr: string | undefined): string {
+    if (!prev || !curr) return '';
+    const a = new Date(prev).getTime();
+    const b = new Date(curr).getTime();
+    if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return '';
+    const ms = b - a;
+    if (ms < 1000) return `+${ms}ms`;
+    if (ms < 60_000) return `+${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3_600_000) {
+      const m = Math.floor(ms / 60_000);
+      const s = Math.round((ms % 60_000) / 1000);
+      return s > 0 ? `+${m}m ${s}s` : `+${m}m`;
+    }
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.round((ms % 3_600_000) / 60_000);
+    return m > 0 ? `+${h}h ${m}m` : `+${h}h`;
+  }
+
+  let clockTime = $derived(formatClockTime(createdAt));
+  let gap = $derived(formatGap(prevCreatedAt, createdAt));
 
   const marked = new Marked({ gfm: true, breaks: true });
 
@@ -77,7 +120,7 @@
   });
 </script>
 
-<div class="flex {isUser ? 'justify-end' : 'justify-start'} mb-3">
+<div class="flex flex-col {isUser ? 'items-end' : 'items-start'} mb-3">
   <div
     class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
     class:hb-msg={!!heartbeat}
@@ -132,9 +175,31 @@
       </div>
     {/if}
   </div>
+  {#if clockTime}
+    <div class="msg-timestamp">
+      <span class="ts-clock">{clockTime}</span>
+      {#if gap}<span class="ts-gap" title="Time since the previous bubble">{gap}</span>{/if}
+    </div>
+  {/if}
 </div>
 
 <style>
+  .msg-timestamp {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    line-height: 1;
+  }
+  .ts-clock {
+    letter-spacing: 0.04em;
+  }
+  .ts-gap {
+    opacity: 0.7;
+  }
   .chat-markdown :global(p) {
     margin: 0 0 0.5em;
   }
