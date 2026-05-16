@@ -178,6 +178,24 @@ function getOutputSchema(type: string, config: Record<string, unknown>): JsonSch
   return { type: 'object' };
 }
 
+/**
+ * Synchronous structural + semantic verification of a workflow's nodes/edges.
+ * Wraps `verifyWorkflow` from ./verify with the registry-backed dependency
+ * lookups so site-tool callers (e.g. workflow_create) can run a one-shot
+ * sanity check post-save without re-importing the orchestrator internals.
+ */
+export function runWorkflowVerification(
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+) {
+  return verifyWorkflow(
+    nodes,
+    edges,
+    (type) => registry.getDefinition(type),
+    getOutputSchema,
+  );
+}
+
 function getToolCallDeps(): ToolCallDeps {
   const builtinTypes = new Set(nodeDefinitions.map(d => d.type));
   return {
@@ -752,6 +770,46 @@ export async function generateWorkflow(
       nodeId: i.nodeId,
       description: `${i.severity}: ${i.message}`,
     }));
+  }
+
+  // Post-build escalation (chat path only). The skipVerification=true caller
+  // intentionally hides verify_workflow from the planning loop to keep latency
+  // around ~1 min — but a sync sweep at the end is cheap and catches the
+  // common gaps (empty whatsapp.message, http-request POST without body,
+  // missing email recipient, etc.). If any issues are found, run ONE targeted
+  // revision round to fix them by name; if they remain, save anyway and let
+  // the caller surface them to the user.
+  if (opts?.skipVerification) {
+    const lateIssues = runWorkflowVerification(finalWorkflow.nodes, finalWorkflow.edges);
+    if (lateIssues.length > 0) {
+      onChunk?.(`Post-build check: ${lateIssues.length} config issue(s) — asking the builder to fix.\n`);
+      const issuesSummary = formatIssues(lateIssues);
+      const workflowSummary = JSON.stringify({
+        name: finalWorkflow.name,
+        nodes: finalWorkflow.nodes.map(n => ({ id: n.id, type: n.type, label: n.label, config: n.config })),
+        edges: finalWorkflow.edges.map(e => ({ source: e.sourceNodeId, target: e.targetNodeId, sourceHandle: e.sourceHandle })),
+      }, null, 2);
+      const escalateSystem = `${buildRevisionPrompt(opts)}\n\n## Node Registry\n\n${grounding}`;
+      try {
+        const escResult = await runToolLoop(
+          escalateSystem,
+          `## Existing Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Issues To Fix\n\n${issuesSummary}\n\nFix ONLY these specific issues with use_node calls — set the missing/incorrect config fields. Do not add new nodes or rewire. Call finalize_workflow when done.`,
+          [],
+          onChunk,
+          finalDraft,
+          workflowId,
+          opts,
+        );
+        if (escResult.draft.nodes.size > 0) {
+          finalDraft = escResult.draft;
+          finalWorkflow = assembleWorkflow(finalDraft, escResult.name || finalWorkflow.name, escResult.description || finalWorkflow.description);
+          onChunk?.('Escalation round complete — workflow ready to save.\n');
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        onChunk?.(`Escalation round failed: ${msg} — proceeding with the pre-escalation workflow.\n`);
+      }
+    }
   }
 
   if (finalDraft.newNodeTypes.length > 0) {

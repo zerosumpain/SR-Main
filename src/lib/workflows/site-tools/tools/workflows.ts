@@ -14,6 +14,97 @@ import { desc, eq, asc, and, or, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
 import { slugify } from '$lib/canvas/slug';
 
+type SummaryNode = { id: string; type: string; label: string; config: Record<string, unknown> };
+type SummaryEdge = { sourceNodeId: string; targetNodeId: string };
+type SummaryIssue = { nodeId: string; nodeLabel: string; field: string; issue: string; severity: 'error' | 'warning' };
+
+/**
+ * Render a single config value for inline display in chat. Trims strings to
+ * 80 chars (keeps the markdown bullet readable on phones), stringifies objects/
+ * arrays, and represents undefined/empty as `<unset>` so the user can see what's
+ * missing without having to open the canvas.
+ */
+function formatConfigValue(v: unknown): string {
+  if (v == null || v === '') return '<unset>';
+  if (typeof v === 'string') return v.length > 80 ? v.slice(0, 77) + '…' : v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  const s = JSON.stringify(v);
+  return s.length > 80 ? s.slice(0, 77) + '…' : s;
+}
+
+function formatNodeConfigInline(cfg: Record<string, unknown>): string {
+  const entries = Object.entries(cfg ?? {});
+  if (entries.length === 0) return '_no config_';
+  return entries
+    .map(([k, v]) => `\`${k}=${formatConfigValue(v)}\``)
+    .join(', ');
+}
+
+/**
+ * Trace edges from any root (a node with no incoming edge) and produce a
+ * compact "A → B → C" string. Falls through to a comma list if the graph
+ * doesn't reduce to chains.
+ */
+function buildFlowDiagram(nodes: SummaryNode[], edges: SummaryEdge[]): string {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const inDeg = new Map<string, number>();
+  for (const n of nodes) inDeg.set(n.id, 0);
+  for (const e of edges) inDeg.set(e.targetNodeId, (inDeg.get(e.targetNodeId) ?? 0) + 1);
+  const roots = nodes.filter(n => (inDeg.get(n.id) ?? 0) === 0);
+  if (roots.length === 0) return nodes.map(n => n.label).join(', ');
+  const chains: string[] = [];
+  for (const root of roots) {
+    const chain: string[] = [];
+    let cur: SummaryNode | undefined = root;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      chain.push(cur.label);
+      const next = edges.find(e => e.sourceNodeId === cur!.id);
+      cur = next ? byId.get(next.targetNodeId) : undefined;
+    }
+    chains.push(chain.join(' → '));
+  }
+  return chains.join('  \n');
+}
+
+function buildWorkflowSummaryMarkdown(opts: {
+  linkLabel: string;
+  url: string;
+  description?: string;
+  nodes: SummaryNode[];
+  edges: SummaryEdge[];
+  issues: SummaryIssue[];
+}): string {
+  const { linkLabel, url, description, nodes, edges, issues } = opts;
+  const out: string[] = [];
+  out.push(`**[${linkLabel}](${url})** — ${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}`);
+  if (description) {
+    out.push('');
+    out.push(`> ${description.replace(/\n/g, ' ').trim()}`);
+  }
+  out.push('');
+  out.push('**Nodes**');
+  nodes.forEach((n, i) => {
+    out.push(`${i + 1}. \`${n.type}\` **${n.label}** — ${formatNodeConfigInline(n.config)}`);
+  });
+  out.push('');
+  out.push('**Flow** ' + buildFlowDiagram(nodes, edges));
+  if (issues.length > 0) {
+    const errors = issues.filter(i => i.severity === 'error');
+    const warnings = issues.filter(i => i.severity === 'warning');
+    out.push('');
+    out.push('> ⚠ **Needs attention on the canvas**');
+    for (const i of errors) {
+      out.push(`> - **${i.nodeLabel}** · \`${i.field}\` — ${i.issue}`);
+    }
+    for (const i of warnings) {
+      out.push(`> - ${i.nodeLabel} · \`${i.field}\` — ${i.issue} _(warning)_`);
+    }
+  }
+  return out.join('\n');
+}
+
 // ==========================================
 // Existing Tools (moved)
 // ==========================================
@@ -31,10 +122,13 @@ register({
     'Supported node types: trigger, chat, llm-call, llm-agent, text-parser, ' +
     'transform, http-request, conditional, delay, intel-write, intel-query, ' +
     'data-store, whatsapp, email, blog, home-assistant, and more. ' +
-    'CRITICAL: when you share a link to the canvas in your reply, paste the EXACT ' +
-    '`data.linkMarkdown` value verbatim. Do NOT construct your own URL, do NOT use ' +
-    'data.workflowId in a URL, do NOT invent a slug. The slug returned is the only ' +
-    'one that resolves — any other URL will 404.',
+    'CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply. It contains the ' +
+    'canvas link, the description, every node with its actual saved config, the ' +
+    'flow diagram, and any "Needs attention" issues that the user must fix on the ' +
+    'canvas. Do NOT rewrite it, do NOT summarise it further, do NOT construct your ' +
+    'own URL or guess at the config — the markdown reflects the workflow that was ' +
+    'actually persisted to the database. After pasting, you can add one short ' +
+    'follow-up sentence (e.g. "Want me to open it?") but never replace the markdown.',
   parameters: {
     type: 'object',
     properties: {
@@ -125,7 +219,11 @@ register({
     // we created the workflow row then deleted it on error — which cascade-
     // wiped every row referencing that id. A rolled-back transaction leaves
     // no row to reference in the first place.
-    let created: { id: string };
+    let created: {
+      id: string;
+      finalNodes: import('$lib/workflows/types').WorkflowNodeDef[];
+      finalEdges: import('$lib/workflows/types').WorkflowEdgeDef[];
+    };
     try {
       created = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -205,7 +303,7 @@ register({
           );
         }
 
-        return { id: row.id };
+        return { id: row.id, finalNodes: nodes, finalEdges: edges };
       });
     } catch (dbErr: unknown) {
       const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
@@ -215,6 +313,33 @@ register({
     const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
     const url = `${baseUrl}/jkai/canvas/${slug}`;
     const linkLabel = workflow.name || slug;
+
+    // Final sync verification against the persisted nodes/edges. generateWorkflow
+    // already ran an escalation round if skipVerification was on; this catches
+    // anything that survived (e.g. the LLM couldn't satisfy a particular gap)
+    // so we can flag it in the chat reply.
+    const { runWorkflowVerification } = await import('$lib/workflows/orchestrator');
+    const issues = runWorkflowVerification(created.finalNodes, created.finalEdges) as SummaryIssue[];
+
+    const summaryNodes: SummaryNode[] = created.finalNodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      label: n.label,
+      config: n.config ?? {},
+    }));
+    const summaryEdges: SummaryEdge[] = created.finalEdges.map(e => ({
+      sourceNodeId: e.sourceNodeId,
+      targetNodeId: e.targetNodeId,
+    }));
+    const summaryMarkdown = buildWorkflowSummaryMarkdown({
+      linkLabel,
+      url,
+      description: workflow.description,
+      nodes: summaryNodes,
+      edges: summaryEdges,
+      issues,
+    });
+
     return {
       success: true,
       data: {
@@ -225,10 +350,15 @@ register({
         explanation: workflow.explanation,
         nodeCount: workflow.nodes.length,
         url,
-        // Ready-to-paste markdown — model should use this verbatim in its reply.
-        // Avoids the class of bug where the model invents a slug or uses
-        // workflowId in the URL.
+        // Ready-to-paste markdown — model pastes this VERBATIM. Contains
+        // the link, the description, every node with its actual saved
+        // config, the flow diagram, and any verification gaps the user
+        // must fix on the canvas. The previous `linkMarkdown` is now
+        // embedded as the title line of this block.
+        summaryMarkdown,
+        // Kept for backwards compat with any caller still reading it.
         linkMarkdown: `[${linkLabel}](${url})`,
+        verificationIssues: issues,
       },
     };
   },
