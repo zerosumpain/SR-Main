@@ -148,7 +148,60 @@
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
-  let heartbeat = $state<{ summary: string; phase: string; elapsedSec: number } | null>(null);
+  // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in
+  // src/lib/workflows/chat/job-store.ts — the server fires beats on a fixed
+  // 5s cadence and the countdown maths assumes the same interval.
+  const HEARTBEAT_INTERVAL_MS = 5_000;
+  // Stall thresholds, measured in ms past the expected next-beat moment.
+  // - <STALL_JITTER_MS: fresh / counting down normally
+  // - <STALL_SLOW_MS:   "checking…"          (subtle)
+  // - <STALL_STUCK_MS:  "Connection slow"     (amber)
+  // - >=STALL_STUCK_MS: "No response"         (red, cancel affordance)
+  const STALL_JITTER_MS = 3_000;
+  const STALL_SLOW_MS = 10_000;
+  const STALL_STUCK_MS = 30_000;
+  let heartbeat = $state<{ summary: string; phase: string; elapsedSec: number; lastBeatAt: number } | null>(null);
+  // Driven by a 250ms ticker while a heartbeat exists. Used purely to make
+  // the countdown / stalled state re-render every quarter-second without
+  // touching the heartbeat object itself.
+  let hbNow = $state(Date.now());
+  let hbTicker: ReturnType<typeof setInterval> | null = null;
+  function startHeartbeatTicker() {
+    if (hbTicker) return;
+    hbTicker = setInterval(() => { hbNow = Date.now(); }, 250);
+  }
+  function stopHeartbeatTicker() {
+    if (hbTicker) { clearInterval(hbTicker); hbTicker = null; }
+  }
+  $effect(() => {
+    // Single source of truth for ticker lifecycle: heartbeat present → tick,
+    // heartbeat cleared → stop. Every `heartbeat = null` site (plan/confirm/
+    // clarify/done/error/subagent_start) flows through here without needing
+    // its own teardown call.
+    if (heartbeat) startHeartbeatTicker();
+    else stopHeartbeatTicker();
+    return () => stopHeartbeatTicker();
+  });
+  // Recompute countdown / stall state from heartbeat + hbNow. Derived values
+  // are read into the template at every tick.
+  const hbDerived = $derived.by(() => {
+    if (!heartbeat) return null;
+    const nextDueAt = heartbeat.lastBeatAt + HEARTBEAT_INTERVAL_MS;
+    const remainingMs = nextDueAt - hbNow;
+    const overdueMs = -remainingMs; // positive means we've blown the next-beat deadline
+    let state: 'fresh' | 'jitter' | 'slow' | 'stuck';
+    if (overdueMs < 0) state = 'fresh';
+    else if (overdueMs < STALL_JITTER_MS) state = 'jitter';
+    else if (overdueMs < STALL_SLOW_MS) state = 'slow';
+    else state = overdueMs < STALL_STUCK_MS ? 'slow' : 'stuck';
+    // displayedSec ticks 5 → 4 → 3 → 2 → 1 → 0 while fresh, stays at 0 once stalled
+    const displayedSec = Math.max(0, Math.ceil(remainingMs / 1000));
+    // overdueSec counts UP once we've passed the expected beat
+    const overdueSec = Math.max(0, Math.floor(overdueMs / 1000));
+    // total elapsed for the run — keep it live, not frozen at last beat
+    const liveElapsedSec = heartbeat.elapsedSec + Math.floor((hbNow - heartbeat.lastBeatAt) / 1000);
+    return { state, displayedSec, overdueSec, liveElapsedSec };
+  });
   let connectionWarning = $state<string | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
@@ -733,7 +786,10 @@
               summary: data.summary,
               phase: data.phase ?? 'thinking',
               elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
+              lastBeatAt: Date.now(),
             };
+            hbNow = Date.now();
+            startHeartbeatTicker();
             return;
           }
 
@@ -1041,12 +1097,28 @@
                     onresolve={() => { pendingClarify = null; }}
                   />
                 {/if}
-                {#if heartbeat}
-                  <div class="heartbeat-line" role="status" aria-live="polite" data-phase={heartbeat.phase}>
+                {#if heartbeat && hbDerived}
+                  <div
+                    class="heartbeat-line"
+                    role="status"
+                    aria-live="polite"
+                    data-phase={heartbeat.phase}
+                    data-stall={hbDerived.state}
+                  >
                     <span class="hb-dot"></span>
                     <span class="hb-phase">{phaseHumanLabel(heartbeat.phase)}</span>
                     <span class="hb-summary">{heartbeat.summary}</span>
-                    <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                    <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
+                    {#if hbDerived.state === 'fresh'}
+                      <span class="hb-countdown">· next check {hbDerived.displayedSec}s</span>
+                    {:else if hbDerived.state === 'jitter'}
+                      <span class="hb-countdown jitter">· checking…</span>
+                    {:else if hbDerived.state === 'slow'}
+                      <span class="hb-countdown slow">· connection slow ({hbDerived.overdueSec}s overdue)</span>
+                    {:else}
+                      <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
+                      <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
+                    {/if}
                   </div>
                 {/if}
                 {#if connectionWarning}
@@ -1142,11 +1214,26 @@
                   onresolve={() => { pendingClarify = null; }}
                 />
               {/if}
-              {#if heartbeat}
-                <div class="heartbeat-line mb-3" role="status" aria-live="polite">
+              {#if heartbeat && hbDerived}
+                <div
+                  class="heartbeat-line mb-3"
+                  role="status"
+                  aria-live="polite"
+                  data-stall={hbDerived.state}
+                >
                   <span class="hb-dot"></span>
                   <span class="hb-summary">{heartbeat.summary}</span>
-                  <span class="hb-elapsed">{heartbeat.elapsedSec}s</span>
+                  <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
+                  {#if hbDerived.state === 'fresh'}
+                    <span class="hb-countdown">· next check {hbDerived.displayedSec}s</span>
+                  {:else if hbDerived.state === 'jitter'}
+                    <span class="hb-countdown jitter">· checking…</span>
+                  {:else if hbDerived.state === 'slow'}
+                    <span class="hb-countdown slow">· connection slow ({hbDerived.overdueSec}s overdue)</span>
+                  {:else}
+                    <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
+                    <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
+                  {/if}
                 </div>
               {/if}
               {#each Object.values(subAgents) as agent (agent.agentId)}
@@ -1406,6 +1493,50 @@
   .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success, #2a9d4a); }
   .heartbeat-line[data-phase='waiting_llm'] .hb-dot { background: var(--accent); }
   .heartbeat-line[data-phase='subagent'] .hb-dot { background: color-mix(in srgb, var(--accent) 60%, white); }
+  .heartbeat-line .hb-countdown {
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .heartbeat-line .hb-countdown.jitter { opacity: 0.75; }
+  .heartbeat-line .hb-countdown.slow {
+    opacity: 1;
+    color: var(--status-warning, #b8860b);
+    font-weight: 600;
+  }
+  .heartbeat-line .hb-countdown.stuck {
+    opacity: 1;
+    color: var(--status-error, #c0392b);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .heartbeat-line[data-stall='slow'] {
+    background: color-mix(in srgb, var(--status-warning, #b8860b) 8%, transparent);
+  }
+  .heartbeat-line[data-stall='stuck'] {
+    background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
+  }
+  .heartbeat-line[data-stall='stuck'] .hb-dot {
+    background: var(--status-error, #c0392b);
+    animation: hb-pulse 0.6s ease-in-out infinite;
+  }
+  .heartbeat-line .hb-cancel {
+    margin-left: 4px;
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--status-error, #c0392b);
+    color: white;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .heartbeat-line .hb-cancel:hover {
+    background: color-mix(in srgb, var(--status-error, #c0392b) 80%, black);
+  }
   .conn-warning {
     display: flex;
     align-items: center;
