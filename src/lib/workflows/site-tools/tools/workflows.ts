@@ -380,6 +380,22 @@ register({
   handler: async (args, ctx) => {
     const emit = ctx?.emit ?? (() => {});
 
+    // Refuse when called from a canvas chat — the user is on an existing
+    // canvas and wants nodes added to *that* canvas, not a brand-new one.
+    // The MCP layer threads the inbound chat_id as `conversationId`; for
+    // canvas_chat sessions Hermes sets chat_id = the canvas's workflow_id
+    // (a UUID), so a UUID-shaped conversationId is the "we're on a canvas"
+    // signal. jkai-general sessions get synthetic non-UUID ids.
+    if (ctx?.conversationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ctx.conversationId)) {
+      return {
+        success: false,
+        error:
+          `workflow_build_from_spec creates a NEW canvas — but this chat is already on workflow ${ctx.conversationId}. ` +
+          `To add nodes to the current canvas, use workflow_add_node + workflow_add_edge (per the design-first flow). ` +
+          `Only call workflow_build_from_spec from the general /jkai chat hub (which has no workflow scope).`,
+      };
+    }
+
     const v = validateSpec(args);
     if (!v.ok) return { success: false, error: v.error };
     const spec = v.spec;

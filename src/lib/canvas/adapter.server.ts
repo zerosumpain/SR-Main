@@ -353,7 +353,10 @@ export async function listCanvases(): Promise<CanvasSummary[]> {
 
 /**
  * Create a fresh canvas — a workflow named `canvas:<slug>` seeded with a
- * single chat node and no edges. Rejects if the slug is already taken.
+ * trigger node and a chat node, deliberately *not* wired together. The
+ * unwired chat node acts as the canvas orchestrator panel (Hermes
+ * jkai-canvas, design-first edit flow). If the user later wires it into
+ * the DAG it becomes a workflow step. Rejects if the slug is already taken.
  */
 export async function createCanvas(
   slugInput: string,
@@ -374,7 +377,7 @@ export async function createCanvas(
     })
     .returning();
 
-  const [triggerNode] = await db
+  await db
     .insert(workflowNodes)
     .values({
       workflowId: created.id,
@@ -382,25 +385,21 @@ export async function createCanvas(
       label: 'Trigger',
       position: { x: 20, y: 20 },
       config: { kind: 'manual' },
-    })
-    .returning();
+    });
 
-  const [chatNode] = await db
+  // Chat sits off to the right so it doesn't collide with the auto-layout
+  // grid `workflow_add_node` uses (columns at x=240/520/800). No seed edge
+  // — the user wires it in when they want it to play a role in execution;
+  // until then it's the canvas orchestrator panel.
+  await db
     .insert(workflowNodes)
     .values({
       workflowId: created.id,
       type: 'chat',
       label: 'Chat',
-      position: { x: 260, y: 20 },
+      position: { x: 1100, y: 20 },
       config: { model: '', useIntelContext: true },
-    })
-    .returning();
-
-  await db.insert(workflowEdges).values({
-    workflowId: created.id,
-    sourceNodeId: triggerNode.id,
-    targetNodeId: chatNode.id,
-  });
+    });
 
   return { workflowId: created.id, slug };
 }

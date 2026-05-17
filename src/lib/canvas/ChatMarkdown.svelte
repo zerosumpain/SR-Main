@@ -38,15 +38,24 @@
   }
   .chat-md {
     font-size: 12px;
-    line-height: 1.55;
+    line-height: 1.35;
     color: var(--text-primary);
     word-break: break-word;
   }
   .chat-md :global(p) {
-    margin: 0 0 0.5em;
+    margin: 0 0 0.4em;
   }
   .chat-md :global(p:last-child) {
     margin-bottom: 0;
+  }
+  /* Collapse <br> spacing when marked turns a soft-wrap into <br/>. Plus a
+   * second <br> in a row (often from the model double-newlining inside a
+   * paragraph) is treated as one line of visual gap, not two. */
+  .chat-md :global(br) {
+    line-height: 1;
+  }
+  .chat-md :global(br + br) {
+    display: none;
   }
   .chat-md :global(strong) {
     font-weight: 600;
@@ -81,13 +90,13 @@
     font-size: inherit;
   }
   .chat-md :global(ul) {
-    margin: 0 0 0.5em;
-    padding-left: 1.3em;
+    margin: 0 0 0.35em;
+    padding-left: 1.2em;
     list-style: disc outside;
   }
   .chat-md :global(ol) {
-    margin: 0 0 0.5em;
-    padding-left: 1.3em;
+    margin: 0 0 0.35em;
+    padding-left: 1.2em;
     list-style: decimal outside;
   }
   .chat-md :global(ul:last-child),
@@ -95,20 +104,17 @@
     margin-bottom: 0;
   }
   .chat-md :global(li) {
-    margin: 0 0 0.12em;
+    margin: 0;
   }
-  .chat-md :global(li:last-child) {
-    margin-bottom: 0;
-  }
+  /* Markdown lists separated by a blank line render as <li><p>…</p></li>
+   * (the "loose list" form). Strip the inner <p> margin so the bullets
+   * sit flush against each other — same visual rhythm as a tight list. */
   .chat-md :global(li > p) {
-    margin: 0 0 0.12em;
-  }
-  .chat-md :global(li > p:last-child) {
-    margin-bottom: 0;
+    margin: 0;
   }
   .chat-md :global(li > ul),
   .chat-md :global(li > ol) {
-    margin: 0.12em 0 0;
+    margin: 0 0 0 0;
   }
   .chat-md :global(h1),
   .chat-md :global(h2),
