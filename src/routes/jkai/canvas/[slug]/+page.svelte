@@ -877,16 +877,74 @@
   });
 
   // ——— Chat lifecycle (decoupled from workflow runs) ———
-  // Sending a message hits the orchestrator chat endpoint. The orchestrator
-  // already injects canvas context (workflow nodes/edges via
-  // buildCanvasContextSection) and loads prior chat history by
-  // conversationId, so the assistant knows which canvas it's on and what
-  // was said before. Workflow runs (Run button) stay independent.
+  // Chat-node wiring drives which endpoint catches the user's message:
+  //
+  //  - **Unwired** (no edges either side): the node is acting as the canvas
+  //    orchestrator panel. Send to `/api/workflows/orchestrator/chat` →
+  //    Hermes `jkai-canvas` (design-first edit flow).
+  //  - **Wired as trigger** (outgoing edges only): typing starts a workflow
+  //    run via `/api/workflows/[id]/chat`. The chat node's executor calls
+  //    Hermes, response flows downstream; we subscribe to the run SSE so
+  //    `chat_stream` log events still render in the panel.
+  //  - **Wired as receiver / middle** (any incoming edge): typing is
+  //    disabled — the node only speaks when upstream data arrives via Run.
+  function chatNodeWiring(chatNodeId: string): 'unwired' | 'trigger' | 'receiver' {
+    let hasIn = false;
+    let hasOut = false;
+    for (const e of canvas.edges) {
+      if (e.to === chatNodeId) hasIn = true;
+      if (e.from === chatNodeId) hasOut = true;
+      if (hasIn && hasOut) break;
+    }
+    if (hasIn) return 'receiver';
+    if (hasOut) return 'trigger';
+    return 'unwired';
+  }
+
   async function sendMessageFrom(chatNodeId: string | null, text: string) {
     if (!text.trim() || !chatNodeId) return;
     if (streamingFor[chatNodeId]) return;
+    const wiring = chatNodeWiring(chatNodeId);
+    if (wiring === 'receiver') {
+      // Middle / terminal chat nodes only respond to workflow data, never
+      // free-text input. Bail with a hint instead of swallowing the message.
+      actionError =
+        'This chat node receives input from upstream nodes — it only speaks when you Run the workflow.';
+      return;
+    }
     streamingFor = { ...streamingFor, [chatNodeId]: true };
     streamingReplies = { ...streamingReplies, [chatNodeId]: '' };
+
+    if (wiring === 'trigger') {
+      try {
+        const res = await fetch(`/api/workflows/${canvas.workflowId}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, chatNodeId }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        const { runId } = (await res.json()) as { runId: string };
+        pendingRun = { runId, chatNodeId };
+        activeRunId = runId;
+        runMeta = { state: 'running' };
+        runStartedAt = Date.now();
+        runSummary = null;
+        subscribeToRun(runId);
+        void invalidateAll().then(() => scrollChatToBottom(chatNodeId));
+      } catch (err) {
+        streamingFor = { ...streamingFor, [chatNodeId]: false };
+        const next = { ...streamingReplies };
+        delete next[chatNodeId];
+        streamingReplies = next;
+        actionError = err instanceof Error ? err.message : String(err);
+      }
+      return;
+    }
+
+    // wiring === 'unwired' → orchestrator (Hermes jkai-canvas design-first).
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -904,7 +962,6 @@
       const { jobId } = (await res.json()) as { jobId: string };
       chatJobs = { ...chatJobs, [chatNodeId]: jobId };
       subscribeToChat(jobId, chatNodeId);
-      // Fire-and-forget refresh so the just-persisted user message renders.
       void invalidateAll().then(() => scrollChatToBottom(chatNodeId));
     } catch (err) {
       streamingFor = { ...streamingFor, [chatNodeId]: false };
@@ -1432,6 +1489,10 @@
       const nextTools = { ...liveToolSteps };
       delete nextTools[pending.chatNodeId];
       liveToolSteps = nextTools;
+      // Free the composer up for the next message. Without this, a chat
+      // that triggered a run stays in "running…" forever from the panel's
+      // perspective.
+      streamingFor = { ...streamingFor, [pending.chatNodeId]: false };
     }
   }
 
@@ -2903,6 +2964,7 @@
         {#if n.kind === 'chat'}
           {@const msgs = messagesFor(n.id)}
           {@const size = chatNodeSize(n)}
+          {@const wiring = chatNodeWiring(n.id)}
           <div
             class="chat-node"
             class:is-selected={selectedId === n.id}
@@ -3054,43 +3116,57 @@
               class="chat-node-composer"
               onpointerdown={(e) => e.stopPropagation()}
             >
-              <textarea
-                class="chat-input"
-                value={chatDrafts[n.id] ?? ''}
-                oninput={(e) =>
-                  (chatDrafts = {
-                    ...chatDrafts,
-                    [n.id]: (e.target as HTMLTextAreaElement).value,
-                  })}
-                placeholder="Message this chat — ⏎ send · ⇧⏎ newline"
-                rows="2"
-                onkeydown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                    e.preventDefault();
-                    sendFromChat(n.id);
-                  }
-                }}
-              ></textarea>
-              <div class="chat-composer-foot">
-                <span class="mono10 muted">
-                  {#if streamingFor[n.id]}thinking…{:else}⏎ send · ⇧⏎ newline{/if}
-                </span>
-                {#if streamingFor[n.id]}
-                  <button
-                    class="composer-pill stop-btn"
-                    onclick={() => cancelChat(n.id)}
-                    title="Stop the reply (keeps what was streamed so far)"
-                  >■ stop</button>
-                {:else}
-                  <button
-                    class="composer-pill run-btn"
-                    onclick={() => sendFromChat(n.id)}
-                    disabled={!(chatDrafts[n.id] ?? '').trim()}
-                  >
-                    SEND
-                  </button>
-                {/if}
-              </div>
+              {#if wiring === 'receiver'}
+                <div class="chat-locked-hint">
+                  Receives input from upstream — reply appears here when you Run the workflow.
+                </div>
+              {:else}
+                <textarea
+                  class="chat-input"
+                  value={chatDrafts[n.id] ?? ''}
+                  oninput={(e) =>
+                    (chatDrafts = {
+                      ...chatDrafts,
+                      [n.id]: (e.target as HTMLTextAreaElement).value,
+                    })}
+                  placeholder={wiring === 'trigger'
+                    ? 'Message — fires the workflow with your text as input'
+                    : 'Message this chat — ⏎ send · ⇧⏎ newline'}
+                  rows="2"
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                      sendFromChat(n.id);
+                    }
+                  }}
+                ></textarea>
+                <div class="chat-composer-foot">
+                  <span class="mono10 muted">
+                    {#if streamingFor[n.id]}
+                      {wiring === 'trigger' ? 'running…' : 'thinking…'}
+                    {:else if wiring === 'trigger'}
+                      ⏎ run workflow · ⇧⏎ newline
+                    {:else}
+                      ⏎ send · ⇧⏎ newline
+                    {/if}
+                  </span>
+                  {#if streamingFor[n.id]}
+                    <button
+                      class="composer-pill stop-btn"
+                      onclick={() => cancelChat(n.id)}
+                      title="Stop the reply (keeps what was streamed so far)"
+                    >■ stop</button>
+                  {:else}
+                    <button
+                      class="composer-pill run-btn"
+                      onclick={() => sendFromChat(n.id)}
+                      disabled={!(chatDrafts[n.id] ?? '').trim()}
+                    >
+                      {wiring === 'trigger' ? 'RUN' : 'SEND'}
+                    </button>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </div>
         {:else if n.kind === 'inspector'}
@@ -5598,6 +5674,15 @@
   .chat-composer-foot .run-btn {
     padding: 4px 14px;
     font-size: 10px;
+  }
+  .chat-locked-hint {
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--text-ghost);
+    background: rgba(26, 16, 8, 0.03);
+    border-top: 1px dashed var(--divider);
   }
   .msg-meta {
     font-family: var(--font-mono);

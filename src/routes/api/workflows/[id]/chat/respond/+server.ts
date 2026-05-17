@@ -43,25 +43,43 @@ export const POST: RequestHandler = async ({ params, request }) => {
     if (typeof cfg.conversationId === 'string') conversationId = cfg.conversationId;
   }
 
-  const terminalIds = findTerminalNodeIds(
-    nodes.map((n) => ({ id: n.id })),
-    edges.map((e) => ({ from: e.sourceNodeId, to: e.targetNodeId })),
-  );
-  if (terminalIds.length === 0) {
-    return json({ error: 'No terminal node — nothing to reply with' }, { status: 400 });
-  }
-
+  // Prefer the chat node's OWN output when the caller named it. The chat
+  // node calls Hermes and returns the LLM's reply on `response` — that's
+  // what the panel should persist, regardless of what downstream did with
+  // the text (WhatsApp send, email, etc., would otherwise hijack the
+  // panel with `{ success: true }` style payloads). Falls back to terminal
+  // output for back-compat (single-node chats, headless triggers).
   let chosenNodeId: string | null = null;
   let chosenOutput: unknown = null;
-  for (const nid of terminalIds) {
-    const [ex] = await db
+  if (chatNodeId) {
+    const [chatEx] = await db
       .select()
       .from(nodeExecutions)
-      .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nid)));
-    if (ex && ex.outputData !== null && ex.outputData !== undefined) {
-      chosenNodeId = nid;
-      chosenOutput = ex.outputData;
-      break;
+      .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, chatNodeId)));
+    if (chatEx && chatEx.outputData !== null && chatEx.outputData !== undefined) {
+      chosenNodeId = chatNodeId;
+      chosenOutput = chatEx.outputData;
+    }
+  }
+
+  if (chosenNodeId === null) {
+    const terminalIds = findTerminalNodeIds(
+      nodes.map((n) => ({ id: n.id })),
+      edges.map((e) => ({ from: e.sourceNodeId, to: e.targetNodeId })),
+    );
+    if (terminalIds.length === 0) {
+      return json({ error: 'No terminal node — nothing to reply with' }, { status: 400 });
+    }
+    for (const nid of terminalIds) {
+      const [ex] = await db
+        .select()
+        .from(nodeExecutions)
+        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nid)));
+      if (ex && ex.outputData !== null && ex.outputData !== undefined) {
+        chosenNodeId = nid;
+        chosenOutput = ex.outputData;
+        break;
+      }
     }
   }
 

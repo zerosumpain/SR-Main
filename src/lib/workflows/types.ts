@@ -143,6 +143,8 @@ export interface ExecutionContext {
   abortSignal: AbortSignal;
   /** Get outgoing edges from a node (for agent tool discovery) */
   getOutgoingEdges: (nodeId: string) => WorkflowEdgeDef[];
+  /** Get incoming edges into a node (for wiring-aware behaviour). */
+  getIncomingEdges: (nodeId: string) => WorkflowEdgeDef[];
   /** Get a node's type, config, and label by ID */
   getNodeConfig: (nodeId: string) => { type: string; config: Record<string, unknown>; label: string } | undefined;
 }

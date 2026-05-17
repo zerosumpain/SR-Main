@@ -225,6 +225,7 @@ export class WorkflowEngine {
             checkBreakpoint: async () => {},
             abortSignal: abortController.signal,
             getOutgoingEdges: (id) => graph.edgesBySource.get(id) || [],
+            getIncomingEdges: (id) => graph.edgesByTarget.get(id) || [],
             getNodeConfig: (id) => {
               const n = graph.nodeMap.get(id);
               return n ? { type: n.type, config: n.config, label: n.label } : undefined;

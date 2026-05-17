@@ -51,6 +51,7 @@ export const POST: RequestHandler = async ({ request }) => {
     checkBreakpoint: async () => {},
     abortSignal: new AbortController().signal,
     getOutgoingEdges: () => [],
+    getIncomingEdges: () => [],
     getNodeConfig: () => undefined,
     // _currentNodeId is read by stealth-scrape but isn't on the public type
     _currentNodeId: body.nodeId,
