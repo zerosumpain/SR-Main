@@ -188,7 +188,7 @@
       <div class="flex items-center gap-3">
         <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
         <a
-          href="https://homeserv.tail668b8c.ts.net:8443/"
+          href="https://hermes.strangeramblings.com/"
           target="_blank"
           rel="noopener"
           class="hermes-admin-link"
