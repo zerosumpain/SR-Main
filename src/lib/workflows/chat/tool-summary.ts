@@ -33,6 +33,7 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
     case 'workflow_list': return 'listing existing canvases — checking what already exists';
     case 'workflow_list_node_types': return 'fetching node types — needed before searching';
     case 'workflow_create': return str('name') ? `creating canvas "${str('name')}" — about to plan its structure` : 'creating a new canvas';
+    case 'workflow_build_from_spec': return str('name') ? `building canvas "${str('name')}" from spec — inserting nodes one by one` : 'building a canvas from spec';
     case 'workflow_delete': return str('id') ? `deleting canvas ${str('id')!.slice(0, 8)}…` : 'deleting a canvas';
     case 'workflow_update_metadata': return str('name') ? `renaming canvas to "${str('name')}"` : 'updating canvas metadata';
     case 'workflow_add_node': return str('type') ? `adding a ${str('type')} node to the canvas` : 'adding a node to the canvas';
@@ -102,6 +103,14 @@ export function summarizeToolResult(step: ToolProgressStep): string {
     case 'workflow_create': {
       const id = (r?.data as { workflowId?: string } | undefined)?.workflowId;
       return id ? `Created canvas ${id}` : 'Created canvas';
+    }
+    case 'workflow_build_from_spec': {
+      const d = r?.data as { workflowId?: string; nodeCount?: number; name?: string } | undefined;
+      if (!d) return 'Built canvas';
+      const parts: string[] = [];
+      if (d.name) parts.push(`"${d.name}"`); else if (d.workflowId) parts.push(d.workflowId.slice(0, 8));
+      if (typeof d.nodeCount === 'number') parts.push(`${d.nodeCount} node${d.nodeCount === 1 ? '' : 's'}`);
+      return `Built canvas${parts.length ? ` ${parts.join(' · ')}` : ''}`;
     }
     case 'workflow_modify':
       return 'Updated canvas';

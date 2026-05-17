@@ -480,7 +480,7 @@ async function buildCanvasContextSection(
       ? `THIS CANVAS IS EMPTY (only the seed trigger + chat, no real work yet).
 → When the user asks for a workflow, BUILD IT INTO THIS CANVAS.
   Call workflow_add_node and workflow_add_edge with workflowId="${workflowId}".
-→ DO NOT call workflow_create. That would spawn a separate canvas and
+→ DO NOT call workflow_build_from_spec. That would spawn a separate canvas and
   leave the one the user is looking at empty. The user WILL be surprised.
 → Wire new processing nodes from the existing trigger (or downstream of
   it); do not leave nodes orphaned.`
@@ -490,7 +490,8 @@ async function buildCanvasContextSection(
   workflowId="${workflowId}".
 → If the user clearly wants a NEW, separate workflow (words like "new
   canvas", "another one", "separate", or a distinct unrelated topic),
-  call workflow_create — it will create a new canvas with a short slug.`;
+  design it in chat first then call workflow_build_from_spec with an
+  explicit JSON spec.`;
 
     return `\n\n--- Current Canvas ---
 You are chatting inside a canvas, not /jkai. The workflow you are
@@ -708,8 +709,8 @@ export async function generalChat(
     activatedToolsets.add('workflows');
   }
 
-  // If we're inside an empty canvas, hide workflow_create entirely — the
-  // model should extend the current canvas, not spawn a parallel one.
+  // If we're inside an empty canvas, hide workflow_build_from_spec entirely
+  // — the model should extend the current canvas, not spawn a parallel one.
   if (options.workflowId) {
     try {
       const siblingNodes = await db
@@ -722,7 +723,9 @@ export async function generalChat(
       if (!hasRealNodes) {
         for (let i = activeTools.length - 1; i >= 0; i--) {
           const t = activeTools[i] as { function?: { name?: string } };
-          if (t.function?.name === 'workflow_create') activeTools.splice(i, 1);
+          if (t.function?.name === 'workflow_build_from_spec' || t.function?.name === 'workflow_create') {
+            activeTools.splice(i, 1);
+          }
         }
       }
     } catch {

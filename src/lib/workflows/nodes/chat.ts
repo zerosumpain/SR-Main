@@ -185,6 +185,11 @@ export const chatDef: NodeDefinition = {
         description:
           'When false, skip injecting the intel knowledge graph into the system prompt (default true).',
       },
+      conversationId: {
+        type: 'string',
+        description:
+          'Optional: pin an existing /jkai conversation to this chat node so the canvas thread "follows" the user from chat onto the canvas. The canvas adapter pulls orchestrator_chats rows for this id alongside the workflow-tagged rows. Written by `pinConversationToCanvasChat` (on `?conv=` deep-links) and by `workflow_build_from_spec` (when the build was kicked off from a chat).',
+      },
     },
   },
   defaultConfig: {

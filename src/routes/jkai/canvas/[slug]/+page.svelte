@@ -130,6 +130,32 @@
   const canvas = $derived(data.canvas);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
 
+  // Live mutation feed: when an external builder (e.g. workflow_build_from_spec)
+  // adds nodes or edges to this workflow, an SSE event fires on /api/workflows/
+  // <id>/live and we invalidateAll() so the canvas re-renders with the new
+  // state. Debounced 150ms so a burst of inserts coalesces into a single
+  // re-fetch instead of N round-trips.
+  $effect(() => {
+    if (!canvas?.id) return;
+    const es = new EventSource(`/api/workflows/${canvas.id}/live`);
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const scheduleInvalidate = () => {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        void invalidateAll();
+      }, 150);
+    };
+    es.onmessage = () => scheduleInvalidate();
+    es.onerror = () => {
+      // EventSource auto-reconnects after a brief backoff; no action needed.
+    };
+    return () => {
+      if (pending) clearTimeout(pending);
+      es.close();
+    };
+  });
+
   const NODE_W = 148;
   const NODE_H = 52;
   const COL = [320, 540, 760, 980];

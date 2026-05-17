@@ -247,6 +247,11 @@ export async function dispatchJsonRpc(
 
         try {
           const out = await executeTool(name, args, {
+            // Thread the chat_id through as conversationId so tool handlers
+            // can wire chat-handoff features (e.g. workflow_build_from_spec
+            // attaches a chat node configured with the originating
+            // conversation id so the canvas chat continues the design talk).
+            conversationId: typeof meta.chat_id === 'string' ? meta.chat_id : undefined,
             emit: (msg: string) => {
               // Heavyweight tools (workflow_create, generateWorkflow's internal
               // loop) can run for minutes. The Streamable HTTP transport buffers

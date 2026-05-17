@@ -735,13 +735,15 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           }).returning({ id: orchestratorChats.id });
           assistantMsgId = ins.id;
         } else {
-          // No conversation or workflow pinned on entry. Check if a workflow_create
-          // tool succeeded mid-turn (typical on /jkai/workflows/new). If so, back-fill
-          // both the user message AND the assistant reply against that new workflow id
-          // so the conversation survives the redirect.
+          // No conversation or workflow pinned on entry. Check if a workflow-
+          // creation tool succeeded mid-turn (typical on /jkai/workflows/new
+          // and after design-confirm → workflow_build_from_spec). Back-fill
+          // both the user message AND the assistant reply against that new
+          // workflow id so the conversation survives the redirect.
           let backfillWorkflowId: string | null = null;
           for (const step of job.toolSteps) {
-            if (step.tool !== 'workflow_create' || step.status !== 'done') continue;
+            const isBuilder = step.tool === 'workflow_build_from_spec' || step.tool === 'workflow_create';
+            if (!isBuilder || step.status !== 'done') continue;
             const r = step.result as { success?: boolean; data?: { workflowId?: string } } | undefined;
             if (r?.success && r.data?.workflowId) {
               backfillWorkflowId = r.data.workflowId;

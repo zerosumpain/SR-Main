@@ -14,6 +14,8 @@ import { desc, eq, asc, and, or, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
 import { slugify } from '$lib/canvas/slug';
 import { registerCronJob } from '$lib/workflows/scheduler';
+import { registry } from '$lib/workflows';
+import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
 
 /**
  * Coerce the generator's `workflow.trigger` (set by the orchestrator's
@@ -163,291 +165,451 @@ function buildWorkflowSummaryMarkdown(opts: {
 // Existing Tools (moved)
 // ==========================================
 
+// ==========================================
+// workflow_build_from_spec — deterministic JSON-driven canvas builder.
+// Replaces the legacy workflow_create autonomous-LLM-loop generator.
+// You design the workflow in chat, then call this tool with an explicit spec.
+// ==========================================
+
+type SpecNode = {
+  /** Stable id you reference from edges. Maps internally to a UUID. */
+  id: string;
+  /** Registered node type (e.g. 'http-request', 'whatsapp', 'home-assistant'). */
+  type: string;
+  /** Human label shown on the canvas. */
+  label: string;
+  /** Node config — the actual saved JSON. Must match the node type's schema. */
+  config?: Record<string, unknown>;
+  /** Optional canvas position. Defaults to an auto-laid grid. */
+  position?: { x: number; y: number };
+};
+type SpecEdge = {
+  /** Source node id (matches SpecNode.id). */
+  from: string;
+  /** Target node id. */
+  to: string;
+  /** Optional source handle (e.g. 'true' / 'false' on conditional nodes). */
+  sourceHandle?: string | null;
+  /** Optional target handle. */
+  targetHandle?: string | null;
+};
+
+function validateSpec(args: Record<string, unknown>): {
+  ok: true;
+  spec: {
+    name: string;
+    description?: string;
+    trigger: { type: 'manual' | 'cron' | 'webhook' | 'event'; config?: Record<string, unknown> };
+    nodes: SpecNode[];
+    edges: SpecEdge[];
+    attachChatNode: boolean;
+  };
+} | { ok: false; error: string } {
+  const name = typeof args.name === 'string' ? args.name.trim() : '';
+  if (!name) return { ok: false, error: '`name` (string) is required.' };
+  const description = typeof args.description === 'string' ? args.description : undefined;
+  const trigArg = args.trigger as { type?: unknown; config?: unknown } | undefined;
+  const tType = typeof trigArg?.type === 'string' ? trigArg.type : 'manual';
+  if (!['manual', 'cron', 'webhook', 'event'].includes(tType)) {
+    return { ok: false, error: `\`trigger.type\` must be one of manual|cron|webhook|event (got "${tType}").` };
+  }
+  const trigger = {
+    type: tType as 'manual' | 'cron' | 'webhook' | 'event',
+    config: (trigArg?.config && typeof trigArg.config === 'object' ? trigArg.config : {}) as Record<string, unknown>,
+  };
+  if (trigger.type === 'cron') {
+    const cfg = trigger.config;
+    const expr = typeof cfg.expression === 'string' ? cfg.expression : (typeof cfg.cron === 'string' ? cfg.cron : '');
+    if (!expr) return { ok: false, error: '`trigger.config.expression` (cron string, e.g. "*/15 * * * *") is required when trigger.type=cron.' };
+  }
+  const nodesArg = Array.isArray(args.nodes) ? args.nodes : null;
+  if (!nodesArg || nodesArg.length === 0) {
+    return { ok: false, error: '`nodes` (non-empty array) is required.' };
+  }
+  const seenIds = new Set<string>();
+  const nodes: SpecNode[] = [];
+  for (let i = 0; i < nodesArg.length; i++) {
+    const n = nodesArg[i] as Record<string, unknown>;
+    if (!n || typeof n !== 'object') return { ok: false, error: `nodes[${i}] must be an object.` };
+    const id = typeof n.id === 'string' ? n.id.trim() : '';
+    if (!id) return { ok: false, error: `nodes[${i}].id (string) is required.` };
+    if (seenIds.has(id)) return { ok: false, error: `nodes[${i}].id "${id}" duplicated.` };
+    seenIds.add(id);
+    const type = typeof n.type === 'string' ? n.type.trim() : '';
+    if (!type) return { ok: false, error: `nodes[${i}].type (string) is required.` };
+    if (!registry.getDefinition(type)) {
+      return { ok: false, error: `nodes[${i}].type "${type}" is not a registered node type. Use workflow_search_nodes / workflow_list_node_types to find valid types.` };
+    }
+    const label = typeof n.label === 'string' && n.label.trim() ? n.label.trim() : type;
+    const config = (n.config && typeof n.config === 'object' ? n.config : {}) as Record<string, unknown>;
+    const position = (n.position && typeof n.position === 'object'
+      && typeof (n.position as { x?: unknown }).x === 'number'
+      && typeof (n.position as { y?: unknown }).y === 'number')
+      ? { x: (n.position as { x: number }).x, y: (n.position as { y: number }).y }
+      : undefined;
+    nodes.push({ id, type, label, config, position });
+  }
+  const edgesArg = Array.isArray(args.edges) ? args.edges : [];
+  const edges: SpecEdge[] = [];
+  for (let i = 0; i < edgesArg.length; i++) {
+    const e = edgesArg[i] as Record<string, unknown>;
+    if (!e || typeof e !== 'object') return { ok: false, error: `edges[${i}] must be an object.` };
+    const from = typeof e.from === 'string' ? e.from.trim() : (typeof e.source === 'string' ? e.source.trim() : '');
+    const to = typeof e.to === 'string' ? e.to.trim() : (typeof e.target === 'string' ? e.target.trim() : '');
+    if (!from || !to) return { ok: false, error: `edges[${i}] requires \`from\` and \`to\` (spec node ids).` };
+    if (!seenIds.has(from) && from !== 'trigger') return { ok: false, error: `edges[${i}].from "${from}" does not match any spec node id.` };
+    if (!seenIds.has(to)) return { ok: false, error: `edges[${i}].to "${to}" does not match any spec node id.` };
+    edges.push({
+      from,
+      to,
+      sourceHandle: typeof e.sourceHandle === 'string' ? e.sourceHandle : null,
+      targetHandle: typeof e.targetHandle === 'string' ? e.targetHandle : null,
+    });
+  }
+  const attachChatNode = args.attach_chat_node === undefined ? true : Boolean(args.attach_chat_node);
+  return { ok: true, spec: { name, description, trigger, nodes, edges, attachChatNode } };
+}
+
+function shortSlug(src: string): string {
+  const base = slugify(src || 'canvas');
+  if (!base) return 'canvas';
+  if (base.length <= 24) return base;
+  const words = base.split('-');
+  let out = '';
+  for (const w of words) {
+    const next = out ? `${out}-${w}` : w;
+    if (next.length > 24) break;
+    out = next;
+  }
+  return out || base.slice(0, 24);
+}
+
+async function pickUniqueSlug(seed: string): Promise<string> {
+  const baseSlug = shortSlug(seed);
+  let slug = baseSlug;
+  let attempt = 1;
+  while (attempt < 50) {
+    const [existing] = await db
+      .select({ id: workflows.id })
+      .from(workflows)
+      .where(eq(workflows.name, `canvas:${slug}`));
+    if (!existing) break;
+    attempt += 1;
+    slug = `${baseSlug}-${attempt}`;
+  }
+  return slug;
+}
+
 register({
-  name: 'workflow_create',
+  name: 'workflow_build_from_spec',
   description:
-    'Create a NEW separate canvas (workflow) from a natural language description. ' +
-    'Only call this when the user explicitly asks for a new, separate canvas. ' +
-    'If you are currently inside a canvas (see "Current Canvas" context) and the ' +
-    'user is asking to build/extend it, use workflow_add_node / workflow_add_edge ' +
-    'on the existing workflowId instead. ' +
-    'The created canvas gets a trigger node + any generated nodes, and is available ' +
-    'at the returned `data.url`. ' +
-    'Supported node types: trigger, chat, llm-call, llm-agent, text-parser, ' +
-    'transform, http-request, conditional, delay, intel-write, intel-query, ' +
-    'data-store, whatsapp, email, blog, home-assistant, and more. ' +
-    'CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply. It contains the ' +
-    'canvas link, the description, every node with its actual saved config, the ' +
-    'flow diagram, and any "Needs attention" issues that the user must fix on the ' +
-    'canvas. Do NOT rewrite it, do NOT summarise it further, do NOT construct your ' +
-    'own URL or guess at the config — the markdown reflects the workflow that was ' +
-    'actually persisted to the database. After pasting, you can add one short ' +
-    'follow-up sentence (e.g. "Want me to open it?") but never replace the markdown.',
+    'Build a NEW canvas (workflow) from an EXPLICIT JSON spec — name, trigger, nodes, edges. ' +
+    'Use this when the user has confirmed the design you proposed in chat. ' +
+    'DESIGN-FIRST WORKFLOW: Before calling this tool, you MUST have written out the design ' +
+    'in chat (numbered nodes with type+label+config, edge wiring) and the user must have ' +
+    'said yes/build it/ship it. Never call this tool with a guess at the design — every ' +
+    'config field must be intentional. ' +
+    'Each node is inserted into the canvas one at a time with a small delay, and the ' +
+    'canvas page auto-refreshes between inserts so the user can watch the build live if ' +
+    'they have the URL open. ' +
+    'The tool emits the canvas URL on its very first progress event so the user can open it ' +
+    'before the build finishes. ' +
+    'CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply when the tool returns. ' +
+    'It contains the canvas link, the description, every node with its actual saved config, ' +
+    'the flow diagram, and any "Needs attention" issues that need fixing on the canvas. ' +
+    'Do NOT rewrite it, summarise it, or construct your own URL.',
   parameters: {
     type: 'object',
     properties: {
+      name: {
+        type: 'string',
+        description: 'Short canvas name (will be slugified for the URL).',
+      },
       description: {
         type: 'string',
-        description: 'Natural language description of what the canvas should do.',
+        description: 'One-line human description of what the canvas does.',
+      },
+      trigger: {
+        type: 'object',
+        description:
+          'How the workflow fires. type ∈ {manual, cron, webhook, event}. For cron, set config.expression to a 5-field cron string (e.g. "*/15 * * * *"). For event, set config.eventType.',
+        properties: {
+          type: { type: 'string' },
+          config: { type: 'object' },
+        },
+      },
+      nodes: {
+        type: 'array',
+        description:
+          'The non-trigger nodes that do the work. Each node: { id (spec-local, used by edges), type (registered node type), label, config, position? }. The trigger node is auto-inserted — do NOT include a node with type="trigger" yourself.',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: { type: 'string' },
+            label: { type: 'string' },
+            config: { type: 'object' },
+            position: { type: 'object' },
+          },
+        },
+      },
+      edges: {
+        type: 'array',
+        description:
+          'Wiring between nodes. Each edge: { from (spec id), to (spec id), sourceHandle? (e.g. "true"/"false" on conditional), targetHandle? }. Use "trigger" as a special source id to wire from the auto-inserted trigger node; if you omit a trigger edge, one is added to the first non-chat node automatically.',
+        items: {
+          type: 'object',
+          properties: {
+            from: { type: 'string' },
+            to: { type: 'string' },
+            sourceHandle: { type: 'string' },
+            targetHandle: { type: 'string' },
+          },
+        },
+      },
+      attach_chat_node: {
+        type: 'boolean',
+        description:
+          'When true (default), inserts a `chat` node alongside the trigger so the user can continue talking to you from the canvas. Set false only if the workflow really has no chat interaction.',
       },
     },
-    required: ['description'],
+    required: ['name', 'nodes'],
   },
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args, ctx) => {
-    const { generateWorkflow } = await import('$lib/workflows/orchestrator');
     const emit = ctx?.emit ?? (() => {});
 
-    const description = args.description as string;
-    // Wrapper kickoff — fires before any LLM call so the user sees activity
-    // immediately. generateWorkflow runs a multi-stage LLM loop that can take
-    // 30-90s; without this pre-emit the chat sits silent until the first
-    // internal "Planning workflow" chunk lands.
-    emit('Generating a new workflow — planning structure now. This usually takes 30-90 seconds.');
-    // generateWorkflow already emits internal chunks (Planning..., Reviewing...,
-    // Revising..., Registering new node types...). Pipe each non-trivial chunk
-    // up to the orchestrator as a `status` event so the user sees progress.
-    let lastEmittedAt = 0;
-    const { workflow, followUp } = await generateWorkflow(description, null, (text) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      // Throttle to one emit per 800ms to avoid flooding when generateWorkflow
-      // chunks arrive in bursts (search_nodes / use_node / connect_nodes can
-      // fire dozens of times in a few hundred ms during runToolLoop).
-      // BUT: bypass the throttle for post-loop summary signals — Plan,
-      // Reviewing, Revising, warnings — otherwise they get eaten because
-      // the runToolLoop burst exhausted the budget right before they fire.
-      const isHighPriority = /^(Plan:|Reviewing|Revising|Revision|⚠|Saving|Registering)/.test(trimmed);
-      if (!isHighPriority) {
-        const now = Date.now();
-        if (now - lastEmittedAt < 800) return;
-        lastEmittedAt = now;
-      }
-      emit(trimmed);
-    }, { skipVerification: true });
+    const v = validateSpec(args);
+    if (!v.ok) return { success: false, error: v.error };
+    const spec = v.spec;
 
-    if (followUp) {
-      return { success: true, data: { needsMoreInfo: true, question: followUp } };
+    // Slug + canvas URL up-front. Emit before any DB work so the user can
+    // open the canvas before the first node lands.
+    const slug = await pickUniqueSlug(spec.name);
+    const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
+    const url = `${baseUrl}/jkai/canvas/${slug}`;
+    emit(`Building canvas — [${spec.name}](${url}). Open the link to watch it grow.`);
+
+    const triggerShape = deriveTriggerShape(spec.trigger);
+
+    // Pre-compute deterministic UUIDs for every spec node id so edges can
+    // reference them before the nodes are inserted.
+    const idMap = new Map<string, string>();
+    for (const n of spec.nodes) idMap.set(n.id, crypto.randomUUID());
+    const triggerNodeId = crypto.randomUUID();
+    idMap.set('trigger', triggerNodeId);
+    let chatNodeId: string | null = null;
+    if (spec.attachChatNode && !spec.nodes.some(n => n.type === 'chat')) {
+      chatNodeId = crypto.randomUUID();
     }
 
-    if (!workflow || workflow.nodes.length === 0) {
-      return {
-        success: false,
-        error:
-          'Could not generate a valid workflow. Try being more specific about triggers, inputs, and outputs.',
-      };
-    }
-    emit(`Saving the finished canvas with ${workflow.nodes.length} nodes — committing it to the database.`);
-
-    // Canvas-compatible naming: pick a SHORT slug (≤ 24 chars, 3–4 words
-    // max) from the generated title, ensure the "canvas:" prefix. If the
-    // slug is already taken, append -2, -3, ... as a collision suffix.
-    function shortSlug(src: string): string {
-      const base = slugify(src || 'canvas');
-      if (!base) return 'canvas';
-      if (base.length <= 24) return base;
-      const words = base.split('-');
-      let out = '';
-      for (const w of words) {
-        const next = out ? `${out}-${w}` : w;
-        if (next.length > 24) break;
-        out = next;
-      }
-      return out || base.slice(0, 24);
-    }
-    const baseSlug = shortSlug(workflow.name || 'generated');
-    let slug = baseSlug;
-    let attempt = 1;
-    while (attempt < 50) {
-      const [existing] = await db
-        .select()
-        .from(workflows)
-        .where(eq(workflows.name, `canvas:${slug}`));
-      if (!existing) break;
-      attempt += 1;
-      slug = `${baseSlug}-${attempt}`;
-    }
-
-    // Atomic: if any insert fails, the whole canvas rolls back. Previously
-    // we created the workflow row then deleted it on error — which cascade-
-    // wiped every row referencing that id. A rolled-back transaction leaves
-    // no row to reference in the first place.
-    let created: {
-      id: string;
-      finalNodes: import('$lib/workflows/types').WorkflowNodeDef[];
-      finalEdges: import('$lib/workflows/types').WorkflowEdgeDef[];
-    };
-    // The orchestrator's set_trigger tool writes `workflow.trigger`. Honour
-    // it on insert so cron / webhook / event workflows actually fire on
-    // schedule — previously we hardcoded manual and silently dropped what
-    // the generator picked.
-    //
-    // Defensive recovery: when the LLM forgets to call set_trigger but puts
-    // a cron expression on the trigger node's config directly (e.g.
-    // `kind:'manual', cron:'*/10 * * * *'` — an incoherent state the model
-    // produces fairly often), infer the workflow-level trigger from that
-    // node config so the schedule still gets created.
-    let effectiveTrigger = workflow.trigger;
-    if (!effectiveTrigger || effectiveTrigger.type === 'manual') {
-      const trigNode = workflow.nodes.find(
-        (n) => n.type === 'trigger' || n.type === 'manual-trigger',
-      );
-      const cfg = (trigNode?.config ?? {}) as Record<string, unknown>;
-      const cronExpr =
-        (typeof cfg.cron === 'string' && cfg.cron) ||
-        (typeof cfg.expression === 'string' && cfg.expression) ||
-        '';
-      if (cfg.kind === 'cron' || cronExpr) {
-        effectiveTrigger = { type: 'cron', config: { expression: cronExpr } };
-      } else if (cfg.kind === 'webhook') {
-        effectiveTrigger = { type: 'webhook', config: cfg };
-      } else if (cfg.kind === 'event' && typeof cfg.eventType === 'string') {
-        effectiveTrigger = { type: 'event', config: cfg };
-      }
-    }
-    const triggerShape = deriveTriggerShape(effectiveTrigger);
-
+    // Insert workflow row + trigger node atomically so the canvas page can
+    // load the moment it sees the URL. Subsequent nodes/edges then stream
+    // in via incremental inserts.
+    let workflowId: string;
     try {
-      created = await db.transaction(async (tx) => {
+      workflowId = await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(workflows)
           .values({
             name: `canvas:${slug}`,
-            description: workflow.description || workflow.name || slug,
+            description: spec.description || spec.name,
             trigger: triggerShape.workflowsTrigger,
           })
-          .returning();
-
-        const nodes = workflow.nodes.slice();
-        let triggerNodeId: string | null = null;
-        const legacyTriggerIdx = nodes.findIndex(
-          (n) => n.type === 'trigger' || n.type === 'manual-trigger',
-        );
-        if (legacyTriggerIdx >= 0) {
-          const existing = nodes[legacyTriggerIdx];
-          triggerNodeId = existing.id;
-          nodes[legacyTriggerIdx] = {
-            ...existing,
-            type: 'trigger',
-            label: existing.label || 'Trigger',
-            // existing.config wins for any extra LLM-supplied keys, but
-            // triggerShape.nodeConfig sets the canonical kind/cron/etc. so
-            // the canvas menu reads the same values the scheduler does.
-            config: { ...(existing.config || {}), ...triggerShape.nodeConfig },
-            position: existing.position || { x: 20, y: 20 },
-          };
-        } else {
-          const newId = crypto.randomUUID();
-          triggerNodeId = newId;
-          nodes.unshift({
-            id: newId,
-            type: 'trigger',
-            label: 'Trigger',
-            config: triggerShape.nodeConfig,
-            position: { x: 20, y: 20 },
+          .returning({ id: workflows.id });
+        await tx.insert(workflowNodes).values({
+          id: triggerNodeId,
+          workflowId: row.id,
+          type: 'trigger',
+          position: { x: 20, y: 20 },
+          config: triggerShape.nodeConfig,
+          label: spec.trigger.type === 'cron' ? `Trigger (${spec.trigger.config?.expression ?? 'cron'})` : 'Trigger',
+        });
+        if (chatNodeId) {
+          // Conversation handoff: pin the originating /jkai conversation onto
+          // the chat node so the canvas adapter pulls those orchestrator_chats
+          // rows alongside the workflow-tagged ones. The user opens the
+          // canvas URL and sees the same conversation continuing inside the
+          // chat node — same wiring `pinConversationToCanvasChat` uses for
+          // `?conv=` deep-links from /jkai.
+          //
+          // Hermes' chat_id has the form `chat_<uuid>`; orchestrator_chats
+          // stores the bare uuid as conversation_id. Strip the prefix.
+          const conversationId = ctx?.conversationId?.startsWith('chat_')
+            ? ctx.conversationId.slice('chat_'.length)
+            : ctx?.conversationId;
+          await tx.insert(workflowNodes).values({
+            id: chatNodeId,
+            workflowId: row.id,
+            type: 'chat',
+            position: { x: 20, y: 200 },
+            config: conversationId ? { conversationId } : {},
+            label: 'Chat',
           });
         }
-
-        await tx.insert(workflowNodes).values(
-          nodes.map((n) => ({
-            id: n.id,
-            workflowId: row.id,
-            type: n.type,
-            position: n.position,
-            config: n.config,
-            label: n.label,
-          })),
-        );
-
-        const edges = workflow.edges.slice();
-        const triggerHasOutgoing = edges.some((e) => e.sourceNodeId === triggerNodeId);
-        if (!triggerHasOutgoing) {
-          const roots = nodes.filter(
-            (n) => n.id !== triggerNodeId && !edges.some((e) => e.targetNodeId === n.id),
-          );
-          for (const root of roots.slice(0, 1)) {
-            edges.push({
-              id: crypto.randomUUID(),
-              sourceNodeId: triggerNodeId,
-              targetNodeId: root.id,
-              sourceHandle: null,
-              targetHandle: null,
-            });
-          }
-        }
-
-        if (edges.length > 0) {
-          await tx.insert(workflowEdges).values(
-            edges.map((e) => ({
-              id: e.id,
-              workflowId: row.id,
-              sourceNodeId: e.sourceNodeId,
-              targetNodeId: e.targetNodeId,
-              sourceHandle: e.sourceHandle || null,
-              targetHandle: e.targetHandle || null,
-            })),
-          );
-        }
-
-        return { id: row.id, finalNodes: nodes, finalEdges: edges };
+        return row.id;
       });
     } catch (dbErr: unknown) {
-      const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
-      return { success: false, error: `Failed to save canvas: ${dbMsg}` };
+      const msg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
+      return { success: false, error: `Failed to create canvas row: ${msg}` };
     }
 
-    // For cron / event workflows, the trigger column + node config isn't
-    // enough — the scheduler reads from `workflow_schedules`. Insert the
-    // row and register the cron job so the workflow actually fires.
+    publishWorkflowUpdate({ workflowId, kind: 'build_started', summary: 'Canvas ready — building nodes', ts: Date.now() });
+    publishWorkflowUpdate({ workflowId, kind: 'node_added', nodeId: triggerNodeId, summary: 'Trigger', ts: Date.now() });
+    if (chatNodeId) {
+      publishWorkflowUpdate({ workflowId, kind: 'node_added', nodeId: chatNodeId, summary: 'Chat', ts: Date.now() });
+    }
+
+    // Incrementally insert spec nodes — separate small transaction per node,
+    // 200ms gap between each, plus a workflow-update event so the canvas
+    // re-fetches and animates the node appearing.
+    const insertedNodeIds: string[] = [triggerNodeId];
+    if (chatNodeId) insertedNodeIds.push(chatNodeId);
+    for (let i = 0; i < spec.nodes.length; i++) {
+      const n = spec.nodes[i];
+      const nodeUuid = idMap.get(n.id)!;
+      // Auto-layout: fallback grid below the trigger if no position given.
+      const position = n.position ?? { x: 240 + (i % 3) * 280, y: 20 + Math.floor(i / 3) * 160 };
+      try {
+        await db.insert(workflowNodes).values({
+          id: nodeUuid,
+          workflowId,
+          type: n.type,
+          position,
+          config: n.config,
+          label: n.label,
+        });
+        insertedNodeIds.push(nodeUuid);
+        emit(`Added node: ${n.label} (${n.type})`);
+        publishWorkflowUpdate({ workflowId, kind: 'node_added', nodeId: nodeUuid, summary: n.label, ts: Date.now() });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        emit(`Skipped node "${n.label}" (${n.type}): ${msg}`);
+      }
+      // Give the canvas time to re-fetch and render between inserts. 200ms
+      // is fast enough to feel responsive on a 5-node build (~1s) without
+      // making 30-node builds drag.
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    // Edges. Resolve spec ids to UUIDs and skip any that point at a node
+    // that failed to insert. Auto-wire trigger → first non-chat node if the
+    // model didn't specify a trigger edge.
+    const resolvedEdges: { id: string; sourceNodeId: string; targetNodeId: string; sourceHandle: string | null; targetHandle: string | null }[] = [];
+    const triggerHasOutgoing = spec.edges.some(e => e.from === 'trigger');
+    if (!triggerHasOutgoing) {
+      // First non-chat spec node that actually got inserted
+      const firstReal = spec.nodes.find(n => insertedNodeIds.includes(idMap.get(n.id)!) && n.type !== 'chat');
+      if (firstReal) {
+        resolvedEdges.push({
+          id: crypto.randomUUID(),
+          sourceNodeId: triggerNodeId,
+          targetNodeId: idMap.get(firstReal.id)!,
+          sourceHandle: null,
+          targetHandle: null,
+        });
+      }
+    }
+    for (const e of spec.edges) {
+      const sourceNodeId = idMap.get(e.from);
+      const targetNodeId = idMap.get(e.to);
+      if (!sourceNodeId || !targetNodeId) continue;
+      if (!insertedNodeIds.includes(sourceNodeId) || !insertedNodeIds.includes(targetNodeId)) continue;
+      resolvedEdges.push({
+        id: crypto.randomUUID(),
+        sourceNodeId,
+        targetNodeId,
+        sourceHandle: e.sourceHandle ?? null,
+        targetHandle: e.targetHandle ?? null,
+      });
+    }
+    for (const edge of resolvedEdges) {
+      try {
+        await db.insert(workflowEdges).values({
+          id: edge.id,
+          workflowId,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        });
+        publishWorkflowUpdate({ workflowId, kind: 'edge_added', edgeId: edge.id, ts: Date.now() });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        emit(`Edge insert failed: ${msg}`);
+      }
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    // Schedule + cron registration for cron/event triggers.
     if (triggerShape.scheduleRow) {
       try {
         const [sch] = await db
           .insert(workflowSchedules)
           .values({
-            workflowId: created.id,
+            workflowId,
             type: triggerShape.scheduleRow.type,
             config: triggerShape.scheduleRow.config,
             enabled: true,
           })
           .returning();
         if (triggerShape.scheduleRow.type === 'cron') {
-          registerCronJob({ id: sch.id, workflowId: created.id, config: sch.config });
+          registerCronJob({ id: sch.id, workflowId, config: sch.config });
         }
+        emit('Schedule registered.');
       } catch (schedErr: unknown) {
-        // Don't fail the whole create — the workflow exists and the user
-        // can fix the schedule from /jkai/canvas/<slug>. Surface as a
-        // verification-style warning so it shows up in summaryMarkdown.
         const msg = schedErr instanceof Error ? schedErr.message : String(schedErr);
-        console.error('[workflow_create] schedule setup failed', msg);
+        console.error('[workflow_build_from_spec] schedule setup failed', msg);
+        emit(`Schedule setup failed: ${msg} — fix on canvas.`);
       }
     }
 
-    const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
-    const url = `${baseUrl}/jkai/canvas/${slug}`;
-    const linkLabel = workflow.name || slug;
+    publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Build complete', ts: Date.now() });
 
-    // Final sync verification against the persisted nodes/edges. generateWorkflow
-    // already ran an escalation round if skipVerification was on; this catches
-    // anything that survived (e.g. the LLM couldn't satisfy a particular gap)
-    // so we can flag it in the chat reply.
+    // Final verification + summaryMarkdown. Re-read the persisted state so
+    // what we show matches what got saved (not what the spec said — the spec
+    // might have failed an insert here or there).
+    const persistedNodes = await db
+      .select()
+      .from(workflowNodes)
+      .where(eq(workflowNodes.workflowId, workflowId));
+    const persistedEdges = await db
+      .select()
+      .from(workflowEdges)
+      .where(eq(workflowEdges.workflowId, workflowId));
     const { runWorkflowVerification } = await import('$lib/workflows/orchestrator');
-    const issues = runWorkflowVerification(created.finalNodes, created.finalEdges) as SummaryIssue[];
+    const issues = runWorkflowVerification(
+      persistedNodes.map(n => ({
+        id: n.id,
+        type: n.type,
+        label: n.label ?? '',
+        config: (n.config ?? {}) as Record<string, unknown>,
+        position: (n.position ?? { x: 0, y: 0 }) as { x: number; y: number },
+      })),
+      persistedEdges.map(e => ({
+        id: e.id,
+        sourceNodeId: e.sourceNodeId,
+        targetNodeId: e.targetNodeId,
+        sourceHandle: e.sourceHandle ?? null,
+        targetHandle: e.targetHandle ?? null,
+      })),
+    ) as SummaryIssue[];
 
-    const summaryNodes: SummaryNode[] = created.finalNodes.map(n => ({
+    const summaryNodes: SummaryNode[] = persistedNodes.map(n => ({
       id: n.id,
       type: n.type,
-      label: n.label,
-      config: n.config ?? {},
+      label: n.label ?? n.type,
+      config: (n.config ?? {}) as Record<string, unknown>,
     }));
-    const summaryEdges: SummaryEdge[] = created.finalEdges.map(e => ({
+    const summaryEdges: SummaryEdge[] = persistedEdges.map(e => ({
       sourceNodeId: e.sourceNodeId,
       targetNodeId: e.targetNodeId,
     }));
     const summaryMarkdown = buildWorkflowSummaryMarkdown({
-      linkLabel,
+      linkLabel: spec.name,
       url,
-      description: workflow.description,
+      description: spec.description,
       nodes: summaryNodes,
       edges: summaryEdges,
       issues,
@@ -456,26 +618,20 @@ register({
     return {
       success: true,
       data: {
-        workflowId: created.id,
+        workflowId,
         slug,
-        name: workflow.name,
-        description: workflow.description,
-        explanation: workflow.explanation,
-        nodeCount: workflow.nodes.length,
+        name: spec.name,
+        description: spec.description,
+        nodeCount: persistedNodes.length,
         url,
-        // Ready-to-paste markdown — model pastes this VERBATIM. Contains
-        // the link, the description, every node with its actual saved
-        // config, the flow diagram, and any verification gaps the user
-        // must fix on the canvas. The previous `linkMarkdown` is now
-        // embedded as the title line of this block.
         summaryMarkdown,
-        // Kept for backwards compat with any caller still reading it.
-        linkMarkdown: `[${linkLabel}](${url})`,
+        linkMarkdown: `[${spec.name}](${url})`,
         verificationIssues: issues,
       },
     };
   },
 });
+
 
 register({
   name: 'workflow_list',
