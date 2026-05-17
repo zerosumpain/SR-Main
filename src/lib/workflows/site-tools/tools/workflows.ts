@@ -13,6 +13,60 @@ import {
 import { desc, eq, asc, and, or, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
 import { slugify } from '$lib/canvas/slug';
+import { registerCronJob } from '$lib/workflows/scheduler';
+
+/**
+ * Coerce the generator's `workflow.trigger` (set by the orchestrator's
+ * set_trigger tool) into the three shapes we need:
+ *   - the `workflows.trigger` JSON column
+ *   - the trigger node's `config` JSON
+ *   - the `workflowSchedules` row (only for kind=cron / kind=event)
+ *
+ * The orchestrator emits config.expression for cron (per its tool description
+ * — "provide config.expression as a cron string"); we also accept config.cron
+ * defensively in case the model wrote that key by mistake.
+ */
+function deriveTriggerShape(trigger: { type: string; config?: Record<string, unknown> } | undefined) {
+  const type = trigger?.type ?? 'manual';
+  const cfg = (trigger?.config ?? {}) as Record<string, unknown>;
+  if (type === 'cron') {
+    const expression =
+      (typeof cfg.expression === 'string' && cfg.expression) ||
+      (typeof cfg.cron === 'string' && cfg.cron) ||
+      '';
+    return {
+      workflowsTrigger: { type: 'cron', config: { expression } },
+      nodeConfig: { kind: 'cron', cron: expression },
+      scheduleRow: expression
+        ? { type: 'cron' as const, config: { expression } }
+        : null,
+    };
+  }
+  if (type === 'webhook') {
+    return {
+      workflowsTrigger: { type: 'webhook', config: cfg },
+      nodeConfig: { kind: 'webhook', ...cfg },
+      scheduleRow: null,
+    };
+  }
+  if (type === 'event') {
+    const eventType = typeof cfg.eventType === 'string' ? cfg.eventType : '';
+    const sourceWorkflowId = typeof cfg.sourceWorkflowId === 'string' ? cfg.sourceWorkflowId : undefined;
+    return {
+      workflowsTrigger: { type: 'event', config: cfg },
+      nodeConfig: { kind: 'event', eventType, ...(sourceWorkflowId ? { sourceWorkflowId } : {}) },
+      scheduleRow: eventType
+        ? { type: 'event' as const, config: sourceWorkflowId ? { eventType, sourceWorkflowId } : { eventType } }
+        : null,
+    };
+  }
+  // manual (default)
+  return {
+    workflowsTrigger: { type: 'manual' },
+    nodeConfig: { kind: 'manual' },
+    scheduleRow: null,
+  };
+}
 
 type SummaryNode = { id: string; type: string; label: string; config: Record<string, unknown> };
 type SummaryEdge = { sourceNodeId: string; targetNodeId: string };
@@ -224,6 +278,36 @@ register({
       finalNodes: import('$lib/workflows/types').WorkflowNodeDef[];
       finalEdges: import('$lib/workflows/types').WorkflowEdgeDef[];
     };
+    // The orchestrator's set_trigger tool writes `workflow.trigger`. Honour
+    // it on insert so cron / webhook / event workflows actually fire on
+    // schedule — previously we hardcoded manual and silently dropped what
+    // the generator picked.
+    //
+    // Defensive recovery: when the LLM forgets to call set_trigger but puts
+    // a cron expression on the trigger node's config directly (e.g.
+    // `kind:'manual', cron:'*/10 * * * *'` — an incoherent state the model
+    // produces fairly often), infer the workflow-level trigger from that
+    // node config so the schedule still gets created.
+    let effectiveTrigger = workflow.trigger;
+    if (!effectiveTrigger || effectiveTrigger.type === 'manual') {
+      const trigNode = workflow.nodes.find(
+        (n) => n.type === 'trigger' || n.type === 'manual-trigger',
+      );
+      const cfg = (trigNode?.config ?? {}) as Record<string, unknown>;
+      const cronExpr =
+        (typeof cfg.cron === 'string' && cfg.cron) ||
+        (typeof cfg.expression === 'string' && cfg.expression) ||
+        '';
+      if (cfg.kind === 'cron' || cronExpr) {
+        effectiveTrigger = { type: 'cron', config: { expression: cronExpr } };
+      } else if (cfg.kind === 'webhook') {
+        effectiveTrigger = { type: 'webhook', config: cfg };
+      } else if (cfg.kind === 'event' && typeof cfg.eventType === 'string') {
+        effectiveTrigger = { type: 'event', config: cfg };
+      }
+    }
+    const triggerShape = deriveTriggerShape(effectiveTrigger);
+
     try {
       created = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -231,7 +315,7 @@ register({
           .values({
             name: `canvas:${slug}`,
             description: workflow.description || workflow.name || slug,
-            trigger: { type: 'manual' },
+            trigger: triggerShape.workflowsTrigger,
           })
           .returning();
 
@@ -247,7 +331,10 @@ register({
             ...existing,
             type: 'trigger',
             label: existing.label || 'Trigger',
-            config: { kind: 'manual', ...(existing.config || {}) },
+            // existing.config wins for any extra LLM-supplied keys, but
+            // triggerShape.nodeConfig sets the canonical kind/cron/etc. so
+            // the canvas menu reads the same values the scheduler does.
+            config: { ...(existing.config || {}), ...triggerShape.nodeConfig },
             position: existing.position || { x: 20, y: 20 },
           };
         } else {
@@ -257,7 +344,7 @@ register({
             id: newId,
             type: 'trigger',
             label: 'Trigger',
-            config: { kind: 'manual' },
+            config: triggerShape.nodeConfig,
             position: { x: 20, y: 20 },
           });
         }
@@ -308,6 +395,32 @@ register({
     } catch (dbErr: unknown) {
       const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
       return { success: false, error: `Failed to save canvas: ${dbMsg}` };
+    }
+
+    // For cron / event workflows, the trigger column + node config isn't
+    // enough — the scheduler reads from `workflow_schedules`. Insert the
+    // row and register the cron job so the workflow actually fires.
+    if (triggerShape.scheduleRow) {
+      try {
+        const [sch] = await db
+          .insert(workflowSchedules)
+          .values({
+            workflowId: created.id,
+            type: triggerShape.scheduleRow.type,
+            config: triggerShape.scheduleRow.config,
+            enabled: true,
+          })
+          .returning();
+        if (triggerShape.scheduleRow.type === 'cron') {
+          registerCronJob({ id: sch.id, workflowId: created.id, config: sch.config });
+        }
+      } catch (schedErr: unknown) {
+        // Don't fail the whole create — the workflow exists and the user
+        // can fix the schedule from /jkai/canvas/<slug>. Surface as a
+        // verification-style warning so it shows up in summaryMarkdown.
+        const msg = schedErr instanceof Error ? schedErr.message : String(schedErr);
+        console.error('[workflow_create] schedule setup failed', msg);
+      }
     }
 
     const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');

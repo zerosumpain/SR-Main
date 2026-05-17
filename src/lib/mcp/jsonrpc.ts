@@ -279,6 +279,24 @@ export async function dispatchJsonRpc(
               result: out,
               status,
             });
+            // Pull the human-readable error message out of the result so the
+            // chat subscriber doesn't fall through to "unknown error". The
+            // failed-phase publish path expects `error:` to be populated;
+            // results shaped { success:false, error:"..." } would otherwise
+            // strand the message inside `result` where the subscriber
+            // ignores it.
+            const failedMessage =
+              status === 'error' && out && typeof out === 'object'
+                ? (() => {
+                    const o = out as Record<string, unknown>;
+                    if (typeof o.error === 'string') return o.error;
+                    if (o.error && typeof o.error === 'object') {
+                      const err = o.error as Record<string, unknown>;
+                      if (typeof err.message === 'string') return err.message;
+                    }
+                    return undefined;
+                  })()
+                : undefined;
             publishToolStep({
               workflowId: busKey,
               stepId,
@@ -286,6 +304,7 @@ export async function dispatchJsonRpc(
               tool: name,
               resultPreview: preview,
               result: out,
+              error: failedMessage,
               summary: completionSummary || undefined,
               ts: Date.now(),
             });
