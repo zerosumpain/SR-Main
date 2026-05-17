@@ -195,8 +195,16 @@ const dynamicDefs = loadDynamicNodeDefinitions(DYNAMIC_NODES_DIR);
   }
 })();
 
-// Boot WhatsApp service if enabled
+// Boot WhatsApp service if enabled.
+//
+// Delegated mode: when WHATSAPP_HERMES_BRIDGE_URL is set, every outbound send
+// POSTs to the Hermes WA bridge instead of running our own Baileys. We don't
+// wire the OrchestratorBridge — inbound WhatsApp is Hermes-owned (the platform
+// plugin handles DMs + home channel). That was already how things worked in
+// practice; only outbound was duplicated, which is what kept failing.
 async function bootWhatsApp() {
+  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL;
+
   try {
     const [config] = await db
       .select()
@@ -204,27 +212,34 @@ async function bootWhatsApp() {
       .where(eq(whatsappConfig.id, 'default'))
       .limit(1);
 
-    if (!config?.enabled) {
+    // In delegated mode we always boot the service (with no Baileys) so that
+    // outbound sends route through the bridge regardless of the legacy
+    // `enabled` flag. Otherwise honour the flag.
+    if (!delegated && !config?.enabled) {
       console.log('[whatsapp] Not enabled — skipping boot');
       return;
     }
 
     const service = getWhatsAppService();
-    service.setAllowedNumbers((config.allowedNumbers as string[]) || []);
+    if (config?.allowedNumbers) {
+      service.setAllowedNumbers(config.allowedNumbers as string[]);
+    }
 
-    const bridge = new OrchestratorBridge(
-      (to, text) => service.sendMessage(to, text),
-      {
-        sendAttachmentFn: (to, att, caption) => service.sendAttachment(to, att, caption),
-        typingFn: (to) => service.sendTyping(to),
-        typingDoneFn: (to) => service.sendTypingDone(to),
-      },
-    );
+    if (!delegated) {
+      const bridge = new OrchestratorBridge(
+        (to, text) => service.sendMessage(to, text),
+        {
+          sendAttachmentFn: (to, att, caption) => service.sendAttachment(to, att, caption),
+          typingFn: (to) => service.sendTyping(to),
+          typingDoneFn: (to) => service.sendTypingDone(to),
+        },
+      );
+      service.onMessage((msg) => bridge.handleMessage(msg));
+    }
 
-    service.onMessage((msg) => bridge.handleMessage(msg));
-    await service.connect(config.authDir || 'data/whatsapp-auth');
+    await service.connect(config?.authDir || 'data/whatsapp-auth');
 
-    console.log('[whatsapp] Service booted');
+    console.log(`[whatsapp] Service booted${delegated ? ' (delegated → Hermes bridge)' : ''}`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[whatsapp] Boot failed:', msg);

@@ -31,6 +31,16 @@ export class WhatsAppService {
 	private saveCreds: (() => Promise<void>) | null = null;
 	private credsWriteQueue: Promise<void> = Promise.resolve();
 
+	// Delegated mode: when WHATSAPP_HERMES_BRIDGE_URL is set we don't run our
+	// own Baileys client (which would fight Hermes for the paired session and
+	// loop on failed QR-pair attempts). Instead, every outbound send POSTs to
+	// the Hermes bridge's existing HTTP API. Inbound stays Hermes-only.
+	private bridgeUrl: string | null =
+		typeof process !== 'undefined' && process.env.WHATSAPP_HERMES_BRIDGE_URL
+			? process.env.WHATSAPP_HERMES_BRIDGE_URL.replace(/\/+$/, '')
+			: null;
+	private get delegated(): boolean { return this.bridgeUrl !== null; }
+
 	getState(): WhatsAppServiceState {
 		return {
 			status: this.status,
@@ -69,6 +79,24 @@ export class WhatsAppService {
 
 	async connect(authDir: string): Promise<void> {
 		if (this.status === 'connected' || this.status === 'connecting') return;
+
+		// Delegated mode: don't pair our own Baileys. Probe the bridge once to
+		// surface a connected/disconnected status correctly; outbound sends
+		// will hit /send on every call regardless.
+		if (this.delegated) {
+			try {
+				const res = await fetch(`${this.bridgeUrl}/health`, { signal: AbortSignal.timeout(3000) });
+				this.status = res.ok ? 'connected' : 'disconnected';
+			} catch {
+				// Bridge unreachable at boot is fine — Hermes may still be coming
+				// up. Sends will fail per-call with a clear error until the
+				// bridge is live.
+				this.status = 'disconnected';
+			}
+			this.qrCode = null;
+			return;
+		}
+
 		this.status = 'connecting';
 		this.qrCode = null;
 
@@ -269,14 +297,28 @@ export class WhatsAppService {
 	}
 
 	async sendTyping(to: string): Promise<void> {
+		const jid = to.includes('@') ? to : this.toJid(to);
+		if (this.delegated) {
+			try {
+				await fetch(`${this.bridgeUrl}/typing`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ chatId: jid }),
+					signal: AbortSignal.timeout(3000),
+				});
+			} catch {}
+			return;
+		}
 		if (!this.sock || this.status !== 'connected') return;
 		try {
-			const jid = to.includes('@') ? to : this.toJid(to);
 			await this.sock.sendPresenceUpdate('composing', jid);
 		} catch {}
 	}
 
 	async sendTypingDone(to: string): Promise<void> {
+		// Hermes bridge has no explicit "stop typing" endpoint; presence
+		// resets on its own. No-op in delegated mode.
+		if (this.delegated) return;
 		if (!this.sock || this.status !== 'connected') return;
 		try {
 			const jid = to.includes('@') ? to : this.toJid(to);
@@ -285,13 +327,33 @@ export class WhatsAppService {
 	}
 
 	async sendMessage(to: string, text: string): Promise<WhatsAppSendResult> {
+		const jid = to.includes('@') ? to : this.toJid(to);
+
+		if (this.delegated) {
+			try {
+				const res = await fetch(`${this.bridgeUrl}/send`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ chatId: jid, message: text }),
+					signal: AbortSignal.timeout(15_000),
+				});
+				if (!res.ok) {
+					const body = await res.text().catch(() => '');
+					return { sent: false, error: `Hermes bridge /send returned ${res.status}: ${body.slice(0, 200)}` };
+				}
+				const json = (await res.json().catch(() => ({}))) as { messageId?: string; id?: string };
+				return { sent: true, messageId: json.messageId ?? json.id };
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : 'Unknown error';
+				return { sent: false, error: `Hermes bridge unreachable: ${msg}` };
+			}
+		}
+
 		if (!this.sock || this.status !== 'connected') {
 			return { sent: false, error: 'WhatsApp not connected' };
 		}
 
 		try {
-			// If 'to' already contains @ it's a full JID (e.g. LID), use as-is
-			const jid = to.includes('@') ? to : this.toJid(to);
 			const result = await this.sock.sendMessage(jid, { text });
 			return { sent: true, messageId: result?.key?.id || undefined };
 		} catch (err: unknown) {
@@ -346,6 +408,40 @@ export class WhatsAppService {
 	}
 
 	async sendAttachment(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		// Delegated mode: route every attachment through the Hermes bridge's
+		// /send-media endpoint, which takes a filePath the bridge will read
+		// directly. Works for both processes on homeserv because they share
+		// the same user + filesystem.
+		if (this.delegated) {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const mediaType =
+				att.kind === 'image' ? 'image' :
+				att.kind === 'audio' ? 'audio' :
+				att.kind === 'video' ? 'video' : 'document';
+			try {
+				const res = await fetch(`${this.bridgeUrl}/send-media`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						chatId: jid,
+						filePath: att.diskPath,
+						mediaType,
+						caption: caption ?? undefined,
+						fileName: att.originalName ?? undefined,
+					}),
+					signal: AbortSignal.timeout(60_000),
+				});
+				if (!res.ok) {
+					const body = await res.text().catch(() => '');
+					return { sent: false, error: `Hermes bridge /send-media returned ${res.status}: ${body.slice(0, 200)}` };
+				}
+				const json = (await res.json().catch(() => ({}))) as { messageId?: string; id?: string };
+				return { sent: true, messageId: json.messageId ?? json.id };
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : 'Unknown error';
+				return { sent: false, error: `Hermes bridge unreachable: ${msg}` };
+			}
+		}
 		if (att.kind === 'image') return this.sendImage(to, att, caption);
 		if (att.kind === 'audio') return this.sendAudio(to, att);
 		if (att.kind === 'video') {
