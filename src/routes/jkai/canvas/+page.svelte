@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { slugify } from '$lib/canvas/slug';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import type { CanvasSummary } from '$lib/canvas/adapter';
 
   let { data } = $props();
   const canvases = $derived(data.canvases);
@@ -12,6 +13,9 @@
   let slugEdited = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+
+  type SortKey = 'lastRun' | 'nodes' | 'lastEdited';
+  let sortKey = $state<SortKey>('lastRun');
 
   const previewSlug = $derived(slugEdited ? slugify(slugDraft) : slugify(titleDraft));
 
@@ -25,6 +29,64 @@
       minute: '2-digit',
     });
   }
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  function bucketLastRun(c: { latestRunAt: string | null }, now: number): string {
+    if (!c.latestRunAt) return 'Never run';
+    const age = now - new Date(c.latestRunAt).getTime();
+    if (age < 1 * DAY_MS) return 'Last 24 hours';
+    if (age < 7 * DAY_MS) return 'This week';
+    if (age < 14 * DAY_MS) return 'Last 2 weeks';
+    return 'Older than 2 weeks';
+  }
+
+  function bucketLastEdited(c: { updatedAt: string }, now: number): string {
+    const age = now - new Date(c.updatedAt).getTime();
+    if (age < 1 * DAY_MS) return 'Today';
+    if (age < 7 * DAY_MS) return 'This week';
+    if (age < 30 * DAY_MS) return 'This month';
+    return 'Older';
+  }
+
+  function bucketNodes(c: { nodeCount: number }): string {
+    if (c.nodeCount <= 5) return 'Small (1–5 nodes)';
+    if (c.nodeCount <= 15) return 'Medium (6–15 nodes)';
+    return 'Large (16+ nodes)';
+  }
+
+  const BUCKET_ORDER: Record<SortKey, string[]> = {
+    lastRun: ['Last 24 hours', 'This week', 'Last 2 weeks', 'Older than 2 weeks', 'Never run'],
+    lastEdited: ['Today', 'This week', 'This month', 'Older'],
+    nodes: ['Large (16+ nodes)', 'Medium (6–15 nodes)', 'Small (1–5 nodes)'],
+  };
+
+  function sortValue(c: CanvasSummary, key: SortKey): number {
+    if (key === 'lastRun') return c.latestRunAt ? new Date(c.latestRunAt).getTime() : 0;
+    if (key === 'lastEdited') return new Date(c.updatedAt).getTime();
+    return c.nodeCount;
+  }
+
+  const groupedCanvases = $derived.by(() => {
+    const now = Date.now();
+    const bucketed = new Map<string, CanvasSummary[]>();
+    for (const c of canvases) {
+      const bucket =
+        sortKey === 'lastRun'
+          ? bucketLastRun(c, now)
+          : sortKey === 'lastEdited'
+            ? bucketLastEdited(c, now)
+            : bucketNodes(c);
+      if (!bucketed.has(bucket)) bucketed.set(bucket, []);
+      bucketed.get(bucket)!.push(c);
+    }
+    for (const list of bucketed.values()) {
+      list.sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey));
+    }
+    return BUCKET_ORDER[sortKey]
+      .filter((name) => bucketed.has(name))
+      .map((name) => ({ name, items: bucketed.get(name)! }));
+  });
 
   function formatPct(v: number | null) {
     if (v === null) return '—';
@@ -178,6 +240,14 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Canvases</span>
+      <label class="sort-ctrl">
+        <span class="sr-label-tight">Sort</span>
+        <select class="nm-text-input sort-select" bind:value={sortKey}>
+          <option value="lastRun">Last run (recent → older)</option>
+          <option value="nodes">Node count (large → small)</option>
+          <option value="lastEdited">Last edited (recent → older)</option>
+        </select>
+      </label>
       <span class="nm-sec-meta">
         {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
       </span>
@@ -186,53 +256,62 @@
     {#if canvases.length === 0}
       <div class="empty">No canvases yet. Create one above.</div>
     {:else}
-      <div class="grid">
-        {#each canvases as c (c.workflowId)}
-          <article class="canvas-card">
-            <a class="card-link" href={`/jkai/canvas/${c.slug}`}>
-              <div class="card-head">
-                <div class="card-title-block">
-                  <span class="card-title">{c.title}</span>
-                  <span class="card-slug">/{c.slug}</span>
-                </div>
-                <span class="trigger-pill" data-type={c.triggerType}>{c.triggerType}</span>
-              </div>
-              <div class="card-stats">
-                <div class="mini">
-                  <span class="mini-val">{c.nodeCount}</span>
-                  <span class="mini-lbl">nodes</span>
-                </div>
-                <div class="mini">
-                  <span class="mini-val">{c.edgeCount}</span>
-                  <span class="mini-lbl">edges</span>
-                </div>
-                <div class="mini">
-                  <span class="mini-val">
-                    {#if c.latestRunStatus}
-                      <span class="status-dot" data-status={c.latestRunStatus}></span>
-                      {c.latestRunStatus}
-                    {:else}
-                      <span class="mini-muted">—</span>
-                    {/if}
-                  </span>
-                  <span class="mini-lbl">last run</span>
-                </div>
-              </div>
-              <div class="card-foot">
-                <span>last run {formatTime(c.latestRunAt)}</span>
-              </div>
-            </a>
-            <button
-              type="button"
-              class="row-link danger card-del"
-              title="Delete canvas"
-              onclick={() => removeCanvas(c.slug, c.title)}
-            >
-              Delete
-            </button>
-          </article>
-        {/each}
-      </div>
+      {#each groupedCanvases as group (group.name)}
+        <div class="bucket">
+          <div class="bucket-hd">
+            <span class="bucket-name">{group.name}</span>
+            <span class="bucket-count">{group.items.length}</span>
+          </div>
+          <div class="grid">
+            {#each group.items as c (c.workflowId)}
+              <article class="canvas-card">
+                <a class="card-link" href={`/jkai/canvas/${c.slug}`}>
+                  <div class="card-head">
+                    <div class="card-title-block">
+                      <span class="card-title">{c.title}</span>
+                      <span class="card-slug">/{c.slug}</span>
+                    </div>
+                    <span class="trigger-pill" data-type={c.triggerType}>{c.triggerType}</span>
+                  </div>
+                  <div class="card-stats">
+                    <div class="mini">
+                      <span class="mini-val">{c.nodeCount}</span>
+                      <span class="mini-lbl">nodes</span>
+                    </div>
+                    <div class="mini">
+                      <span class="mini-val">{c.edgeCount}</span>
+                      <span class="mini-lbl">edges</span>
+                    </div>
+                    <div class="mini">
+                      <span class="mini-val">
+                        {#if c.latestRunStatus}
+                          <span class="status-dot" data-status={c.latestRunStatus}></span>
+                          {c.latestRunStatus}
+                        {:else}
+                          <span class="mini-muted">—</span>
+                        {/if}
+                      </span>
+                      <span class="mini-lbl">last run</span>
+                    </div>
+                  </div>
+                  <div class="card-foot">
+                    <span>last run {formatTime(c.latestRunAt)}</span>
+                    <span>edited {formatTime(c.updatedAt)}</span>
+                  </div>
+                </a>
+                <button
+                  type="button"
+                  class="row-link danger card-del"
+                  title="Delete canvas"
+                  onclick={() => removeCanvas(c.slug, c.title)}
+                >
+                  Delete
+                </button>
+              </article>
+            {/each}
+          </div>
+        </div>
+      {/each}
     {/if}
   </section>
 </div>
@@ -329,6 +408,42 @@
     font-size: 10px;
     color: var(--text-ghost);
     margin-left: auto;
+  }
+  .sort-ctrl {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+  }
+  .sort-select {
+    width: auto;
+    padding: 3px 6px;
+    font-size: 11px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+
+  /* ——— Buckets ——— */
+  .bucket { margin-bottom: 1.1rem; }
+  .bucket:last-child { margin-bottom: 0; }
+  .bucket-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.55rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px dashed var(--card-border);
+  }
+  .bucket-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+  }
+  .bucket-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
   }
 
   /* ——— Stats ——— */
@@ -551,6 +666,9 @@
     color: var(--text-ghost);
     padding-top: 0.35rem;
     border-top: 1px dashed var(--card-border);
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
   }
 
   .status-dot {
