@@ -31,6 +31,25 @@ export interface WorkflowUpdateEvent {
   edgeId?: string;
   /** Optional human-readable summary the canvas can flash inline. */
   summary?: string;
+  /** Full node row for node_added / node_updated. Lets the canvas patch
+   *  its local state in place instead of paying a full invalidateAll round
+   *  trip — so nodes appear one at a time as they're built, not in a
+   *  batch when the orchestrator's tool burst ends. */
+  node?: {
+    id: string;
+    type: string;
+    label: string;
+    config: unknown;
+    position: unknown;
+  };
+  /** Full edge row for edge_added. Same in-place-patch rationale. */
+  edge?: {
+    id: string;
+    sourceNodeId: string;
+    targetNodeId: string;
+    sourceHandle: string | null;
+    targetHandle: string | null;
+  };
   ts: number;
 }
 

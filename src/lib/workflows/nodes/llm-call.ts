@@ -19,7 +19,7 @@ export const llmCallExecutor: NodeExecutor = {
       throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
     }
     const temperature = (config.temperature as number) ?? 0.7;
-    const maxTokens = (config.maxTokens as number) ?? 1024;
+    const maxTokens = (config.maxTokens as number) ?? 2048;
 
     const { client, model } = await resolveLLMClient(config.model as string | undefined);
 

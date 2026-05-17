@@ -1,6 +1,49 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { safeFunction, UnsafeExpressionError } from './safe-eval';
 
+/**
+ * LLMs writing transform bodies often skip the explicit `return` and just
+ * leave a value expression at the end (arrow-function-body style):
+ *   `const r = input; ({ message: \`x\` })`
+ * Without a `return`, `new Function(body)` evaluates the expression then
+ * returns undefined → downstream nodes get empty input → silent failure
+ * (this is exactly what broke whatsapp sends from canvas builds).
+ *
+ * If the body already contains a `return`, leave it alone. Otherwise:
+ *   1. Try wrapping the whole body as `return (body)`. Works for single
+ *      expressions (`{ ...input, x: 1 }`, `input.body.value`).
+ *   2. If that doesn't parse, find the last top-level semicolon and stick
+ *      `return ` in front of whatever follows it. Handles the common
+ *      `const x = ...; <expression>` pattern.
+ * If neither works, fall back to the raw body and let the executor catch
+ * the resulting undefined / SyntaxError.
+ */
+function ensureReturn(rawBody: string): string {
+  if (/\breturn\b/.test(rawBody)) return rawBody;
+  const wrapped = `return (${rawBody.trim().replace(/;+\s*$/, '')});`;
+  try {
+    new Function('input', wrapped);
+    return wrapped;
+  } catch {
+    // fall through
+  }
+  const lastSemi = rawBody.lastIndexOf(';');
+  if (lastSemi >= 0) {
+    const head = rawBody.slice(0, lastSemi + 1);
+    const tail = rawBody.slice(lastSemi + 1).trim().replace(/;+\s*$/, '');
+    if (tail) {
+      const candidate = `${head} return (${tail});`;
+      try {
+        new Function('input', candidate);
+        return candidate;
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return rawBody;
+}
+
 export const transformExecutor: NodeExecutor = {
   type: 'transform',
 
@@ -15,8 +58,10 @@ export const transformExecutor: NodeExecutor = {
       return { output: { ...input }, rowCount: 1 };
     }
 
+    const body = ensureReturn(expression);
+
     try {
-      const fn = safeFunction(['input'], expression);
+      const fn = safeFunction(['input'], body);
       const result = fn(input);
       const output = result && typeof result === 'object' ? result : { result };
       return { output, rowCount: 1 };

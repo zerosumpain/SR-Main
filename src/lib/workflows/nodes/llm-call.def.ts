@@ -12,11 +12,11 @@ export const llmCallDef: NodeDefinition = {
       systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
       userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
       temperature: { type: 'number', description: 'Sampling temperature 0–2 (default 0.7)' },
-      maxTokens: { type: 'number', description: 'Max tokens to generate (default 1024)' },
+      maxTokens: { type: 'number', description: 'Max tokens to generate (default 2048). Note: reasoning-heavy models (GLM, o1, etc.) charge reasoning tokens against this cap — values below ~1000 frequently return an empty content with finish_reason=length. Bias high.' },
     },
     required: ['userPrompt'],
   },
-  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 1024 },
+  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 2048 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
   basicConfig: [

@@ -937,6 +937,13 @@ register({
         kind: 'node_updated',
         nodeId: node.id,
         summary: node.label,
+        node: {
+          id: node.id,
+          type: node.type,
+          label: node.label,
+          config: node.config,
+          position: node.position,
+        },
         ts: Date.now(),
       });
     }
@@ -999,6 +1006,13 @@ register({
       kind: 'node_added',
       nodeId: node.id,
       summary: node.label,
+      node: {
+        id: node.id,
+        type: node.type,
+        label: node.label,
+        config: node.config,
+        position: node.position,
+      },
       ts: Date.now(),
     });
     return { success: true, data: node };
@@ -1120,6 +1134,13 @@ register({
       workflowId: edge.workflowId,
       kind: 'edge_added',
       edgeId: edge.id,
+      edge: {
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+      },
       ts: Date.now(),
     });
     return { success: true, data: edge };
@@ -1179,6 +1200,13 @@ register({
         workflowId: edge.workflowId,
         kind: 'edge_added',
         edgeId: edge.id,
+        edge: {
+          id: edge.id,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        },
         ts: Date.now(),
       });
     }

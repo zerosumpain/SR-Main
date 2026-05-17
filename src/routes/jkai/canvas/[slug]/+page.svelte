@@ -18,7 +18,7 @@
   import BuildViewNode from '$lib/canvas/nodes/BuildViewNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
-  import { byType as byNodeType, allTypes as allNodeTypes, type NodeTypeOption } from '$lib/canvas/adapter';
+  import { byType as byNodeType, allTypes as allNodeTypes, mapTypeToKind, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
   import { getDefinition } from '$lib/workflows/registry-client';
@@ -130,28 +130,104 @@
   const canvas = $derived(data.canvas);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
 
-  // Live mutation feed: when an external builder (e.g. workflow_build_from_spec)
-  // adds nodes or edges to this workflow, an SSE event fires on /api/workflows/
-  // <id>/live and we invalidateAll() so the canvas re-renders with the new
-  // state. Debounced 150ms so a burst of inserts coalesces into a single
-  // re-fetch instead of N round-trips.
+  // Live mutation feed: when an external builder (workflow_build_from_spec
+  // or per-tool workflow_add_node / workflow_add_edge / etc) mutates this
+  // workflow, an SSE event fires on /api/workflows/<id>/live. We patch the
+  // local canvas state in-place per event so each node/edge appears the
+  // instant its tool call completes — invalidateAll() is too heavy here
+  // (it re-runs the canvas load + listCanvases + model catalogue) and a
+  // debounced refetch made the user wait until the whole build was done
+  // before anything rendered.
+  //
+  // For event kinds we can't patch (build_started, build_complete,
+  // workflow_created) we still invalidateAll on a trailing edge.
   $effect(() => {
     if (!canvas?.id) return;
     const es = new EventSource(`/api/workflows/${canvas.id}/live`);
-    let pending: ReturnType<typeof setTimeout> | null = null;
+    let pendingInvalidate: ReturnType<typeof setTimeout> | null = null;
     const scheduleInvalidate = () => {
-      if (pending) clearTimeout(pending);
-      pending = setTimeout(() => {
-        pending = null;
+      if (pendingInvalidate) clearTimeout(pendingInvalidate);
+      pendingInvalidate = setTimeout(() => {
+        pendingInvalidate = null;
         void invalidateAll();
-      }, 150);
+      }, 200);
     };
-    es.onmessage = () => scheduleInvalidate();
+    es.onmessage = (evt) => {
+      let e: {
+        kind?: string;
+        nodeId?: string;
+        edgeId?: string;
+        node?: { id: string; type: string; label: string; config: unknown; position: unknown };
+        edge?: {
+          id: string;
+          sourceNodeId: string;
+          targetNodeId: string;
+          sourceHandle: string | null;
+          targetHandle: string | null;
+        };
+      } = {};
+      try { e = JSON.parse(evt.data); } catch { return; }
+      if ((e.kind === 'node_added' || e.kind === 'node_updated') && e.node) {
+        const pos = (e.node.position as { x?: number; y?: number }) || {};
+        const incoming: CanvasNode = {
+          id: e.node.id,
+          kind: mapTypeToKind(e.node.type),
+          name: e.node.label,
+          x: typeof pos.x === 'number' ? pos.x : 0,
+          y: typeof pos.y === 'number' ? pos.y : 0,
+          type: e.node.type,
+          config: (e.node.config as Record<string, unknown>) || {},
+        };
+        const list = data.canvas.nodes;
+        const idx = list.findIndex((n) => n.id === incoming.id);
+        if (idx >= 0) {
+          // Preserve runtime fields (status / inputData / outputData) the
+          // server-side load attaches but external mutations don't carry.
+          const prev = list[idx];
+          data.canvas.nodes = [
+            ...list.slice(0, idx),
+            { ...prev, ...incoming },
+            ...list.slice(idx + 1),
+          ];
+        } else {
+          data.canvas.nodes = [...list, incoming];
+        }
+        return;
+      }
+      if (e.kind === 'node_removed' && e.nodeId) {
+        data.canvas.nodes = data.canvas.nodes.filter((n) => n.id !== e.nodeId);
+        data.canvas.edges = data.canvas.edges.filter(
+          (edge) => edge.from !== e.nodeId && edge.to !== e.nodeId,
+        );
+        return;
+      }
+      if (e.kind === 'edge_added' && e.edge) {
+        const edgeView = { id: e.edge.id, from: e.edge.sourceNodeId, to: e.edge.targetNodeId };
+        const existingIdx = data.canvas.edges.findIndex((x) => x.id === edgeView.id);
+        if (existingIdx >= 0) {
+          data.canvas.edges = [
+            ...data.canvas.edges.slice(0, existingIdx),
+            { ...data.canvas.edges[existingIdx], ...edgeView },
+            ...data.canvas.edges.slice(existingIdx + 1),
+          ];
+        } else {
+          data.canvas.edges = [...data.canvas.edges, edgeView];
+        }
+        return;
+      }
+      if (e.kind === 'edge_removed' && e.edgeId) {
+        data.canvas.edges = data.canvas.edges.filter((edge) => edge.id !== e.edgeId);
+        return;
+      }
+      // build_started / build_complete / workflow_created / anything new
+      // we don't recognise — fall back to the heavyweight refetch.
+      scheduleInvalidate();
+    };
     es.onerror = () => {
       // EventSource auto-reconnects after a brief backoff; no action needed.
     };
     return () => {
-      if (pending) clearTimeout(pending);
+      if (pendingInvalidate) clearTimeout(pendingInvalidate);
       es.close();
     };
   });
