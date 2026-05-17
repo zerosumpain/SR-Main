@@ -931,6 +931,15 @@ register({
     }
 
     const [node] = await db.update(workflowNodes).set(updates).where(eq(workflowNodes.id, nodeId)).returning();
+    if (node) {
+      publishWorkflowUpdate({
+        workflowId: node.workflowId,
+        kind: 'node_updated',
+        nodeId: node.id,
+        summary: node.label,
+        ts: Date.now(),
+      });
+    }
     return { success: true, data: node };
   },
 });
@@ -975,16 +984,59 @@ register({
     const configErr = await validateNodeConfig(type, config);
     if (configErr) return { success: false, error: configErr };
 
+    const explicitPosition = args.position as { x: number; y: number } | undefined;
+    const position = explicitPosition ?? (await nextNodePosition(workflowId));
+
     const [node] = await db.insert(workflowNodes).values({
       workflowId,
       type,
       label: args.label as string,
       config,
-      position: (args.position as { x: number; y: number }) || { x: 0, y: 0 },
+      position,
     }).returning();
+    publishWorkflowUpdate({
+      workflowId,
+      kind: 'node_added',
+      nodeId: node.id,
+      summary: node.label,
+      ts: Date.now(),
+    });
     return { success: true, data: node };
   },
 });
+
+/**
+ * Pick a fresh canvas position for a brand-new node so individual
+ * `workflow_add_node` calls don't pile up at (0, 0). Lays nodes out in a
+ * 3-column grid below / to the right of whatever's already there, matching
+ * the spacing `workflow_build_from_spec` uses for batch inserts.
+ */
+async function nextNodePosition(workflowId: string): Promise<{ x: number; y: number }> {
+  const COL_W = 280;
+  const ROW_H = 160;
+  const COLS = 3;
+  const ORIGIN_X = 240;
+  const ORIGIN_Y = 20;
+  const existing = await db
+    .select({ position: workflowNodes.position })
+    .from(workflowNodes)
+    .where(eq(workflowNodes.workflowId, workflowId));
+  const used = new Set<string>();
+  for (const row of existing) {
+    const p = row.position as { x?: number; y?: number } | null;
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') continue;
+    used.add(`${Math.round(p.x)},${Math.round(p.y)}`);
+  }
+  for (let i = 0; i < 60; i++) {
+    const col = i % COLS;
+    const row = Math.floor(i / COLS);
+    const x = ORIGIN_X + col * COL_W;
+    const y = ORIGIN_Y + row * ROW_H;
+    if (!used.has(`${x},${y}`)) return { x, y };
+  }
+  // Past 60 slots — just stagger off the bottom so nothing exactly overlaps.
+  return { x: ORIGIN_X, y: ORIGIN_Y + (existing.length + 1) * ROW_H };
+}
 
 register({
   name: 'workflow_list_node_types',
@@ -1025,6 +1077,13 @@ register({
       .where(or(eq(workflowEdges.sourceNodeId, nodeId), eq(workflowEdges.targetNodeId, nodeId)));
 
     await db.delete(workflowNodes).where(eq(workflowNodes.id, nodeId));
+    publishWorkflowUpdate({
+      workflowId: existing.workflowId,
+      kind: 'node_removed',
+      nodeId,
+      summary: existing.label,
+      ts: Date.now(),
+    });
     return { success: true, data: { deleted: true, label: existing.label, edgesRemoved: connectedEdges.length } };
   },
 });
@@ -1057,6 +1116,12 @@ register({
       sourceHandle: (args.sourceHandle as string) || null,
       targetHandle: (args.targetHandle as string) || null,
     }).returning();
+    publishWorkflowUpdate({
+      workflowId: edge.workflowId,
+      kind: 'edge_added',
+      edgeId: edge.id,
+      ts: Date.now(),
+    });
     return { success: true, data: edge };
   },
 });
@@ -1075,6 +1140,12 @@ register({
     const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string)).limit(1);
     if (!existing) return { success: false, error: 'Edge not found' };
     await db.delete(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string));
+    publishWorkflowUpdate({
+      workflowId: existing.workflowId,
+      kind: 'edge_removed',
+      edgeId: existing.id,
+      ts: Date.now(),
+    });
     return { success: true, data: { deleted: true } };
   },
 });
@@ -1103,6 +1174,14 @@ register({
     if (args.sourceHandle !== undefined) updates.sourceHandle = args.sourceHandle || null;
     if (args.targetHandle !== undefined) updates.targetHandle = args.targetHandle || null;
     const [edge] = await db.update(workflowEdges).set(updates).where(eq(workflowEdges.id, edgeId)).returning();
+    if (edge) {
+      publishWorkflowUpdate({
+        workflowId: edge.workflowId,
+        kind: 'edge_added',
+        edgeId: edge.id,
+        ts: Date.now(),
+      });
+    }
     return edge ? { success: true, data: edge } : { success: false, error: 'Edge not found' };
   },
 });
