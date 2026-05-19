@@ -57,13 +57,13 @@
     gap: 2px;
     padding: 4px;
     overflow-x: auto;
-    border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    border-bottom: 1px solid var(--card-border);
   }
   .dot {
     flex: 0 0 auto;
-    background: var(--bg-card, rgba(255,255,255,0.04));
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
-    color: var(--text-muted, #888);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
     padding: 2px 6px;
     font: 9px / 1 ui-monospace, Menlo, monospace;
     border-radius: 2px;
@@ -71,14 +71,14 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
-  .dot:hover { background: var(--bg-hover, rgba(255,255,255,0.08)); }
+  .dot:hover { background: var(--surface-overlay); }
   .dot.active {
-    background: var(--accent, #3a8a56);
-    color: white;
-    border-color: var(--accent, #3a8a56);
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
   }
-  .dot.s-completed { border-left: 2px solid #3a8a56; }
-  .dot.s-failed    { border-left: 2px solid #c44; }
-  .dot.s-running   { border-left: 2px solid #ffcf40; }
+  .dot.s-completed { border-left: 2px solid var(--status-success); }
+  .dot.s-failed    { border-left: 2px solid var(--status-error); }
+  .dot.s-running   { border-left: 2px solid #ffcf40; } /* healing — no token, amber literal */
   .rel { font-weight: 600; }
 </style>

@@ -83,10 +83,10 @@
     return Math.max((b.durationMs / runDurationMs) * 100, 0.4);
   }
   function barColour(status: string): string {
-    if (status === 'completed') return '#3a8a56';
-    if (status === 'failed') return '#c44';
-    if (status === 'running') return '#ffcf40';
-    return 'var(--text-muted, #888)';
+    if (status === 'completed') return 'var(--status-success)';
+    if (status === 'failed') return 'var(--status-error)';
+    if (status === 'running') return '#ffcf40'; /* healing — no token, amber literal */
+    return 'var(--text-muted)';
   }
 </script>
 
@@ -150,25 +150,25 @@
     height: 100%;
     padding: 10px;
     gap: 8px;
-    background: var(--bg-card, rgba(255,255,255,0.03));
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
-    font: 11px / 1.4 ui-monospace, Menlo, monospace;
-    color: var(--text-primary, #e6e6e6);
+    font: 11px / 1.4 var(--font-mono);
+    color: var(--text-primary);
     overflow: hidden;
   }
   .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .title { font-weight: 600; font-size: 12px; }
-  .picker { flex: 1; background: transparent; color: inherit; border: 1px solid var(--border-subtle, rgba(255,255,255,0.08)); font: inherit; padding: 1px 4px; }
+  .picker { flex: 1; background: transparent; color: inherit; border: 1px solid var(--card-border); font: inherit; padding: 1px 4px; }
   .gantt { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   .row { display: grid; grid-template-columns: 100px 1fr 50px; gap: 6px; align-items: center; }
-  .rowlabel { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary, #e6e6e6); }
-  .track { position: relative; height: 14px; background: var(--bg-track, rgba(255,255,255,0.04)); border-radius: 2px; }
+  .rowlabel { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+  .track { position: relative; height: 14px; background: var(--bg-section); border-radius: 2px; }
   .bar { position: absolute; top: 0; height: 100%; border: none; cursor: pointer; border-radius: 2px; padding: 0; }
   .bar:hover { filter: brightness(1.15); }
-  .rowdur { color: var(--text-muted, #888); font-size: 9px; text-align: right; }
-  .ft { display: flex; gap: 6px; color: var(--text-muted, #888); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .rowdur { color: var(--text-muted); font-size: 9px; text-align: right; }
+  .ft { display: flex; gap: 6px; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; }
   .sep { opacity: 0.5; }
-  .empty, .skel { color: var(--text-muted, #888); font-style: italic; padding: 8px; }
-  .error-strip { color: #c44; font-size: 10px; padding: 4px; border: 1px solid #c44; border-radius: 4px; }
+  .empty, .skel { color: var(--text-muted); font-style: italic; padding: 8px; }
+  .error-strip { color: var(--status-error); font-size: 10px; padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
 </style>
