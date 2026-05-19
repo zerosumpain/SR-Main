@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, nodeExecutions } from '$lib/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 /**
  * Returns the last N node_execution rows for a given node id, scoped
@@ -53,7 +53,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
     })
     .from(nodeExecutions)
     .where(eq(nodeExecutions.nodeId, params.id))
-    .orderBy(desc(nodeExecutions.completedAt))
+    // NULLS LAST: an in-flight execution (completed_at IS NULL) must not sort
+    // above the most-recently-completed row — the Inspector auto-selects
+    // executions[0], and a null-output running row would show "no data".
+    .orderBy(sql`${nodeExecutions.completedAt} DESC NULLS LAST`, sql`${nodeExecutions.startedAt} DESC NULLS LAST`)
     .limit(limit);
 
   return json({
