@@ -60,6 +60,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
         eq(workflowRuns.workflowId, wf.id),
         eq(nodeExecutions.status, 'failed'),
         isNotNull(nodeExecutions.error),
+        // Require completedAt so totalErrors stays consistent with what the
+        // grouping loop actually processes — watchdog-reaped or mid-flight
+        // crashed rows can have status='failed' but no completed_at.
+        isNotNull(nodeExecutions.completedAt),
         gte(workflowRuns.startedAt, period.from),
         lt(workflowRuns.startedAt, period.to),
       ),
