@@ -61,6 +61,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       FROM node_executions ne
       INNER JOIN workflow_runs wr ON wr.id = ne.run_id
       WHERE ne.node_id = ${params.id}
+        AND wr.workflow_id = ${wf.id}
         AND wr.started_at >= ${period.from}
         AND wr.started_at < ${period.to}
         AND ne.completed_at IS NOT NULL
@@ -82,6 +83,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       FROM node_executions ne
       INNER JOIN workflow_runs wr ON wr.id = ne.run_id
       WHERE ne.node_id = ${params.id}
+        AND wr.workflow_id = ${wf.id}
         AND wr.started_at >= ${period.from}
         AND wr.started_at < ${period.to}
       GROUP BY bucket
@@ -99,6 +101,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       FROM node_executions ne
       INNER JOIN workflow_runs wr ON wr.id = ne.run_id
       WHERE ne.node_id = ${params.id}
+        AND wr.workflow_id = ${wf.id}
         AND wr.started_at >= ${period.from}
         AND wr.started_at < ${period.to}
       GROUP BY bucket
@@ -121,6 +124,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       FROM node_executions ne
       INNER JOIN workflow_runs wr ON wr.id = ne.run_id
       WHERE ne.node_id = ${params.id}
+        AND wr.workflow_id = ${wf.id}
         AND wr.started_at >= ${period.from}
         AND wr.started_at < ${period.to}
       GROUP BY bucket
