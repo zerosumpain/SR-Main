@@ -2,6 +2,7 @@
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
   import { formatUsd, formatTokens } from './costFormat';
+  import PerNodeDrilldown from './PerNodeDrilldown.svelte';
 
   interface PerNodeRow {
     nodeId: string;
@@ -215,43 +216,17 @@
               <tr class="detail">
                 <td></td>
                 <td colspan="11">
-                  <div class="detail-grid">
-                    <div class="detail-cell">
-                      <span class="dl">Min</span>
-                      <span class="dv">{formatDurationMs(r.minMs)}</span>
-                    </div>
-                    <div class="detail-cell">
-                      <span class="dl">Max</span>
-                      <span class="dv">{formatDurationMs(r.maxMs)}</span>
-                    </div>
-                    <div class="detail-cell">
-                      <span class="dl">Success</span>
-                      <span class="dv ok">{r.success}</span>
-                    </div>
-                    <div class="detail-cell">
-                      <span class="dl">Failed</span>
-                      <span class="dv fail">{r.failed}</span>
-                    </div>
-                  </div>
+                  <PerNodeDrilldown
+                    slug={slug}
+                    nodeId={r.nodeId}
+                    defaultRange={period as '1h' | '6h' | '24h' | '7d' | '30d' | 'all'}
+                    refreshKey={refreshKey}
+                  />
                   {#if r.lastError}
-                    <div class="last-err">
-                      <div class="last-err-hdr">
-                        Last error · {formatRelative(new Date(r.lastError.at))}
-                      </div>
-                      <pre>{r.lastError.message}</pre>
+                    <div class="last-error" title={r.lastError.message}>
+                      <span class="le-when">{formatRelative(new Date(r.lastError.at))}</span>
+                      <span class="le-msg">{r.lastError.message.slice(0, 200)}</span>
                     </div>
-                  {/if}
-                  {#if onrowclick}
-                    <button
-                      class="jump-btn"
-                      type="button"
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        onrowclick?.(r.nodeId);
-                      }}
-                    >
-                      Jump to node
-                    </button>
                   {/if}
                 </td>
               </tr>
@@ -441,6 +416,18 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  .last-error {
+    margin-top: 6px;
+    padding: 4px 6px;
+    background: rgba(204, 68, 68, 0.06);
+    border-left: 2px solid #c44;
+    font-size: 9px;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .last-error .le-when { color: var(--text-muted, #888); flex: 0 0 auto; }
+  .last-error .le-msg { color: #c44; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .error-strip {
     color: #b53b3b;
     font-size: 10px;
