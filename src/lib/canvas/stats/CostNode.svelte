@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Chart, Svg, Bars } from 'layerchart';
+  import { groupStackData } from 'layerchart/utils/stack';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { formatUsd } from './costFormat';
   import { formatPercent } from './format';
@@ -68,17 +69,24 @@
     return `hsl(${hue}, 65%, 55%)`;
   }
 
-  // Stack buckets per timestamp for the chart.
+  // Stack buckets per timestamp for the chart using layerchart's groupStackData.
+  // groupStackData requires a `value` field; map costUsd → value before stacking.
   const stackedBuckets = $derived.by(() => {
-    const byT = new Map<string, Record<string, number | Date>>();
-    const models = new Set<string>();
-    for (const b of data?.buckets ?? []) {
-      models.add(b.model);
-      const row = (byT.get(b.t) ?? { t: new Date(b.t) }) as Record<string, number | Date>;
-      row[b.model] = b.costUsd;
-      byT.set(b.t, row);
-    }
-    return { rows: Array.from(byT.values()), models: [...models].sort() };
+    const buckets = data?.buckets ?? [];
+    const models = [...new Set(buckets.map((b) => b.model))].sort();
+    if (buckets.length === 0) return { rows: [], models };
+
+    const mapped = buckets.map((b) => ({ t: b.t, model: b.model, value: b.costUsd }));
+    const stackRows = (groupStackData(mapped, { xKey: 't', stackBy: 'model' }) as unknown) as Array<{
+      t: string;
+      model: string;
+      value: number;
+      values: [number, number];
+    }>;
+
+    // Attach parsed Date so scaleTime can consume it.
+    const rows = stackRows.map((r) => ({ ...r, ts: new Date(r.t) }));
+    return { rows, models };
   });
 </script>
 
@@ -99,13 +107,21 @@
       {#if stackedBuckets.rows.length > 0}
         <Chart
           data={stackedBuckets.rows}
-          x="t"
+          x="ts"
+          y="values"
+          yDomain={[0, null]}
           xScale={scaleTime()}
           yScale={scaleLinear()}
         >
           <Svg>
             {#each stackedBuckets.models as model (model)}
-              <Bars y={model} fill={colorForModel(model)} stroke="none" />
+              <Bars
+                data={stackedBuckets.rows.filter((r) => r.model === model)}
+                x="ts"
+                y="values"
+                fill={colorForModel(model)}
+                stroke="none"
+              />
             {/each}
           </Svg>
         </Chart>
