@@ -11,6 +11,7 @@
   import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
   import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
+  import RunTimelineNode from '$lib/canvas/stats/RunTimelineNode.svelte';
   import { useCanvasStream } from '$lib/canvas/stats/useCanvasStream.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
@@ -815,6 +816,20 @@
     ) {
       return evt.seq;
     }
+    return 0;
+  });
+
+  const timelineBumpKey = $derived.by(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return 0;
+    if (
+      evt.type === 'node.started' ||
+      evt.type === 'node.completed' ||
+      evt.type === 'node.failed' ||
+      evt.type === 'run.started' ||
+      evt.type === 'run.completed' ||
+      evt.type === 'run.failed'
+    ) return evt.seq;
     return 0;
   });
 
@@ -3884,6 +3899,12 @@
                   period={period}
                   refreshKey={perNodeBumpKey}
                   onrowclick={(nodeId) => scrollToNode(nodeId)}
+                />
+              {:else if n.type === 'run-timeline'}
+                <RunTimelineNode
+                  slug={canvas.slug}
+                  refreshKey={timelineBumpKey}
+                  onnodeclick={(nodeId) => scrollToNode(nodeId)}
                 />
               {/if}
             </div>
