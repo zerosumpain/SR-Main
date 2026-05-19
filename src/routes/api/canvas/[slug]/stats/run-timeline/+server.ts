@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 function canvasWorkflowName(slug: string): string {
   return `canvas:${slug}`;
@@ -67,7 +67,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
     .from(nodeExecutions)
     .innerJoin(workflowNodes, eq(workflowNodes.id, nodeExecutions.nodeId))
     .where(eq(nodeExecutions.runId, runId))
-    .orderBy(nodeExecutions.startedAt);
+    // NULLS LAST: pending/aborted rows with no startedAt should sort to the
+    // end so the Gantt renderer's bar-offset math (which uses run.startedAt
+    // as t=0) doesn't place them ahead of completed nodes.
+    .orderBy(sql`${nodeExecutions.startedAt} ASC NULLS LAST`);
 
   return json({
     run: {
