@@ -12,6 +12,8 @@
   import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
   import RunTimelineNode from '$lib/canvas/stats/RunTimelineNode.svelte';
+  import ErrorExplorerNode from '$lib/canvas/stats/ErrorExplorerNode.svelte';
+  import CostNode from '$lib/canvas/stats/CostNode.svelte';
   import { useCanvasStream } from '$lib/canvas/stats/useCanvasStream.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
@@ -830,6 +832,19 @@
       evt.type === 'run.completed' ||
       evt.type === 'run.failed'
     ) return evt.seq;
+    return 0;
+  });
+
+  const errorsBumpKey = $derived.by(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return 0;
+    if (evt.type === 'node.failed' || evt.type === 'run.failed' || evt.type === 'run.completed') return evt.seq;
+    return 0;
+  });
+  const costBumpKey = $derived.by(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return 0;
+    if (evt.type === 'node.completed' || evt.type === 'run.completed') return evt.seq;
     return 0;
   });
 
@@ -3904,6 +3919,20 @@
                 <RunTimelineNode
                   slug={canvas.slug}
                   refreshKey={timelineBumpKey}
+                  onnodeclick={(nodeId) => scrollToNode(nodeId)}
+                />
+              {:else if n.type === 'error-explorer'}
+                <ErrorExplorerNode
+                  slug={canvas.slug}
+                  period={period}
+                  refreshKey={errorsBumpKey}
+                  onnodeclick={(nodeId) => scrollToNode(nodeId)}
+                />
+              {:else if n.type === 'cost-summary'}
+                <CostNode
+                  slug={canvas.slug}
+                  period={period}
+                  refreshKey={costBumpKey}
                   onnodeclick={(nodeId) => scrollToNode(nodeId)}
                 />
               {/if}
