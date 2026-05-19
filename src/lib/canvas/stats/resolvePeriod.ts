@@ -1,4 +1,4 @@
-export type PeriodPreset = '24h' | 'this-week' | 'last-week' | '30d' | 'last-month' | 'all';
+export type PeriodPreset = '1h' | '6h' | '24h' | '7d' | 'this-week' | 'last-week' | '30d' | 'last-month' | 'all';
 export type Granularity = 'hour' | 'day' | 'week';
 
 export interface ResolvedPeriod {
@@ -8,7 +8,7 @@ export interface ResolvedPeriod {
   granularity: Granularity;
 }
 
-const VALID = new Set<PeriodPreset>(['24h', 'this-week', 'last-week', '30d', 'last-month', 'all']);
+const VALID = new Set<PeriodPreset>(['1h', '6h', '24h', '7d', 'this-week', 'last-week', '30d', 'last-month', 'all']);
 
 function coerce(p: string | null | undefined): PeriodPreset {
   if (p && (VALID as Set<string>).has(p)) return p as PeriodPreset;
@@ -36,10 +36,25 @@ export function resolvePeriod(
   const preset = coerce(rawPreset);
 
   switch (preset) {
+    case '1h': {
+      const to = new Date(now);
+      const from = new Date(now.getTime() - 60 * 60 * 1000);
+      return { preset, from, to, granularity: 'hour' };
+    }
+    case '6h': {
+      const to = new Date(now);
+      const from = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+      return { preset, from, to, granularity: 'hour' };
+    }
     case '24h': {
       const to = new Date(now);
       const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       return { preset, from, to, granularity: 'hour' };
+    }
+    case '7d': {
+      const to = new Date(now);
+      const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return { preset, from, to, granularity: 'day' };
     }
     case 'this-week': {
       const from = startOfISOWeekUTC(now);

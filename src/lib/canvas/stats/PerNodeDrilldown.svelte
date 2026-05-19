@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { Chart, Svg, Spline, Area, Highlight } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { formatUsd, formatTokens } from './costFormat';
@@ -15,8 +16,13 @@
   }
   let { slug, nodeId, defaultRange, refreshKey = 0 }: Props = $props();
 
+  const DRILL_RANGES: Range[] = ['1h', '6h', '24h', '7d', '30d', 'all'];
+  // untrack: we intentionally snapshot `defaultRange` once to seed local state —
+  // the user drives `range` from the select after initial mount.
+  const initialRange: Range = untrack(() => DRILL_RANGES.includes(defaultRange) ? defaultRange : '24h');
+
   let metric = $state<Metric>('duration');
-  let range = $state<Range>(defaultRange);
+  let range = $state<Range>(initialRange);
 
   interface SeriesPoint {
     t: string;
