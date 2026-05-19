@@ -68,6 +68,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
     max_ms: number | null;
     total_ms: number | null;
     last_run_at: Date | null;
+    cost_usd: string | null;
+    tokens_in: string | null;
+    tokens_out: string | null;
+    cache_read: string | null;
   }>(sql`
     SELECT
       ne.node_id AS node_id,
@@ -85,7 +89,11 @@ export const GET: RequestHandler = async ({ params, url }) => {
         FILTER (WHERE ne.completed_at IS NOT NULL) AS max_ms,
       SUM(EXTRACT(EPOCH FROM (ne.completed_at - ne.started_at)) * 1000)
         FILTER (WHERE ne.completed_at IS NOT NULL) AS total_ms,
-      MAX(ne.completed_at) AS last_run_at
+      MAX(ne.completed_at) AS last_run_at,
+      COALESCE(SUM(ne.cost_usd), 0)::text AS cost_usd,
+      COALESCE(SUM(ne.tokens_input), 0)::bigint AS tokens_in,
+      COALESCE(SUM(ne.tokens_output), 0)::bigint AS tokens_out,
+      COALESCE(SUM(ne.cache_read_tokens), 0)::bigint AS cache_read
     FROM node_executions ne
     INNER JOIN workflow_runs wr ON wr.id = ne.run_id
     WHERE wr.workflow_id = ${wf.id}
@@ -143,6 +151,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
       lastError: err
         ? { at: new Date(err.completed_at).toISOString(), message: err.error }
         : null,
+      costUsd: agg ? Number(agg.cost_usd) : 0,
+      tokensInput: agg ? Number(agg.tokens_in) : 0,
+      tokensOutput: agg ? Number(agg.tokens_out) : 0,
+      cacheReadTokens: agg ? Number(agg.cache_read) : 0,
     };
   });
 
