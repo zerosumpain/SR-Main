@@ -1,4 +1,4 @@
-export type StatsEndpoint = 'summary' | 'trends' | 'per-node';
+export type StatsEndpoint = 'summary' | 'trends' | 'per-node' | 'errors' | 'cost';
 
 export interface StatsWindow {
   preset: string;

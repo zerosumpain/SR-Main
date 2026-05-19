@@ -1,0 +1,116 @@
+<script lang="ts">
+  import { useStats } from './useStats.svelte';
+  import { formatRelative } from './format';
+
+  interface ErrorGroup {
+    signature: string;
+    count: number;
+    lastSeen: string;
+    affectedNodeIds: string[];
+    affectedNodeLabels: string[];
+    recent: Array<{
+      runId: string;
+      nodeId: string;
+      nodeLabel: string;
+      at: string;
+      error: string;
+    }>;
+  }
+
+  interface ErrorsData {
+    totalErrors: number;
+    groups: ErrorGroup[];
+  }
+
+  interface Props {
+    slug: string;
+    period: string;
+    refreshKey?: number;
+    onnodeclick?: (nodeId: string) => void;
+  }
+  let { slug, period, refreshKey = 0, onnodeclick }: Props = $props();
+
+  const stats = useStats<ErrorsData>(() => slug, 'errors', () => period, () => refreshKey);
+
+  let expanded = $state<Record<string, boolean>>({});
+  function toggle(sig: string) { expanded = { ...expanded, [sig]: !expanded[sig] }; }
+</script>
+
+<div class="ee">
+  <header class="hd">
+    <span class="title">Errors</span>
+    <button class="refresh" onclick={() => stats.refresh()} title="Refresh">⟳</button>
+  </header>
+
+  {#if stats.error}
+    <div class="error-strip">{stats.error}</div>
+  {:else if stats.loading && !stats.data}
+    <div class="skel">Loading…</div>
+  {:else if stats.data}
+    <div class="total">{stats.data.totalErrors} errors in window</div>
+    {#if stats.data.groups.length === 0}
+      <div class="empty">No failures</div>
+    {:else}
+      <ul class="groups">
+        {#each stats.data.groups as g (g.signature)}
+          {@const isOpen = !!expanded[g.signature]}
+          <li>
+            <button class="grow" onclick={() => toggle(g.signature)}>
+              <span class="count">{g.count}×</span>
+              <span class="sig" title={g.signature}>{g.signature}</span>
+              <span class="when">{formatRelative(new Date(g.lastSeen))}</span>
+            </button>
+            <div class="affected">on {g.affectedNodeLabels.join(', ')}</div>
+            {#if isOpen}
+              <ul class="recent">
+                {#each g.recent as r, i (r.runId + '|' + r.nodeId + '|' + i)}
+                  <li>
+                    <span class="rid">{r.runId.slice(0, 8)}</span>
+                    <span class="nl">{r.nodeLabel}</span>
+                    <span class="at">{formatRelative(new Date(r.at))}</span>
+                    <button class="jump" onclick={() => onnodeclick?.(r.nodeId)}>open</button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
+</div>
+
+<style>
+  .ee {
+    display: flex; flex-direction: column; gap: 6px; padding: 10px;
+    width: 100%; height: 100%;
+    background: var(--bg-card, rgba(255,255,255,0.03));
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    border-radius: 8px;
+    font: 11px / 1.4 ui-monospace, Menlo, monospace;
+    color: var(--text-primary, #e6e6e6);
+    overflow: hidden;
+  }
+  .hd { display: flex; justify-content: space-between; align-items: center; }
+  .title { font-weight: 600; font-size: 12px; }
+  .refresh { background: transparent; border: none; color: var(--text-muted, #888); cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .total { color: var(--text-muted, #888); font-size: 10px; }
+  .groups { list-style: none; padding: 0; margin: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .grow {
+    background: transparent; border: none; color: inherit; font: inherit;
+    display: grid; grid-template-columns: 40px 1fr 60px; gap: 6px; align-items: center;
+    width: 100%; padding: 4px; cursor: pointer; text-align: left; border-radius: 3px;
+  }
+  .grow:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
+  .count { font-weight: 700; }
+  .sig { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .when, .at { color: var(--text-muted, #888); font-size: 9px; text-align: right; }
+  .affected { color: var(--text-muted, #888); font-size: 9px; padding: 0 4px 4px; }
+  .recent { list-style: none; padding: 0 4px; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+  .recent li { display: grid; grid-template-columns: 60px 1fr 50px 40px; gap: 4px; font-size: 9px; }
+  .rid { font-family: ui-monospace; color: var(--text-muted, #888); }
+  .nl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump { background: transparent; border: 1px solid var(--border-subtle, rgba(255,255,255,0.08)); color: var(--accent, #3a8a56); cursor: pointer; padding: 0 4px; font: inherit; border-radius: 2px; }
+  .empty, .skel { color: var(--text-muted, #888); font-style: italic; padding: 8px; text-align: center; }
+  .error-strip { color: #c44; font-size: 10px; padding: 4px; border: 1px solid #c44; border-radius: 4px; }
+</style>
