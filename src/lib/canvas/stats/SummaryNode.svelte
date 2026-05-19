@@ -2,6 +2,7 @@
   import { Chart, Svg, Area, Spline } from 'layerchart';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
+  import { formatUsd, formatTokens } from './costFormat';
 
   interface SummaryData {
     counters: {
@@ -11,6 +12,10 @@
       healing: number;
       successRate: number;
       avgDurationMs: number | null;
+      totalCostUsd: number;
+      tokensInput: number;
+      tokensOutput: number;
+      cacheHitRate: number;
     };
     sparkline: Array<{ bucket: string; count: number }>;
     recentRuns: Array<{ id: string; status: string; startedAt: string; durationMs: number | null }>;
@@ -66,7 +71,10 @@
       <div class="counter"><span class="v ok">{c.success}</span><span class="l">success</span></div>
       <div class="counter"><span class="v fail">{c.failed}</span><span class="l">failed</span></div>
       <div class="counter"><span class="v">{formatPercent(c.successRate)}</span><span class="l">rate</span></div>
-      <div class="counter"><span class="v">{formatDurationMs(c.avgDurationMs)}</span><span class="l">avg</span></div>
+      <div class="counter"><span class="v">{formatDurationMs(c.avgDurationMs)}</span><span class="l">avg dur</span></div>
+      <div class="counter"><span class="v">{formatUsd(c.totalCostUsd)}</span><span class="l">spend</span></div>
+      <div class="counter"><span class="v">{formatTokens(c.tokensInput)}→{formatTokens(c.tokensOutput)}</span><span class="l">tokens</span></div>
+      <div class="counter"><span class="v">{formatPercent(c.cacheHitRate)}</span><span class="l">cache</span></div>
     </div>
 
     <div class="spark" aria-hidden>
@@ -142,7 +150,7 @@
     cursor: pointer; font-size: 14px; padding: 0 4px;
   }
   .refresh:hover { color: var(--text-primary, #e6e6e6); }
-  .counters { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 6px; }
   .counter { display: flex; flex-direction: column; align-items: center; }
   .counter .v { font-size: 14px; font-weight: 600; }
   .counter .v.ok { color: #3a8a56; }
