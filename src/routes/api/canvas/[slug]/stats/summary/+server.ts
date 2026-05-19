@@ -65,6 +65,32 @@ export const GET: RequestHandler = async ({ params, url }) => {
   const successRate = runs > 0 ? success / runs : 0;
   const avgDurationMs = durCount > 0 ? Math.round(totalDuration / durCount) : null;
 
+  // Cost / token aggregates over node_executions for runs in the window.
+  const costRow = await db.execute<{
+    total_cost: string | null;
+    tokens_in: number | null;
+    tokens_out: number | null;
+    cache_read: number | null;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(ne.cost_usd), 0)::text       AS total_cost,
+      COALESCE(SUM(ne.tokens_input), 0)::int    AS tokens_in,
+      COALESCE(SUM(ne.tokens_output), 0)::int   AS tokens_out,
+      COALESCE(SUM(ne.cache_read_tokens), 0)::int AS cache_read
+    FROM node_executions ne
+    INNER JOIN workflow_runs wr ON wr.id = ne.run_id
+    WHERE wr.workflow_id = ${wf.id}
+      AND wr.started_at >= ${period.from}
+      AND wr.started_at < ${period.to}
+  `);
+
+  const cost = costRow.rows[0];
+  const totalCostUsd = cost ? Number(cost.total_cost) : 0;
+  const tokensInput = cost ? Number(cost.tokens_in) : 0;
+  const tokensOutput = cost ? Number(cost.tokens_out) : 0;
+  const cacheReadTokens = cost ? Number(cost.cache_read) : 0;
+  const cacheHitRate = tokensInput > 0 ? cacheReadTokens / tokensInput : 0;
+
   // Sparkline — bucket by granularity
   const bucketExpr =
     period.granularity === 'hour'
@@ -130,7 +156,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
       granularity: period.granularity,
     },
     data: {
-      counters: { runs, success, failed, healing, successRate, avgDurationMs },
+      counters: { runs, success, failed, healing, successRate, avgDurationMs, totalCostUsd, tokensInput, tokensOutput, cacheHitRate },
       sparkline,
       recentRuns,
       recentEdits,
