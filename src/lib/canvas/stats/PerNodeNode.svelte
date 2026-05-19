@@ -1,6 +1,7 @@
 <script lang="ts">
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
+  import { formatUsd, formatTokens } from './costFormat';
 
   interface PerNodeRow {
     nodeId: string;
@@ -16,6 +17,10 @@
     totalMs: number | null;
     lastRunAt: string | null;
     lastError: { at: string; message: string } | null;
+    costUsd: number;
+    tokensInput: number;
+    tokensOutput: number;
+    cacheReadTokens: number;
   }
 
   interface PerNodeData {
@@ -40,7 +45,8 @@
     | 'avgMs'
     | 'p95Ms'
     | 'totalMs'
-    | 'lastRunAt';
+    | 'lastRunAt'
+    | 'costUsd';
   let sortKey = $state<SortKey>('runs');
   let sortDesc = $state(true);
   let expanded = $state<Record<string, boolean>>({});
@@ -74,6 +80,9 @@
       } else if (sortKey === 'lastRunAt') {
         av = a.lastRunAt ? new Date(a.lastRunAt).getTime() : -1;
         bv = b.lastRunAt ? new Date(b.lastRunAt).getTime() : -1;
+      } else if (sortKey === 'costUsd') {
+        av = a.costUsd;
+        bv = b.costUsd;
       }
       if (av < bv) return sortDesc ? 1 : -1;
       if (av > bv) return sortDesc ? -1 : 1;
@@ -155,6 +164,16 @@
               Total
             </th>
             <th
+              onclick={() => toggleSort('costUsd')}
+              class:active={sortKey === 'costUsd'}
+              class="num"
+              title="Sum of LLM cost across all runs in this window"
+            >
+              Cost
+            </th>
+            <th class="num" title="Total prompt → completion tokens">Tokens</th>
+            <th class="num" title="Cache-read tokens as a fraction of prompt tokens">Cache</th>
+            <th
               onclick={() => toggleSort('lastRunAt')}
               class:active={sortKey === 'lastRunAt'}
               class="num"
@@ -185,6 +204,9 @@
               <td class="num">{formatDurationMs(r.avgMs)}</td>
               <td class="num">{formatDurationMs(r.p95Ms)}</td>
               <td class="num">{formatDurationMs(r.totalMs)}</td>
+              <td class="num">{formatUsd(r.costUsd)}</td>
+              <td class="num">{formatTokens(r.tokensInput)}→{formatTokens(r.tokensOutput)}</td>
+              <td class="num">{r.tokensInput > 0 ? formatPercent(r.cacheReadTokens / r.tokensInput) : '—'}</td>
               <td class="num">
                 {r.lastRunAt ? formatRelative(new Date(r.lastRunAt)) : '—'}
               </td>
@@ -192,7 +214,7 @@
             {#if isOpen}
               <tr class="detail">
                 <td></td>
-                <td colspan="8">
+                <td colspan="11">
                   <div class="detail-grid">
                     <div class="detail-cell">
                       <span class="dl">Min</span>
