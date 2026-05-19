@@ -114,12 +114,17 @@
   import { SvelteSet } from 'svelte/reactivity';
   import CollapsibleOutput from './CollapsibleOutput.svelte';
   import InspectorBody from './InspectorBody.svelte';
+  import InspectorHistory, { type Execution } from './InspectorHistory.svelte';
 
-  let {
-    data,
-    depth = 0,
-    maxDepth = 4,
-  }: { data: unknown; depth?: number; maxDepth?: number } = $props();
+  interface Props {
+    data: unknown;
+    depth?: number;
+    maxDepth?: number;
+    history?: Execution[];
+    selectedHistoryId?: string | null;
+    onhistoryselect?: (id: string) => void;
+  }
+  let { data, depth = 0, maxDepth = 4, history, selectedHistoryId = null, onhistoryselect }: Props = $props();
   const format = $derived(detectFormat(data));
 
   const csvRows = $derived(format === 'csv' ? parseCsv(data as string) : []);
@@ -240,6 +245,10 @@
     modalData = undefined;
   }
 </script>
+
+{#if history && history.length > 1 && depth === 0 && onhistoryselect}
+  <InspectorHistory executions={history} selectedId={selectedHistoryId} onselect={onhistoryselect} />
+{/if}
 
 {#if format === 'empty'}
   <div class="empty">no data captured yet — run the canvas to populate this</div>

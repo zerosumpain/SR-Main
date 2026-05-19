@@ -5,6 +5,7 @@
   import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
+  import type { Execution as InspectorExecution } from '$lib/canvas/InspectorHistory.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TimeFilter from '$lib/canvas/stats/TimeFilter.svelte';
   import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
@@ -258,6 +259,33 @@
       durationMs?: number;
     }>
   >({});
+  // Inspector node history — keyed by inspector node id.
+  let inspectorHistories = $state.raw<Record<string, InspectorExecution[]>>({});
+  let inspectorSelected = $state.raw<Record<string, string | null>>({});
+
+  async function loadInspectorHistory(inspectorNodeId: string, upstreamNodeId: string): Promise<void> {
+    try {
+      const res = await fetch(
+        `/api/canvas/${encodeURIComponent(canvas.slug)}/nodes/${encodeURIComponent(upstreamNodeId)}/recent-executions?limit=20`,
+      );
+      if (!res.ok) return;
+      const body = (await res.json()) as { executions: InspectorExecution[] };
+      inspectorHistories = { ...inspectorHistories, [inspectorNodeId]: body.executions };
+      if (!inspectorSelected[inspectorNodeId]) {
+        inspectorSelected = { ...inspectorSelected, [inspectorNodeId]: body.executions[0]?.id ?? null };
+      }
+    } catch {
+      /* network blip — try again next event */
+    }
+  }
+
+  function upstreamNodeIdFor(inspectorId: string): string | null {
+    for (const e of canvas.edges) {
+      if (e.to === inspectorId) return e.from;
+    }
+    return null;
+  }
+
   // Per-node start times (Date.now() when node_started fired) feed the
   // running-pill ticker. nowTick advances every 250ms while at least one
   // node is running so the "Running 1.2s" label increments live.
@@ -810,6 +838,23 @@
     // every node in the workflow, including any added since this tab loaded.
     if (!byId[nodeId]) return;
     refreshNodeExecution(nodeId);
+    for (const n of viewNodes) {
+      if (n.kind !== 'inspector') continue;
+      if (upstreamNodeIdFor(n.id) === nodeId) {
+        loadInspectorHistory(n.id, nodeId);
+      }
+    }
+  });
+
+  // Initial load of history for each inspector node present on the canvas.
+  $effect(() => {
+    for (const n of viewNodes) {
+      if (n.kind !== 'inspector') continue;
+      const up = upstreamNodeIdFor(n.id);
+      if (!up) continue;
+      if (inspectorHistories[n.id]) continue;
+      loadInspectorHistory(n.id, up);
+    }
   });
 
   async function refreshNodeExecution(nodeId: string): Promise<void> {
@@ -3387,7 +3432,16 @@
             </div>
 
             <div class="inspector-body" onpointerdown={(e) => e.stopPropagation()}>
-              <InspectorBody data={n.inputData} />
+              {#each [inspectorHistories[n.id] ?? []] as hist (n.id)}
+                {@const selectedId = inspectorSelected[n.id] ?? null}
+                {@const selectedExec = hist.find((e) => e.id === selectedId)}
+                <InspectorBody
+                  data={selectedExec ? selectedExec.outputData : n.inputData}
+                  history={hist}
+                  selectedHistoryId={selectedId}
+                  onhistoryselect={(id) => { inspectorSelected = { ...inspectorSelected, [n.id]: id }; }}
+                />
+              {/each}
             </div>
 
             <div
