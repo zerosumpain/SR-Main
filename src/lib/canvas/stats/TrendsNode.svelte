@@ -290,7 +290,7 @@
     <!-- ——— Cost by model track (only when data present) ——— -->
     {#if showCostChart}
       <section class="block">
-        <h4>Cost · stacked by model</h4>
+        <h4>Cost · by model</h4>
         <div class="chart-host">
           <Chart
             data={costByModelGrouped.models.flatMap((model) =>
