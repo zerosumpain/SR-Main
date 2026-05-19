@@ -761,6 +761,42 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       outputs: [],
     },
   },
+  {
+    type: 'run-timeline',
+    label: 'Run · timeline',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Gantt-style waterfall of a single run — every node as a bar, click to focus.',
+    defaultConfig: { size: { w: 540, h: 320 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
+  },
+  {
+    type: 'error-explorer',
+    label: 'Errors',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Groups failed node executions by signature. Click a group to see runs.',
+    defaultConfig: { size: { w: 420, h: 360 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
+  },
+  {
+    type: 'cost-summary',
+    label: 'Cost',
+    kind: 'stats',
+    group: 'Observability',
+    description: 'Total spend in window, by-model trend, drill-down by node type / label.',
+    defaultConfig: { size: { w: 380, h: 320 } },
+    handles: {
+      inputs: [{ id: 'data', kinds: ['dataset', 'json'] }],
+      outputs: [],
+    },
+  },
 
   // ————————————————————————— Builder (jkai autonomous build, brought into the canvas)
   {
@@ -875,7 +911,15 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'trigger') return 'trigger';
   if (type === 'chat') return 'chat';
   if (type === 'inspector') return 'inspector';
-  if (type === 'stats-summary' || type === 'stats-trends' || type === 'stats-per-node') return 'stats';
+  if (
+    type === 'stats-summary' ||
+    type === 'stats-trends' ||
+    type === 'stats-per-node' ||
+    type === 'run-timeline' ||
+    type === 'error-explorer' ||
+    type === 'cost-summary'
+  )
+    return 'stats';
   if (type === 'postit') return 'postit';
   if (type === 'annotation') return 'annotation';
   if (type === 'manual-trigger' || type === 'http-request') return 'input';
