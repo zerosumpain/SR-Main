@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Spline } from 'layerchart';
+  import { Chart, Svg, Area, Spline, Highlight, Tooltip } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { curveMonotoneX } from 'd3-shape';
   import { useStats } from './useStats.svelte';
@@ -20,6 +20,8 @@
       durationMs: { p50: number | null; p95: number | null; avg: number | null };
     }>;
     recentRuns: RecentRun[];
+    costByModel: Array<{ t: string; model: string; costUsd: number }>;
+    priorRunsByBucket: Array<{ t: string; count: number }>;
   }
 
   interface Props {
@@ -90,6 +92,41 @@
     volumeSparkline.filter((p) => p.v > 0).length >= 4,
   );
   const showDurationChart = $derived(durationSparkline.length >= 4);
+
+  // ——— Cost-by-model track ———
+  const costByModelGrouped = $derived.by(() => {
+    const map = new Map<string, Map<number, number>>(); // model -> bucketMs -> costUsd
+    for (const row of stats.data?.costByModel ?? []) {
+      const bucketMs = new Date(row.t).getTime();
+      let mm = map.get(row.model);
+      if (!mm) {
+        mm = new Map();
+        map.set(row.model, mm);
+      }
+      mm.set(bucketMs, (mm.get(bucketMs) ?? 0) + row.costUsd);
+    }
+    const models = [...map.keys()].sort();
+    return { map, models };
+  });
+
+  const showCostChart = $derived((stats.data?.costByModel?.length ?? 0) > 0);
+
+  // ——— Prior-period overlay for run-volume chart ———
+  const priorOverlay = $derived(
+    (stats.data?.priorRunsByBucket ?? []).map((p) => ({
+      t: new Date(p.t),
+      v: p.count,
+    })),
+  );
+
+  function colorForModel(model: string): string {
+    // Deterministic colour from model name — same model always gets the
+    // same hue across renders, while distinct models stay visually separated.
+    let hash = 0;
+    for (let i = 0; i < model.length; i++) hash = (hash * 31 + model.charCodeAt(i)) | 0;
+    const hue = ((hash % 360) + 360) % 360;
+    return `hsl(${hue}, 65%, 55%)`;
+  }
 </script>
 
 <div class="stats-node stats-trends">
@@ -174,7 +211,28 @@
             <Svg>
               <Area fill="var(--accent)" fillOpacity={0.15} curve={curveMonotoneX} />
               <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+              {#if priorOverlay.length > 0}
+                <Spline
+                  data={priorOverlay}
+                  x="t"
+                  y="v"
+                  stroke="var(--text-muted, #888)"
+                  strokeWidth={1}
+                  strokeDasharray="2 3"
+                  opacity={0.6}
+                  curve={curveMonotoneX}
+                />
+              {/if}
+              <Highlight points lines />
             </Svg>
+            <Tooltip.Context mode="bisect-x">
+              <Tooltip.Root let:data variant="none">
+                <div class="tt">
+                  <div class="tt-t">{new Date(data.t).toLocaleString()}</div>
+                  <div class="tt-v">{data.v} run{data.v === 1 ? '' : 's'}</div>
+                </div>
+              </Tooltip.Root>
+            </Tooltip.Context>
           </Chart>
         </div>
       </section>
@@ -197,7 +255,16 @@
             <Svg>
               <Area fill="var(--accent)" fillOpacity={0.1} curve={curveMonotoneX} />
               <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+              <Highlight points lines />
             </Svg>
+            <Tooltip.Context mode="bisect-x">
+              <Tooltip.Root let:data variant="none">
+                <div class="tt">
+                  <div class="tt-t">{new Date(data.t).toLocaleString()}</div>
+                  <div class="tt-v">{formatDurationMs(data.v)}</div>
+                </div>
+              </Tooltip.Root>
+            </Tooltip.Context>
           </Chart>
         </div>
       {:else if kpis.avg !== null}
@@ -219,6 +286,63 @@
         <div class="empty-msg">No duration data</div>
       {/if}
     </section>
+
+    <!-- ——— Cost by model track (only when data present) ——— -->
+    {#if showCostChart}
+      <section class="block">
+        <h4>Cost · stacked by model</h4>
+        <div class="chart-host">
+          <Chart
+            data={costByModelGrouped.models.flatMap((model) =>
+              Array.from(costByModelGrouped.map.get(model)?.entries() ?? []).map(([t, v]) => ({
+                t: new Date(t),
+                v,
+                model,
+              })),
+            )}
+            x="t"
+            xScale={scaleTime()}
+            y="v"
+            yScale={scaleLinear()}
+            yNice
+            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+          >
+            <Svg>
+              {#each costByModelGrouped.models as model (model)}
+                <Area
+                  data={Array.from(costByModelGrouped.map.get(model)?.entries() ?? []).map(
+                    ([t, v]) => ({ t: new Date(t), v }),
+                  )}
+                  x="t"
+                  y="v"
+                  fill={colorForModel(model)}
+                  fillOpacity={0.4}
+                  stroke={colorForModel(model)}
+                  strokeWidth={1}
+                  curve={curveMonotoneX}
+                />
+              {/each}
+              <Highlight points lines />
+            </Svg>
+            <Tooltip.Context mode="bisect-x">
+              <Tooltip.Root let:data variant="none">
+                <div class="tt">
+                  <div class="tt-t">{new Date(data.t).toLocaleString()}</div>
+                  <div class="tt-v">{data.model} · ${data.v.toFixed(4)}</div>
+                </div>
+              </Tooltip.Root>
+            </Tooltip.Context>
+          </Chart>
+        </div>
+        <div class="model-legend">
+          {#each costByModelGrouped.models as model (model)}
+            <span class="model-legend-item">
+              <span class="model-sw" style:background={colorForModel(model)}></span>{model}
+            </span>
+          {/each}
+        </div>
+      </section>
+    {/if}
   {/if}
 </div>
 
@@ -412,5 +536,49 @@
     font-size: 10px;
     padding: 8px;
     text-align: center;
+  }
+
+  /* ——— Cost-by-model legend ——— */
+  .model-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 4px;
+    font-size: 9px;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .model-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .model-sw {
+    width: 8px;
+    height: 8px;
+    border-radius: 1px;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* ——— Hover tooltip ——— */
+  .tt {
+    background: var(--bg-section, #1a1a1a);
+    border: 1px solid var(--card-border, #333);
+    padding: 4px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.5;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .tt-t {
+    color: var(--text-ghost, #666);
+    font-size: 8px;
+  }
+  .tt-v {
+    color: var(--text-primary, #eee);
+    font-weight: 500;
   }
 </style>
