@@ -66,17 +66,21 @@ export const GET: RequestHandler = async ({ params, url }) => {
   const avgDurationMs = durCount > 0 ? Math.round(totalDuration / durCount) : null;
 
   // Cost / token aggregates over node_executions for runs in the window.
+  // Token sums use ::bigint, not ::int, because INTEGER (32-bit) can overflow
+  // at ~2.1B and a long "all"-preset window across an LLM-heavy canvas can
+  // exceed that. pg returns BIGINT as a string; Number() handles values up
+  // to 2^53 cleanly, which is more than enough for any plausible total.
   const costRow = await db.execute<{
     total_cost: string | null;
-    tokens_in: number | null;
-    tokens_out: number | null;
-    cache_read: number | null;
+    tokens_in: string | null;
+    tokens_out: string | null;
+    cache_read: string | null;
   }>(sql`
     SELECT
-      COALESCE(SUM(ne.cost_usd), 0)::text       AS total_cost,
-      COALESCE(SUM(ne.tokens_input), 0)::int    AS tokens_in,
-      COALESCE(SUM(ne.tokens_output), 0)::int   AS tokens_out,
-      COALESCE(SUM(ne.cache_read_tokens), 0)::int AS cache_read
+      COALESCE(SUM(ne.cost_usd), 0)::text         AS total_cost,
+      COALESCE(SUM(ne.tokens_input), 0)::bigint   AS tokens_in,
+      COALESCE(SUM(ne.tokens_output), 0)::bigint  AS tokens_out,
+      COALESCE(SUM(ne.cache_read_tokens), 0)::bigint AS cache_read
     FROM node_executions ne
     INNER JOIN workflow_runs wr ON wr.id = ne.run_id
     WHERE wr.workflow_id = ${wf.id}
