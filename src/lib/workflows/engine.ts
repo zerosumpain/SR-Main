@@ -13,6 +13,14 @@ import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events'
 import { diagnoseAndFix } from './orchestrator/healing';
 import type { HealingContext, UndoEntry, NodeDefinition } from './types';
 import {
+  executionContext,
+  rollupUsage,
+  type LLMCallRecord,
+  type NodeExecutionContext,
+  type UsageRollup,
+} from './execution-context';
+import { emitObs } from './observability-bus';
+import {
   acquireRunSlot,
   nodeTimeoutMs,
   startHeartbeat,
@@ -32,6 +40,11 @@ export interface EngineResult {
   nodeOutputs: Map<string, Record<string, unknown>>;
   nodeInputs: Map<string, Record<string, unknown>>;
   nodeErrors: Map<string, string>;
+  /** Per-node LLM cost/token rollup, populated when one or more LLM calls
+   *  happened inside the node's execution. Nodes with no LLM calls are
+   *  absent (not present with null usage), so the persister can skip
+   *  touching the cost columns for non-LLM nodes. */
+  nodeUsage: Map<string, UsageRollup>;
   error?: string;
   healingHistory?: UndoEntry[];
   /** Populated when the engine paused mid-run for human interaction. */
@@ -119,6 +132,7 @@ export class WorkflowEngine {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
+    const nodeUsage = new Map<string, UsageRollup>();
     const skippedNodes = new Set<string>();
     const blockedEdgeIds = new Set<string>();
 
@@ -214,6 +228,58 @@ export class WorkflowEngine {
 
           const nodeStartedAt = Date.now();
           emit('node_started', nodeId);
+          emitObs('node.started', {
+            workflowId: workflowId ?? workflow.id,
+            runId,
+            nodeId,
+            startedAt: new Date(nodeStartedAt).toISOString(),
+          });
+
+          // Per-node LLM telemetry capture. The gateway wrapper (Phase 2)
+          // pushes one record per chat-completion call into `llmCalls` via
+          // AsyncLocalStorage. drain() rolls up totals and stores them on
+          // the engine result so run-helpers / scheduler can persist the
+          // cost columns. drain() is called at every exit path below
+          // (success, on-error continue, on-error route, self-healing
+          // success, self-healing failure, thrown error before healing).
+          const llmCalls: LLMCallRecord[] = [];
+          const execCtx: NodeExecutionContext = {
+            workflowId: workflowId ?? workflow.id,
+            runId,
+            nodeId,
+            llmCalls,
+          };
+          let drained = false;
+          const drain = () => {
+            if (drained) return;
+            drained = true;
+            const rollup = rollupUsage(llmCalls);
+            if (rollup) nodeUsage.set(nodeId, rollup);
+          };
+          const finishNodeOk = () => {
+            drain();
+            const u = nodeUsage.get(nodeId);
+            emitObs('node.completed', {
+              workflowId: workflowId ?? workflow.id,
+              runId,
+              nodeId,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - nodeStartedAt,
+              costUsd: u?.costUsd ? Number(u.costUsd) : null,
+              tokensInput: u?.tokensInput ?? null,
+              tokensOutput: u?.tokensOutput ?? null,
+            });
+          };
+          const finishNodeFailed = (error: string) => {
+            drain();
+            emitObs('node.failed', {
+              workflowId: workflowId ?? workflow.id,
+              runId,
+              nodeId,
+              completedAt: new Date().toISOString(),
+              error,
+            });
+          };
 
           const context: ExecutionContext = {
             runId,
@@ -261,7 +327,9 @@ export class WorkflowEngine {
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               try {
                 result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, abortController, () =>
-                  executor.execute(mergedInput, nodeDef.config, context),
+                  executionContext.run(execCtx, () =>
+                    executor.execute(mergedInput, nodeDef.config, context),
+                  ),
                 );
                 attemptErr = null;
                 break;
@@ -303,6 +371,8 @@ export class WorkflowEngine {
                 }
               }
             }
+
+            finishNodeOk();
           } catch (err: unknown) {
             // Let pause signals propagate immediately — do not heal them.
             if (err instanceof PauseForHumanSignal) throw err;
@@ -318,6 +388,7 @@ export class WorkflowEngine {
               console.log(`[on-error] ${nodeId} (${nodeDef.type}) failed but mode=continue — swallowing: ${message.slice(0, 100)}`);
               nodeOutputs.set(nodeId, {});
               emit('node_completed', nodeId, { _onErrorContinued: true, _error: message, _durationMs: Date.now() - nodeStartedAt });
+              finishNodeOk();
               return;
             }
             if (onErrorMode === 'route') {
@@ -334,6 +405,7 @@ export class WorkflowEngine {
                     this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
                   }
                 }
+                finishNodeFailed(message);
                 return;
               }
               // No error edge declared — fall through to default behaviour.
@@ -353,6 +425,7 @@ export class WorkflowEngine {
             if (!selfHealing) {
               nodeErrors.set(nodeId, message);
               emit('node_failed', nodeId, { error: message });
+              finishNodeFailed(message);
               throw err;
             }
 
@@ -475,7 +548,9 @@ export class WorkflowEngine {
                 try {
                   const retryResult: NodeResult = await withNodeTimeout(
                     nodeId, nodeDef.type, timeoutMs, abortController,
-                    () => executor.execute(mergedInput, currentConfig, context),
+                    () => executionContext.run(execCtx, () =>
+                      executor.execute(mergedInput, currentConfig, context),
+                    ),
                   );
                   const retryRowCount = typeof retryResult.rowCount === 'number' ? retryResult.rowCount : 1;
                   nodeOutputs.set(nodeId, retryResult.output);
@@ -494,6 +569,7 @@ export class WorkflowEngine {
                   }
 
                   healed = true;
+                  finishNodeOk();
                   break;
                 } catch (retryErr: unknown) {
                   currentError = retryErr instanceof Error ? retryErr.message : String(retryErr);
@@ -520,8 +596,15 @@ export class WorkflowEngine {
                 blockedEdgeIds.add(edge.id);
                 this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
               }
+              finishNodeFailed(currentError);
               // Don't throw — let other branches continue
             }
+
+            // Safety-net drain for any exit path not covered above. drain()
+            // and the finishNode* helpers are idempotent — re-running here
+            // is harmless and protects against a future code change that
+            // adds a new exit without remembering to emit observability.
+            drain();
           }
         });
 
@@ -546,7 +629,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, healingHistory };
+      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, nodeUsage, healingHistory };
     } catch (err: unknown) {
       // Human-in-the-loop pause: the run halts cleanly (no failure).
       if (err instanceof PauseForHumanSignal) {
@@ -560,6 +643,7 @@ export class WorkflowEngine {
           nodeOutputs,
           nodeInputs,
           nodeErrors,
+          nodeUsage,
           healingHistory,
           pausedAtNodeId: err.nodeId,
         };
@@ -571,7 +655,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, error: message, healingHistory };
+      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, nodeUsage, error: message, healingHistory };
     }
   }
 }

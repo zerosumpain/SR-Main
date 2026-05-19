@@ -564,6 +564,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
+  origin: text('origin', { enum: ['manual', 'hermes'] }).notNull().default('manual'),
   milestones: jsonb('milestones').$type<Array<{ id: string; title: string; done: boolean; iter?: number }>>().notNull().default(sql`'[]'::jsonb`),
   requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),
   thinkingLevel: text('thinking_level').notNull().default('medium'),
@@ -762,6 +763,19 @@ export const nodeExecutions = pgTable('node_executions', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
   logs: jsonb('logs').default(sql`'[]'::jsonb`),
+  // LLM cost / token telemetry — populated by the gateway wrapper when a
+  // node makes one or more LLM calls. Sum across calls within a single
+  // node execution; per-call breakdown is not retained. Nullable: non-LLM
+  // nodes and unknown-priced models leave these fields null so charts can
+  // distinguish "no data" from "zero".
+  tokensInput: integer('tokens_input'),
+  tokensOutput: integer('tokens_output'),
+  cacheReadTokens: integer('cache_read_tokens'),
+  reasoningTokens: integer('reasoning_tokens'),
+  costUsd: numeric('cost_usd', { precision: 12, scale: 6 }),
+  provider: text('provider'),
+  model: text('model'),
+  priceSnapshot: jsonb('price_snapshot'),
 });
 
 export type NodeExecution = typeof nodeExecutions.$inferSelect;

@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
+import { emitObs } from '$lib/workflows/observability-bus';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -89,6 +90,14 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
   const now = new Date();
   console.log(`[scheduler] Starting run ${runId} for workflow ${workflowId}`);
 
+  const runStartedAt = Date.now();
+  emitObs('run.started', {
+    workflowId,
+    runId,
+    trigger: 'scheduled',
+    startedAt: new Date(runStartedAt).toISOString(),
+  });
+
   try {
     const nodes = await db
       .select()
@@ -137,14 +146,33 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
 
     const result = await engine.execute(definition, runId, {}, undefined, workflowId);
 
+    const completedAt = new Date();
     await db
       .update(workflowRuns)
-      .set({ status: result.status, completedAt: new Date(), error: result.error ?? null })
+      .set({ status: result.status, completedAt, error: result.error ?? null })
       .where(eq(workflowRuns.id, runId));
+
+    if (result.status === 'failed') {
+      emitObs('run.failed', {
+        workflowId,
+        runId,
+        error: result.error ?? 'run failed',
+        completedAt: completedAt.toISOString(),
+      });
+    } else if (result.status !== 'awaiting_human') {
+      emitObs('run.completed', {
+        workflowId,
+        runId,
+        status: result.status as 'completed' | 'completed_with_errors',
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - runStartedAt,
+      });
+    }
 
     // Update node execution records with inputs/outputs/status
     for (const [nodeId, output] of result.nodeOutputs) {
       const inputData = result.nodeInputs.get(nodeId);
+      const usage = result.nodeUsage.get(nodeId);
       await db
         .update(nodeExecutions)
         .set({
@@ -152,17 +180,20 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
           inputData: inputData ?? null,
           outputData: output,
           completedAt: new Date(),
+          ...(usage ?? {}),
         })
         .where(eq(nodeExecutions.nodeId, nodeId));
     }
 
     for (const [nodeId, error] of result.nodeErrors) {
+      const usage = result.nodeUsage.get(nodeId);
       await db
         .update(nodeExecutions)
         .set({
           status: 'failed',
           error,
           completedAt: new Date(),
+          ...(usage ?? {}),
         })
         .where(eq(nodeExecutions.nodeId, nodeId));
     }
@@ -178,11 +209,18 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
       .where(eq(workflowSchedules.id, scheduleId));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const failedAt = new Date();
     await db
       .update(workflowRuns)
-      .set({ status: 'failed', completedAt: new Date(), error: message })
+      .set({ status: 'failed', completedAt: failedAt, error: message })
       .where(eq(workflowRuns.id, runId));
     console.error(`[scheduler] Run ${runId} failed:`, message);
+    emitObs('run.failed', {
+      workflowId,
+      runId,
+      error: message,
+      completedAt: failedAt.toISOString(),
+    });
   }
 }
 

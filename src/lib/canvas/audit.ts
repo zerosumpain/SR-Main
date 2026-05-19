@@ -1,5 +1,6 @@
 import { db } from '$lib/db';
 import { workflowAuditLog } from '$lib/db/schema';
+import { emitObs } from '$lib/workflows/observability-bus';
 
 export type AuditEntity = 'workflow' | 'node' | 'edge' | 'trigger' | 'schedule';
 export type AuditAction = 'create' | 'delete' | 'rename' | 'config' | 'update';
@@ -25,6 +26,12 @@ export async function recordAudit(input: AuditInput): Promise<void> {
       action: input.action,
       details: input.details ?? {},
     });
+    emitObs('audit.edit', {
+      workflowId: input.workflowId,
+      entity: input.entity,
+      action: input.action,
+      at: new Date().toISOString(),
+    });
   } catch (err) {
     console.error('[audit] failed to record', input, err);
   }
@@ -43,6 +50,15 @@ export async function recordAuditBatch(entries: AuditInput[]): Promise<void> {
         details: e.details ?? {},
       })),
     );
+    const at = new Date().toISOString();
+    for (const e of entries) {
+      emitObs('audit.edit', {
+        workflowId: e.workflowId,
+        entity: e.entity,
+        action: e.action,
+        at,
+      });
+    }
   } catch (err) {
     console.error('[audit] failed to record batch', entries, err);
   }

@@ -19,6 +19,7 @@ import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
+import { emitObs } from '$lib/workflows/observability-bus';
 
 /**
  * Resume a run that is currently in `awaiting_human` status.
@@ -157,6 +158,8 @@ export async function resumeRun(
   //
   //    The cleanest approach without engine refactoring: call engine.execute()
   //    with the pre-seeded outputs injected via the PreSeeded helper below.
+  const originalStartedAt = run.startedAt?.getTime() ?? Date.now();
+
   engine
     .executeWithPreSeededOutputs(definition, runId, seededOutputs, workflowId)
     .then(async (result) => {
@@ -164,22 +167,41 @@ export async function resumeRun(
 
       try {
         const isPaused = result.status === 'awaiting_human';
+        const completedAt = isPaused ? undefined : new Date();
         await db
           .update(workflowRuns)
           .set({
             status: result.status,
-            completedAt: isPaused ? undefined : new Date(),
+            completedAt,
             error: result.error || null,
             healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
             ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
           })
           .where(eq(workflowRuns.id, runId));
 
+        if (completedAt && result.status === 'failed') {
+          emitObs('run.failed', {
+            workflowId,
+            runId,
+            error: result.error ?? 'run failed',
+            completedAt: completedAt.toISOString(),
+          });
+        } else if (completedAt && result.status !== 'awaiting_human') {
+          emitObs('run.completed', {
+            workflowId,
+            runId,
+            status: result.status as 'completed' | 'completed_with_errors',
+            completedAt: completedAt.toISOString(),
+            durationMs: completedAt.getTime() - originalStartedAt,
+          });
+        }
+
         // Persist outputs for newly-executed nodes.
         for (const [nodeId, output] of result.nodeOutputs) {
           // Skip nodes that were pre-seeded (already persisted).
           if (seededOutputs[nodeId]) continue;
           const inputData = result.nodeInputs.get(nodeId);
+          const usage = result.nodeUsage.get(nodeId);
           await db
             .update(nodeExecutions)
             .set({
@@ -187,6 +209,7 @@ export async function resumeRun(
               inputData: inputData ?? null,
               outputData: output,
               completedAt: new Date(),
+              ...(usage ?? {}),
             })
             .where(
               and(
@@ -198,12 +221,14 @@ export async function resumeRun(
 
         for (const [nodeId, error] of result.nodeErrors) {
           if (seededOutputs[nodeId]) continue;
+          const usage = result.nodeUsage.get(nodeId);
           await db
             .update(nodeExecutions)
             .set({
               status: 'failed',
               error,
               completedAt: new Date(),
+              ...(usage ?? {}),
             })
             .where(
               and(
@@ -218,17 +243,25 @@ export async function resumeRun(
     })
     .catch(async (err) => {
       console.error(`[resume] Resumed workflow execution threw (runId=${runId})`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      const failedAt = new Date();
       try {
         await db
           .update(workflowRuns)
           .set({
             status: 'failed',
-            completedAt: new Date(),
-            error: err instanceof Error ? err.message : String(err),
+            completedAt: failedAt,
+            error: message,
           })
           .where(eq(workflowRuns.id, runId));
       } catch {
         /* swallow */
       }
+      emitObs('run.failed', {
+        workflowId,
+        runId,
+        error: message,
+        completedAt: failedAt.toISOString(),
+      });
     });
 }

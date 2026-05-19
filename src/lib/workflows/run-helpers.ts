@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from './types';
 import { emitWorkflowEvent, onWorkflowEvent } from './events';
+import { emitObs } from './observability-bus';
 
 // Idle timeout — if NO workflow events are emitted for this long we assume
 // the engine has hung silently inside a node (LLM call with no streaming,
@@ -100,6 +101,14 @@ export function runWorkflowAndPersist(
   });
   resetIdleWatchdog();
 
+  const runStartedAt = Date.now();
+  emitObs('run.started', {
+    workflowId,
+    runId,
+    trigger: 'manual',
+    startedAt: new Date(runStartedAt).toISOString(),
+  });
+
   engine
     .execute(definition, runId, initialInput, breakpoints, workflowId, { selfHealing })
     .then(async (result) => {
@@ -132,6 +141,7 @@ export function runWorkflowAndPersist(
 
         for (const [nodeId, output] of result.nodeOutputs) {
           const inputData = result.nodeInputs.get(nodeId);
+          const usage = result.nodeUsage.get(nodeId);
           await db
             .update(nodeExecutions)
             .set({
@@ -139,17 +149,20 @@ export function runWorkflowAndPersist(
               inputData: inputData ?? null,
               outputData: output,
               completedAt: new Date(),
+              ...(usage ?? {}),
             })
             .where(eq(nodeExecutions.nodeId, nodeId));
         }
 
         for (const [nodeId, error] of result.nodeErrors) {
+          const usage = result.nodeUsage.get(nodeId);
           await db
             .update(nodeExecutions)
             .set({
               status: 'failed',
               error,
               completedAt: new Date(),
+              ...(usage ?? {}),
             })
             .where(eq(nodeExecutions.nodeId, nodeId));
         }
@@ -162,6 +175,24 @@ export function runWorkflowAndPersist(
         }
       } catch (err) {
         console.error(`[${label}] failed to persist run results (runId=${runId})`, err);
+      }
+
+      const completedAt = new Date();
+      if (result.status === 'failed') {
+        emitObs('run.failed', {
+          workflowId,
+          runId,
+          error: result.error ?? 'run failed',
+          completedAt: completedAt.toISOString(),
+        });
+      } else if (result.status !== 'awaiting_human') {
+        emitObs('run.completed', {
+          workflowId,
+          runId,
+          status: result.status as 'completed' | 'completed_with_errors',
+          completedAt: completedAt.toISOString(),
+          durationMs: completedAt.getTime() - runStartedAt,
+        });
       }
     })
     .catch(async (err) => {
@@ -189,6 +220,12 @@ export function runWorkflowAndPersist(
         timestamp: new Date().toISOString(),
         type: 'run_failed',
         data: { error: message },
+      });
+      emitObs('run.failed', {
+        workflowId,
+        runId,
+        error: message,
+        completedAt: new Date().toISOString(),
       });
     });
 }

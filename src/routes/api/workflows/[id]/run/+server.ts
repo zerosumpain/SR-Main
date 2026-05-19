@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
+import { emitObs } from '$lib/workflows/observability-bus';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -64,19 +65,45 @@ export const POST: RequestHandler = async ({ params, request }) => {
     })),
   };
 
+  const runStartedAt = Date.now();
+  emitObs('run.started', {
+    workflowId: params.id,
+    runId: run.id,
+    trigger: 'manual',
+    startedAt: new Date(runStartedAt).toISOString(),
+  });
+
   // Execute in background — don't await
   engine.execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing }).then(async (result) => {
     const healingHistory = result.healingHistory || [];
 
     // For awaiting_human: don't set completedAt; persist pausedAtNodeId instead.
     const isPaused = result.status === 'awaiting_human';
+    const completedAt = isPaused ? undefined : new Date();
     await db.update(workflowRuns).set({
       status: result.status,
-      completedAt: isPaused ? undefined : new Date(),
+      completedAt,
       error: result.error || null,
       healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
       ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
     }).where(eq(workflowRuns.id, run.id));
+
+    if (completedAt && result.status === 'failed') {
+      emitObs('run.failed', {
+        workflowId: params.id,
+        runId: run.id,
+        error: result.error ?? 'run failed',
+        completedAt: completedAt.toISOString(),
+      });
+    } else if (completedAt && result.status !== 'awaiting_human') {
+      emitObs('run.completed', {
+        workflowId: params.id,
+        runId: run.id,
+        status: result.status as 'completed' | 'completed_with_errors',
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - runStartedAt,
+      });
+    }
 
     // Emit workflow_completed event so event-triggered workflows can chain
     if (result.status === 'completed' || result.status === 'completed_with_errors') {
@@ -91,21 +118,25 @@ export const POST: RequestHandler = async ({ params, request }) => {
     // Update node execution records
     for (const [nodeId, output] of result.nodeOutputs) {
       const inputData = result.nodeInputs.get(nodeId);
+      const usage = result.nodeUsage.get(nodeId);
       await db.update(nodeExecutions).set({
         status: 'completed',
         inputData: inputData ?? null,
         outputData: output,
         completedAt: new Date(),
+        ...(usage ?? {}),
       }).where(
         eq(nodeExecutions.nodeId, nodeId),
       );
     }
 
     for (const [nodeId, error] of result.nodeErrors) {
+      const usage = result.nodeUsage.get(nodeId);
       await db.update(nodeExecutions).set({
         status: 'failed',
         error,
         completedAt: new Date(),
+        ...(usage ?? {}),
       }).where(
         eq(nodeExecutions.nodeId, nodeId),
       );

@@ -10,6 +10,7 @@
   import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
   import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
   import PerNodeNode from '$lib/canvas/stats/PerNodeNode.svelte';
+  import { useCanvasStream } from '$lib/canvas/stats/useCanvasStream.svelte';
   import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
   import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
@@ -749,8 +750,105 @@
     await goto(url, { replaceState: true, keepFocus: true, noScroll: true });
   }
   const hasStatsNode = $derived(viewNodes.some((n) => n.kind === 'stats'));
+
+  // Canvas-wide observability stream (SSE). One connection per tab; the
+  // stats nodes and Inspector taps below derive their own refresh signals
+  // from `liveStream.lastEvent`. The legacy `refreshKey` remains as a
+  // fallback bump that some old code paths still increment (e.g., on
+  // workflow runs initiated from this same tab); it is now harmless extra
+  // signal rather than the sole trigger.
+  const liveStream = useCanvasStream(() => canvas.slug);
+
+  // Bump signal for run-level observability views (Summary, Trends). Fires
+  // when a run starts, finishes, or fails — anything that changes the
+  // counters, sparkline, or trend bars.
+  const runBumpKey = $derived.by(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return 0;
+    if (evt.type === 'run.started' || evt.type === 'run.completed' || evt.type === 'run.failed') {
+      return evt.seq;
+    }
+    if (evt.type === 'audit.edit') return evt.seq;
+    return 0;
+  });
+
+  // Bump signal for per-node observability (Per-Node table). Fires on any
+  // node-level event (started/completed/failed) plus run-level events that
+  // change the aggregate window.
+  const perNodeBumpKey = $derived.by(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return 0;
+    if (
+      evt.type === 'node.started' ||
+      evt.type === 'node.completed' ||
+      evt.type === 'node.failed' ||
+      evt.type === 'run.completed' ||
+      evt.type === 'run.failed'
+    ) {
+      return evt.seq;
+    }
+    return 0;
+  });
+
   let refreshKey = $state(0);
   let flashNodeId = $state<string | null>(null);
+
+  // Cross-tab live refresh for per-node data. The in-tab live tail already
+  // patches viewNodes via the per-run event handler when the user triggers
+  // the run from this tab. In a SECOND tab, that pipe isn't running — but
+  // useCanvasStream still receives node.completed / node.failed events
+  // from the observability bus. When one arrives for a node we have on
+  // this canvas, fetch its latest execution and patch liveData / liveStatus
+  // so Inspector taps and node status pills update without a refresh.
+  $effect(() => {
+    const evt = liveStream.lastEvent;
+    if (!evt) return;
+    if (evt.type !== 'node.completed' && evt.type !== 'node.failed') return;
+    const nodeId = evt.data?.nodeId;
+    if (typeof nodeId !== 'string') return;
+    // Only refetch nodes that exist on this canvas — events arrive for
+    // every node in the workflow, including any added since this tab loaded.
+    if (!byId[nodeId]) return;
+    refreshNodeExecution(nodeId);
+  });
+
+  async function refreshNodeExecution(nodeId: string): Promise<void> {
+    try {
+      const res = await fetch(
+        `/api/canvas/${encodeURIComponent(canvas.slug)}/nodes/${encodeURIComponent(nodeId)}/latest-execution`,
+      );
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        execution: {
+          status: string;
+          inputData: unknown;
+          outputData: unknown;
+          error: string | null;
+        } | null;
+      };
+      if (!body.execution) return;
+      const ex = body.execution;
+      // Replace the container references — see liveStatus/liveData comments
+      // above for why we use whole-object writes against $state.raw.
+      const nextStatus: NodeStatus | undefined =
+        ex.status === 'completed' ? 'ok'
+          : ex.status === 'failed' ? 'failed'
+          : ex.status === 'running' ? 'running'
+          : undefined;
+      if (nextStatus) liveStatus = { ...liveStatus, [nodeId]: nextStatus };
+      liveData = {
+        ...liveData,
+        [nodeId]: {
+          ...(liveData[nodeId] ?? {}),
+          inputData: ex.inputData,
+          outputData: ex.outputData,
+          error: ex.error,
+        },
+      };
+    } catch {
+      // Network blip — the next event will retry. Don't surface to the user.
+    }
+  }
 
   // Guard against orphan edges whose endpoints no longer exist
   const visibleEdges = $derived(
@@ -3723,14 +3821,14 @@
 
             <div class="stats-node-body" onpointerdown={(e) => e.stopPropagation()}>
               {#if n.type === 'stats-summary'}
-                <SummaryNode slug={canvas.slug} period={period} refreshKey={refreshKey} />
+                <SummaryNode slug={canvas.slug} period={period} refreshKey={runBumpKey} />
               {:else if n.type === 'stats-trends'}
-                <TrendsNode slug={canvas.slug} period={period} refreshKey={refreshKey} />
+                <TrendsNode slug={canvas.slug} period={period} refreshKey={runBumpKey} />
               {:else if n.type === 'stats-per-node'}
                 <PerNodeNode
                   slug={canvas.slug}
                   period={period}
-                  refreshKey={refreshKey}
+                  refreshKey={perNodeBumpKey}
                   onrowclick={(nodeId) => scrollToNode(nodeId)}
                 />
               {/if}
