@@ -37,6 +37,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
     .limit(1);
   const period = resolvePeriod(url.searchParams.get('period'), new Date(), earliestRow?.t ?? undefined);
 
+  const periodMs = period.to.getTime() - period.from.getTime();
+  const priorFrom = new Date(period.from.getTime() - periodMs);
+  const priorTo = period.from;
+
   const trunc =
     period.granularity === 'hour'
       ? sql`date_trunc('hour', ${workflowRuns.startedAt})`
@@ -159,6 +163,48 @@ export const GET: RequestHandler = async ({ params, url }) => {
           : null,
     }));
 
+  const costByModelRows = await db.execute<{
+    bucket: Date;
+    model: string | null;
+    cost_usd: string | null;
+  }>(sql`
+    SELECT
+      date_trunc(${period.granularity}, wr.started_at) AS bucket,
+      ne.model AS model,
+      COALESCE(SUM(ne.cost_usd), 0)::text AS cost_usd
+    FROM node_executions ne
+    INNER JOIN workflow_runs wr ON wr.id = ne.run_id
+    WHERE wr.workflow_id = ${wf.id}
+      AND wr.started_at >= ${period.from}
+      AND wr.started_at < ${period.to}
+      AND ne.cost_usd IS NOT NULL
+    GROUP BY bucket, ne.model
+    ORDER BY bucket, ne.model
+  `);
+
+  const costByModel = costByModelRows.rows.map((r) => ({
+    t: (r.bucket instanceof Date ? r.bucket : new Date(r.bucket as unknown as string)).toISOString(),
+    model: r.model ?? 'unknown',
+    costUsd: r.cost_usd !== null ? Number(r.cost_usd) : 0,
+  }));
+
+  const priorBuckets = await db.execute<{ bucket: Date; total: number }>(sql`
+    SELECT
+      date_trunc(${period.granularity}, wr.started_at) AS bucket,
+      COUNT(*)::int AS total
+    FROM workflow_runs wr
+    WHERE wr.workflow_id = ${wf.id}
+      AND wr.started_at >= ${priorFrom}
+      AND wr.started_at < ${priorTo}
+    GROUP BY bucket
+    ORDER BY bucket
+  `);
+
+  const priorRunsByBucket = priorBuckets.rows.map((r) => ({
+    t: (r.bucket instanceof Date ? r.bucket : new Date(r.bucket as unknown as string)).toISOString(),
+    count: Number(r.total),
+  }));
+
   return json({
     window: {
       preset: period.preset,
@@ -166,6 +212,6 @@ export const GET: RequestHandler = async ({ params, url }) => {
       to: period.to.toISOString(),
       granularity: period.granularity,
     },
-    data: { buckets, recentRuns },
+    data: { buckets, recentRuns, costByModel, priorRunsByBucket },
   });
 };
