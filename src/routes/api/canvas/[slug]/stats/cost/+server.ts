@@ -18,7 +18,15 @@ export const GET: RequestHandler = async ({ params, url }) => {
     .where(eq(workflows.name, canvasWorkflowName(params.slug)));
   if (!wf) return json({ error: 'Canvas not found' }, { status: 404 });
 
-  const groupBy = (url.searchParams.get('groupBy') ?? 'model') as GroupBy;
+  const rawGroupBy = url.searchParams.get('groupBy') ?? 'model';
+  const VALID_GROUP_BY: ReadonlyArray<GroupBy> = ['model', 'node-type', 'node-label'];
+  if (!VALID_GROUP_BY.includes(rawGroupBy as GroupBy)) {
+    return json(
+      { error: `Invalid groupBy "${rawGroupBy}". Must be one of: ${VALID_GROUP_BY.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  const groupBy = rawGroupBy as GroupBy;
 
   const [earliestRow] = await db
     .select({ t: workflowRuns.startedAt })
