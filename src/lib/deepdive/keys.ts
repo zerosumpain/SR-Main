@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import OpenAI from 'openai';
+import { installUsageCapture } from '$lib/jkai/usage-capture';
 
 const KEYS_PATH = join(process.cwd(), 'keys.json');
 
@@ -45,10 +46,13 @@ export function saveKeys(keys: DeepDiveKeys): void {
 export function getOpenAIClient(): OpenAI {
   const keys = loadKeys();
   if (!keys.zaiApiKey) throw new Error('Z.AI API key not configured');
-  return new OpenAI({
-    apiKey: keys.zaiApiKey,
-    baseURL: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-  });
+  return installUsageCapture(
+    new OpenAI({
+      apiKey: keys.zaiApiKey,
+      baseURL: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
+    }),
+    'zai',
+  );
 }
 
 export function getModel(): string {
