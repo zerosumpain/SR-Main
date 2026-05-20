@@ -175,10 +175,12 @@
   .refresh { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
   .headline { font-size: 22px; font-weight: 700; }
   .chart { height: 130px; }
-  .chart :global(.tick text), .chart :global(.tickLabel text) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
-  .chart :global(.tick line) { stroke: var(--divider); }
-  .chart :global(.rule line), .chart :global(.rule) { stroke: var(--divider); }
-  .chart :global(.Grid line), .chart :global(.Grid path) { stroke: var(--divider); opacity: 0.5; }
+  /* layerchart puts the class on the element itself: <text class="tickLabel">,
+     <line class="tick">. Descendant selectors (.tick text) do not match. */
+  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .chart :global(.tick) { stroke: var(--divider); }
+  .chart :global(.rule line) { stroke: var(--card-border); }
+  .chart :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
   .tabs { display: flex; gap: 2px; }
   .tabs button {
     background: transparent; border: 1px solid var(--card-border);
