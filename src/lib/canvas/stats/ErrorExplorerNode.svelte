@@ -34,6 +34,10 @@
 
   let expanded = $state<Record<string, boolean>>({});
   function toggle(sig: string) { expanded = { ...expanded, [sig]: !expanded[sig] }; }
+
+  const maxCount = $derived(
+    stats.data ? Math.max(1, ...stats.data.groups.map((g) => g.count)) : 1
+  );
 </script>
 
 <div class="ee">
@@ -47,7 +51,10 @@
   {:else if stats.loading && !stats.data}
     <div class="skel">Loading…</div>
   {:else if stats.data}
-    <div class="total">{stats.data.totalErrors} errors in window</div>
+    <div class="total">
+      <span class="total-count" class:has-errors={stats.data.totalErrors > 0}>{stats.data.totalErrors}</span>
+      <span class="total-label">errors in window</span>
+    </div>
     {#if stats.data.groups.length === 0}
       <div class="empty">No failures</div>
     {:else}
@@ -60,6 +67,7 @@
               <span class="sig" title={g.signature}>{g.signature}</span>
               <span class="when">{formatRelative(new Date(g.lastSeen))}</span>
             </button>
+            <div class="err-bar" style="width: {(g.count / maxCount) * 100}%"></div>
             <div class="affected">on {g.affectedNodeLabels.join(', ')}</div>
             {#if isOpen}
               <ul class="recent">
@@ -94,14 +102,18 @@
   .hd { display: flex; justify-content: space-between; align-items: center; }
   .title { font-weight: 600; font-size: 12px; }
   .refresh { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
-  .total { color: var(--text-muted); font-size: 10px; }
+  .total { display: flex; align-items: baseline; gap: 6px; }
+  .total-count { font-size: 18px; font-weight: 500; color: var(--text-muted); line-height: 1; }
+  .total-count.has-errors { color: var(--status-error); }
+  .total-label { color: var(--text-ghost); font-size: 10px; }
   .groups { list-style: none; padding: 0; margin: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
   .grow {
-    background: transparent; border: none; color: inherit; font: inherit;
+    background: transparent; border: none; border-left: 3px solid var(--status-error); color: inherit; font: inherit;
     display: grid; grid-template-columns: 40px 1fr 60px; gap: 6px; align-items: center;
-    width: 100%; padding: 4px; cursor: pointer; text-align: left; border-radius: 3px;
+    width: 100%; padding: 4px; padding-left: 6px; cursor: pointer; text-align: left; border-radius: 3px;
   }
   .grow:hover { background: var(--surface-overlay); }
+  .err-bar { height: 4px; background: var(--status-error); opacity: 0.55; border-radius: 1px; min-width: 1px; margin-bottom: 2px; }
   .count { font-weight: 700; }
   .sig { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .when, .at { color: var(--text-muted); font-size: 9px; text-align: right; }

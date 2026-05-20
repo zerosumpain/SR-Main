@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Bars } from 'layerchart';
+  import { Chart, Svg, Bars, Axis, Grid } from 'layerchart';
   import { groupStackData } from 'layerchart/utils/stack';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { formatUsd } from './costFormat';
@@ -112,8 +112,10 @@
           yDomain={[0, null]}
           xScale={scaleTime()}
           yScale={scaleLinear()}
+          padding={{ top: 8, bottom: 20, left: 44, right: 8 }}
         >
           <Svg>
+            <Grid y yTicks={4} />
             {#each stackedBuckets.models as model (model)}
               <Bars
                 data={stackedBuckets.rows.filter((r) => r.model === model)}
@@ -123,6 +125,8 @@
                 stroke="none"
               />
             {/each}
+            <Axis placement="left" rule ticks={4} format={(v) => '$' + Number(v).toFixed(Number(v) < 1 ? 3 : 2)} />
+            <Axis placement="bottom" rule ticks={4} format={(d) => { const dt = d instanceof Date ? d : new Date(d); return dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }); }} />
           </Svg>
         </Chart>
       {:else}
@@ -142,10 +146,13 @@
     <ul class="breakdown">
       {#each data.breakdown as r (r.key)}
         <li>
-          <span class="bd-key" title={r.key}>{r.key}</span>
-          <span class="bd-cost">{formatUsd(r.costUsd)}</span>
-          <span class="bd-pct">{formatPercent(r.percentage)}</span>
-          <span class="bd-n">{r.requests}× · {formatUsd(r.avgCostPerRequest)}</span>
+          <div class="bd-row">
+            <span class="bd-key" title={r.key}>{r.key}</span>
+            <span class="bd-cost">{formatUsd(r.costUsd)}</span>
+            <span class="bd-pct">{formatPercent(r.percentage)}</span>
+            <span class="bd-n">{r.requests}× · {formatUsd(r.avgCostPerRequest)}</span>
+          </div>
+          <div class="bd-bar" style="width: {r.percentage * 100}%"></div>
         </li>
       {/each}
     </ul>
@@ -167,7 +174,11 @@
   .title { font-weight: 600; font-size: 12px; }
   .refresh { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
   .headline { font-size: 22px; font-weight: 700; }
-  .chart { height: 90px; }
+  .chart { height: 130px; }
+  .chart :global(.tick text), .chart :global(.tickLabel text) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .chart :global(.tick line) { stroke: var(--divider); }
+  .chart :global(.rule line), .chart :global(.rule) { stroke: var(--divider); }
+  .chart :global(.Grid line), .chart :global(.Grid path) { stroke: var(--divider); opacity: 0.5; }
   .tabs { display: flex; gap: 2px; }
   .tabs button {
     background: transparent; border: 1px solid var(--card-border);
@@ -176,7 +187,9 @@
   }
   .tabs button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
   .breakdown { list-style: none; padding: 0; margin: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-  .breakdown li { display: grid; grid-template-columns: 1fr 70px 50px 100px; gap: 6px; align-items: baseline; font-size: 10px; }
+  .breakdown li { display: flex; flex-direction: column; gap: 1px; font-size: 10px; }
+  .bd-row { display: grid; grid-template-columns: 1fr 70px 50px 100px; gap: 6px; align-items: baseline; }
+  .bd-bar { height: 3px; background: var(--accent); border-radius: 1px; min-width: 1px; }
   .bd-key { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bd-cost { text-align: right; font-weight: 600; }
   .bd-pct { text-align: right; color: var(--text-muted); }
