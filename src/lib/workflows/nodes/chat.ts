@@ -1,6 +1,20 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { HermesClient } from '$lib/jkai/hermes-client';
+import { recordLLMCall } from '../execution-context';
 import { env } from '$env/dynamic/private';
+
+/** Per-turn LLM usage the Hermes jkai_platform adapter attaches to the
+ *  synthetic `finalize` frame's `metadata.usage`. The LLM call happens inside
+ *  the Hermes sidecar process, so this frame is the only channel through which
+ *  chat-node cost can reach SvelteKit. */
+interface HermesTurnUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cost_usd?: number;
+  model?: string | null;
+  provider?: string | null;
+}
 
 /**
  * Chat node.
@@ -120,6 +134,7 @@ export const chatExecutor: NodeExecutor = {
     const kindId = chatId;
 
     let response = '';
+    let turnUsage: HermesTurnUsage | null = null;
 
     await client.sendMessage({
       chatId,
@@ -148,9 +163,32 @@ export const chatExecutor: NodeExecutor = {
         streamLog('chat_stream', { event: { type: 'replace_bubble', content: frame.content } });
       } else if (frame.kind === 'finalize') {
         // adapter emits a synthetic empty finalize once handle_message
-        // completes — `response` already holds the streamed text.
+        // completes — `response` already holds the streamed text. The
+        // finalize frame also carries this turn's LLM usage under
+        // `metadata.usage` (the Hermes-side call is out-of-process, so this
+        // is the only channel for chat-node cost).
+        const u = (frame.metadata as { usage?: HermesTurnUsage } | undefined)?.usage;
+        if (u && typeof u === 'object') turnUsage = u;
         break;
       }
+    }
+
+    // Record the Hermes turn's cost into the execution context so the engine
+    // rolls it up into node_executions cost columns. recordLLMCall is a no-op
+    // outside an engine-managed node; chat.ts always runs inside one.
+    if (turnUsage) {
+      recordLLMCall({
+        provider: turnUsage.provider ?? 'hermes',
+        model: turnUsage.model ?? 'unknown',
+        tokensInput: turnUsage.input_tokens ?? null,
+        tokensOutput: turnUsage.output_tokens ?? null,
+        cacheReadTokens: turnUsage.cache_read_tokens ?? null,
+        reasoningTokens: null,
+        // Hermes computes its own estimated cost; we pass it through verbatim
+        // rather than re-deriving from the price table.
+        costUsd: typeof turnUsage.cost_usd === 'number' ? turnUsage.cost_usd : null,
+        priceSnapshot: null,
+      });
     }
 
     return {
