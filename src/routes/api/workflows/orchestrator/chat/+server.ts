@@ -6,7 +6,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
@@ -204,6 +204,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // them inline.
   const turnAttachments: AssistantAttachment[] = [];
 
+  // Per-turn LLM usage captured from the Hermes finalize frame's
+  // `metadata.usage`. Populated inside the stream pump; consumed after
+  // assistant-message persistence to accumulate onto the conversation row.
+  let turnUsage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_tokens?: number;
+    cost_usd?: number;
+    model?: string | null;
+    provider?: string | null;
+  } | null = null;
+
   // Subscribe to tool-step events for this chat. The MCP dispatcher publishes
   // a started/completed/failed event for every tools/call carrying a
   // matching workflow_id argument (= chatId for general /jkai chats, or the
@@ -334,6 +346,21 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           publishJobEvent(jobId, ev);
         }
         if (frame.kind === 'finalize') {
+          // Capture per-turn LLM usage from the adapter's synthetic finalize
+          // frame so we can accrue it onto the conversation row below.
+          const rawUsage = (frame.metadata as Record<string, unknown> | undefined)?.['usage'];
+          if (rawUsage && typeof rawUsage === 'object') {
+            const ru = rawUsage as Record<string, unknown>;
+            turnUsage = {
+              input_tokens: typeof ru['input_tokens'] === 'number' ? ru['input_tokens'] : undefined,
+              output_tokens: typeof ru['output_tokens'] === 'number' ? ru['output_tokens'] : undefined,
+              cache_read_tokens: typeof ru['cache_read_tokens'] === 'number' ? ru['cache_read_tokens'] : undefined,
+              cost_usd: typeof ru['cost_usd'] === 'number' ? ru['cost_usd'] : undefined,
+              model: ru['model'] != null ? String(ru['model']) : null,
+              provider: ru['provider'] != null ? String(ru['provider']) : null,
+            };
+          }
+
           // Use the accumulated partialResponse as the final message
           // because the adapter's finalize content is intentionally empty
           // (delivery already happened via prior `send` frames).
@@ -396,6 +423,30 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
         } catch (persistErr) {
           console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);
+        }
+
+        // Accrue per-turn LLM cost onto the conversation row. This is a
+        // best-effort atomic increment — a failure here must not surface to
+        // the user or break message persistence, hence its own try/catch.
+        try {
+          const capturedUsage = turnUsage;
+          if (conversationId && capturedUsage) {
+            const dIn = Math.max(0, Math.round(capturedUsage.input_tokens ?? 0));
+            const dOut = Math.max(0, Math.round(capturedUsage.output_tokens ?? 0));
+            const dCost = Math.max(0, capturedUsage.cost_usd ?? 0);
+            if (dIn > 0 || dOut > 0 || dCost > 0) {
+              await db
+                .update(conversations)
+                .set({
+                  promptTokens: sql`${conversations.promptTokens} + ${dIn}`,
+                  completionTokens: sql`${conversations.completionTokens} + ${dOut}`,
+                  costUsd: sql`${conversations.costUsd} + ${dCost.toFixed(6)}`,
+                })
+                .where(eq(conversations.id, conversationId));
+            }
+          }
+        } catch (usageErr) {
+          console.error('[hermes-chat] failed to accrue usage onto conversation:', usageErr instanceof Error ? usageErr.message : usageErr);
         }
       }
     } catch (err: unknown) {
