@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { conversations, jkaiBuilds, workflowRuns, workflowSchedules, orchestratorChats } from '$lib/db/schema';
 import { desc, eq, sql, gte, asc } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
@@ -61,19 +62,27 @@ export const load: PageServerLoad = async () => {
     whatsappThread = { phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
   }
 
-  // LLM spend over the last 24h — windowed to match the run metrics above.
-  // conversations.cost_usd / jkaiBuilds.cost_usd are running totals, so this
-  // sums the full cost of conversations + builds *touched* in the window
-  // (a per-turn cost ledger would be needed for an exact 24h slice).
-  const [convCostRow] = await db
-    .select({ convCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
-    .from(conversations)
-    .where(gte(conversations.updatedAt, since));
-  const [buildCostRow] = await db
-    .select({ buildCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
-    .from(jkaiBuilds)
-    .where(gte(jkaiBuilds.updatedAt, since));
-  const totalSpendUsd = Number(convCostRow?.convCost ?? 0) + Number(buildCostRow?.buildCost ?? 0);
+  // LLM spend per window (day / week / month / lifetime) — the top-bar metric
+  // is click-to-cycle, so all four are computed up front. conversations.cost_usd
+  // / jkaiBuilds.cost_usd are running totals, so each window sums the full cost
+  // of rows *touched* in it (a per-turn ledger would be needed for an exact
+  // slice). `lifetime` is unfiltered and therefore exact.
+  const weekCut = new Date(Date.now() - 7 * 86400000);
+  const monthCut = new Date(Date.now() - 30 * 86400000);
+  const spendCols = (col: AnyPgColumn) => ({
+    day: sql<string>`COALESCE(SUM(cost_usd) FILTER (WHERE ${col} >= ${since}), 0)::text`,
+    week: sql<string>`COALESCE(SUM(cost_usd) FILTER (WHERE ${col} >= ${weekCut}), 0)::text`,
+    month: sql<string>`COALESCE(SUM(cost_usd) FILTER (WHERE ${col} >= ${monthCut}), 0)::text`,
+    lifetime: sql<string>`COALESCE(SUM(cost_usd), 0)::text`,
+  });
+  const [convSpend] = await db.select(spendCols(conversations.updatedAt)).from(conversations);
+  const [buildSpend] = await db.select(spendCols(jkaiBuilds.updatedAt)).from(jkaiBuilds);
+  const spendByPeriod = {
+    day: Number(convSpend?.day ?? 0) + Number(buildSpend?.day ?? 0),
+    week: Number(convSpend?.week ?? 0) + Number(buildSpend?.week ?? 0),
+    month: Number(convSpend?.month ?? 0) + Number(buildSpend?.month ?? 0),
+    lifetime: Number(convSpend?.lifetime ?? 0) + Number(buildSpend?.lifetime ?? 0),
+  };
 
   const [defaultChatModel, chatAltOpenRouterModel, approvalUi] = await Promise.all([
     resolveDefaultModel('chat'),
@@ -87,7 +96,7 @@ export const load: PageServerLoad = async () => {
     whatsappThread,
     defaultChatModel,
     chatAltOpenRouterModel,
-    totalSpendUsd,
+    spendByPeriod,
     approvalUi,
   };
 };

@@ -1,13 +1,33 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
 
+  interface SpendByPeriod {
+    day: number;
+    week: number;
+    month: number;
+    lifetime: number;
+  }
+
   let {
     metrics,
-    totalSpendUsd = 0,
+    spendByPeriod,
   }: {
     metrics: { scheduled: number; running: number; completed: number; failed: number };
-    totalSpendUsd?: number;
+    spendByPeriod: SpendByPeriod;
   } = $props();
+
+  // Click-to-cycle spend window. day → week → month → lifetime → day.
+  const PERIODS = [
+    { key: 'day', label: 'day' },
+    { key: 'week', label: 'week' },
+    { key: 'month', label: 'month' },
+    { key: 'lifetime', label: 'lifetime' },
+  ] as const;
+  let periodIdx = $state(0);
+  const period = $derived(PERIODS[periodIdx]);
+  function cyclePeriod() {
+    periodIdx = (periodIdx + 1) % PERIODS.length;
+  }
 </script>
 
 <div
@@ -30,7 +50,28 @@
     <span>{metrics.failed} failed</span>
   {/if}
   <span style="color: var(--text-ghost);">|</span>
-  <span title="LLM spend (GBP) across conversations and builds active in the last 24h">
-    {formatGbp(totalSpendUsd)} spend · 24h
-  </span>
+  <button
+    type="button"
+    class="spend"
+    onclick={cyclePeriod}
+    title="LLM spend (GBP) across conversations and builds — click to change window (day / week / month / lifetime)"
+  >
+    {formatGbp(spendByPeriod[period.key])} spend · {period.label}
+  </button>
 </div>
+
+<style>
+  .spend {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .spend:hover {
+    color: var(--text-primary);
+  }
+</style>

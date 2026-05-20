@@ -186,7 +186,7 @@
     {/snippet}
     {#snippet meta()}
       <div class="flex items-center gap-3">
-        <MetricsStrip {metrics} totalSpendUsd={data.totalSpendUsd} />
+        <MetricsStrip {metrics} spendByPeriod={data.spendByPeriod} />
         <a
           href="https://hermes.strangeramblings.com/"
           target="_blank"
