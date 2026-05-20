@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Spline, Highlight, Tooltip } from 'layerchart';
+  import { Chart, Svg, Area, Spline, Highlight, Tooltip, Axis, Grid, Points } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { curveMonotoneX } from 'd3-shape';
   import { useStats } from './useStats.svelte';
@@ -74,8 +74,7 @@
       .map((b) => ({ t: new Date(b.t), v: b.durationMs.avg as number })),
   );
 
-  // Run-volume sparkline: total runs per bucket, oldest → newest. Same
-  // gating as duration — needs at least a few points to read.
+  // Run-volume sparkline: total runs per bucket, oldest → newest.
   const volumeSparkline = $derived(
     (stats.data?.buckets ?? []).map((b) => ({
       t: new Date(b.t),
@@ -83,10 +82,35 @@
     })),
   );
 
+  // Success and failed reference splines for volume chart.
+  const successSparkline = $derived(
+    (stats.data?.buckets ?? []).map((b) => ({
+      t: new Date(b.t),
+      v: b.runs.success,
+    })),
+  );
+
+  const failedSparkline = $derived(
+    (stats.data?.buckets ?? []).map((b) => ({
+      t: new Date(b.t),
+      v: b.runs.failed,
+    })),
+  );
+
   const recentRuns = $derived(stats.data?.recentRuns ?? []);
   // Render the timeline oldest → newest so the most recent run is on the
   // right (matches the way users read time-series charts).
   const timelineRuns = $derived([...recentRuns].reverse());
+
+  // Duration-proportional bar heights for recent runs timeline.
+  const maxDurationMs = $derived(
+    Math.max(0, ...timelineRuns.map((r) => r.durationMs ?? 0)),
+  );
+
+  function tickBarHeight(durationMs: number | null): number {
+    if (maxDurationMs === 0 || durationMs === null) return 4;
+    return 4 + (durationMs / maxDurationMs) * 18;
+  }
 
   const showVolumeChart = $derived(
     volumeSparkline.filter((p) => p.v > 0).length >= 4,
@@ -126,6 +150,12 @@
     for (let i = 0; i < model.length; i++) hash = (hash * 31 + model.charCodeAt(i)) | 0;
     const hue = ((hash % 360) + 360) % 360;
     return `hsl(${hue}, 65%, 55%)`;
+  }
+
+  // Shared bottom-axis time formatter.
+  function fmtDate(d: any): string {
+    const dt = d instanceof Date ? d : new Date(d);
+    return dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
   }
 </script>
 
@@ -181,6 +211,7 @@
               role="listitem"
               class="tick s-{r.status}"
               class:healing={r.healing}
+              style:height="{tickBarHeight(r.durationMs)}px"
               title={`${r.status}${r.healing ? ' · healed' : ''}\n${formatDurationMs(r.durationMs)} · ${formatRelative(new Date(r.startedAt))}`}
             ></div>
           {/each}
@@ -206,11 +237,39 @@
             y="v"
             yScale={scaleLinear()}
             yNice
-            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+            padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
           >
             <Svg>
-              <Area fill="var(--accent)" fillOpacity={0.15} curve={curveMonotoneX} />
+              <defs>
+                <linearGradient id="trends-vol-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                  <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <Grid y yTicks={4} />
+              <Axis placement="left" rule ticks={4} format={(v) => String(v)} />
+              <Axis placement="bottom" rule ticks={4} format={fmtDate} />
+              <Area fill="url(#trends-vol-grad)" curve={curveMonotoneX} />
               <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+              <!-- Success / failed reference lines -->
+              <Spline
+                data={successSparkline}
+                x="t"
+                y="v"
+                stroke="var(--status-success)"
+                strokeWidth={1}
+                opacity={0.7}
+                curve={curveMonotoneX}
+              />
+              <Spline
+                data={failedSparkline}
+                x="t"
+                y="v"
+                stroke="var(--status-error)"
+                strokeWidth={1}
+                opacity={0.7}
+                curve={curveMonotoneX}
+              />
               {#if priorOverlay.length > 0}
                 <Spline
                   data={priorOverlay}
@@ -223,6 +282,7 @@
                   curve={curveMonotoneX}
                 />
               {/if}
+              <Points r={2} fill="var(--accent)" />
               <Highlight points lines />
             </Svg>
             <Tooltip.Context mode="bisect-x">
@@ -250,11 +310,21 @@
             y="v"
             yScale={scaleLinear()}
             yNice
-            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+            padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
           >
             <Svg>
-              <Area fill="var(--accent)" fillOpacity={0.1} curve={curveMonotoneX} />
+              <defs>
+                <linearGradient id="trends-dur-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                  <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <Grid y yTicks={4} />
+              <Axis placement="left" rule ticks={4} format={(v) => formatDurationMs(v)} />
+              <Axis placement="bottom" rule ticks={4} format={fmtDate} />
+              <Area fill="url(#trends-dur-grad)" curve={curveMonotoneX} />
               <Spline stroke="var(--accent)" strokeWidth={1.5} curve={curveMonotoneX} />
+              <Points r={2} fill="var(--accent)" />
               <Highlight points lines />
             </Svg>
             <Tooltip.Context mode="bisect-x">
@@ -305,9 +375,17 @@
             y="v"
             yScale={scaleLinear()}
             yNice
-            padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+            padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
           >
             <Svg>
+              <Grid y yTicks={4} />
+              <Axis
+                placement="left"
+                rule
+                ticks={4}
+                format={(v) => '$' + Number(v).toFixed(v < 1 ? 3 : 2)}
+              />
+              <Axis placement="bottom" rule ticks={4} format={fmtDate} />
               {#each costByModelGrouped.models as model (model)}
                 <Area
                   data={Array.from(costByModelGrouped.map.get(model)?.entries() ?? []).map(
@@ -316,7 +394,7 @@
                   x="t"
                   y="v"
                   fill={colorForModel(model)}
-                  fillOpacity={0.4}
+                  fillOpacity={0.25}
                   stroke={colorForModel(model)}
                   strokeWidth={1}
                   curve={curveMonotoneX}
@@ -444,7 +522,7 @@
   /* ——— Run timeline ——— */
   .timeline {
     display: flex;
-    align-items: stretch;
+    align-items: flex-end;
     gap: 3px;
     padding: 6px 8px;
     background: var(--bg-section);
@@ -454,7 +532,7 @@
   }
   .tick {
     width: 10px;
-    height: 16px;
+    /* height is set inline per-tick, proportional to durationMs */
     background: var(--text-ghost);
     border-radius: 1px;
     flex-shrink: 0;
@@ -466,7 +544,7 @@
     background: repeating-linear-gradient(
       45deg,
       var(--accent) 0 3px,
-      var(--accent-tint-35) 3px 6px
+      rgba(196, 87, 10, 0.35) 3px 6px
     );
   }
 
@@ -493,18 +571,41 @@
     background: repeating-linear-gradient(
       45deg,
       var(--accent) 0 2px,
-      var(--accent-tint-35) 2px 4px
+      rgba(196, 87, 10, 0.35) 2px 4px
     );
   }
   .legend span + span { margin-right: 6px; }
 
-  /* ——— Sparklines ——— */
+  /* ——— Chart host ——— */
   .chart-host {
     position: relative;
-    height: 56px;
+    height: 116px;
     background: var(--bg-section);
     border: 1px solid var(--card-border);
     padding: 4px 8px;
+  }
+
+  /* ——— Axis / Grid styling ——— */
+  /* Tick mark lines (short perpendicular lines on Axis) */
+  .chart-host :global(line.tick) {
+    stroke: var(--divider);
+  }
+  /* Tick label text — layerchart wraps in <svg class="overflow-visible"> → <text class="tickLabel"> */
+  .chart-host :global(.tickLabel text),
+  .chart-host :global(text.tickLabel) {
+    fill: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    stroke: none;
+  }
+  /* Axis rule lines (the axis spine) — Rule wraps in <g class="rule"> → <line> */
+  .chart-host :global(g.rule line) {
+    stroke: var(--divider);
+  }
+  /* Grid lines — Grid → Rule → <g class="rule"> but also direct <line> inside Grid */
+  .chart-host :global(g.Grid line) {
+    stroke: var(--divider);
+    stroke-opacity: 0.4;
   }
 
   /* ——— Duration fallback KPIs ——— */
