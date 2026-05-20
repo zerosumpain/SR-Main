@@ -14,7 +14,7 @@
 </script>
 
 <script lang="ts">
-  import { formatUsd } from './stats/costFormat';
+  import { formatGbp } from './stats/costFormat';
 
   interface Props {
     executions: Execution[];
@@ -41,7 +41,7 @@
       class:s-completed={e.status === 'completed'}
       class:s-failed={e.status === 'failed'}
       class:s-running={e.status === 'running'}
-      title={`${e.status} · ${relative(e.completedAt ?? e.startedAt)} ago${e.costUsd ? ' · ' + formatUsd(e.costUsd) : ''}${e.error ? '\n' + e.error.slice(0, 200) : ''}`}
+      title={`${e.status} · ${relative(e.completedAt ?? e.startedAt)} ago${e.costUsd ? ' · ' + formatGbp(e.costUsd) : ''}${e.error ? '\n' + e.error.slice(0, 200) : ''}`}
       onclick={() => onselect(e.id)}
       role="tab"
       aria-selected={e.id === selectedId}

@@ -4,6 +4,7 @@
   import { curveMonotoneX } from 'd3-shape';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
+  import { formatGbp } from './costFormat';
 
   interface RecentRun {
     id: string;
@@ -383,7 +384,7 @@
                 placement="left"
                 rule
                 ticks={4}
-                format={(v) => '$' + Number(v).toFixed(v < 1 ? 3 : 2)}
+                format={(v) => formatGbp(Number(v))}
               />
               <Axis placement="bottom" rule ticks={4} format={fmtDate} />
               {#each costByModelGrouped.models as model (model)}
@@ -406,7 +407,7 @@
               <Tooltip.Root let:data variant="none">
                 <div class="tt">
                   <div class="tt-t">{new Date(data.t).toLocaleString()}</div>
-                  <div class="tt-v">{data.model} · ${data.v.toFixed(4)}</div>
+                  <div class="tt-v">{data.model} · {formatGbp(data.v)}</div>
                 </div>
               </Tooltip.Root>
             </Tooltip.Context>

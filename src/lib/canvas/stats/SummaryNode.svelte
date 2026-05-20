@@ -3,7 +3,7 @@
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
-  import { formatUsd, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from './costFormat';
 
   const fmtTime = (d: unknown) => {
     const dt = d instanceof Date ? d : new Date(d as string);
@@ -78,7 +78,7 @@
       <div class="counter"><span class="v fail">{c.failed}</span><span class="l">failed</span></div>
       <div class="counter"><span class="v">{formatPercent(c.successRate)}</span><span class="l">rate</span></div>
       <div class="counter"><span class="v">{formatDurationMs(c.avgDurationMs)}</span><span class="l">avg dur</span></div>
-      <div class="counter"><span class="v">{formatUsd(c.totalCostUsd)}</span><span class="l">spend</span></div>
+      <div class="counter"><span class="v">{formatGbp(c.totalCostUsd)}</span><span class="l">spend</span></div>
       <div class="counter"><span class="v">{formatTokens(c.tokensInput)}→{formatTokens(c.tokensOutput)}</span><span class="l">tokens</span></div>
       <div class="counter"><span class="v">{formatPercent(c.cacheHitRate)}</span><span class="l">cache</span></div>
     </div>

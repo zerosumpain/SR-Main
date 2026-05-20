@@ -1,26 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { formatUsd, formatTokens } from '$lib/canvas/stats/costFormat';
+import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
 
-describe('formatUsd', () => {
-  it('renders zero as $0.00', () => {
-    expect(formatUsd(0)).toBe('$0.00');
-  });
-  it('renders sub-cent values with 4 decimals', () => {
-    expect(formatUsd(0.0042)).toBe('$0.0042');
-    expect(formatUsd(0.0001)).toBe('$0.0001');
-  });
-  it('renders cents with 2 decimals when under $1', () => {
-    expect(formatUsd(0.42)).toBe('$0.42');
-    expect(formatUsd(0.99)).toBe('$0.99');
-  });
-  it('renders dollars with 2 decimals when >= $1', () => {
-    expect(formatUsd(1)).toBe('$1.00');
-    expect(formatUsd(12.345)).toBe('$12.35');
-    expect(formatUsd(1234)).toBe('$1,234.00');
+describe('formatGbp', () => {
+  it('renders zero as £0.00', () => {
+    expect(formatGbp(0)).toBe('£0.00');
   });
   it('renders null/undefined as em-dash', () => {
-    expect(formatUsd(null)).toBe('—');
-    expect(formatUsd(undefined)).toBe('—');
+    expect(formatGbp(null)).toBe('—');
+    expect(formatGbp(undefined)).toBe('—');
+  });
+  it('converts USD 1 to £0.79', () => {
+    expect(formatGbp(1)).toBe('£0.79');
+  });
+  it('converts USD 100 to £79.00', () => {
+    expect(formatGbp(100)).toBe('£79.00');
+  });
+  it('renders sub-penny values with 4 decimals after conversion', () => {
+    // 0.001 USD * 0.79 = 0.00079 GBP → sub-cent → 4 decimals
+    expect(formatGbp(0.001)).toBe('£0.0008');
+    // 0.005 USD * 0.79 = 0.00395 GBP → sub-cent → 4 decimals
+    expect(formatGbp(0.005)).toBe('£0.0040');
+  });
+  it('renders amounts >= £0.01 with 2 decimals after conversion', () => {
+    // 0.02 USD * 0.79 = 0.0158 → sub-cent → 4 decimals
+    // 0.1 USD * 0.79 = 0.079 → sub-cent → 4 decimals
+    // 0.5 USD * 0.79 = 0.395 → >= 0.01 → 2 decimals
+    expect(formatGbp(0.5)).toBe('£0.40');
+    expect(formatGbp(12.345)).toBe('£9.75');
+  });
+  it('renders large values with thousands separators', () => {
+    // 1000 USD * 0.79 = 790.00
+    expect(formatGbp(1000)).toBe('£790.00');
   });
 });
 

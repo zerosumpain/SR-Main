@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { Chart, Svg, Spline, Area, Highlight, Axis, Grid, Points } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
-  import { formatUsd, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from './costFormat';
   import { formatDurationMs, formatPercent } from './format';
 
   const fmtTime = (d: unknown) => {
@@ -152,7 +152,7 @@
               </linearGradient>
             </defs>
             <Grid y yTicks={4} />
-            <Axis placement="left" rule ticks={4} format={(v) => metric === 'cost' ? '$' + Number(v).toFixed(Number(v) < 1 ? 3 : 2) : metric === 'cache' ? Math.round(Number(v) * 100) + '%' : String(v)} />
+            <Axis placement="left" rule ticks={4} format={(v) => metric === 'cost' ? formatGbp(Number(v)) : metric === 'cache' ? Math.round(Number(v) * 100) + '%' : String(v)} />
             <Axis placement="bottom" rule ticks={4} format={fmtTime} />
             <Area fill="url(#drill-val-grad)" />
             <Spline stroke="var(--accent)" strokeWidth={1.5} />
@@ -170,9 +170,9 @@
         <span class="kv"><span class="k">p95</span><span class="v">{formatDurationMs((summary as { p95: number | null }).p95)}</span></span>
         <span class="kv"><span class="k">max</span><span class="v">{formatDurationMs((summary as { max: number | null }).max)}</span></span>
       {:else if metric === 'cost'}
-        <span class="kv"><span class="k">sum</span><span class="v">{formatUsd((summary as { sum: number }).sum)}</span></span>
-        <span class="kv"><span class="k">avg/bucket</span><span class="v">{formatUsd((summary as { avg: number | null }).avg)}</span></span>
-        <span class="kv"><span class="k">max/bucket</span><span class="v">{formatUsd((summary as { max: number | null }).max)}</span></span>
+        <span class="kv"><span class="k">sum</span><span class="v">{formatGbp((summary as { sum: number }).sum)}</span></span>
+        <span class="kv"><span class="k">avg/bucket</span><span class="v">{formatGbp((summary as { avg: number | null }).avg)}</span></span>
+        <span class="kv"><span class="k">max/bucket</span><span class="v">{formatGbp((summary as { max: number | null }).max)}</span></span>
       {:else if metric === 'runs'}
         <span class="kv"><span class="k">total</span><span class="v">{(summary as { sum: number }).sum}</span></span>
         <span class="kv"><span class="k">avg/bucket</span><span class="v">{(summary as { avg: number | null }).avg?.toFixed(1) ?? '—'}</span></span>

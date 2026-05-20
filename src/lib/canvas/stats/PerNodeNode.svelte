@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
-  import { formatUsd, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from './costFormat';
   import PerNodeDrilldown from './PerNodeDrilldown.svelte';
 
   interface PerNodeRow {
@@ -205,7 +205,7 @@
               <td class="num">{formatDurationMs(r.avgMs)}</td>
               <td class="num">{formatDurationMs(r.p95Ms)}</td>
               <td class="num">{formatDurationMs(r.totalMs)}</td>
-              <td class="num">{formatUsd(r.costUsd)}</td>
+              <td class="num">{formatGbp(r.costUsd)}</td>
               <td class="num">{formatTokens(r.tokensInput)}→{formatTokens(r.tokensOutput)}</td>
               <td class="num">{r.tokensInput > 0 ? formatPercent(r.cacheReadTokens / r.tokensInput) : '—'}</td>
               <td class="num">

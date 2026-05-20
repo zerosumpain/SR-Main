@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { formatGbp } from '$lib/canvas/stats/costFormat';
+
   interface ConversationItem {
     id: string;
     title: string | null;
@@ -215,7 +217,7 @@
                   </p>
                   {#if Number(conv.costUsd ?? 0) > 0}
                     <div class="text-[10px] mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                      ${Number(conv.costUsd).toFixed(4)}
+                      {formatGbp(Number(conv.costUsd))}
                     </div>
                   {/if}
                 </div>

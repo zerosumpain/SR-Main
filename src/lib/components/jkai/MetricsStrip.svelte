@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { formatGbp } from '$lib/canvas/stats/costFormat';
+
   let {
     metrics,
     totalSpendUsd = 0,
@@ -28,7 +30,7 @@
     <span>{metrics.failed} failed</span>
   {/if}
   <span style="color: var(--text-ghost);">|</span>
-  <span title="Total LLM spend across conversations and builds">
-    ${totalSpendUsd.toFixed(2)} spend
+  <span title="Total LLM spend across conversations and builds (GBP)">
+    {formatGbp(totalSpendUsd)} spend
   </span>
 </div>

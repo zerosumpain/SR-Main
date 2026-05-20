@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatDurationMs, formatRelative } from './format';
-  import { formatUsd } from './costFormat';
+  import { formatGbp } from './costFormat';
 
   interface RecentRun {
     id: string;
@@ -125,7 +125,7 @@
               style:left="{barLeft(n)}%"
               style:width="{barWidth(n)}%"
               style:background={barColour(n.status)}
-              title="{n.label} · {n.type} · {formatDurationMs(n.durationMs)}{n.costUsd ? ' · ' + formatUsd(n.costUsd) : ''}{n.error ? '\n' + n.error.slice(0, 200) : ''}"
+              title="{n.label} · {n.type} · {formatDurationMs(n.durationMs)}{n.costUsd ? ' · ' + formatGbp(n.costUsd) : ''}{n.error ? '\n' + n.error.slice(0, 200) : ''}"
               onclick={() => onnodeclick?.(n.nodeId)}
               aria-label={`${n.label} bar`}
             ></button>

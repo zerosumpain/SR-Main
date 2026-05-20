@@ -2,7 +2,7 @@
   import { Chart, Svg, Bars, Axis, Grid } from 'layerchart';
   import { groupStackData } from 'layerchart/utils/stack';
   import { scaleTime, scaleLinear } from 'd3-scale';
-  import { formatUsd } from './costFormat';
+  import { formatGbp } from './costFormat';
   import { formatPercent } from './format';
 
   type GroupBy = 'model' | 'node-type' | 'node-label';
@@ -101,7 +101,7 @@
   {:else if loading && !data}
     <div class="skel">Loading…</div>
   {:else if data}
-    <div class="headline">{formatUsd(data.totalUsd)}</div>
+    <div class="headline">{formatGbp(data.totalUsd)}</div>
 
     <div class="chart">
       {#if stackedBuckets.rows.length > 0}
@@ -125,7 +125,7 @@
                 stroke="none"
               />
             {/each}
-            <Axis placement="left" rule ticks={4} format={(v) => '$' + Number(v).toFixed(Number(v) < 1 ? 3 : 2)} />
+            <Axis placement="left" rule ticks={4} format={(v) => formatGbp(Number(v))} />
             <Axis placement="bottom" rule ticks={4} format={(d) => { const dt = d instanceof Date ? d : new Date(d); return dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }); }} />
           </Svg>
         </Chart>
@@ -148,9 +148,9 @@
         <li>
           <div class="bd-row">
             <span class="bd-key" title={r.key}>{r.key}</span>
-            <span class="bd-cost">{formatUsd(r.costUsd)}</span>
+            <span class="bd-cost">{formatGbp(r.costUsd)}</span>
             <span class="bd-pct">{formatPercent(r.percentage)}</span>
-            <span class="bd-n">{r.requests}× · {formatUsd(r.avgCostPerRequest)}</span>
+            <span class="bd-n">{r.requests}× · {formatGbp(r.avgCostPerRequest)}</span>
           </div>
           <div class="bd-bar" style="width: {r.percentage * 100}%"></div>
         </li>
