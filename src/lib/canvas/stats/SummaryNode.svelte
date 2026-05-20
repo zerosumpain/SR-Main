@@ -1,8 +1,14 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Spline } from 'layerchart';
+  import { Chart, Svg, Area, Spline, Axis, Grid, Points } from 'layerchart';
+  import { scaleTime, scaleLinear } from 'd3-scale';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
   import { formatUsd, formatTokens } from './costFormat';
+
+  const fmtTime = (d: unknown) => {
+    const dt = d instanceof Date ? d : new Date(d as string);
+    return dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  };
 
   interface SummaryData {
     counters: {
@@ -77,17 +83,30 @@
       <div class="counter"><span class="v">{formatPercent(c.cacheHitRate)}</span><span class="l">cache</span></div>
     </div>
 
+    <h4 class="spark-label">Run volume</h4>
     <div class="spark" aria-hidden>
       {#if stats.data.sparkline.length > 1}
         <Chart
           data={stats.data.sparkline.map((p) => ({ t: new Date(p.bucket), v: p.count }))}
           x="t"
           y="v"
-          padding={{ top: 4, bottom: 4 }}
+          xScale={scaleTime()}
+          yScale={scaleLinear()}
+          padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
         >
           <Svg>
-            <Area fill="var(--accent)" fillOpacity={0.15} />
+            <defs>
+              <linearGradient id="summary-spark-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <Grid y yTicks={3} />
+            <Axis placement="left" rule ticks={3} format={(v) => String(v)} />
+            <Axis placement="bottom" rule ticks={3} format={fmtTime} />
+            <Area fill="url(#summary-spark-grad)" />
             <Spline stroke="var(--accent)" strokeWidth={1.5} />
+            <Points r={2} fill="var(--accent)" />
           </Svg>
         </Chart>
       {/if}
@@ -156,7 +175,12 @@
   .counter .v.ok { color: #3a8a56; }
   .counter .v.fail { color: #c44; }
   .counter .l { color: var(--text-muted, #888); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .spark { height: 32px; }
+  .spark-label { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; }
+  .spark { height: 96px; }
+  .spark :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .spark :global(.tick) { stroke: var(--divider); }
+  .spark :global(.rule line) { stroke: var(--divider); }
+  .spark :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
   .list h4 { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; }
   .list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
   .list li { display: flex; gap: 6px; align-items: center; font-size: 10px; }

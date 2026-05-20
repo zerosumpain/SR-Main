@@ -1,9 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Chart, Svg, Spline, Area, Highlight } from 'layerchart';
+  import { Chart, Svg, Spline, Area, Highlight, Axis, Grid, Points } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { formatUsd, formatTokens } from './costFormat';
   import { formatDurationMs, formatPercent } from './format';
+
+  const fmtTime = (d: unknown) => {
+    const dt = d instanceof Date ? d : new Date(d as string);
+    return dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  };
 
   type Metric = 'duration' | 'cost' | 'runs' | 'cache';
   type Range = '1h' | '6h' | '24h' | '7d' | '30d' | 'all';
@@ -111,10 +116,21 @@
           x="t"
           xScale={scaleTime()}
           yScale={scaleLinear()}
+          padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
         >
           <Svg>
-            <Area y="p95" fill="var(--accent)" fillOpacity={0.15} />
+            <defs>
+              <linearGradient id="drill-dur-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <Grid y yTicks={4} />
+            <Axis placement="left" rule ticks={4} format={(v) => formatDurationMs(v as number)} />
+            <Axis placement="bottom" rule ticks={4} format={fmtTime} />
+            <Area y="p95" fill="url(#drill-dur-grad)" />
             <Spline y="p50" stroke="var(--accent)" strokeWidth={1.2} />
+            <Points y="p50" r={2} fill="var(--accent)" />
             <Spline y="avg" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="2 3" />
             <Highlight points lines />
           </Svg>
@@ -126,10 +142,21 @@
           y="v"
           xScale={scaleTime()}
           yScale={scaleLinear()}
+          padding={{ top: 8, bottom: 20, left: 40, right: 8 }}
         >
           <Svg>
-            <Area fill="var(--accent)" fillOpacity={0.15} />
+            <defs>
+              <linearGradient id="drill-val-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <Grid y yTicks={4} />
+            <Axis placement="left" rule ticks={4} format={(v) => metric === 'cost' ? '$' + Number(v).toFixed(Number(v) < 1 ? 3 : 2) : metric === 'cache' ? Math.round(Number(v) * 100) + '%' : String(v)} />
+            <Axis placement="bottom" rule ticks={4} format={fmtTime} />
+            <Area fill="url(#drill-val-grad)" />
             <Spline stroke="var(--accent)" strokeWidth={1.5} />
+            <Points r={2} fill="var(--accent)" />
             <Highlight points lines />
           </Svg>
         </Chart>
@@ -193,6 +220,10 @@
     font: inherit;
   }
   .chart { height: 180px; }
+  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .chart :global(.tick) { stroke: var(--divider); }
+  .chart :global(.rule line) { stroke: var(--divider); }
+  .chart :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
   .summary { display: flex; gap: 12px; flex-wrap: wrap; }
   .kv { display: flex; gap: 4px; align-items: baseline; }
   .kv .k { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
