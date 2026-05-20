@@ -146,6 +146,7 @@ export function runWorkflowAndPersist(
             .update(nodeExecutions)
             .set({
               status: 'completed',
+              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
               inputData: inputData ?? null,
               outputData: output,
               completedAt: new Date(),
@@ -160,6 +161,7 @@ export function runWorkflowAndPersist(
             .update(nodeExecutions)
             .set({
               status: 'failed',
+              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
               error,
               completedAt: new Date(),
               ...(usage ?? {}),

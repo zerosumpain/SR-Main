@@ -45,6 +45,10 @@ export interface EngineResult {
    *  absent (not present with null usage), so the persister can skip
    *  touching the cost columns for non-LLM nodes. */
   nodeUsage: Map<string, UsageRollup>;
+  /** When each node began executing — wall-clock. Persisted to
+   *  node_executions.started_at so duration (completed_at - started_at)
+   *  can be computed. */
+  nodeStartTimes: Map<string, Date>;
   error?: string;
   healingHistory?: UndoEntry[];
   /** Populated when the engine paused mid-run for human interaction. */
@@ -133,6 +137,7 @@ export class WorkflowEngine {
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
     const nodeUsage = new Map<string, UsageRollup>();
+    const nodeStartTimes = new Map<string, Date>();
     const skippedNodes = new Set<string>();
     const blockedEdgeIds = new Set<string>();
 
@@ -227,6 +232,7 @@ export class WorkflowEngine {
           nodeInputs.set(nodeId, { ...mergedInput });
 
           const nodeStartedAt = Date.now();
+          nodeStartTimes.set(nodeId, new Date(nodeStartedAt));
           emit('node_started', nodeId);
           emitObs('node.started', {
             workflowId: workflowId ?? workflow.id,
@@ -629,7 +635,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, nodeUsage, healingHistory };
+      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, healingHistory };
     } catch (err: unknown) {
       // Human-in-the-loop pause: the run halts cleanly (no failure).
       if (err instanceof PauseForHumanSignal) {
@@ -644,6 +650,7 @@ export class WorkflowEngine {
           nodeInputs,
           nodeErrors,
           nodeUsage,
+          nodeStartTimes,
           healingHistory,
           pausedAtNodeId: err.nodeId,
         };
@@ -655,7 +662,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, nodeUsage, error: message, healingHistory };
+      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, error: message, healingHistory };
     }
   }
 }

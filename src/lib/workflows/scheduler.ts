@@ -177,6 +177,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
         .update(nodeExecutions)
         .set({
           status: 'completed',
+          startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
           inputData: inputData ?? null,
           outputData: output,
           completedAt: new Date(),
@@ -191,6 +192,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
         .update(nodeExecutions)
         .set({
           status: 'failed',
+          startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
           error,
           completedAt: new Date(),
           ...(usage ?? {}),
