@@ -17,6 +17,7 @@ import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabili
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
+import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -433,7 +434,25 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           if (conversationId && capturedUsage) {
             const dIn = Math.max(0, Math.round(capturedUsage.input_tokens ?? 0));
             const dOut = Math.max(0, Math.round(capturedUsage.output_tokens ?? 0));
-            const dCost = Math.max(0, capturedUsage.cost_usd ?? 0);
+            // Hermes reports token counts but its own cost estimate is
+            // unreliable for z.ai GLM models (its pricing tables don't cover
+            // the coding-paas endpoint — it returns 0). Compute cost from the
+            // conversation's own model via our price table; fall back to
+            // Hermes's number only if we can't price the model.
+            let dCost = 0;
+            if (dIn > 0 || dOut > 0) {
+              const [conv] = await db
+                .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1);
+              const pricing = conv ? priceFor(conv.provider, conv.modelId) : null;
+              if (pricing) {
+                dCost = computeCost(pricing, dIn, dOut);
+              } else {
+                dCost = Math.max(0, capturedUsage.cost_usd ?? 0);
+              }
+            }
             if (dIn > 0 || dOut > 0 || dCost > 0) {
               await db
                 .update(conversations)

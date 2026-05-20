@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { HermesClient } from '$lib/jkai/hermes-client';
 import { recordLLMCall } from '../execution-context';
+import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { env } from '$env/dynamic/private';
 
 /** Per-turn LLM usage the Hermes jkai_platform adapter attaches to the
@@ -177,16 +178,29 @@ export const chatExecutor: NodeExecutor = {
     // rolls it up into node_executions cost columns. recordLLMCall is a no-op
     // outside an engine-managed node; chat.ts always runs inside one.
     if (turnUsage) {
+      const provider = turnUsage.provider ?? 'hermes';
+      const model = turnUsage.model ?? 'unknown';
+      const tokensIn = turnUsage.input_tokens ?? null;
+      const tokensOut = turnUsage.output_tokens ?? null;
+      // Hermes reports token counts but its own cost estimate is unreliable
+      // for z.ai GLM models (it returns 0). Re-derive cost from our price
+      // table when we can price the model; fall back to Hermes's number only
+      // if the model is unknown to us.
+      const pricing = priceFor(provider, model);
+      const costUsd =
+        pricing && tokensIn !== null && tokensOut !== null
+          ? computeCost(pricing, tokensIn, tokensOut)
+          : typeof turnUsage.cost_usd === 'number'
+            ? turnUsage.cost_usd
+            : null;
       recordLLMCall({
-        provider: turnUsage.provider ?? 'hermes',
-        model: turnUsage.model ?? 'unknown',
-        tokensInput: turnUsage.input_tokens ?? null,
-        tokensOutput: turnUsage.output_tokens ?? null,
+        provider,
+        model,
+        tokensInput: tokensIn,
+        tokensOutput: tokensOut,
         cacheReadTokens: turnUsage.cache_read_tokens ?? null,
         reasoningTokens: null,
-        // Hermes computes its own estimated cost; we pass it through verbatim
-        // rather than re-deriving from the price table.
-        costUsd: typeof turnUsage.cost_usd === 'number' ? turnUsage.cost_usd : null,
+        costUsd,
         priceSnapshot: null,
       });
     }
