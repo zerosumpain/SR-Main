@@ -30,7 +30,7 @@
     <span>{metrics.failed} failed</span>
   {/if}
   <span style="color: var(--text-ghost);">|</span>
-  <span title="Total LLM spend across conversations and builds (GBP)">
-    {formatGbp(totalSpendUsd)} spend
+  <span title="LLM spend (GBP) across conversations and builds active in the last 24h">
+    {formatGbp(totalSpendUsd)} spend · 24h
   </span>
 </div>

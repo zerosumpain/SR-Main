@@ -61,13 +61,18 @@ export const load: PageServerLoad = async () => {
     whatsappThread = { phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
   }
 
-  // Total spend across conversations + builds
+  // LLM spend over the last 24h — windowed to match the run metrics above.
+  // conversations.cost_usd / jkaiBuilds.cost_usd are running totals, so this
+  // sums the full cost of conversations + builds *touched* in the window
+  // (a per-turn cost ledger would be needed for an exact 24h slice).
   const [convCostRow] = await db
     .select({ convCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
-    .from(conversations);
+    .from(conversations)
+    .where(gte(conversations.updatedAt, since));
   const [buildCostRow] = await db
     .select({ buildCost: sql<string>`COALESCE(SUM(cost_usd), 0)::text` })
-    .from(jkaiBuilds);
+    .from(jkaiBuilds)
+    .where(gte(jkaiBuilds.updatedAt, since));
   const totalSpendUsd = Number(convCostRow?.convCost ?? 0) + Number(buildCostRow?.buildCost ?? 0);
 
   const [defaultChatModel, chatAltOpenRouterModel, approvalUi] = await Promise.all([
