@@ -22,6 +22,17 @@ export const TEMP_BUCKETS: AxisBuckets = {
   centroids: [-2, 5, 10, 15, 21, 28],
 };
 
+// Fail loudly at startup if a bucket axis is mis-edited — enumerateGrid
+// indexes states[] by centroid index, so a length mismatch would silently
+// yield "undefined" state strings in generated prompts.
+for (const b of [HR_BUCKETS, STEPS_BUCKETS, TEMP_BUCKETS]) {
+  if (b.states.length !== b.centroids.length) {
+    throw new Error(
+      `AxisBuckets '${b.axis}': states.length (${b.states.length}) !== centroids.length (${b.centroids.length})`,
+    );
+  }
+}
+
 /** Index of the centroid nearest to `value`. Ties resolve to the lower index. */
 export function snapBucket(value: number, centroids: number[]): number {
   let best = 0;
