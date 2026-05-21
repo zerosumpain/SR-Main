@@ -176,8 +176,9 @@ async function callLLM(p: GridPoint): Promise<HeroTitleCopy | null> {
         ],
         temperature: 0.9,
         // GLM consumes reasoning tokens out of max_tokens before any visible
-        // output — give it room (mirrors hero-copy-service).
-        max_tokens: 3000,
+        // output. At 3000, ~23% of generations were cut off mid-reasoning
+        // (finish_reason=length, empty content); 8000 clears the long tail.
+        max_tokens: 8000,
       },
       { signal: controller.signal },
     );
@@ -275,10 +276,15 @@ export async function generateHeroTitles(
       await Promise.all(
         batch.map(async (point) => {
           let copy: HeroTitleCopy | null = null;
-          try {
-            copy = await llmCall(point);
-          } catch (e) {
-            console.warn('[hero-titles] generation call threw', e);
+          // Reasoning length varies per call — retry a failed bucket a couple
+          // of times before falling back, so one over-long reasoning run
+          // doesn't doom the bucket to fallback copy.
+          for (let attempt = 0; attempt < 3 && !copy; attempt++) {
+            try {
+              copy = await llmCall(point);
+            } catch (e) {
+              console.warn('[hero-titles] generation call threw', e);
+            }
           }
           if (copy) {
             await upsertRow(point, copy);
