@@ -3,23 +3,12 @@ import { db } from '$lib/db';
 import { heroTitles } from '$lib/db/schema';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import {
-  enumerateGrid,
-  snapToBuckets,
-  fillStrap,
-  type GridPoint,
-} from './hero-titles-buckets';
+import { enumerateGrid, snapToBuckets, type GridPoint } from './hero-titles-buckets';
 
 export interface HeroTitleCopy {
   primary: string;
   ghost: string;
   strapTemplate: string;
-}
-
-export interface HeroTitle {
-  primary: string;
-  ghost: string;
-  strap: string;
 }
 
 const MAX_HEADLINE_LEN = 24;
@@ -103,12 +92,10 @@ export interface SnapInput {
   hr: number;
   steps: number;
   temp: number;
-  condition: string;
 }
 
-export async function snapHeroTitle(input: SnapInput): Promise<HeroTitle> {
+export async function snapHeroTitle(input: SnapInput): Promise<HeroTitleCopy> {
   const key = snapToBuckets(input.hr, input.steps, input.temp);
-  let copy: HeroTitleCopy;
   try {
     const rows = await loadRows();
     const row = rows.find(
@@ -117,23 +104,13 @@ export async function snapHeroTitle(input: SnapInput): Promise<HeroTitle> {
         r.stepsBucket === key.stepsBucket &&
         r.tempBucket === key.tempBucket,
     );
-    copy = row
-      ? { primary: row.primary, ghost: row.ghost, strapTemplate: row.strapTemplate }
-      : FALLBACK[key.hrBucket];
+    if (row) {
+      return { primary: row.primary, ghost: row.ghost, strapTemplate: row.strapTemplate };
+    }
   } catch (err) {
     console.warn('[hero-titles] snap fell back:', err instanceof Error ? err.message : err);
-    copy = FALLBACK[key.hrBucket];
   }
-  return {
-    primary: copy.primary,
-    ghost: copy.ghost,
-    strap: fillStrap(copy.strapTemplate, {
-      bpm: input.hr,
-      steps: input.steps,
-      temp: input.temp,
-      sky: input.condition,
-    }),
-  };
+  return FALLBACK[key.hrBucket];
 }
 
 // ---------------------------------------------------------------------------

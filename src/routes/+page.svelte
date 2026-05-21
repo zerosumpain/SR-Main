@@ -20,6 +20,7 @@
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import SiteNav from '$lib/components/SiteNav.svelte';
   import { roundPulse } from '$lib/biome/state';
+  import { fillStrap } from '$lib/landing/hero-titles-buckets';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
   const store = getContext<BiomeStore>('biome');
@@ -40,9 +41,16 @@
       : (data.initialBiome?.weather?.condition ?? 'clear'),
   );
 
-  const heroTag = `RIGHT NOW · ${new Date()
-    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    .toUpperCase()} · LONDON`;
+  let strap = $derived(
+    fillStrap(data.heroTitle.strapTemplate, {
+      bpm: pulse,
+      steps: data.steps,
+      temp,
+      sky: condition,
+    }),
+  );
+
+  const heroTag = `RIGHT NOW · ${data.dateStr} · LONDON`;
 
   onMount(() => {
     if (data.initialBiome) {
@@ -82,7 +90,7 @@
       tag={heroTag}
       primary={data.heroTitle.primary}
       ghost={data.heroTitle.ghost}
-      strap={data.heroTitle.strap}
+      strap={strap}
       {pulse}
       steps={data.steps}
       {temp}

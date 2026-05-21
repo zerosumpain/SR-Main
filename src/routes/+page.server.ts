@@ -32,8 +32,11 @@ export const load: PageServerLoad = async ({ fetch }) => {
     hr: biomeRes?.pulse ?? 60,
     steps,
     temp: biomeRes?.weather?.temp ?? 15,
-    condition: biomeRes?.weather?.condition ?? 'clear',
   });
 
-  return { posts, steps, initialBiome: biomeRes, heroTitle };
+  const dateStr = new Date()
+    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    .toUpperCase();
+
+  return { posts, steps, initialBiome: biomeRes, heroTitle, dateStr };
 };
