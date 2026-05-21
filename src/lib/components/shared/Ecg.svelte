@@ -69,8 +69,11 @@
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      // 8 beats per sweep, so cycles/sec = bpm / 60 / beats. Pace the trace with the live heart rate.
-      const cyclesPerSec = Math.max(0.2, bpm / 60 / beats);
+      // 8 beats per sweep, so cycles/sec = bpm / 60 / beats. Pace the trace
+      // with the live heart rate. The floor only guards against a near-zero
+      // bpm (0.05 ≈ 24 bpm) — the old 0.2 floor pinned the trace to an
+      // effective ~96 bpm for every normal resting heart rate.
+      const cyclesPerSec = Math.max(0.05, bpm / 60 / beats);
       phase = phase + dt * cyclesPerSec;
       raf = requestAnimationFrame(tick);
     };
