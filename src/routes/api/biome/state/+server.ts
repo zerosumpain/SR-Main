@@ -11,10 +11,8 @@ import {
   type BiomeState,
   type WeatherCondition,
 } from '$lib/biome/state';
+import { getBiomeLocation } from '$lib/biome/location';
 import type { RequestHandler } from './$types';
-
-const LAT = 51.5;
-const LON = -0.1;
 
 const WEATHER_CODES: Record<number, WeatherCondition> = {
   0: 'clear', 1: 'clear',
@@ -82,10 +80,13 @@ export const GET: RequestHandler = async () => {
     console.error('[biome] DB fetch failed:', error);
   }
 
+  const loc = await getBiomeLocation();
+  state.town = loc.town ?? undefined;
+
   try {
     const params = new URLSearchParams({
-      latitude: String(LAT),
-      longitude: String(LON),
+      latitude: String(loc.lat),
+      longitude: String(loc.lon),
       current: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day',
     });
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
@@ -108,6 +109,7 @@ export const GET: RequestHandler = async () => {
 
   if (latestDataTime) {
     state.dataAge = Math.round(Date.now() / 1000 - latestDataTime);
+    state.lastSyncedAt = new Date(latestDataTime * 1000).toISOString();
   }
   state.stale = isStale(state.dataAge) || !state.sources.heartRate;
   state.lastUpdated = new Date().toISOString();

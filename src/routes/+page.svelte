@@ -40,6 +40,10 @@
       ? store.state.weather.condition
       : (data.initialBiome?.weather?.condition ?? 'clear'),
   );
+  let town = $derived(mounted ? store.state.town : data.initialBiome?.town);
+  let lastSyncedAt = $derived(
+    mounted ? store.state.lastSyncedAt : data.initialBiome?.lastSyncedAt,
+  );
 
   let strap = $derived(
     fillStrap(data.heroTitle.strapTemplate, {
@@ -50,7 +54,24 @@
     }),
   );
 
-  const heroTag = `RIGHT NOW · ${data.dateStr} · LONDON`;
+  let heroTag = $derived(
+    `RIGHT NOW · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : ''),
+  );
+
+  let now = $state(Date.now());
+
+  function formatSynced(iso: string | undefined, ref: number): string {
+    if (!iso) return '';
+    const secs = Math.round((ref - Date.parse(iso)) / 1000);
+    if (!Number.isFinite(secs) || secs < 90) return 'just now';
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }
+
+  let syncedText = $derived(formatSynced(lastSyncedAt, now));
 
   onMount(() => {
     if (data.initialBiome) {
@@ -65,7 +86,13 @@
       bgMode = (e as CustomEvent<{ mode: 'ecg' | 'biome' }>).detail.mode;
     }
     window.addEventListener('landing-bg-change', handleBgChange);
-    return () => window.removeEventListener('landing-bg-change', handleBgChange);
+
+    const tick = setInterval(() => (now = Date.now()), 30_000);
+
+    return () => {
+      window.removeEventListener('landing-bg-change', handleBgChange);
+      clearInterval(tick);
+    };
   });
 </script>
 
@@ -109,6 +136,7 @@
     style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted);"
   >
     <span>Signature · {bgMode === 'biome' ? 'Biome' : 'Pulse'} · Live</span>
+    {#if syncedText}<span>Synced {syncedText}</span>{/if}
     <span style="opacity: 0.5;">Scroll ↓</span>
   </div>
 </section>

@@ -33,5 +33,7 @@ export function interpolateBiomeState(
     dataAge: to.dataAge,
     stale: to.stale,
     sources: to.sources,
+    town: to.town,
+    lastSyncedAt: to.lastSyncedAt,
   };
 }

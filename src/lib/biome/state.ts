@@ -19,6 +19,10 @@ export interface BiomeState {
   dataAge: number;
   stale: boolean;
   sources: { heartRate: boolean; weather: boolean };
+  /** Obfuscated (town-level) location label. Absent until resolved. */
+  town?: string;
+  /** ISO timestamp of the most recent vitals reading. */
+  lastSyncedAt?: string;
 }
 
 export const BIOME_DEFAULTS: BiomeState = {
