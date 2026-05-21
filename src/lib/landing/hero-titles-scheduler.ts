@@ -1,4 +1,5 @@
 import { generateHeroTitles, heroTitlesCount } from './hero-titles-service';
+import { enumerateGrid } from './hero-titles-buckets';
 
 let interval: ReturnType<typeof setInterval> | undefined;
 let startTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -16,16 +17,19 @@ export function startHeroTitlesScheduler(): void {
   const ms = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MS;
   console.log(`[hero-titles] regeneration every ${Math.round(ms / 3_600_000)}h`);
 
-  // Let the app finish booting, then generate immediately only if the table
-  // is empty (cold start). Otherwise wait one full interval.
+  // Let the app finish booting, then generate if the set is incomplete —
+  // a cold-start empty table, or a partial set left behind when a deploy
+  // restarted the service mid-generation. A complete set waits for the
+  // next interval.
   startTimeout = setTimeout(async () => {
     startTimeout = undefined;
     try {
       const count = await heroTitlesCount();
-      if (count === 0) {
-        console.log('[hero-titles] table empty — generating initial set');
+      const expected = enumerateGrid().length;
+      if (count < expected) {
+        console.log(`[hero-titles] set incomplete (${count}/${expected}) — generating`);
         const res = await generateHeroTitles();
-        console.log('[hero-titles] initial generation done', res);
+        console.log('[hero-titles] startup generation done', res);
       }
     } catch (e) {
       console.error('[hero-titles] startup check failed', e);
