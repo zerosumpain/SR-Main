@@ -1,0 +1,32 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+
+  let mode = $state<'ecg' | 'biome'>('ecg');
+
+  onMount(() => {
+    const stored = localStorage.getItem('landing-bg');
+    if (stored === 'biome' || stored === 'ecg') mode = stored;
+  });
+
+  function toggle() {
+    mode = mode === 'ecg' ? 'biome' : 'ecg';
+    localStorage.setItem('landing-bg', mode);
+    window.dispatchEvent(new CustomEvent('landing-bg-change', { detail: { mode } }));
+  }
+</script>
+
+<button
+  onclick={toggle}
+  class="fixed bottom-4 left-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 transition-opacity hover:opacity-100"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); opacity: 0.7;"
+  title="Switch hero background"
+  aria-label="Switch hero background"
+>
+  <span
+    class="text-[9px] uppercase tracking-[0.15em]"
+    style="color: var(--text-ghost); font-family: var(--font-mono);"
+  >
+    {mode === 'ecg' ? 'ECG' : 'Biome'}
+  </span>
+  <span class="text-[10px]" style="color: var(--text-ghost);">⇄</span>
+</button>
