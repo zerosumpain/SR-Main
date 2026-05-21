@@ -14,24 +14,35 @@
   import { getContext, onMount } from 'svelte';
   import ScrollReveal from '$lib/components/ScrollReveal.svelte';
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
-  import BiomeToggle from '$lib/components/BiomeToggle.svelte';
+  import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
+  import LandingHero from '$lib/components/landing/LandingHero.svelte';
+  import Ecg from '$lib/components/shared/Ecg.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import SiteNav from '$lib/components/SiteNav.svelte';
   import { roundPulse } from '$lib/biome/state';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
-
   const store = getContext<BiomeStore>('biome');
-  let biomeVisible = $state(true);
 
   let { data } = $props();
 
   let mounted = $state(false);
+  let bgMode = $state<'ecg' | 'biome'>('ecg');
 
   // Before mount: use server-fetched biome data. After mount: use live store.
   let pulse = $derived(mounted ? store.state.pulse : (data.initialBiome?.pulse ?? 60));
-  let temp = $derived(mounted ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15));
-  let condition = $derived(mounted ? store.state.weather.condition : (data.initialBiome?.weather?.condition ?? 'clear'));
+  let temp = $derived(
+    mounted ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15),
+  );
+  let condition = $derived(
+    mounted
+      ? store.state.weather.condition
+      : (data.initialBiome?.weather?.condition ?? 'clear'),
+  );
+
+  const heroTag = `RIGHT NOW · ${new Date()
+    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    .toUpperCase()} · LONDON`;
 
   onMount(() => {
     if (data.initialBiome) {
@@ -39,61 +50,58 @@
     }
     mounted = true;
 
-    const stored = localStorage.getItem('biome-visible');
-    if (stored === 'false') biomeVisible = false;
+    const stored = localStorage.getItem('landing-bg');
+    if (stored === 'biome' || stored === 'ecg') bgMode = stored;
 
-    function handleBiomeToggle(e: Event) {
-      biomeVisible = (e as CustomEvent<{ visible: boolean }>).detail.visible;
+    function handleBgChange(e: Event) {
+      bgMode = (e as CustomEvent<{ mode: 'ecg' | 'biome' }>).detail.mode;
     }
-    window.addEventListener('biome-toggle', handleBiomeToggle);
-    return () => window.removeEventListener('biome-toggle', handleBiomeToggle);
+    window.addEventListener('landing-bg-change', handleBgChange);
+    return () => window.removeEventListener('landing-bg-change', handleBgChange);
   });
 </script>
 
-<!-- HERO — full viewport, heavy type -->
-<section class="relative min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden">
-  {#if biomeVisible}
+<!-- HERO — full viewport, /health hero language -->
+<section
+  class="relative min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden"
+>
+  {#if bgMode === 'biome'}
     <BiomeBackground {store} position="absolute" transparent />
+  {:else}
+    <div class="absolute inset-0 pointer-events-none">
+      <Ecg rhr={roundPulse(pulse)} />
+    </div>
   {/if}
+
   <!-- Top bar -->
   <SiteNav variant="hero" />
 
-  <!-- Center — stats + explainer side by side -->
+  <!-- Center — hero copy -->
   <div class="relative z-10 flex-1 flex items-center">
-    <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
-      <!-- Left: vitals -->
-      <div class="text-center md:text-right">
-        <p class="display text-[64px] sm:text-[96px] md:text-[120px]" style="color: var(--accent);">
-          {roundPulse(pulse)}
-        </p>
-        <p class="label mt-2">
-          BPM&ensp;/&ensp;{data.steps?.toLocaleString() || '—'} STEPS
-        </p>
-        <p class="label mt-1">
-          {Math.round(temp)}°C&ensp;/&ensp;{condition.toUpperCase()}
-        </p>
-      </div>
-
-      <!-- Right: explainer with accent strip + live walk -->
-      <div class="accent-strip max-w-[280px]">
-        <p class="text-base font-medium leading-relaxed" style="color: var(--text-primary);">
-          I'm John Kelly and these are my vitals, right now.
-        </p>
-        <p class="text-sm leading-relaxed mt-2" style="color: var(--text-secondary);">
-          The pulsing background is my heart rate. You can toggle it off if it's distracting (bottom right). Weather is what I am experiencing where I am right now. This site is a place to blog, experiment, and share.
-        </p>
-      </div>
-    </div>
+    <LandingHero
+      tag={heroTag}
+      primary={data.heroTitle.primary}
+      ghost={data.heroTitle.ghost}
+      strap={data.heroTitle.strap}
+      {pulse}
+      steps={data.steps}
+      {temp}
+      {condition}
+    />
   </div>
 
-  <!-- Live walk banner — centred below hero content -->
+  <!-- Live walk banner -->
   <div class="relative z-10 text-center mt-4">
     <LiveWalkBanner />
   </div>
 
-  <!-- Bottom — scroll prompt -->
-  <div class="relative z-10 text-center">
-    <p class="label" style="opacity: 0.4;">SCROLL</p>
+  <!-- Footer meta bar -->
+  <div
+    class="relative z-10 flex justify-between items-center"
+    style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted);"
+  >
+    <span>Signature · {bgMode === 'biome' ? 'Biome' : 'Pulse'} · Live</span>
+    <span style="opacity: 0.5;">Scroll ↓</span>
   </div>
 </section>
 
@@ -104,6 +112,7 @@
 <section class="px-6 sm:px-10 md:px-16 py-12">
   <ScrollReveal>
     <div class="max-w-4xl">
+      <p class="label" style="color: var(--text-ghost); margin-bottom: 4px;">02 / SIGNATURE</p>
       <p class="label mb-4">The Biome</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="accent-strip">
@@ -137,7 +146,10 @@
   <ScrollReveal>
     <div class="max-w-4xl">
       <div class="flex justify-between items-end mb-6">
-        <p class="label">Writing</p>
+        <div>
+          <p class="label" style="color: var(--text-ghost); margin-bottom: 4px;">03 / WRITING</p>
+          <p class="label">Writing</p>
+        </div>
         <a href="/blog" class="nav-link">All posts →</a>
       </div>
 
@@ -180,4 +192,4 @@
   </div>
 </footer>
 
-<BiomeToggle />
+<BackgroundToggle />
