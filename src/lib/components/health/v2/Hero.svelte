@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { HealthDay } from '$lib/health/series-30d-service';
-  import Ecg from './Ecg.svelte';
+  import Ecg from '$lib/components/shared/Ecg.svelte';
   import Orbit from './Orbit.svelte';
   import Biome from './Biome.svelte';
 

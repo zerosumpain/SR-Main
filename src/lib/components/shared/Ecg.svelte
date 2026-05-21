@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { prefersReducedMotion } from './utils';
+  import { prefersReducedMotion } from '$lib/components/health/v2/utils';
 
   let { rhr = 64, fullbleed = true }: { rhr?: number; fullbleed?: boolean } = $props();
 
