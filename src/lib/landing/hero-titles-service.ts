@@ -205,8 +205,19 @@ async function callLLM(p: GridPoint): Promise<HeroTitleCopy | null> {
       { signal: controller.signal },
     );
     const text = completion.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text) return null;
-    return validateGenerated(tryParseJson(text));
+    if (typeof text !== 'string' || !text) {
+      console.warn(
+        '[hero-titles] empty LLM response, finish:',
+        completion.choices?.[0]?.finish_reason,
+      );
+      return null;
+    }
+    const parsed = tryParseJson(text);
+    const valid = validateGenerated(parsed);
+    if (!valid) {
+      console.warn('[hero-titles] validation failed; raw:', JSON.stringify(text).slice(0, 200));
+    }
+    return valid;
   } finally {
     clearTimeout(timeout);
   }

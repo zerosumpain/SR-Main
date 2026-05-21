@@ -42,6 +42,12 @@ describe('validateGenerated', () => {
     ).toBeNull();
   });
 
+  it('rejects an over-length strap', () => {
+    expect(
+      validateGenerated({ ...good, strap: '{bpm} ' + 'x'.repeat(196) }),
+    ).toBeNull();
+  });
+
   it('rejects a non-object', () => {
     expect(validateGenerated('nope')).toBeNull();
     expect(validateGenerated(null)).toBeNull();
