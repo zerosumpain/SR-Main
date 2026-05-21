@@ -46,11 +46,19 @@ export const POST: RequestHandler = async ({ request }) => {
   const payload = await request.json();
   const metrics: AppleHealthMetric[] = payload?.data?.metrics || [];
 
+  console.log(
+    `[apple-ingest] received ${metrics.length} metric(s): ` +
+      (metrics.map((m) => `${m.name}[${m.data?.length ?? 0}]`).join(', ') || '(none)'),
+  );
+
   let totalSynced = 0;
   const errors: string[] = [];
 
   for (const metric of metrics) {
-    if (!SUPPORTED_METRICS.includes(metric.name)) continue;
+    if (!SUPPORTED_METRICS.includes(metric.name)) {
+      console.log(`[apple-ingest] skipped unsupported metric: ${metric.name}`);
+      continue;
+    }
     if (!metric.data?.length) continue;
 
     try {
@@ -72,7 +80,12 @@ export const POST: RequestHandler = async ({ request }) => {
         })
         .filter((x): x is NonNullable<typeof x> => x !== null);
 
-      if (!mapped.length) continue;
+      if (!mapped.length) {
+        console.log(
+          `[apple-ingest] ${metric.name}: ${metric.data.length} point(s) but 0 usable values`,
+        );
+        continue;
+      }
 
       // Delete stale data in date range for this metric
       const dates = mapped.map((m) => m.date);
@@ -98,6 +111,11 @@ export const POST: RequestHandler = async ({ request }) => {
       errors.push(`${metric.name}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+
+  console.log(
+    `[apple-ingest] done — ${totalSynced} record(s) synced` +
+      (errors.length ? `, errors: ${errors.join('; ')}` : ''),
+  );
 
   return json({
     success: errors.length === 0,
