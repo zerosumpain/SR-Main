@@ -2,12 +2,11 @@
 
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import type { PageData, ActionData } from './$types';
+  import type { PageData } from './$types';
 
-  let { data, form }: { data: PageData; form: ActionData } = $props();
+  let { data }: { data: PageData } = $props();
 
   let submitting = $state(false);
   let formError = $state<string | null>(null);
@@ -37,7 +36,6 @@
             } else {
               formError = null;
             }
-            await invalidateAll();
             submitting = false;
           };
         }}
@@ -94,7 +92,7 @@
   .status-error {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #c44;
+    color: var(--status-error);
     margin-bottom: 1rem;
   }
 
