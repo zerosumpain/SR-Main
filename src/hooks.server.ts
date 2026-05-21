@@ -1,5 +1,9 @@
 import { startScheduler } from '$lib/health/scheduler';
 import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
+import {
+  startHeroTitlesScheduler,
+  stopHeroTitlesScheduler,
+} from '$lib/landing/hero-titles-scheduler';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
 // jkai-builder.service). Build-control routes call it over the Unix socket
@@ -31,6 +35,9 @@ startScheduler();
 startWorkflowScheduler().catch((err) => {
   console.error('[hooks.server] Workflow scheduler failed to start:', err);
 });
+
+// Start the landing-page hero-title regeneration scheduler
+startHeroTitlesScheduler();
 
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 startOrphanSweep();
@@ -72,6 +79,7 @@ function gracefulShutdown() {
   stopScheduledEngine();
   stopHealthScheduler();
   stopWorkflowScheduler();
+  stopHeroTitlesScheduler();
   stopGmailWatcher();
   unregisterGmailBridge();
   process.exit(0);
