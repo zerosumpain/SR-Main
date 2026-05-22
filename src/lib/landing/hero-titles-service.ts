@@ -3,7 +3,12 @@ import { db } from '$lib/db';
 import { heroTitles } from '$lib/db/schema';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { enumerateGrid, snapToBuckets, type GridPoint } from './hero-titles-buckets';
+import {
+  enumerateUnits,
+  snapToBuckets,
+  type BucketKey,
+  type GridPoint,
+} from './hero-titles-buckets';
 
 export interface HeroTitleCopy {
   primary: string;
@@ -11,51 +16,96 @@ export interface HeroTitleCopy {
   strapTemplate: string;
 }
 
-const MAX_HEADLINE_LEN = 24;
-const MAX_STRAP_LEN = 200;
-const TIMEOUT_MS = 90_000;
+export interface LengthLimits {
+  headlineWords: number;
+  strapWords: number;
+}
+
+export interface GenParams {
+  style: string;
+  headlineWords: number;
+  strapWords: number;
+}
+
+export interface GeneratedRow {
+  hrBucket: number;
+  stepsBucket: number;
+  tempBucket: number;
+  hrCentroid: number;
+  stepsCentroid: number;
+  tempCentroid: number;
+  primary: string;
+  ghost: string;
+  strapTemplate: string;
+  style: string | null;
+  failed: boolean;
+}
+
+export const BATCH_SIZE = 50;
+const BATCH_TIMEOUT_MS = 180_000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const CONCURRENCY = 4;
+const HEADLINE_CHAR_CEIL = 60;
+const STRAP_CHAR_CEIL = 400;
+const SAVE_LIMITS: LengthLimits = { headlineWords: 12, strapWords: 60 };
+const DEFAULT_PARAMS: GenParams = { style: '', headlineWords: 3, strapWords: 22 };
 
 /** Deterministic fallback, one entry per HR bucket index (0-4). */
 const FALLBACK: HeroTitleCopy[] = [
   {
     primary: 'STILL.',
     ghost: 'FOR NOW.',
-    strapTemplate: '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
   },
   {
     primary: 'IDLING.',
     ghost: 'BUT HERE.',
-    strapTemplate: '{bpm} beats, {steps} steps, {temp} and {sky}. Ticking over, nothing forced.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} and {sky}. Ticking over, nothing forced.',
   },
   {
     primary: 'WARMING UP.',
     ghost: 'KEEP GOING.',
-    strapTemplate: '{bpm} beats, {steps} steps, {temp} of {sky}. The body is paying attention now.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} of {sky}. The body is paying attention now.',
   },
   {
     primary: 'PUSHING.',
     ghost: "DON'T STOP.",
-    strapTemplate: '{bpm} beats, {steps} steps, {temp} and {sky}. Well into the effort.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} and {sky}. Well into the effort.',
   },
   {
     primary: 'FLAT OUT.',
     ghost: 'ALL IN.',
-    strapTemplate: '{bpm} beats, {steps} steps, {temp} of {sky}. Nothing held in reserve.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} of {sky}. Nothing held in reserve.',
   },
 ];
 
-/** Validate an LLM-generated entry. Returns null if it fails any rule. */
-export function validateGenerated(parsed: unknown): HeroTitleCopy | null {
-  if (!parsed || typeof parsed !== 'object') return null;
-  const o = parsed as Record<string, unknown>;
-  const primary = typeof o.primary === 'string' ? o.primary.trim() : '';
-  const ghost = typeof o.ghost === 'string' ? o.ghost.trim() : '';
-  const strap = typeof o.strap === 'string' ? o.strap.trim() : '';
+// ---------------------------------------------------------------------------
+// Validation.
+// ---------------------------------------------------------------------------
+
+function wordCount(s: string): number {
+  return s.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Core rule check on already-extracted, trimmed strings. */
+export function checkCopy(
+  primary: string,
+  ghost: string,
+  strap: string,
+  limits: LengthLimits,
+): HeroTitleCopy | null {
   if (!primary || !ghost || !strap) return null;
-  if (primary.length > MAX_HEADLINE_LEN || ghost.length > MAX_HEADLINE_LEN) return null;
-  if (strap.length > MAX_STRAP_LEN) return null;
+  if (wordCount(primary) > limits.headlineWords) return null;
+  if (wordCount(ghost) > limits.headlineWords) return null;
+  if (wordCount(strap) > limits.strapWords) return null;
+  if (primary.length > HEADLINE_CHAR_CEIL || ghost.length > HEADLINE_CHAR_CEIL) {
+    return null;
+  }
+  if (strap.length > STRAP_CHAR_CEIL) return null;
   if (/\d/.test(primary) || /\d/.test(ghost) || /\d/.test(strap)) return null;
   if (!strap.includes('{bpm}')) return null;
   return {
@@ -63,6 +113,19 @@ export function validateGenerated(parsed: unknown): HeroTitleCopy | null {
     ghost: ghost.toUpperCase(),
     strapTemplate: strap,
   };
+}
+
+/** Validate a raw LLM-generated entry. Returns null if it fails any rule. */
+export function validateGenerated(
+  parsed: unknown,
+  limits: LengthLimits,
+): HeroTitleCopy | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  const primary = typeof o.primary === 'string' ? o.primary.trim() : '';
+  const ghost = typeof o.ghost === 'string' ? o.ghost.trim() : '';
+  const strap = typeof o.strap === 'string' ? o.strap.trim() : '';
+  return checkCopy(primary, ghost, strap, limits);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,54 +157,79 @@ export interface SnapInput {
   temp: number;
 }
 
+/** Pick one row at random from those matching the bucket key. */
+export function pickVariant(rows: Row[], key: BucketKey): Row | null {
+  const matches = rows.filter(
+    (r) =>
+      r.hrBucket === key.hrBucket &&
+      r.stepsBucket === key.stepsBucket &&
+      r.tempBucket === key.tempBucket,
+  );
+  if (matches.length === 0) return null;
+  return matches[Math.floor(Math.random() * matches.length)];
+}
+
 export async function snapHeroTitle(input: SnapInput): Promise<HeroTitleCopy> {
   const key = snapToBuckets(input.hr, input.steps, input.temp);
   try {
     const rows = await loadRows();
-    const row = rows.find(
-      (r) =>
-        r.hrBucket === key.hrBucket &&
-        r.stepsBucket === key.stepsBucket &&
-        r.tempBucket === key.tempBucket,
-    );
+    const row = pickVariant(rows, key);
     if (row) {
-      return { primary: row.primary, ghost: row.ghost, strapTemplate: row.strapTemplate };
+      return {
+        primary: row.primary,
+        ghost: row.ghost,
+        strapTemplate: row.strapTemplate,
+      };
     }
   } catch (err) {
-    console.warn('[hero-titles] snap fell back:', err instanceof Error ? err.message : err);
+    console.warn(
+      '[hero-titles] snap fell back:',
+      err instanceof Error ? err.message : err,
+    );
   }
   return FALLBACK[key.hrBucket];
 }
 
 // ---------------------------------------------------------------------------
-// LLM generation.
+// Batch prompt + parsing.
 // ---------------------------------------------------------------------------
 
-function buildPrompt(p: GridPoint): { system: string; user: string } {
+function buildBatchPrompt(
+  units: GridPoint[],
+  params: GenParams,
+): { system: string; user: string } {
+  const styleLine = params.style.trim()
+    ? `Style direction from the site owner — follow it closely, it overrides the default tone: ${params.style.trim()}`
+    : 'No extra style direction; use the default voice described above.';
   const system = [
     'You write the hero copy for the landing page of a personal website.',
     "The page shows the owner's live vitals; your copy is the first thing a visitor reads.",
-    'Tone: dry, witty, snappy, lightly provocative. Never cheerful, never preachy.',
-    'Output strict JSON only: {"primary":"...","ghost":"...","strap":"..."}.',
-    'No code fences, no commentary.',
-    'primary: 1-3 words, ALL CAPS, ends with a full stop. Names the state.',
-    'ghost: 1-3 words, ALL CAPS, ends with a full stop. The turn or the punchline.',
-    'strap: one sentence, 22 words maximum, same mood as the headline.',
+    'Default tone: dry, witty, snappy, lightly provocative. Never cheerful, never preachy.',
+    styleLine,
+    'You will be given a numbered list of states. Return a JSON array with one',
+    'object per state, in the same order. Each object: {"primary":"...","ghost":"...","strap":"..."}.',
+    'Output strict JSON only — a single array. No code fences, no commentary.',
+    `primary: up to ${params.headlineWords} word(s), ALL CAPS, ends with a full stop. Names the state.`,
+    `ghost: up to ${params.headlineWords} word(s), ALL CAPS, ends with a full stop. The turn or the punchline.`,
+    `strap: one sentence, ${params.strapWords} words maximum, same mood as the headline.`,
     'NUMBERS: never write digits anywhere. primary and ghost contain no numbers at all.',
     'In the strap, refer to live figures ONLY through these tokens: {bpm} {steps} {temp} {sky}.',
     'The strap MUST contain {bpm} and at least one other token.',
-    'Voice examples (do not copy verbatim):',
+    'Make the entries varied — avoid repeating words or sentence shapes across the list.',
+    'Voice examples (shape only — do not copy, let the style direction set the tone):',
     '  {"primary":"STILL.","ghost":"BUT PLOTTING.","strap":"{bpm} beats, {steps} steps, {temp} of {sky} London — the day has not been agreed to yet."}',
     '  {"primary":"LIT UP.","ghost":"DON\'T STOP.","strap":"{bpm} beats and climbing, {steps} steps deep, {temp} and {sky}: this is the good part."}',
-    '  {"primary":"SPENT.","ghost":"WELL SPENT.","strap":"{bpm} beats settling, {steps} steps banked, {temp} and {sky} — nothing left to prove today."}',
   ].join('\n');
+  const lines = units.map(
+    (p, i) =>
+      `${i + 1}. heart rate ${p.hrState} (~${p.hrCentroid} bpm); activity ${p.stepsState} (~${p.stepsCentroid.toLocaleString('en-GB')} steps); temperature ${p.tempState} (~${p.tempCentroid}°C)`,
+  );
   const user = [
-    "The owner's current state:",
-    `- heart rate: ${p.hrState} (around ${p.hrCentroid} bpm)`,
-    `- activity so far today: ${p.stepsState} (around ${p.stepsCentroid.toLocaleString('en-GB')} steps)`,
-    `- temperature where they are: ${p.tempState} (around ${p.tempCentroid}°C)`,
+    `Write hero copy for these ${units.length} states. Return a JSON array of exactly ${units.length} objects, in order.`,
     '',
-    'Return only the JSON object.',
+    ...lines,
+    '',
+    'Return only the JSON array.',
   ].join('\n');
   return { system, user };
 }
@@ -155,31 +243,93 @@ function tryParseJson(s: string): unknown {
   try {
     return JSON.parse(cleaned);
   } catch {
-    return null;
+    /* fall through to bracket extraction */
   }
+  const start = cleaned.search(/[[{]/);
+  const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      /* give up */
+    }
+  }
+  return null;
 }
 
-/** One LLM call for one grid point. Returns null on any failure. */
-async function callLLM(p: GridPoint): Promise<HeroTitleCopy | null> {
+function buildRow(
+  p: GridPoint,
+  copy: HeroTitleCopy,
+  style: string,
+  failed: boolean,
+): GeneratedRow {
+  return {
+    hrBucket: p.hrBucket,
+    stepsBucket: p.stepsBucket,
+    tempBucket: p.tempBucket,
+    hrCentroid: p.hrCentroid,
+    stepsCentroid: p.stepsCentroid,
+    tempCentroid: p.tempCentroid,
+    primary: copy.primary,
+    ghost: copy.ghost,
+    strapTemplate: copy.strapTemplate,
+    style: style.trim() || null,
+    failed,
+  };
+}
+
+/**
+ * Map a raw LLM batch response onto its units. Always returns one row per
+ * unit; a unit whose object is missing or invalid gets flagged fallback copy.
+ */
+export function parseBatchResponse(
+  text: string,
+  units: GridPoint[],
+  params: GenParams,
+): GeneratedRow[] {
+  const limits: LengthLimits = {
+    headlineWords: params.headlineWords,
+    strapWords: params.strapWords,
+  };
+  const parsed = tryParseJson(text);
+  const arr: unknown[] = Array.isArray(parsed) ? parsed : [];
+  return units.map((p, i) => {
+    const valid = validateGenerated(arr[i], limits);
+    if (valid) return buildRow(p, valid, params.style, false);
+    return buildRow(p, FALLBACK[p.hrBucket], params.style, true);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// LLM batch call.
+// ---------------------------------------------------------------------------
+
+export type BatchLLMFn = (
+  prompt: { system: string; user: string },
+  unitCount: number,
+) => Promise<string | null>;
+
+async function callBatchLLM(
+  prompt: { system: string; user: string },
+  unitCount: number,
+): Promise<string | null> {
   const ctx = await resolveDefaultModel('chat');
   const { client, model } = await getLLMClient(ctx);
-  const { system, user } = buildPrompt(p);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
   try {
     const completion = await client.chat.completions.create(
       {
         model,
         messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
         ],
         temperature: 0.9,
-        max_tokens: 600,
-        // Disable GLM's extended reasoning. These prompts need a tiny JSON
-        // object, not a chain of thought — with reasoning on, calls ran
-        // ~25-90s and burned the token budget (empty content / timeouts);
-        // off, they return in ~4s. `thinking` is a z.ai-specific param.
+        // Sized to the batch — ~260 tokens per entry plus headroom, capped.
+        max_tokens: Math.min(16000, 400 + unitCount * 260),
+        // Disable GLM's extended reasoning — these prompts need JSON, not a
+        // chain of thought. `thinking` is a z.ai-specific param.
         // @ts-expect-error -- z.ai extension, absent from the OpenAI types
         thinking: { type: 'disabled' },
       },
@@ -188,62 +338,74 @@ async function callLLM(p: GridPoint): Promise<HeroTitleCopy | null> {
     const text = completion.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text) {
       console.warn(
-        '[hero-titles] empty LLM response, finish:',
+        '[hero-titles] empty batch response, finish:',
         completion.choices?.[0]?.finish_reason,
       );
       return null;
     }
-    const parsed = tryParseJson(text);
-    const valid = validateGenerated(parsed);
-    if (!valid) {
-      console.warn('[hero-titles] validation failed; raw:', JSON.stringify(text).slice(0, 200));
-    }
-    return valid;
+    return text;
+  } catch (e) {
+    console.warn('[hero-titles] batch LLM call failed', e);
+    return null;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export type LLMGenFn = (p: GridPoint) => Promise<HeroTitleCopy | null>;
+/**
+ * Generate copy for one batch of units (≤ BATCH_SIZE). Retries the whole call
+ * up to 3× on failure; after that, every unit gets flagged fallback copy.
+ */
+export async function generateBatch(
+  units: GridPoint[],
+  params: GenParams,
+  llmCall: BatchLLMFn = callBatchLLM,
+): Promise<GeneratedRow[]> {
+  const prompt = buildBatchPrompt(units, params);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const text = await llmCall(prompt, units.length);
+    if (text) return parseBatchResponse(text, units, params);
+  }
+  return units.map((p) => buildRow(p, FALLBACK[p.hrBucket], params.style, true));
+}
 
-async function upsertRow(p: GridPoint, copy: HeroTitleCopy): Promise<void> {
-  await db
-    .insert(heroTitles)
-    .values({
-      hrBucket: p.hrBucket,
-      stepsBucket: p.stepsBucket,
-      tempBucket: p.tempBucket,
-      hrCentroid: p.hrCentroid,
-      stepsCentroid: p.stepsCentroid,
-      tempCentroid: p.tempCentroid,
+// ---------------------------------------------------------------------------
+// Persistence.
+// ---------------------------------------------------------------------------
+
+function prepareRowsForSave(
+  rows: unknown[],
+): (typeof heroTitles.$inferInsert)[] {
+  const num = (v: unknown): number => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) throw new Error('row has an invalid numeric field');
+    return n;
+  };
+  return rows.map((raw) => {
+    if (!raw || typeof raw !== 'object') throw new Error('invalid row');
+    const r = raw as Record<string, unknown>;
+    const copy = checkCopy(
+      String(r.primary ?? '').trim(),
+      String(r.ghost ?? '').trim(),
+      String(r.strapTemplate ?? '').trim(),
+      SAVE_LIMITS,
+    );
+    if (!copy) throw new Error('row failed validation');
+    return {
+      hrBucket: num(r.hrBucket),
+      stepsBucket: num(r.stepsBucket),
+      tempBucket: num(r.tempBucket),
+      hrCentroid: num(r.hrCentroid),
+      stepsCentroid: num(r.stepsCentroid),
+      tempCentroid: num(r.tempCentroid),
       primary: copy.primary,
       ghost: copy.ghost,
       strapTemplate: copy.strapTemplate,
+      style:
+        typeof r.style === 'string' && r.style.trim() ? r.style.trim() : null,
       generatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [heroTitles.hrBucket, heroTitles.stepsBucket, heroTitles.tempBucket],
-      set: {
-        hrCentroid: p.hrCentroid,
-        stepsCentroid: p.stepsCentroid,
-        tempCentroid: p.tempCentroid,
-        primary: copy.primary,
-        ghost: copy.ghost,
-        strapTemplate: copy.strapTemplate,
-        generatedAt: new Date(),
-      },
-    });
-}
-
-async function loadExistingKeys(): Promise<Set<string>> {
-  const rows = await db
-    .select({
-      h: heroTitles.hrBucket,
-      s: heroTitles.stepsBucket,
-      t: heroTitles.tempBucket,
-    })
-    .from(heroTitles);
-  return new Set(rows.map((r) => `${r.h}-${r.s}-${r.t}`));
+    };
+  });
 }
 
 export async function heroTitlesCount(): Promise<number> {
@@ -253,58 +415,51 @@ export async function heroTitlesCount(): Promise<number> {
   return r?.n ?? 0;
 }
 
-let generationInProgress = false;
-
-export function isGenerationInProgress(): boolean {
-  return generationInProgress;
+/**
+ * Persist a generated set. `replace` clears the pool first; `append` adds to
+ * it. Every row is re-validated server-side before insert.
+ */
+export async function saveHeroTitles(
+  rows: unknown[],
+  mode: 'replace' | 'append',
+): Promise<number> {
+  const prepared = prepareRowsForSave(rows);
+  await db.transaction(async (tx) => {
+    if (mode === 'replace') await tx.delete(heroTitles);
+    if (prepared.length > 0) await tx.insert(heroTitles).values(prepared);
+  });
+  invalidateHeroTitlesCache();
+  return heroTitlesCount();
 }
 
+// ---------------------------------------------------------------------------
+// Full run — used by the scheduler and the startup top-up.
+// ---------------------------------------------------------------------------
+
+let generationInProgress = false;
+
 /**
- * Regenerate the full ~150-entry set. Non-destructive on partial failure: a
- * bucket whose LLM call fails keeps its existing row, or gets the fallback if
- * it has no row yet. No-op if a generation is already running.
+ * Generate one variant for every bucket and save it in `replace` mode. No-op
+ * if a run is already in progress.
  */
-export async function generateHeroTitles(
-  llmCall: LLMGenFn = callLLM,
+export async function runFullGeneration(
+  params: GenParams = DEFAULT_PARAMS,
+  llmCall: BatchLLMFn = callBatchLLM,
 ): Promise<{ ok: number; failed: number }> {
   if (generationInProgress) return { ok: 0, failed: 0 };
   generationInProgress = true;
-  let ok = 0;
-  let failed = 0;
   try {
-    const grid = enumerateGrid();
-    const existing = await loadExistingKeys();
-    for (let i = 0; i < grid.length; i += CONCURRENCY) {
-      const batch = grid.slice(i, i + CONCURRENCY);
-      await Promise.all(
-        batch.map(async (point) => {
-          let copy: HeroTitleCopy | null = null;
-          // Reasoning length varies per call — retry a failed bucket a couple
-          // of times before falling back, so one over-long reasoning run
-          // doesn't doom the bucket to fallback copy.
-          for (let attempt = 0; attempt < 3 && !copy; attempt++) {
-            try {
-              copy = await llmCall(point);
-            } catch (e) {
-              console.warn('[hero-titles] generation call threw', e);
-            }
-          }
-          if (copy) {
-            await upsertRow(point, copy);
-            ok++;
-          } else {
-            failed++;
-            const keyStr = `${point.hrBucket}-${point.stepsBucket}-${point.tempBucket}`;
-            if (!existing.has(keyStr)) {
-              await upsertRow(point, FALLBACK[point.hrBucket]);
-            }
-          }
-        }),
-      );
+    const units = enumerateUnits(1);
+    const all: GeneratedRow[] = [];
+    for (let i = 0; i < units.length; i += BATCH_SIZE) {
+      const slice = units.slice(i, i + BATCH_SIZE);
+      all.push(...(await generateBatch(slice, params, llmCall)));
     }
+    await saveHeroTitles(all, 'replace');
+    const ok = all.filter((r) => !r.failed).length;
+    return { ok, failed: all.length - ok };
   } finally {
     generationInProgress = false;
     invalidateHeroTitlesCache();
   }
-  return { ok, failed };
 }
