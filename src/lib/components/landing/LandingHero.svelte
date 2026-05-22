@@ -48,7 +48,7 @@
   .lh-head {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: clamp(52px, 9vw, 120px);
+    font-size: clamp(36px, 9vw, 120px);
     line-height: 0.86;
     letter-spacing: -0.03em;
     text-transform: uppercase;
