@@ -347,29 +347,20 @@ export const biomeConfig = pgTable('biome_config', {
 // Hero Titles — Cached landing-page hero copy
 // ==========================================
 
-export const heroTitles = pgTable(
-  'hero_titles',
-  {
-    id: serial('id').primaryKey(),
-    hrBucket: integer('hr_bucket').notNull(),
-    stepsBucket: integer('steps_bucket').notNull(),
-    tempBucket: integer('temp_bucket').notNull(),
-    hrCentroid: integer('hr_centroid').notNull(),
-    stepsCentroid: integer('steps_centroid').notNull(),
-    tempCentroid: integer('temp_centroid').notNull(),
-    primary: text('primary').notNull(),
-    ghost: text('ghost').notNull(),
-    strapTemplate: text('strap_template').notNull(),
-    generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({
-    bucketUnique: uniqueIndex('hero_titles_bucket_unique').on(
-      t.hrBucket,
-      t.stepsBucket,
-      t.tempBucket,
-    ),
-  }),
-);
+export const heroTitles = pgTable('hero_titles', {
+  id: serial('id').primaryKey(),
+  hrBucket: integer('hr_bucket').notNull(),
+  stepsBucket: integer('steps_bucket').notNull(),
+  tempBucket: integer('temp_bucket').notNull(),
+  hrCentroid: integer('hr_centroid').notNull(),
+  stepsCentroid: integer('steps_centroid').notNull(),
+  tempCentroid: integer('temp_centroid').notNull(),
+  primary: text('primary').notNull(),
+  ghost: text('ghost').notNull(),
+  strapTemplate: text('strap_template').notNull(),
+  style: text('style'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow(),
+});
 
 // ==========================================
 // Deep Dive — Research Agent
