@@ -175,10 +175,13 @@ async function callLLM(p: GridPoint): Promise<HeroTitleCopy | null> {
           { role: 'user', content: user },
         ],
         temperature: 0.9,
-        // GLM consumes reasoning tokens out of max_tokens before any visible
-        // output. At 3000, ~23% of generations were cut off mid-reasoning
-        // (finish_reason=length, empty content); 8000 clears the long tail.
-        max_tokens: 8000,
+        max_tokens: 600,
+        // Disable GLM's extended reasoning. These prompts need a tiny JSON
+        // object, not a chain of thought — with reasoning on, calls ran
+        // ~25-90s and burned the token budget (empty content / timeouts);
+        // off, they return in ~4s. `thinking` is a z.ai-specific param.
+        // @ts-expect-error -- z.ai extension, absent from the OpenAI types
+        thinking: { type: 'disabled' },
       },
       { signal: controller.signal },
     );
