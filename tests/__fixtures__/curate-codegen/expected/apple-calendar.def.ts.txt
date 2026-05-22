@@ -5,8 +5,10 @@ import type { NodeDefinition } from '$lib/workflows/types';
 export const appleCalendarDef: NodeDefinition = {
   type: 'apple-calendar',
   label: 'Apple Calendar',
-  category: 'integrations',
+  category: 'integration',
   description: 'Read and write events on iCloud calendars via CalDAV.',
+  inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  outputs: [{ name: 'output', type: 'object', label: 'Apple Calendar result' }],
   llmDescription: 'Use to fetch events for a date range or to create / update / delete events on an iCloud calendar. Authenticated via app-specific password (basic auth, kind=basic in integrationCredentials).',
   llmExamples: [
     {
@@ -82,16 +84,16 @@ export const appleCalendarDef: NodeDefinition = {
     "operation": "list"
   },
   basicConfig: [
-    { key: 'credentialId', label: 'iCloud account', type: 'string', required: true },
-    { key: 'calendar', label: 'Calendar', type: 'string', required: true },
-    { key: 'operation', label: 'What to do', type: 'dropdown', required: true },
-    { key: 'dateRangeStart', label: 'From', type: 'string' },
-    { key: 'dateRangeEnd', label: 'To', type: 'string' },
-    { key: 'eventTitle', label: 'Title', type: 'string' },
-    { key: 'eventStart', label: 'Start', type: 'string' },
-    { key: 'eventEnd', label: 'End', type: 'string' },
-    { key: 'eventLocation', label: 'Location', type: 'string' },
-    { key: 'eventNotes', label: 'Notes', type: 'string' },
-    { key: 'eventId', label: 'Event ID', type: 'string', required: true }
+    { key: 'credentialId', label: 'iCloud account', type: 'text' },
+    { key: 'calendar', label: 'Calendar', type: 'text' },
+    { key: 'operation', label: 'What to do', type: 'dropdown' },
+    { key: 'dateRangeStart', label: 'From', type: 'template-textarea' },
+    { key: 'dateRangeEnd', label: 'To', type: 'template-textarea' },
+    { key: 'eventTitle', label: 'Title', type: 'template-textarea' },
+    { key: 'eventStart', label: 'Start', type: 'template-textarea' },
+    { key: 'eventEnd', label: 'End', type: 'template-textarea' },
+    { key: 'eventLocation', label: 'Location', type: 'template-textarea' },
+    { key: 'eventNotes', label: 'Notes', type: 'template-textarea' },
+    { key: 'eventId', label: 'Event ID', type: 'text' }
   ],
 };

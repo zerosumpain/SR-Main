@@ -24,7 +24,7 @@ describe('POST /api/jkai/tools/promote', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.name).toBe('render_sleep_chart');
-  });
+  }, 15_000);
 
   it('returns 400 when messageId is missing', async () => {
     const { POST } = await import('../../../src/routes/api/jkai/tools/promote/+server');

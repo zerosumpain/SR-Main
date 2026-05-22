@@ -26,8 +26,8 @@ const mockClient = {
   },
 };
 
-vi.mock('$lib/deepdive/keys', () => ({
-  getOpenRouterClient: () => mockClient,
+vi.mock('$lib/workflows/nodes/llm-helpers', () => ({
+  resolveLLMClient: async () => ({ client: mockClient, model: 'openai/gpt-4o-mini' }),
 }));
 
 describe('llmCallExecutor', () => {

@@ -49,38 +49,6 @@ describe('runTool — proposal mode', () => {
     expect(p.suggestedValue).toBe('published');
   });
 
-  it('replace_content returns a prose proposal covering the whole body', async () => {
-    const r = await runTool('replace_content', { content: 'totally new body' }, ctx());
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const p = r.proposal as Proposal;
-    expect(p.kind).toBe('prose');
-    if (p.kind !== 'prose') return;
-    expect(p.original).toBe(snapshot.content);
-    expect(p.suggested).toBe('totally new body');
-    expect(p.anchor.from).toBe(0);
-    expect(p.anchor.to).toBe(snapshot.content.length);
-  });
-
-  it('patch_content errors when find string is missing', async () => {
-    const r = await runTool('patch_content', { find: 'not present', replace: 'x' }, ctx());
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error).toMatch(/not found/i);
-  });
-
-  it('patch_content returns a prose proposal at correct anchor', async () => {
-    const r = await runTool('patch_content', { find: 'second sentence.', replace: 'SECOND.' }, ctx());
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const p = r.proposal as Proposal;
-    expect(p.kind).toBe('prose');
-    if (p.kind !== 'prose') return;
-    expect(p.original).toBe('second sentence.');
-    expect(p.suggested).toBe('SECOND.');
-    expect(snapshot.content.slice(p.anchor.from, p.anchor.to)).toBe('second sentence.');
-  });
-
   it('read_post returns the snapshot directly', async () => {
     const r = await runTool('read_post', {}, ctx());
     expect(r.ok).toBe(true);

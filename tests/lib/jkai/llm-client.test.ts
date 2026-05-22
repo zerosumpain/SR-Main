@@ -16,6 +16,9 @@ vi.mock('openai', () => ({
   default: class MockOpenAI {
     apiKey: string;
     baseURL: string;
+    // installUsageCapture wraps chat.completions.create, so the mock client
+    // must expose it as a bindable function.
+    chat = { completions: { create: async () => ({}) } };
     constructor(opts: { apiKey: string; baseURL: string }) {
       this.apiKey = opts.apiKey;
       this.baseURL = opts.baseURL;

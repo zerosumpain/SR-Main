@@ -74,7 +74,10 @@ describe('heartbeat', () => {
     }
   });
 
-  it('does not emit heartbeat while tokens are flowing', async () => {
+  it('emits heartbeats at a fixed cadence even while tokens are flowing', async () => {
+    // The heartbeat is fixed-cadence by design (job-store.ts): it fires
+    // unconditionally while the job runs, independent of token activity.
+    // The client deduplicates identical (phase, summary) ticks.
     vi.useFakeTimers();
     try {
       const { jobId } = createJob('test');
@@ -84,7 +87,7 @@ describe('heartbeat', () => {
         publishJobEvent(jobId, { type: 'token', delta: 'x' });
         vi.advanceTimersByTime(10_000);
       }
-      expect(received.filter((e) => e.type === 'heartbeat').length).toBe(0);
+      expect(received.filter((e) => e.type === 'heartbeat').length).toBeGreaterThan(0);
     } finally {
       vi.useRealTimers();
     }

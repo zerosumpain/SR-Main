@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   signBridgeToken,
   verifyBridgeToken,
   invokeTool,
 } from '$lib/jkai/tool-bridge';
+
+beforeAll(() => {
+  // signBridgeToken / verifyBridgeToken require a >=32-char secret.
+  process.env.JKAI_BRIDGE_SECRET = 'test-bridge-secret-at-least-32-chars-long';
+});
 
 describe('bridge tokens', () => {
   it('round-trips a build id through sign/verify', () => {

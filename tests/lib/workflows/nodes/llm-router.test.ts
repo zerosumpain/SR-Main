@@ -19,9 +19,10 @@ const mockCreate = vi.fn().mockResolvedValue({
   usage: { prompt_tokens: 50, completion_tokens: 5 },
 });
 
-vi.mock('$lib/deepdive/keys', () => ({
-  getOpenRouterClient: () => ({
-    chat: { completions: { create: mockCreate } },
+vi.mock('$lib/workflows/nodes/llm-helpers', () => ({
+  resolveLLMClient: async () => ({
+    client: { chat: { completions: { create: mockCreate } } },
+    model: 'openai/gpt-4o-mini',
   }),
 }));
 

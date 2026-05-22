@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted ensures mocks are available when the hoisted vi.mock factory runs.
-const { startQuickAnswerMock, dbMock } = vi.hoisted(() => {
-  const startQuickAnswerMock = vi.fn();
-  const dbMock = {
-    insert: vi.fn(),
-    select: vi.fn(),
-  };
-  return { startQuickAnswerMock, dbMock };
+const { runQuickAnswerSyncMock, requestStopMock, dbMock } = vi.hoisted(() => {
+  const runQuickAnswerSyncMock = vi.fn();
+  const requestStopMock = vi.fn();
+  const dbMock = { insert: vi.fn() };
+  return { runQuickAnswerSyncMock, requestStopMock, dbMock };
 });
 
 vi.mock('$lib/quickanswer/worker', () => ({
-  startQuickAnswer: startQuickAnswerMock,
-  getEmitter: () => ({ on: vi.fn(), off: vi.fn() }),
+  runQuickAnswerSync: runQuickAnswerSyncMock,
+  requestStop: requestStopMock,
 }));
 vi.mock('$lib/db', () => ({ db: dbMock }));
 vi.mock('$lib/db/schema', () => ({ quickAnswers: {} }));
@@ -25,9 +23,9 @@ function ctx() {
 
 describe('quick-answer executor', () => {
   beforeEach(() => {
-    startQuickAnswerMock.mockReset();
+    runQuickAnswerSyncMock.mockReset();
+    requestStopMock.mockReset();
     dbMock.insert.mockReset();
-    dbMock.select.mockReset();
   });
 
   it('errors when topic is empty after interpolation', async () => {
@@ -35,29 +33,26 @@ describe('quick-answer executor', () => {
     expect(res.output.success).toBe(false);
   });
 
-  it('inserts row, starts worker, polls for completion', async () => {
-    // Insert returns a row id.
+  it('inserts a row, runs the worker synchronously, and returns the answer', async () => {
+    // Insert returns the new row id.
     const returning = vi.fn().mockResolvedValue([{ id: 'qa-1' }]);
     dbMock.insert.mockReturnValue({ values: () => ({ returning }) });
-    // Select returns a completed row on first poll.
-    dbMock.select.mockReturnValue({
-      from: () => ({
-        where: () => ({
-          limit: () =>
-            Promise.resolve([
-              { id: 'qa-1', topic: 'x', status: 'complete', answer: 'ok', sources: [], durationMs: 500 },
-            ]),
-        }),
-      }),
+    // The worker runs to completion in-process and returns the final row.
+    runQuickAnswerSyncMock.mockResolvedValue({
+      id: 'qa-1',
+      topic: 'x',
+      status: 'complete',
+      answer: 'ok',
+      sources: [],
+      durationMs: 500,
     });
-    startQuickAnswerMock.mockResolvedValue(undefined);
 
     const res = await quickAnswerExecutor.execute(
       {},
-      { topic: 'x', goals: ['g1'], pollIntervalMs: 1, maxWaitMs: 100 },
+      { topic: 'x', goals: ['g1'], maxWaitMs: 100 },
       ctx(),
     );
-    expect(startQuickAnswerMock).toHaveBeenCalledWith('qa-1');
+    expect(runQuickAnswerSyncMock).toHaveBeenCalledWith('qa-1');
     expect(res.output.success).toBe(true);
     expect(res.output.researchSessionId).toBe('qa-1');
     expect(res.output.researchReport).toBe('ok');

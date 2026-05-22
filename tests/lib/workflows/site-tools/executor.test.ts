@@ -17,16 +17,12 @@ vi.mock('$lib/health/timeline-service', () => ({
   getTimeline: vi.fn(),
 }));
 
-// Mock DB
+// Mock DB. The real $lib/db/schema is left unmocked so every table export
+// resolves — the mocked db.select() chain ignores the table arg anyway.
 vi.mock('$lib/db', () => ({
   db: {
     select: vi.fn(),
   },
-}));
-vi.mock('$lib/db/schema', () => ({
-  blogPosts: Symbol('blogPosts'),
-  jkaiBuilds: Symbol('jkaiBuilds'),
-  researchSessions: Symbol('researchSessions'),
 }));
 
 // We need to mock drizzle query builder pattern: db.select().from(table).where(...)
