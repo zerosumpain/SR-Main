@@ -9,7 +9,9 @@
   const beats = 8;
   const beatW = W / beats;
 
-  function beatPath(x0: number): Array<[number, number]> {
+  // `amp` scales the QRS deflection (Q dip, R spike, S dip) — see the `amp`
+  // derived below. P and T waves stay fixed; they're baseline detail.
+  function beatPath(x0: number, amp: number): Array<[number, number]> {
     const b = beatW;
     const baseline = H * 0.55;
     return [
@@ -17,20 +19,15 @@
       [x0 + b * 0.1, baseline],
       [x0 + b * 0.16, baseline - 8],
       [x0 + b * 0.22, baseline],
-      [x0 + b * 0.3, baseline + 6],
-      [x0 + b * 0.34, baseline - H * 0.32],
-      [x0 + b * 0.38, baseline + 14],
+      [x0 + b * 0.3, baseline + 6 * amp],
+      [x0 + b * 0.34, baseline - H * 0.32 * amp],
+      [x0 + b * 0.38, baseline + 14 * amp],
       [x0 + b * 0.46, baseline],
       [x0 + b * 0.62, baseline - 12],
       [x0 + b * 0.78, baseline],
       [x0 + b, baseline],
     ];
   }
-  const all: Array<[number, number]> = [];
-  for (let i = 0; i < beats; i++) all.push(...beatPath(i * beatW));
-  const d = all
-    .map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1))
-    .join(' ');
 
   const grid: Array<{ key: string; x1: number; y1: number; x2: number; y2: number; major: boolean }> = [];
   for (let x = 0; x <= W; x += 20)
@@ -41,6 +38,20 @@
   let phase = $state(0);
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
+
+  // Spike amplitude tracks heart rate: a resting heart shows a modest R
+  // spike, a working one a tall, emphatic spike. Mapped across 40-160 bpm
+  // (0.4x at rest -> 1.3x flat out), clamped, and recomputed as bpm updates.
+  let amp = $derived(0.4 + Math.max(0, Math.min(1, (bpm - 40) / 120)) * 0.9);
+
+  let d = $derived.by(() => {
+    const segs: Array<[number, number]> = [];
+    for (let i = 0; i < beats; i++) segs.push(...beatPath(i * beatW, amp));
+    return segs
+      .map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1))
+      .join(' ');
+  });
+
   let raf: number | undefined;
   let liveInterval: ReturnType<typeof setInterval> | undefined;
 
