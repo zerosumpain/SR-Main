@@ -348,6 +348,136 @@ register({
 });
 
 register({
+  name: 'register_hermes_build',
+  description:
+    'Register an app you (Hermes) just built as a JKAI build, so it appears at /jkai/builds and can be promoted to /projects/<slug>/. ' +
+    'Use this whenever you finish a static web app (single-page or multi-page HTML/JS/CSS) in a conversation — typically WhatsApp or general chat. ' +
+    'You provide the source files; this tool writes them to the build workspace, creates a `jkai_builds` row marked origin=hermes, status=completed, and returns the build id + URL. ' +
+    'After calling this, ask the user (in the same conversation) whether they want it conformed to the Strange Ramblings design system and published. ' +
+    'If yes, call `build_tweak` with the build id and an instruction like "Apply the site design system, then publish to /projects/". ' +
+    'If no, leave it — the user can still hit "Publish" from the /jkai/builds card to ship the raw version.',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Short human-readable title (e.g. "Quick calculator", "Daily mood tracker"). Auto-generated from prompt if omitted.' },
+      prompt: { type: 'string', description: 'The user request that led to this app — used as the "build prompt" for accounting and any future continuation pass. Free text, 1-2 sentences.' },
+      files: {
+        type: 'array',
+        description: 'Static source files. The first file with name "index.html" becomes the entry point. Other files (style.css, app.js, sub-pages, assets) are written alongside it.',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Relative path within the workspace, e.g. "index.html", "assets/logo.svg".' },
+            content: { type: 'string', description: 'File body as text.' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+    },
+    required: ['prompt', 'files'],
+  },
+  category: 'JKAI Builder',
+  toolset: 'builds',
+  handler: async (args, toolCtx) => {
+    const { ensureWorkspace, writeFileInSandbox, execInSandbox } = await import('$lib/jkai/sandbox');
+    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+
+    const filesRaw = args.files;
+    if (!Array.isArray(filesRaw) || filesRaw.length === 0) {
+      return { success: false, error: 'files[] is required and must be non-empty' };
+    }
+    const files = filesRaw as Array<{ path: string; content: string }>;
+    for (const f of files) {
+      if (!f.path || typeof f.path !== 'string' || typeof f.content !== 'string') {
+        return { success: false, error: 'each file needs string path + string content' };
+      }
+      // Reject path traversal — keep writes scoped to the workspace.
+      if (f.path.startsWith('/') || f.path.includes('..')) {
+        return { success: false, error: `invalid file path: ${f.path}` };
+      }
+    }
+
+    const hasIndex = files.some((f) => f.path === 'index.html');
+    if (!hasIndex) {
+      return { success: false, error: 'one of the files must be named "index.html" (the entry point)' };
+    }
+
+    const prompt = String(args.prompt);
+    const titleArg = typeof args.title === 'string' && args.title.trim().length > 0 ? args.title.trim() : null;
+    const title = titleArg ?? prompt.split('\n')[0].slice(0, 60);
+
+    const ctx = await resolveDefaultModel('builder');
+
+    // Pre-create the build row so we have the buildId for the workspace path.
+    const insertValues: Record<string, unknown> = {
+      title,
+      prompt,
+      status: 'completed',
+      origin: 'hermes',
+      planStatus: 'approved',
+      iterationsCompleted: 1,
+      budgetConfig: { maxIterations: 10, maxTotalMinutes: 60 },
+      modelProvider: ctx.provider,
+      modelId: ctx.modelId,
+      enforceDesignSystem: false, // Hermes-origin starts as-is; user opts in to conformance via build_tweak.
+      // Mark it servable — a static index.html is enough for publishBuild to copy.
+      serveConfig: {
+        port: 0,
+        startCommand: null,
+        healthCheck: '/',
+        description: title,
+        kind: 'static',
+      },
+    };
+    if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
+
+    const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
+    const buildId = build.id;
+
+    // Materialise the workspace + write files to BOTH dev/ and live/ so the
+    // publish path (which copies from live/) works without an extra promote step.
+    await ensureWorkspace(buildId);
+    const devRoot = `/home/jkai/workspace/${buildId}/dev`;
+    const liveRoot = `/home/jkai/workspace/${buildId}/live`;
+    const dirs = new Set<string>();
+    for (const f of files) {
+      const slash = f.path.lastIndexOf('/');
+      if (slash > 0) dirs.add(f.path.slice(0, slash));
+    }
+    for (const d of dirs) {
+      await execInSandbox(`mkdir -p ${devRoot}/${d} ${liveRoot}/${d}`);
+    }
+    for (const f of files) {
+      const r1 = await writeFileInSandbox(`${devRoot}/${f.path}`, f.content);
+      if (r1.exitCode !== 0) return { success: false, error: `write ${f.path} (dev): ${r1.stderr || 'failed'}` };
+      const r2 = await writeFileInSandbox(`${liveRoot}/${f.path}`, f.content);
+      if (r2.exitCode !== 0) return { success: false, error: `write ${f.path} (live): ${r2.stderr || 'failed'}` };
+    }
+
+    // Emit a single log line so the /jkai/builds detail page has something
+    // to show instead of an empty timeline.
+    const fileList = files.map((f) => `- ${f.path} (${Buffer.byteLength(f.content)} bytes)`).join('\n');
+    await db.insert(jkaiLogs).values({
+      buildId,
+      type: 'system',
+      content: `Hermes registered ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or have Hermes call build_tweak to conform it to the site design system first.`,
+    });
+
+    return {
+      success: true,
+      data: {
+        id: buildId,
+        title,
+        origin: 'hermes',
+        status: 'completed',
+        detailUrl: `/jkai/builds/${buildId}`,
+        publishHint: 'Call build_control with action="publish" to ship to /projects/<slug>/, or build_tweak to refine first.',
+      },
+    };
+  },
+});
+
+register({
   name: 'build_delete',
   description: 'Delete a build and all its iterations, logs, and workspace files',
   parameters: {

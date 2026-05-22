@@ -11,6 +11,15 @@
   let targetType = $state('');
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+  let selected = $state<Set<string>>(new Set());
+  let bulkBusy = $state(false);
+  let rowBusyId = $state<string | null>(null);
+  let toast = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  function showToast(kind: 'ok' | 'err', text: string) {
+    toast = { kind, text };
+    setTimeout(() => { toast = null; }, 2200);
+  }
 
   function fmtDate(d: string | Date): string {
     const dt = d instanceof Date ? d : new Date(d);
@@ -18,6 +27,58 @@
   }
 
   const STATUS_ACTIVE = ['scoping', 'discovering', 'awaiting-approval', 'generating', 'live-testing', 'awaiting-promotion', 'promoting'];
+
+  function toggleSelected(id: string, e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selected = next;
+  }
+  function selectAll() {
+    if (selected.size === sessions.length && sessions.length > 0) selected = new Set();
+    else selected = new Set(sessions.map((s: any) => s.id));
+  }
+  function clearSelection() { selected = new Set(); }
+
+  async function deleteOne(s: any, e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Delete session "${s.goal ?? s.targetType ?? s.id}"?\nIts worktree on disk is reaped separately by the hourly cleaner.`)) return;
+    rowBusyId = s.id;
+    try {
+      const r = await fetch(`/api/curate/sessions/${s.id}`, { method: 'DELETE' });
+      if (r.ok) {
+        sessions = sessions.filter((x: any) => x.id !== s.id);
+        showToast('ok', 'Deleted');
+      } else {
+        showToast('err', 'Delete failed');
+      }
+    } finally {
+      rowBusyId = null;
+    }
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} session${selected.size === 1 ? '' : 's'}?`)) return;
+    bulkBusy = true;
+    const ids = Array.from(selected);
+    let okCount = 0, errCount = 0;
+    for (const id of ids) {
+      try {
+        const r = await fetch(`/api/curate/sessions/${id}`, { method: 'DELETE' });
+        if (r.ok) {
+          sessions = sessions.filter((x: any) => x.id !== id);
+          okCount++;
+        } else errCount++;
+      } catch { errCount++; }
+    }
+    selected = new Set();
+    bulkBusy = false;
+    showToast(errCount === 0 ? 'ok' : 'err', `Deleted ${okCount}${errCount ? ` · ${errCount} failed` : ''}`);
+  }
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -105,23 +166,59 @@
     {#if sessions.length === 0}
       <div class="empty">No active sessions. Start one above.</div>
     {:else}
+      <div class="bulk-bar" class:visible={selected.size > 0}>
+        <button class="link" type="button" onclick={selectAll}>
+          {selected.size === sessions.length && sessions.length > 0 ? 'Deselect all' : 'Select all'}
+        </button>
+        <span class="dim">{selected.size} selected</span>
+        <span class="spacer"></span>
+        <button class="link danger" type="button" onclick={bulkDelete} disabled={bulkBusy}>
+          {bulkBusy ? 'Deleting…' : `Delete ${selected.size}`}
+        </button>
+        <button class="link" type="button" onclick={clearSelection}>Cancel</button>
+      </div>
       <div class="session-list">
         {#each sessions as s (s.id)}
-          <a class="session-row" href="/jkai/curate/{s.id}">
-            <div class="session-main">
-              <div class="session-goal">{s.goal ?? s.targetType ?? 'Untitled session'}</div>
-              <div class="session-meta">
-                <code class="type-chip">{s.targetType}</code>
-                <span class="dot">·</span>
-                <span>{fmtDate(s.createdAt)}</span>
+          {@const isSelected = selected.has(s.id)}
+          {@const isBusy = rowBusyId === s.id}
+          <div class="session-row" class:selected={isSelected}>
+            <button
+              class="row-check"
+              type="button"
+              aria-label={isSelected ? 'Deselect' : 'Select'}
+              aria-pressed={isSelected}
+              onclick={(e) => toggleSelected(s.id, e)}
+            >
+              {#if isSelected}✓{:else}&nbsp;{/if}
+            </button>
+            <a class="session-link" href="/jkai/curate/{s.id}">
+              <div class="session-main">
+                <div class="session-goal">{s.goal ?? s.targetType ?? 'Untitled session'}</div>
+                <div class="session-meta">
+                  <code class="type-chip">{s.targetType}</code>
+                  <span class="dot">·</span>
+                  <span>{fmtDate(s.createdAt)}</span>
+                </div>
               </div>
-            </div>
-            <span class="status-pill" data-status={s.status}>{s.status}</span>
-          </a>
+              <span class="status-pill" data-status={s.status}>{s.status}</span>
+            </a>
+            <button
+              type="button"
+              class="row-del"
+              title="Delete session"
+              aria-label="Delete session"
+              disabled={isBusy}
+              onclick={(e) => deleteOne(s, e)}
+            >✕</button>
+          </div>
         {/each}
       </div>
     {/if}
   </section>
+
+  {#if toast}
+    <div class="toast" data-kind={toast.kind}>{toast.text}</div>
+  {/if}
 </div>
 
 <style>
@@ -209,6 +306,43 @@
     margin-top: 0.4rem;
   }
 
+  /* bulk-bar (mirrors the /builds bulk-bar) */
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 100ms ease;
+  }
+  .bulk-bar.visible { visibility: visible; opacity: 1; }
+  .bulk-bar .spacer { flex: 1; }
+  .link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+  }
+  .link:disabled { opacity: 0.5; cursor: not-allowed; }
+  .link.danger { color: #b43232; }
+  .link:hover { text-decoration: underline; }
+  .dim {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
   /* session list */
   .session-list {
     display: flex;
@@ -218,15 +352,82 @@
   .session-row {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.6rem 0.5rem;
+    gap: 0.5rem;
+    padding: 0.5rem 0.5rem;
     border-bottom: 1px solid var(--divider);
-    text-decoration: none;
     color: var(--text-primary);
     transition: background 0.1s;
   }
   .session-row:last-child { border-bottom: none; }
   .session-row:hover { background: var(--accent-tint-04); }
+  .session-row.selected { background: var(--accent-tint-08); }
+
+  .row-check {
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    padding: 0;
+    flex-shrink: 0;
+    transition: border-color 80ms ease;
+  }
+  .row-check:hover { border-color: var(--text-primary); }
+  .session-row.selected .row-check { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+  .session-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .row-del {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(180, 50, 50, 0.4);
+    background: transparent;
+    color: #b43232;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    transition: all 80ms ease;
+  }
+  .row-del:hover:not(:disabled) {
+    background: #b43232;
+    color: white;
+    border-color: #b43232;
+  }
+  .row-del:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.55rem 0.9rem;
+    background: var(--text-primary);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border: 1px solid var(--text-primary);
+    z-index: 100;
+  }
+  .toast[data-kind="err"] { background: #b43232; border-color: #b43232; color: white; }
 
   .session-main { flex: 1; min-width: 0; }
   .session-goal {

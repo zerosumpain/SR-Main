@@ -15,7 +15,7 @@ import { executeIteration } from './executor';
 import { runTests } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
-import type { FailureEnvelope } from './types';
+import type { BudgetConfig, FailureEnvelope } from './types';
 import { emitStage } from './stage-events';
 
 export { onBuildLog } from './log-emitter';
@@ -248,6 +248,17 @@ class Orchestrator {
     // Append the improvement prompt to the original build prompt
     const combinedPrompt = `${build.prompt}\n\n--- Continuation ---\nThe project above has been built. The user now wants the following improvements:\n${improvementPrompt}`;
 
+    // Bump activeMinutesUsed down by maxTotalMinutes so the continuation
+    // gets a fresh time budget. Without this, any build that hit its cap
+    // before is unrecoverable — the first iteration's checkBudget() trips
+    // instantly and the build "completes" without running. Subtracting
+    // (rather than zeroing) preserves the historical "minutes ever burned"
+    // figure for accounting across multiple continuations.
+    const cfg = (build.budgetConfig ?? {}) as BudgetConfig;
+    const carryover = cfg.maxTotalMinutes
+      ? Math.max(0, build.activeMinutesUsed - cfg.maxTotalMinutes)
+      : build.activeMinutesUsed;
+
     const updates: Record<string, unknown> = {
       status: 'running',
       prompt: combinedPrompt,
@@ -256,6 +267,7 @@ class Orchestrator {
       consecutiveFailures: 0,
       queuedAction: null,
       queuedAt: null,
+      activeMinutesUsed: carryover,
     };
     if (modelOverride?.provider) updates.modelProvider = modelOverride.provider;
     if (modelOverride?.modelId) updates.modelId = modelOverride.modelId;
