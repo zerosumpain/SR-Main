@@ -12,7 +12,7 @@
     nodeId: string;
     mode: 'vnc' | 'confirm' | 'both';
     prompt: string;
-    configSnapshot: { url?: string; fields?: FieldDef[] };
+    configSnapshot: { url?: string; fields?: FieldDef[]; profile?: string };
     wsPort: number | null;
     vncUrl: string | null;
   };

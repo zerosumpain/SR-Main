@@ -243,6 +243,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
   const child = spawn(spawnCmd, spawnArgs, spawnOpts);
+  // spawnOpts always uses `stdio: ['ignore', 'pipe', 'pipe']` (both branches),
+  // so stdout/stderr are real pipes — this guard narrows the types and would
+  // only ever fire if the stdio config above is changed.
+  if (!child.stdout || !child.stderr) {
+    throw new Error('pi-runner: child process stdout/stderr pipes unavailable');
+  }
   // Register so the WebSocket inbound `interrupt` handler can SIGTERM us.
   registerActiveChild(build.id, child);
   child.once('exit', () => clearActiveChild(build.id, child));

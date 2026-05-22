@@ -20,6 +20,9 @@ const mockContext: ExecutionContext = {
   getNodeOutput: () => undefined,
   checkBreakpoint: async () => {},
   abortSignal: new AbortController().signal,
+  getOutgoingEdges: () => [],
+  getIncomingEdges: () => [],
+  getNodeConfig: () => undefined,
 };
 
 describe('codeExecuteExecutor', () => {

@@ -75,7 +75,7 @@ describe('write_document', () => {
 describe('generate_image', () => {
   it('calls OpenRouter, saves the image, returns attachment', async () => {
     const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    globalThis.fetch = vi.fn(async (url: string) => {
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('openrouter.ai')) {
         return new Response(JSON.stringify({

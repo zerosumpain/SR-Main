@@ -20,7 +20,7 @@ describe('job-store event schema', () => {
   it('accepts all new event variants without type error', () => {
     const { jobId } = createJob('test');
     const events: JobEvent[] = [
-      { type: 'heartbeat', summary: 'Still working: fetching data', elapsedMs: 30000 },
+      { type: 'heartbeat', summary: 'Still working: fetching data', phase: 'thinking', elapsedMs: 30000 },
       { type: 'plan', plan: { steps: [{ id: 's1', title: 'x', detail: 'y' }], filesToTouch: [] }, planId: 'p1' },
       { type: 'plan_ack', planId: 'p1', decision: 'approved' },
       { type: 'confirm', confirmId: 'c1', prompt: 'Delete workflow?', destructive: true },

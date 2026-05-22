@@ -180,7 +180,7 @@ describe('mcp/jsonrpc', () => {
     );
     // Either success or a tool-layer error — what we don't want is the old
     // -32602 "not exposed in this profile" rejection.
-    if ('error' in (response as Record<string, unknown>)) {
+    if ('error' in (response as unknown as Record<string, unknown>)) {
       const err = response as { error: { code: number; message: string } };
       expect(err.error.message).not.toMatch(/not exposed/i);
     }

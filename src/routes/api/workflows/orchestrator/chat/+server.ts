@@ -11,7 +11,7 @@ import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
-import { extractEphemeralSidecar } from '$lib/workflows/chat/ephemeral-sidecar';
+import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
@@ -776,7 +776,24 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // Save the assistant response. Persist tool steps in metadata so the
         // tool-call drawer survives page reloads. User message was already
         // saved above.
-        const cleanedToolSteps = job.toolSteps.map((s) => extractEphemeralSidecar(s));
+        // ToolProgressStep.result is typed `unknown`; tool handlers return the
+        // structured { success, data, error } envelope. Normalise into a
+        // StoredToolStep (narrowing result) before lifting the ephemeral sidecar.
+        const cleanedToolSteps = job.toolSteps.map((s) => {
+          const r = s.result;
+          const result =
+            r && typeof r === 'object'
+              ? (r as { success?: boolean; data?: Record<string, unknown>; error?: string })
+              : undefined;
+          const stored: StoredToolStep = {
+            tool: s.tool,
+            toolCallId: s.toolCallId,
+            args: s.args,
+            status: s.status,
+            result,
+          };
+          return extractEphemeralSidecar(stored);
+        });
         const assistantMetaParts: Record<string, unknown> = {};
         if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;

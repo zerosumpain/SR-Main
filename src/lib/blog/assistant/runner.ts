@@ -99,6 +99,7 @@ export async function* runAssistant(opts: RunOptions): AsyncGenerator<AssistantE
       messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls });
 
       for (const tc of msg.tool_calls) {
+        if (tc.type !== 'function') continue;
         if (toolCalls >= MAX_TOOL_CALLS) {
           yield { type: 'done', reason: 'cap' };
           return;

@@ -29,6 +29,7 @@ const mockContext: ExecutionContext = {
   checkBreakpoint: vi.fn(),
   abortSignal: new AbortController().signal,
   getOutgoingEdges: vi.fn().mockReturnValue([]),
+  getIncomingEdges: vi.fn().mockReturnValue([]),
   getNodeConfig: vi.fn(),
 };
 

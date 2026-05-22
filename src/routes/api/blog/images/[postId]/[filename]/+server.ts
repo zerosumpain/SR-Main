@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ params }) => {
     throw error(404, 'not found');
   }
 
-  return new Response(buf, {
+  return new Response(new Uint8Array(buf), {
     status: 200,
     headers: {
       'Content-Type': mime,

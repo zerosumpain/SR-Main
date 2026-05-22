@@ -20,6 +20,9 @@ export interface GmailMessage {
   bodyText: string;
   bodyHtml: string;
   attachments: GmailAttachmentRef[];
+  // Plain data object — passed straight through as a node executor `output`,
+  // which must satisfy `Record<string, unknown>`.
+  [key: string]: unknown;
 }
 
 export interface GmailAttachmentRef {

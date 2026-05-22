@@ -511,7 +511,7 @@
       <div class="ps-col">
         <input class="ps-input" type="text" value={pagTemplate}
           oninput={(e) => { pagTemplate = (e.target as HTMLInputElement).value; emit(); }}
-          placeholder="https://example.com/jobs?page={{page}}" />
+          placeholder={'https://example.com/jobs?page={{page}}'} />
         <div class="ps-row ps-row-gap">
           <label class="ps-label-inline">Start page
             <input class="ps-input ps-input-narrow" type="number" value={pagStart}

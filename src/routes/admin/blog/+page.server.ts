@@ -10,9 +10,11 @@ export const load: PageServerLoad = async () => {
       id: blogPosts.id,
       slug: blogPosts.slug,
       title: blogPosts.title,
+      excerpt: blogPosts.excerpt,
       status: blogPosts.status,
       coverImageUrl: blogPosts.coverImageUrl,
       publishedAt: blogPosts.publishedAt,
+      createdAt: blogPosts.createdAt,
       updatedAt: blogPosts.updatedAt,
     })
     .from(blogPosts)

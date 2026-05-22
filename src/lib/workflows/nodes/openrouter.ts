@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { getOpenRouterClient, loadKeys } from '$lib/deepdive/keys';
 import { interpolateTemplateStrict } from './template';
 import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
@@ -99,7 +99,7 @@ export const openrouterExecutor: NodeExecutor = {
     return { type: 'object', description: 'Available for template interpolation in prompts' };
   },
 
-  getOutputSchema(config: Record<string, unknown>) {
+  getOutputSchema(config: Record<string, unknown>): JsonSchema {
     const op = (config.operation as string) || 'chat_completion';
     if (op === 'chat_completion') {
       return {

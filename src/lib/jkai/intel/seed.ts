@@ -1,7 +1,15 @@
 import { db } from '$lib/db';
 import { intelEntityTypes } from '$lib/db/schema';
 
-const SEEDED_TYPES = [
+interface SeededType {
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+  propertySchema: Record<string, string>;
+}
+
+const SEEDED_TYPES: SeededType[] = [
   { name: 'person', icon: '👤', color: '#7dd3fc', description: 'A person — colleague, stakeholder, contact', propertySchema: { role: 'string', team: 'string', department: 'string', reportsTo: 'string' } },
   { name: 'project', icon: '📋', color: '#34d399', description: 'A project, initiative, or workstream', propertySchema: { status: 'string', owner: 'string', deadline: 'string' } },
   { name: 'team', icon: '👥', color: '#a78bfa', description: 'A team or group of people', propertySchema: { department: 'string', lead: 'string' } },

@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { getValidToken } from '$lib/health/tokens';
 import { getStravaActivities } from '$lib/health/strava';
 import { db } from '$lib/db';
@@ -165,7 +165,7 @@ export const stravaExecutor: NodeExecutor = {
     return { type: 'object', description: 'Optional overrides for operation parameters' };
   },
 
-  getOutputSchema(config: Record<string, unknown>) {
+  getOutputSchema(config: Record<string, unknown>): JsonSchema {
     const operation = (config.operation as string) || 'get_summary';
     if (operation === 'get_summary') {
       return { type: 'object', properties: { summary: { type: 'object' } } };

@@ -24,7 +24,8 @@ describe('whoopExecutor', () => {
 
   it('get_recovery returns recoveries', async () => {
     const result = await whoopExecutor.execute({}, { operation: 'get_recovery' }, mockContext);
-    expect(result.output.recoveries[0].score.recovery_score).toBe(78);
+    const output = result.output as { recoveries: { score: { recovery_score: number } }[] };
+    expect(output.recoveries[0].score.recovery_score).toBe(78);
   });
 
   it('get_sleep returns sleeps', async () => {

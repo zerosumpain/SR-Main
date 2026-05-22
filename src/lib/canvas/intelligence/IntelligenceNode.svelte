@@ -438,7 +438,7 @@
     const nodeGroup = g
       .append('g')
       .attr('class', 'nodes')
-      .selectAll('g')
+      .selectAll<SVGGElement, SimNode>('g')
       .data(simNodes)
       .join('g')
       .attr('cursor', 'grab');

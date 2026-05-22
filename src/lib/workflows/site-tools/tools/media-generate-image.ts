@@ -138,7 +138,15 @@ register({
     },
     required: ['prompt'],
   },
-  handler: async (args) => {
-    return handleGenerateImage(args as any);
+  handler: async (args, ctx) => {
+    const typedArgs: GenerateImageArgs = {
+      prompt: String(args.prompt ?? ''),
+      aspect_ratio: args.aspect_ratio as GenerateImageArgs['aspect_ratio'],
+      count: typeof args.count === 'number' ? args.count : undefined,
+    };
+    return handleGenerateImage(typedArgs, {
+      conversationId: ctx?.conversationId ?? null,
+      messageId: null,
+    });
   },
 });

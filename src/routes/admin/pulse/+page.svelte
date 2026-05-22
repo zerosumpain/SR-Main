@@ -639,7 +639,7 @@
               {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
               {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
               <div class="kv"><span>active hours:</span><span class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</span></div>
-              <div class="kv"><span>last run:</span><span>{a.lastTickAt ?? a.lastRunAt ? fmtTs(a.lastRunAt) : '—'}</span></div>
+              <div class="kv"><span>last run:</span><span>{a.lastRunAt ? fmtTs(a.lastRunAt) : '—'}</span></div>
               <div class="kv"><span>total cost:</span><span>{fmtMoney(a.totalCostUsd)}</span></div>
 
               <div class="act-controls">

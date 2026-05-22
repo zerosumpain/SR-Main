@@ -72,6 +72,7 @@ async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
 
     const def = {
       id: schedule.workflowId,
+      name: wf.name,
       nodes: nodes.map((n) => ({
         id: n.id,
         type: n.type,

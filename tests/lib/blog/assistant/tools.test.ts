@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runTool } from '$lib/blog/assistant/tools';
+import { runTool, isProposalResult } from '$lib/blog/assistant/tools';
 import type { Proposal } from '$lib/blog/assistant/proposal';
 
 const snapshot = {
@@ -16,8 +16,8 @@ describe('runTool — proposal mode', () => {
   it('update_title returns a meta proposal', async () => {
     const r = await runTool('update_title', { title: 'new' }, ctx());
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const p = r.proposal as Proposal;
+    if (!isProposalResult(r)) return;
+    const p: Proposal = r.proposal;
     expect(p.kind).toBe('meta');
     if (p.kind !== 'meta') return;
     expect(p.field).toBe('title');
@@ -29,8 +29,8 @@ describe('runTool — proposal mode', () => {
   it('update_tags returns a meta proposal with array values', async () => {
     const r = await runTool('update_tags', { tags: ['a', 'b'] }, ctx());
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const p = r.proposal as Proposal;
+    if (!isProposalResult(r)) return;
+    const p: Proposal = r.proposal;
     expect(p.kind).toBe('meta');
     if (p.kind !== 'meta') return;
     expect(p.field).toBe('tags');
@@ -41,8 +41,8 @@ describe('runTool — proposal mode', () => {
   it('set_status returns a meta proposal', async () => {
     const r = await runTool('set_status', { status: 'published' }, ctx());
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const p = r.proposal as Proposal;
+    if (!isProposalResult(r)) return;
+    const p: Proposal = r.proposal;
     expect(p.kind).toBe('meta');
     if (p.kind !== 'meta') return;
     expect(p.field).toBe('status');
@@ -52,8 +52,8 @@ describe('runTool — proposal mode', () => {
   it('read_post returns the snapshot directly', async () => {
     const r = await runTool('read_post', {}, ctx());
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect((r.snapshot as { title: string }).title).toBe('old title');
+    if (!r.ok || !('snapshot' in r)) return;
+    expect(r.snapshot.title).toBe('old title');
   });
 
   it('returns error for unknown tool', async () => {

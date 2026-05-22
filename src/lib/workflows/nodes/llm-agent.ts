@@ -191,6 +191,7 @@ export const llmAgentExecutor: NodeExecutor = {
 
       // Execute each tool call
       for (const tc of toolCalls) {
+        if (tc.type !== 'function') continue;
         const toolName = tc.function.name;
         let args: Record<string, unknown>;
         try {

@@ -55,10 +55,8 @@
   // Elapsed timer.
   let nowMs = $state(Date.now());
   const isTerminal = $derived(['completed', 'failed', 'paused'].includes(build.status));
-  const startMs = $derived(
-    build.startedAt ? new Date(build.startedAt).getTime() : new Date(build.createdAt).getTime(),
-  );
-  const endMs = $derived(build.completedAt ? new Date(build.completedAt).getTime() : null);
+  const startMs = $derived(new Date(build.createdAt).getTime());
+  const endMs = $derived(isTerminal ? new Date(build.updatedAt).getTime() : null);
   const elapsedMs = $derived(isTerminal ? Math.max(0, (endMs ?? nowMs) - startMs) : Math.max(0, nowMs - startMs));
   function fmt(ms: number): string {
     const s = Math.floor(ms / 1000);

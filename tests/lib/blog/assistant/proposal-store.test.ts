@@ -24,7 +24,9 @@ describe('proposal-store', () => {
     s.add(proseP);
     s.replace('p1', { ...proseP, id: 'p2', suggested: 'newer' });
     expect(s.get('p1')).toBeUndefined();
-    expect(s.get('p2')?.suggested).toBe('newer');
+    const p2 = s.get('p2');
+    expect(p2?.kind).toBe('prose');
+    if (p2?.kind === 'prose') expect(p2.suggested).toBe('newer');
   });
 
   it('resolve() updates status and keeps the row', () => {

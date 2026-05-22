@@ -68,7 +68,7 @@ export function schemaToVariablePaths(
 
     results.push({
       path,
-      type: value.type,
+      type: value.type ?? 'any',
       description: value.description as string | undefined,
     });
 

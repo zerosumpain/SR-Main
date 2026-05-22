@@ -6,6 +6,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { generalChat } from './general-chat';
+import type { HistoryMessage } from './conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 
@@ -192,12 +193,21 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
   try {
     // Load conversation history for context
     const history = await db
-      .select({ role: orchestratorChats.role, content: orchestratorChats.content })
+      .select({
+        role: orchestratorChats.role,
+        content: orchestratorChats.content,
+        createdAt: orchestratorChats.createdAt,
+      })
       .from(orchestratorChats)
       .where(eq(orchestratorChats.conversationId, item.conversationId))
       .orderBy(orchestratorChats.createdAt);
 
-    const recentHistory = history.slice(-10).map(h => ({ role: h.role, content: h.content }));
+    const recentHistory: HistoryMessage[] = history.slice(-10).map(h => ({
+      role: h.role,
+      content: h.content,
+      attachments: [],
+      createdAt: h.createdAt,
+    }));
 
     // Build a follow-up prompt with the completion context
     const resultContext = check.summary || JSON.stringify(check.result ?? {});

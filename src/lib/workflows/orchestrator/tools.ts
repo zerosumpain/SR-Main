@@ -139,14 +139,19 @@ function isOptional(schema: z.ZodTypeAny): boolean {
 }
 
 function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
-  if (schema instanceof z.ZodOptional) return zodToJsonSchema(schema.unwrap());
-  if (schema instanceof z.ZodDefault) return zodToJsonSchema(schema.removeDefault());
+  // zod 4's wrapper schemas (ZodOptional/ZodDefault/ZodArray) are generic over
+  // `core.$ZodType`, so `.unwrap()` / `.removeDefault()` / `.element` are typed
+  // as the core internal `$ZodType` rather than the classic `ZodTypeAny`. At
+  // runtime they are always a classic schema, so we re-narrow with an explicit
+  // (non-`any`) assertion before recursing.
+  if (schema instanceof z.ZodOptional) return zodToJsonSchema(schema.unwrap() as z.ZodTypeAny);
+  if (schema instanceof z.ZodDefault) return zodToJsonSchema(schema.unwrap() as z.ZodTypeAny);
   if (schema instanceof z.ZodString) return { type: 'string' };
   if (schema instanceof z.ZodNumber) return { type: 'number' };
   if (schema instanceof z.ZodBoolean) return { type: 'boolean' };
   if (schema instanceof z.ZodEnum) return { type: 'string', enum: schema.options };
   if (schema instanceof z.ZodLiteral) return { type: typeof schema.value, const: schema.value };
-  if (schema instanceof z.ZodArray) return { type: 'array', items: zodToJsonSchema(schema.element) };
+  if (schema instanceof z.ZodArray) return { type: 'array', items: zodToJsonSchema(schema.element as z.ZodTypeAny) };
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape;
     const props: Record<string, unknown> = {};

@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { getValidToken } from '$lib/health/tokens';
 import {
   getWhoopCycles,
@@ -228,7 +228,7 @@ export const whoopExecutor: NodeExecutor = {
     return { type: 'object', description: 'Optional overrides (limit, start, end, days, metric)' };
   },
 
-  getOutputSchema(config: Record<string, unknown>) {
+  getOutputSchema(config: Record<string, unknown>): JsonSchema {
     const op = (config.operation as string) || 'get_summary';
     if (op === 'get_summary') {
       return { type: 'object', properties: { summary: { type: 'object' } } };

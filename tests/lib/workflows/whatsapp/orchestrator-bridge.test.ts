@@ -75,7 +75,9 @@ vi.mock('$lib/workflows/chat/general-chat', () => ({
 }));
 
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
-import type { WhatsAppInboundMessage } from '$lib/workflows/whatsapp/types';
+import type { WhatsAppInboundMessage, WhatsAppSendResult } from '$lib/workflows/whatsapp/types';
+
+type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 
 describe('OrchestratorBridge', () => {
 	let bridge: OrchestratorBridge;
@@ -84,7 +86,7 @@ describe('OrchestratorBridge', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		sendFn = vi.fn().mockResolvedValue({ sent: true });
-		bridge = new OrchestratorBridge(sendFn);
+		bridge = new OrchestratorBridge(sendFn as unknown as SendFn);
 		mockDbChain.orderBy.mockResolvedValue([]);
 		mockDbChain.limit.mockResolvedValue([{ id: mockConvId }]);
 	});

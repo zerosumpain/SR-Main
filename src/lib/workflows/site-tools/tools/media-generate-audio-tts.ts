@@ -105,7 +105,15 @@ register({
     },
     required: ['text'],
   },
-  handler: async (args) => {
-    return handleGenerateAudioTts(args as any);
+  handler: async (args, ctx) => {
+    const typedArgs: GenerateAudioTtsArgs = {
+      text: String(args.text ?? ''),
+      voice: typeof args.voice === 'string' ? args.voice : undefined,
+      model: args.model as GenerateAudioTtsArgs['model'],
+    };
+    return handleGenerateAudioTts(typedArgs, {
+      conversationId: ctx?.conversationId ?? null,
+      messageId: null,
+    });
   },
 });

@@ -24,7 +24,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
   const dispo = `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`;
 
   // Buffer -> Uint8Array for Response body
-  const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  const body = new Uint8Array(buf);
   return new Response(body, {
     headers: {
       'content-type': row.mimeType || 'application/octet-stream',

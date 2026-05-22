@@ -282,6 +282,7 @@ async function runToolLoop(
     messages.push(msg);
 
     for (const toolCall of msg.tool_calls) {
+      if (toolCall.type !== 'function') continue;
       const fnName = toolCall.function.name;
       let fnArgs: Record<string, unknown>;
 

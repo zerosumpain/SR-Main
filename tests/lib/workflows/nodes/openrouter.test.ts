@@ -31,6 +31,9 @@ const mockContext: ExecutionContext = {
   getNodeOutput: () => undefined,
   checkBreakpoint: async () => {},
   abortSignal: new AbortController().signal,
+  getOutgoingEdges: () => [],
+  getIncomingEdges: () => [],
+  getNodeConfig: () => undefined,
 };
 
 describe('openrouterExecutor', () => {
@@ -40,8 +43,9 @@ describe('openrouterExecutor', () => {
       { operation: 'chat_completion', model: 'openai/gpt-4o-mini', userPrompt: 'Tell me about {{input.topic}}' },
       mockContext,
     );
-    expect(result.output.response).toBe('Hello world');
-    expect(result.output.usage.promptTokens).toBe(10);
+    const output = result.output as { response: string; usage: { promptTokens: number; completionTokens: number } };
+    expect(output.response).toBe('Hello world');
+    expect(output.usage.promptTokens).toBe(10);
   });
 
   it('chat_completion interpolates userPrompt template', async () => {
@@ -72,8 +76,9 @@ describe('openrouterExecutor', () => {
       { operation: 'chat_completion', model: 'openai/gpt-4o-mini', userPrompt: 'Hi' },
       mockContext,
     );
-    expect(result.output.model).toBe('openai/gpt-4o-mini');
-    expect(result.output.usage.completionTokens).toBe(20);
+    const output = result.output as { model: string; usage: { promptTokens: number; completionTokens: number } };
+    expect(output.model).toBe('openai/gpt-4o-mini');
+    expect(output.usage.completionTokens).toBe(20);
   });
 
   it('list_models fetches from OpenRouter API', async () => {
@@ -82,9 +87,10 @@ describe('openrouterExecutor', () => {
       json: async () => ({ data: [{ id: 'openai/gpt-4o', name: 'GPT-4o' }] }),
     } as Response);
     const result = await openrouterExecutor.execute({}, { operation: 'list_models' }, mockContext);
-    expect(result.output.models).toHaveLength(1);
-    expect(result.output.models[0].id).toBe('openai/gpt-4o');
-    expect(result.output.count).toBe(1);
+    const output = result.output as { models: { id: string; name: string }[]; count: number };
+    expect(output.models).toHaveLength(1);
+    expect(output.models[0].id).toBe('openai/gpt-4o');
+    expect(output.count).toBe(1);
   });
 
   it('get_usage fetches key info from OpenRouter API', async () => {

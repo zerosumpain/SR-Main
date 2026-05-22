@@ -10,11 +10,15 @@ export interface PortDefinition {
 }
 
 export interface JsonSchema {
-  type: string;
+  /** Optional: composition schemas (`oneOf`/`anyOf`/`allOf`) legitimately omit `type`. */
+  type?: string;
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;
   required?: string[];
   description?: string;
+  oneOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+  allOf?: JsonSchema[];
   [key: string]: unknown;
 }
 

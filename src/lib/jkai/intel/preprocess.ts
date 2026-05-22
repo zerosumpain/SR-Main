@@ -41,7 +41,7 @@ export async function transcribeAudio(attachment: JkaiAttachment): Promise<strin
   const { client } = await getLLMClient(modelCtx);
 
   try {
-    const file = new File([buffer], attachment.originalName ?? 'audio.webm', {
+    const file = new File([new Uint8Array(buffer)], attachment.originalName ?? 'audio.webm', {
       type: attachment.mimeType,
     });
     const transcription = await client.audio.transcriptions.create({

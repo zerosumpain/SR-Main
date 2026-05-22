@@ -14,7 +14,7 @@ export const GET: RequestHandler = async ({ params }) => {
   } catch {
     throw error(410, 'attachment file missing on disk');
   }
-  return new Response(buf, {
+  return new Response(new Uint8Array(buf), {
     status: 200,
     headers: {
       'Content-Type': row.mimeType,

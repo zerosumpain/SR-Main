@@ -8,23 +8,8 @@
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
   import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
   import type { ProseProposal } from '$lib/blog/assistant/proposal';
+  import type { RichEditorApi } from './rich-editor-api';
 
-  interface RichEditorApi {
-    getHTML: () => string;
-    getText: () => string;
-    /** Wrap the first occurrence of `snippet` in an inline link. Returns true if found. */
-    linkSnippet: (snippet: string, url: string, title?: string) => boolean;
-    /** Append a numbered footnote referencing `snippet`. Returns the footnote number. */
-    addFootnote: (snippet: string, url: string, title?: string) => number;
-    applyProposal: (p: ProseProposal) => boolean;
-    acceptProposal: (id: string, modifiedText?: string) => boolean;
-    rejectProposal: (id: string) => boolean;
-    /** Strip ALL suggestion marks from the document, treating each one as a
-     *  reject (delete insertions, unwrap deletions). Used by the Clear button. */
-    clearAllSuggestions: () => void;
-    /** Replace the entire document content. Used after rollback. */
-    setContent: (html: string) => void;
-  }
 
   let {
     content = '',

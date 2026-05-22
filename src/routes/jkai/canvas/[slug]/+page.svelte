@@ -147,8 +147,8 @@
   // For event kinds we can't patch (build_started, build_complete,
   // workflow_created) we still invalidateAll on a trailing edge.
   $effect(() => {
-    if (!canvas?.id) return;
-    const es = new EventSource(`/api/workflows/${canvas.id}/live`);
+    if (!canvas?.workflowId) return;
+    const es = new EventSource(`/api/workflows/${canvas.workflowId}/live`);
     let pendingInvalidate: ReturnType<typeof setTimeout> | null = null;
     const scheduleInvalidate = () => {
       if (pendingInvalidate) clearTimeout(pendingInvalidate);

@@ -34,6 +34,9 @@ export interface HAOperationResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  // Plain data object — passed straight through as a node executor `output`,
+  // which must satisfy `Record<string, unknown>`.
+  [key: string]: unknown;
 }
 
 export type HAOperation = 'query_state' | 'call_service' | 'fire_event' | 'get_history' | 'render_template';

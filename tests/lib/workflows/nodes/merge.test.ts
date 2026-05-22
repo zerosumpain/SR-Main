@@ -11,6 +11,9 @@ const mockContext: ExecutionContext = {
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),
   abortSignal: new AbortController().signal,
+  getOutgoingEdges: () => [],
+  getIncomingEdges: () => [],
+  getNodeConfig: () => undefined,
 };
 
 describe('mergeExecutor', () => {

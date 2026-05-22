@@ -22,14 +22,18 @@ const mockContext: ExecutionContext = {
   getNodeOutput: () => undefined,
   checkBreakpoint: async () => {},
   abortSignal: new AbortController().signal,
+  getOutgoingEdges: () => [],
+  getIncomingEdges: () => [],
+  getNodeConfig: () => undefined,
 };
 
 describe('stravaExecutor', () => {
   describe('list_activities', () => {
     it('returns activities array', async () => {
       const result = await stravaExecutor.execute({}, { operation: 'list_activities' }, mockContext);
-      expect(result.output.activities).toHaveLength(1);
-      expect(result.output.activities[0].name).toBe('Morning Run');
+      const output = result.output as { activities: { name: string }[] };
+      expect(output.activities).toHaveLength(1);
+      expect(output.activities[0].name).toBe('Morning Run');
     });
 
     it('returns count', async () => {

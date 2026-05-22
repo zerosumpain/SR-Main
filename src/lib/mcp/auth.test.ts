@@ -22,6 +22,7 @@ describe('mcp/auth bridge tokens', () => {
     const wrongTarget: TokenScope = { ...scope, kindId: 'wf_99' };
     const result = verifyBridgeToken(token, wrongTarget, SECRET);
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('scope_mismatch');
   });
 
@@ -30,6 +31,7 @@ describe('mcp/auth bridge tokens', () => {
     const wrongKind: TokenScope = { ...scope, kind: 'build' };
     const result = verifyBridgeToken(token, wrongKind, SECRET);
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('scope_mismatch');
   });
 
@@ -38,6 +40,7 @@ describe('mcp/auth bridge tokens', () => {
     const token = mintBridgeToken(expired, SECRET);
     const result = verifyBridgeToken(token, expired, SECRET);
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('expired');
   });
 
@@ -46,6 +49,7 @@ describe('mcp/auth bridge tokens', () => {
     const tampered = token.slice(0, -4) + 'AAAA';
     const result = verifyBridgeToken(tampered, scope, SECRET);
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('signature_mismatch');
   });
 
@@ -53,6 +57,7 @@ describe('mcp/auth bridge tokens', () => {
     const token = mintBridgeToken(scope, SECRET);
     const result = verifyBridgeToken(token, scope, 'different-secret-also-32-bytes-long-eh');
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('signature_mismatch');
   });
 
@@ -61,6 +66,7 @@ describe('mcp/auth bridge tokens', () => {
     const broken = token + '.junk';
     const result = verifyBridgeToken(broken, scope, SECRET);
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('malformed');
   });
 

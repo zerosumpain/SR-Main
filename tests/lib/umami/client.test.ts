@@ -13,7 +13,7 @@ describe('umami client', () => {
   it('getStatsForPath calls the right URL with bearer token', async () => {
     fetchMock.mockResolvedValue(mkResponse({ pageviews: { value: 5 }, visitors: { value: 3 } }));
     const c = createUmamiClient({
-      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock,
+      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock as unknown as typeof fetch,
     });
     const stats = await c.getStatsForPath('/blog/foo', 7);
     expect(stats).toEqual({ pageviews: 5, visitors: 3 });
@@ -27,7 +27,7 @@ describe('umami client', () => {
   it('returns zeros when umami is unreachable', async () => {
     fetchMock.mockRejectedValue(new Error('boom'));
     const c = createUmamiClient({
-      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock,
+      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock as unknown as typeof fetch,
     });
     expect(await c.getStatsForPath('/blog/foo', 7)).toEqual({ pageviews: 0, visitors: 0 });
   });
@@ -35,7 +35,7 @@ describe('umami client', () => {
   it('getStatsBatch fans out and dedupes via cache', async () => {
     fetchMock.mockResolvedValue(mkResponse({ pageviews: { value: 1 }, visitors: { value: 1 } }));
     const c = createUmamiClient({
-      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock,
+      baseUrl: 'https://x', websiteId: 'wid', apiKey: 'k', fetchFn: fetchMock as unknown as typeof fetch,
     });
     const a = await c.getStatsBatch(['/blog/a', '/blog/b'], 7);
     expect(Object.keys(a)).toEqual(['/blog/a', '/blog/b']);
@@ -51,7 +51,7 @@ describe('umami client', () => {
       .mockResolvedValue(mkResponse({ pageviews: { value: 7 }, visitors: { value: 2 } }));
     const c = createUmamiClient({
       baseUrl: 'https://x', websiteId: 'wid',
-      username: 'u', password: 'p', fetchFn: fetchMock,
+      username: 'u', password: 'p', fetchFn: fetchMock as unknown as typeof fetch,
     });
     await c.getStatsForPath('/blog/x', 7);
     await c.getStatsForPath('/blog/y', 7);
@@ -75,7 +75,7 @@ describe('umami client', () => {
       .mockResolvedValueOnce(mkResponse({ pageviews: { value: 4 }, visitors: { value: 1 } }));
     const c = createUmamiClient({
       baseUrl: 'https://x', websiteId: 'wid',
-      username: 'u', password: 'p', fetchFn: fetchMock,
+      username: 'u', password: 'p', fetchFn: fetchMock as unknown as typeof fetch,
     });
     const stats = await c.getStatsForPath('/blog/x', 7);
     expect(stats).toEqual({ pageviews: 4, visitors: 1 });
@@ -88,7 +88,7 @@ describe('umami client', () => {
     fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) } as unknown as Response);
     const c = createUmamiClient({
       baseUrl: 'https://x', websiteId: 'wid',
-      username: 'u', password: 'p', fetchFn: fetchMock,
+      username: 'u', password: 'p', fetchFn: fetchMock as unknown as typeof fetch,
     });
     expect(await c.getStatsForPath('/blog/x', 7)).toEqual({ pageviews: 0, visitors: 0 });
   });

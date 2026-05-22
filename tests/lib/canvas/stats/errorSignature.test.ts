@@ -34,7 +34,6 @@ describe('extractSignature', () => {
   it('returns empty string for null/undefined/whitespace input', () => {
     expect(extractSignature('')).toBe('');
     expect(extractSignature('   ')).toBe('');
-    // @ts-expect-error — runtime callers may pass null
     expect(extractSignature(null)).toBe('');
   });
 });

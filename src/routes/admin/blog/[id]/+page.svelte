@@ -6,12 +6,7 @@
   import RichEditor from '$lib/components/RichEditor.svelte';
   import ClaimReviewPanel from '$lib/components/ClaimReviewPanel.svelte';
   import { Marked } from 'marked';
-
-  type RichApi = {
-    getHTML: () => string;
-    linkSnippet: (snippet: string, url: string, title?: string) => boolean;
-    addFootnote: (snippet: string, url: string, title?: string) => number;
-  };
+  import type { RichEditorApi } from '$lib/components/rich-editor-api';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
@@ -34,10 +29,12 @@
   let coverUploading = $state(false);
   let previewCopied = $state(false);
 
-  let contentFormat = $state<'html' | 'markdown'>(data.post.contentFormat);
+  let contentFormat = $state<'html' | 'markdown'>(
+    data.post.contentFormat === 'markdown' ? 'markdown' : 'html',
+  );
   let isMarkdown = $derived(contentFormat === 'markdown');
   let converting = $state(false);
-  let richApi = $state<RichApi | undefined>();
+  let richApi = $state<RichEditorApi | undefined>();
 
   let dirty = $derived(
     title !== data.post.title ||

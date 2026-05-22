@@ -119,10 +119,11 @@ function buildCheckFn(taskType: string, taskId: string): (() => Promise<{ done: 
         const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, taskId)).limit(1);
         if (!build) return { done: true, summary: 'Build not found.' };
         if (build.status === 'completed' || build.status === 'failed' || build.status === 'cancelled') {
+          const publishedUrl = build.publishedSlug ? `/projects/${build.publishedSlug}/` : null;
           return {
             done: true,
-            result: { title: build.title, status: build.status, url: build.publishedUrl },
-            summary: `Build "${build.title || build.prompt?.slice(0, 50)}" ${build.status}.${build.publishedUrl ? ` Published at: ${build.publishedUrl}` : ''}`,
+            result: { title: build.title, status: build.status, url: publishedUrl },
+            summary: `Build "${build.title || build.prompt?.slice(0, 50)}" ${build.status}.${publishedUrl ? ` Published at: ${publishedUrl}` : ''}`,
           };
         }
         return { done: false, summary: `Still running: ${build.status}` };
