@@ -3,6 +3,7 @@ import {
   snapBucket,
   snapToBuckets,
   enumerateGrid,
+  enumerateUnits,
   fillStrap,
   HR_BUCKETS,
   STEPS_BUCKETS,
@@ -46,6 +47,16 @@ describe('enumerateGrid', () => {
     const p = enumerateGrid()[0];
     expect(p.hrCentroid).toBe(HR_BUCKETS.centroids[0]);
     expect(p.tempState).toBe(TEMP_BUCKETS.states[0]);
+  });
+});
+
+describe('enumerateUnits', () => {
+  it('repeats the 150-point grid once per variant', () => {
+    expect(enumerateUnits(1)).toHaveLength(150);
+    expect(enumerateUnits(3)).toHaveLength(450);
+  });
+  it('returns an empty list for zero variants', () => {
+    expect(enumerateUnits(0)).toHaveLength(0);
   });
 });
 

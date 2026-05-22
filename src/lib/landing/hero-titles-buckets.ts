@@ -100,6 +100,19 @@ export function enumerateGrid(): GridPoint[] {
   return out;
 }
 
+/**
+ * The full unit list for a generation run: the 150-point grid repeated once
+ * per variant. A run with `variantsPerBucket = 3` yields 450 units.
+ */
+export function enumerateUnits(variantsPerBucket: number): GridPoint[] {
+  const grid = enumerateGrid();
+  const out: GridPoint[] = [];
+  for (let v = 0; v < variantsPerBucket; v++) {
+    out.push(...grid);
+  }
+  return out;
+}
+
 export interface StrapVitals {
   bpm: number;
   steps: number;
