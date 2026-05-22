@@ -41,10 +41,13 @@
   }}
 />
 
+<!-- z-index lifts above sibling hero content (also z-10) while the menu is
+     open, so the dropdown panel receives clicks instead of the overlay. -->
 <div
-  class="relative z-10 flex items-center gap-6"
+  class="relative flex items-center gap-6"
   class:justify-between={showBrand}
   class:justify-end={!showBrand}
+  style:z-index={menuOpen ? 60 : 10}
 >
   {#if showBrand}
     <a
