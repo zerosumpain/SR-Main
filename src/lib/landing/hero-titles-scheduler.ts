@@ -1,4 +1,4 @@
-import { generateHeroTitles, heroTitlesCount } from './hero-titles-service';
+import { runFullGeneration, heroTitlesCount } from './hero-titles-service';
 import { enumerateGrid } from './hero-titles-buckets';
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -12,32 +12,37 @@ export function startHeroTitlesScheduler(): void {
   running = true;
 
   // Guard against a bad env value — a NaN interval would make setInterval
-  // fire as fast as possible, hammering the LLM with ~150 calls in a loop.
+  // fire as fast as possible, hammering the LLM in a loop.
   const raw = parseInt(process.env.HERO_TITLES_REGEN_MS || '', 10);
   const ms = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MS;
   console.log(`[hero-titles] regeneration every ${Math.round(ms / 3_600_000)}h`);
 
-  // Let the app finish booting, then generate if the set is incomplete —
-  // a cold-start empty table, or a partial set left behind when a deploy
-  // restarted the service mid-generation. A complete set waits for the
-  // next interval.
+  // Let the app finish booting, then generate if the pool is incomplete —
+  // a cold-start empty table, or a partial set left by a deploy that
+  // restarted the service mid-generation. A populated pool waits.
   startTimeout = setTimeout(async () => {
     startTimeout = undefined;
     try {
       const count = await heroTitlesCount();
       const expected = enumerateGrid().length;
       if (count < expected) {
-        console.log(`[hero-titles] set incomplete (${count}/${expected}) — generating`);
-        const res = await generateHeroTitles();
+        console.log(
+          `[hero-titles] pool incomplete (${count}/${expected}) — generating`,
+        );
+        const res = await runFullGeneration();
         console.log('[hero-titles] startup generation done', res);
       }
     } catch (e) {
       console.error('[hero-titles] startup check failed', e);
     }
     interval = setInterval(() => {
-      generateHeroTitles()
-        .then((res) => console.log('[hero-titles] scheduled regeneration done', res))
-        .catch((e) => console.error('[hero-titles] scheduled regeneration failed', e));
+      runFullGeneration()
+        .then((res) =>
+          console.log('[hero-titles] scheduled regeneration done', res),
+        )
+        .catch((e) =>
+          console.error('[hero-titles] scheduled regeneration failed', e),
+        );
     }, ms);
   }, 30_000);
 }
