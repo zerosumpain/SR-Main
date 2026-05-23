@@ -1,25 +1,31 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
-  import type { ResolvedModel, ID } from '../lib/types';
+  import { onMount } from 'svelte';
+  import type { ResolvedModel, ID, ZoomLevel } from '../lib/types';
   import { render, hitTest, type RenderState } from '../lib/render';
 
   interface Props {
     model: ResolvedModel;
     playhead: number;
-    onHover: (id: ID | 'spine' | null, x: number, y: number) => void;
+    zoom: ZoomLevel;
+    onHover: (
+      hit: { kind: 'strand'; id: ID } | { kind: 'output'; id: ID } | { kind: 'spine' } | null,
+      x: number,
+      y: number,
+    ) => void;
   }
 
-  let { model, playhead, onHover }: Props = $props();
+  let { model, playhead, zoom, onHover }: Props = $props();
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
   let size = $state({ w: 800, h: 380 });
   let hoverId = $state<ID | 'spine' | null>(null);
+  let hoverOutputId = $state<ID | null>(null);
   let dpr = $state(1);
-
+  let mounted = $state(false);
+  let animTime = $state(0);
   let rafHandle: number | null = null;
 
-  // Resize observer keeps the canvas pixel-perfect on layout changes.
   onMount(() => {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const ro = new ResizeObserver((entries) => {
@@ -29,19 +35,25 @@
       }
     });
     ro.observe(wrap);
-
-    // Initial size.
     const r = wrap.getBoundingClientRect();
     size = { w: Math.max(320, Math.floor(r.width)), h: Math.max(220, Math.floor(r.height)) };
+    mounted = true;
 
-    // Frame loop — request on relevant changes via $effect below.
+    // Continuous animation loop — the spine bar is alive even when paused.
+    let start = performance.now();
+    function tick(ts: number) {
+      animTime = ts - start;
+      rafHandle = requestAnimationFrame(tick);
+    }
+    rafHandle = requestAnimationFrame(tick);
+
     return () => {
       ro.disconnect();
       if (rafHandle !== null) cancelAnimationFrame(rafHandle);
     };
   });
 
-  // Configure canvas backing pixels whenever size/DPR change.
+  // Configure canvas backing pixels.
   $effect(() => {
     if (!canvas) return;
     const w = size.w;
@@ -50,39 +62,23 @@
     canvas.height = Math.floor(h * dpr);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
-    scheduleDraw();
   });
 
-  // Redraw when these change.
+  // Redraw on every reactive change OR on animTime (so spine bar moves continuously).
   $effect(() => {
-    // Touch reactive deps:
-    void model;
-    void playhead;
-    void hoverId;
-    void size;
-    void dpr;
-    scheduleDraw();
+    void model; void playhead; void zoom; void hoverId; void hoverOutputId; void size; void dpr; void animTime;
+    if (!mounted) return;
+    draw();
   });
-
-  function scheduleDraw() {
-    if (rafHandle !== null) return;
-    rafHandle = requestAnimationFrame(() => {
-      rafHandle = null;
-      draw();
-    });
-  }
 
   function draw() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const state: RenderState = {
-      width: size.w,
-      height: size.h,
-      dpr,
-      playhead,
-      hoverId,
-      showWaveSamples: false,
+      width: size.w, height: size.h, dpr,
+      playhead, animTime, zoom,
+      hoverId, hoverOutputId,
     };
     render(ctx, model, state);
   }
@@ -93,34 +89,26 @@
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     const state: RenderState = {
-      width: size.w,
-      height: size.h,
-      dpr,
-      playhead,
-      hoverId,
-      showWaveSamples: false,
+      width: size.w, height: size.h, dpr,
+      playhead, animTime, zoom,
+      hoverId, hoverOutputId,
     };
-    const id = hitTest(x, y, model, state);
-    if (id !== hoverId) {
-      hoverId = id;
-      onHover(id, e.clientX, e.clientY);
-    } else if (id !== null) {
-      // Update tooltip position even if id didn't change.
-      onHover(id, e.clientX, e.clientY);
+    const hit = hitTest(x, y, model, state);
+    const newStrand = hit && hit.kind !== 'output' ? (hit.kind === 'spine' ? 'spine' : hit.id) : null;
+    const newOutput = hit && hit.kind === 'output' ? hit.id : null;
+    if (newStrand !== hoverId || newOutput !== hoverOutputId) {
+      hoverId = newStrand;
+      hoverOutputId = newOutput;
     }
+    onHover(hit, e.clientX, e.clientY);
   }
 
   function handleLeave() {
-    if (hoverId !== null) {
+    if (hoverId !== null || hoverOutputId !== null) {
       hoverId = null;
+      hoverOutputId = null;
       onHover(null, 0, 0);
     }
-  }
-
-  function handleTap(e: PointerEvent) {
-    // On touch, the move event might not fire before tap-end; force a hit-test
-    // at the tap position.
-    handlePointer(e);
   }
 </script>
 
@@ -128,7 +116,7 @@
   <canvas
     bind:this={canvas}
     onpointermove={handlePointer}
-    onpointerdown={handleTap}
+    onpointerdown={handlePointer}
     onpointerleave={handleLeave}
   ></canvas>
 </div>

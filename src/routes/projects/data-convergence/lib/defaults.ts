@@ -1,123 +1,231 @@
-// Default scene — a deliberately rich set so the metaphor reads instantly.
-// Multiple sources, some confluences (strands merging into other strands first),
-// varied collection cadences and user counts.
+// Default scene — modelled on data the UK Department for Education collects
+// across a learner's lifetime: school (0-16), further education (16-18),
+// higher education (18-22), then adult skills and training. Plus reference
+// data and bi-directional feeds with local authorities for children's social
+// care.
+//
+// Dates are anchored relative to a notional learner born 2010 — so the
+// timeline spans 2010 through 2080. The scene scales gracefully across the
+// 6m / 1y / 10y / lifetime zoom presets.
 
-import type { StrandConfig } from './types';
+import type { StrandConfig, OutputConfig } from './types';
+
+// Colour palette — warm + saturated, semi-organic. The DfE world has lots of
+// categories so we leave headroom for additional sources without clashing.
+const COL = {
+  schoolDaily:    '#c0392b',  // attendance
+  schoolTermly:   '#e67e22',  // school census
+  schoolKS:       '#d35400',  // key-stage assessments
+  schoolPhonics:  '#f1c40f',  // phonics
+  feALevel:       '#8e44ad',  // A-level results
+  heHesa:         '#2980b9',  // HESA
+  apprentice:     '#16a085',  // apprenticeships
+  trainingAdult:  '#27ae60',  // adult skills
+  laSafeguard:    '#34495e',  // children's social care
+  refSchools:     '#7f8c8d',  // GIAS / Get Information about Schools reference
+  refQualNet:     '#95a5a6',  // qualifications net (Ofqual reference)
+};
 
 export const DEFAULT_CONFIG: StrandConfig[] = [
-  // --- Confluence A: web behavioural ---
+  // -------------- SCHOOL: ages 4-16 (2014 - 2026) --------------
   {
-    id: 'web-pageviews',
-    name: 'Web pageviews',
-    colour: '#b95431',
-    startDate: '2018-03-01',
-    mergeDate: '2021-09-01',
-    mergeInto: 'web-behaviour',
-    users: 420,
-    frequency: 240,
-    frequencyPeriod: 'day',
+    id: 'attendance',
+    name: 'Pupil attendance (daily)',
+    colour: COL.schoolDaily,
+    startDate: '2014-09-01',
+    mergeDate: '2026-07-20',
+    mergeInto: 'spine',
+    users: 320,
+    cadence: 'daily',
+    outputs: ['out-perf-tables', 'out-pupil-premium', 'out-regional-dashboard'],
   },
   {
-    id: 'web-clicks',
-    name: 'Click events',
-    colour: '#c98a2a',
-    startDate: '2019-06-12',
-    mergeDate: '2021-09-01',
-    mergeInto: 'web-behaviour',
-    users: 380,
-    frequency: 180,
-    frequencyPeriod: 'day',
+    id: 'school-census',
+    name: 'School Census (termly)',
+    colour: COL.schoolTermly,
+    startDate: '2014-09-01',
+    mergeDate: '2026-07-20',
+    mergeInto: 'spine',
+    users: 280,
+    cadence: 'termly',
+    outputs: ['out-perf-tables', 'out-pupil-premium', 'out-statistical-release', 'out-regional-dashboard'],
   },
   {
-    id: 'web-behaviour',
-    name: 'Web behaviour (merged)',
-    colour: '#9b3a55',
-    startDate: '2021-09-01',
-    mergeDate: '2024-04-01',
+    id: 'phonics',
+    name: 'Phonics screening (Y1)',
+    colour: COL.schoolPhonics,
+    startDate: '2015-06-01',
+    mergeDate: '2016-07-15',
     mergeInto: 'spine',
     users: 90,
-    frequency: 24,
-    frequencyPeriod: 'day',
+    cadence: 'annual',
+    outputs: ['out-statistical-release'],
+  },
+  {
+    id: 'ks2',
+    name: 'KS2 SATs (Y6)',
+    colour: COL.schoolKS,
+    startDate: '2021-05-10',
+    mergeDate: '2021-07-20',
+    mergeInto: 'spine',
+    users: 130,
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-statistical-release', 'out-regional-dashboard'],
+  },
+  {
+    id: 'ks4',
+    name: 'KS4 / GCSE results',
+    colour: COL.schoolKS,
+    startDate: '2026-05-15',
+    mergeDate: '2026-08-25',
+    mergeInto: 'spine',
+    users: 220,
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-ebacc', 'out-statistical-release', 'out-regional-dashboard'],
   },
 
-  // --- Confluence B: CRM ---
+  // -------------- FURTHER EDUCATION: ages 16-18 (2026 - 2028) --------------
   {
-    id: 'crm-deals',
-    name: 'CRM deals',
-    colour: '#4a6b8a',
-    startDate: '2017-01-15',
-    mergeDate: '2022-02-15',
-    mergeInto: 'crm-unified',
+    id: 'alevels',
+    name: 'A-Level / T-Level results',
+    colour: COL.feALevel,
+    startDate: '2026-09-01',
+    mergeDate: '2028-08-25',
+    mergeInto: 'spine',
     users: 180,
-    frequency: 12,
-    frequencyPeriod: 'week',
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-ebacc', 'out-skills-funding', 'out-statistical-release'],
   },
   {
-    id: 'crm-contacts',
-    name: 'CRM contacts',
-    colour: '#6b8aa8',
-    startDate: '2017-01-15',
-    mergeDate: '2022-02-15',
-    mergeInto: 'crm-unified',
-    users: 320,
-    frequency: 36,
-    frequencyPeriod: 'week',
-  },
-  {
-    id: 'crm-unified',
-    name: 'CRM unified',
-    colour: '#3d4f6e',
-    startDate: '2022-02-15',
-    mergeDate: '2024-09-01',
+    id: 'ilr-college',
+    name: 'ILR — college learner records',
+    colour: COL.apprentice,
+    startDate: '2026-09-01',
+    mergeDate: '2030-08-31',
     mergeInto: 'spine',
-    users: 70,
-    frequency: 3,
-    frequencyPeriod: 'day',
+    users: 140,
+    cadence: 'termly',
+    outputs: ['out-skills-funding', 'out-regional-dashboard'],
   },
 
-  // --- Direct-to-spine sources ---
+  // -------------- HIGHER EDUCATION: ages 18-22 (2028 - 2032) --------------
   {
-    id: 'support-tickets',
-    name: 'Support tickets',
-    colour: '#6a8f4f',
-    startDate: '2019-11-01',
-    mergeDate: '2023-06-01',
+    id: 'hesa',
+    name: 'HESA student record',
+    colour: COL.heHesa,
+    startDate: '2028-09-01',
+    mergeDate: '2032-07-15',
     mergeInto: 'spine',
-    users: 240,
-    frequency: 1,
-    frequencyPeriod: 'day',
+    users: 160,
+    cadence: 'annual',
+    outputs: ['out-statistical-release', 'out-skills-funding'],
+  },
+
+  // -------------- ADULT SKILLS & TRAINING: ages 16+ (rolling) --------------
+  {
+    id: 'apprenticeships',
+    name: 'Apprenticeships data',
+    colour: COL.apprentice,
+    startDate: '2026-10-01',
+    mergeDate: '2040-10-01',
+    mergeInto: 'spine',
+    users: 110,
+    cadence: 'termly',
+    outputs: ['out-skills-funding', 'out-statistical-release', 'out-regional-dashboard'],
   },
   {
-    id: 'billing',
-    name: 'Billing & invoicing',
-    colour: '#8a6f3a',
-    startDate: '2016-04-01',
-    mergeDate: '2025-01-15',
+    id: 'adult-skills',
+    name: 'Adult learning records',
+    colour: COL.trainingAdult,
+    startDate: '2028-01-01',
+    mergeDate: '2080-12-31',
     mergeInto: 'spine',
-    users: 540,
-    frequency: 1,
-    frequencyPeriod: 'month',
+    users: 90,
+    cadence: 'adhoc',
+    outputs: ['out-skills-funding', 'out-statistical-release'],
+  },
+
+  // -------------- LOCAL AUTHORITY: children's social care --------------
+  {
+    id: 'la-csc',
+    name: 'LA children’s social care',
+    colour: COL.laSafeguard,
+    startDate: '2014-04-01',
+    mergeDate: '2028-03-31',
+    mergeInto: 'spine',
+    users: 130,
+    cadence: 'biannual',
+    outputs: ['out-safeguarding', 'out-statistical-release'],
+  },
+
+  // -------------- REFERENCE DATA: continuous metadata feeds --------------
+  {
+    id: 'ref-gias',
+    name: 'GIAS — schools reference data',
+    colour: COL.refSchools,
+    startDate: '2014-01-01',
+    mergeDate: '2080-12-31',
+    mergeInto: 'spine',
+    users: 60,
+    cadence: 'continuous',
+    isReference: true,
+    outputs: ['out-perf-tables', 'out-regional-dashboard'],
   },
   {
-    id: 'survey-nps',
-    name: 'NPS surveys',
-    colour: '#7a4a8c',
-    startDate: '2020-08-01',
-    mergeDate: '2024-11-15',
+    id: 'ref-qual',
+    name: 'Qualifications reference net',
+    colour: COL.refQualNet,
+    startDate: '2014-01-01',
+    mergeDate: '2080-12-31',
     mergeInto: 'spine',
-    users: 150,
-    frequency: 1,
-    frequencyPeriod: 'quarter',
+    users: 50,
+    cadence: 'continuous',
+    isReference: true,
+    outputs: ['out-perf-tables', 'out-ebacc', 'out-skills-funding'],
+  },
+];
+
+export const DEFAULT_OUTPUTS: OutputConfig[] = [
+  {
+    id: 'out-perf-tables',
+    name: 'School performance tables',
+    colour: '#c0392b',
+    side: 'above',
   },
   {
-    id: 'product-telemetry',
-    name: 'Product telemetry',
-    colour: '#356b6b',
-    startDate: '2021-02-01',
-    mergeDate: '2025-08-01',
-    mergeInto: 'spine',
-    users: 880,
-    frequency: 144,
-    frequencyPeriod: 'day',
+    id: 'out-pupil-premium',
+    name: 'Pupil Premium funding',
+    colour: '#e67e22',
+    side: 'below',
+  },
+  {
+    id: 'out-ebacc',
+    name: 'EBacc analysis',
+    colour: '#8e44ad',
+    side: 'above',
+  },
+  {
+    id: 'out-skills-funding',
+    name: 'Skills funding allocations',
+    colour: '#16a085',
+    side: 'below',
+  },
+  {
+    id: 'out-safeguarding',
+    name: 'Safeguarding casework',
+    colour: '#34495e',
+    side: 'below',
+  },
+  {
+    id: 'out-statistical-release',
+    name: 'Statistical First Release',
+    colour: '#2980b9',
+    side: 'above',
+  },
+  {
+    id: 'out-regional-dashboard',
+    name: 'Regional outcomes dashboard',
+    colour: '#27ae60',
+    side: 'below',
   },
 ];

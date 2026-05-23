@@ -1,158 +1,129 @@
-# The Spine — Data Convergence Timeline
+# The Spine — Data Convergence Timeline (V2)
 
 A standalone, isolated interactive visualisation built into `src/routes/projects/data-convergence/`.
 
 Live: `https://strangeramblings.com/projects/data-convergence`
 
-## Concept
+## What V2 added
 
-Multiple data sources enter the timeline at their start dates as oscillating
-strands of "twine". They wind together at confluences — strand into strand —
-until everything binds into a single horizontal spine, the source of truth.
-Thickness encodes user counts; oscillation frequency encodes how often that
-source is collected; colour encodes the source itself, and merged strands
-show their constituents as a visible braided pattern rather than blending
-to a single tone.
+Compared to V1:
 
-## How to run it
+- **Rainbow spine** — the core spine is now a single, always-moving rainbow
+  bar of horizontal coloured stripes (one per merged source), all sharing a
+  single sine displacement that animates continuously regardless of the play
+  state. The bar thickens over time as more sources merge in. The internal
+  wave-thread braid is gone.
+- **Zoom presets** — four locked zoom levels, each with a calibrated
+  oscillation rhythm for the spine:
+  * **6 months** — each oscillation ≈ 1 day
+  * **1 year (default)** — each oscillation ≈ 1 week
+  * **10 years** — each oscillation ≈ 1 month
+  * **Lifetime** — each oscillation ≈ 1 year
+  The visible time window is centred on the playhead and clamped to model
+  bounds. Strand oscillations use their own data cadence but are capped to a
+  minimum readable wavelength so daily-cadence sources don't smear into a flat
+  line at the tighter zooms.
+- **Outputs** — a new "business activity" entity (analyses, funding rounds,
+  dashboards). Rendered as labelled circles above/below the spine with bezier
+  connectors to each contributing source. When a source has merged into the
+  spine, the connector hooks on the spine at the output's x; when the source
+  is still independent, it hooks on the strand's leading edge.
+- **Reference-data feeds** — a distinct strand kind that doesn't have a
+  single merge point. Rendered as a labelled chip band with regular tick
+  marks falling onto the spine at intervals matched to the active zoom. They
+  contribute to spine thickness gradually rather than as a step.
+- **Always-prominent colour identity** — every strand keeps its colour as a
+  full ribbon throughout its lifetime, with white inner highlight + ink
+  outline. Within the spine, each source contributes its own coloured stripe
+  in a stable rainbow order so the constituent colours stay readable even
+  after merging.
+- **Desktop layout fix** — the play/scrubber/zoom row is now its own
+  flex-column slot, so the legend no longer overlaps it on desktop. The
+  mobile compact layouts still collapse correctly.
+- **DfE-themed scene** — defaults model the UK Department for Education's
+  data landscape across a learner's life: attendance (daily), School Census
+  (termly), Phonics / KS2 / KS4 (annual), A-Level + College ILR (FE), HESA
+  (HE), Apprenticeships + Adult Skills (ongoing), and a bi-directional LA
+  Children's Social Care feed. Reference data: GIAS and qualifications net.
+  Outputs: school performance tables, Pupil Premium funding, EBacc analysis,
+  Skills funding, Safeguarding casework, Statistical First Release, regional
+  outcomes dashboard.
 
-This route lives inside the existing SvelteKit site. It has no server
-dependencies and no global CSS impact. Just visit `/projects/data-convergence`
-in any environment where this repo is running.
+## Quick controls
 
-For development you can use the debug URL hash:
+- **Zoom**: 4 buttons in the bottom bar.
+- **Play / pause / scrubber / speed**: bottom bar.
+- **Hover a source / output / spine**: tooltip with metadata; the
+  related connectors highlight.
+- **Edit sources →**: opens the right-side drawer with the full config
+  table (per-row outputs assigned via chips), plus the Outputs editor.
 
-- `#t=0.55` — seek the playhead to 55% of the timeline.
+For development:
+
+- `#t=0.5` — seek the playhead to 50% of the model's full span.
+- `#zoom=6m|1y|10y|adult` — start at that zoom.
 - `#panel` — open the config drawer on load.
-- These can be combined: `#t=0.85&panel`.
 
 ## Isolation contract
 
-Per the brief, this route does not import from anywhere else in the project:
-
-- No `$lib/*` imports.
-- No changes to shared layouts or global CSS.
-- All styles are component-scoped Svelte styles (no `:global` leaks).
-- Fonts are loaded via a `<link>` inside `<svelte:head>` on this page only
-  (Fraunces, DM Sans, JetBrains Mono).
-- Persistence is via `localStorage` under a namespaced key
-  (`data-convergence:config:v1`); no server or DB.
+This route imports nothing from `$lib`. All styles are component-scoped. Fonts
+are loaded via a `<link>` inside `<svelte:head>` on this page only (Fraunces,
+DM Sans, JetBrains Mono). Persistence is via `localStorage` under
+`data-convergence:config:v2`.
 
 ## Engineering decisions
 
-### Canvas-2D over SVG
+### Canvas-2D
 
-The visualisation has many simultaneously animating waveforms, and merged
-strands need a *braided* effect — multiple constituent-colour filaments
-interweaving along a shared centreline. Drawing those as SVG paths means a
-DOM node per filament per strand per frame, which is hostile to mobile
-animation. Canvas lets us redraw N filaments per parent strand cheaply at
-60 fps. The trade-off is doing manual hit-testing for hover/tap, which is a
-small price for the animation budget.
+Same reasoning as V1 — many simultaneous animating waveforms + a perpetually
+animating rainbow bar would punish the DOM in SVG. Canvas lets us redraw the
+spine stripes per frame cheaply at 60 fps. Hit-testing is math-only.
 
-### Two-axis fit
+### Spine thickness scaling
 
-Layout offsets (where each strand sits vertically before it merges) and
-visual thickness (how thick a strand draws) are on different curves:
+The spine's natural total thickness = sum of `usersToThickness(s.users)` for
+every strand whose ancestry includes the spine. We compute a single `stripeScale`
+= `min(1, MAX_SPINE_PX / naturalMax)` once, where `MAX_SPINE_PX` is
+`min(64, height * 0.16)`. Every stripe is then drawn at its natural thickness
+× scale × current ramp. This gives a bar that grows over time but never eats
+the canvas, regardless of the user-volume mix.
 
-- **Layout** is sized in raw "subtree weight" units (sum of users in the
-  subtree), and the renderer applies a one-pass `yScale` that shrinks the
-  whole layout to fit the canvas height. That way the composition always
-  fills the visible space gracefully whether you have 5 strands or 50.
-- **Thickness** uses a gentle exponent (`users^0.45 * 0.55`) so a 900-user
-  strand is only ~6× thicker than a 1-user strand, not 900×.
+### Stripe stability
 
-The constants live at the top of `lib/strands.ts` so they're easy to tune.
+Stripe order is computed once per model and held stable across frames so the
+rainbow doesn't shuffle when the playhead moves. Reference feeds order by
+`startMs`; conventional sources by `mergeMs`.
 
-### DAG resolution
+### Spine animation rhythm
 
-`resolveModel(config)` is the single entry point. It:
+Each zoom level specifies a target `oscCount` across the visible span. The
+spine's wavelength in CSS px = canvas usable width / `oscCount`. The animation
+phase advances continuously (`animTime` ticked by a separate rAF loop in the
+canvas component), so the bar is "alive" even when playback is paused.
 
-1. Detects duplicate ids, missing merge targets, self-merges, and cycles
-   (DFS with three-colour marking).
-2. Warns when a strand's merge date is after its target has itself merged on.
-3. Builds a tree rooted at `'spine'`, sorts each parent's children by start
-   date for stability, then re-sorts by subtree weight for layout so heavier
-   confluences get more vertical room.
-4. Lays out children alternating above/below the parent's centreline.
-5. Computes each strand's birth offset by summing all ancestor offsets, so
-   leaf strands' starting y is unique and consistent.
-6. Returns a `ResolvedModel` with strands, layout map, time bounds, and a
-   list of validation issues. Errored strands are excluded from rendering;
-   the table surfaces their issues inline.
+### Outputs layout
 
-### Strand geometry
+Outputs spread along the canvas x by side-balanced index (a stable spread that
+keeps labels apart) blended 70/30 with their `anchorDate` x. y-positions get a
+small alternating stagger so adjacent labels don't collide. When an output's
+anchor falls outside the current view window, the output is pinned to the
+nearest edge — it never disappears just because the user zoomed past it.
 
-For any strand at world-time `t`:
+### Strand-to-output connectors
 
-- `strandCentreY(strand, t)` returns the y offset from the spine, including
-  smoothstep-eased convergence onto the parent's centreline over the last
-  `CONVERGE_WINDOW` (32%) of the strand's lifespan.
-- `strandAmplitude(strand, t)` tapers the oscillation amplitude to zero over
-  that same window so the strand neatly *settles* into its parent rather
-  than disappearing mid-wobble.
-- The path is sampled in CSS pixels with a step of 3 px; each sample's
-  world-time is derived from its x-position, so the shape is purely a
-  function of the model + playhead.
+A connector starts on the spine at the output's x when the source has merged
+in (clean visual: just a near-vertical line down/up from the rainbow), or on
+the strand's current leading edge when the source is still independent (the
+bezier sweeps from the strand's oscillating tip toward the output). Reference
+feeds always hook on the spine since they flow continuously.
 
-### Braided merged strands
+### Reference-data feeds
 
-When a strand has children that have merged into it, it's drawn as a
-*braid* of those constituent threads (`drawConstituentBraid`). Each thread
-is rendered as its own coloured stroke along the parent's centreline, with:
-
-- A static vertical offset within the band (sized by its own thickness).
-- A phase-shifted sinusoidal wobble (`twistAmp = min(totalThickness * 0.42, 8)`)
-  that makes the threads weave in and out of each other. The phases are
-  offset by `(i / N) * 2π + i * 0.7` so adjacent threads cross visibly.
-
-The spine uses the same braid mechanism with a perfectly straight
-centreline.
-
-### Hit testing
-
-`hitTest(mx, my, model, state)` is a math-only point-in-band check rather
-than an offscreen-canvas approach. It iterates strands by descending
-ancestry depth (children win over parents), maps the mouse x to a world
-time, computes the strand's y at that time, and checks `|my - cy| ≤
-thickness/2 + 8px`. Spine is the fallback. Fast enough for hundreds of
-strands per pointer event.
-
-### Playback loop
-
-A `requestAnimationFrame` loop advances the playhead by
-`span / 28s * speed * dt`. At speed=1 that's ~28 seconds to traverse the
-whole timeline; speeds 0.25× → 8× are exposed. Hitting play when the
-playhead is already at the end rewinds to the start first, so you can
-re-watch without having to scrub manually.
-
-### Initial playhead
-
-We seed the playhead at the *end* of the timeline so the first paint shows
-the fully wound rope — the conceptual punchline. Then the user can press
-play to rewind and re-experience the convergence. The clamp `$effect`
-keeps the playhead in range when the config changes underneath.
-
-### Persistence
-
-`saveConfig` / `loadConfig` round-trip through `localStorage` under a
-versioned key. `validateConfig` is permissive — it accepts anything that
-smells like a strand array, coerces types, and silently drops bad rows.
-Import takes a file or pasted JSON; export downloads a pretty-printed file
-and "Copy" puts the same blob on the clipboard.
-
-## Responsive behaviour
-
-- **Desktop / wide**: full layout — header, visualisation, controls bar,
-  legend, footer.
-- **Landscape phone (`max-height: 520px`)**: header collapses to a single
-  thin bar (title + Edit Sources button), blurb and footer hide, legend
-  becomes a horizontally-scrollable row, the canvas takes everything else.
-- **Portrait phone (`max-width: 720px`)**: shows the rotate-for-best-view
-  hint over the visualisation; the layout still works, just compressed.
-- **Config panel**: always a right-side drawer; on narrow widths it covers
-  most of the viewport, and each table row becomes a stacked card so the
-  inputs stay tappable.
+Stacked above/below the spine in alternating rows. Each gets a labelled chip
+band with hairlines top/bottom, then dotted tick marks at zoom-matched
+intervals (1 week at 6m → 1 year at Lifetime). The feed's contribution to
+spine thickness ramps in linearly from `startMs` to `mergeMs` so it builds
+the rope gradually rather than as a step.
 
 ## Project layout
 
@@ -161,27 +132,15 @@ data-convergence/
 ├── +page.svelte              # composition root — owns state + playback loop
 ├── README.md                 # this file
 ├── components/
-│   ├── ConfigTable.svelte    # editable table with DAG-aware merge dropdowns
-│   ├── Controls.svelte       # play/pause/speed/scrubber bottom bar
-│   ├── Legend.svelte         # colour↔source mapping
-│   ├── Tooltip.svelte        # hover/tap inspector
-│   └── Visualization.svelte  # canvas mount, ResizeObserver, hit-testing
+│   ├── ConfigTable.svelte    # editable strands + outputs tables, output chips
+│   ├── Controls.svelte       # zoom buttons + play/pause/scrubber/speed
+│   ├── Legend.svelte         # three columns: sources, reference data, outputs
+│   ├── Tooltip.svelte        # hover/tap inspector for strands AND outputs
+│   └── Visualization.svelte  # canvas mount, continuous animation, hit-testing
 └── lib/
-    ├── defaults.ts           # default scene used on first load
-    ├── render.ts             # canvas-2D rendering
-    ├── storage.ts            # localStorage + JSON I/O
-    ├── strands.ts            # DAG resolution + strand math
-    └── types.ts              # shared types
+    ├── defaults.ts           # DfE-themed default scene
+    ├── render.ts             # canvas-2D rendering (spine, strands, refs, outputs)
+    ├── storage.ts            # localStorage + JSON bundle I/O
+    ├── strands.ts            # DAG resolution + strand/spine math, cadence helpers
+    └── types.ts              # shared types + ZOOM_SPECS
 ```
-
-## WhatsApp notification
-
-Delivered on completion via the running site's existing
-`/api/channels/[id]/test` endpoint, which authenticates via DB-side channel
-ownership and routes through `getWhatsAppService().sendMessage()`. The
-script created an ephemeral `whatsapp` channel, sent the message, and
-deleted the channel afterwards. WhatsApp `messageId: 3EB01A805DF1AD4E488727`.
-
-For future autonomous projects, consider adding a dedicated
-`/api/projects/whatsapp-notify` endpoint so this doesn't have to round-trip
-through the channels CRUD.

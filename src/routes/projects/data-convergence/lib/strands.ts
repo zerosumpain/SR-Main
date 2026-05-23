@@ -1,58 +1,43 @@
-// Strand mathematics for the convergence timeline.
+// Strand mathematics for the convergence timeline. V2.
 //
-// Responsibilities:
-//   * Validate the DAG of merges (no cycles, all targets exist, terminates at spine).
-//   * Resolve a flat config into a tree layout with vertical offsets that scale by
-//     subtree weight so confluences are visually clear and strands don't overlap.
-//   * Produce per-frame strand geometry for the canvas renderer:
-//       - centreline y(t) including ease-onto-parent near merge date,
-//       - amplitude(t) tapering to zero near merge date,
-//       - thickness given the playhead position (sum of merged constituents).
-//
-// All units are tunable from the top of the file.
+// Resolves a flat list of StrandConfig + OutputConfig into a layered model the
+// renderer can iterate. Validates the DAG (no cycles, no missing targets), lays
+// strands out as a tree rooted at the spine, and pre-computes per-strand
+// geometry hints (birth offset, ancestry, frequency-per-day, thickness).
 
 import type {
   StrandConfig,
+  OutputConfig,
   ResolvedStrand,
+  ResolvedOutput,
   ResolvedModel,
   LayoutNode,
   ID,
   ValidationIssue,
+  Cadence,
 } from './types';
 
 // ------- Tunable constants -------
-//
-// We keep layout (vertical offsets) and visual weight (stroke thickness) on
-// different curves so a 900-user strand doesn't dwarf an 80-user strand visually.
 
-/** Vertical room each "unit of subtree weight" takes (in *layout pixels*).
- *  The renderer applies an additional fit-to-canvas scale on top of this so
- *  the whole composition always fits the available height. */
-export const WEIGHT_TO_PX = 0.1;
-/** Smallest band between sibling strands regardless of weight (layout px). */
-export const MIN_SIBLING_GAP = 28;
-/** Minimum stroke thickness in px (1 user). */
-export const MIN_THICKNESS = 1.6;
-/** Thickness scaling exponent (sqrt-ish — large sources stay readable). */
+/** Vertical room per "unit of subtree weight" (layout px). yScale shrinks to fit. */
+export const WEIGHT_TO_PX = 0.06;
+export const MIN_SIBLING_GAP = 32;
+export const MIN_THICKNESS = 2;
 export const THICKNESS_EXP = 0.45;
-/** Scale factor on top of the exponent — px per scaled-users unit. */
 export const THICKNESS_SCALE = 0.55;
-/** Spine's intrinsic baseline thickness (px) before any strands have merged in. */
-export const SPINE_BASE_THICKNESS = 3;
-/** Fraction of a strand's lifespan over which it converges onto its parent. */
-export const CONVERGE_WINDOW = 0.32;
-/** Wavelength scaling — px of canvas covered per oscillation period at 1/day. */
-export const PX_PER_DAY_WAVE = 14;
-/** Max amplitude (px) at the broadest oscillation. */
-export const MAX_AMPLITUDE = 18;
+export const SPINE_BASE_THICKNESS = 6;
+export const CONVERGE_WINDOW = 0.28;
+export const MAX_AMPLITUDE = 16;
 
-// ------- Public API -------
+/** Outputs sit at this many px from the spine centreline (px, post-yScale). */
+export const OUTPUT_OFFSET_PX = 130;
 
-/** Resolve a raw config list into the model used by every other module. */
-export function resolveModel(config: StrandConfig[]): ResolvedModel {
+export function resolveModel(
+  config: StrandConfig[],
+  outputs: OutputConfig[] = [],
+): ResolvedModel {
   const issues: ValidationIssue[] = [];
 
-  // Pass 1: parse dates, validate basic shape, build id map.
   const byId = new Map<ID, StrandConfig>();
   for (const s of config) {
     if (byId.has(s.id)) {
@@ -61,7 +46,7 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     byId.set(s.id, s);
   }
 
-  // Pass 2: merge target validity & date sanity.
+  // Basic validation.
   for (const s of config) {
     if (s.mergeInto !== 'spine' && !byId.has(s.mergeInto)) {
       issues.push({
@@ -76,25 +61,17 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     const start = Date.parse(s.startDate);
     const merge = Date.parse(s.mergeDate);
     if (!Number.isFinite(start) || !Number.isFinite(merge)) {
-      issues.push({
-        level: 'error',
-        strandId: s.id,
-        message: `"${s.name}" has an invalid date.`,
-      });
+      issues.push({ level: 'error', strandId: s.id, message: `"${s.name}" has an invalid date.` });
     } else if (merge <= start) {
-      issues.push({
-        level: 'error',
-        strandId: s.id,
-        message: `"${s.name}" merges before (or as) it starts.`,
-      });
+      issues.push({ level: 'error', strandId: s.id, message: `"${s.name}" merges before (or as) it starts.` });
     }
   }
 
-  // Pass 3: cycle detection — DFS with grey/black colouring.
+  // Cycle detection.
   const colour = new Map<ID, 0 | 1 | 2>();
   function visit(id: ID): boolean {
     const c = colour.get(id) ?? 0;
-    if (c === 1) return false; // grey => cycle
+    if (c === 1) return false;
     if (c === 2) return true;
     colour.set(id, 1);
     const node = byId.get(id);
@@ -106,15 +83,11 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
   }
   for (const s of config) {
     if (!visit(s.id)) {
-      issues.push({
-        level: 'error',
-        strandId: s.id,
-        message: `"${s.name}" is part of a cycle.`,
-      });
+      issues.push({ level: 'error', strandId: s.id, message: `"${s.name}" is part of a cycle.` });
     }
   }
 
-  // Pass 4: warn when a strand's merge date is after its target has merged on.
+  // Late-merge warning.
   for (const s of config) {
     if (s.mergeInto === 'spine') continue;
     const target = byId.get(s.mergeInto);
@@ -130,16 +103,16 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     }
   }
 
-  // Compute ancestry chains, ignoring strands that are part of broken graphs.
   const errorIds = new Set(
     issues.filter((i) => i.level === 'error' && i.strandId).map((i) => i.strandId as ID),
   );
+
   function ancestry(id: ID): (ID | 'spine')[] {
     const seen = new Set<ID>();
     const chain: (ID | 'spine')[] = [id];
     let cur: ID | 'spine' = id;
     while (cur !== 'spine') {
-      if (seen.has(cur)) return chain; // belt-and-braces against cycles
+      if (seen.has(cur)) return chain;
       seen.add(cur);
       const n = byId.get(cur);
       if (!n) break;
@@ -149,13 +122,7 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     return chain;
   }
 
-  // Layout: place strands as a tree rooted at the spine.
-  // - Children of a node are ordered by start date (stable for the eye).
-  // - Each child's offset = midpoint of its slice within the parent's slot,
-  //   alternating above / below in proportion to its subtree weight.
-  // - The spine itself sits at y = 0.
-
-  // Build adjacency (only over strands that aren't in the error set).
+  // Build adjacency.
   const children = new Map<ID | 'spine', ID[]>();
   children.set('spine', []);
   for (const s of config) {
@@ -168,12 +135,11 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent)!.push(s.id);
   }
-  // Sort children by start date (earliest first).
   for (const [, kids] of children) {
     kids.sort((a, b) => Date.parse(byId.get(a)!.startDate) - Date.parse(byId.get(b)!.startDate));
   }
 
-  // Subtree weight = sum of users in the subtree (own + descendants).
+  // Subtree weight = sum of users in subtree.
   const subtreeWeight = new Map<ID | 'spine', number>();
   function weight(id: ID | 'spine'): number {
     const cached = subtreeWeight.get(id);
@@ -186,14 +152,9 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
   }
   weight('spine');
 
-  // Assign offsets relative to parent. Alternate above/below, walking outward.
-  // Each child takes up a band proportional to its subtree weight; its centre
-  // becomes its offsetFromParent. This produces a balanced layout where heavy
-  // sub-confluences get more vertical room.
   const layout = new Map<ID | 'spine', LayoutNode>();
   layout.set('spine', {
-    id: 'spine',
-    parent: null,
+    id: 'spine', parent: null,
     children: children.get('spine') ?? [],
     offsetFromParent: 0,
     subtreeWeight: subtreeWeight.get('spine') ?? 0,
@@ -202,9 +163,6 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
   function assignChildren(parentId: ID | 'spine') {
     const kids = children.get(parentId) ?? [];
     if (kids.length === 0) return;
-    // Split into two interleaved sides: zig-zag above/below.
-    // Heavier children get placed first (further out), so smaller strands
-    // can tuck in closer to the parent.
     const sorted = [...kids].sort(
       (a, b) => (subtreeWeight.get(b) ?? 0) - (subtreeWeight.get(a) ?? 0),
     );
@@ -225,8 +183,7 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
         belowCursor += band / 2;
       }
       layout.set(id, {
-        id,
-        parent: parentId,
+        id, parent: parentId,
         children: children.get(id) ?? [],
         offsetFromParent: centre,
         subtreeWeight: w,
@@ -242,9 +199,7 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
     .map((s) => {
       const startMs = Date.parse(s.startDate);
       const mergeMs = Date.parse(s.mergeDate);
-      const freqPerDay = normaliseFrequency(s.frequency, s.frequencyPeriod);
-      const node = layout.get(s.id)!;
-      // birthOffset is the cumulative offset from spine, summing each ancestor.
+      const freqPerDay = cadenceToFreqPerDay(s.cadence);
       let off = 0;
       let cur: ID | 'spine' = s.id;
       while (cur !== 'spine') {
@@ -262,38 +217,90 @@ export function resolveModel(config: StrandConfig[]): ResolvedModel {
       } satisfies ResolvedStrand;
     });
 
-  // Time window.
+  // Resolve outputs.
+  const strandIdSet = new Set(strands.map((s) => s.id));
+  let aboveIdx = 0;
+  let belowIdx = 0;
+  const resolvedOutputs: ResolvedOutput[] = outputs.map((o) => {
+    const sourceIds = (Array.isArray((o as OutputConfig & { sources?: ID[] }).sources)
+      ? (o as OutputConfig & { sources?: ID[] }).sources!
+      : []
+    ).filter((id) => strandIdSet.has(id));
+    if (sourceIds.length === 0) {
+      issues.push({ level: 'warning', outputId: o.id, message: `Output "${o.name}" has no recognised sources.` });
+    }
+    // Auto-balance side if not set.
+    let side: 'above' | 'below';
+    if (o.side === 'above' || o.side === 'below') side = o.side;
+    else { side = aboveIdx <= belowIdx ? 'above' : 'below'; }
+    if (side === 'above') aboveIdx++; else belowIdx++;
+
+    let anchorMs: number;
+    if (o.anchorDate && Number.isFinite(Date.parse(o.anchorDate))) {
+      anchorMs = Date.parse(o.anchorDate);
+    } else if (sourceIds.length) {
+      anchorMs = Math.max(...sourceIds.map((sid) => {
+        const s = strands.find((x) => x.id === sid);
+        return s ? s.startMs : 0;
+      }));
+    } else {
+      anchorMs = Date.now();
+    }
+    return {
+      ...o,
+      sourceIds,
+      resolvedSide: side,
+      anchorMs,
+    } satisfies ResolvedOutput;
+  });
+
   const allTimes = strands.flatMap((s) => [s.startMs, s.mergeMs]);
   const tStart = allTimes.length ? Math.min(...allTimes) : Date.now() - 1;
   const tEnd = allTimes.length ? Math.max(...allTimes) : Date.now();
 
-  // Compute the spine's max thickness — total users of all strands that ever
-  // reach the spine (which is all strands, by definition of a valid DAG).
+  // Spine's max thickness for sizing the visual rope.
   const spineUsers = strands.reduce((sum, s) => sum + Math.max(1, s.users), 0);
   const spineMaxThickness = SPINE_BASE_THICKNESS + usersToThickness(spineUsers);
 
-  return { strands, layout, tStart, tEnd, spineMaxThickness, issues };
+  return { strands, outputs: resolvedOutputs, layout, tStart, tEnd, spineMaxThickness, issues };
+}
+
+// ------- Cadence -> frequency mapping -------
+
+export function cadenceToFreqPerDay(cadence: Cadence): number {
+  switch (cadence) {
+    case 'daily':       return 1;
+    case 'termly':      return 3 / 365;
+    case 'annual':      return 1 / 365;
+    case 'biannual':    return 2 / 365;
+    case 'adhoc':       return 0.5 / 365;
+    case 'continuous':  return 24 / 365; // reference data ticks ~ twice a month
+  }
+}
+
+/** Human-readable cadence label. */
+export function cadenceLabel(cadence: Cadence): string {
+  switch (cadence) {
+    case 'daily':       return 'Daily';
+    case 'termly':      return 'Termly';
+    case 'annual':      return 'Annually';
+    case 'biannual':    return 'Twice yearly';
+    case 'adhoc':       return 'Ad-hoc';
+    case 'continuous':  return 'Continuous feed';
+  }
 }
 
 // ------- Geometry helpers used by the renderer -------
 
-/** A strand's centreline y at world-time `t` (relative to spine = 0). */
 export function strandCentreY(strand: ResolvedStrand, model: ResolvedModel, t: number): number {
-  // Before birth: pretend it sits at its birthOffset (won't be drawn).
   if (t <= strand.startMs) return strand.birthOffset;
-  // After merge: take on the parent's y at this moment.
   const parentId = strand.mergeInto === 'spine' ? 'spine' : strand.mergeInto;
   const parentY = parentCentreY(parentId, model, t);
   if (t >= strand.mergeMs) return parentY;
-  // Live: ease from its own birth offset onto the parent's current y as we
-  // approach the merge.
   const e = convergenceProgress(strand, t);
-  // Self's "free" y is birthOffset away from spine; parent's y is parentY.
-  const selfY = strand.birthOffset;
-  return selfY + (parentY - selfY) * e;
+  return strand.birthOffset + (parentY - strand.birthOffset) * e;
 }
 
-/** Convergence ease-in 0..1 — 0 well before merge, 1 at the merge instant. */
 export function convergenceProgress(strand: ResolvedStrand, t: number): number {
   const span = Math.max(1, strand.mergeMs - strand.startMs);
   const tail = span * CONVERGE_WINDOW;
@@ -301,18 +308,15 @@ export function convergenceProgress(strand: ResolvedStrand, t: number): number {
   if (t <= windowStart) return 0;
   if (t >= strand.mergeMs) return 1;
   const x = (t - windowStart) / tail;
-  // smoothstep (cubic): 3x² − 2x³
   return x * x * (3 - 2 * x);
 }
 
-/** Oscillation amplitude for a strand at time t — taper to zero near merge. */
 export function strandAmplitude(strand: ResolvedStrand, t: number): number {
-  const base = Math.min(MAX_AMPLITUDE, Math.max(6, Math.sqrt(strand.users) * 2.4));
+  const base = Math.min(MAX_AMPLITUDE, Math.max(6, Math.sqrt(strand.users) * 1.4));
   const e = convergenceProgress(strand, t);
   return base * (1 - e);
 }
 
-/** Centre-y of a node at time t, recursively chasing merges. */
 function parentCentreY(id: ID | 'spine', model: ResolvedModel, t: number): number {
   if (id === 'spine') return 0;
   const s = model.strands.find((x) => x.id === id);
@@ -320,60 +324,71 @@ function parentCentreY(id: ID | 'spine', model: ResolvedModel, t: number): numbe
   return strandCentreY(s, model, t);
 }
 
-/** Map users -> pixel thickness with a gentle sqrt-ish curve. */
 export function usersToThickness(users: number): number {
   const u = Math.max(0, users);
   return MIN_THICKNESS + Math.pow(u, THICKNESS_EXP) * THICKNESS_SCALE;
 }
 
-/** Spine thickness at time t: base + thickness of every strand that has merged in by t. */
+/** Sum of thicknesses for all strands that have merged into the spine by time t. */
 export function spineThicknessAt(model: ResolvedModel, t: number): number {
   let extra = 0;
   for (const s of model.strands) {
     if (s.mergeMs <= t && s.ancestry.includes('spine')) {
-      extra += usersToThickness(s.users);
+      // Reference feeds contribute continuously rather than as a step.
+      if (s.isReference) {
+        // Once the feed has started, count a fraction (1.0 at startMs+1y, ramping up).
+        const ramp = Math.min(1, (t - s.startMs) / (1000 * 60 * 60 * 24 * 365));
+        if (ramp <= 0) continue;
+        extra += usersToThickness(s.users) * ramp;
+      } else {
+        extra += usersToThickness(s.users);
+      }
+    } else if (s.isReference && s.ancestry.includes('spine')) {
+      // Reference feed still flowing — partial contribution proportional to t.
+      if (t >= s.startMs && t < s.mergeMs) {
+        const span = Math.max(1, s.mergeMs - s.startMs);
+        const ramp = Math.min(1, (t - s.startMs) / span);
+        extra += usersToThickness(s.users) * ramp;
+      }
     }
   }
   return SPINE_BASE_THICKNESS + extra;
 }
 
-/** Constituents currently flowing inside a strand (or the spine) at time t.
- *  Returns leaf-level strands (real data sources, not intermediate confluences). */
-export function constituentsInside(
+/** Stripe colours currently flowing through `parentId` at time t — used to
+ *  draw the rainbow spine. Leaf-level strands only; intermediates contribute
+ *  their constituents instead of themselves. */
+export function spineStripeColoursAt(
   parentId: ID | 'spine',
   model: ResolvedModel,
   t: number,
-): ResolvedStrand[] {
-  // Walk descendants: any strand whose ancestry includes parentId and whose
-  // mergeMs <= t has flowed into this parent by time t.
-  const out: ResolvedStrand[] = [];
+): { strand: ResolvedStrand; ramp: number }[] {
+  const out: { strand: ResolvedStrand; ramp: number }[] = [];
   for (const s of model.strands) {
     if (parentId !== 'spine' && !s.ancestry.includes(parentId as ID)) continue;
-    if (s.mergeMs <= t) out.push(s);
+    // Walk ancestry between s and parentId — all intermediates must have merged
+    // by t for s's colour to be flowing inside parentId.
+    const ancestry = s.ancestry;
+    const idx = ancestry.indexOf(parentId);
+    if (idx <= 0) continue;
+    let ok = true;
+    for (let i = 1; i < idx; i++) {
+      const mid = ancestry[i];
+      if (mid === 'spine') break;
+      const midStrand = model.strands.find((x) => x.id === mid);
+      if (!midStrand || midStrand.mergeMs > t) { ok = false; break; }
+    }
+    if (!ok) continue;
+    if (s.isReference) {
+      // Reference contributes from startMs onward, ramping up.
+      if (t < s.startMs) continue;
+      const span = Math.max(1, s.mergeMs - s.startMs);
+      const ramp = Math.min(1, (t - s.startMs) / span);
+      if (ramp > 0) out.push({ strand: s, ramp });
+    } else {
+      if (s.mergeMs > t) continue;
+      out.push({ strand: s, ramp: 1 });
+    }
   }
   return out;
-}
-
-/** Total thickness of a strand at time t — own contribution plus everything that has flowed in. */
-export function strandTotalThickness(strand: ResolvedStrand, model: ResolvedModel, t: number): number {
-  if (t < strand.startMs) return 0;
-  if (t > strand.mergeMs) return 0; // strand no longer exists as an entity
-  // Own thickness + every descendant that has already merged into it.
-  let total = usersToThickness(strand.users);
-  for (const s of model.strands) {
-    if (s.id === strand.id) continue;
-    if (!s.ancestry.includes(strand.id)) continue;
-    if (s.mergeMs <= t) total += usersToThickness(s.users);
-  }
-  return total;
-}
-
-function normaliseFrequency(value: number, period: StrandConfig['frequencyPeriod']): number {
-  const v = Math.max(0.001, value);
-  switch (period) {
-    case 'day': return v;
-    case 'week': return v / 7;
-    case 'month': return v / 30.44;
-    case 'quarter': return v / 91.31;
-  }
 }

@@ -1,98 +1,124 @@
-// Canvas-2D rendering for the convergence timeline.
+// Canvas-2D rendering for the convergence timeline. V2.
 //
-// Pure-ish: given a model + a frame state (size, playhead, hover), it draws.
-// The component file owns animation/state; this module owns pixels.
+// V2 changes:
+//  - Spine is now a SINGLE moving rainbow bar — coloured stripes for each
+//    contributing source, all sharing one always-animating sine displacement.
+//    No more individual wave-threads through the spine area.
+//  - Spine oscillation period is calibrated to the active zoom so the visual
+//    rhythm matches the time axis (1 day, 1 week, 1 month, 1 year per cycle).
+//  - Outputs render as labelled circles off the spine with bezier connectors.
+//  - Reference-data feeds render as a dotted tick stream entering the spine.
+//  - Pan/zoom: the visible time window is the spec's `spanMs`, centred on the
+//    playhead, clamped to model bounds.
 
-import type { ResolvedModel, ResolvedStrand, ID } from './types';
+import type {
+  ResolvedModel, ResolvedStrand, ResolvedOutput, ID, ZoomLevel,
+} from './types';
+import { ZOOM_SPECS } from './types';
 import {
-  strandCentreY,
-  strandAmplitude,
-  spineThicknessAt,
-  constituentsInside,
-  usersToThickness,
-  convergenceProgress,
-  PX_PER_DAY_WAVE,
+  strandCentreY, strandAmplitude, spineThicknessAt,
+  usersToThickness, spineStripeColoursAt, OUTPUT_OFFSET_PX,
 } from './strands';
 
 export interface RenderState {
   width: number;
   height: number;
   dpr: number;
-  playhead: number;          // ms epoch
+  /** World time (ms epoch) at the playhead. */
+  playhead: number;
+  /** Real wall-clock time (ms) — used to animate the rainbow spine. */
+  animTime: number;
+  zoom: ZoomLevel;
   hoverId: ID | 'spine' | null;
-  showWaveSamples: boolean;  // dev only
+  hoverOutputId: ID | null;
 }
 
 export interface CanvasMetrics {
-  /** Centre line y in CSS px. */
   centreY: number;
-  /** Left edge of the drawing area (CSS px). */
   leftX: number;
-  /** Right edge of the drawing area (CSS px). */
   rightX: number;
-  /** Scale applied to all layout-y values (birthOffset etc) so the layout
-   *  fits the available vertical space without clipping. */
   yScale: number;
+  /** Visible time window, ms. */
+  viewStart: number;
+  viewEnd: number;
+  /** Oscillation wavelength in CSS px for the spine bar at this zoom. */
+  spineWavelengthPx: number;
 }
 
-// ------- Theme palette (kept here so render is self-contained) -------
+// ------- Theme palette -------
 const PAPER = '#f1ead6';
 const INK = '#1c1611';
-const INK_SOFT = 'rgba(28, 22, 17, 0.42)';
-const INK_FAINT = 'rgba(28, 22, 17, 0.18)';
-const SPINE_FILL = 'rgba(28, 22, 17, 0.78)';
+const INK_SOFT = 'rgba(28, 22, 17, 0.5)';
+const INK_FAINT = 'rgba(28, 22, 17, 0.16)';
 
 export function metricsFor(state: RenderState, model: ResolvedModel): CanvasMetrics {
-  // Reserve room left & right for source labels / future room.
-  const leftX = 96;
-  const rightX = state.width - 32;
+  const leftX = 24;
+  const rightX = state.width - 24;
   const centreY = state.height / 2;
-  // Half the available vertical space, minus a safety margin for amplitude /
-  // thickness / time axis labels.
-  const verticalRoom = state.height / 2 - 60;
-  // Largest absolute birthOffset across all strands tells us the natural
-  // extent of the layout.
+
+  // View window: span centred on playhead, clamped to model bounds.
+  const span = ZOOM_SPECS[state.zoom].spanMs;
+  const oscCount = ZOOM_SPECS[state.zoom].oscCount;
+  let viewStart = state.playhead - span / 2;
+  let viewEnd = state.playhead + span / 2;
+  // Allow viewing slightly past the bounds for context, but center on data when possible.
+  const pad = span * 0.06;
+  if (viewStart < model.tStart - pad) {
+    viewStart = model.tStart - pad;
+    viewEnd = viewStart + span;
+  }
+  if (viewEnd > model.tEnd + pad) {
+    viewEnd = model.tEnd + pad;
+    viewStart = viewEnd - span;
+  }
+
+  // Compute yScale to fit the layout.
+  const verticalRoom = state.height / 2 - 110; // reserve room for outputs above/below
   let maxOffset = 1;
   for (const s of model.strands) {
     const a = Math.abs(s.birthOffset);
     if (a > maxOffset) maxOffset = a;
   }
-  // Add the maximum stroke half-thickness so the broadest strand still fits.
   let maxThickness = 0;
   for (const s of model.strands) {
     if (s.thickness > maxThickness) maxThickness = s.thickness;
   }
   const extent = maxOffset + maxThickness * 0.6 + 12;
   const yScale = Math.min(1, verticalRoom / extent);
-  return { centreY, leftX, rightX, yScale };
+
+  const spineWavelengthPx = (rightX - leftX) / oscCount;
+
+  return { centreY, leftX, rightX, yScale, viewStart, viewEnd, spineWavelengthPx };
 }
 
-/** Convert world time (ms) to canvas x (CSS px). */
-export function timeToX(t: number, model: ResolvedModel, m: CanvasMetrics): number {
-  const range = Math.max(1, model.tEnd - model.tStart);
-  const p = (t - model.tStart) / range;
+/** Convert world time (ms) to canvas x using the current view window. */
+export function timeToX(t: number, m: CanvasMetrics): number {
+  const range = Math.max(1, m.viewEnd - m.viewStart);
+  const p = (t - m.viewStart) / range;
   return m.leftX + p * (m.rightX - m.leftX);
 }
 
-/** Inverse — for the scrubber. */
-export function xToTime(x: number, model: ResolvedModel, m: CanvasMetrics): number {
+/** Inverse. */
+export function xToTime(x: number, m: CanvasMetrics): number {
   const p = (x - m.leftX) / Math.max(1, m.rightX - m.leftX);
-  return model.tStart + p * (model.tEnd - model.tStart);
+  return m.viewStart + p * (m.viewEnd - m.viewStart);
 }
+
+// ------- Top-level render -------
 
 export function render(ctx: CanvasRenderingContext2D, model: ResolvedModel, state: RenderState) {
   const { width, height, dpr } = state;
-  // Reset transform for the new frame.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  // Clear with the paper colour.
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, width, height);
 
   const m = metricsFor(state, model);
 
   drawTimeAxis(ctx, model, m, state);
-  drawSpine(ctx, model, m, state);
+  drawSpineRainbow(ctx, model, m, state);
+  drawReferenceFeeds(ctx, model, m, state);
   drawStrands(ctx, model, m, state);
+  drawOutputs(ctx, model, m, state);
   drawPlayhead(ctx, model, m, state);
 }
 
@@ -110,76 +136,87 @@ function drawTimeAxis(
   ctx.fillStyle = INK_SOFT;
   ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
 
-  const ticks = niceTicks(model.tStart, model.tEnd, 7);
-  for (const t of ticks) {
-    const x = timeToX(t, model, m);
+  const ticks = niceTicks(m.viewStart, m.viewEnd, state.zoom);
+  for (const tick of ticks) {
+    const x = timeToX(tick.t, m);
+    if (x < m.leftX - 30 || x > m.rightX + 30) continue;
     ctx.beginPath();
     ctx.setLineDash([1, 4]);
-    ctx.moveTo(x, 24);
-    ctx.lineTo(x, state.height - 56);
+    ctx.moveTo(x, 28);
+    ctx.lineTo(x, state.height - 32);
     ctx.stroke();
     ctx.setLineDash([]);
-    const label = formatYearMonth(t);
-    const w = ctx.measureText(label).width;
-    ctx.fillText(label, x - w / 2, state.height - 38);
+    const w = ctx.measureText(tick.label).width;
+    ctx.fillText(tick.label, x - w / 2, state.height - 14);
   }
   ctx.restore();
 }
 
-function niceTicks(start: number, end: number, target: number): number[] {
-  const range = end - start;
-  if (range <= 0) return [];
-  // Pick interval out of {1 month, 3 months, 6 months, 1 year, 2 years}.
-  const candidates = [
-    1000 * 60 * 60 * 24 * 30,
-    1000 * 60 * 60 * 24 * 91,
-    1000 * 60 * 60 * 24 * 182,
-    1000 * 60 * 60 * 24 * 365,
-    1000 * 60 * 60 * 24 * 365 * 2,
-    1000 * 60 * 60 * 24 * 365 * 5,
-  ];
-  let best = candidates[0];
-  for (const c of candidates) {
-    if (range / c <= target * 1.2) { best = c; break; }
+function niceTicks(start: number, end: number, zoom: ZoomLevel): { t: number; label: string }[] {
+  const out: { t: number; label: string }[] = [];
+  const dayMs = 1000 * 60 * 60 * 24;
+  if (zoom === '6m') {
+    // monthly ticks
+    const d = new Date(start);
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    while (d.getTime() < end) {
+      out.push({ t: d.getTime(), label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }).toUpperCase() });
+      d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+  } else if (zoom === '1y') {
+    // monthly ticks
+    const d = new Date(start);
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    while (d.getTime() < end) {
+      out.push({ t: d.getTime(), label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }).toUpperCase() });
+      d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+  } else if (zoom === '10y') {
+    // yearly ticks
+    const yStart = new Date(start).getUTCFullYear();
+    const yEnd = new Date(end).getUTCFullYear();
+    for (let y = yStart; y <= yEnd; y++) {
+      out.push({ t: Date.UTC(y, 0, 1), label: `’${String(y).slice(-2)}` });
+    }
+  } else {
+    // every 5 years
+    const yStart = Math.floor(new Date(start).getUTCFullYear() / 5) * 5;
+    const yEnd = new Date(end).getUTCFullYear();
+    for (let y = yStart; y <= yEnd; y += 5) {
+      out.push({ t: Date.UTC(y, 0, 1), label: String(y) });
+    }
   }
-  const ticks: number[] = [];
-  // Snap first tick to start of a month.
-  const d0 = new Date(start);
-  d0.setUTCDate(1);
-  d0.setUTCHours(0, 0, 0, 0);
-  let t = d0.getTime();
-  while (t < start) t += best;
-  for (; t <= end; t += best) ticks.push(t);
-  return ticks;
+  void dayMs;
+  return out;
 }
 
-function formatYearMonth(t: number): string {
-  const d = new Date(t);
-  return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }).toUpperCase();
-}
+// ------- Spine (the moving rainbow bar) -------
 
-// ------- The spine -------
-
-function drawSpine(
+function drawSpineRainbow(
   ctx: CanvasRenderingContext2D,
   model: ResolvedModel,
   m: CanvasMetrics,
   state: RenderState,
 ) {
-  const t = state.playhead;
-  // Build segments at strand merge events into the spine.
-  // We draw the spine from tStart to tEnd; thickness steps up at each merge
-  // event that's <= t. For x > playhead, draw an even thinner "outline" so
-  // there's a visual cue for "where the spine will run".
+  // Phase animation — rolls regardless of play state so the bar is "alive".
+  const phase = (state.animTime / 1000) * Math.PI * 1.2; // ~0.6 cycles/s
+  const wavelengthPx = m.spineWavelengthPx;
+  const radPerPx = (Math.PI * 2) / Math.max(1, wavelengthPx);
+  const ampMax = Math.min(10, Math.max(3, wavelengthPx * 0.16));
 
-  // Merge events directly into spine, sorted.
-  const events = model.strands
-    .filter((s) => s.mergeInto === 'spine')
-    .map((s) => s.mergeMs)
-    .sort((a, b) => a - b);
-  const breakpoints = [model.tStart, ...events, model.tEnd];
+  // Maximum px we'll let the rainbow bar grow to — proportionate to canvas height.
+  // The bar should be a strong focal element but not eat the whole frame.
+  const MAX_SPINE_PX = Math.min(64, Math.max(28, state.height * 0.16));
+  // Compute the spine's "natural" max thickness (sum of all leaf contributors).
+  let maxNatural = 0;
+  for (const s of model.strands) {
+    if (s.ancestry.includes('spine')) maxNatural += usersToThickness(s.users);
+  }
+  const stripeScale = maxNatural > 0 ? Math.min(1, MAX_SPINE_PX / maxNatural) : 1;
 
-  // Draw the future-spine guideline (faint hairline) under everything.
+  // Faint future-spine guide (dashed line so the user sees where the spine will run).
   ctx.save();
   ctx.strokeStyle = INK_FAINT;
   ctx.lineWidth = 1;
@@ -190,35 +227,196 @@ function drawSpine(
   ctx.stroke();
   ctx.restore();
 
-  // Solid spine up to the playhead.
-  for (let i = 0; i < breakpoints.length - 1; i++) {
-    const a = breakpoints[i];
-    const b = breakpoints[i + 1];
-    const visB = Math.min(b, t);
-    if (visB <= a) continue;
-    const thickness = spineThicknessAt(model, a + (visB - a) / 2);
-    drawSpineSegment(ctx, model, m, a, visB, thickness);
+  // Sample x positions along the visible range.
+  const step = 2;
+  const xStart = m.leftX;
+  const xEnd = m.rightX;
+
+  // Precompute samples with their current stripe sets and a shared sine displacement.
+  const samples: { x: number; t: number; y: number; stripes: { strand: ResolvedStrand; ramp: number }[] }[] = [];
+  for (let x = xStart; x <= xEnd; x += step) {
+    const t = xToTime(x, m);
+    const alive = t >= model.tStart && t <= model.tEnd;
+    const stripes = alive ? spineStripeColoursAt('spine', model, t) : [];
+    // Local amplitude — bigger as the spine has more sources flowing.
+    let segNatural = 0;
+    for (const stripe of stripes) segNatural += usersToThickness(stripe.strand.users) * stripe.ramp;
+    const fullness = maxNatural > 0 ? Math.min(1, segNatural / maxNatural) : 0;
+    const ampHere = alive ? ampMax * (0.35 + 0.65 * fullness) : 0;
+    const y = m.centreY + Math.sin(x * radPerPx + phase) * ampHere;
+    samples.push({ x, t, y, stripes });
   }
 
-  // Draw constituent threads inside the spine for the live portion.
-  drawConstituentBraid(ctx, model, m, state, 'spine');
+  if (samples.length < 2) return;
+
+  // Stable stripe order so the rainbow doesn't shuffle as the playhead moves.
+  const stripeOrder = computeSpineStripeOrder(model);
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+
+    // Merge the stripe sets of the two adjacent samples (a + b) so we draw smooth segments.
+    const merged = new Map<ID, { strand: ResolvedStrand; ramp: number }>();
+    for (const stripe of a.stripes) merged.set(stripe.strand.id, { ...stripe });
+    for (const stripe of b.stripes) {
+      const prev = merged.get(stripe.strand.id);
+      if (prev) merged.set(stripe.strand.id, { strand: stripe.strand, ramp: Math.max(prev.ramp, stripe.ramp) });
+      else merged.set(stripe.strand.id, { ...stripe });
+    }
+
+    const ordered = [...merged.values()].sort((u, v) => {
+      const ai = stripeOrder.get(u.strand.id) ?? 9999;
+      const bi = stripeOrder.get(v.strand.id) ?? 9999;
+      return ai - bi;
+    });
+
+    let segThickness = 0;
+    for (const item of ordered) segThickness += usersToThickness(item.strand.users) * item.ramp * stripeScale;
+    // Always show a thin spine line if any source has started — so the rope is anchored even when very early.
+    if (segThickness > 0) segThickness = Math.max(segThickness, 3);
+
+    if (segThickness <= 0) continue;
+
+    let cursor = -segThickness / 2;
+    for (const item of ordered) {
+      const h = usersToThickness(item.strand.users) * item.ramp * stripeScale;
+      if (h <= 0.1) continue;
+      drawStripeSegment(ctx, a.x, a.y + cursor, b.x, b.y + cursor, h, item.strand.colour, 0.92);
+      cursor += h;
+    }
+  }
 }
 
-function drawSpineSegment(
+function drawStripeSegment(
+  ctx: CanvasRenderingContext2D,
+  x1: number, y1: number,
+  x2: number, y2: number,
+  height: number,
+  colour: string,
+  alpha: number,
+) {
+  ctx.save();
+  ctx.fillStyle = colour;
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x2, y2 + height);
+  ctx.lineTo(x1, y1 + height);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Compute the stripe order across the spine based on each strand's merge
+ *  date (oldest first → at the centre of the bar; newest → edges). Reference
+ *  feeds sort by startMs. */
+function computeSpineStripeOrder(model: ResolvedModel): Map<ID, number> {
+  const order = new Map<ID, number>();
+  const sorted = [...model.strands]
+    .filter((s) => s.ancestry.includes('spine'))
+    .sort((a, b) => {
+      const aT = a.isReference ? a.startMs : a.mergeMs;
+      const bT = b.isReference ? b.startMs : b.mergeMs;
+      return aT - bT;
+    });
+  sorted.forEach((s, i) => order.set(s.id, i));
+  return order;
+}
+
+// ------- Reference-data tick stream -------
+
+function drawReferenceFeeds(
   ctx: CanvasRenderingContext2D,
   model: ResolvedModel,
   m: CanvasMetrics,
-  a: number,
-  b: number,
-  thickness: number,
+  state: RenderState,
 ) {
-  const x1 = timeToX(a, model, m);
-  const x2 = timeToX(b, model, m);
-  ctx.fillStyle = SPINE_FILL;
-  ctx.fillRect(x1, m.centreY - thickness / 2, x2 - x1, thickness);
+  const t = state.playhead;
+  // Stack reference feeds: each gets its own row above OR below the spine, with a
+  // header band, a label, and tick marks falling onto the spine.
+  const refs = model.strands.filter((s) => s.isReference);
+  if (refs.length === 0) return;
+  ctx.save();
+  refs.forEach((s, i) => {
+    if (s.startMs > Math.max(state.playhead, m.viewEnd)) return;
+    const stopMs = Math.min(s.mergeMs, m.viewEnd);
+    const startMs = Math.max(s.startMs, m.viewStart);
+    if (stopMs <= startMs) return;
+
+    // Alternate sides; positions stack inward toward the spine.
+    const sideSign = i % 2 === 0 ? -1 : 1;
+    const rowIdx = Math.floor(i / 2);
+    const baseOff = OUTPUT_OFFSET_PX * 0.42 * m.yScale;
+    const headerY = m.centreY + sideSign * (baseOff + rowIdx * 22);
+    const spineY = m.centreY;
+
+    const startX = timeToX(startMs, m);
+    const stopX = timeToX(stopMs, m);
+    if (stopX - startX < 6) return;
+
+    // Background band.
+    ctx.fillStyle = hexAlpha(s.colour, 0.08);
+    ctx.fillRect(startX, headerY - 8, stopX - startX, 16);
+    // Top/bottom hairlines.
+    ctx.strokeStyle = hexAlpha(s.colour, 0.4);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(startX, headerY - 8);
+    ctx.lineTo(stopX, headerY - 8);
+    ctx.moveTo(startX, headerY + 8);
+    ctx.lineTo(stopX, headerY + 8);
+    ctx.stroke();
+
+    // Tick marks.
+    const periodMs = ZOOM_SPECS_TICK_PERIOD[state.zoom];
+    let cursor = Math.ceil(s.startMs / periodMs) * periodMs;
+    while (cursor <= stopMs) {
+      if (cursor >= startMs && cursor <= t) {
+        const x = timeToX(cursor, m);
+        ctx.strokeStyle = hexAlpha(s.colour, 0.85);
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, headerY + (sideSign === -1 ? 8 : -8));
+        ctx.lineTo(x, spineY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Solid dot on the header band.
+        ctx.fillStyle = s.colour;
+        ctx.beginPath();
+        ctx.arc(x, headerY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      cursor += periodMs;
+    }
+
+    // Label inside the band.
+    ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillStyle = PAPER;
+    const labelText = s.name.toUpperCase();
+    const labelX = Math.max(m.leftX + 6, startX + 6);
+    const labelY = headerY + 3.5;
+    // Draw a chip behind the label so it doesn't blend with the canvas.
+    const lw = ctx.measureText(labelText).width;
+    ctx.fillStyle = s.colour;
+    roundRect(ctx, labelX - 4, labelY - 9, lw + 8, 12, 2);
+    ctx.fill();
+    ctx.fillStyle = PAPER;
+    ctx.fillText(labelText, labelX, labelY);
+  });
+  ctx.restore();
 }
 
-// ------- Strands -------
+const ZOOM_SPECS_TICK_PERIOD: Record<ZoomLevel, number> = {
+  '6m':    1000 * 60 * 60 * 24 * 7,        // 1 week
+  '1y':    1000 * 60 * 60 * 24 * 14,       // 2 weeks
+  '10y':   1000 * 60 * 60 * 24 * 60,       // 2 months
+  'adult': 1000 * 60 * 60 * 24 * 365,      // 1 year
+};
+
+// ------- Strands (everything not in the spine, with colour always prominent) -------
 
 function drawStrands(
   ctx: CanvasRenderingContext2D,
@@ -226,10 +424,10 @@ function drawStrands(
   m: CanvasMetrics,
   state: RenderState,
 ) {
-  // Draw in order: leaves first so their constituent threads get drawn after
-  // (on top of) their parents — but actually we want parents underneath, so
-  // sort by depth ascending. We approximate depth by ancestry length.
-  const sorted = [...model.strands].sort((a, b) => a.ancestry.length - b.ancestry.length);
+  // Reference feeds are drawn separately.
+  const sorted = [...model.strands]
+    .filter((s) => !s.isReference)
+    .sort((a, b) => a.ancestry.length - b.ancestry.length);
   for (const s of sorted) {
     drawStrand(ctx, model, m, state, s);
   }
@@ -247,205 +445,55 @@ function drawStrand(
   const endT = Math.min(t, strand.mergeMs);
   if (endT <= strand.startMs) return;
 
-  // Determine whether this strand has children that have merged in by endT;
-  // if so it's a "merged strand" carrying multiple constituent colours.
-  const constituents = constituentsInside(strand.id, model, endT);
-  // If this strand has zero children that have merged, it's a single-colour source.
-  const selfAlone = constituents.length === 0;
-
-  if (selfAlone) {
-    drawLeafStrand(ctx, model, m, state, strand, endT);
-  } else {
-    // Hover highlight only — the braid below provides the actual visual mass.
-    if (state.hoverId === strand.id) drawMergedStrandHalo(ctx, model, m, state, strand, endT, constituents);
-    drawConstituentBraid(ctx, model, m, state, strand.id);
-  }
-}
-
-function drawLeafStrand(
-  ctx: CanvasRenderingContext2D,
-  model: ResolvedModel,
-  m: CanvasMetrics,
-  state: RenderState,
-  strand: ResolvedStrand,
-  endT: number,
-) {
-  // A single oscillating ribbon in the strand's colour.
   const samples = sampleStrandPath(model, m, strand, endT);
   if (samples.length < 2) return;
 
-  ctx.save();
-  ctx.strokeStyle = strand.colour;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(1.4, usersToThickness(strand.users));
-  ctx.beginPath();
-  ctx.moveTo(samples[0].x, samples[0].y);
-  for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].x, samples[i].y);
-  ctx.stroke();
-
-  // Subtle inner highlight for that warm braided look.
-  ctx.strokeStyle = withAlpha('#ffffff', 0.18);
-  ctx.lineWidth = Math.max(0.6, ctx.lineWidth * 0.35);
-  ctx.stroke();
-  ctx.restore();
-
   // Hover halo.
-  if (state.hoverId === strand.id) {
+  if (state.hoverId === strand.id || (state.hoverOutputId && strand.outputs?.includes(state.hoverOutputId))) {
     ctx.save();
-    ctx.strokeStyle = withAlpha(strand.colour, 0.28);
-    ctx.lineWidth = Math.max(8, usersToThickness(strand.users) * 2.2);
+    ctx.strokeStyle = hexAlpha(strand.colour, 0.35);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(10, usersToThickness(strand.users) * 2.4);
     ctx.beginPath();
     ctx.moveTo(samples[0].x, samples[0].y);
     for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].x, samples[i].y);
     ctx.stroke();
     ctx.restore();
   }
-}
 
-function drawMergedStrandHalo(
-  ctx: CanvasRenderingContext2D,
-  model: ResolvedModel,
-  m: CanvasMetrics,
-  state: RenderState,
-  strand: ResolvedStrand,
-  endT: number,
-  constituents: ResolvedStrand[],
-) {
-  const samples = sampleStrandPath(model, m, strand, endT);
-  if (samples.length < 2) return;
-  const baseThickness = constituents.reduce((s, c) => s + usersToThickness(c.users), 0)
-    + usersToThickness(strand.users);
+  // Main coloured ribbon.
   ctx.save();
-  ctx.strokeStyle = withAlpha(strand.colour, 0.22);
+  ctx.strokeStyle = strand.colour;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = baseThickness + 14;
+  ctx.lineWidth = Math.max(2.4, usersToThickness(strand.users));
   ctx.beginPath();
   ctx.moveTo(samples[0].x, samples[0].y);
   for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].x, samples[i].y);
   ctx.stroke();
+
+  // Inner highlight to give the ribbon depth.
+  ctx.strokeStyle = hexAlpha('#ffffff', 0.22);
+  ctx.lineWidth = Math.max(0.8, ctx.lineWidth * 0.32);
+  ctx.stroke();
+
+  // Outer outline so the colour stays readable against the rainbow spine.
+  ctx.strokeStyle = hexAlpha(INK, 0.25);
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.restore();
-}
 
-/** Draw constituent threads currently bound inside `parentId`, twisted as a braid. */
-function drawConstituentBraid(
-  ctx: CanvasRenderingContext2D,
-  model: ResolvedModel,
-  m: CanvasMetrics,
-  state: RenderState,
-  parentId: ID | 'spine',
-) {
-  const t = state.playhead;
-  // Constituents = leaves whose ancestry includes parentId and have merged by t.
-  // Actually: we want ALL strands (incl. intermediates) that have merged into
-  // this parent (directly or via a child of this parent that has also merged).
-  // The braid for the spine should show only leaf-level threads, not intermediate ones.
-  // Easiest definition: a strand contributes a thread inside parentId iff:
-  //   (1) parentId is in its ancestry,
-  //   (2) every node on its ancestry path *between itself and parentId* has merged by t.
-  const threads: ResolvedStrand[] = [];
-  for (const s of model.strands) {
-    if (s.mergeMs > t) continue; // hasn't merged on yet
-    const ancestry = s.ancestry;
-    const idx = ancestry.indexOf(parentId as ID | 'spine');
-    if (idx <= 0) continue; // not an ancestor (or it's itself)
-    // Check every intermediate node (between self and parent) has also merged by t.
-    let ok = true;
-    for (let i = 1; i < idx; i++) {
-      const mid = ancestry[i];
-      if (mid === 'spine') break;
-      const midStrand = model.strands.find((x) => x.id === mid);
-      if (!midStrand || midStrand.mergeMs > t) {
-        ok = false; break;
-      }
-    }
-    if (ok) threads.push(s);
-  }
-
-  if (threads.length === 0) return;
-
-  // The braid occupies the parent's current thickness.
-  // Parent's centreline path:
-  const parentSamples = parentId === 'spine'
-    ? spineSampleLine(model, m, t)
-    : (() => {
-        const ps = model.strands.find((x) => x.id === parentId);
-        if (!ps) return [];
-        const endT = Math.min(t, ps.mergeMs);
-        return sampleStrandPath(model, m, ps, endT);
-      })();
-  if (parentSamples.length < 2) return;
-
-  // For the spine, the right end is min(t, tEnd); for intermediates similar.
-  // Sort threads for stable position assignment.
-  const sorted = [...threads].sort((a, b) => a.startMs - b.startMs);
-
-  // Total thickness based on threads' own thicknesses.
-  const totalThickness = sorted.reduce((s, c) => s + usersToThickness(c.users), 0);
-  // Compute each thread's y-band centre relative to parent centreline.
-  const offsets: number[] = [];
-  let cursor = -totalThickness / 2;
-  for (const th of sorted) {
-    const w = usersToThickness(th.users);
-    offsets.push(cursor + w / 2);
-    cursor += w;
-  }
-
-  // Draw each thread along the parent's centreline with twist offset.
+  // Start cap — small dot to anchor the strand visually.
   ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  sorted.forEach((th, i) => {
-    const baseOffset = offsets[i];
-    const ownThick = Math.max(1.2, usersToThickness(th.users) * 0.78);
-
-    // Each thread gets a phase offset for the twist undulation.
-    const phase = (i / sorted.length) * Math.PI * 2 + (i * 0.7);
-    // Twist period in CSS px — the smaller, the tighter the braid.
-    const twistPeriodPx = 64;
-    // Twist amplitude scales with band size but capped.
-    const twistAmp = Math.min(totalThickness * 0.42, 8);
-
-    ctx.beginPath();
-    for (let k = 0; k < parentSamples.length; k++) {
-      const p = parentSamples[k];
-      const wobble = Math.sin((p.x / twistPeriodPx) * Math.PI * 2 + phase) * twistAmp;
-      const y = p.y + baseOffset + wobble;
-      if (k === 0) ctx.moveTo(p.x, y);
-      else ctx.lineTo(p.x, y);
-    }
-    ctx.strokeStyle = th.colour;
-    ctx.lineWidth = ownThick;
-    ctx.stroke();
-
-    // Highlight (gives the threads a 3D fibre feel).
-    ctx.strokeStyle = withAlpha('#ffffff', 0.16);
-    ctx.lineWidth = Math.max(0.5, ownThick * 0.35);
-    ctx.stroke();
-  });
+  ctx.fillStyle = strand.colour;
+  ctx.beginPath();
+  ctx.arc(samples[0].x, samples[0].y, Math.max(2.5, usersToThickness(strand.users) * 0.45), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = hexAlpha(INK, 0.4);
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.restore();
-}
-
-/** The spine sample line — straight horizontal from tStart to min(t, tEnd). */
-function spineSampleLine(model: ResolvedModel, m: CanvasMetrics, t: number) {
-  const endT = Math.min(t, model.tEnd);
-  const startX = timeToX(model.tStart, model, m);
-  const endX = timeToX(endT, model, m);
-  const samples: { x: number; y: number }[] = [];
-  const step = 4;
-  for (let x = startX; x <= endX; x += step) samples.push({ x, y: m.centreY });
-  samples.push({ x: endX, y: m.centreY });
-  return samples;
-}
-
-// ------- Strand path sampling -------
-
-interface PathSample {
-  x: number;
-  y: number;
-  /** World time at this sample (ms). */
-  t: number;
 }
 
 function sampleStrandPath(
@@ -453,33 +501,178 @@ function sampleStrandPath(
   m: CanvasMetrics,
   strand: ResolvedStrand,
   endT: number,
-): PathSample[] {
-  const startX = timeToX(strand.startMs, model, m);
-  const endX = timeToX(endT, model, m);
-  if (endX <= startX) return [];
-
-  const step = 3; // CSS px between samples — small enough to look smooth
-  const samples: PathSample[] = [];
-  // Wavelength in px: PX_PER_DAY_WAVE divided by freqPerDay (so high frequency => short wavelength).
-  // Equivalently: oscillations per px = freqPerDay / PX_PER_DAY_WAVE.
-  const freqRadPerPx = (strand.freqPerDay / PX_PER_DAY_WAVE) * Math.PI * 2;
-  // Above-or-below the centreline alternation: start positive on top, depending on birthOffset sign.
+): { x: number; y: number; t: number }[] {
+  const startX = timeToX(strand.startMs, m);
+  const endX = timeToX(endT, m);
+  if (endX - startX < 1) return [];
+  const samples: { x: number; y: number; t: number }[] = [];
+  const dayMs = 1000 * 60 * 60 * 24;
+  const tRange = endT - strand.startMs;
+  const pxRange = endX - startX;
+  const daysPerPx = (tRange / dayMs) / Math.max(1, pxRange);
+  // Natural cycles-per-px from data cadence. Capped so even daily cadence at
+  // 6m zoom remains readable (min wavelength ~7 px).
+  let cyclesPerPx = strand.freqPerDay * daysPerPx;
+  const maxCyclesPerPx = 1 / 7;
+  if (cyclesPerPx > maxCyclesPerPx) cyclesPerPx = maxCyclesPerPx;
+  const radPerPx = cyclesPerPx * Math.PI * 2;
+  // Step size adapts to frequency — denser sampling for high-freq strands.
+  const step = Math.max(1.5, Math.min(3, 1 / (cyclesPerPx * 4)));
   const sideSign = strand.birthOffset === 0 ? 1 : Math.sign(strand.birthOffset) || 1;
   for (let x = startX; x <= endX; x += step) {
-    const tx = invLerp(startX, endX, x);
-    const t = strand.startMs + tx * (endT - strand.startMs);
+    const ratio = (x - startX) / Math.max(1, endX - startX);
+    const t = strand.startMs + ratio * (endT - strand.startMs);
     const cy = m.centreY + strandCentreY(strand, model, t) * m.yScale;
     const amp = strandAmplitude(strand, t);
-    // Oscillation: sin wave with frequency. Phase based on world time.
-    const wave = Math.sin((x - startX) * freqRadPerPx) * amp * sideSign;
+    const wave = Math.sin((x - startX) * radPerPx) * amp * sideSign;
     samples.push({ x, y: cy + wave, t });
   }
-  // Force last sample exactly at endX to land cleanly on the merge point.
-  if (samples.length) {
-    const last = samples[samples.length - 1];
-    if (last.x < endX) samples.push({ x: endX, y: m.centreY + strandCentreY(strand, model, endT) * m.yScale, t: endT });
-  }
   return samples;
+}
+
+// ------- Outputs (off-spine circles + connectors) -------
+
+function drawOutputs(
+  ctx: CanvasRenderingContext2D,
+  model: ResolvedModel,
+  m: CanvasMetrics,
+  state: RenderState,
+) {
+  for (const out of model.outputs) {
+    drawOutput(ctx, model, m, state, out);
+  }
+}
+
+function drawOutput(
+  ctx: CanvasRenderingContext2D,
+  model: ResolvedModel,
+  m: CanvasMetrics,
+  state: RenderState,
+  out: ResolvedOutput,
+) {
+  const sideSign = out.resolvedSide === 'above' ? -1 : 1;
+  // Pin to view edges so the output is always visible while consuming.
+  const rawX = timeToX(out.anchorMs, m);
+  const x = Math.max(m.leftX + 30, Math.min(m.rightX - 30, rawX));
+  // Don't show outputs whose anchor is far in the future.
+  if (out.anchorMs > state.playhead + 1000 * 60 * 60 * 24 * 365 * 2) return;
+  // Distribute outputs on the same side along x so they don't collide.
+  const sameSidePeers = model.outputs.filter((o) => o.resolvedSide === out.resolvedSide);
+  const idx = sameSidePeers.findIndex((o) => o.id === out.id);
+  const spreadStep = (m.rightX - m.leftX) / Math.max(1, sameSidePeers.length + 1);
+  const spreadX = m.leftX + spreadStep * (idx + 1);
+  // Blend the spread position with the time-anchored position so outputs roughly
+  // sit near their anchor but don't pile up on the same x.
+  const finalX = Math.round(spreadX * 0.7 + x * 0.3);
+
+  const yBase = m.centreY + sideSign * OUTPUT_OFFSET_PX * m.yScale;
+  // Stagger y slightly within the band so labels don't collide.
+  const yStagger = (idx % 2 === 0 ? 0 : 18 * sideSign);
+  const y = yBase + yStagger;
+  const visible = true;
+  const hovered = state.hoverOutputId === out.id;
+
+  // Connectors first (so they sit under the circle).
+  for (const sid of out.sourceIds) {
+    const s = model.strands.find((x) => x.id === sid);
+    if (!s) continue;
+    // Determine "from" point on the strand or spine.
+    const t = state.playhead;
+    const fromPoint = computeStrandHookPoint(s, model, m, t, out, finalX);
+    if (!fromPoint) continue;
+    drawConnector(ctx, fromPoint, { x: finalX, y }, out.colour, hovered || state.hoverId === sid, visible);
+  }
+
+  if (!visible) return;
+
+  // The output circle.
+  const radius = Math.max(9, Math.min(15, m.yScale * 16));
+  ctx.save();
+  // Glow if hovered.
+  if (hovered) {
+    ctx.fillStyle = hexAlpha(out.colour, 0.25);
+    ctx.beginPath();
+    ctx.arc(finalX, y, radius + 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Paper-filled circle with coloured ring.
+  ctx.fillStyle = PAPER;
+  ctx.beginPath();
+  ctx.arc(finalX, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = out.colour;
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+  // Inner dot.
+  ctx.fillStyle = hexAlpha(out.colour, 0.85);
+  ctx.beginPath();
+  ctx.arc(finalX, y, radius * 0.32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Label.
+  ctx.save();
+  ctx.font = '11px "DM Sans", system-ui, sans-serif';
+  ctx.fillStyle = INK;
+  const label = out.name;
+  const lw = ctx.measureText(label).width;
+  const labelY = y + (sideSign === -1 ? -radius - 8 : radius + 16);
+  // Background so the label remains readable on top of strands.
+  ctx.fillStyle = hexAlpha(PAPER, 0.85);
+  ctx.fillRect(finalX - lw / 2 - 3, labelY - 11, lw + 6, 13);
+  ctx.fillStyle = INK;
+  ctx.fillText(label, finalX - lw / 2, labelY);
+  ctx.restore();
+}
+
+/** Where on the strand (or spine) should a connector hook in? Picks a point
+ *  that's currently visible at the playhead — the strand's leading edge if
+ *  unmerged, the spine just below the output if merged. */
+function computeStrandHookPoint(
+  strand: ResolvedStrand,
+  model: ResolvedModel,
+  m: CanvasMetrics,
+  t: number,
+  out: ResolvedOutput,
+  outputX: number,
+): { x: number; y: number } | null {
+  if (t < strand.startMs) return null;
+  // Reference feeds hook on the spine at the output's x (they flow continuously).
+  if (strand.isReference) {
+    return { x: outputX, y: m.centreY };
+  }
+  // If the strand has merged into the spine by t, hook on the spine at the output's x.
+  if (strand.mergeMs <= t && strand.ancestry.includes('spine')) {
+    return { x: outputX, y: m.centreY };
+  }
+  // Otherwise hook on the strand at the strand's CURRENT leading edge (t).
+  const endT = Math.min(t, strand.mergeMs);
+  const hookX = clamp(timeToX(endT, m), m.leftX + 4, m.rightX - 4);
+  const hookY = m.centreY + strandCentreY(strand, model, endT) * m.yScale;
+  return { x: hookX, y: hookY };
+}
+
+function drawConnector(
+  ctx: CanvasRenderingContext2D,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  colour: string,
+  highlighted: boolean,
+  outputVisible: boolean,
+) {
+  ctx.save();
+  ctx.strokeStyle = hexAlpha(colour, highlighted ? 0.95 : (outputVisible ? 0.7 : 0.3));
+  ctx.lineWidth = highlighted ? 2.4 : 1.6;
+  ctx.lineCap = 'round';
+  // Cubic bezier — vertical control points so the curve bows out gently.
+  const dy = to.y - from.y;
+  const cp1 = { x: from.x, y: from.y + dy * 0.55 };
+  const cp2 = { x: to.x, y: to.y - dy * 0.55 };
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, to.x, to.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // ------- Playhead -------
@@ -490,18 +683,19 @@ function drawPlayhead(
   m: CanvasMetrics,
   state: RenderState,
 ) {
-  const x = timeToX(state.playhead, model, m);
+  const x = timeToX(state.playhead, m);
+  if (x < m.leftX || x > m.rightX) return;
   ctx.save();
-  ctx.strokeStyle = withAlpha(INK, 0.55);
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = hexAlpha(INK, 0.62);
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(x, 24);
-  ctx.lineTo(x, state.height - 56);
+  ctx.lineTo(x, state.height - 32);
   ctx.stroke();
   ctx.restore();
 
-  // Date pill above.
+  // Date pill.
   const label = new Date(state.playhead).toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
@@ -519,64 +713,57 @@ function drawPlayhead(
 
 // ------- Hit testing -------
 
-/** Returns the strand id at the mouse position, or 'spine' / null. */
 export function hitTest(
   mx: number,
   my: number,
   model: ResolvedModel,
   state: RenderState,
-): ID | 'spine' | null {
+): { kind: 'strand'; id: ID } | { kind: 'output'; id: ID } | { kind: 'spine' } | null {
   const m = metricsFor(state, model);
   const t = state.playhead;
-  // Convert mx to world time so we can test bands.
-  const tAtX = xToTime(mx, model, m);
+  const tAtX = xToTime(mx, m);
 
-  // Reverse iteration so top-most threads win.
-  // Test merged-strand backings first (the wide hit area), then leaves.
-  const sorted = [...model.strands].sort((a, b) => b.ancestry.length - a.ancestry.length);
+  // Outputs first (large hit targets in their own band).
+  for (const out of model.outputs) {
+    const sideSign = out.resolvedSide === 'above' ? -1 : 1;
+    const cx = timeToX(out.anchorMs, m);
+    const cy = m.centreY + sideSign * OUTPUT_OFFSET_PX * m.yScale;
+    const r = Math.max(8, Math.min(16, m.yScale * 18));
+    const dx = mx - cx;
+    const dy = my - cy;
+    if (Math.sqrt(dx * dx + dy * dy) <= r + 6) return { kind: 'output', id: out.id };
+  }
+
+  // Strands.
+  const sorted = [...model.strands]
+    .filter((s) => !s.isReference)
+    .sort((a, b) => b.ancestry.length - a.ancestry.length);
   for (const s of sorted) {
     if (tAtX < s.startMs || tAtX > Math.min(t, s.mergeMs)) continue;
-    // Compute centre y at tAtX
     const cy = m.centreY + strandCentreY(s, model, tAtX) * m.yScale;
-    const totalThick = Math.max(usersToThickness(s.users), strandTotalDrawnThickness(s, model, tAtX));
-    const tolerance = 8;
-    if (Math.abs(my - cy) <= totalThick / 2 + tolerance) {
-      return s.id;
-    }
+    const thick = Math.max(8, usersToThickness(s.users));
+    if (Math.abs(my - cy) <= thick / 2 + 6) return { kind: 'strand', id: s.id };
+  }
+  // Reference feeds — match against their header band.
+  for (const s of model.strands) {
+    if (!s.isReference) continue;
+    if (tAtX < s.startMs || tAtX > s.mergeMs) continue;
+    const sideSign = s.birthOffset < 0 ? -1 : 1;
+    const headerY = m.centreY + sideSign * OUTPUT_OFFSET_PX * 0.55 * m.yScale;
+    if (Math.abs(my - headerY) <= 12) return { kind: 'strand', id: s.id };
   }
   // Spine fallback.
   if (tAtX >= model.tStart && tAtX <= Math.min(t, model.tEnd)) {
     const cy = m.centreY;
-    const totalThick = spineThicknessAt(model, tAtX);
-    if (Math.abs(my - cy) <= totalThick / 2 + 6) return 'spine';
+    const tot = spineThicknessAt(model, tAtX);
+    if (Math.abs(my - cy) <= tot / 2 + 8) return { kind: 'spine' };
   }
   return null;
 }
 
-function strandTotalDrawnThickness(
-  strand: ResolvedStrand,
-  model: ResolvedModel,
-  t: number,
-): number {
-  // Self + every descendant whose mergeMs <= t.
-  let total = usersToThickness(strand.users);
-  for (const s of model.strands) {
-    if (s.id === strand.id) continue;
-    if (!s.ancestry.includes(strand.id)) continue;
-    if (s.mergeMs <= t) total += usersToThickness(s.users);
-  }
-  return total;
-}
+// ------- Utilities -------
 
-// ------- Small utilities -------
-
-function invLerp(a: number, b: number, x: number): number {
-  if (b === a) return 0;
-  return (x - a) / (b - a);
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  // Accept #rgb / #rrggbb / rgba(...).
+function hexAlpha(hex: string, alpha: number): string {
   if (hex.startsWith('rgba')) return hex;
   let h = hex.replace('#', '');
   if (h.length === 3) h = h.split('').map((c) => c + c).join('');
@@ -588,11 +775,7 @@ function withAlpha(hex: string, alpha: number): string {
 
 function roundRect(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
+  x: number, y: number, w: number, h: number, r: number,
 ) {
   const rad = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -606,4 +789,8 @@ function roundRect(
   ctx.lineTo(x, y + rad);
   ctx.quadraticCurveTo(x, y, x + rad, y);
   ctx.closePath();
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
 }
