@@ -49,15 +49,52 @@
     </p>
   </div>
 
-  {#if projects.length === 0}
+  <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
     <div
-      class="max-w-4xl text-center py-16 rounded-xl border"
+      class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
-      <p class="text-sm" style="color: var(--text-ghost);">No published projects yet.</p>
+      <a href="/projects/data-convergence" class="absolute inset-0 z-0" aria-label="Open The Spine"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №1
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          One-shot prompt
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Spine — Data Convergence Timeline
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        Scattered data sources are tributaries. They enter as oscillating strands of twine,
+        wind together at confluences, and bind into a single horizontal spine — the source
+        of truth. Interactive: play, scrub, edit the sources.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          Canvas · DAG · braid render
+        </span>
+      </div>
     </div>
-  {:else}
-    <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    {#if projects.length === 0}
+      <div
+        class="text-center py-16 rounded-xl border"
+        style="background: var(--card-bg); border-color: var(--card-border);"
+      >
+        <p class="text-sm" style="color: var(--text-ghost);">No AI-built projects yet.</p>
+      </div>
+    {:else}
       {#each projects as project (project.id)}
         <div
           class="group relative p-6 rounded-xl border transition-colors"
@@ -111,8 +148,8 @@
           </div>
         </div>
       {/each}
-    </div>
-  {/if}
+    {/if}
+  </div>
 </section>
 
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
