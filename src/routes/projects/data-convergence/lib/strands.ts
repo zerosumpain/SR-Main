@@ -45,9 +45,13 @@ export const WEIGHT_TO_PX = 0.06;
 export const MIN_SIBLING_GAP = 32;
 
 export function resolveModel(
-  config: StrandConfig[],
-  outputs: OutputConfig[] = [],
+  configIn: StrandConfig[],
+  outputsIn: OutputConfig[] = [],
 ): ResolvedModel {
+  // Visibility filter — hidden rows kept in config but stripped before resolve.
+  const config = configIn.filter((s) => s.visible !== false);
+  const outputs = outputsIn.filter((o) => o.visible !== false);
+
   const issues: ValidationIssue[] = [];
 
   const byId = new Map<ID, StrandConfig>();

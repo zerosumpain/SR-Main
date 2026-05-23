@@ -772,6 +772,35 @@ function drawPlayhead(
 
 // ------- Hit testing -------
 
+/** Pointer hit-test for drag handles on strand endpoints. */
+export function dragHitTest(
+  mx: number,
+  my: number,
+  model: ResolvedModel,
+  state: RenderState,
+): { strandId: ID; handle: 'start' | 'merge' } | null {
+  const m = metricsFor(state, model);
+  const HANDLE_R = 10;
+  for (const s of model.strands) {
+    if (s.isReference) continue;
+    // Merge endpoint — only available if the playhead is at/past the merge date.
+    if (state.playhead >= s.mergeMs) {
+      const mx0 = timeToX(s.mergeMs, m);
+      const my0 = m.centreY + strandCentreY(s, model, s.mergeMs) * m.yScale;
+      const dx = mx - mx0;
+      const dy = my - my0;
+      if (Math.sqrt(dx * dx + dy * dy) <= HANDLE_R) return { strandId: s.id, handle: 'merge' };
+    }
+    // Start cap — always grabbable while the strand is alive.
+    const sx0 = timeToX(s.startMs, m);
+    const sy0 = m.centreY + strandCentreY(s, model, s.startMs) * m.yScale;
+    const sdx = mx - sx0;
+    const sdy = my - sy0;
+    if (Math.sqrt(sdx * sdx + sdy * sdy) <= HANDLE_R) return { strandId: s.id, handle: 'start' };
+  }
+  return null;
+}
+
 export function hitTest(
   mx: number,
   my: number,

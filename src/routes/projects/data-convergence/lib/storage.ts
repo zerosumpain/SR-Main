@@ -1,53 +1,96 @@
-// LocalStorage persistence + JSON import/export.
-//
-// V2 keeps strands + outputs together as a single bundle.
+// Scenario-aware persistence. V4 stores an array of named scenarios in
+// localStorage, with one active at a time. Older v1/v2 single-bundle saves
+// are silently migrated on first load.
 
-import type { StrandConfig, OutputConfig, Cadence } from './types';
+import type { StrandConfig, OutputConfig, Cadence, Scenario, ScenarioStore } from './types';
 
-const STORAGE_KEY = 'data-convergence:config:v2';
+const STORE_KEY = 'data-convergence:store:v4';
+const LEGACY_V2_KEY = 'data-convergence:config:v2';
+const LEGACY_V1_KEY = 'data-convergence:config:v1';
 
-export interface ConfigBundle {
-  strands: StrandConfig[];
-  outputs: OutputConfig[];
-}
-
-export function loadConfig(): ConfigBundle | null {
+export function loadStore(): ScenarioStore | null {
   if (typeof localStorage === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return validateBundle(parsed);
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return validateStore(parsed);
+    }
+    // Migration from legacy bundle keys.
+    const legacy = localStorage.getItem(LEGACY_V2_KEY) ?? localStorage.getItem(LEGACY_V1_KEY);
+    if (!legacy) return null;
+    const bundle = JSON.parse(legacy);
+    const strands = Array.isArray(bundle?.strands) ? bundle.strands.map(validateStrand).filter(Boolean) as StrandConfig[]
+      : Array.isArray(bundle) ? bundle.map(validateStrand).filter(Boolean) as StrandConfig[]
+      : [];
+    const outputs = Array.isArray(bundle?.outputs) ? bundle.outputs.map(validateOutput).filter(Boolean) as OutputConfig[] : [];
+    if (strands.length === 0) return null;
+    const now = new Date().toISOString();
+    const id = newId();
+    return {
+      activeId: id,
+      scenarios: [{
+        id,
+        name: 'Saved scenario',
+        strands,
+        outputs,
+        createdAt: now,
+        updatedAt: now,
+      }],
+    };
   } catch {
     return null;
   }
 }
 
-export function saveConfig(bundle: ConfigBundle) {
+export function saveStore(store: ScenarioStore) {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(bundle));
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
   } catch {
     // ignore
   }
 }
 
-export function clearConfig() {
+export function clearStore() {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORE_KEY);
+    localStorage.removeItem(LEGACY_V2_KEY);
+    localStorage.removeItem(LEGACY_V1_KEY);
   } catch {
     // ignore
   }
 }
 
-export function validateBundle(value: unknown): ConfigBundle | null {
+export function validateStore(value: unknown): ScenarioStore | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
-  const strands = Array.isArray(v.strands) ? v.strands.map(validateStrand).filter(Boolean) as StrandConfig[] : [];
-  const outputs = Array.isArray(v.outputs) ? v.outputs.map(validateOutput).filter(Boolean) as OutputConfig[] : [];
+  if (!Array.isArray(v.scenarios)) return null;
+  const scenarios = v.scenarios.map(validateScenario).filter(Boolean) as Scenario[];
+  if (scenarios.length === 0) return null;
+  let activeId = typeof v.activeId === 'string' ? v.activeId : scenarios[0].id;
+  if (!scenarios.some((s) => s.id === activeId)) activeId = scenarios[0].id;
+  return { activeId, scenarios };
+}
+
+export function validateScenario(raw: unknown): Scenario | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== 'string' || typeof r.name !== 'string') return null;
+  const strands = Array.isArray(r.strands) ? r.strands.map(validateStrand).filter(Boolean) as StrandConfig[] : [];
+  const outputs = Array.isArray(r.outputs) ? r.outputs.map(validateOutput).filter(Boolean) as OutputConfig[] : [];
   if (strands.length === 0) return null;
-  return { strands, outputs };
+  const now = new Date().toISOString();
+  return {
+    id: r.id,
+    name: r.name,
+    description: typeof r.description === 'string' ? r.description : undefined,
+    strands,
+    outputs,
+    createdAt: typeof r.createdAt === 'string' ? r.createdAt : now,
+    updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : now,
+  };
 }
 
 function validateStrand(raw: unknown): StrandConfig | null {
@@ -72,6 +115,8 @@ function validateStrand(raw: unknown): StrandConfig | null {
     cadence,
     outputs: Array.isArray(r.outputs) ? (r.outputs as unknown[]).filter((x) => typeof x === 'string') as string[] : [],
     isReference: r.isReference === true,
+    visible: r.visible !== false,
+    schema: Array.isArray(r.schema) ? (r.schema as unknown[]).filter((x) => typeof x === 'string') as string[] : undefined,
   };
 }
 
@@ -85,11 +130,12 @@ function validateOutput(raw: unknown): OutputConfig | null {
     colour: typeof r.colour === 'string' ? r.colour : '#666666',
     side: r.side === 'above' || r.side === 'below' ? r.side : undefined,
     anchorDate: typeof r.anchorDate === 'string' ? r.anchorDate : undefined,
+    visible: r.visible !== false,
   };
 }
 
-export function serialiseConfig(bundle: ConfigBundle): string {
-  return JSON.stringify(bundle, null, 2);
+export function serialiseStore(store: ScenarioStore): string {
+  return JSON.stringify(store, null, 2);
 }
 
 export function downloadJSON(filename: string, data: string) {
@@ -105,4 +151,9 @@ export function downloadJSON(filename: string, data: string) {
     a.remove();
     URL.revokeObjectURL(url);
   }, 0);
+}
+
+/** Cryptographically-cheap unique id for new scenarios. */
+export function newId(): string {
+  return 'sc_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }

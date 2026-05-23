@@ -89,6 +89,12 @@
           {/each}
         </dd>
       {/if}
+      {#if strand.schema && strand.schema.length > 0}
+        <dt>Schema</dt>
+        <dd class="schema">
+          <code>{strand.schema.join(' · ')}</code>
+        </dd>
+      {/if}
     </dl>
   </div>
 {/if}
@@ -181,5 +187,13 @@
   dd {
     margin: 0;
     color: var(--paper);
+  }
+  dd.schema code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    color: rgba(241, 234, 214, 0.85);
+    word-break: break-word;
+    white-space: normal;
+    line-height: 1.45;
   }
 </style>

@@ -17,22 +17,19 @@ export interface StrandConfig {
   id: ID;
   name: string;
   colour: string;
-  startDate: string;          // ISO date or date-time
-  /** For 'continuous' kinds, mergeDate is the date the feed STOPS contributing
-   *  (use a far-future date for live feeds). For everything else, the date it
-   *  winds into its merge target. */
+  startDate: string;
   mergeDate: string;
   mergeInto: ID | 'spine';
-  users: number;              // drives thickness — read as "row count / scale of contribution"
-  /** Discrete cadence — controls oscillation density on the strand and how
-   *  often a reference-feed ticks into the spine. */
+  users: number;
   cadence: Cadence;
-  /** Which output IDs this source contributes to. */
   outputs?: ID[];
-  /** Reference-data feeds enter the spine as a continuous metadata stream
-   *  rather than as a one-shot merge. They still have a `mergeInto` target —
-   *  the channel they enrich — but the visual treatment differs. */
   isReference?: boolean;
+  /** Per-row visibility — filtered out of the renderer when false. */
+  visible?: boolean;
+  /** This dataset's *schema*. Each of the ~10 sources has its own — that
+   *  separateness is the whole reason converging them is hard. We surface
+   *  the field list in the tooltip and config to reinforce the point. */
+  schema?: string[];
 }
 
 /** A consuming "business activity" — analyses, funding rounds, dashboards.
@@ -41,13 +38,27 @@ export interface StrandConfig {
 export interface OutputConfig {
   id: ID;
   name: string;
-  /** Colour used for the output's ring + connectors. */
   colour: string;
-  /** Where the output sits — above or below the spine. Auto-balanced if absent. */
   side?: 'above' | 'below';
-  /** Time anchor on the timeline — when this output begins consuming data.
-   *  ISO date. Defaults to the earliest connected source's startDate. */
   anchorDate?: string;
+  visible?: boolean;
+}
+
+/** A named scenario — full config snapshot, plus metadata. */
+export interface Scenario {
+  id: ID;
+  name: string;
+  description?: string;
+  strands: StrandConfig[];
+  outputs: OutputConfig[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The bundle persisted to localStorage — multiple scenarios + which one is active. */
+export interface ScenarioStore {
+  activeId: ID;
+  scenarios: Scenario[];
 }
 
 export interface ValidationIssue {

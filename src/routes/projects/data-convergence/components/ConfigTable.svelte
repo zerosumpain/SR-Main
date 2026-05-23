@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { StrandConfig, OutputConfig, ValidationIssue, ResolvedModel, Cadence } from '../lib/types';
   import { cadenceLabel } from '../lib/strands';
+  import { STRAND_TEMPLATES } from '../lib/defaults';
+  import { newId } from '../lib/storage';
 
   interface Props {
     strands: StrandConfig[];
@@ -27,6 +29,10 @@
   });
 
   const CADENCES: Cadence[] = ['daily', 'termly', 'biannual', 'annual', 'adhoc', 'continuous'];
+  const PALETTE = ['#c0392b','#e67e22','#f1c40f','#d35400','#8e44ad','#9b59b6','#2980b9','#16a085','#27ae60','#34495e'];
+
+  let addOpen = $state(false);
+  let expandedSchemas = $state<Set<string>>(new Set());
 
   function updateStrand(idx: number, patch: Partial<StrandConfig>) {
     const next = [...strands];
@@ -40,28 +46,17 @@
     updateStrand(idx, { outputs: next });
   }
 
-  function addStrand() {
-    const newId = `src-${strands.length + 1}-${Math.random().toString(36).slice(2, 6)}`;
-    const start = new Date(); start.setFullYear(start.getFullYear() - 2);
-    const merge = new Date(); merge.setFullYear(merge.getFullYear() + 1);
-    const colours = ['#c0392b','#e67e22','#8e44ad','#16a085','#2980b9','#27ae60','#34495e','#d35400'];
-    onChange({
-      strands: [
-        ...strands,
-        {
-          id: newId,
-          name: 'New source',
-          colour: colours[strands.length % colours.length],
-          startDate: start.toISOString().slice(0, 10),
-          mergeDate: merge.toISOString().slice(0, 10),
-          mergeInto: 'spine',
-          users: 100,
-          cadence: 'annual',
-          outputs: [],
-          isReference: false,
-        },
-      ],
-    });
+  function addStrandFromTemplate(templateIdx: number) {
+    const t = STRAND_TEMPLATES[templateIdx];
+    const id = newId();
+    const next: StrandConfig = {
+      id,
+      name: `New ${t.label.toLowerCase()}`,
+      colour: PALETTE[strands.length % PALETTE.length],
+      ...t.pattern,
+    };
+    onChange({ strands: [...strands, next] });
+    addOpen = false;
   }
 
   function removeStrand(idx: number) {
@@ -72,13 +67,33 @@
     onChange({ strands: fixed });
   }
 
+  function moveStrand(idx: number, dir: -1 | 1) {
+    const next = [...strands];
+    const dst = idx + dir;
+    if (dst < 0 || dst >= next.length) return;
+    const [item] = next.splice(idx, 1);
+    next.splice(dst, 0, item);
+    onChange({ strands: next });
+  }
+
+  function toggleSchemaEdit(id: string) {
+    const next = new Set(expandedSchemas);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    expandedSchemas = next;
+  }
+
+  function updateSchema(idx: number, text: string) {
+    const fields = text.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+    updateStrand(idx, { schema: fields });
+  }
+
   function addOutput() {
     const id = `out-${outputs.length + 1}-${Math.random().toString(36).slice(2, 5)}`;
-    const colours = ['#c0392b','#e67e22','#8e44ad','#16a085','#2980b9','#27ae60','#34495e'];
     onChange({
       outputs: [
         ...outputs,
-        { id, name: 'New output', colour: colours[outputs.length % colours.length] },
+        { id, name: 'New output', colour: PALETTE[(outputs.length + 3) % PALETTE.length], visible: true },
       ],
     });
   }
@@ -93,7 +108,6 @@
     const removedId = outputs[idx].id;
     const next = [...outputs];
     next.splice(idx, 1);
-    // Also strip from strand.outputs
     const cleanedStrands = strands.map((s) =>
       s.outputs?.includes(removedId) ? { ...s, outputs: s.outputs.filter((x) => x !== removedId) } : s
     );
@@ -105,12 +119,25 @@
   <section>
     <header>
       <h3>Sources</h3>
-      <button class="add" type="button" onclick={addStrand}>+ Add source</button>
+      <div class="add-wrap">
+        <button class="add" type="button" onclick={() => (addOpen = !addOpen)}>+ Add source</button>
+        {#if addOpen}
+          <div class="add-menu">
+            {#each STRAND_TEMPLATES as t, i}
+              <button type="button" class="add-item" onclick={() => addStrandFromTemplate(i)}>
+                <span class="add-label">{t.label}</span>
+                <span class="add-desc">{t.description}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </header>
 
     <div class="rows" role="table">
       <div class="row header" role="row">
-        <span class="col-colour" role="columnheader" aria-label="Colour"></span>
+        <span class="col-vis" aria-label="Visible"></span>
+        <span class="col-colour"></span>
         <span class="col-name">Name</span>
         <span class="col-start">Start</span>
         <span class="col-merge">Merge</span>
@@ -119,12 +146,17 @@
         <span class="col-cad">Cadence</span>
         <span class="col-ref">Ref</span>
         <span class="col-out">Outputs</span>
-        <span class="col-del" aria-label="Remove"></span>
+        <span class="col-move" aria-label="Move"></span>
+        <span class="col-del"></span>
       </div>
 
       {#each strands as row, i (row.id)}
         {@const issues = issuesByStrand.get(row.id) ?? []}
-        <div class="row" class:has-error={issues.some((x) => x.level === 'error')} role="row">
+        <div class="row" class:has-error={issues.some((x) => x.level === 'error')} class:hidden-row={row.visible === false} role="row">
+          <label class="col-vis" title={row.visible === false ? 'Hidden' : 'Visible'}>
+            <input type="checkbox" checked={row.visible !== false}
+              onchange={(e) => updateStrand(i, { visible: (e.currentTarget as HTMLInputElement).checked })} />
+          </label>
           <input class="col-colour" type="color" value={row.colour}
             oninput={(e) => updateStrand(i, { colour: (e.currentTarget as HTMLInputElement).value })} aria-label="Colour" />
           <input class="col-name" type="text" value={row.name} placeholder="Source name"
@@ -147,7 +179,7 @@
               <option value={c}>{cadenceLabel(c)}</option>
             {/each}
           </select>
-          <label class="col-ref" title="Treat as continuous reference-data feed">
+          <label class="col-ref" title="Continuous reference-data feed">
             <input type="checkbox" checked={!!row.isReference}
               onchange={(e) => updateStrand(i, { isReference: (e.currentTarget as HTMLInputElement).checked })} />
           </label>
@@ -166,8 +198,30 @@
               </button>
             {/each}
           </div>
+          <div class="col-move">
+            <button type="button" onclick={() => moveStrand(i, -1)} disabled={i === 0} title="Move up">▲</button>
+            <button type="button" onclick={() => moveStrand(i, 1)} disabled={i === strands.length - 1} title="Move down">▼</button>
+          </div>
           <button class="col-del" type="button" onclick={() => removeStrand(i)} aria-label="Remove">×</button>
         </div>
+
+        <div class="schema-row">
+          <button type="button" class="schema-toggle" onclick={() => toggleSchemaEdit(row.id)}>
+            {expandedSchemas.has(row.id) ? '▾' : '▸'} schema
+            <span class="schema-summary">
+              {(row.schema ?? []).join(' · ') || 'no fields defined'}
+            </span>
+          </button>
+          {#if expandedSchemas.has(row.id)}
+            <textarea
+              class="schema-input"
+              placeholder="comma- or newline-separated fields, e.g. pupilUPN, urn, sessionDate"
+              value={(row.schema ?? []).join(', ')}
+              oninput={(e) => updateSchema(i, (e.currentTarget as HTMLTextAreaElement).value)}
+            ></textarea>
+          {/if}
+        </div>
+
         {#if issues.length}
           <div class="issues" role="row">
             {#each issues as iss}
@@ -181,19 +235,24 @@
 
   <section class="outs">
     <header>
-      <h3>Outputs (business activities)</h3>
+      <h3>Outputs (annual collections)</h3>
       <button class="add" type="button" onclick={addOutput}>+ Add output</button>
     </header>
     <div class="rows" role="table">
       <div class="row header out-header" role="row">
+        <span class="col-vis"></span>
         <span class="col-colour"></span>
         <span class="col-name">Name</span>
         <span class="col-side">Side</span>
-        <span class="col-anchor">Anchor</span>
+        <span class="col-anchor">Anchor (optional)</span>
         <span class="col-del"></span>
       </div>
       {#each outputs as row, i (row.id)}
-        <div class="row out-row" role="row">
+        <div class="row out-row" class:hidden-row={row.visible === false} role="row">
+          <label class="col-vis" title={row.visible === false ? 'Hidden' : 'Visible'}>
+            <input type="checkbox" checked={row.visible !== false}
+              onchange={(e) => updateOutput(i, { visible: (e.currentTarget as HTMLInputElement).checked })} />
+          </label>
           <input class="col-colour" type="color" value={row.colour}
             oninput={(e) => updateOutput(i, { colour: (e.currentTarget as HTMLInputElement).value })} aria-label="Colour" />
           <input class="col-name" type="text" value={row.name}
@@ -239,6 +298,7 @@
     font-weight: 500;
     margin: 0;
   }
+  .add-wrap { position: relative; }
   .add {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10.5px;
@@ -252,27 +312,60 @@
     text-transform: uppercase;
   }
   .add:hover { background: rgba(255,255,255,0.7); }
+  .add-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--paper, #f1ead6);
+    border: 1px solid rgba(28, 22, 17, 0.18);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    min-width: 280px;
+    z-index: 5;
+    padding: 4px;
+  }
+  .add-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    border-radius: 4px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .add-item:hover { background: rgba(28, 22, 17, 0.07); }
+  .add-label { font-weight: 500; font-size: 12.5px; }
+  .add-desc { font-size: 11px; color: rgba(28, 22, 17, 0.6); margin-top: 2px; }
 
   .rows { display: flex; flex-direction: column; gap: 4px; }
 
   .row {
     display: grid;
     grid-template-columns:
-      24px              /* colour */
-      minmax(110px, 1.4fr)  /* name */
-      124px             /* start */
-      124px             /* merge */
+      22px              /* vis */
+      22px              /* colour */
+      minmax(110px, 1.3fr)  /* name */
+      120px             /* start */
+      120px             /* merge */
       minmax(110px, 0.9fr)  /* into */
-      72px              /* users */
+      70px              /* users */
       120px             /* cadence */
-      40px              /* ref */
+      32px              /* ref */
       minmax(160px, 1.4fr)  /* outputs */
-      24px;             /* delete */
+      40px              /* move */
+      22px;             /* delete */
     gap: 6px;
     align-items: center;
     padding: 4px 6px;
     border-radius: 4px;
+    transition: opacity 0.12s;
   }
+  .row.hidden-row { opacity: 0.4; }
   .row.header {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px;
@@ -284,7 +377,7 @@
   .row.has-error { background: rgba(177, 60, 48, 0.06); }
   .row:hover:not(.header) { background: rgba(28, 22, 17, 0.03); }
 
-  input, select {
+  input, select, textarea {
     font: inherit;
     color: var(--ink);
     background: rgba(255, 255, 255, 0.55);
@@ -295,7 +388,7 @@
     min-width: 0;
     width: 100%;
   }
-  input:focus, select:focus {
+  input:focus, select:focus, textarea:focus {
     outline: 2px solid rgba(28, 22, 17, 0.35);
     outline-offset: -1px;
   }
@@ -311,9 +404,9 @@
   input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
   input[type="color"]::-webkit-color-swatch { border: 1px solid rgba(28, 22, 17, 0.25); border-radius: 50%; }
   input[type="color"]::-moz-color-swatch { border: 1px solid rgba(28, 22, 17, 0.25); border-radius: 50%; }
+  input[type="checkbox"] { width: 16px; height: 16px; }
 
-  .col-ref { display: flex; justify-content: center; }
-  .col-ref input[type="checkbox"] { width: 16px; height: 16px; }
+  .col-vis, .col-ref { display: flex; justify-content: center; align-items: center; }
 
   .col-out {
     display: flex;
@@ -351,15 +444,33 @@
     box-shadow: none;
   }
   .chip-label {
-    max-width: 96px;
+    max-width: 100px;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
   }
 
-  /* Output rows have fewer columns */
+  .col-move {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .col-move button {
+    width: 22px;
+    height: 14px;
+    padding: 0;
+    border: 1px solid rgba(28, 22, 17, 0.15);
+    background: rgba(255, 255, 255, 0.55);
+    color: rgba(28, 22, 17, 0.6);
+    font-size: 8px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .col-move button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.9); color: var(--ink); }
+  .col-move button:disabled { opacity: 0.3; cursor: default; }
+
   .out-header, .out-row {
-    grid-template-columns: 24px 1.4fr 100px 140px 24px;
+    grid-template-columns: 22px 22px 1.4fr 100px 140px 22px;
   }
 
   .col-del {
@@ -369,8 +480,8 @@
     cursor: pointer;
     font-size: 20px;
     line-height: 1;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 4px;
     padding: 0;
   }
@@ -379,8 +490,35 @@
     color: #b13c30;
   }
 
+  .schema-row {
+    padding: 0 6px 4px 56px;
+  }
+  .schema-toggle {
+    background: transparent;
+    border: none;
+    color: rgba(28, 22, 17, 0.55);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    cursor: pointer;
+    padding: 1px 0;
+  }
+  .schema-toggle:hover { color: var(--ink); }
+  .schema-summary {
+    color: rgba(28, 22, 17, 0.6);
+    margin-left: 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .schema-input {
+    margin-top: 4px;
+    min-height: 48px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    resize: vertical;
+  }
+
   .issues {
-    padding: 2px 6px 6px 36px;
+    padding: 2px 6px 6px 56px;
   }
   .iss {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -402,20 +540,22 @@
   @media (max-width: 980px) {
     .row.header { display: none; }
     .row {
-      grid-template-columns: 24px 1fr 24px;
+      grid-template-columns: 22px 22px 1fr 22px;
       grid-template-areas:
-        'colour name del'
-        'start start start'
-        'merge merge merge'
-        'into into into'
-        'users users users'
-        'cad cad cad'
-        'ref ref ref'
-        'out out out';
+        'vis colour name del'
+        'start start start start'
+        'merge merge merge merge'
+        'into into into into'
+        'users users users users'
+        'cad cad cad cad'
+        'ref ref ref ref'
+        'out out out out'
+        'move move move move';
       padding: 8px;
       background: rgba(255, 255, 255, 0.25);
       border: 1px solid rgba(28, 22, 17, 0.08);
     }
+    .col-vis { grid-area: vis; }
     .col-colour { grid-area: colour; }
     .col-name { grid-area: name; }
     .col-start { grid-area: start; }
@@ -425,15 +565,17 @@
     .col-cad { grid-area: cad; }
     .col-ref { grid-area: ref; }
     .col-out { grid-area: out; }
+    .col-move { grid-area: move; flex-direction: row; justify-content: flex-end; }
     .col-del { grid-area: del; }
     .out-row {
-      grid-template-columns: 24px 1fr 24px;
+      grid-template-columns: 22px 22px 1fr 22px;
       grid-template-areas:
-        'colour name del'
-        'side side side'
-        'anchor anchor anchor';
+        'vis colour name del'
+        'side side side side'
+        'anchor anchor anchor anchor';
     }
     .col-side { grid-area: side; }
     .col-anchor { grid-area: anchor; }
+    .schema-row { padding-left: 8px; }
   }
 </style>
