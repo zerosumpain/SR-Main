@@ -43,7 +43,14 @@ export interface CanvasMetrics {
   viewEnd: number;
   /** Oscillation wavelength in CSS px for the spine bar at this zoom. */
   spineWavelengthPx: number;
+  /** Pre-computed output track centres, keyed by output id. */
+  outputTrackY: Map<ID, number>;
 }
+
+// Output band layout — each output gets its own horizontal track at a fixed
+// y in CSS px. Tracks stack inward from the top / bottom edge of the canvas.
+const OUTPUT_EDGE_PAD = 36;
+const OUTPUT_TRACK_GAP = 28;
 
 // ------- Theme palette -------
 const PAPER = '#f1ead6';
@@ -61,7 +68,6 @@ export function metricsFor(state: RenderState, model: ResolvedModel): CanvasMetr
   const oscCount = ZOOM_SPECS[state.zoom].oscCount;
   let viewStart = state.playhead - span / 2;
   let viewEnd = state.playhead + span / 2;
-  // Allow viewing slightly past the bounds for context, but center on data when possible.
   const pad = span * 0.06;
   if (viewStart < model.tStart - pad) {
     viewStart = model.tStart - pad;
@@ -72,8 +78,24 @@ export function metricsFor(state: RenderState, model: ResolvedModel): CanvasMetr
     viewStart = viewEnd - span;
   }
 
-  // Compute yScale to fit the layout.
-  const verticalRoom = state.height / 2 - 110; // reserve room for outputs above/below
+  // Output track layout — reserve space at the top and bottom of the canvas.
+  const aboveOuts = model.outputs.filter((o) => o.resolvedSide === 'above');
+  const belowOuts = model.outputs.filter((o) => o.resolvedSide === 'below');
+  const outputTrackY = new Map<ID, number>();
+  aboveOuts.forEach((o, i) => {
+    outputTrackY.set(o.id, OUTPUT_EDGE_PAD + i * OUTPUT_TRACK_GAP);
+  });
+  belowOuts.forEach((o, i) => {
+    outputTrackY.set(o.id, state.height - OUTPUT_EDGE_PAD - i * OUTPUT_TRACK_GAP);
+  });
+  const aboveBandPx = OUTPUT_EDGE_PAD + Math.max(0, aboveOuts.length - 1) * OUTPUT_TRACK_GAP;
+  const belowBandPx = OUTPUT_EDGE_PAD + Math.max(0, belowOuts.length - 1) * OUTPUT_TRACK_GAP;
+
+  // Strands live between the output bands.
+  const verticalRoomAbove = centreY - aboveBandPx - 20;
+  const verticalRoomBelow = (state.height - centreY) - belowBandPx - 26; // 26 for time axis
+  const verticalRoom = Math.min(verticalRoomAbove, verticalRoomBelow);
+
   let maxOffset = 1;
   for (const s of model.strands) {
     const a = Math.abs(s.birthOffset);
@@ -83,12 +105,12 @@ export function metricsFor(state: RenderState, model: ResolvedModel): CanvasMetr
   for (const s of model.strands) {
     if (s.thickness > maxThickness) maxThickness = s.thickness;
   }
-  const extent = maxOffset + maxThickness * 0.6 + 12;
+  const extent = maxOffset + maxThickness * 0.6 + 8;
   const yScale = Math.min(1, verticalRoom / extent);
 
   const spineWavelengthPx = (rightX - leftX) / oscCount;
 
-  return { centreY, leftX, rightX, yScale, viewStart, viewEnd, spineWavelengthPx };
+  return { centreY, leftX, rightX, yScale, viewStart, viewEnd, spineWavelengthPx, outputTrackY };
 }
 
 /** Convert world time (ms) to canvas x using the current view window. */
@@ -530,7 +552,14 @@ function sampleStrandPath(
   return samples;
 }
 
-// ------- Outputs (off-spine circles + connectors) -------
+// ------- Collections / Outputs (annual instance tracks) -------
+//
+// In V3 each output runs *every year*. We render a horizontal track for each
+// output at a fixed CSS-px y; on that track, a dot appears at each year's x
+// the playhead has reached. Each dot has connectors to the contributing
+// source strands at the same x — never to the spine directly.
+
+const YEAR_MS = 1000 * 60 * 60 * 24 * 365.25;
 
 function drawOutputs(
   ctx: CanvasRenderingContext2D,
@@ -539,140 +568,170 @@ function drawOutputs(
   state: RenderState,
 ) {
   for (const out of model.outputs) {
-    drawOutput(ctx, model, m, state, out);
+    drawOutputTrack(ctx, model, m, state, out);
   }
 }
 
-function drawOutput(
+function drawOutputTrack(
   ctx: CanvasRenderingContext2D,
   model: ResolvedModel,
   m: CanvasMetrics,
   state: RenderState,
   out: ResolvedOutput,
 ) {
-  const sideSign = out.resolvedSide === 'above' ? -1 : 1;
-  // Pin to view edges so the output is always visible while consuming.
-  const rawX = timeToX(out.anchorMs, m);
-  const x = Math.max(m.leftX + 30, Math.min(m.rightX - 30, rawX));
-  // Don't show outputs whose anchor is far in the future.
-  if (out.anchorMs > state.playhead + 1000 * 60 * 60 * 24 * 365 * 2) return;
-  // Distribute outputs on the same side along x so they don't collide.
-  const sameSidePeers = model.outputs.filter((o) => o.resolvedSide === out.resolvedSide);
-  const idx = sameSidePeers.findIndex((o) => o.id === out.id);
-  const spreadStep = (m.rightX - m.leftX) / Math.max(1, sameSidePeers.length + 1);
-  const spreadX = m.leftX + spreadStep * (idx + 1);
-  // Blend the spread position with the time-anchored position so outputs roughly
-  // sit near their anchor but don't pile up on the same x.
-  const finalX = Math.round(spreadX * 0.7 + x * 0.3);
-
-  const yBase = m.centreY + sideSign * OUTPUT_OFFSET_PX * m.yScale;
-  // Stagger y slightly within the band so labels don't collide.
-  const yStagger = (idx % 2 === 0 ? 0 : 18 * sideSign);
-  const y = yBase + yStagger;
-  const visible = true;
+  const trackY = m.outputTrackY.get(out.id);
+  if (trackY === undefined) return;
   const hovered = state.hoverOutputId === out.id;
+  const sideSign = out.resolvedSide === 'above' ? -1 : 1;
 
-  // Connectors first (so they sit under the circle).
-  for (const sid of out.sourceIds) {
-    const s = model.strands.find((x) => x.id === sid);
-    if (!s) continue;
-    // Determine "from" point on the strand or spine.
-    const t = state.playhead;
-    const fromPoint = computeStrandHookPoint(s, model, m, t, out, finalX);
-    if (!fromPoint) continue;
-    drawConnector(ctx, fromPoint, { x: finalX, y }, out.colour, hovered || state.hoverId === sid, visible);
-  }
+  // Determine year range — from the model's start year up to its end year.
+  const yStart = new Date(model.tStart).getUTCFullYear();
+  const yEnd = new Date(model.tEnd).getUTCFullYear() + 1;
 
-  if (!visible) return;
-
-  // The output circle.
-  const radius = Math.max(9, Math.min(15, m.yScale * 16));
+  // Faint track baseline so the user can scan all years for this output.
   ctx.save();
-  // Glow if hovered.
-  if (hovered) {
-    ctx.fillStyle = hexAlpha(out.colour, 0.25);
-    ctx.beginPath();
-    ctx.arc(finalX, y, radius + 8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Paper-filled circle with coloured ring.
-  ctx.fillStyle = PAPER;
+  ctx.strokeStyle = hexAlpha(out.colour, hovered ? 0.5 : 0.18);
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
   ctx.beginPath();
-  ctx.arc(finalX, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = out.colour;
-  ctx.lineWidth = 2.4;
+  ctx.moveTo(m.leftX, trackY);
+  ctx.lineTo(m.rightX, trackY);
   ctx.stroke();
-  // Inner dot.
-  ctx.fillStyle = hexAlpha(out.colour, 0.85);
-  ctx.beginPath();
-  ctx.arc(finalX, y, radius * 0.32, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.setLineDash([]);
   ctx.restore();
 
-  // Label.
-  ctx.save();
-  ctx.font = '11px "DM Sans", system-ui, sans-serif';
-  ctx.fillStyle = INK;
-  const label = out.name;
-  const lw = ctx.measureText(label).width;
-  const labelY = y + (sideSign === -1 ? -radius - 8 : radius + 16);
-  // Background so the label remains readable on top of strands.
-  ctx.fillStyle = hexAlpha(PAPER, 0.85);
-  ctx.fillRect(finalX - lw / 2 - 3, labelY - 11, lw + 6, 13);
-  ctx.fillStyle = INK;
-  ctx.fillText(label, finalX - lw / 2, labelY);
-  ctx.restore();
+  // Label pill at the left edge of the track.
+  drawOutputLabel(ctx, m, out, trackY, hovered);
+
+  // For each year, render a dot + connectors to active source strands.
+  const playheadYear = new Date(state.playhead).getUTCFullYear();
+  for (let yr = yStart; yr <= yEnd; yr++) {
+    const yearMs = Date.UTC(yr, 0, 1);
+    // Use a "collection date" mid-year so it doesn't sit on top of the time-axis tick.
+    const collectionMs = yearMs + YEAR_MS * 0.5;
+    if (collectionMs > state.playhead) break; // not revealed yet
+    const dotX = timeToX(collectionMs, m);
+    if (dotX < m.leftX - 14 || dotX > m.rightX + 14) continue;
+
+    // Identify currently-active contributing sources.
+    const activeSources: ResolvedStrand[] = [];
+    for (const sid of out.sourceIds) {
+      const s = model.strands.find((x) => x.id === sid);
+      if (!s) continue;
+      if (collectionMs < s.startMs || collectionMs > s.mergeMs) continue;
+      activeSources.push(s);
+    }
+
+    // Draw connectors UNDER the dot.
+    for (const s of activeSources) {
+      const sourceY = m.centreY + strandCentreY(s, model, collectionMs) * m.yScale;
+      const highlight = hovered || state.hoverId === s.id;
+      drawCollectionConnector(
+        ctx,
+        { x: dotX, y: trackY },
+        { x: dotX, y: sourceY },
+        s.colour,
+        out.colour,
+        sideSign,
+        highlight,
+      );
+    }
+
+    // The dot itself. Most recent year is brightest, older ones fade.
+    const isLatest = yr === playheadYear;
+    const hasActive = activeSources.length > 0;
+    const dotAlpha = hasActive ? 1 : 0.4;
+    drawCollectionDot(ctx, dotX, trackY, out.colour, dotAlpha, isLatest || hovered);
+  }
 }
 
-/** Where on the strand (or spine) should a connector hook in? Picks a point
- *  that's currently visible at the playhead — the strand's leading edge if
- *  unmerged, the spine just below the output if merged. */
-function computeStrandHookPoint(
-  strand: ResolvedStrand,
-  model: ResolvedModel,
-  m: CanvasMetrics,
-  t: number,
-  out: ResolvedOutput,
-  outputX: number,
-): { x: number; y: number } | null {
-  if (t < strand.startMs) return null;
-  // Reference feeds hook on the spine at the output's x (they flow continuously).
-  if (strand.isReference) {
-    return { x: outputX, y: m.centreY };
-  }
-  // If the strand has merged into the spine by t, hook on the spine at the output's x.
-  if (strand.mergeMs <= t && strand.ancestry.includes('spine')) {
-    return { x: outputX, y: m.centreY };
-  }
-  // Otherwise hook on the strand at the strand's CURRENT leading edge (t).
-  const endT = Math.min(t, strand.mergeMs);
-  const hookX = clamp(timeToX(endT, m), m.leftX + 4, m.rightX - 4);
-  const hookY = m.centreY + strandCentreY(strand, model, endT) * m.yScale;
-  return { x: hookX, y: hookY };
-}
-
-function drawConnector(
+function drawOutputLabel(
   ctx: CanvasRenderingContext2D,
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  colour: string,
-  highlighted: boolean,
-  outputVisible: boolean,
+  m: CanvasMetrics,
+  out: ResolvedOutput,
+  trackY: number,
+  hovered: boolean,
 ) {
   ctx.save();
-  ctx.strokeStyle = hexAlpha(colour, highlighted ? 0.95 : (outputVisible ? 0.7 : 0.3));
-  ctx.lineWidth = highlighted ? 2.4 : 1.6;
-  ctx.lineCap = 'round';
-  // Cubic bezier — vertical control points so the curve bows out gently.
-  const dy = to.y - from.y;
-  const cp1 = { x: from.x, y: from.y + dy * 0.55 };
-  const cp2 = { x: to.x, y: to.y - dy * 0.55 };
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, to.x, to.y);
-  ctx.stroke();
+  ctx.font = '10.5px "DM Sans", system-ui, sans-serif';
+  const label = out.name;
+  const lw = ctx.measureText(label).width;
+  const padX = 8;
+  const w = lw + padX * 2;
+  const h = 18;
+  const x = m.leftX + 4;
+  // Pill background.
+  ctx.fillStyle = hovered ? out.colour : hexAlpha(out.colour, 0.92);
+  roundRect(ctx, x, trackY - h / 2, w, h, 9);
+  ctx.fill();
+  // Text.
+  ctx.fillStyle = PAPER;
+  ctx.fillText(label, x + padX, trackY + 3.5);
   ctx.restore();
+}
+
+function drawCollectionDot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  colour: string,
+  alpha: number,
+  emphasised: boolean,
+) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const r = emphasised ? 5.2 : 4;
+  // Halo for the latest / hovered instance.
+  if (emphasised) {
+    ctx.fillStyle = hexAlpha(colour, 0.22);
+    ctx.beginPath();
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Solid dot.
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  // Inner highlight.
+  ctx.fillStyle = hexAlpha('#ffffff', 0.55);
+  ctx.beginPath();
+  ctx.arc(x - r * 0.32, y - r * 0.32, r * 0.32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCollectionConnector(
+  ctx: CanvasRenderingContext2D,
+  fromOut: { x: number; y: number },
+  toSrc: { x: number; y: number },
+  sourceColour: string,
+  outputColour: string,
+  sideSign: number,
+  highlighted: boolean,
+) {
+  ctx.save();
+  // Use source colour so eye traces source → collection.
+  ctx.strokeStyle = hexAlpha(sourceColour, highlighted ? 0.95 : 0.55);
+  ctx.lineWidth = highlighted ? 2 : 1.2;
+  ctx.lineCap = 'round';
+  // Bezier with the control point pulled toward the source side so the curve
+  // hugs the strand briefly before splaying out to the collection track.
+  const dy = toSrc.y - fromOut.y;
+  const cp1 = { x: fromOut.x, y: fromOut.y + dy * 0.65 };
+  const cp2 = { x: toSrc.x, y: toSrc.y - dy * 0.25 };
+  ctx.beginPath();
+  ctx.moveTo(fromOut.x, fromOut.y);
+  ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, toSrc.x, toSrc.y);
+  ctx.stroke();
+  // Small terminator tick at the source end, in the output's colour, so the
+  // connection back to the consuming activity is still legible.
+  ctx.fillStyle = outputColour;
+  ctx.beginPath();
+  ctx.arc(toSrc.x, toSrc.y, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  void sideSign;
 }
 
 // ------- Playhead -------
@@ -723,15 +782,11 @@ export function hitTest(
   const t = state.playhead;
   const tAtX = xToTime(mx, m);
 
-  // Outputs first (large hit targets in their own band).
+  // Outputs first — match against their full horizontal track.
   for (const out of model.outputs) {
-    const sideSign = out.resolvedSide === 'above' ? -1 : 1;
-    const cx = timeToX(out.anchorMs, m);
-    const cy = m.centreY + sideSign * OUTPUT_OFFSET_PX * m.yScale;
-    const r = Math.max(8, Math.min(16, m.yScale * 18));
-    const dx = mx - cx;
-    const dy = my - cy;
-    if (Math.sqrt(dx * dx + dy * dy) <= r + 6) return { kind: 'output', id: out.id };
+    const trackY = m.outputTrackY.get(out.id);
+    if (trackY === undefined) continue;
+    if (Math.abs(my - trackY) <= 9) return { kind: 'output', id: out.id };
   }
 
   // Strands.

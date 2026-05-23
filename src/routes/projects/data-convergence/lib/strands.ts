@@ -19,18 +19,30 @@ import type {
 
 // ------- Tunable constants -------
 
-/** Vertical room per "unit of subtree weight" (layout px). yScale shrinks to fit. */
-export const WEIGHT_TO_PX = 0.06;
-export const MIN_SIBLING_GAP = 32;
+/** Layout base offset (px from spine for the closest-merging strand). */
+export const LAYOUT_BASE_OFFSET = 40;
+/** Per-rank vertical stride within a side (above OR below). */
+export const LAYOUT_RANK_STRIDE = 36;
+/** Strands ease onto the spine over the LAST `CONVERGE_WINDOW` of their life
+ *  — kept short so the fan-in pattern stays visible across most of the run. */
+export const CONVERGE_WINDOW = 0.18;
+/** Oscillation amplitude cap. */
+export const MAX_AMPLITUDE = 14;
+
+/** Thickness curve — wide dynamic range so 800-user sources read as ~5×
+ *  thicker than 100-user sources. */
 export const MIN_THICKNESS = 2;
-export const THICKNESS_EXP = 0.45;
-export const THICKNESS_SCALE = 0.55;
-export const SPINE_BASE_THICKNESS = 6;
-export const CONVERGE_WINDOW = 0.28;
-export const MAX_AMPLITUDE = 16;
+export const THICKNESS_EXP = 0.62;
+export const THICKNESS_SCALE = 0.42;
+
+export const SPINE_BASE_THICKNESS = 4;
 
 /** Outputs sit at this many px from the spine centreline (px, post-yScale). */
-export const OUTPUT_OFFSET_PX = 130;
+export const OUTPUT_OFFSET_PX = 170;
+
+// Legacy constants (still imported by tests / older code paths).
+export const WEIGHT_TO_PX = 0.06;
+export const MIN_SIBLING_GAP = 32;
 
 export function resolveModel(
   config: StrandConfig[],
@@ -160,9 +172,38 @@ export function resolveModel(
     subtreeWeight: subtreeWeight.get('spine') ?? 0,
   });
 
+  // V3 layout: for children of the spine, lay them out in rank order of merge
+  // date — earliest mergers closest, latest mergers furthest. Sides alternate
+  // above/below within rank-pairs. Non-reference strands and reference strands
+  // both follow this scheme. (Intermediate confluences still use the old
+  // subtree-weight layout under their own parent.)
   function assignChildren(parentId: ID | 'spine') {
     const kids = children.get(parentId) ?? [];
     if (kids.length === 0) return;
+
+    if (parentId === 'spine') {
+      // Rank by mergeMs ascending. Earliest first.
+      const sorted = [...kids].sort(
+        (a, b) => Date.parse(byId.get(a)!.mergeDate) - Date.parse(byId.get(b)!.mergeDate),
+      );
+      sorted.forEach((id, rank) => {
+        const above = rank % 2 === 0;
+        const pairIdx = Math.floor(rank / 2);
+        const magnitude = LAYOUT_BASE_OFFSET + pairIdx * LAYOUT_RANK_STRIDE;
+        const centre = above ? -magnitude : +magnitude;
+        layout.set(id, {
+          id, parent: parentId,
+          children: children.get(id) ?? [],
+          offsetFromParent: centre,
+          subtreeWeight: subtreeWeight.get(id) ?? 1,
+        });
+        assignChildren(id);
+      });
+      return;
+    }
+
+    // Non-spine parent: keep the older subtree-weight layout for any
+    // intermediate confluences a future scene might introduce.
     const sorted = [...kids].sort(
       (a, b) => (subtreeWeight.get(b) ?? 0) - (subtreeWeight.get(a) ?? 0),
     );

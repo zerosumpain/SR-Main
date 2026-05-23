@@ -1,190 +1,155 @@
-// Default scene — modelled on data the UK Department for Education collects
-// across a learner's lifetime: school (0-16), further education (16-18),
-// higher education (18-22), then adult skills and training. Plus reference
-// data and bi-directional feeds with local authorities for children's social
-// care.
+// V3 scene — 10 Department for Education data sources, all starting on
+// 1st Jan 2020, none merging into the spine until 2025 (attendance first),
+// then staggered through the next five years.
 //
-// Dates are anchored relative to a notional learner born 2010 — so the
-// timeline spans 2010 through 2080. The scene scales gracefully across the
-// 6m / 1y / 10y / lifetime zoom presets.
+// Volumes are deliberately spread so the visual width differences read at a
+// glance.
 
 import type { StrandConfig, OutputConfig } from './types';
 
-// Colour palette — warm + saturated, semi-organic. The DfE world has lots of
-// categories so we leave headroom for additional sources without clashing.
+// Shared start date — every source kicks off on this day.
+const T0 = '2020-01-01';
+
+// Warm + saturated palette, semi-organic.
 const COL = {
-  schoolDaily:    '#c0392b',  // attendance
-  schoolTermly:   '#e67e22',  // school census
-  schoolKS:       '#d35400',  // key-stage assessments
-  schoolPhonics:  '#f1c40f',  // phonics
-  feALevel:       '#8e44ad',  // A-level results
-  heHesa:         '#2980b9',  // HESA
-  apprentice:     '#16a085',  // apprenticeships
-  trainingAdult:  '#27ae60',  // adult skills
-  laSafeguard:    '#34495e',  // children's social care
-  refSchools:     '#7f8c8d',  // GIAS / Get Information about Schools reference
-  refQualNet:     '#95a5a6',  // qualifications net (Ofqual reference)
+  attendance:    '#c0392b',
+  schoolCensus:  '#e67e22',
+  phonics:       '#f1c40f',
+  ks2:           '#d35400',
+  ks4:           '#8e44ad',
+  alevel:        '#9b59b6',
+  hesa:          '#2980b9',
+  apprentice:    '#16a085',
+  adultSkills:   '#27ae60',
+  laCare:        '#34495e',
 };
 
 export const DEFAULT_CONFIG: StrandConfig[] = [
-  // -------------- SCHOOL: ages 4-16 (2014 - 2026) --------------
+  // 1. Attendance — first to merge.
   {
     id: 'attendance',
-    name: 'Pupil attendance (daily)',
-    colour: COL.schoolDaily,
-    startDate: '2014-09-01',
-    mergeDate: '2026-07-20',
+    name: 'Pupil attendance',
+    colour: COL.attendance,
+    startDate: T0,
+    mergeDate: '2025-04-01',
     mergeInto: 'spine',
-    users: 320,
+    users: 820,
     cadence: 'daily',
     outputs: ['out-perf-tables', 'out-pupil-premium', 'out-regional-dashboard'],
   },
+  // 2. School Census.
   {
     id: 'school-census',
-    name: 'School Census (termly)',
-    colour: COL.schoolTermly,
-    startDate: '2014-09-01',
-    mergeDate: '2026-07-20',
+    name: 'School Census',
+    colour: COL.schoolCensus,
+    startDate: T0,
+    mergeDate: '2025-10-01',
     mergeInto: 'spine',
-    users: 280,
+    users: 620,
     cadence: 'termly',
     outputs: ['out-perf-tables', 'out-pupil-premium', 'out-statistical-release', 'out-regional-dashboard'],
   },
+  // 3. Phonics screening.
   {
     id: 'phonics',
     name: 'Phonics screening (Y1)',
-    colour: COL.schoolPhonics,
-    startDate: '2015-06-01',
-    mergeDate: '2016-07-15',
-    mergeInto: 'spine',
-    users: 90,
-    cadence: 'annual',
-    outputs: ['out-statistical-release'],
-  },
-  {
-    id: 'ks2',
-    name: 'KS2 SATs (Y6)',
-    colour: COL.schoolKS,
-    startDate: '2021-05-10',
-    mergeDate: '2021-07-20',
-    mergeInto: 'spine',
-    users: 130,
-    cadence: 'annual',
-    outputs: ['out-perf-tables', 'out-statistical-release', 'out-regional-dashboard'],
-  },
-  {
-    id: 'ks4',
-    name: 'KS4 / GCSE results',
-    colour: COL.schoolKS,
-    startDate: '2026-05-15',
-    mergeDate: '2026-08-25',
-    mergeInto: 'spine',
-    users: 220,
-    cadence: 'annual',
-    outputs: ['out-perf-tables', 'out-ebacc', 'out-statistical-release', 'out-regional-dashboard'],
-  },
-
-  // -------------- FURTHER EDUCATION: ages 16-18 (2026 - 2028) --------------
-  {
-    id: 'alevels',
-    name: 'A-Level / T-Level results',
-    colour: COL.feALevel,
-    startDate: '2026-09-01',
-    mergeDate: '2028-08-25',
-    mergeInto: 'spine',
-    users: 180,
-    cadence: 'annual',
-    outputs: ['out-perf-tables', 'out-ebacc', 'out-skills-funding', 'out-statistical-release'],
-  },
-  {
-    id: 'ilr-college',
-    name: 'ILR — college learner records',
-    colour: COL.apprentice,
-    startDate: '2026-09-01',
-    mergeDate: '2030-08-31',
-    mergeInto: 'spine',
-    users: 140,
-    cadence: 'termly',
-    outputs: ['out-skills-funding', 'out-regional-dashboard'],
-  },
-
-  // -------------- HIGHER EDUCATION: ages 18-22 (2028 - 2032) --------------
-  {
-    id: 'hesa',
-    name: 'HESA student record',
-    colour: COL.heHesa,
-    startDate: '2028-09-01',
-    mergeDate: '2032-07-15',
+    colour: COL.phonics,
+    startDate: T0,
+    mergeDate: '2026-04-01',
     mergeInto: 'spine',
     users: 160,
     cadence: 'annual',
+    outputs: ['out-statistical-release'],
+  },
+  // 4. KS2 SATs.
+  {
+    id: 'ks2',
+    name: 'KS2 SATs (Y6)',
+    colour: COL.ks2,
+    startDate: T0,
+    mergeDate: '2026-10-01',
+    mergeInto: 'spine',
+    users: 340,
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-statistical-release', 'out-regional-dashboard'],
+  },
+  // 5. KS4 / GCSE results.
+  {
+    id: 'ks4',
+    name: 'KS4 / GCSE results',
+    colour: COL.ks4,
+    startDate: T0,
+    mergeDate: '2027-04-01',
+    mergeInto: 'spine',
+    users: 470,
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-ebacc', 'out-statistical-release', 'out-regional-dashboard'],
+  },
+  // 6. A-Level / T-Level.
+  {
+    id: 'alevels',
+    name: 'A-Level / T-Level results',
+    colour: COL.alevel,
+    startDate: T0,
+    mergeDate: '2027-10-01',
+    mergeInto: 'spine',
+    users: 290,
+    cadence: 'annual',
+    outputs: ['out-perf-tables', 'out-ebacc', 'out-skills-funding', 'out-statistical-release'],
+  },
+  // 7. HESA student record.
+  {
+    id: 'hesa',
+    name: 'HESA student record',
+    colour: COL.hesa,
+    startDate: T0,
+    mergeDate: '2028-04-01',
+    mergeInto: 'spine',
+    users: 360,
+    cadence: 'annual',
     outputs: ['out-statistical-release', 'out-skills-funding'],
   },
-
-  // -------------- ADULT SKILLS & TRAINING: ages 16+ (rolling) --------------
+  // 8. Apprenticeships.
   {
     id: 'apprenticeships',
     name: 'Apprenticeships data',
     colour: COL.apprentice,
-    startDate: '2026-10-01',
-    mergeDate: '2040-10-01',
+    startDate: T0,
+    mergeDate: '2029-04-01',
     mergeInto: 'spine',
-    users: 110,
+    users: 230,
     cadence: 'termly',
     outputs: ['out-skills-funding', 'out-statistical-release', 'out-regional-dashboard'],
   },
+  // 9. Adult Skills records.
   {
     id: 'adult-skills',
     name: 'Adult learning records',
-    colour: COL.trainingAdult,
-    startDate: '2028-01-01',
-    mergeDate: '2080-12-31',
+    colour: COL.adultSkills,
+    startDate: T0,
+    mergeDate: '2030-04-01',
     mergeInto: 'spine',
-    users: 90,
+    users: 140,
     cadence: 'adhoc',
     outputs: ['out-skills-funding', 'out-statistical-release'],
   },
-
-  // -------------- LOCAL AUTHORITY: children's social care --------------
+  // 10. LA Children's Social Care — last to merge.
   {
     id: 'la-csc',
     name: 'LA children’s social care',
-    colour: COL.laSafeguard,
-    startDate: '2014-04-01',
-    mergeDate: '2028-03-31',
+    colour: COL.laCare,
+    startDate: T0,
+    mergeDate: '2031-04-01',
     mergeInto: 'spine',
-    users: 130,
+    users: 410,
     cadence: 'biannual',
     outputs: ['out-safeguarding', 'out-statistical-release'],
   },
-
-  // -------------- REFERENCE DATA: continuous metadata feeds --------------
-  {
-    id: 'ref-gias',
-    name: 'GIAS — schools reference data',
-    colour: COL.refSchools,
-    startDate: '2014-01-01',
-    mergeDate: '2080-12-31',
-    mergeInto: 'spine',
-    users: 60,
-    cadence: 'continuous',
-    isReference: true,
-    outputs: ['out-perf-tables', 'out-regional-dashboard'],
-  },
-  {
-    id: 'ref-qual',
-    name: 'Qualifications reference net',
-    colour: COL.refQualNet,
-    startDate: '2014-01-01',
-    mergeDate: '2080-12-31',
-    mergeInto: 'spine',
-    users: 50,
-    cadence: 'continuous',
-    isReference: true,
-    outputs: ['out-perf-tables', 'out-ebacc', 'out-skills-funding'],
-  },
 ];
 
+// Collections / data products. Each runs ANNUALLY: every year from 2020
+// onwards an instance appears at that year's x, connected to the source
+// strand at the same point in time.
 export const DEFAULT_OUTPUTS: OutputConfig[] = [
   {
     id: 'out-perf-tables',

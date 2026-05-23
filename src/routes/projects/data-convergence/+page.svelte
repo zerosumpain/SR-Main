@@ -47,11 +47,10 @@
       strands = saved.strands;
       outputs = saved.outputs;
     }
-    // Start the playhead at a meaningful point — for the default DfE scene,
-    // mid-secondary-school (2024) is a good demo moment with multiple strands active.
-    const m = resolveModel(strands, outputs);
-    const middle = m.tStart + (m.tEnd - m.tStart) * 0.45;
-    playhead = middle;
+    // Default playhead sits at Jan 2023 — early enough that the fan-in is
+    // fully visible (no strand has begun converging), but late enough that
+    // collection annual instances have started reveiling.
+    playhead = Date.parse('2023-01-01');
     mounted = true;
 
     const mq = window.matchMedia('(orientation: portrait)');
@@ -64,7 +63,8 @@
     const hashMatch = hash.match(/t=([0-9.]+)/);
     if (hashMatch) {
       const ratio = Math.max(0, Math.min(1, parseFloat(hashMatch[1])));
-      playhead = m.tStart + ratio * (m.tEnd - m.tStart);
+      const debugModel = resolveModel(strands, outputs);
+      playhead = debugModel.tStart + ratio * (debugModel.tEnd - debugModel.tStart);
     }
     const zoomMatch = hash.match(/zoom=(6m|1y|10y|adult)/);
     if (zoomMatch) zoom = zoomMatch[1] as ZoomLevel;
@@ -107,14 +107,27 @@
     }
   });
 
+  // Playback rate is tied to the active zoom — the visual rhythm of the spine
+  // stays comprehensible at any level. Multiplier ×speed is applied on top.
+  //   6m     → 7 days / real second
+  //   1y     → 30 days / real second
+  //   10y    → 90 days / real second
+  //   adult  → ~180 days / real second (≈6 months)
+  const dayMs = 1000 * 60 * 60 * 24;
+  const ZOOM_DAYS_PER_SECOND: Record<string, number> = {
+    '6m': 7,
+    '1y': 30,
+    '10y': 90,
+    'adult': 182,
+  };
+
   function loop(ts: number) {
     if (!playing) { rafHandle = null; return; }
     if (lastTs === null) lastTs = ts;
     const dt = (ts - lastTs) / 1000;
     lastTs = ts;
-    const span = Math.max(1, model.tEnd - model.tStart);
-    const baseSeconds = 32;
-    const delta = (span / baseSeconds) * speed * dt;
+    const daysPerSec = ZOOM_DAYS_PER_SECOND[zoom] ?? 30;
+    const delta = daysPerSec * dayMs * speed * dt;
     playhead = Math.min(model.tEnd, playhead + delta);
     if (playhead >= model.tEnd) {
       playing = false;
