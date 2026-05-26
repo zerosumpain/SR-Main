@@ -619,6 +619,12 @@
   const pendingStreamDeltas = new Map<string, string>();
   let streamFlushHandle: ReturnType<typeof setTimeout> | null = null;
   const STREAM_FLUSH_MS = 50;
+  // Bubbles whose first token has already been rendered. Subsequent tokens
+  // for these bubbles fall through to the 50ms batched flush; the first
+  // token for any bubble NOT in this set is flushed synchronously so the
+  // user sees the first character with no setTimeout wait. Cleared per-bubble
+  // when the stream finishes.
+  const bubblesWithFirstTokenRendered = new Set<string>();
   function flushStreamDeltas() {
     streamFlushHandle = null;
     if (pendingStreamDeltas.size === 0) return;
@@ -637,6 +643,18 @@
       chatNodeId,
       (pendingStreamDeltas.get(chatNodeId) ?? '') + delta,
     );
+    if (!bubblesWithFirstTokenRendered.has(chatNodeId)) {
+      // First token for this bubble — flush synchronously so TTFT isn't
+      // gated by the 50ms timer. After this, the bubble is registered for
+      // batched coalescing on subsequent tokens.
+      bubblesWithFirstTokenRendered.add(chatNodeId);
+      if (streamFlushHandle !== null) {
+        clearTimeout(streamFlushHandle);
+        streamFlushHandle = null;
+      }
+      flushStreamDeltas();
+      return;
+    }
     if (streamFlushHandle === null) {
       streamFlushHandle = setTimeout(flushStreamDeltas, STREAM_FLUSH_MS);
     }
@@ -1253,6 +1271,7 @@
       streamFlushHandle = null;
     }
     flushStreamDeltas();
+    bubblesWithFirstTokenRendered.delete(chatNodeId);
     streamingFor = { ...streamingFor, [chatNodeId]: false };
     chatJobs = { ...chatJobs, [chatNodeId]: null };
     // Reload to pick up the persisted assistant message; only then drop
@@ -1742,6 +1761,7 @@
       // that triggered a run stays in "running…" forever from the panel's
       // perspective.
       streamingFor = { ...streamingFor, [pending.chatNodeId]: false };
+      bubblesWithFirstTokenRendered.delete(pending.chatNodeId);
     }
   }
 
