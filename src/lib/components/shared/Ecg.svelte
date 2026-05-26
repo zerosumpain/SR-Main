@@ -2,7 +2,11 @@
   import { onMount } from 'svelte';
   import { prefersReducedMotion } from '$lib/components/health/v2/utils';
 
-  let { rhr = 64, fullbleed = true }: { rhr?: number; fullbleed?: boolean } = $props();
+  let {
+    rhr = 64,
+    fullbleed = true,
+    showGrid = true,
+  }: { rhr?: number; fullbleed?: boolean; showGrid?: boolean } = $props();
 
   const W = 800;
   const H = 280;
@@ -109,11 +113,13 @@
   role="img"
   aria-label="Live ECG trace at {bpm} bpm"
 >
-  <g class="h-ecg-grid">
-    {#each grid as g (g.key)}
-      <line class:major={g.major} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} />
-    {/each}
-  </g>
+  {#if showGrid}
+    <g class="h-ecg-grid">
+      {#each grid as g (g.key)}
+        <line class:major={g.major} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} />
+      {/each}
+    </g>
+  {/if}
   <path class="h-ecg-trace-bg" {d} />
   <defs>
     <clipPath id={clipId}>

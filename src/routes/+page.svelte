@@ -12,7 +12,6 @@
 
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
-  import ScrollReveal from '$lib/components/ScrollReveal.svelte';
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
@@ -104,7 +103,7 @@
     <BiomeBackground {store} position="absolute" transparent />
   {:else}
     <div class="absolute inset-0 pointer-events-none">
-      <Ecg rhr={roundPulse(pulse)} />
+      <Ecg rhr={roundPulse(pulse)} showGrid={false} />
     </div>
   {/if}
 
@@ -137,83 +136,7 @@
   >
     <span>Signature · {bgMode === 'biome' ? 'Biome' : 'Pulse'} · Live</span>
     {#if syncedText}<span>Synced {syncedText}</span>{/if}
-    <span style="opacity: 0.5;">Scroll ↓</span>
   </div>
-</section>
-
-<!-- DIVIDER -->
-<hr class="rule" />
-
-<!-- THE BIOME — explanation as a bold callout -->
-<section class="px-6 sm:px-10 md:px-16 py-12">
-  <ScrollReveal>
-    <div class="max-w-4xl">
-      <p class="label" style="color: var(--text-ghost); margin-bottom: 4px;">02 / SIGNATURE</p>
-      <p class="label mb-4">The Biome</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">PULSE</p>
-          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-            When my heart rate rises, the particles quicken. Each beat pulses through the field.
-          </p>
-        </div>
-        <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">WEATHER</p>
-          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-            When it rains outside, it rains here too. Wind direction and speed drive particle drift.
-          </p>
-        </div>
-        <div class="accent-strip">
-          <p class="display text-[20px] mb-2" style="color: var(--text-primary);">RECOVERY</p>
-          <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-            Colour intensity tracks recovery score. Higher recovery means more vivid particles.
-          </p>
-        </div>
-      </div>
-    </div>
-  </ScrollReveal>
-</section>
-
-<!-- DIVIDER -->
-<hr class="rule" />
-
-<!-- WRITING — full width, list style -->
-<section class="px-6 sm:px-10 md:px-16 py-12" style="background: var(--bg-section);">
-  <ScrollReveal>
-    <div class="max-w-4xl">
-      <div class="flex justify-between items-end mb-6">
-        <div>
-          <p class="label" style="color: var(--text-ghost); margin-bottom: 4px;">03 / WRITING</p>
-          <p class="label">Writing</p>
-        </div>
-        <a href="/blog" class="nav-link">All posts →</a>
-      </div>
-
-      {#if data.posts.length}
-        <div class="space-y-0">
-          {#each data.posts as post, i}
-            <a
-              href="/blog/{post.slug}"
-              class="block py-4 group transition-colors hover:bg-[rgba(196,87,10,0.04)]"
-              style="border-top: 1px solid var(--divider);"
-            >
-              <div class="flex justify-between items-baseline gap-4">
-                <span class="text-base sm:text-lg font-medium group-hover:text-[var(--accent)] transition-colors" style="color: var(--text-primary);">
-                  {post.title}
-                </span>
-                <span class="label shrink-0" style="font-size: 10px;">
-                  {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
-                </span>
-              </div>
-            </a>
-          {/each}
-          <div style="border-top: 1px solid var(--divider);"></div>
-        </div>
-      {:else}
-        <p class="text-sm" style="color: var(--text-muted);">Nothing published yet.</p>
-      {/if}
-    </div>
-  </ScrollReveal>
 </section>
 
 <!-- FOOTER — dense, utilitarian -->
