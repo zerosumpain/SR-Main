@@ -1,11 +1,12 @@
 <script lang="ts">
-  import HealthNav from '$lib/components/health/v2/HealthNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import Hero from '$lib/components/health/v2/Hero.svelte';
   import Narrative from '$lib/components/health/v2/Narrative.svelte';
   import PulseGrid from '$lib/components/health/v2/PulseGrid.svelte';
   import Breakdown from '$lib/components/health/v2/Breakdown.svelte';
   import Correlations from '$lib/components/health/v2/Correlations.svelte';
   import EpicActivities from '$lib/components/health/v2/EpicActivities.svelte';
+  import { fmtAgo } from '$lib/components/health/v2/utils';
 
   let { data } = $props();
 </script>
@@ -26,7 +27,14 @@
 </svelte:head>
 
 <div class="h-root">
-  <HealthNav syncedAgoSeconds={data.syncedAgoSeconds} />
+  <PageHeader title="HEALTH">
+    {#snippet meta()}
+      <span class="h-sync-meta">
+        <span class="h-pulse-dot" aria-hidden="true"></span>
+        Live · synced {fmtAgo(data.syncedAgoSeconds)} ago
+      </span>
+    {/snippet}
+  </PageHeader>
 
   <Hero
     series={data.series}
@@ -245,8 +253,31 @@
     margin: 0;
   }
 
+  .h-sync-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+  }
+  .h-pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(196, 87, 10, 0.6);
+    animation: sr-pulse 1.5s ease-in-out infinite;
+    display: inline-block;
+    margin-right: 8px;
+  }
+  @keyframes sr-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.25); }
+  }
   @media (prefers-reduced-motion: reduce) {
-    :global(.h-pulse-dot) {
+    .h-pulse-dot {
       animation: none;
     }
   }
