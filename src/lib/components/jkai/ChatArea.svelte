@@ -19,6 +19,7 @@
   import VoiceRecorder from './VoiceRecorder.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
+  import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { onMount, tick } from 'svelte';
 
   let {
@@ -214,6 +215,9 @@
   // above — Svelte 5 doesn't track in-place Map mutations, so we
   // construct a fresh Map on every write.
   let thinkingByBubble = $state<Map<string, { text: string; expanded: boolean }>>(new Map());
+  // Pending TTFT marks keyed by progressId. Populated at send time, fired on
+  // first 'token' or 'thinking' event, and deleted on stream completion.
+  let pendingTtft = new Map<string, { onFirstToken: () => void }>();
 
   function toggleThinking(bubbleId: string) {
     const prev = thinkingByBubble.get(bubbleId);
@@ -257,6 +261,7 @@
     heartbeat = null;
 
     const progressId = crypto.randomUUID();
+    pendingTtft.set(progressId, startTtftMark(progressId));
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -288,6 +293,12 @@
       let accumulatedContent = '';
       const onSilentEvent = (data: any) => {
         if (data.type === 'connected') return;
+        // TTFT mark: fire on first sign of life (text token or thinking delta)
+        if ((data.type === 'token' || data.type === 'thinking') && pendingTtft.has(progressId)) {
+          const m = pendingTtft.get(progressId)!;
+          m.onFirstToken();
+          pendingTtft.delete(progressId);
+        }
         if (data.type === 'token') {
           accumulatedContent += data.delta;
           messages = messages.map((m) =>
@@ -315,6 +326,7 @@
           return;
         }
         if (data.type === 'done') {
+          pendingTtft.delete(progressId);
           const result = data.result ?? {};
           const finalMessage = (result.message as string) ?? accumulatedContent;
           messages = messages.map((m) =>
@@ -326,6 +338,7 @@
           return;
         }
         if (data.type === 'error') {
+          pendingTtft.delete(progressId);
           messages = messages.map((m) =>
             m.id === progressId
               ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown'}` }
@@ -687,6 +700,7 @@
     scrollToBottom();
 
     const progressId = crypto.randomUUID();
+    pendingTtft.set(progressId, startTtftMark(progressId));
     // Start with a subtle typing indicator — no progress box yet
     messages = [...messages, {
       id: progressId,
@@ -726,6 +740,13 @@
 
       const processSseEvent = (data: any) => {
           if (data.type === 'connected') return;
+
+          // TTFT mark: fire on first sign of life (text token or thinking delta)
+          if ((data.type === 'token' || data.type === 'thinking') && pendingTtft.has(progressId)) {
+            const m = pendingTtft.get(progressId)!;
+            m.onFirstToken();
+            pendingTtft.delete(progressId);
+          }
 
           if (data.type === 'token') {
             heartbeat = null;
@@ -924,6 +945,7 @@
 
           if (data.type === 'done') {
             heartbeat = null;
+            pendingTtft.delete(progressId);
             pendingPlan = null;
             pendingConfirm = null;
             pendingClarify = null;
@@ -961,6 +983,7 @@
 
           if (data.type === 'error') {
             heartbeat = null;
+            pendingTtft.delete(progressId);
             pendingPlan = null;
             pendingConfirm = null;
             pendingClarify = null;
