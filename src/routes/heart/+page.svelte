@@ -6,7 +6,7 @@
 
 <script lang="ts">
   import HeartSimulation from '$lib/components/HeartSimulation.svelte';
-  import SiteNav from '$lib/components/SiteNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let bpm = $state(70);
   let count = $state(9000);
@@ -14,7 +14,7 @@
 </script>
 
 <div class="page">
-  <SiteNav variant="hero" />
+  <PageHeader title="heart" />
 
   <section class="hero">
     <div class="canvas-wrap">
