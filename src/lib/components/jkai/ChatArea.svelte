@@ -207,6 +207,22 @@
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
+  // Per-bubble reasoning state from Hermes `thinking` frames. Keyed by
+  // the assistant bubble's `message.id` (the in-flight `progressId`) so
+  // the panel stays attached to its bubble after finalisation. Uses the
+  // same $state<Map> + reassign-to-new-Map pattern as `expandedTools`
+  // above — Svelte 5 doesn't track in-place Map mutations, so we
+  // construct a fresh Map on every write.
+  let thinkingByBubble = $state<Map<string, { text: string; expanded: boolean }>>(new Map());
+
+  function toggleThinking(bubbleId: string) {
+    const prev = thinkingByBubble.get(bubbleId);
+    if (!prev) return;
+    const next = new Map(thinkingByBubble);
+    next.set(bubbleId, { ...prev, expanded: !prev.expanded });
+    thinkingByBubble = next;
+  }
+
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let eventSource: EventSource | null = null;
@@ -286,6 +302,16 @@
             m.id === progressId ? { ...m, content: accumulatedContent, isProgress: false } : m,
           );
           scrollToBottom();
+          return;
+        }
+        if (data.type === 'thinking') {
+          // Reasoning-delta surfaced even on silent-send paths so
+          // approval-flow turns ("/approve") that reason can show
+          // their work too.
+          const prev = thinkingByBubble.get(progressId) ?? { text: '', expanded: false };
+          const next = new Map(thinkingByBubble);
+          next.set(progressId, { ...prev, text: prev.text + data.delta });
+          thinkingByBubble = next;
           return;
         }
         if (data.type === 'done') {
@@ -721,6 +747,19 @@
             return;
           }
 
+          if (data.type === 'thinking') {
+            // Append reasoning-delta to the per-bubble Reasoning panel.
+            // Keyed by progressId so the panel stays attached to its
+            // bubble after finalisation. Clear heartbeat — reasoning
+            // arriving means the model is alive and producing.
+            heartbeat = null;
+            const prev = thinkingByBubble.get(progressId) ?? { text: '', expanded: false };
+            const next = new Map(thinkingByBubble);
+            next.set(progressId, { ...prev, text: prev.text + data.delta });
+            thinkingByBubble = next;
+            return;
+          }
+
           if (data.type === 'tool_start') {
             heartbeat = null;
             const newStep: ToolStep = {
@@ -1130,6 +1169,26 @@
                 {#each Object.values(subAgents) as agent (agent.agentId)}
                   <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
                 {/each}
+                {#if thinkingByBubble.has(msg.id)}
+                  {@const t = thinkingByBubble.get(msg.id)!}
+                  <div class="reasoning-panel">
+                    <button
+                      type="button"
+                      class="reasoning-toggle"
+                      onclick={() => toggleThinking(msg.id)}
+                      aria-expanded={t.expanded ? 'true' : 'false'}
+                    >
+                      <span class="reasoning-label">Reasoning</span>
+                      <span class="reasoning-preview">
+                        {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
+                      </span>
+                      <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
+                    </button>
+                    {#if t.expanded}
+                      <pre class="reasoning-body">{t.text}</pre>
+                    {/if}
+                  </div>
+                {/if}
                 <ul class="step-cards">
                   {#each msg.toolSteps as step, stepIndex}
                     {#if step.tool === 'status_update'}
@@ -1239,6 +1298,26 @@
               {#each Object.values(subAgents) as agent (agent.agentId)}
                 <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
               {/each}
+              {#if thinkingByBubble.has(msg.id)}
+                {@const t = thinkingByBubble.get(msg.id)!}
+                <div class="reasoning-panel mb-3">
+                  <button
+                    type="button"
+                    class="reasoning-toggle"
+                    onclick={() => toggleThinking(msg.id)}
+                    aria-expanded={t.expanded ? 'true' : 'false'}
+                  >
+                    <span class="reasoning-label">Reasoning</span>
+                    <span class="reasoning-preview">
+                      {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
+                    </span>
+                    <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
+                  </button>
+                  {#if t.expanded}
+                    <pre class="reasoning-body">{t.text}</pre>
+                  {/if}
+                </div>
+              {/if}
               <div class="mb-3 flex items-center gap-1 px-1 py-2">
                 <span class="typing-dot" style="background: var(--text-ghost);"></span>
                 <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.15s;"></span>
@@ -1261,6 +1340,26 @@
               {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
                 <PromoteToolBanner messageId={msg.id} {marker} />
               {/each}
+              {#if thinkingByBubble.has(msg.id)}
+                {@const t = thinkingByBubble.get(msg.id)!}
+                <div class="reasoning-panel mb-2">
+                  <button
+                    type="button"
+                    class="reasoning-toggle"
+                    onclick={() => toggleThinking(msg.id)}
+                    aria-expanded={t.expanded ? 'true' : 'false'}
+                  >
+                    <span class="reasoning-label">Reasoning</span>
+                    <span class="reasoning-preview">
+                      {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
+                    </span>
+                    <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
+                  </button>
+                  {#if t.expanded}
+                    <pre class="reasoning-body">{t.text}</pre>
+                  {/if}
+                </div>
+              {/if}
             {/if}
             <div class="relative">
               {#if msg.source === 'followup'}
@@ -1456,6 +1555,64 @@
     display: inline-block;
     animation: typing-bounce 1.2s ease-in-out infinite;
     opacity: 0.5;
+  }
+
+  /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
+  .reasoning-panel {
+    margin: 4px 0;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent) 3%, transparent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .reasoning-toggle {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--text-muted);
+    text-align: left;
+    cursor: pointer;
+  }
+  .reasoning-toggle:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .reasoning-label {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 10px;
+  }
+  .reasoning-preview {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+  }
+  .reasoning-chev {
+    opacity: 0.55;
+    font-size: 10px;
+  }
+  .reasoning-body {
+    margin: 0;
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    color: var(--text-muted);
+    border-top: 1px solid var(--card-border);
+    max-height: 240px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
   }
 
   @keyframes typing-bounce {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HermesClient } from './hermes-client';
+import { HermesClient, type SseFrame } from './hermes-client';
+import { adaptFrameToCanvasSse } from './sse-adapter';
 
 describe('HermesClient', () => {
   let originalFetch: typeof fetch;
@@ -105,5 +106,46 @@ describe('HermesClient', () => {
     expect(frames[1].kind).toBe('replace');
 
     global.fetch = originalFetch;
+  });
+});
+
+describe('adaptFrameToCanvasSse — thinking frame', () => {
+  it('emits a thinking JobEvent with the delta', () => {
+    const frame: SseFrame = {
+      kind: 'thinking',
+      chat_id: 'c1',
+      message_id: 'think:c1',
+      content: 'reasoning step',
+      metadata: {},
+      ts: Date.now(),
+    };
+    const events = adaptFrameToCanvasSse(frame);
+    expect(events).toEqual([
+      { type: 'thinking', delta: 'reasoning step', messageId: 'think:c1' },
+    ]);
+  });
+
+  it('returns send frames as token deltas (regression: existing kinds still work)', () => {
+    const frame: SseFrame = {
+      kind: 'send',
+      chat_id: 'c1',
+      message_id: 'm1',
+      content: 'hi',
+      metadata: {},
+      ts: 1,
+    };
+    expect(adaptFrameToCanvasSse(frame)).toEqual([{ type: 'token', delta: 'hi' }]);
+  });
+
+  it('returns finalize frames as empty (caller emits its own done)', () => {
+    const frame: SseFrame = {
+      kind: 'finalize',
+      chat_id: 'c1',
+      message_id: 'm1',
+      content: '',
+      metadata: {},
+      ts: 2,
+    };
+    expect(adaptFrameToCanvasSse(frame)).toEqual([]);
   });
 });

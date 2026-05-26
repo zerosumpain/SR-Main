@@ -46,13 +46,15 @@ export interface SseFrameAttachment {
 }
 
 export interface SseFrame {
-  /** `send`/`replace`/`finalize` are text-bubble frames; `image`/`audio`/
-   *  `video`/`pdf`/`document` carry an attachment uploaded to
+  /** `send`/`replace`/`finalize` are text-bubble frames; `thinking` carries
+   *  a reasoning-delta for the collapsible Reasoning panel (rendered
+   *  alongside the in-flight assistant bubble, not inside it); `image`/
+   *  `audio`/`video`/`pdf`/`document` carry an attachment uploaded to
    *  `/api/jkai/attachments` so the chat UI can render the bytes inline
    *  instead of the legacy `🖼️ Image: …` / `🔊 Audio: …` / `🎬 Video: …` /
    *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
    *  back to. */
-  kind: 'send' | 'replace' | 'finalize' | 'image' | 'audio' | 'video' | 'pdf' | 'document';
+  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document';
   chat_id: string;
   message_id: string;
   content: string;

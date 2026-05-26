@@ -40,6 +40,12 @@ export type JobEvent =
   // Hermes `replace` frame: overwrite the in-flight bubble's content with
   // the full new body (the model issued a revision, not an append).
   | { type: 'replace_bubble'; content: string }
+  // Hermes `thinking` frame: a reasoning-delta routed to the collapsible
+  // Reasoning panel beside the in-flight assistant bubble. Eliminates the
+  // dead-air window on reasoning-heavy turns (GLM-5, Claude extended
+  // thinking) by surfacing model deliberation before the first answer
+  // token arrives.
+  | { type: 'thinking'; delta: string; messageId?: string }
   | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string; summary?: string }
   | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
   | { type: 'status'; text: string }

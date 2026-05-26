@@ -16,6 +16,7 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
+import { adaptFrameToCanvasSse } from '$lib/jkai/sse-adapter';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 
@@ -79,36 +80,9 @@ type AssistantAttachment = {
   source: 'web' | 'whatsapp' | 'generated';
 };
 
-function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
-  switch (frame.kind) {
-    case 'send':
-      return [{ type: 'token', delta: frame.content }];
-    case 'replace':
-      return [{ type: 'replace_bubble', content: frame.content }];
-    case 'finalize':
-      // The jkai adapter emits a synthetic `finalize` with empty content
-      // once `handle_message` finishes — the actual reply text has already
-      // been delivered via prior `send` frames. The pump below uses
-      // `job.partialResponse` (accumulated from those `send` frames) for
-      // the final `message` field, so we don't return a `done` event here.
-      // Returning empty so the pump's own finalize handling fires.
-      return [];
-    case 'image':
-    case 'audio':
-    case 'video':
-    case 'pdf':
-    case 'document':
-      // Media frames carry an attachment id that was uploaded by the
-      // jkai_platform plugin to `/api/jkai/attachments`. The chat UI's
-      // attachment-render path keys off `result.attachments` on the
-      // terminating `done` event — so we don't emit a per-frame JobEvent
-      // here; the pump below collects the attachment metadata and folds
-      // it into `job.result.attachments` before dispatching `done`.
-      return [];
-    default:
-      return [];
-  }
-}
+// adaptFrameToCanvasSse: see $lib/jkai/sse-adapter.ts. Extracted so
+// the frame→JobEvent mapping is unit-testable without standing up a
+// SvelteKit request context.
 
 function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
   // Any frame that carries a media attachment row qualifies — gating on
