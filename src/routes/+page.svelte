@@ -17,7 +17,7 @@
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
-  import SiteNav from '$lib/components/SiteNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { roundPulse } from '$lib/biome/state';
   import { fillStrap } from '$lib/landing/hero-titles-buckets';
   import type { BiomeStore } from '$lib/biome/store.svelte';
@@ -95,9 +95,12 @@
   });
 </script>
 
-<!-- HERO — full viewport, /health hero language -->
+<PageHeader title="strange ramblings" titleHref="/" />
+
+<!-- HERO — viewport minus nav -->
 <section
-  class="relative min-h-screen flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden"
+  class="relative flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden"
+  style="min-height: calc(100vh - var(--site-nav-height));"
 >
   {#if bgMode === 'biome'}
     <BiomeBackground {store} position="absolute" transparent />
@@ -106,9 +109,6 @@
       <Ecg rhr={roundPulse(pulse)} showGrid={false} />
     </div>
   {/if}
-
-  <!-- Top bar -->
-  <SiteNav variant="hero" />
 
   <!-- Center — hero copy -->
   <div class="relative z-10 flex-1 flex items-center">
