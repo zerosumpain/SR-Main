@@ -142,12 +142,24 @@ register({
   },
   category: 'Scraper',
   toolset: 'scraper',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const { runScript } = await import('$lib/workflows/scraper/script-runner');
     const r = await runScript({
       profile: args.profile as string,
       searchQuery: args.searchQuery as string | undefined,
       vars: args.vars as Record<string, string> | undefined,
+      onProgress: (ev) => {
+        if (!ctx?.emit) return;
+        const t = ev.t as string | undefined;
+        if (t === 'script.decompose.start') ctx.emit(`Decomposing query into vars…`);
+        else if (t === 'script.decompose.done') ctx.emit(`Query decomposed — launching browser…`);
+        else if (t === 'script.exec.start') ctx.emit(`Browser running script for "${args.profile as string}"…`);
+        else if (t === 'script.exec.done') {
+          const count = ev.itemCount as number | undefined;
+          if (ev.success) ctx.emit(`Script finished — ${count ?? 0} item(s) extracted`);
+          else ctx.emit(`Script finished with error: ${ev.error ?? 'unknown'}`);
+        }
+      },
     });
     return {
       success: r.success,
