@@ -19,6 +19,7 @@ import { listMcpTools } from './server';
 import { executeTool } from '$lib/workflows/site-tools/registry';
 import { publishToolStep } from '$lib/jkai/tool-step-bus';
 import { summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
 // Phase 1.5: all 132 registered tools are exposed via MCP. Hermes' skill
 // system constrains which subset the agent considers for a given chat
@@ -246,7 +247,10 @@ export async function dispatchJsonRpc(
         }
 
         try {
-          const out = await executeTool(name, args, {
+          // Build the shared exec context once — used both by the normal
+          // executeTool path and by the jkai_extended dispatcher (which
+          // forwards it to executeTool internally on operation="invoke").
+          const execCtx = {
             // Thread the chat_id through as conversationId so tool handlers
             // can wire chat-handoff features (e.g. workflow_build_from_spec
             // attaches a chat node configured with the originating
@@ -271,7 +275,18 @@ export async function dispatchJsonRpc(
                 ts: Date.now(),
               });
             },
-          });
+          };
+
+          // jkai_extended isn't in the site-tools registry — it's an
+          // MCP-layer dispatcher. Route it directly to dispatchMetaTool so
+          // executeTool() doesn't return "Unknown tool".
+          const out =
+            name === JKAI_EXTENDED_TOOL.name
+              ? await dispatchMetaTool(
+                  args as Parameters<typeof dispatchMetaTool>[0],
+                  execCtx,
+                )
+              : await executeTool(name, args, execCtx);
           if (busKey) {
             const raw = typeof out === 'string' ? out : JSON.stringify(out);
             const preview = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
