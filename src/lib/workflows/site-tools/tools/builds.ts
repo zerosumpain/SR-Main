@@ -395,6 +395,28 @@ register({
       if (f.path.startsWith('/') || f.path.includes('..')) {
         return { success: false, error: `invalid file path: ${f.path}` };
       }
+      // Fail fast on path-as-content: the model occasionally passes a host
+      // path (e.g. "/home/john/app.html" or "/tmp/foo.html") as the file
+      // content, expecting the tool to read from disk. We don't — content
+      // is the literal file body. Catch this early so we return a useful
+      // error to the LLM instead of publishing a "build" whose entire
+      // payload is the path string itself.
+      const trimmed = f.content.trim();
+      const looksLikePath =
+        trimmed.length < 256 &&
+        !trimmed.includes('\n') &&
+        /^\/[A-Za-z0-9_./~-]+\.[A-Za-z0-9]{1,8}$/.test(trimmed);
+      if (looksLikePath) {
+        return {
+          success: false,
+          error:
+            `files[${files.indexOf(f)}].content looks like a filesystem path ` +
+            `("${trimmed}"), not file body text. The "content" field must be the ` +
+            `literal HTML/CSS/JS as a string. Do not write the file separately ` +
+            `and pass its path here — paste the body inline. Example: ` +
+            `{ path: "index.html", content: "<!doctype html><html>...</html>" }.`,
+        };
+      }
     }
 
     const hasIndex = files.some((f) => f.path === 'index.html');
