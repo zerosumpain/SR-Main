@@ -5,10 +5,108 @@ import { eq } from 'drizzle-orm';
 import { proxyToSandbox } from '$lib/jkai/serve';
 import { startProjectServer } from '$lib/jkai/sandbox';
 import type { ServeConfig } from '$lib/jkai/types';
+import { readFile, stat } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 
 // Track in-flight revive attempts so concurrent requests during the wake-up
 // window don't all fan out to startProjectServer (which is expensive).
 const reviving = new Set<string>();
+
+// Static MIME map for register_hermes_build's typical outputs (HTML/CSS/JS +
+// a few images/fonts). Anything not listed falls back to octet-stream — the
+// browser handles it fine for download but won't render. Expand on demand.
+const STATIC_MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+/** Serve a kind:'static' build directly from /home/jkai/workspace/<id>/live/.
+ *
+ * register_hermes_build writes files into this directory at registration time
+ * (no dev server, no proxy needed). Without this branch the request bounces
+ * through proxyToSandbox(0,…) → fake 502 → fake "Waking preview" page →
+ * infinite refresh, because there's no startCommand to revive.
+ *
+ * Path-traversal guard: resolve the requested file inside the workspace root
+ * and refuse anything outside.
+ *
+ * HTML pages get a <base href> injection so relative links + asset URLs in the
+ * served app resolve through the proxy prefix (e.g. <link href="style.css">
+ * resolves to /api/jkai/proxy/<id>/style.css) — same convention proxyToSandbox
+ * uses, kept identical so the rest of the build pipeline behaves the same.
+ */
+async function serveStaticBuild(
+  buildId: string,
+  requestedPath: string,
+  baseHref: string,
+): Promise<Response> {
+  const workspaceRoot = `/home/jkai/workspace/${buildId}/live`;
+  // Normalise the requested path and refuse absolute / parent-escaping paths.
+  const cleanRequested = requestedPath.replace(/^\/+/, '') || 'index.html';
+  const resolved = resolve(workspaceRoot, cleanRequested);
+  const rootResolved = resolve(workspaceRoot) + sep;
+  if (resolved !== resolve(workspaceRoot) && !resolved.startsWith(rootResolved)) {
+    return new Response('forbidden', { status: 403 });
+  }
+
+  let st: Awaited<ReturnType<typeof stat>>;
+  try {
+    st = await stat(resolved);
+  } catch {
+    return new Response('not found', { status: 404 });
+  }
+
+  // Directory request → fall back to index.html inside it. Mirrors `serve`'s
+  // default behaviour and matches how publishBuild's static copy would resolve.
+  const targetPath = st.isDirectory() ? join(resolved, 'index.html') : resolved;
+  let body: Buffer;
+  try {
+    body = await readFile(targetPath);
+  } catch {
+    return new Response('not found', { status: 404 });
+  }
+
+  const ext = extname(targetPath).toLowerCase();
+  const mime = STATIC_MIME[ext] ?? 'application/octet-stream';
+
+  // Inject a <base href> into served HTML so relative URLs resolve through
+  // the proxy prefix. Mirrors proxyToSandbox's behaviour for dev-server HTML.
+  if (mime.startsWith('text/html') && !body.includes(Buffer.from('<base'))) {
+    const baseTag = `<base href="${baseHref}">`;
+    const text = body.toString('utf-8');
+    // Insert just after <head>, or at the start of <html>, or at the very top.
+    const headIdx = text.search(/<head[^>]*>/i);
+    const injected = headIdx >= 0
+      ? text.slice(0, headIdx + text.match(/<head[^>]*>/i)![0].length) + baseTag + text.slice(headIdx + text.match(/<head[^>]*>/i)![0].length)
+      : baseTag + text;
+    body = Buffer.from(injected, 'utf-8');
+  }
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'content-type': mime,
+      'cache-control': 'no-cache',
+    },
+  });
+}
 
 function wakingUpHtml(refreshUrl: string): string {
   return `<!doctype html>
@@ -67,6 +165,18 @@ const handler: RequestHandler = async ({ params, request }) => {
   const path = '/' + (params.path || '');
   // Base href ensures all relative URLs in the proxied app resolve through the proxy
   const baseHref = `/api/jkai/proxy/${params.id}/`;
+
+  // Static-kind builds (e.g. register_hermes_build output: a single index.html
+  // app, no dev server) have port=0 / startCommand=null. The proxy path below
+  // would 502 and bounce into the "Waking preview" infinite refresh loop.
+  // Serve the files directly from the live/ workspace instead — that's the
+  // version register_hermes_build wrote and the same version publishBuild
+  // would copy to /projects/<slug>/. When HOST_MODE=1 (VPS prod), workspace
+  // files live on the host fs and are readable by this node process.
+  if (config.kind === 'static') {
+    const result = await serveStaticBuild(params.id, params.path || '', baseHref);
+    return result;
+  }
 
   const resp = await proxyToSandbox(config.port, path, request, baseHref);
 
