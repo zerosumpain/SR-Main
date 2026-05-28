@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
+  import { renderMarkdown } from '$lib/canvas/ChatMarkdown.svelte';
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
@@ -225,6 +226,14 @@
     const next = new Map(thinkingByBubble);
     next.set(bubbleId, { ...prev, expanded: !prev.expanded });
     thinkingByBubble = next;
+  }
+
+  /** Last non-empty line of reasoning text, sliced for the collapsed preview.
+   * Strips markdown emphasis markers from common patterns so the inline preview
+   * reads cleanly when reasoning has bold/italic. */
+  function reasoningPreview(text: string): string {
+    const lastLine = (text || '').split('\n').filter((l) => l.trim()).at(-1) ?? '';
+    return lastLine.replace(/[*_`#]+/g, '').trim().slice(0, 80);
   }
 
   let chatContainer: HTMLDivElement;
@@ -1202,13 +1211,13 @@
                       aria-expanded={t.expanded ? 'true' : 'false'}
                     >
                       <span class="reasoning-label">Reasoning</span>
-                      <span class="reasoning-preview">
-                        {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
-                      </span>
+                      {#if !t.expanded}
+                        <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
+                      {/if}
                       <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
                     </button>
                     {#if t.expanded}
-                      <pre class="reasoning-body">{t.text}</pre>
+                      <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
                     {/if}
                   </div>
                 {/if}
@@ -1331,13 +1340,13 @@
                     aria-expanded={t.expanded ? 'true' : 'false'}
                   >
                     <span class="reasoning-label">Reasoning</span>
-                    <span class="reasoning-preview">
-                      {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
-                    </span>
+                    {#if !t.expanded}
+                      <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
+                    {/if}
                     <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
                   </button>
                   {#if t.expanded}
-                    <pre class="reasoning-body">{t.text}</pre>
+                    <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
                   {/if}
                 </div>
               {/if}
@@ -1373,13 +1382,13 @@
                     aria-expanded={t.expanded ? 'true' : 'false'}
                   >
                     <span class="reasoning-label">Reasoning</span>
-                    <span class="reasoning-preview">
-                      {t.expanded ? '' : (t.text.split('\n').filter(l => l.trim()).at(-1) ?? '').slice(0, 80)}
-                    </span>
+                    {#if !t.expanded}
+                      <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
+                    {/if}
                     <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
                   </button>
                   {#if t.expanded}
-                    <pre class="reasoning-body">{t.text}</pre>
+                    <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
                   {/if}
                 </div>
               {/if}
@@ -1625,17 +1634,109 @@
     opacity: 0.55;
     font-size: 10px;
   }
+  /* Reasoning body — renders the model's chain-of-thought as markdown.
+   * Uses `:global()` to style the marked-produced HTML, mirroring the
+   * approach in ChatMarkdown.svelte but tuned dimmer/denser for secondary
+   * "thinking" content rather than the primary assistant reply. */
   .reasoning-body {
     margin: 0;
-    padding: 8px 10px;
-    white-space: pre-wrap;
+    padding: 10px 12px;
     color: var(--text-muted);
     border-top: 1px solid var(--card-border);
-    max-height: 240px;
+    max-height: 320px;
     overflow-y: auto;
+    font-family: var(--font-sans, inherit);
+    font-size: 11.5px;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .reasoning-body :global(p) {
+    margin: 0 0 0.55em;
+  }
+  .reasoning-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+  .reasoning-body :global(strong) {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .reasoning-body :global(em) {
+    font-style: italic;
+  }
+  .reasoning-body :global(h1),
+  .reasoning-body :global(h2),
+  .reasoning-body :global(h3),
+  .reasoning-body :global(h4) {
+    margin: 0.7em 0 0.3em;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .reasoning-body :global(h1:first-child),
+  .reasoning-body :global(h2:first-child),
+  .reasoning-body :global(h3:first-child),
+  .reasoning-body :global(h4:first-child) {
+    margin-top: 0;
+  }
+  .reasoning-body :global(ul),
+  .reasoning-body :global(ol) {
+    margin: 0.2em 0 0.55em;
+    padding-left: 1.3em;
+  }
+  .reasoning-body :global(ul) { list-style: disc outside; }
+  .reasoning-body :global(ol) { list-style: decimal outside; }
+  .reasoning-body :global(ul:last-child),
+  .reasoning-body :global(ol:last-child) {
+    margin-bottom: 0;
+  }
+  .reasoning-body :global(li) {
+    margin: 0.15em 0;
+  }
+  .reasoning-body :global(li > p) {
+    margin: 0;
+  }
+  .reasoning-body :global(code) {
     font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    padding: 0 4px;
+    border-radius: 2px;
+    color: var(--text-primary);
+  }
+  .reasoning-body :global(pre) {
+    margin: 0.5em 0;
+    padding: 7px 9px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-section));
+    border: 1px solid var(--card-border);
+    border-radius: 3px;
+    overflow-x: auto;
     font-size: 11px;
     line-height: 1.5;
+    color: var(--text-primary);
+  }
+  .reasoning-body :global(pre code) {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  .reasoning-body :global(blockquote) {
+    border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    padding-left: 9px;
+    margin: 0.4em 0;
+    color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+  }
+  .reasoning-body :global(hr) {
+    border: none;
+    border-top: 1px dashed var(--card-border);
+    margin: 0.7em 0;
+  }
+  .reasoning-body :global(a) {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   @keyframes typing-bounce {
