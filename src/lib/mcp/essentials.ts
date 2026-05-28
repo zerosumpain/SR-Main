@@ -21,6 +21,16 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   'register_heartbeat_action',
   // Primary outbound notification channel.
   'whatsapp_send',
+  // Static-app creation path. jkai-general SKILL.md explicitly tells the
+  // model to call this whenever it builds a self-contained HTML app in
+  // chat. Routing it through jkai_extended.invoke is fragile (the model
+  // sometimes misforms the wrapper args), and the prompt-cost of a single
+  // tool definition is modest vs. losing the "build me a quick app" UX.
+  'register_hermes_build',
+  // New-workflow path. Same rationale: the design-first flow ends with a
+  // workflow_build_from_spec call, and the model must reliably hit it
+  // after the user confirms. Cheap insurance.
+  'workflow_build_from_spec',
 ]);
 
 export function isMetaToolEnabled(): boolean {
