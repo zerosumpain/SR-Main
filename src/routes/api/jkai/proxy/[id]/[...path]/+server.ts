@@ -99,7 +99,8 @@ async function serveStaticBuild(
     body = Buffer.from(injected, 'utf-8');
   }
 
-  return new Response(body, {
+  // Buffer → Uint8Array for the Response constructor's BodyInit shape.
+  return new Response(new Uint8Array(body), {
     status: 200,
     headers: {
       'content-type': mime,

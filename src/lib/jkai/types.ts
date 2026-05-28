@@ -7,9 +7,15 @@ export interface BudgetConfig {
 
 export interface ServeConfig {
   port: number;
-  startCommand: string;
+  startCommand: string | null;
   healthCheck: string;
   description: string;
+  /** When set to 'static', the build is a self-contained set of files in
+   * /home/jkai/workspace/<id>/live/ and the proxy serves them directly
+   * (no dev server). register_hermes_build emits this kind for static
+   * HTML apps. When omitted or 'dev', the proxy expects a backing dev
+   * server listening on `port` and bridges it via proxyToSandbox. */
+  kind?: 'static' | 'dev';
 }
 
 export interface ActionRecord {
