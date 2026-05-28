@@ -228,7 +228,11 @@ export function getRecentPulses(): PulseEvent[] {
 
 function phaseLabel(phase: JobPhase): string {
   switch (phase) {
-    case 'starting': return 'Starting up';
+    // 'starting' is the default phase the server sits in until something more
+    // specific happens (first token, tool_start, or an explicit setJobPhase).
+    // "Connecting…" is a more honest user-facing label — the model has not
+    // told us it's doing anything yet, only that the run was created.
+    case 'starting': return 'Connecting…';
     case 'thinking': return 'Thinking';
     case 'tool_running': return 'Running tool';
     case 'waiting_llm': return 'Drafting reply';

@@ -182,26 +182,73 @@
     else stopHeartbeatTicker();
     return () => stopHeartbeatTicker();
   });
-  // Recompute countdown / stall state from heartbeat + hbNow. Derived values
-  // are read into the template at every tick.
+  // Hide the elapsed counter until 3s — below that it's noise.
+  const SHOW_ELAPSED_AFTER_MS = 3_000;
+  // The reasoning panel is "actively streaming" if a thinking delta arrived
+  // in the last 2s. While it is, suppress the heartbeat line — the panel
+  // itself signals progress.
+  const REASONING_LINGER_MS = 2_000;
+  // Distinguish "server hasn't sent heartbeat" from "server is fine but the
+  // model has stopped emitting tokens/thoughts/tool events". If the heartbeat
+  // is fresh but no model event has arrived in this many ms, render the
+  // heartbeat line as "provider_slow" instead of letting it sit silent.
+  const PROVIDER_SLOW_MS = 15_000;
+
+  // Recompute countdown / stall state from heartbeat + hbNow + recent model
+  // activity. Derived values are read into the template at every tick.
   const hbDerived = $derived.by(() => {
     if (!heartbeat) return null;
     const nextDueAt = heartbeat.lastBeatAt + HEARTBEAT_INTERVAL_MS;
     const remainingMs = nextDueAt - hbNow;
     const overdueMs = -remainingMs; // positive means we've blown the next-beat deadline
-    let state: 'fresh' | 'jitter' | 'slow' | 'stuck';
-    if (overdueMs < 0) state = 'fresh';
-    else if (overdueMs < STALL_JITTER_MS) state = 'jitter';
-    else if (overdueMs < STALL_SLOW_MS) state = 'slow';
-    else state = overdueMs < STALL_STUCK_MS ? 'slow' : 'stuck';
+    let state: 'fresh' | 'jitter' | 'server_slow' | 'provider_slow' | 'stuck';
+    if (overdueMs >= STALL_STUCK_MS) {
+      state = 'stuck';
+    } else if (overdueMs >= STALL_JITTER_MS) {
+      state = 'server_slow';
+    } else if (overdueMs >= 0) {
+      state = 'jitter';
+    } else {
+      // Heartbeats are arriving on time. Check whether the model itself is
+      // making progress — if not, surface that distinctly.
+      const phase = heartbeat.phase;
+      const phaseExpectsProgress = phase === 'thinking' || phase === 'waiting_llm' || phase === 'tool_running';
+      const stallMs = lastModelEventAt > 0 ? hbNow - lastModelEventAt : (hbNow - heartbeat.lastBeatAt + heartbeat.elapsedSec * 1000);
+      state = phaseExpectsProgress && stallMs > PROVIDER_SLOW_MS ? 'provider_slow' : 'fresh';
+    }
     // displayedSec ticks 5 → 4 → 3 → 2 → 1 → 0 while fresh, stays at 0 once stalled
     const displayedSec = Math.max(0, Math.ceil(remainingMs / 1000));
     // overdueSec counts UP once we've passed the expected beat
     const overdueSec = Math.max(0, Math.floor(overdueMs / 1000));
     // total elapsed for the run — keep it live, not frozen at last beat
     const liveElapsedSec = heartbeat.elapsedSec + Math.floor((hbNow - heartbeat.lastBeatAt) / 1000);
-    return { state, displayedSec, overdueSec, liveElapsedSec };
+    // Provider-stall duration (only meaningful in the provider_slow state)
+    const providerStallSec = lastModelEventAt > 0 ? Math.floor((hbNow - lastModelEventAt) / 1000) : liveElapsedSec;
+    const showElapsed = liveElapsedSec * 1000 >= SHOW_ELAPSED_AFTER_MS;
+    // Suppress the heartbeat line when reasoning is actively streaming —
+    // the Reasoning panel itself is showing live deltas, so the heartbeat
+    // is redundant noise.
+    const reasoningActive = lastReasoningAt > 0 && hbNow - lastReasoningAt < REASONING_LINGER_MS;
+    return { state, displayedSec, overdueSec, liveElapsedSec, providerStallSec, showElapsed, reasoningActive };
   });
+
+  // True when any tool step on the in-flight bubble is still running — the
+  // tool step card already shows what's happening, so the heartbeat line
+  // would be a duplicate signal.
+  const anyToolRunning = $derived.by(() => {
+    for (const m of messages) {
+      if (!m.isProgress) continue;
+      if (m.toolSteps?.some((s) => s.status === 'running')) return true;
+    }
+    return false;
+  });
+
+  // Single decision for "render the heartbeat line" — used by both render
+  // sites (with-tools and typing-only) so the suppression rules stay in
+  // sync without two duplicated conditional ladders in the template.
+  const showHeartbeatLine = $derived(
+    !!(heartbeat && hbDerived) && !anyToolRunning && !hbDerived!.reasoningActive,
+  );
   let connectionWarning = $state<string | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
@@ -217,6 +264,20 @@
   // Pending TTFT marks keyed by progressId. Populated at send time, fired on
   // first 'token' or 'thinking' event, and deleted on stream completion.
   let pendingTtft = new Map<string, { onFirstToken: () => void }>();
+
+  // Timestamps used to decide whether to render the heartbeat line. The
+  // server's heartbeat fires every 5s with a phase label, but it adds noise
+  // when something more informative is already on screen (an active tool
+  // step, or a reasoning panel that's still streaming deltas). Suppress the
+  // heartbeat in those cases — one signal per moment.
+  //
+  // ``lastReasoningAt`` tracks the wall-clock time of the last 'thinking'
+  // event; the heartbeat-line conditional treats reasoning as 'active' for
+  // 2s after the last delta. ``lastModelEventAt`` is any token / thinking /
+  // tool event — used to distinguish 'model is slow' from 'server is slow'
+  // when heartbeats are still arriving but no model progress has been made.
+  let lastReasoningAt = $state(0);
+  let lastModelEventAt = $state(0);
 
   function toggleThinking(bubbleId: string) {
     const prev = thinkingByBubble.get(bubbleId);
@@ -755,6 +816,20 @@
             pendingTtft.delete(progressId);
           }
 
+          // Track activity timestamps so the heartbeat-line can suppress
+          // itself when something more informative is already on screen
+          // (reasoning, tool calls) — see lastReasoningAt / lastModelEventAt.
+          if (data.type === 'thinking') lastReasoningAt = Date.now();
+          if (
+            data.type === 'token' ||
+            data.type === 'thinking' ||
+            data.type === 'tool_start' ||
+            data.type === 'tool_result' ||
+            data.type === 'replace_bubble'
+          ) {
+            lastModelEventAt = Date.now();
+          }
+
           if (data.type === 'token') {
             heartbeat = null;
             accumulatedContent += data.delta;
@@ -1031,7 +1106,10 @@
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {
-      case 'starting': return 'Starting up';
+      // Keep in sync with $lib/workflows/chat/job-store.ts phaseLabel() —
+      // the server-side label is also "Connecting…" for the default
+      // 'starting' phase so we match here for any client-only renders.
+      case 'starting': return 'Connecting…';
       case 'thinking': return 'Thinking';
       case 'tool_running': return 'Running tool';
       case 'waiting_llm': return 'Drafting reply';
@@ -1054,6 +1132,40 @@
     }
   }
 </script>
+
+{#snippet heartbeatLine()}
+  {#if showHeartbeatLine && heartbeat && hbDerived}
+    <div
+      class="heartbeat-line"
+      role="status"
+      aria-live="polite"
+      data-phase={heartbeat.phase}
+      data-stall={hbDerived.state}
+    >
+      <span class="hb-dot"></span>
+      <span class="hb-phase">{phaseHumanLabel(heartbeat.phase)}</span>
+      {#if heartbeat.summary && heartbeat.summary !== phaseHumanLabel(heartbeat.phase) + '…'}
+        <span class="hb-summary">{heartbeat.summary}</span>
+      {/if}
+      {#if hbDerived.showElapsed}
+        <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
+      {/if}
+      {#if hbDerived.state === 'fresh'}
+        <!-- Quietest: no countdown noise while things are healthy. The elapsed
+             counter above is enough signal that work is in progress. -->
+      {:else if hbDerived.state === 'jitter'}
+        <span class="hb-countdown jitter">· checking…</span>
+      {:else if hbDerived.state === 'provider_slow'}
+        <span class="hb-countdown slow">· z.ai slow ({hbDerived.providerStallSec}s no progress)</span>
+      {:else if hbDerived.state === 'server_slow'}
+        <span class="hb-countdown slow">· server slow ({hbDerived.overdueSec}s overdue)</span>
+      {:else}
+        <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
+        <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 <div class="flex flex-col h-full relative">
   <!-- Chat header -->
@@ -1145,30 +1257,7 @@
                     onresolve={() => { pendingClarify = null; }}
                   />
                 {/if}
-                {#if heartbeat && hbDerived}
-                  <div
-                    class="heartbeat-line"
-                    role="status"
-                    aria-live="polite"
-                    data-phase={heartbeat.phase}
-                    data-stall={hbDerived.state}
-                  >
-                    <span class="hb-dot"></span>
-                    <span class="hb-phase">{phaseHumanLabel(heartbeat.phase)}</span>
-                    <span class="hb-summary">{heartbeat.summary}</span>
-                    <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
-                    {#if hbDerived.state === 'fresh'}
-                      <span class="hb-countdown">· next check {hbDerived.displayedSec}s</span>
-                    {:else if hbDerived.state === 'jitter'}
-                      <span class="hb-countdown jitter">· checking…</span>
-                    {:else if hbDerived.state === 'slow'}
-                      <span class="hb-countdown slow">· connection slow ({hbDerived.overdueSec}s overdue)</span>
-                    {:else}
-                      <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
-                      <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
-                    {/if}
-                  </div>
-                {/if}
+                {@render heartbeatLine()}
                 {#if connectionWarning}
                   <div class="conn-warning" role="status" aria-live="polite">
                     <span class="hb-dot warn"></span>
@@ -1282,28 +1371,7 @@
                   onresolve={() => { pendingClarify = null; }}
                 />
               {/if}
-              {#if heartbeat && hbDerived}
-                <div
-                  class="heartbeat-line mb-3"
-                  role="status"
-                  aria-live="polite"
-                  data-stall={hbDerived.state}
-                >
-                  <span class="hb-dot"></span>
-                  <span class="hb-summary">{heartbeat.summary}</span>
-                  <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
-                  {#if hbDerived.state === 'fresh'}
-                    <span class="hb-countdown">· next check {hbDerived.displayedSec}s</span>
-                  {:else if hbDerived.state === 'jitter'}
-                    <span class="hb-countdown jitter">· checking…</span>
-                  {:else if hbDerived.state === 'slow'}
-                    <span class="hb-countdown slow">· connection slow ({hbDerived.overdueSec}s overdue)</span>
-                  {:else}
-                    <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
-                    <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
-                  {/if}
-                </div>
-              {/if}
+              <div class="hb-wrap">{@render heartbeatLine()}</div>
               {#each Object.values(subAgents) as agent (agent.agentId)}
                 <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
               {/each}
@@ -1327,11 +1395,12 @@
                   {/if}
                 </div>
               {/if}
-              <div class="mb-3 flex items-center gap-1 px-1 py-2">
-                <span class="typing-dot" style="background: var(--text-ghost);"></span>
-                <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.15s;"></span>
-                <span class="typing-dot" style="background: var(--text-ghost); animation-delay: 0.3s;"></span>
-              </div>
+              <!-- Typing-dots block removed (2026-05-28): the heartbeat-line +
+                   reasoning panel + tool-step card collectively cover every
+                   in-flight state. The dots carried no information beyond
+                   "the bubble is in-flight" — which is already implied by
+                   the bubble's presence — so they were pure visual noise
+                   stacking on top of the more informative indicators. -->
             {/if}
           {:else if msg.source === 'status_update'}
             <!-- Mid-task working note — stylistically distinct from a real reply.
@@ -1556,14 +1625,10 @@
 </div>
 
 <style>
-  .typing-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    display: inline-block;
-    animation: typing-bounce 1.2s ease-in-out infinite;
-    opacity: 0.5;
-  }
+  /* Wrap div for the second heartbeat-line render site — kept as a hook
+   * for potential future spacing/positioning tweaks; the line itself
+   * styles its own margins. */
+  .hb-wrap { margin-bottom: 0.75rem; }
 
   /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
   .reasoning-panel {
@@ -1713,11 +1778,6 @@
     color: var(--accent);
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-
-  @keyframes typing-bounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
-    30% { transform: translateY(-4px); opacity: 0.7; }
   }
 
   .heartbeat-line {
