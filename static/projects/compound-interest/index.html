@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound Interest Calculator — Strange Ramblings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1a1a1a;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text-dim: #888;
+    --accent: #4ade80;
+    --accent-dim: rgba(74, 222, 128, 0.15);
+    --accent2: #facc15;
+    --accent2-dim: rgba(250, 204, 21, 0.15);
+    --danger: #f87171;
+    --font-display: 'Archivo Black', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .brand {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+  .brand a { color: var(--accent); text-decoration: none; }
+  .brand a:hover { text-decoration: underline; }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+  }
+
+  /* --- Inputs Panel --- */
+  .inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 0.4rem; }
+  .field label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  .field .input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .field input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    outline: none;
+  }
+  .field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  .field .value-display {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 500;
+    min-width: 70px;
+    text-align: right;
+    color: var(--accent);
+  }
+  .field.full-width { grid-column: 1 / -1; }
+
+  /* --- Toggle --- */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .toggle-row span { font-size: 0.85rem; color: var(--text-dim); }
+  .toggle-row span.active { color: var(--text); font-weight: 600; }
+  .toggle-btn {
+    width: 48px; height: 26px;
+    background: var(--border);
+    border-radius: 13px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+  }
+  .toggle-btn.on { background: var(--accent); }
+  .toggle-btn::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 20px; height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle-btn.on::after { transform: translateX(22px); }
+
+  /* --- Summary Cards --- */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+  }
+  .card .card-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+  }
+  .card .card-value {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 500;
+  }
+  .card .card-sub {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 0.2rem;
+  }
+  .card.green .card-value { color: var(--accent); }
+  .card.yellow .card-value { color: var(--accent2); }
+  .card.red .card-value { color: var(--danger); }
+
+  /* --- Chart --- */
+  .chart-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+  }
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+  }
+  canvas { width: 100%; height: 300px; }
+  .chart-legend {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  /* --- Table --- */
+  .table-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+  .table-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .table-header .table-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  thead th {
+    padding: 0.75rem 1rem;
+    text-align: right;
+    font-weight: 400;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child { text-align: left; }
+  tbody td {
+    padding: 0.6rem 1rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td:first-child { text-align: left; color: var(--text-dim); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  .compound-val { color: var(--accent); }
+  .simple-val { color: var(--accent2); }
+  .contrib-val { color: var(--text-dim); }
+  .highlight-row { background: var(--accent-dim) !important; }
+
+  /* --- Responsive --- */
+  @media (max-width: 600px) {
+    body { padding: 1rem 0.75rem; }
+    .inputs { padding: 1rem; }
+    .card .card-value { font-size: 1.2rem; }
+    canvas { height: 220px; }
+    table { font-size: 0.72rem; }
+    thead th, tbody td { padding: 0.5rem 0.6rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="brand"><a href="https://strangeramblings.com">sr.</a> / tools / compound interest</div>
+  <h1>Compound Interest Calculator</h1>
+  <p class="subtitle">Model your investment growth over time. Drag the sliders, watch the math.</p>
+
+  <!-- Inputs -->
+  <div class="inputs">
+    <div class="field">
+      <label>Initial Investment</label>
+      <div class="input-row">
+        <input type="range" id="principal" min="100" max="100000" step="100" value="5000">
+        <div class="value-display" id="principal-val">£5,000</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Annual Interest Rate</label>
+      <div class="input-row">
+        <input type="range" id="rate" min="0.5" max="20" step="0.1" value="5">
+        <div class="value-display" id="rate-val">5.0%</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Years</label>
+      <div class="input-row">
+        <input type="range" id="years" min="1" max="50" step="1" value="20">
+        <div class="value-display" id="years-val">20</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Monthly Contribution</label>
+      <div class="input-row">
+        <input type="range" id="monthly" min="0" max="2000" step="25" value="0">
+        <div class="value-display" id="monthly-val">£0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compounding frequency toggle -->
+  <div class="toggle-row">
+    <span>Annual</span>
+    <button class="toggle-btn" id="freqToggle" onclick="toggleFreq()"></button>
+    <span>Monthly compounding</span>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="card green">
+      <div class="card-label">Final Balance (Compound)</div>
+      <div class="card-value" id="final-balance">—</div>
+      <div class="card-sub" id="final-sub"></div>
+    </div>
+    <div class="card yellow">
+      <div class="card-label">Total Interest Earned</div>
+      <div class="card-value" id="total-interest">—</div>
+      <div class="card-sub" id="interest-pct"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Contributions</div>
+      <div class="card-value" id="total-contrib" style="color:var(--text)">—</div>
+      <div class="card-sub" id="contrib-sub"></div>
+    </div>
+    <div class="card red">
+      <div class="card-label">Simple Interest Diff</div>
+      <div class="card-value" id="diff-val">—</div>
+      <div class="card-sub">compound vs simple</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-container">
+    <div class="chart-title">Growth Over Time</div>
+    <canvas id="chart"></canvas>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Compound</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Simple</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--border)"></div>Contributions</div>
+    </div>
+  </div>
+
+  <!-- Year-by-Year Table -->
+  <div class="table-container">
+    <div class="table-header">
+      <div class="table-title">Year-by-Year Breakdown</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Interest</th>
+            <th>Compound Total</th>
+            <th>Simple Total</th>
+            <th>Contributions</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const fmt = (n) => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+const $ = (id) => document.getElementById(id);
+const inputs = { principal: $('principal'), rate: $('rate'), years: $('years'), monthly: $('monthly') };
+const displays = { principal: $('principal-val'), rate: $('rate-val'), years: $('years-val'), monthly: $('monthly-val') };
+
+let compoundMonthly = false;
+
+function toggleFreq() {
+  compoundMonthly = !compoundMonthly;
+  $('freqToggle').classList.toggle('on', compoundMonthly);
+  calculate();
+}
+
+function calculate() {
+  const P = +inputs.principal.value;
+  const r = +inputs.rate.value / 100;
+  const Y = +inputs.years.value;
+  const M = +inputs.monthly.value;
+
+  displays.principal.textContent = fmt(P);
+  displays.rate.textContent = r.toFixed(1) + '%';
+  displays.years.textContent = Y;
+  displays.monthly.textContent = fmt(M);
+
+  const data = [];
+  let compoundBal = P;
+  let simpleBal = P;
+  let totalContrib = P;
+
+  for (let y = 1; y <= Y; y++) {
+    const annualContrib = M * 12;
+    totalContrib += annualContrib;
+
+    // Compound
+    if (compoundMonthly) {
+      // Monthly compounding: apply rate/12 each month, add monthly contribution each month
+      for (let m = 0; m < 12; m++) {
+        compoundBal += M; // contribution at start of month
+        compoundBal *= (1 + r / 12);
+      }
+    } else {
+      // Annual compounding
+      compoundBal += annualContrib;
+      compoundBal *= (1 + r);
+    }
+
+    // Simple
+    const simpleInterest = (P + (annualContrib * y / 2)) * r; // rough approximation
+    simpleBal = totalContrib + (P * r * y) + (M * 12 * r * y * (y + 1) / 24);
+
+    data.push({
+      year: y,
+      compoundBal,
+      simpleBal,
+      totalContrib,
+      compoundInterest: compoundBal - totalContrib,
+    });
+  }
+
+  const final = data[data.length - 1];
+  const totalInterest = final.compoundBal - final.totalContrib;
+  const diff = final.compoundBal - final.simpleBal;
+
+  $('final-balance').textContent = fmt(final.compoundBal);
+  $('final-sub').textContent = `after ${Y} years`;
+  $('total-interest').textContent = fmt(totalInterest);
+  $('interest-pct').textContent = `${((totalInterest / final.totalContrib) * 100).toFixed(1)}× return on contributions`;
+  $('total-contrib').textContent = fmt(final.totalContrib);
+  $('contrib-sub').textContent = M > 0 ? `£${P.toLocaleString()} initial + £${M}/mo` : `initial only`;
+  $('diff-val').textContent = (diff >= 0 ? '+' : '') + fmt(diff);
+
+  // Table
+  const tbody = $('table-body');
+  tbody.innerHTML = '';
+  const milestones = new Set([1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]);
+  const showYears = Y <= 15 ? 'all' : 'milestones';
+  
+  for (const row of data) {
+    const show = showYears === 'all' || milestones.has(row.year) || row.year === Y;
+    if (!show) continue;
+    const isFinal = row.year === Y;
+    tbody.innerHTML += `
+      <tr class="${isFinal ? 'highlight-row' : ''}">
+        <td>${row.year}${isFinal ? ' ★' : ''}</td>
+        <td class="compound-val">+${fmt(row.compoundInterest)}</td>
+        <td class="compound-val">${fmt(row.compoundBal)}</td>
+        <td class="simple-val">${fmt(row.simpleBal)}</td>
+        <td class="contrib-val">${fmt(row.totalContrib)}</td>
+      </tr>`;
+  }
+
+  drawChart(data);
+}
+
+function drawChart(data) {
+  const canvas = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  const pad = { top: 20, right: 20, bottom: 30, left: 70 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  const maxVal = Math.max(...data.map(d => Math.max(d.compoundBal, d.simpleBal)));
+  const maxY = Math.ceil(maxVal / 10000) * 10000;
+  const minVal = 0;
+
+  // Grid
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  const gridLines = 5;
+  ctx.font = '11px "DM Mono", monospace';
+  ctx.fillStyle = '#666';
+  ctx.textAlign = 'right';
+
+  for (let i = 0; i <= gridLines; i++) {
+    const val = minVal + (maxY - minVal) * (i / gridLines);
+    const y = pad.top + plotH - (plotH * i / gridLines);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.fillText(fmt(val), pad.left - 8, y + 4);
+  }
+
+  // X labels
+  ctx.textAlign = 'center';
+  const labelEvery = data.length <= 10 ? 1 : data.length <= 25 ? 5 : 10;
+  for (const row of data) {
+    if (row.year % labelEvery === 0 || row.year === data.length) {
+      const x = pad.left + (plotW * (row.year - 1) / (data.length - 1));
+      ctx.fillText(row.year + 'y', x, h - 8);
+    }
+  }
+
+  // Helper
+  const getX = (i) => pad.left + (plotW * i / (data.length - 1));
+  const getY = (val) => pad.top + plotH - (plotH * (val - minVal) / (maxY - minVal));
+
+  // Contributions area
+  ctx.beginPath();
+  ctx.moveTo(getX(0), getY(data[0].totalContrib));
+  for (let i = 1; i < data.length; i++) {
+    ctx.lineTo(getX(i), getY(data[i].totalContrib));
+  }
+  ctx.lineTo(getX(data.length - 1), getY(0));
+  ctx.lineTo(getX(0), getY(0));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(42, 42, 42, 0.5)';
+  ctx.fill();
+
+  // Simple line
+  ctx.beginPath();
+  ctx.moveTo(getX(0), getY(data[0].simpleBal));
+  for (let i = 1; i < data.length; i++) {
+    ctx.lineTo(getX(i), getY(data[i].simpleBal));
+  }
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Compound line
+  ctx.beginPath();
+  ctx.moveTo(getX(0), getY(data[0].compoundBal));
+  for (let i = 1; i < data.length; i++) {
+    ctx.lineTo(getX(i), getY(data[i].compoundBal));
+  }
+  ctx.strokeStyle = '#4ade80';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Compound area fill
+  ctx.beginPath();
+  ctx.moveTo(getX(0), getY(data[0].compoundBal));
+  for (let i = 1; i < data.length; i++) {
+    ctx.lineTo(getX(i), getY(data[i].compoundBal));
+  }
+  ctx.lineTo(getX(data.length - 1), getY(data[data.length - 1].totalContrib));
+  for (let i = data.length - 2; i >= 0; i--) {
+    ctx.lineTo(getX(i), getY(data[i].totalContrib));
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(74, 222, 128, 0.08)';
+  ctx.fill();
+
+  // Endpoint dots
+  const last = data[data.length - 1];
+  [[last.compoundBal, '#4ade80'], [last.simpleBal, '#facc15']].forEach(([val, color]) => {
+    ctx.beginPath();
+    ctx.arc(getX(data.length - 1), getY(val), 5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+}
+
+// Bind events
+Object.values(inputs).forEach(input => {
+  input.addEventListener('input', calculate);
+});
+
+// Initial calc
+calculate();
+
+// Redraw chart on resize
+window.addEventListener('resize', calculate);
+</script>
+</body>
+</html>
