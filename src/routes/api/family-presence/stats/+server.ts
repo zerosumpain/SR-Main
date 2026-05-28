@@ -61,6 +61,30 @@ export const GET: RequestHandler = async ({ url }) => {
 	// Geocode cache (from new data-store key)
 	const geocacheData = store['family_presence_geocache']?.value || {};
 
+	// Patterns & anomalies (from new data-store key, populated by trend engine)
+	const patternsData = store['family_presence_patterns']?.value || null;
+
+	// Anomalies from stats (computed per-person by the workflow)
+	const anomalies: any[] = [];
+	if (statsData?.perPerson) {
+		for (const [key, ps] of Object.entries(statsData.perPerson as Record<string, any>)) {
+			if (ps?.anomalies?.length) {
+				for (const a of ps.anomalies) {
+					anomalies.push({ person: key, ...a });
+				}
+			}
+		}
+	}
+	// Also surface from patterns data if available
+	if (patternsData?.anomalies) {
+		for (const a of patternsData.anomalies) {
+			if (!anomalies.some(x => x.person === a.person && x.ts === a.ts && x.type === a.type)) {
+				anomalies.push(a);
+			}
+		}
+	}
+	anomalies.sort((a: any, b: any) => (b.zScore || 0) - (a.zScore || 0));
+
 	// Position history for map trails (from current states, legacy format)
 	const history: Record<string, any[]> = {};
 	for (const key of Object.keys(names)) {
@@ -87,6 +111,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		perPerson,
 		history,
 		geocache: geocacheData,
+		patterns: patternsData?.patterns || null,
+		anomalies,
 		range,
 		since: since.toISOString(),
 		updatedAt: store['family_presence_states']?.updatedAt || null
