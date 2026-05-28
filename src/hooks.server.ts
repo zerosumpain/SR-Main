@@ -229,7 +229,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // Public API routes — read-only, used by public pages.
-  const PUBLIC_API_PATHS = ['/api/biome/state'];
+  const PUBLIC_API_PATHS = ['/api/biome/state', '/api/family-presence/stats'];
   if (PUBLIC_API_PATHS.some((p) => pathname === p)) {
     return resolve(event);
   }
