@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound Interest Calculator</title>
+<style>
+:root{--bg:#0a0a0a;--surface:#141414;--surface2:#1c1c1c;--border:#2a2a2a;--text:#e8e8e8;--dim:#888;--accent:#4ade80}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:DM Sans,-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:2rem}
+h1{font-family:Archivo Black,sans-serif;font-size:1.75rem;margin-bottom:.25rem;letter-spacing:-.02em}
+.sub{color:var(--dim);font-size:.875rem;margin-bottom:2rem}
+.ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.25rem;margin-bottom:2rem;background:var(--surface);padding:1.5rem;border-radius:12px;border:1px solid var(--border)}
+.cg label{display:block;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:.5rem;font-family:JetBrains Mono,monospace}
+.cg .vd{font-size:1.5rem;font-weight:700;margin-bottom:.5rem;font-family:DM Mono,monospace}
+.cg .vd .u{font-size:.875rem;color:var(--dim);font-weight:400}
+input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:6px;background:var(--border);border-radius:3px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px rgba(74,222,128,.3)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;background:var(--accent);border-radius:50%;cursor:pointer;border:none}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.25rem}
+.sc .l{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);font-family:JetBrains Mono,monospace;margin-bottom:.4rem}
+.sc .a{font-size:1.5rem;font-weight:700;font-family:DM Mono,monospace}
+.sc .a.g{color:var(--accent)}
+.cc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:2rem}
+.cc h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:JetBrains Mono,monospace;margin-bottom:1rem}
+canvas{width:100%;height:280px;display:block}
+.lg{display:flex;gap:1.5rem;margin-top:.75rem;font-size:.75rem;color:var(--dim)}
+.lg span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.lg .p::before{background:var(--dim)}.lg .i::before{background:var(--accent)}
+.tbl{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbl h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:JetBrains Mono,monospace;padding:1.25rem 1.5rem .75rem}
+table{width:100%;border-collapse:collapse;font-family:DM Mono,monospace;font-size:.85rem}
+thead th{text-align:right;padding:.75rem 1.5rem;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);border-bottom:1px solid var(--border);font-family:JetBrains Mono,monospace;font-weight:400}
+thead th:first-child{text-align:left}
+tbody td{padding:.6rem 1.5rem;text-align:right;border-bottom:1px solid var(--border);color:var(--dim)}
+tbody td:first-child{text-align:left;color:var(--text)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface2)}
+tbody td.h{color:var(--accent);font-weight:600}
+@media(max-width:600px){body{padding:1rem}h1{font-size:1.25rem}.ctrls{padding:1rem}.cg .vd{font-size:1.15rem}.sc .a{font-size:1.15rem}canvas{height:200px}thead th,tbody td{padding:.5rem .75rem;font-size:.75rem}}
+</style>
+</head>
+<body>
+<h1>Compound Interest</h1>
+<p class="sub">Drag the sliders to see how your money grows over time.</p>
+<div class="ctrls">
+<div class="cg"><label>Principal</label><div class="vd">£<span id="pv">5,000</span></div><input type="range" id="principal" min="100" max="100000" step="100" value="5000"></div>
+<div class="cg"><label>Annual Rate</label><div class="vd"><span id="rv">5.0</span><span class="u">%</span></div><input type="range" id="rate" min="0.1" max="20" step="0.1" value="5"></div>
+<div class="cg"><label>Years</label><div class="vd"><span id="yv">10</span> <span class="u">years</span></div><input type="range" id="years" min="1" max="50" step="1" value="10"></div>
+<div class="cg"><label>Monthly Contribution</label><div class="vd">£<span id="mv">0</span></div><input type="range" id="monthly" min="0" max="2000" step="25" value="0"></div>
+</div>
+<div class="sum">
+<div class="sc"><div class="l">Final Balance</div><div class="a" id="fb">£8,144.47</div></div>
+<div class="sc"><div class="l">Total Interest</div><div class="a g" id="ti">£8,144.47</div></div>
+<div class="sc"><div class="l">Total Contributed</div><div class="a" id="tc">£5,000.00</div></div>
+<div class="sc"><div class="l">Interest Share</div><div class="a g" id="is">38.6%</div></div>
+</div>
+<div class="cc">
+<h2>Growth Over Time</h2>
+<canvas id="chart"></canvas>
+<div class="lg"><span class="p">Principal</span><span class="i">Interest</span></div>
+</div>
+<div class="tbl">
+<h2>Year-by-Year Breakdown</h2>
+<table><thead><tr><th>Year</th><th>Balance</th><th>Interest (that year)</th><th>Total Interest</th></tr></thead><tbody id="bd"></tbody></table>
+</div>
+<script>
+var $=function(id){return document.getElementById(id)};
+function fmt(n){return n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtI(n){return n.toLocaleString('en-GB')}
+function calc(){
+var p=+$('principal').value,r=+$('rate').value/100,y=+$('years').value,m=+$('monthly').value,mr=r/12;
+var rows=[],bal=p,tc=p,ti=0;
+for(var i=1;i<=y;i++){var yi=0;for(var j=0;j<12;j++){var intr=bal*mr;yi+=intr;bal+=intr;if(m>0){bal+=m;tc+=m}}ti+=yi;rows.push({year:i,balance:bal,yearInterest:yi,totalInterest:ti})}
+$('pv').textContent=fmtI(p);$('rv').textContent=(+$('rate').value).toFixed(1);$('yv').textContent=y;$('mv').textContent=fmtI(m);
+$('fb').textContent='£'+fmt(bal);$('ti').textContent='£'+fmt(ti);$('tc').textContent='£'+fmt(tc);
+$('is').textContent=bal>0?(ti/bal*100).toFixed(1)+'%':'0%';
+$('bd').innerHTML=rows.map(function(r){return '<tr><td>'+r.year+'</td><td>£'+fmt(r.balance)+'</td><td class="h">£'+fmt(r.yearInterest)+'</td><td>£'+fmt(r.totalInterest)+'</td></tr>'}).join('');
+draw(rows,p,m)}
+function draw(rows,p,m){
+var cv=$('chart'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
+cv.width=rect.width*dpr;cv.height=rect.height*dpr;
+var ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+var w=rect.width,h=rect.height,pad={t:10,r:20,b:30,l:70};
+var cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+ctx.clearRect(0,0,w,h);
+var mv=rows.length>0?rows[rows.length-1].balance*1.1:10000;
+var y0=pad.t,y1=pad.t+ch;
+ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;
+for(var i=0;i<=5;i++){var gy=y0+(ch/5)*i;ctx.beginPath();ctx.moveTo(pad.l,gy);ctx.lineTo(w-pad.r,gy);ctx.stroke();
+var v=mv-(mv/5)*i;ctx.fillStyle='#555';ctx.font='11px DM Mono,monospace';ctx.textAlign='right';
+ctx.fillText('£'+(v>=1000?(v/1000).toFixed(1)+'k':Math.round(v)),pad.l-8,gy+4)}
+if(!rows.length)return;
+var bw=cw/rows.length*0.7,gp=cw/rows.length*0.3;
+rows.forEach(function(r,i){var x=pad.l+(cw/rows.length)*i+gp/2;
+var cb=p+m*12*r.year;var ph=Math.min(cb/mv,1)*ch;var ih=Math.min(Math.max(r.balance-cb,0)/mv,1)*ch;var th=ph+ih;
+ctx.fillStyle='#3a3a3a';ctx.fillRect(x,y1-th,bw,ph);
+ctx.fillStyle='rgba(74,222,128,0.6)';ctx.fillRect(x,y1-ih,bw,ih);
+if(rows.length<=20||r.year%5===0||r.year===1){ctx.fillStyle='#555';ctx.font='10px JetBrains Mono,monospace';ctx.textAlign='center';ctx.fillText(r.year,x+bw/2,y1+18)}})}
+document.querySelectorAll('input[type=range]').forEach(function(el){el.addEventListener('input',calc)});
+window.addEventListener('resize',calc);calc();
+</script>
+</body>
+</html>

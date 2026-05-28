@@ -290,7 +290,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // Public page routes — no auth required.
-  const PUBLIC_PATHS = ['/health'];
+  const PUBLIC_PATHS = ['/health', '/tools'];
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return resolve(event);
   }
