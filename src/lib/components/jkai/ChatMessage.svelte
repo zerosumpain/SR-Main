@@ -11,7 +11,6 @@
     content,
     metadata,
     thinking,
-    showThinking = false,
     conversationId = null,
     onSilentSend,
     approvalUi,
@@ -31,7 +30,6 @@
       };
     };
     thinking?: OrchestratorThinking;
-    showThinking?: boolean;
     conversationId?: string | null;
     onSilentSend?: (command: string) => void | Promise<void>;
     approvalUi?: ApprovalUiSettings;
@@ -108,7 +106,7 @@
 
   let isUser = $derived(role === 'user');
   let thinkingOpen = $state(true);
-  let hasThinking = $derived(showThinking && thinking && thinking.steps && thinking.steps.length > 0);
+  let hasThinking = $derived(thinking && thinking.steps && thinking.steps.length > 0);
   let heartbeat = $derived(metadata?.heartbeat ?? null);
   let isHeartbeatTrigger = $derived(heartbeat?.kind === 'user-trigger');
   let heartbeatLabel = $derived.by(() => {

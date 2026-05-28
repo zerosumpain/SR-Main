@@ -12,7 +12,6 @@
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
-  import ChatModelToggle from '$lib/components/jkai/ChatModelToggle.svelte';
   import MessageAttachments from './MessageAttachments.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import BuildPill from './BuildPill.svelte';
@@ -146,7 +145,6 @@
   let messages = $state<Message[]>([]);
   let input = $state('');
   let loading = $state(false);
-  let showThinking = $state(true);
   let showToolDrawer = $state(false);
   let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
@@ -1068,17 +1066,6 @@
           Chat with the orchestrator — ask anything, build workflows, control your home
         {/if}
       </p>
-      {#if conversationId && conversation?.modelId}
-        <ChatModelToggle
-          {conversationId}
-          modelProvider={(conversation.modelProvider ?? 'zai') as 'zai' | 'openrouter'}
-          modelId={conversation.modelId}
-          {messageCount}
-          {altOpenRouterModel}
-          {defaultGlmModelId}
-          onChanged={(ctx) => onmodelchange?.(ctx)}
-        />
-      {/if}
     </div>
     {#if conversationId}
       <div class="chat-toolbar">
@@ -1094,16 +1081,6 @@
             <span class="sm:hidden">Tools ({allToolCalls.length})</span>
           </button>
         {/if}
-        <button
-          type="button"
-          onclick={() => { showThinking = !showThinking; }}
-          class="nm-btn-ghost"
-          data-active={showThinking ? 'true' : 'false'}
-          title={showThinking ? 'Hide thinking timeline' : 'Show thinking timeline'}
-        >
-          <span class="hidden sm:inline">{showThinking ? 'Hide' : 'Show'} thinking</span>
-          <span class="sm:hidden">{showThinking ? 'Hide' : 'Show'} think</span>
-        </button>
       </div>
     {/if}
   </div>
@@ -1416,7 +1393,6 @@
                 content={msg.role === 'assistant' ? stripPromoteMarkers(msg.content) : msg.content}
                 metadata={msg.metadata}
                 thinking={msg.thinking}
-                {showThinking}
                 {conversationId}
                 {approvalUi}
                 onSilentSend={msg.role === 'assistant' ? silentSend : undefined}
