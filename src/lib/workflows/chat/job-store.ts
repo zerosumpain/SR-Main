@@ -73,6 +73,16 @@ interface JobStream {
 
 const streams = new Map<string, JobStream>();
 
+// External side-effect hook fired after every published event. Used by
+// wa-escalation to ping WhatsApp when a waiter opens or a job ends and the
+// user isn't attached. Set via registerEventHook from hooks.server.ts so the
+// job-store stays free of WA / I/O dependencies.
+type ExternalEventHook = (jobId: string, event: JobEvent) => void;
+let externalEventHook: ExternalEventHook | null = null;
+export function registerEventHook(hook: ExternalEventHook | null): void {
+  externalEventHook = hook;
+}
+
 export function publishJobEvent(jobId: string, event: JobEvent): void {
   let stream = streams.get(jobId);
   if (!stream) {
@@ -109,6 +119,11 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
     }
     // Give late subscribers a moment to attach, then clean up
     setTimeout(() => streams.delete(jobId), 60_000);
+  }
+  if (externalEventHook) {
+    try { externalEventHook(jobId, event); } catch (err) {
+      console.error('[job-store] external event hook threw:', err);
+    }
   }
 }
 
@@ -153,6 +168,11 @@ export interface OrchestratorJob {
   // streamed `token` event's delta here so a user-initiated cancel can
   // persist what was streamed so far instead of throwing it away.
   partialResponse: string;
+  // Set the first time a waiter (plan / clarify / confirm) is opened on
+  // this job and cleared once every waiter is resolved. While non-null,
+  // the watchdog applies WAITER_IDLE_TIMEOUT_MS instead of IDLE_TIMEOUT_MS
+  // so an unattended user-input gate doesn't reap the job after 4 min.
+  waiterOpenedAt: number | null;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -165,6 +185,12 @@ const jobs = new Map<string, OrchestratorJob>();
 // before first token) is tolerated, but a truly hung job still trips at 4min.
 const IDLE_TIMEOUT_MS = 240_000; // 4 min idle
 const HARD_TIMEOUT_MS = 600_000; // 10 min total
+// While a waiter (plan / clarify / confirm) is open, the job is legitimately
+// idle on the server side waiting for the user — extend the idle limit so it
+// survives an overnight gap. The wa-escalation hook is the alert mechanism;
+// this just stops the watchdog from killing the conversation mid-wait.
+const WAITER_IDLE_TIMEOUT_MS = 24 * 60 * 60_000; // 24 h
+const WAITER_HARD_TIMEOUT_MS = 48 * 60 * 60_000; // 48 h total cap with waiter open
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {
   job.watchdog = setInterval(() => {
@@ -178,10 +204,12 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     const now = Date.now();
     const idle = now - job.lastEventAt;
     const elapsed = now - job.startedAt;
-    if (idle > IDLE_TIMEOUT_MS || elapsed > HARD_TIMEOUT_MS) {
+    const idleLimit = job.waiterOpenedAt ? WAITER_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
+    const hardLimit = job.waiterOpenedAt ? WAITER_HARD_TIMEOUT_MS : HARD_TIMEOUT_MS;
+    if (idle > idleLimit || elapsed > hardLimit) {
       const phaseLabel = `${job.phase}${job.currentStep ? `: ${job.currentStep}` : ''}`;
-      const reason = elapsed > HARD_TIMEOUT_MS
-        ? `Job exceeded max duration (${Math.round(HARD_TIMEOUT_MS / 1000)}s) while ${phaseLabel}`
+      const reason = elapsed > hardLimit
+        ? `Job exceeded max duration (${Math.round(hardLimit / 1000)}s) while ${phaseLabel}`
         : `Job idle for ${Math.round(idle / 1000)}s while ${phaseLabel} — likely stuck`;
       console.warn(`[orchestrator] Watchdog terminating job ${jobId}: ${reason}`);
       recordPulse({ ts: now, jobId, kind: 'watchdog_kill', phase: job.phase, summary: reason.slice(0, 140), elapsedMs: elapsed });
@@ -313,6 +341,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     lastHeartbeatAt: now,
     phase: 'starting',
     partialResponse: '',
+    waiterOpenedAt: null,
   };
   jobs.set(jobId, job);
   recordPulse({ ts: now, jobId, kind: 'job_start', phase: 'starting', summary: message.slice(0, 140), elapsedMs: 0 });
@@ -454,6 +483,18 @@ interface Waiter {
 
 const waiters = new Map<string, Map<string, Waiter>>();
 
+function markWaiterOpen(jobId: string): void {
+  const job = jobs.get(jobId);
+  if (job && job.waiterOpenedAt == null) job.waiterOpenedAt = Date.now();
+}
+
+function clearWaiterIfDrained(jobId: string): void {
+  const m = waiters.get(jobId);
+  if (m && m.size > 0) return;
+  const job = jobs.get(jobId);
+  if (job) job.waiterOpenedAt = null;
+}
+
 export function createWaiter<T = unknown>(
   jobId: string,
   key: string,
@@ -466,6 +507,7 @@ export function createWaiter<T = unknown>(
   });
   if (!waiter) throw new Error('waiter init failed');
   map.set(key, waiter);
+  markWaiterOpen(jobId);
   return {
     awaitResponse: () => promise,
     respond: (value: T) => {
@@ -474,6 +516,7 @@ export function createWaiter<T = unknown>(
       m.delete(key);
       if (m.size === 0) waiters.delete(jobId);
       w.resolve(value);
+      clearWaiterIfDrained(jobId);
     },
   };
 }
@@ -484,6 +527,7 @@ export function respondToWaiter(jobId: string, key: string, value: unknown): boo
   m.delete(key);
   if (m.size === 0) waiters.delete(jobId);
   w.resolve(value);
+  clearWaiterIfDrained(jobId);
   return true;
 }
 
@@ -493,6 +537,7 @@ export function rejectWaiter(jobId: string, key: string, reason: string): void {
   m.delete(key);
   if (m.size === 0) waiters.delete(jobId);
   w.reject(new Error(reason));
+  clearWaiterIfDrained(jobId);
 }
 
 // When a job ends (done / error / cancelled), reject every outstanding waiter
@@ -501,4 +546,29 @@ export function failAllWaiters(jobId: string, reason: string): void {
   const m = waiters.get(jobId); if (!m) return;
   for (const [, w] of m) w.reject(new Error(reason));
   waiters.delete(jobId);
+  const job = jobs.get(jobId);
+  if (job) job.waiterOpenedAt = null;
+}
+
+export function getStreamSubscriberCount(jobId: string): number {
+  return streams.get(jobId)?.subscribers.size ?? 0;
+}
+
+export function listRunningJobsByConversation(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [id, job] of jobs) {
+    if (job.status !== 'running') continue;
+    const convId = job.scope.conversationId;
+    if (!convId) continue;
+    out.set(convId, id);
+  }
+  return out;
+}
+
+export function getRunningJobIdForConversation(conversationId: string): string | null {
+  for (const [id, job] of jobs) {
+    if (job.status !== 'running') continue;
+    if (job.scope.conversationId === conversationId) return id;
+  }
+  return null;
 }

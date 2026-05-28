@@ -450,6 +450,34 @@
     }
   });
 
+  // When the selected conversation changes, look up whether the
+  // orchestrator already has a job running for it on the server. If yes,
+  // re-attach the chat stream so the user sees the in-flight activity
+  // (tools, thinking, plan/clarify/confirm) instead of static history.
+  let lastResumedConvId: string | null = null;
+  $effect(() => {
+    const convId = conversationId;
+    if (!convId) {
+      lastResumedConvId = null;
+      return;
+    }
+    if (loading || currentJobId || chatStream) return;
+    if (lastResumedConvId === convId) return;
+    lastResumedConvId = convId;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/workflows/orchestrator/chat/active?conversationId=${encodeURIComponent(convId)}`);
+        if (!res.ok) return;
+        const data = await res.json() as { jobId: string | null };
+        if (data.jobId && conversationId === convId) {
+          await resumeRunningJob(data.jobId);
+        }
+      } catch (err) {
+        console.warn('[ChatArea] active-job lookup failed:', err);
+      }
+    })();
+  });
+
   // Attachment composer state
   interface PendingAttachment {
     id: string;
@@ -736,6 +764,318 @@
     if (step) step.expanded = !step.expanded;
   }
 
+  // Builds the SSE event handler that routes orchestrator events into the
+  // chat bubble identified by `progressId`. Shared by send() (new requests)
+  // and resumeRunningJob() (re-attaching to a server-side job after the
+  // user returns to the page). `accRef.value` accumulates streamed tokens
+  // so the terminal `done` event can fall back to them if the persisted
+  // response is missing.
+  function makeProgressHandler(progressId: string, accRef: { value: string }): (data: any) => void {
+    return (data: any) => {
+      if (data.type === 'connected') return;
+
+      if ((data.type === 'token' || data.type === 'thinking') && pendingTtft.has(progressId)) {
+        const m = pendingTtft.get(progressId)!;
+        m.onFirstToken();
+        pendingTtft.delete(progressId);
+      }
+
+      if (data.type === 'thinking') lastReasoningAt = Date.now();
+      if (
+        data.type === 'token' ||
+        data.type === 'thinking' ||
+        data.type === 'tool_start' ||
+        data.type === 'tool_result' ||
+        data.type === 'replace_bubble'
+      ) {
+        lastModelEventAt = Date.now();
+      }
+
+      if (data.type === 'token') {
+        heartbeat = null;
+        accRef.value += data.delta;
+        messages = messages.map((m) =>
+          m.id === progressId ? { ...m, content: accRef.value } : m,
+        );
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'replace_bubble') {
+        heartbeat = null;
+        accRef.value = data.content;
+        messages = messages.map((m) =>
+          m.id === progressId ? { ...m, content: accRef.value } : m,
+        );
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'thinking') {
+        heartbeat = null;
+        const prev = thinkingByBubble.get(progressId) ?? { text: '', expanded: false };
+        const next = new Map(thinkingByBubble);
+        next.set(progressId, { ...prev, text: prev.text + data.delta });
+        thinkingByBubble = next;
+        return;
+      }
+
+      if (data.type === 'tool_start') {
+        heartbeat = null;
+        const newStep: ToolStep = {
+          tool: data.tool,
+          args: data.args || {},
+          status: 'running',
+          summary: data.summary,
+        };
+        messages = messages.map((m) => {
+          if (m.id !== progressId) return m;
+          return { ...m, toolSteps: [...(m.toolSteps ?? []), newStep] };
+        });
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'tool_result') {
+        heartbeat = null;
+        messages = messages.map((m) => {
+          if (m.id !== progressId || !m.toolSteps) return m;
+          const idx = (() => {
+            for (let i = m.toolSteps.length - 1; i >= 0; i--) {
+              if (m.toolSteps[i].tool === data.tool && m.toolSteps[i].status === 'running') return i;
+            }
+            return -1;
+          })();
+          if (idx < 0) return m;
+          const next = m.toolSteps.slice();
+          next[idx] = { ...next[idx], result: data.result, status: data.status, summary: data.summary };
+          return { ...m, toolSteps: next };
+        });
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'status') {
+        heartbeat = null;
+        const newMsg: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data.text,
+          source: 'status_update',
+          createdAt: new Date().toISOString(),
+        };
+        const progressIdx = messages.findIndex((m) => m.isProgress);
+        if (progressIdx >= 0) {
+          messages = [
+            ...messages.slice(0, progressIdx),
+            newMsg,
+            ...messages.slice(progressIdx),
+          ];
+        } else {
+          messages = [...messages, newMsg];
+        }
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'heartbeat') {
+        heartbeat = {
+          summary: data.summary,
+          phase: data.phase ?? 'thinking',
+          elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
+          lastBeatAt: Date.now(),
+        };
+        hbNow = Date.now();
+        startHeartbeatTicker();
+        return;
+      }
+
+      if (data.type === 'plan') {
+        pendingPlan = { planId: data.planId, plan: data.plan };
+        heartbeat = null;
+        return;
+      }
+
+      if (data.type === 'plan_ack') {
+        pendingPlan = null;
+        return;
+      }
+
+      if (data.type === 'confirm') {
+        pendingConfirm = {
+          confirmId: data.confirmId,
+          prompt: data.prompt,
+          destructive: data.destructive,
+          details: data.details,
+        };
+        heartbeat = null;
+        return;
+      }
+
+      if (data.type === 'confirm_ack') {
+        pendingConfirm = null;
+        return;
+      }
+
+      if (data.type === 'clarify') {
+        pendingClarify = { clarifyId: data.clarifyId, questions: data.questions };
+        heartbeat = null;
+        return;
+      }
+
+      if (data.type === 'clarify_ack') {
+        pendingClarify = null;
+        return;
+      }
+
+      if (data.type === 'subagent_start') {
+        subAgents[data.agentId] = {
+          agentId: data.agentId,
+          task: data.task,
+          status: 'running',
+          liveTokens: '',
+          toolSteps: [],
+        };
+        heartbeat = null;
+        return;
+      }
+
+      if (data.type === 'subagent_event') {
+        const a = subAgents[data.agentId];
+        if (!a) return;
+        const ev = data.event;
+        if (ev.type === 'token') {
+          a.liveTokens += ev.delta;
+        } else if (ev.type === 'tool_start') {
+          a.toolSteps.push({
+            toolCallId: ev.toolCallId ?? crypto.randomUUID(),
+            tool: ev.tool,
+            args: ev.args ?? {},
+            status: 'running',
+            summary: ev.summary,
+          });
+        } else if (ev.type === 'tool_result') {
+          const callId = ev.toolCallId;
+          let idx = -1;
+          if (callId) idx = a.toolSteps.findIndex((s) => s.toolCallId === callId);
+          if (idx < 0) {
+            for (let i = a.toolSteps.length - 1; i >= 0; i--) {
+              if (a.toolSteps[i].tool === ev.tool && a.toolSteps[i].status === 'running') { idx = i; break; }
+            }
+          }
+          if (idx >= 0) {
+            a.toolSteps[idx] = { ...a.toolSteps[idx], status: ev.status, result: ev.result, summary: ev.summary };
+          }
+        }
+        return;
+      }
+
+      if (data.type === 'subagent_done') {
+        const a = subAgents[data.agentId];
+        if (a) {
+          a.status = 'done';
+          a.summary = data.summary;
+          a.liveTokens = '';
+        }
+        return;
+      }
+
+      if (data.type === 'done') {
+        heartbeat = null;
+        pendingTtft.delete(progressId);
+        pendingPlan = null;
+        pendingConfirm = null;
+        pendingClarify = null;
+        const result = (data.result || {}) as {
+          message?: string;
+          error?: string;
+          workflow?: unknown;
+          thinking?: OrchestratorThinking;
+          attachments?: Message['attachments'];
+        };
+        const prior = messages.find((m) => m.id === progressId);
+        const finalContent = result.message || result.error || accRef.value || 'No response.';
+        const finalMsg: Message = {
+          id: progressId,
+          role: 'assistant',
+          content: finalContent,
+          metadata: { workflowGenerated: !!result.workflow },
+          thinking: result.thinking || undefined,
+          isProgress: false,
+          source: 'web',
+          toolSteps: prior?.toolSteps,
+          attachments: result.attachments ?? undefined,
+          createdAt: prior?.createdAt ?? new Date().toISOString(),
+        };
+        messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
+        scrollToBottom();
+        return;
+      }
+
+      if (data.type === 'error') {
+        heartbeat = null;
+        pendingTtft.delete(progressId);
+        pendingPlan = null;
+        pendingConfirm = null;
+        pendingClarify = null;
+        messages = messages.map((m) =>
+          m.id === progressId
+            ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
+            : m,
+        );
+        scrollToBottom();
+        return;
+      }
+    };
+  }
+
+  // Re-attach to a server-side job that's already running for the active
+  // conversation (e.g. the user backgrounded the tab, the job kept running,
+  // and now they're back). Replays the buffered events first, then streams
+  // live ones, painting them into a fresh progress bubble.
+  async function resumeRunningJob(jobId: string): Promise<void> {
+    if (loading || currentJobId) return;
+    loading = true;
+    currentJobId = jobId;
+    heartbeat = null;
+    pendingPlan = null;
+    pendingConfirm = null;
+    pendingClarify = null;
+    subAgents = {};
+
+    const progressId = crypto.randomUUID();
+    pendingTtft.set(progressId, startTtftMark(progressId));
+    messages = [...messages, {
+      id: progressId,
+      role: 'assistant',
+      content: '',
+      isProgress: true,
+      progressSteps: [],
+      toolSteps: [],
+      createdAt: new Date().toISOString(),
+    }];
+    scrollToBottom();
+
+    const accRef = { value: '' };
+    const handler = makeProgressHandler(progressId, accRef);
+    chatStream = streamChatJob(jobId, {
+      onEvent: handler,
+      onWarning: (w) => { connectionWarning = w; },
+    });
+    try {
+      await chatStream.done;
+    } finally {
+      chatStream = null;
+      loading = false;
+      currentJobId = null;
+      heartbeat = null;
+      pendingPlan = null;
+      pendingConfirm = null;
+      pendingClarify = null;
+      scrollToBottom();
+    }
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading || !conversationId) return;
@@ -803,281 +1143,8 @@
       if (!jobId) throw new Error('No job ID returned');
       currentJobId = jobId;
 
-      // Subscribe to live token + tool events via SSE.
-      let accumulatedContent = '';
-
-      const processSseEvent = (data: any) => {
-          if (data.type === 'connected') return;
-
-          // TTFT mark: fire on first sign of life (text token or thinking delta)
-          if ((data.type === 'token' || data.type === 'thinking') && pendingTtft.has(progressId)) {
-            const m = pendingTtft.get(progressId)!;
-            m.onFirstToken();
-            pendingTtft.delete(progressId);
-          }
-
-          // Track activity timestamps so the heartbeat-line can suppress
-          // itself when something more informative is already on screen
-          // (reasoning, tool calls) — see lastReasoningAt / lastModelEventAt.
-          if (data.type === 'thinking') lastReasoningAt = Date.now();
-          if (
-            data.type === 'token' ||
-            data.type === 'thinking' ||
-            data.type === 'tool_start' ||
-            data.type === 'tool_result' ||
-            data.type === 'replace_bubble'
-          ) {
-            lastModelEventAt = Date.now();
-          }
-
-          if (data.type === 'token') {
-            heartbeat = null;
-            accumulatedContent += data.delta;
-            messages = messages.map((m) =>
-              m.id === progressId ? { ...m, content: accumulatedContent } : m,
-            );
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'replace_bubble') {
-            heartbeat = null;
-            accumulatedContent = data.content;
-            messages = messages.map((m) =>
-              m.id === progressId ? { ...m, content: accumulatedContent } : m,
-            );
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'thinking') {
-            // Append reasoning-delta to the per-bubble Reasoning panel.
-            // Keyed by progressId so the panel stays attached to its
-            // bubble after finalisation. Clear heartbeat — reasoning
-            // arriving means the model is alive and producing.
-            heartbeat = null;
-            const prev = thinkingByBubble.get(progressId) ?? { text: '', expanded: false };
-            const next = new Map(thinkingByBubble);
-            next.set(progressId, { ...prev, text: prev.text + data.delta });
-            thinkingByBubble = next;
-            return;
-          }
-
-          if (data.type === 'tool_start') {
-            heartbeat = null;
-            const newStep: ToolStep = {
-              tool: data.tool,
-              args: data.args || {},
-              status: 'running',
-              summary: data.summary,
-            };
-            messages = messages.map((m) => {
-              if (m.id !== progressId) return m;
-              return { ...m, toolSteps: [...(m.toolSteps ?? []), newStep] };
-            });
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'tool_result') {
-            heartbeat = null;
-            messages = messages.map((m) => {
-              if (m.id !== progressId || !m.toolSteps) return m;
-              // Find the most recent running step for this tool name and finalise it
-              const idx = (() => {
-                for (let i = m.toolSteps.length - 1; i >= 0; i--) {
-                  if (m.toolSteps[i].tool === data.tool && m.toolSteps[i].status === 'running') return i;
-                }
-                return -1;
-              })();
-              if (idx < 0) return m;
-              const next = m.toolSteps.slice();
-              next[idx] = { ...next[idx], result: data.result, status: data.status, summary: data.summary };
-              return { ...m, toolSteps: next };
-            });
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'status') {
-            heartbeat = null;
-            // Mid-task working note — same UX as `/api/jkai/events` status_update
-            const newMsg: Message = {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              content: data.text,
-              source: 'status_update',
-              createdAt: new Date().toISOString(),
-            };
-            const progressIdx = messages.findIndex((m) => m.isProgress);
-            if (progressIdx >= 0) {
-              messages = [
-                ...messages.slice(0, progressIdx),
-                newMsg,
-                ...messages.slice(progressIdx),
-              ];
-            } else {
-              messages = [...messages, newMsg];
-            }
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'heartbeat') {
-            heartbeat = {
-              summary: data.summary,
-              phase: data.phase ?? 'thinking',
-              elapsedSec: Math.round((data.elapsedMs ?? 0) / 1000),
-              lastBeatAt: Date.now(),
-            };
-            hbNow = Date.now();
-            startHeartbeatTicker();
-            return;
-          }
-
-          if (data.type === 'plan') {
-            pendingPlan = { planId: data.planId, plan: data.plan };
-            heartbeat = null;
-            return;
-          }
-
-          if (data.type === 'plan_ack') {
-            pendingPlan = null;
-            return;
-          }
-
-          if (data.type === 'confirm') {
-            pendingConfirm = {
-              confirmId: data.confirmId,
-              prompt: data.prompt,
-              destructive: data.destructive,
-              details: data.details,
-            };
-            heartbeat = null;
-            return;
-          }
-
-          if (data.type === 'confirm_ack') {
-            pendingConfirm = null;
-            return;
-          }
-
-          if (data.type === 'clarify') {
-            pendingClarify = { clarifyId: data.clarifyId, questions: data.questions };
-            heartbeat = null;
-            return;
-          }
-
-          if (data.type === 'clarify_ack') {
-            pendingClarify = null;
-            return;
-          }
-
-          if (data.type === 'subagent_start') {
-            subAgents[data.agentId] = {
-              agentId: data.agentId,
-              task: data.task,
-              status: 'running',
-              liveTokens: '',
-              toolSteps: [],
-            };
-            heartbeat = null;
-            return;
-          }
-
-          if (data.type === 'subagent_event') {
-            const a = subAgents[data.agentId];
-            if (!a) return;
-            const ev = data.event;
-            if (ev.type === 'token') {
-              a.liveTokens += ev.delta;
-            } else if (ev.type === 'tool_start') {
-              a.toolSteps.push({
-                toolCallId: ev.toolCallId ?? crypto.randomUUID(),
-                tool: ev.tool,
-                args: ev.args ?? {},
-                status: 'running',
-                summary: ev.summary,
-              });
-            } else if (ev.type === 'tool_result') {
-              const callId = ev.toolCallId;
-              let idx = -1;
-              if (callId) idx = a.toolSteps.findIndex((s) => s.toolCallId === callId);
-              if (idx < 0) {
-                for (let i = a.toolSteps.length - 1; i >= 0; i--) {
-                  if (a.toolSteps[i].tool === ev.tool && a.toolSteps[i].status === 'running') { idx = i; break; }
-                }
-              }
-              if (idx >= 0) {
-                a.toolSteps[idx] = { ...a.toolSteps[idx], status: ev.status, result: ev.result, summary: ev.summary };
-              }
-            }
-            return;
-          }
-
-          if (data.type === 'subagent_done') {
-            const a = subAgents[data.agentId];
-            if (a) {
-              a.status = 'done';
-              a.summary = data.summary;
-              a.liveTokens = '';
-            }
-            return;
-          }
-
-          if (data.type === 'done') {
-            heartbeat = null;
-            pendingTtft.delete(progressId);
-            pendingPlan = null;
-            pendingConfirm = null;
-            pendingClarify = null;
-            const result = (data.result || {}) as {
-              message?: string;
-              error?: string;
-              workflow?: unknown;
-              thinking?: OrchestratorThinking;
-              attachments?: Message['attachments'];
-            };
-            const prior = messages.find((m) => m.id === progressId);
-            // Authoritative final content from persisted responseText. Fall
-            // back to streamed tokens if absent (shouldn't happen).
-            const finalContent = result.message || result.error || accumulatedContent || 'No response.';
-            const finalMsg: Message = {
-              id: progressId,
-              role: 'assistant',
-              content: finalContent,
-              metadata: { workflowGenerated: !!result.workflow },
-              thinking: result.thinking || undefined,
-              isProgress: false,
-              source: 'web',
-              toolSteps: prior?.toolSteps,
-              attachments: result.attachments ?? undefined,
-              // Preserve the moment the progress bubble first appeared (set
-              // when the user pressed send) so the rendered "↳ Xs" gap
-              // reflects round-trip latency, not the moment the final
-              // message was assembled.
-              createdAt: prior?.createdAt ?? new Date().toISOString(),
-            };
-            messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
-            scrollToBottom();
-            return;
-          }
-
-          if (data.type === 'error') {
-            heartbeat = null;
-            pendingTtft.delete(progressId);
-            pendingPlan = null;
-            pendingConfirm = null;
-            pendingClarify = null;
-            messages = messages.map((m) =>
-              m.id === progressId
-                ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
-                : m,
-            );
-            scrollToBottom();
-            return;
-          }
-        };
+      const accRef = { value: '' };
+      const processSseEvent = makeProgressHandler(progressId, accRef);
 
       chatStream = streamChatJob(jobId, {
         onEvent: processSseEvent,

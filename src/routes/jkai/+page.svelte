@@ -17,6 +17,11 @@
   let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
   let activeBuild = $state<{ id: string; status: string } | null>(null);
   let sidebarOpen = $state(false);
+  // Conversation IDs the orchestrator currently has a running job for.
+  // Polled every 10 s; the ConversationSidebar renders a pulsing dot next
+  // to each. Updated whenever the user returns to the page so the UI
+  // reflects work that continued in the background.
+  let liveConversationIds = $state<string[]>([]);
 
   const INTEL_CONTEXT_STORAGE_KEY = 'jkai.useIntelContext';
   const LAST_VISIT_STORAGE_KEY = 'jkai.lastVisit';
@@ -33,17 +38,32 @@
     }
 
     let resumed = false;
+    // 1) Deep-link from a WhatsApp escalation: ?c=<convId>. If it matches a
+    // known conversation we open it; otherwise we fall through to the
+    // localStorage-based resume so the URL doesn't strand the user.
     try {
-      const lastVisitStr = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
-      const lastConvId = localStorage.getItem(LAST_CONV_STORAGE_KEY);
-      const lastVisit = lastVisitStr ? Number(lastVisitStr) : 0;
-      const withinWindow = Number.isFinite(lastVisit) && Date.now() - lastVisit < RESUME_WINDOW_MS;
-      if (withinWindow && lastConvId && conversationList.some((c) => c.id === lastConvId)) {
-        selectConversation(lastConvId);
+      const params = new URLSearchParams(window.location.search);
+      const deepLinkId = params.get('c');
+      if (deepLinkId && conversationList.some((c) => c.id === deepLinkId)) {
+        selectConversation(deepLinkId);
         resumed = true;
       }
     } catch {
-      // localStorage unavailable — fall through to creating a fresh conversation.
+      // ignore URL parse failures
+    }
+    if (!resumed) {
+      try {
+        const lastVisitStr = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
+        const lastConvId = localStorage.getItem(LAST_CONV_STORAGE_KEY);
+        const lastVisit = lastVisitStr ? Number(lastVisitStr) : 0;
+        const withinWindow = Number.isFinite(lastVisit) && Date.now() - lastVisit < RESUME_WINDOW_MS;
+        if (withinWindow && lastConvId && conversationList.some((c) => c.id === lastConvId)) {
+          selectConversation(lastConvId);
+          resumed = true;
+        }
+      } catch {
+        // localStorage unavailable — fall through to creating a fresh conversation.
+      }
     }
     if (!resumed) {
       createConversation();
@@ -54,6 +74,20 @@
     } catch {
       // ignore
     }
+
+    const refreshLive = async () => {
+      try {
+        const res = await fetch('/api/workflows/orchestrator/chat/active');
+        if (!res.ok) return;
+        const data = await res.json() as { jobs: Array<{ conversationId: string; jobId: string }> };
+        liveConversationIds = data.jobs.map((j) => j.conversationId);
+      } catch {
+        // ignore — next tick will retry
+      }
+    };
+    void refreshLive();
+    const liveTimer = setInterval(refreshLive, 10_000);
+    return () => clearInterval(liveTimer);
   });
 
   function rememberConversation(id: string) {
@@ -216,6 +250,7 @@
         onToggleCollapse={() => {}}
         {useIntelContext}
         onToggleIntelContext={toggleIntelContext}
+        {liveConversationIds}
       />
     </div>
 
@@ -245,6 +280,7 @@
             onToggleCollapse={() => { sidebarOpen = false; }}
             {useIntelContext}
             onToggleIntelContext={toggleIntelContext}
+            {liveConversationIds}
           />
         </div>
       </div>

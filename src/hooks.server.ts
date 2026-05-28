@@ -42,6 +42,11 @@ startHeroTitlesScheduler();
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 startOrphanSweep();
 
+// Install the WhatsApp escalation hook so orchestrator waiters / terminal
+// events fan out to WA when the user isn't attached to the chat stream.
+import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
+installWaEscalation();
+
 // Start the Gmail polling watcher and orchestrator bridge
 import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
 import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';

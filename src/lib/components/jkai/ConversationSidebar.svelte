@@ -28,6 +28,7 @@
     onToggleCollapse,
     useIntelContext = true,
     onToggleIntelContext,
+    liveConversationIds = [],
   }: {
     conversations: ConversationItem[];
     whatsappThread: WhatsAppThread | null;
@@ -40,7 +41,10 @@
     onToggleCollapse: () => void;
     useIntelContext?: boolean;
     onToggleIntelContext?: (next: boolean) => void;
+    liveConversationIds?: string[];
   } = $props();
+
+  const liveSet = $derived(new Set(liveConversationIds));
 
   type Bucket = 'today' | 'yesterday' | 'last_week' | 'older';
 
@@ -192,6 +196,9 @@
                   style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
                 >
                   <div class="flex items-center justify-between mb-0.5 gap-2">
+                    {#if liveSet.has(conv.id)}
+                      <span class="live-dot" title="JKAI is working on this conversation" aria-label="Live job"></span>
+                    {/if}
                     <span
                       class="text-xs font-medium line-clamp-1 flex-1"
                       style="color: {activeConversationId === conv.id ? 'var(--accent)' : 'var(--text-primary)'};"
@@ -288,3 +295,20 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #25d366;
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6);
+    animation: live-pulse 1.6s ease-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6); }
+    70%  { box-shadow: 0 0 0 6px rgba(37, 211, 102, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+  }
+</style>
