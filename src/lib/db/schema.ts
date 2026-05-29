@@ -1561,41 +1561,12 @@ export const integrationOauthConfigs = pgTable('integration_oauth_configs', {
 export type IntegrationCredentialRow = typeof integrationCredentials.$inferSelect;
 export type IntegrationOauthConfigRow = typeof integrationOauthConfigs.$inferSelect;
 
-// ── Curate sessions ─────────────────────────────────────────────────────
-
-export const curateSessions = pgTable('curate_sessions', {
-  id: text('id').primaryKey(), // uuid (caller-provided via crypto.randomUUID())
-  // The proposed node `type` for this session. Becomes the branch suffix
-  // and the eventual node identifier. May be 'pending' until discovery picks one.
-  targetType: text('target_type').notNull(),
-  status: text('status').notNull(),
-  // ^ 'scoping' | 'discovering' | 'awaiting-approval' | 'generating'
-  //   | 'live-testing' | 'awaiting-promotion' | 'promoting' | 'promoted'
-  //   | 'aborted' | 'error' | 'ended'
-  goal: text('goal'), // one-line outcome from scope phase
-  proposal: jsonb('proposal').$type<Record<string, unknown>>(),
-  nodeSpec: jsonb('node_spec').$type<Record<string, unknown>>(),
-  worktreePath: text('worktree_path'),
-  branchName: text('branch_name'),
-  devServerPort: integer('dev_server_port'),
-  devServerPid: integer('dev_server_pid'),
-  iterationLog: jsonb('iteration_log').$type<unknown[]>().notNull().default([]),
-  errorTrace: text('error_trace'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-  endedAt: timestamp('ended_at'),
-  promotedAt: timestamp('promoted_at'),
-}, (t) => ({
-  byStatus: index('curate_sessions_status_idx').on(t.status),
-  byPort: uniqueIndex('curate_sessions_port_uniq').on(t.devServerPort),
-}));
-
 // ── Hermes sessions ──────────────────────────────────────────────────────
 
 export const hermesSessions = pgTable('hermes_sessions', {
   id: serial('id').primaryKey(),
   hermesSessionId: text('hermes_session_id').notNull(),
-  kind: text('kind', { enum: ['build', 'canvas_chat', 'curate', 'manual'] }).notNull(),
+  kind: text('kind', { enum: ['build', 'canvas_chat', 'manual'] }).notNull(),
   kindId: text('kind_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   closedAt: timestamp('closed_at', { withTimezone: true }),
@@ -1621,5 +1592,3 @@ export const hermesChatOrigin = pgTable('hermes_chat_origin', {
 });
 
 export type HermesChatOriginRow = typeof hermesChatOrigin.$inferSelect;
-
-export type CurateSessionRow = typeof curateSessions.$inferSelect;

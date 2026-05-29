@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export type TokenKind = 'build' | 'canvas_chat' | 'curate' | 'manual';
+export type TokenKind = 'build' | 'canvas_chat' | 'manual';
 
 export interface TokenScope {
   sessionId: string;
@@ -15,7 +15,7 @@ export type VerifyResult =
 
 const SEPARATOR = '.';
 
-const VALID_KINDS: TokenKind[] = ['build', 'canvas_chat', 'curate', 'manual'];
+const VALID_KINDS: TokenKind[] = ['build', 'canvas_chat', 'manual'];
 
 function encodePayload(scope: TokenScope): string {
   return Buffer.from(

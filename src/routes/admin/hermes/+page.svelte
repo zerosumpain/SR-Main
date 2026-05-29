@@ -8,7 +8,7 @@
   type SessionRow = {
     id: number;
     hermesSessionId: string;
-    kind: 'build' | 'canvas_chat' | 'curate' | 'manual';
+    kind: 'build' | 'canvas_chat' | 'manual';
     kindId: string;
     createdAt: string | Date;
   };
