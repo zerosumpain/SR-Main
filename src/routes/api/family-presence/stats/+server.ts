@@ -85,7 +85,7 @@ function nearestGeocacheName(
 	geocache: Record<string, string>
 ): string | null {
 	let bestName: string | null = null;
-	let bestDist = 0.5; // km — max 500m match
+	let bestDist = 1.0; // km — max 1km match (geocache keys are 2-decimal, ~11km boxes)
 	for (const [coords, name] of Object.entries(geocache)) {
 		const [gcLat, gcLon] = coords.split(',').map(Number);
 		if (isNaN(gcLat) || isNaN(gcLon)) continue;
