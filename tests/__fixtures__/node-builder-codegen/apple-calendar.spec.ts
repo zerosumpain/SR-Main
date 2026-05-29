@@ -1,4 +1,4 @@
-import type { NodeSpec } from '$lib/curate/spec/types';
+import type { NodeSpec } from '$lib/node-builder/spec/types';
 
 export const appleCalendarSpec: NodeSpec = {
   type: 'apple-calendar',

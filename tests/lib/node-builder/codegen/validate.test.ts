@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { NodeSpec } from '$lib/curate/spec/types';
+import type { NodeSpec } from '$lib/node-builder/spec/types';
 
 const validSpec: NodeSpec = {
   type: 'test-node',
@@ -23,26 +23,26 @@ const validSpec: NodeSpec = {
 
 describe('validateNodeSpec', () => {
   it('accepts a valid spec', async () => {
-    const { validateNodeSpec } = await import('$lib/curate/spec/validate');
+    const { validateNodeSpec } = await import('$lib/node-builder/spec/validate');
     const r = validateNodeSpec(validSpec);
     expect(r.ok).toBe(true);
   });
 
   it('rejects type with non-kebab-case', async () => {
-    const { validateNodeSpec } = await import('$lib/curate/spec/validate');
+    const { validateNodeSpec } = await import('$lib/node-builder/spec/validate');
     const r = validateNodeSpec({ ...validSpec, type: 'TestNode' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.join(' ')).toMatch(/kebab-case/i);
   });
 
   it('rejects empty label', async () => {
-    const { validateNodeSpec } = await import('$lib/curate/spec/validate');
+    const { validateNodeSpec } = await import('$lib/node-builder/spec/validate');
     const r = validateNodeSpec({ ...validSpec, label: '' });
     expect(r.ok).toBe(false);
   });
 
   it('rejects field with key not in configSchema.properties', async () => {
-    const { validateNodeSpec } = await import('$lib/curate/spec/validate');
+    const { validateNodeSpec } = await import('$lib/node-builder/spec/validate');
     const bad: NodeSpec = {
       ...validSpec,
       uiSchema: {
@@ -56,7 +56,7 @@ describe('validateNodeSpec', () => {
   });
 
   it('rejects oauth2 spec missing oauthSpec', async () => {
-    const { validateNodeSpec } = await import('$lib/curate/spec/validate');
+    const { validateNodeSpec } = await import('$lib/node-builder/spec/validate');
     const bad: NodeSpec = {
       ...validSpec,
       uiSchema: {
