@@ -10,7 +10,7 @@ import { patchWorkflowsIndex } from './index-patch';
 import { validateNodeSpec } from '../spec/validate';
 
 export interface WriteResult {
-  /** Paths written, relative to worktreeDir (except the sr-docs path). */
+  /** Paths written, relative to process.cwd() (except the sr-docs path). */
   written: string[];
 }
 
@@ -26,9 +26,9 @@ export interface WriteResult {
  */
 export async function writeNodeFiles(
   spec: NodeSpec,
-  worktreeDir: string,
   srDocsDir: string,
 ): Promise<WriteResult> {
+  const worktreeDir = process.cwd();
   const validation = validateNodeSpec(spec);
   if (!validation.ok) {
     throw new Error(`Invalid NodeSpec: ${validation.errors.join('; ')}`);

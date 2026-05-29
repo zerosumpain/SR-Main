@@ -39,36 +39,86 @@ afterEach(() => {
 describe('writeNodeFiles', () => {
   it('writes all expected files for apple-calendar', async () => {
     const { writeNodeFiles } = await import('$lib/node-builder/codegen/write-files');
-    const result = await writeNodeFiles(appleCalendarSpec, tempDir, srDocsDir);
-    expect(result.written).toEqual(
-      expect.arrayContaining([
-        'src/lib/workflows/nodes/apple-calendar.def.ts',
-        'src/lib/workflows/nodes/apple-calendar.ts',
-        'src/lib/canvas/nodes/panels/AppleCalendarPanel.svelte',
-        'src/lib/canvas/nodes/panels/registry.ts',
-        'src/lib/workflows/index.ts',
-      ]),
-    );
-    // sr-docs path is relative to srDocsDir.
-    expect(
-      fs.existsSync(
-        path.join(srDocsDir, 'content/internal/features/workflows/nodes/apple-calendar.md'),
-      ),
-    ).toBe(true);
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await writeNodeFiles(appleCalendarSpec, srDocsDir);
+      expect(result.written).toEqual(
+        expect.arrayContaining([
+          'src/lib/workflows/nodes/apple-calendar.def.ts',
+          'src/lib/workflows/nodes/apple-calendar.ts',
+          'src/lib/canvas/nodes/panels/AppleCalendarPanel.svelte',
+          'src/lib/canvas/nodes/panels/registry.ts',
+          'src/lib/workflows/index.ts',
+        ]),
+      );
+      // sr-docs path is relative to srDocsDir.
+      expect(
+        fs.existsSync(
+          path.join(srDocsDir, 'content/internal/features/workflows/nodes/apple-calendar.md'),
+        ),
+      ).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   it('is idempotent — running twice produces identical files', async () => {
     const { writeNodeFiles } = await import('$lib/node-builder/codegen/write-files');
-    await writeNodeFiles(appleCalendarSpec, tempDir, srDocsDir);
-    const snapshot1 = fs.readFileSync(
-      path.join(tempDir, 'src/lib/canvas/nodes/panels/registry.ts'),
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      await writeNodeFiles(appleCalendarSpec, srDocsDir);
+      const snapshot1 = fs.readFileSync(
+        path.join(tempDir, 'src/lib/canvas/nodes/panels/registry.ts'),
+        'utf8',
+      );
+      await writeNodeFiles(appleCalendarSpec, srDocsDir);
+      const snapshot2 = fs.readFileSync(
+        path.join(tempDir, 'src/lib/canvas/nodes/panels/registry.ts'),
+        'utf8',
+      );
+      expect(snapshot2).toBe(snapshot1);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('writes node files relative to process.cwd() when no worktreeDir is passed', async () => {
+    const { writeNodeFiles } = await import('$lib/node-builder/codegen/write-files');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-cwd-'));
+    const cwdSrDocsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-srdocs-'));
+
+    // Seed registry.ts and index.ts so the patch emitters have something to read.
+    fs.mkdirSync(path.join(repoRoot, 'src/lib/canvas/nodes/panels'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, 'src/lib/canvas/nodes/panels/registry.ts'),
+      fs.readFileSync(
+        path.join(__dirname, '../../../__fixtures__/node-builder-codegen/registry-base.ts.txt'),
+        'utf8',
+      ),
       'utf8',
     );
-    await writeNodeFiles(appleCalendarSpec, tempDir, srDocsDir);
-    const snapshot2 = fs.readFileSync(
-      path.join(tempDir, 'src/lib/canvas/nodes/panels/registry.ts'),
+    fs.mkdirSync(path.join(repoRoot, 'src/lib/workflows'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, 'src/lib/workflows/index.ts'),
+      fs.readFileSync(
+        path.join(__dirname, '../../../__fixtures__/node-builder-codegen/index-base.ts.txt'),
+        'utf8',
+      ),
       'utf8',
     );
-    expect(snapshot2).toBe(snapshot1);
+
+    const originalCwd = process.cwd();
+    process.chdir(repoRoot);
+    try {
+      const { written } = await writeNodeFiles(appleCalendarSpec, cwdSrDocsDir);
+      expect(written).toContain('src/lib/workflows/nodes/apple-calendar.ts');
+      expect(written).toContain('src/lib/workflows/nodes/apple-calendar.def.ts');
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(cwdSrDocsDir, { recursive: true, force: true });
+    }
   });
 });
