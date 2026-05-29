@@ -23,20 +23,11 @@
   // reflects work that continued in the background.
   let liveConversationIds = $state<string[]>([]);
 
-  const INTEL_CONTEXT_STORAGE_KEY = 'jkai.useIntelContext';
   const LAST_VISIT_STORAGE_KEY = 'jkai.lastVisit';
   const LAST_CONV_STORAGE_KEY = 'jkai.lastConversationId';
   const RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
-  let useIntelContext = $state(true);
 
   onMount(() => {
-    try {
-      const stored = localStorage.getItem(INTEL_CONTEXT_STORAGE_KEY);
-      if (stored === 'false') useIntelContext = false;
-    } catch {
-      // localStorage unavailable (private mode / SSR hydration race) — fall back to default.
-    }
-
     let resumed = false;
     // 1) Deep-link from a WhatsApp escalation: ?c=<convId>. If it matches a
     // known conversation we open it; otherwise we fall through to the
@@ -95,15 +86,6 @@
       localStorage.setItem(LAST_CONV_STORAGE_KEY, id);
     } catch {
       // ignore
-    }
-  }
-
-  function toggleIntelContext(next: boolean) {
-    useIntelContext = next;
-    try {
-      localStorage.setItem(INTEL_CONTEXT_STORAGE_KEY, String(next));
-    } catch {
-      // swallow — state remains in-memory for this session.
     }
   }
 
@@ -248,8 +230,6 @@
         onDelete={deleteConversation}
         collapsed={false}
         onToggleCollapse={() => {}}
-        {useIntelContext}
-        onToggleIntelContext={toggleIntelContext}
         {liveConversationIds}
       />
     </div>
@@ -278,8 +258,6 @@
             onDelete={deleteConversation}
             collapsed={false}
             onToggleCollapse={() => { sidebarOpen = false; }}
-            {useIntelContext}
-            onToggleIntelContext={toggleIntelContext}
             {liveConversationIds}
           />
         </div>
@@ -297,7 +275,6 @@
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
         approvalUi={data.approvalUi}
-        {useIntelContext}
         {activeBuild}
         onmodelchange={(ctx: ModelContext) => {
           if (activeConversation) {
