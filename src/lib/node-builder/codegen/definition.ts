@@ -41,7 +41,7 @@ ${basicConfigStr}
 }
 
 function fieldToBasicConfig(field: UISchemaField): string | null {
-  // Maps curate UI-schema widget identifiers to valid BasicConfigField.type
+  // Maps node-builder UI-schema widget identifiers to valid BasicConfigField.type
   // values (see src/lib/workflows/types.ts). Widgets without a direct project
   // equivalent (credential-picker, resource-picker, datetime) fall back to
   // plain 'text' — the panel-level Svelte component handles richer rendering.

@@ -1,7 +1,7 @@
 // ── Canonical node spec ────────────────────────────────────────────────
 //
 // One in-memory object that drives all five emitters (definition, executor,
-// panel, docs, registry/index patches). The curate engine builds a NodeSpec
+// panel, docs, registry/index patches). The node-builder builds a NodeSpec
 // during the discovery phase and hands it to writeNodeFiles().
 
 export interface NodeSpec {
@@ -59,7 +59,7 @@ export interface NodeSpec {
 
   /**
    * If the node uses an oauth2 credential, this declares the OAuth flow.
-   * The curate engine writes a row to integrationOauthConfigs for it.
+   * The node-builder writes a row to integrationOauthConfigs for it.
    */
   oauthSpec?: OAuthSpec;
 
