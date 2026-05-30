@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runProcess } from '$lib/workflows/site-tools/tools/node-builder-shared';
@@ -129,5 +129,57 @@ describe('node_builder_diff', () => {
     const result = await tool.handler({});
     const data = result.data as { stat: string; diff: string };
     expect(data.stat).toContain('b.txt');
+  });
+});
+
+describe('node_builder_abort', () => {
+  let repoDir: string;
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    repoDir = mkdtempSync(path.join(tmpdir(), 'nb-abort-'));
+    process.chdir(repoDir);
+    await runProcess('git', ['init', '-q', '-b', 'master'], {});
+    await runProcess('git', ['config', 'user.email', 'test@test.invalid'], {});
+    await runProcess('git', ['config', 'user.name', 'test'], {});
+
+    mkdirSync(path.join(repoDir, 'src/lib/workflows'), { recursive: true });
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const initial = 1;\n', 'utf8');
+    mkdirSync(path.join(repoDir, 'src/lib/canvas/nodes/panels'), { recursive: true });
+    writeFileSync(path.join(repoDir, 'src/lib/canvas/nodes/panels/registry.ts'), 'export const reg = {};\n', 'utf8');
+    writeFileSync(path.join(repoDir, 'package.json'), '{"name":"x"}\n', 'utf8');
+    await runProcess('git', ['add', '-A'], {});
+    await runProcess('git', ['commit', '-q', '-m', 'init'], {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('reverts modified allowlist files', async () => {
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const changed = 2;\n', 'utf8');
+    const tool = getTool('node_builder_abort')!;
+    const result = await tool.handler({});
+    expect(result.success).toBe(true);
+    expect(readFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'utf8'))
+      .toBe('export const initial = 1;\n');
+  });
+
+  it('removes untracked allowlist files', async () => {
+    mkdirSync(path.join(repoDir, 'src/lib/workflows/nodes'), { recursive: true });
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/nodes/new-node.ts'), 'export {};\n', 'utf8');
+    const tool = getTool('node_builder_abort')!;
+    await tool.handler({});
+    expect(existsSync(path.join(repoDir, 'src/lib/workflows/nodes/new-node.ts'))).toBe(false);
+  });
+
+  it('does NOT touch files outside the allowlist', async () => {
+    mkdirSync(path.join(repoDir, 'unrelated'), { recursive: true });
+    writeFileSync(path.join(repoDir, 'unrelated/x.txt'), 'untouched\n', 'utf8');
+    const tool = getTool('node_builder_abort')!;
+    await tool.handler({});
+    expect(existsSync(path.join(repoDir, 'unrelated/x.txt'))).toBe(true);
   });
 });

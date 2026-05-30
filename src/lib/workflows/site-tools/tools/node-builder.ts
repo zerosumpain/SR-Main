@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { register } from '../registry';
-import { runProcess } from './node-builder-shared';
+import { NODE_BUILDER_PATH_ALLOWLIST, runProcess } from './node-builder-shared';
 
 const NOT_IMPLEMENTED = async () => ({
   success: false,
@@ -139,7 +139,17 @@ register({
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async () => {
+    const revertedPaths: string[] = [];
+    for (const entry of NODE_BUILDER_PATH_ALLOWLIST) {
+      // Revert tracked modifications under this entry.
+      const co = await runProcess('git', ['checkout', '--', entry], {});
+      if (co.ok) revertedPaths.push(entry);
+      // Remove untracked files within the allowlist entry.
+      await runProcess('git', ['clean', '-fd', entry], {});
+    }
+    return { success: true, data: { ok: true, revertedPaths } };
+  },
 });
 
 register({
