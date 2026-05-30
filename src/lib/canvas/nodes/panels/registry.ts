@@ -59,7 +59,6 @@ import BuilderPiPanel from './BuilderPiPanel.svelte';
 import BuildViewPanel from './BuildViewPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
-import IcloudCalPanel from './IcloudCalPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
 
 export type PanelProps = {
@@ -144,7 +143,6 @@ const specialized: Record<string, Component<PanelProps>> = {
   'builder-chat': BuilderChatPanel as unknown as Component<PanelProps>,
   'builder-pi': BuilderPiPanel as unknown as Component<PanelProps>,
   'build-view': BuildViewPanel as unknown as Component<PanelProps>,
-  'icloud-cal': IcloudCalPanel as unknown as Component<PanelProps>,
 };
 
 /**
