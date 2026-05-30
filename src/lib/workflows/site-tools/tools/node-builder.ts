@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { register } from '../registry';
 import { NODE_BUILDER_PATH_ALLOWLIST, runProcess } from './node-builder-shared';
@@ -86,7 +87,20 @@ register({
   },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async (args) => {
+    const spec = args.spec;
+    const srDocsDir = process.env.SR_DOCS_DIR ?? path.join(os.homedir(), 'sr-docs');
+    try {
+      const { writeNodeFiles } = await import('$lib/node-builder/codegen/write-files');
+      const { written } = await writeNodeFiles(spec as never, srDocsDir);
+      return { success: true, data: { written } };
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
 });
 
 register({

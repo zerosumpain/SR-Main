@@ -183,3 +183,69 @@ describe('node_builder_abort', () => {
     expect(existsSync(path.join(repoDir, 'unrelated/x.txt'))).toBe(true);
   });
 });
+
+describe('node_builder_write_files', () => {
+  let repoDir: string;
+  let srDocsDir: string;
+  let originalCwd: string;
+  let originalSrDocs: string | undefined;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    originalSrDocs = process.env.SR_DOCS_DIR;
+    repoDir = mkdtempSync(path.join(tmpdir(), 'nb-write-'));
+    srDocsDir = mkdtempSync(path.join(tmpdir(), 'nb-srdocs-'));
+    process.env.SR_DOCS_DIR = srDocsDir;
+    // Seed the registry + index that codegen patches.
+    mkdirSync(path.join(repoDir, 'src/lib/canvas/nodes/panels'), { recursive: true });
+    writeFileSync(
+      path.join(repoDir, 'src/lib/canvas/nodes/panels/registry.ts'),
+      readFileSync(
+        path.join(originalCwd, 'tests/__fixtures__/node-builder-codegen/registry-base.ts.txt'),
+        'utf8',
+      ),
+      'utf8',
+    );
+    mkdirSync(path.join(repoDir, 'src/lib/workflows'), { recursive: true });
+    writeFileSync(
+      path.join(repoDir, 'src/lib/workflows/index.ts'),
+      readFileSync(
+        path.join(originalCwd, 'tests/__fixtures__/node-builder-codegen/index-base.ts.txt'),
+        'utf8',
+      ),
+      'utf8',
+    );
+    process.chdir(repoDir);
+  });
+
+  afterEach(() => {
+    if (originalSrDocs === undefined) delete process.env.SR_DOCS_DIR;
+    else process.env.SR_DOCS_DIR = originalSrDocs;
+    process.chdir(originalCwd);
+    rmSync(repoDir, { recursive: true, force: true });
+    rmSync(srDocsDir, { recursive: true, force: true });
+  });
+
+  it('writes all expected files for a valid spec', async () => {
+    const fixture = await import(
+      path.join(originalCwd, 'tests/__fixtures__/node-builder-codegen/apple-calendar.spec.ts')
+    );
+    // Adjust the export name below to match the actual export (likely `appleCalendarSpec` or `spec`).
+    const spec = (fixture as Record<string, unknown>).appleCalendarSpec
+      ?? (fixture as Record<string, unknown>).spec
+      ?? (fixture as Record<string, unknown>).default;
+    const tool = getTool('node_builder_write_files')!;
+    const result = await tool.handler({ spec });
+    expect(result.success).toBe(true);
+    const data = result.data as { written: string[] };
+    expect(data.written.some((p) => p.endsWith('apple-calendar.ts'))).toBe(true);
+    expect(data.written.some((p) => p.endsWith('apple-calendar.def.ts'))).toBe(true);
+  });
+
+  it('returns success:false when spec is missing required fields', async () => {
+    const tool = getTool('node_builder_write_files')!;
+    const result = await tool.handler({ spec: { type: 'incomplete' } });
+    expect(result.success).toBe(false);
+    expect(typeof result.error).toBe('string');
+  });
+});
