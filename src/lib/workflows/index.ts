@@ -79,6 +79,7 @@ import {
 } from './nodes/deep-dive-ops';
 import { postitDef, postitExecutor } from './nodes/postit';
 import { annotationDef, annotationExecutor } from './nodes/annotation';
+import { icloudCalDef, icloudCalExecutor } from './nodes/icloud-cal';
 import { getWhatsAppService } from './whatsapp/service';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
@@ -173,6 +174,7 @@ registry.register(deepDiveListDef, deepDiveListExecutor);
 registry.register(deepDiveControlDef, deepDiveControlExecutor);
 registry.register(postitDef, postitExecutor);
 registry.register(annotationDef, annotationExecutor);
+registry.register(icloudCalDef, icloudCalExecutor);
 
 // Load dynamic nodes from ~/.strange-rambling/workflow-nodes/
 ensureDynamicNodesDir();
