@@ -102,7 +102,7 @@ register({
 register({
   name: 'node_builder_validate',
   description:
-    'Runs `npm run build` and `npm run check` to verify the working tree builds and typechecks. Use after node_builder_write_files to confirm the generated node compiles cleanly.',
+    'Runs `npm run build` and `svelte-check --threshold error` to verify the working tree builds and typechecks. Reports failure only on real type errors — pre-existing warnings (e.g. deprecation notices) do not fail validation.',
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
@@ -118,9 +118,25 @@ register({
         },
       };
     }
+    // svelte-check directly with --threshold error so pre-existing warnings
+    // (the repo currently has 578) don't cause the validate gate to misfire.
+    // svelte-kit sync runs first so `$types` files are fresh.
+    const sync = await runProcess('npx', ['svelte-kit', 'sync'], {
+      env: { NODE_OPTIONS: '--max-old-space-size=8192' },
+      timeoutMs: 60_000,
+    });
+    if (!sync.ok) {
+      return {
+        success: true,
+        data: {
+          ok: false,
+          errors: `svelte-kit sync failed:\n${sync.stderr || sync.stdout}`,
+        },
+      };
+    }
     const check = await runProcess(
-      'npm',
-      ['run', 'check'],
+      'npx',
+      ['svelte-check', '--tsconfig', './tsconfig.json', '--threshold', 'error'],
       {
         env: { NODE_OPTIONS: '--max-old-space-size=8192' },
         timeoutMs: 5 * 60_000,
@@ -131,7 +147,7 @@ register({
         success: true,
         data: {
           ok: false,
-          errors: `npm run check failed:\n${check.stderr || check.stdout}`,
+          errors: `svelte-check found errors:\n${check.stderr || check.stdout}`,
         },
       };
     }
