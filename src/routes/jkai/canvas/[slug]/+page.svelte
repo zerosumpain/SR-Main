@@ -7620,7 +7620,12 @@
 
   .canvas--mobile :global(.nm-inline) {
     position: fixed !important;
-    inset: auto 0 0 0 !important;
+    /* longhand !important wins against inline style:left/style:top on the
+     * .nm-inline div (shorthand inset can lose to longhand inline styles). */
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
     width: 100% !important;
     max-width: 100% !important;
     max-height: 85dvh !important;
@@ -7632,6 +7637,23 @@
     animation: nm-slide-up 200ms ease-out !important;
     z-index: 1001 !important;
     transform: none !important;
+  }
+
+  /* Tiny debug pill so John can confirm at a glance whether mobile mode is
+   * actually active on his phone. Remove once mobile UX is stable. */
+  .canvas--mobile :global(body)::after {
+    content: 'MOBILE';
+    position: fixed;
+    top: 4px;
+    right: 4px;
+    z-index: 9999;
+    font: 600 9px / 1 system-ui, sans-serif;
+    background: var(--status-success, #2c8a3f);
+    color: white;
+    padding: 3px 6px;
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0.7;
   }
 
   /* Drag-handle visual at the top of the sheet (purely decorative — the
