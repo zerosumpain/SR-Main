@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runProcess } from '$lib/workflows/site-tools/tools/node-builder-shared';
@@ -247,5 +247,90 @@ describe('node_builder_write_files', () => {
     const result = await tool.handler({ spec: { type: 'incomplete' } });
     expect(result.success).toBe(false);
     expect(typeof result.error).toBe('string');
+  });
+});
+
+describe('node_builder_commit_and_deploy', () => {
+  let originalCwd: string;
+  let repoDir: string;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    repoDir = mkdtempSync(path.join(tmpdir(), 'nb-cad-'));
+    process.chdir(repoDir);
+    await runProcess('git', ['init', '-q', '-b', 'master'], {});
+    await runProcess('git', ['config', 'user.email', 'test@test.invalid'], {});
+    await runProcess('git', ['config', 'user.name', 'test'], {});
+    mkdirSync(path.join(repoDir, 'src/lib/workflows'), { recursive: true });
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export {};\n', 'utf8');
+    await runProcess('git', ['add', '-A'], {});
+    await runProcess('git', ['commit', '-q', '-m', 'init'], {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('refuses if any changed file is outside the allowlist', async () => {
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
+    writeFileSync(path.join(repoDir, 'src/unrelated.ts'), 'export {};\n', 'utf8');
+    const tool = getTool('node_builder_commit_and_deploy')!;
+    const result = await tool.handler({ commitMessage: 'feat: x' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('src/unrelated.ts');
+  });
+
+  it('refuses if the working tree has nothing to commit', async () => {
+    const tool = getTool('node_builder_commit_and_deploy')!;
+    const result = await tool.handler({ commitMessage: 'feat: x' });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/nothing|clean/i);
+  });
+
+  it('happy path: stages allowlist files, commits, push+deploy invoked, returns ok', async () => {
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
+    const stub = path.join(repoDir, 'fake-deploy.sh');
+    writeFileSync(stub, '#!/bin/sh\necho "deploy ok"\n', 'utf8');
+    chmodSync(stub, 0o755);
+    process.env.NODE_BUILDER_DEPLOY_CMD = stub;
+    process.env.NODE_BUILDER_SKIP_PUSH = '1';
+    process.env.NODE_BUILDER_VERIFY_URL = '';
+    try {
+      const tool = getTool('node_builder_commit_and_deploy')!;
+      const result = await tool.handler({ commitMessage: 'feat(test): a' });
+      expect(result.success).toBe(true);
+      const data = result.data as { ok: boolean; log: string };
+      expect(data.ok).toBe(true);
+      expect(data.log).toContain('deploy ok');
+      const log = await runProcess('git', ['log', '--oneline', '-1'], {});
+      expect(log.stdout).toContain('feat(test): a');
+    } finally {
+      delete process.env.NODE_BUILDER_DEPLOY_CMD;
+      delete process.env.NODE_BUILDER_SKIP_PUSH;
+      delete process.env.NODE_BUILDER_VERIFY_URL;
+    }
+  });
+
+  it('bubbles up deploy-script failure', async () => {
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
+    const stub = path.join(repoDir, 'fake-deploy-fail.sh');
+    writeFileSync(stub, '#!/bin/sh\necho "deploy broke" >&2\nexit 2\n', 'utf8');
+    chmodSync(stub, 0o755);
+    process.env.NODE_BUILDER_DEPLOY_CMD = stub;
+    process.env.NODE_BUILDER_SKIP_PUSH = '1';
+    process.env.NODE_BUILDER_VERIFY_URL = '';
+    try {
+      const tool = getTool('node_builder_commit_and_deploy')!;
+      const result = await tool.handler({ commitMessage: 'feat(test): b' });
+      expect(result.success).toBe(true);
+      const data = result.data as { ok: boolean; log: string };
+      expect(data.ok).toBe(false);
+      expect(data.log).toMatch(/deploy.*broke|exit 2|deploy/i);
+    } finally {
+      delete process.env.NODE_BUILDER_DEPLOY_CMD;
+      delete process.env.NODE_BUILDER_SKIP_PUSH;
+      delete process.env.NODE_BUILDER_VERIFY_URL;
+    }
   });
 });

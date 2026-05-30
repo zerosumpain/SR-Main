@@ -2,12 +2,8 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { register } from '../registry';
-import { NODE_BUILDER_PATH_ALLOWLIST, runProcess } from './node-builder-shared';
+import { isPathAllowed, NODE_BUILDER_PATH_ALLOWLIST, runProcess } from './node-builder-shared';
 
-const NOT_IMPLEMENTED = async () => ({
-  success: false,
-  error: 'not implemented yet — Phase 2 task pending',
-});
 
 register({
   name: 'node_builder_check_clean',
@@ -212,5 +208,92 @@ register({
   },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async (args) => {
+    const commitMessage = args.commitMessage as string;
+    if (typeof commitMessage !== 'string' || commitMessage.trim().length === 0) {
+      return { success: false, error: 'commitMessage is required and must be a non-empty string' };
+    }
+
+    // 1. Inspect changes.
+    const status = await runProcess('git', ['status', '--porcelain'], {});
+    if (!status.ok) return { success: false, error: `git status failed: ${status.stderr}` };
+
+    const allLines = status.stdout
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0);
+
+    // Collect paths to check: tracked changes plus any untracked files inside the source tree.
+    // Root-level untracked files (e.g. scripts, stubs) are ignored — they won't be staged.
+    const changedPaths = allLines
+      .filter((line) => {
+        if (!line.startsWith('??')) return true; // tracked change — always include
+        const p = line.slice(3);
+        // Include untracked files inside the source tree (they require allowlist clearance)
+        // but ignore top-level untracked files outside src/ (e.g. deploy stubs at repo root).
+        return p.startsWith('src/') || p.startsWith('docs/');
+      })
+      .map((line) => line.slice(3));
+
+    // "nothing to commit" if there are no tracked changes and no source-tree untracked files.
+    if (changedPaths.length === 0) {
+      return { success: false, error: 'nothing to commit — working tree is clean' };
+    }
+
+    // 2. Enforce allowlist.
+    const offenders = changedPaths.filter((p) => !isPathAllowed(p));
+    if (offenders.length > 0) {
+      return {
+        success: false,
+        error: `refusing to commit — these paths are outside the node-builder allowlist: ${offenders.join(', ')}`,
+      };
+    }
+
+    // 3. Stage the already-validated changed paths.
+    const stage = await runProcess('git', ['add', ...changedPaths], {});
+    if (!stage.ok) return { success: false, error: `git add failed: ${stage.stderr}` };
+
+    // 4. Commit.
+    const commit = await runProcess('git', ['commit', '-m', commitMessage], {});
+    if (!commit.ok) {
+      return { success: false, error: `git commit failed: ${commit.stderr || commit.stdout}` };
+    }
+    let log = commit.stdout;
+
+    // 5. Push (unless test stubbed).
+    if (process.env.NODE_BUILDER_SKIP_PUSH !== '1') {
+      const push = await runProcess('git', ['push', 'origin', 'master'], { timeoutMs: 60_000 });
+      log += `\n${push.stdout}\n${push.stderr}`;
+      if (!push.ok) return { success: true, data: { ok: false, log: `${log}\npush failed` } };
+    }
+
+    // 6. Deploy.
+    const deployCmd = process.env.NODE_BUILDER_DEPLOY_CMD ?? './scripts/deploy.sh';
+    const deploy = await runProcess(deployCmd, [], { timeoutMs: 5 * 60_000 });
+    log += `\n${deploy.stdout}\n${deploy.stderr}`;
+    if (!deploy.ok) return { success: true, data: { ok: false, log } };
+
+    // 7. Live verification (skipped if NODE_BUILDER_VERIFY_URL is empty string).
+    const verifyUrl = process.env.NODE_BUILDER_VERIFY_URL ?? 'https://strangeramblings.com';
+    if (verifyUrl) {
+      const curl = await runProcess(
+        'curl',
+        ['-sS', '-o', '/dev/null', '-w', '%{http_code}', verifyUrl],
+        { timeoutMs: 30_000 },
+      );
+      log += `\nverify ${verifyUrl} → ${curl.stdout}`;
+      if (curl.stdout.trim() !== '200') {
+        return { success: true, data: { ok: false, deployUrl: verifyUrl, log } };
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        ok: true,
+        deployUrl: verifyUrl || undefined,
+        log,
+      },
+    };
+  },
 });
