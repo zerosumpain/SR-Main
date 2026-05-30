@@ -290,7 +290,8 @@ describe('node_builder_commit_and_deploy', () => {
 
   it('happy path: stages allowlist files, commits, push+deploy invoked, returns ok', async () => {
     writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
-    const stub = path.join(repoDir, 'fake-deploy.sh');
+    const stubDir = mkdtempSync(path.join(tmpdir(), 'nb-cad-stub-'));
+    const stub = path.join(stubDir, 'fake-deploy.sh');
     writeFileSync(stub, '#!/bin/sh\necho "deploy ok"\n', 'utf8');
     chmodSync(stub, 0o755);
     process.env.NODE_BUILDER_DEPLOY_CMD = stub;
@@ -309,12 +310,14 @@ describe('node_builder_commit_and_deploy', () => {
       delete process.env.NODE_BUILDER_DEPLOY_CMD;
       delete process.env.NODE_BUILDER_SKIP_PUSH;
       delete process.env.NODE_BUILDER_VERIFY_URL;
+      rmSync(stubDir, { recursive: true, force: true });
     }
   });
 
   it('bubbles up deploy-script failure', async () => {
     writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
-    const stub = path.join(repoDir, 'fake-deploy-fail.sh');
+    const stubDir = mkdtempSync(path.join(tmpdir(), 'nb-cad-stub-'));
+    const stub = path.join(stubDir, 'fake-deploy-fail.sh');
     writeFileSync(stub, '#!/bin/sh\necho "deploy broke" >&2\nexit 2\n', 'utf8');
     chmodSync(stub, 0o755);
     process.env.NODE_BUILDER_DEPLOY_CMD = stub;
@@ -331,6 +334,16 @@ describe('node_builder_commit_and_deploy', () => {
       delete process.env.NODE_BUILDER_DEPLOY_CMD;
       delete process.env.NODE_BUILDER_SKIP_PUSH;
       delete process.env.NODE_BUILDER_VERIFY_URL;
+      rmSync(stubDir, { recursive: true, force: true });
     }
+  });
+
+  it('refuses untracked files at repo root (no carve-out)', async () => {
+    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
+    writeFileSync(path.join(repoDir, 'evil.sh'), '#!/bin/sh\nrm -rf /\n', 'utf8');
+    const tool = getTool('node_builder_commit_and_deploy')!;
+    const result = await tool.handler({ commitMessage: 'feat: x' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('evil.sh');
   });
 });

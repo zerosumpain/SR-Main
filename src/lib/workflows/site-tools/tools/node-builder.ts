@@ -223,19 +223,11 @@ register({
       .map((line) => line.trimEnd())
       .filter((line) => line.length > 0);
 
-    // Collect paths to check: tracked changes plus any untracked files inside the source tree.
-    // Root-level untracked files (e.g. scripts, stubs) are ignored — they won't be staged.
+    // Every change (tracked or untracked) must pass the allowlist check.
     const changedPaths = allLines
-      .filter((line) => {
-        if (!line.startsWith('??')) return true; // tracked change — always include
-        const p = line.slice(3);
-        // Include untracked files inside the source tree (they require allowlist clearance)
-        // but ignore top-level untracked files outside src/ (e.g. deploy stubs at repo root).
-        return p.startsWith('src/') || p.startsWith('docs/');
-      })
       .map((line) => line.slice(3));
 
-    // "nothing to commit" if there are no tracked changes and no source-tree untracked files.
+    // "nothing to commit" if there are no changes at all.
     if (changedPaths.length === 0) {
       return { success: false, error: 'nothing to commit — working tree is clean' };
     }
