@@ -29,6 +29,15 @@ beforeEach(() => {
     path.join(tempDir, 'src/lib/workflows/index.ts'),
     fs.readFileSync(path.join(FIXTURE, 'index-base.ts.txt'), 'utf8'),
   );
+  // Seed a minimal package.json so the package-patcher has something to patch.
+  fs.writeFileSync(
+    path.join(tempDir, 'package.json'),
+    JSON.stringify(
+      { name: 'demo', version: '0.1.0', dependencies: { svelte: '^5.0.0' } },
+      null,
+      2,
+    ) + '\n',
+  );
 });
 
 afterEach(() => {
@@ -53,8 +62,13 @@ describe('writeNodeFiles', () => {
           // Adapter + barrel — only emitted because spec has integrationType.
           'src/lib/integrations/adapters/apple-calendar.ts',
           'src/lib/integrations/adapters/index.ts',
+          // package.json — patched with spec.deps (tsdav).
+          'package.json',
         ]),
       );
+      // tsdav (from spec.deps) is now declared in package.json.
+      const pkg = JSON.parse(fs.readFileSync(path.join(tempDir, 'package.json'), 'utf8'));
+      expect(pkg.dependencies.tsdav).toBe('^2.0.0');
       // sr-docs path is relative to srDocsDir.
       expect(
         fs.existsSync(

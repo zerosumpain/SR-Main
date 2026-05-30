@@ -9,6 +9,7 @@ import { patchPanelRegistry } from './registry-patch';
 import { patchWorkflowsIndex } from './index-patch';
 import { emitAdapter, adapterFileName } from './adapter';
 import { patchAdapterIndex } from './adapter-index-patch';
+import { patchPackageJson } from './package-patch';
 import { validateNodeSpec } from '../spec/validate';
 
 export interface WriteResult {
@@ -94,6 +95,20 @@ export async function writeNodeFiles(
       'utf8',
     );
     written.push(adapterIndexRelPath);
+  }
+
+  // 6b. Patch package.json with spec.deps (only if any deps declared).
+  if (spec.deps && spec.deps.length > 0) {
+    const pkgRelPath = 'package.json';
+    const pkgFull = path.join(worktreeDir, pkgRelPath);
+    if (fs.existsSync(pkgFull)) {
+      const pkgSource = fs.readFileSync(pkgFull, 'utf8');
+      const patched = patchPackageJson(pkgSource, spec);
+      if (patched !== pkgSource) {
+        fs.writeFileSync(pkgFull, patched, 'utf8');
+        written.push(pkgRelPath);
+      }
+    }
   }
 
   // 7. sr-docs entry (written to srDocsDir, not worktreeDir).
