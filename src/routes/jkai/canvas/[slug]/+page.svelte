@@ -2189,6 +2189,10 @@
   function onViewportTouchStart(e: TouchEvent) {
     if (!NEW_PALETTE) return;
     if (paletteOpen) return;
+    // Multi-touch (pinch) — let the browser handle pinch-zoom; don't arm
+    // the long-press add-node timer. Fixes the gesture conflict where any
+    // brief pause during a pinch opens the node palette.
+    if (e.touches.length > 1) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.chat-node, .wf-node')) return;
     const t = e.touches[0];
@@ -2213,6 +2217,14 @@
   });
   function onViewportTouchMove(e: TouchEvent) {
     if (!longPressStart) return;
+    // A second finger landed mid-press — that's a pinch starting. Cancel
+    // the pending palette-open timer and let the browser handle pinch-zoom.
+    if (e.touches.length > 1) {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+      return;
+    }
     const t = e.touches[0];
     if (!t) return;
     if (Math.hypot(t.clientX - longPressStart.x, t.clientY - longPressStart.y) > 10) {
