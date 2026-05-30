@@ -172,6 +172,17 @@ export const appleCalendarSpec: NodeSpec = {
       return calendars.map((c) => ({ value: c.url, label: c.displayName ?? c.url }));
     `,
   }],
+  testCredentialBody: `
+    const cred = await getCredential<'basic'>(credentialId);
+    if (!cred) throw new Error('Credential not found');
+    const client = await tsdav.createDAVClient({
+      serverUrl: 'https://caldav.icloud.com',
+      credentials: { username: cred.payload.username, password: cred.payload.password },
+      authMethod: 'Basic',
+      defaultAccountType: 'caldav',
+    });
+    await client.fetchCalendars();
+  `,
   docs: `## When to use
 
 For workflows that need to read or write events on your iCloud calendar — alerts before meetings, scheduling, syncing with other systems.

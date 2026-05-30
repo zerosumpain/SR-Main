@@ -58,6 +58,14 @@ export interface NodeSpec {
   optionsResolvers?: OptionsResolverSpec[];
 
   /**
+   * Optional: body of the adapter's `testCredential(credentialId)` function.
+   * Plain TypeScript source. Should resolve on success, reject with a
+   * human-readable error on failure. Used by /api/integrations/test/<type>
+   * and the `test-connection` action widget.
+   */
+  testCredentialBody?: string;
+
+  /**
    * If the node uses an oauth2 credential, this declares the OAuth flow.
    * The node-builder writes a row to integrationOauthConfigs for it.
    */

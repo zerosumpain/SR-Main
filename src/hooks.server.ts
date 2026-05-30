@@ -9,6 +9,9 @@ import {
 // jkai-builder.service). Build-control routes call it over the Unix socket
 // via $lib/jkai/builder-client. Phase 3 of docs/plans/jkai-build-rewrite.md.
 import { startOrphanSweep } from '$lib/jkai/media/sweep';
+// Side-effect import: every integration adapter registers itself on load.
+// The barrel is maintained by the node-builder codegen.
+import '$lib/integrations/adapters';
 import { isPublicPath } from '$lib/auth';
 import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';

@@ -7,6 +7,8 @@ import { emitPanel } from './panel';
 import { emitDocs } from './docs';
 import { patchPanelRegistry } from './registry-patch';
 import { patchWorkflowsIndex } from './index-patch';
+import { emitAdapter, adapterFileName } from './adapter';
+import { patchAdapterIndex } from './adapter-index-patch';
 import { validateNodeSpec } from '../spec/validate';
 
 export interface WriteResult {
@@ -66,7 +68,35 @@ export async function writeNodeFiles(
   fs.writeFileSync(indexFull, patchWorkflowsIndex(indexSource, spec), 'utf8');
   written.push(indexRelPath);
 
-  // 6. sr-docs entry (written to srDocsDir, not worktreeDir).
+  // 6. Integration adapter (only if spec declares an integrationType).
+  const adapterSource = emitAdapter(spec);
+  if (adapterSource && spec.integrationType) {
+    const adapterRelPath = path.join(
+      'src/lib/integrations/adapters',
+      adapterFileName(spec.integrationType),
+    );
+    writeFile(worktreeDir, adapterRelPath, adapterSource);
+    written.push(adapterRelPath);
+
+    // 6a. Patch adapter index barrel (creates it if missing).
+    const adapterIndexRelPath = path.join(
+      'src/lib/integrations/adapters',
+      'index.ts',
+    );
+    const adapterIndexFull = path.join(worktreeDir, adapterIndexRelPath);
+    const adapterIndexSource = fs.existsSync(adapterIndexFull)
+      ? fs.readFileSync(adapterIndexFull, 'utf8')
+      : '';
+    fs.mkdirSync(path.dirname(adapterIndexFull), { recursive: true });
+    fs.writeFileSync(
+      adapterIndexFull,
+      patchAdapterIndex(adapterIndexSource, spec),
+      'utf8',
+    );
+    written.push(adapterIndexRelPath);
+  }
+
+  // 7. sr-docs entry (written to srDocsDir, not worktreeDir).
   const docsRelPath = path.join(
     'content/internal/features/workflows/nodes',
     `${spec.type}.md`,

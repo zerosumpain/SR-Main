@@ -50,6 +50,9 @@ describe('writeNodeFiles', () => {
           'src/lib/canvas/nodes/panels/AppleCalendarPanel.svelte',
           'src/lib/canvas/nodes/panels/registry.ts',
           'src/lib/workflows/index.ts',
+          // Adapter + barrel — only emitted because spec has integrationType.
+          'src/lib/integrations/adapters/apple-calendar.ts',
+          'src/lib/integrations/adapters/index.ts',
         ]),
       );
       // sr-docs path is relative to srDocsDir.
@@ -58,6 +61,39 @@ describe('writeNodeFiles', () => {
           path.join(srDocsDir, 'content/internal/features/workflows/nodes/apple-calendar.md'),
         ),
       ).toBe(true);
+      // Adapter file actually wires registerIntegrationAdapter + the calendar resolver.
+      const adapter = fs.readFileSync(
+        path.join(tempDir, 'src/lib/integrations/adapters/apple-calendar.ts'),
+        'utf8',
+      );
+      expect(adapter).toContain('registerIntegrationAdapter');
+      expect(adapter).toContain('"apple-calendar"');
+      expect(adapter).toContain('case "calendar":');
+      expect(adapter).toContain('testCredential');
+      // Barrel registers the new adapter.
+      const barrel = fs.readFileSync(
+        path.join(tempDir, 'src/lib/integrations/adapters/index.ts'),
+        'utf8',
+      );
+      expect(barrel).toContain("import './apple-calendar';");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('does NOT emit adapter when spec has no integrationType', async () => {
+    const { writeNodeFiles } = await import('$lib/node-builder/codegen/write-files');
+    const noIntegration = { ...appleCalendarSpec, integrationType: undefined };
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await writeNodeFiles(noIntegration, srDocsDir);
+      expect(result.written).not.toEqual(
+        expect.arrayContaining(['src/lib/integrations/adapters/apple-calendar.ts']),
+      );
+      expect(
+        fs.existsSync(path.join(tempDir, 'src/lib/integrations/adapters/apple-calendar.ts')),
+      ).toBe(false);
     } finally {
       process.chdir(originalCwd);
     }
