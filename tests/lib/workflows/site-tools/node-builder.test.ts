@@ -83,3 +83,51 @@ describe('node_builder_list_existing', () => {
     expect(types).toContain('gmail-send');
   });
 });
+
+describe('node_builder_diff', () => {
+  let repoDir: string;
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    repoDir = mkdtempSync(path.join(tmpdir(), 'nb-diff-'));
+    process.chdir(repoDir);
+    await runProcess('git', ['init', '-q', '-b', 'master'], {});
+    await runProcess('git', ['config', 'user.email', 'test@test.invalid'], {});
+    await runProcess('git', ['config', 'user.name', 'test'], {});
+    writeFileSync(path.join(repoDir, 'a.txt'), 'initial\n', 'utf8');
+    await runProcess('git', ['add', 'a.txt'], {});
+    await runProcess('git', ['commit', '-q', '-m', 'init'], {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('returns empty stat and diff when working tree is clean', async () => {
+    const tool = getTool('node_builder_diff')!;
+    const result = await tool.handler({});
+    expect(result.success).toBe(true);
+    const data = result.data as { stat: string; diff: string };
+    expect(data.stat).toBe('');
+    expect(data.diff).toBe('');
+  });
+
+  it('returns non-empty stat and diff when there are uncommitted changes', async () => {
+    writeFileSync(path.join(repoDir, 'a.txt'), 'changed\n', 'utf8');
+    const tool = getTool('node_builder_diff')!;
+    const result = await tool.handler({});
+    const data = result.data as { stat: string; diff: string };
+    expect(data.stat).toContain('a.txt');
+    expect(data.diff).toContain('changed');
+  });
+
+  it('includes untracked files in the diff/stat', async () => {
+    writeFileSync(path.join(repoDir, 'b.txt'), 'new file\n', 'utf8');
+    const tool = getTool('node_builder_diff')!;
+    const result = await tool.handler({});
+    const data = result.data as { stat: string; diff: string };
+    expect(data.stat).toContain('b.txt');
+  });
+});

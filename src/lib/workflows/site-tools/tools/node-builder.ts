@@ -106,7 +106,30 @@ register({
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async () => {
+    // Intent-to-add untracked files so they show in diff.
+    const status = await runProcess('git', ['status', '--porcelain'], {});
+    if (!status.ok) return { success: false, error: `git status failed: ${status.stderr}` };
+
+    const untracked = status.stdout
+      .split('\n')
+      .filter((line) => line.startsWith('?? '))
+      .map((line) => line.slice(3));
+    for (const f of untracked) {
+      await runProcess('git', ['add', '-N', f], {});
+    }
+
+    const stat = await runProcess('git', ['diff', '--stat', 'HEAD'], {});
+    const diff = await runProcess('git', ['diff', 'HEAD'], {});
+
+    return {
+      success: true,
+      data: {
+        stat: stat.stdout,
+        diff: diff.stdout,
+      },
+    };
+  },
 });
 
 register({
