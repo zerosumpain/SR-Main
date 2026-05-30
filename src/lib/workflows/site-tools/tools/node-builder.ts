@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { register } from '../registry';
+import { runProcess } from './node-builder-shared';
 
 const NOT_IMPLEMENTED = async () => ({
   success: false,
@@ -12,7 +15,41 @@ register({
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async () => {
+    const status = await runProcess('git', ['status', '--porcelain'], {});
+    if (!status.ok) {
+      return { success: false, error: `git status failed: ${status.stderr}` };
+    }
+    if (status.stdout.trim().length > 0) {
+      return {
+        success: true,
+        data: { ok: false, reason: 'working tree is dirty' },
+      };
+    }
+
+    const branch = await runProcess('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {});
+    if (!branch.ok) {
+      return { success: false, error: `git rev-parse failed: ${branch.stderr}` };
+    }
+    if (branch.stdout.trim() !== 'master') {
+      return {
+        success: true,
+        data: {
+          ok: false,
+          reason: `on branch ${branch.stdout.trim()}, not master`,
+        },
+      };
+    }
+
+    if (existsSync(path.join(process.cwd(), '.git/MERGE_HEAD'))) {
+      return {
+        success: true,
+        data: { ok: false, reason: 'merge in progress' },
+      };
+    }
+
+    return { success: true, data: { ok: true } };
+  },
 });
 
 register({
