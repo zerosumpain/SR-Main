@@ -110,7 +110,37 @@ register({
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async () => {
+    // Build first — if it fails, no point typechecking.
+    const build = await runProcess('npm', ['run', 'build'], { timeoutMs: 5 * 60_000 });
+    if (!build.ok) {
+      return {
+        success: true,
+        data: {
+          ok: false,
+          errors: `npm run build failed:\n${build.stderr || build.stdout}`,
+        },
+      };
+    }
+    const check = await runProcess(
+      'npm',
+      ['run', 'check'],
+      {
+        env: { NODE_OPTIONS: '--max-old-space-size=8192' },
+        timeoutMs: 5 * 60_000,
+      },
+    );
+    if (!check.ok) {
+      return {
+        success: true,
+        data: {
+          ok: false,
+          errors: `npm run check failed:\n${check.stderr || check.stdout}`,
+        },
+      };
+    }
+    return { success: true, data: { ok: true } };
+  },
 });
 
 register({
