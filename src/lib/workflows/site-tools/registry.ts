@@ -29,6 +29,7 @@ import './tools/scraper';
 import './tools/files';
 import './tools/gmail';
 import './tools/web';
+import './tools/node-builder';
 
 // --- Public API ---
 
