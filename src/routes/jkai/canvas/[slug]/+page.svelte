@@ -5,6 +5,7 @@
   import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
+  import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
   import type { Execution as InspectorExecution } from '$lib/canvas/InspectorHistory.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TimeFilter from '$lib/canvas/stats/TimeFilter.svelte';
@@ -2193,6 +2194,9 @@
     // the long-press add-node timer. Fixes the gesture conflict where any
     // brief pause during a pinch opens the node palette.
     if (e.touches.length > 1) return;
+    // Mobile is inspect/chat/light-edit only per the design — no add-node
+    // gesture. Authoring happens at desktop.
+    if (isMobile) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.chat-node, .wf-node')) return;
     const t = e.touches[0];
@@ -2776,6 +2780,11 @@
   }
 
   // Phase C — double-click menu (inline shape)
+  // Mobile mode (viewport <=768px) — drives the .canvas--mobile class on
+  // the page root + the isMobile early-return in the touch handler.
+  const getIsMobile = useIsMobile();
+  let isMobile = $derived(getIsMobile());
+
   let menuForNodeId = $state<string | null>(null);
   let edgeInspectorFor = $state<string | null>(null);
   const inspectorEdge = $derived(
@@ -3013,7 +3022,7 @@
   <title>Canvas · {canvas.slug} — JKAI</title>
 </svelte:head>
 
-<div class="page-shell">
+<div class="page-shell" class:canvas--mobile={isMobile}>
   <PageHeader title={canvas.title} titleHref="/jkai/canvas">
     {#snippet meta()}
       <span class="canvas-head-meta">
@@ -4164,6 +4173,16 @@
             </section>
           </div>
         </div>
+      {/if}
+
+      <!-- Mobile-only backdrop behind the inspector sheet -->
+      {#if menuNode && isMobile}
+        <button
+          class="nm-mobile-backdrop"
+          type="button"
+          aria-label="Close inspector"
+          onclick={closeMenu}
+        ></button>
       {/if}
 
       <!-- Inline context menu -->
@@ -7590,5 +7609,71 @@
     margin-top: 16px;
     display: flex;
     justify-content: flex-end;
+  }
+
+  /* ── Mobile mode (viewport <=768px) ──────────────────────────────── */
+  /* CSS-only morph of the inline node inspector into a bottom-sheet.
+   * Triggered by the .canvas--mobile class on .page-shell (driven by the
+   * useIsMobile reactive helper). The nm-inline div is normally
+   * absolute-positioned at the node's screen coordinates; on mobile we
+   * pin it to the bottom edge, full width, with a slide-up animation. */
+
+  .canvas--mobile :global(.nm-inline) {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 85dvh !important;
+    border-radius: 16px 16px 0 0 !important;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    animation: nm-slide-up 200ms ease-out !important;
+    z-index: 1001 !important;
+    transform: none !important;
+  }
+
+  /* Drag-handle visual at the top of the sheet (purely decorative — the
+   * existing ✕ button in the header is what dismisses; backdrop click
+   * also dismisses via the .nm-mobile-backdrop element). */
+  .canvas--mobile :global(.nm-inline::before) {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--nm-muted-border, #ccc);
+    margin: 8px auto 4px;
+    flex: 0 0 auto;
+  }
+
+  /* Inspector body scrolls when content overflows. */
+  .canvas--mobile :global(.nm-inline-body) {
+    overflow-y: auto !important;
+    flex: 1 1 auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Backdrop: dims the canvas behind the sheet; tap to dismiss. */
+  .nm-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.4);
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    animation: nm-fade-in 200ms ease-out;
+  }
+
+  @keyframes nm-slide-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes nm-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 </style>
