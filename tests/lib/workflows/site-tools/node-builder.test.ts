@@ -60,3 +60,26 @@ describe('node_builder_check_clean', () => {
     expect(result.data).toMatchObject({ ok: false, reason: expect.stringContaining('merge') });
   });
 });
+
+describe('node_builder_list_existing', () => {
+  it('returns the registered workflow node types with type and description', async () => {
+    const tool = getTool('node_builder_list_existing')!;
+    const result = await tool.handler({});
+    expect(result.success).toBe(true);
+    const data = result.data as { nodes: Array<{ type: string; description: string }> };
+    expect(Array.isArray(data.nodes)).toBe(true);
+    expect(data.nodes.length).toBeGreaterThan(5); // at least the built-ins
+    for (const node of data.nodes) {
+      expect(typeof node.type).toBe('string');
+      expect(typeof node.description).toBe('string');
+    }
+  });
+
+  it('includes a known built-in node like gmail-send', async () => {
+    const tool = getTool('node_builder_list_existing')!;
+    const result = await tool.handler({});
+    const data = result.data as { nodes: Array<{ type: string }> };
+    const types = data.nodes.map((n) => n.type);
+    expect(types).toContain('gmail-send');
+  });
+});

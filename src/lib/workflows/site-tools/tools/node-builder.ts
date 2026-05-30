@@ -59,7 +59,14 @@ register({
   parameters: { type: 'object', properties: {} },
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: NOT_IMPLEMENTED,
+  handler: async () => {
+    const { registry } = await import('$lib/workflows');
+    const nodes = registry
+      .listDefinitions()
+      .map((d) => ({ type: d.type, description: d.description ?? '' }))
+      .sort((a, b) => a.type.localeCompare(b.type));
+    return { success: true, data: { nodes } };
+  },
 });
 
 register({
