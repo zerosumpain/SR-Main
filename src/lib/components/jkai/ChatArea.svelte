@@ -151,8 +151,6 @@
   let messages = $state<Message[]>([]);
   let input = $state('');
   let loading = $state(false);
-  let showToolDrawer = $state(false);
-  let expandedTools = $state<Set<number>>(new Set());
   let currentJobId = $state<string | null>(null);
   // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in
   // src/lib/workflows/chat/job-store.ts — the server fires beats on a fixed
@@ -262,10 +260,9 @@
   let subAgents = $state<Record<string, SubAgentState>>({});
   // Per-bubble reasoning state from Hermes `thinking` frames. Keyed by
   // the assistant bubble's `message.id` (the in-flight `progressId`) so
-  // the panel stays attached to its bubble after finalisation. Uses the
-  // same $state<Map> + reassign-to-new-Map pattern as `expandedTools`
-  // above — Svelte 5 doesn't track in-place Map mutations, so we
-  // construct a fresh Map on every write.
+  // the panel stays attached to its bubble after finalisation. Svelte 5
+  // doesn't track in-place Map mutations, so we construct a fresh Map on
+  // every write (reassign-to-new-Map pattern).
   let thinkingByBubble = $state<Map<string, { text: string; expanded: boolean }>>(new Map());
   // Pending TTFT marks keyed by progressId. Populated at send time, fired on
   // first 'token' or 'thinking' event, and deleted on stream completion.
@@ -619,25 +616,16 @@
     await uploadFile(f);
   }
 
-  // Aggregate all tool calls across every assistant message in the conversation.
-  // Each entry keeps a reference to which message it belongs to.
-  let allToolCalls = $derived.by(() => {
-    const out: Array<{ messageId: string; messageIndex: number; step: ToolStep }> = [];
-    messages.forEach((m, idx) => {
-      if (m.toolSteps && m.toolSteps.length > 0) {
-        for (const step of m.toolSteps) {
-          out.push({ messageId: m.id, messageIndex: idx, step });
-        }
-      }
-    });
-    return out;
-  });
+  // Tool calls live inline in the thread (a collapsed disclosure under each
+  // assistant message via `msg.toolSteps`), so there's no conversation-level
+  // aggregate or side drawer any more — one home for tool activity.
 
-  function toggleDrawerItem(i: number) {
-    const next = new Set(expandedTools);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
-    expandedTools = next;
+  // Hide synthetic heartbeat *trigger* messages ("just a check-in" pokes the
+  // system sends to wake the orchestrator). The orchestrator's actual reply /
+  // note still renders; only the plumbing poke is suppressed.
+  function isHeartbeatCheckIn(m: { metadata?: unknown }): boolean {
+    const hb = (m.metadata as { heartbeat?: { kind?: string } } | undefined)?.heartbeat;
+    return hb?.kind === 'user-trigger';
   }
 
   // Sync messages when initialMessages or conversationId changes
@@ -1291,22 +1279,6 @@
         {/if}
       </p>
     </div>
-    {#if conversationId}
-      <div class="chat-toolbar">
-        {#if allToolCalls.length > 0}
-          <button
-            type="button"
-            onclick={() => { showToolDrawer = !showToolDrawer; }}
-            class="nm-btn-ghost"
-            data-active={showToolDrawer ? 'true' : 'false'}
-            title="View all tool calls in this conversation"
-          >
-            <span class="hidden sm:inline">Tool calls ({allToolCalls.length})</span>
-            <span class="sm:hidden">Tools ({allToolCalls.length})</span>
-          </button>
-        {/if}
-      </div>
-    {/if}
   </div>
 
   <!-- Messages -->
@@ -1328,7 +1300,9 @@
     {:else}
       <div class="max-w-3xl mx-auto">
         {#each messages as msg, msgIndex (msg.id)}
-          {#if msg.isProgress}
+          {#if isHeartbeatCheckIn(msg)}
+            <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
+          {:else if msg.isProgress}
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
               <div class="progress-bubble mb-3">
@@ -1524,12 +1498,58 @@
             </div>
           {:else}
             {#if msg.role === 'assistant'}
+              {@const toolSteps = (msg.toolSteps ?? []).filter((s) => s.tool !== 'status_update')}
+              {@const failedTools = toolSteps.filter((s) => s.status === 'error').length}
               {#each artifactsForMessage(msg) as artifact, i (i)}
                 <Artifact {artifact} />
               {/each}
               {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
                 <PromoteToolBanner messageId={msg.id} {marker} />
               {/each}
+              {#if toolSteps.length > 0}
+                <!-- Tool activity, inline and permanent: a collapsed disclosure
+                     of what the assistant did to produce this reply. Replaces
+                     the old conversation-level side drawer. -->
+                <details class="tool-activity">
+                  <summary class="tool-activity-summary">
+                    <span class="ta-status" data-error={failedTools > 0 ? 'true' : 'false'}>
+                      {failedTools > 0 ? '✗' : '✓'}
+                    </span>
+                    <span class="ta-count">{toolSteps.length} {toolSteps.length === 1 ? 'tool' : 'tools'}</span>
+                    <span class="ta-names">{toolSteps.map((s) => friendlyToolName(s.tool)).join(' · ')}</span>
+                    <span class="ta-chev" aria-hidden="true">▸</span>
+                  </summary>
+                  <ul class="step-cards ta-steps">
+                    {#each toolSteps as step}
+                      <li class="step-card" data-status={step.status}>
+                        <header class="step-card-hdr">
+                          <span class="step-status" data-status={step.status} aria-label={step.status}>
+                            {step.status === 'error' ? '✗' : '✓'}
+                          </span>
+                          <span class="step-tool">{friendlyToolName(step.tool)}</span>
+                          <span class="step-summary">{step.summary ?? ''}</span>
+                        </header>
+                        {#if Object.keys(step.args).length > 0 || step.result !== undefined}
+                          <div class="step-card-body">
+                            {#if Object.keys(step.args).length > 0}
+                              <details>
+                                <summary class="step-body-label">args</summary>
+                                <JsonBlock data={step.args} />
+                              </details>
+                            {/if}
+                            {#if step.result !== undefined}
+                              <details>
+                                <summary class="step-body-label">result</summary>
+                                <JsonBlock data={step.result} />
+                              </details>
+                            {/if}
+                          </div>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                </details>
+              {/if}
               {#if thinkingByBubble.has(msg.id)}
                 {@const t = thinkingByBubble.get(msg.id)!}
                 <div class="reasoning-panel mb-2">
@@ -1652,81 +1672,6 @@
         </div>
       </div>
     </div>
-  {/if}
-
-  <!-- Tool call drawer -->
-  {#if showToolDrawer && conversationId}
-    <!-- Backdrop (click to close) -->
-    <button
-      class="absolute inset-0 z-20 cursor-default"
-      style="background: rgba(0, 0, 0, 0.3);"
-      onclick={() => { showToolDrawer = false; }}
-      aria-label="Close tool call drawer"
-    ></button>
-    <!-- Drawer -->
-    <aside
-      class="absolute top-0 right-0 h-full z-30 flex flex-col border-l shadow-xl"
-      style="width: min(420px, 90vw); background: var(--bg); border-color: var(--card-border);"
-    >
-      <div class="drawer-hdr">
-        <div class="drawer-hdr-main">
-          <div class="sr-label-tight drawer-title">Tool calls</div>
-          <div class="drawer-subtitle">{allToolCalls.length} total in this conversation</div>
-        </div>
-        <button
-          type="button"
-          onclick={() => { showToolDrawer = false; }}
-          class="drawer-close"
-          aria-label="Close"
-        >&times;</button>
-      </div>
-      <div class="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-        {#each allToolCalls as entry, i (i)}
-          <div class="drawer-item" data-status={entry.step.status}>
-            <button
-              type="button"
-              class="drawer-item-hdr w-full flex items-center gap-2 px-2 py-1.5 text-left hover:opacity-80"
-              onclick={() => toggleDrawerItem(i)}
-            >
-              <span class="drawer-item-idx">#{i + 1}</span>
-              <span class="drawer-item-status" data-status={entry.step.status}>
-                {#if entry.step.status === 'running'}&#9679;
-                {:else if entry.step.status === 'error'}&#10007;
-                {:else}&#10003;
-                {/if}
-              </span>
-              <span class="drawer-item-name flex-1 truncate">
-                {friendlyToolName(entry.step.tool)}
-              </span>
-              <span class="drawer-item-toggle">
-                {expandedTools.has(i) ? '-' : '+'}
-              </span>
-            </button>
-            {#if expandedTools.has(i)}
-              <div class="px-2 pb-2 space-y-2">
-                {#if Object.keys(entry.step.args).length > 0}
-                  <div>
-                    <div class="sr-label-tight drawer-body-label">Args</div>
-                    <JsonBlock data={entry.step.args} />
-                  </div>
-                {/if}
-                {#if entry.step.result !== undefined}
-                  <div>
-                    <div class="sr-label-tight drawer-body-label">Result</div>
-                    <JsonBlock data={entry.step.result} />
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/each}
-        {#if allToolCalls.length === 0}
-          <div class="drawer-empty">
-            No tool calls yet.
-          </div>
-        {/if}
-      </div>
-    </aside>
   {/if}
 
   {#if toast}
@@ -2076,27 +2021,51 @@
     list-style: none;
   }
 
-  /* Chat header toolbar — groups the ghost buttons on the right side */
-  .chat-toolbar {
+  /* Inline tool-activity disclosure — the single, in-thread home for tool
+   * calls (the side drawer was removed). Collapsed by default; reuses the
+   * .step-card styling below for its expanded body. */
+  .tool-activity {
+    margin: 0 0 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .tool-activity-summary {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    list-style: none;
+    cursor: pointer;
+    padding: 3px 2px;
+    border-radius: 4px;
+    color: var(--text-ghost);
+  }
+  .tool-activity-summary::-webkit-details-marker { display: none; }
+  .tool-activity-summary:hover { color: var(--text-secondary); }
+  .ta-status {
+    font-weight: 700;
+    color: var(--status-success, #2a9d4a);
+  }
+  .ta-status[data-error="true"] { color: var(--status-error, #c0392b); }
+  .ta-count {
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .ta-names {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+  .ta-chev {
+    transition: transform 0.15s ease;
     flex-shrink: 0;
-    flex-wrap: wrap;
-    justify-content: flex-end;
   }
-  .chat-toolbar :global(.nm-btn-ghost) {
-    padding: 4px 10px;
-    font-size: 9px;
-  }
-  @media (max-width: 480px) {
-    .chat-toolbar { gap: 4px; }
-    .chat-toolbar :global(.nm-btn-ghost) {
-      padding: 3px 6px;
-      font-size: 9px;
-      letter-spacing: 0.06em;
-    }
-  }
+  .tool-activity[open] .ta-chev { transform: rotate(90deg); }
+  .tool-activity[open] .ta-names { display: none; }
+  .ta-steps { margin-top: 4px; }
 
   /* Progress bubble — outer box for tool step cards */
   .progress-bubble {
@@ -2181,87 +2150,4 @@
     .composer-send { padding: 9px 12px; letter-spacing: 0.08em; }
   }
 
-  /* Tool call drawer */
-  .drawer-hdr {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--card-border);
-  }
-  .drawer-hdr-main {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .drawer-title {
-    color: var(--accent);
-    letter-spacing: 0.14em;
-  }
-  .drawer-subtitle {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
-  }
-  .drawer-close {
-    margin-left: auto;
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    border: none;
-    color: var(--text-ghost);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-  }
-  .drawer-close:hover { color: var(--text-primary); }
-
-  .drawer-item {
-    border: 1px solid var(--card-border);
-    background: rgba(26, 16, 8, 0.04);
-  }
-  .drawer-item[data-status="running"] { border-color: var(--accent); }
-  .drawer-item[data-status="error"]   { border-color: color-mix(in srgb, var(--status-error) 55%, transparent); }
-  .drawer-item-hdr {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-  }
-  .drawer-item-idx {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    color: var(--text-ghost);
-    width: 20px;
-    flex-shrink: 0;
-    text-align: right;
-  }
-  .drawer-item-status {
-    font-size: 10px;
-    flex-shrink: 0;
-    color: var(--text-ghost);
-  }
-  .drawer-item-status[data-status="running"] { color: var(--accent); }
-  .drawer-item-status[data-status="error"]   { color: var(--status-error); }
-  .drawer-item-status[data-status="done"]    { color: var(--status-success); }
-  .drawer-item-name {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-primary);
-  }
-  .drawer-item-toggle {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
-    flex-shrink: 0;
-  }
-  .drawer-body-label {
-    margin-bottom: 3px;
-  }
-  .drawer-empty {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-align: center;
-    padding: 2rem 0;
-    color: var(--text-ghost);
-  }
 </style>

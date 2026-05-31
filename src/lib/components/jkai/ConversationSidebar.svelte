@@ -253,20 +253,6 @@
         <MetricsStrip {metrics} {spendByPeriod} />
       </div>
       <a
-        href="/jkai/builds"
-        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"
-        style="border-color: var(--card-border); color: var(--accent);"
-      >
-        <span>🔨</span> Builds
-      </a>
-      <a
-        href="/jkai/research"
-        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"
-        style="border-color: var(--card-border); color: var(--accent);"
-      >
-        <span>🔎</span> Research
-      </a>
-      <a
         href="/jkai/intel"
         class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"
         style="border-color: var(--card-border); color: var(--accent);"
