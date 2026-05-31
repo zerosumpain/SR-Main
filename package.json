@@ -33,6 +33,7 @@
 		"@types/web-push": "^3.6.4",
 		"@vite-pwa/sveltekit": "^1.1.0",
 		"drizzle-kit": "^0.31.10",
+		"fake-indexeddb": "^6.2.5",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
 		"tailwindcss": "^4.2.2",
