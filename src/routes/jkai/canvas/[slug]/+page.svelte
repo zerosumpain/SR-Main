@@ -2875,13 +2875,6 @@
   const getIsMobile = useIsMobile();
   let isMobile = $derived(getIsMobile());
 
-  // Refs to the mobile inspector sheet + backdrop. Used by the portal
-  // effect below to forcibly move them to document.body when mobile mode
-  // is active (the use:portal action is unreliable across Svelte action
-  // lifecycle on conditional blocks — this $effect is belt-and-braces).
-  let nmInlineEl = $state<HTMLDivElement | undefined>(undefined);
-  let mobileBackdropEl = $state<HTMLButtonElement | undefined>(undefined);
-
   let menuForNodeId = $state<string | null>(null);
   let edgeInspectorFor = $state<string | null>(null);
   const inspectorEdge = $derived(
@@ -2965,49 +2958,9 @@
     menuForNodeId = null;
   }
 
-  // Belt-and-braces portal for the mobile inspector + backdrop: whenever
-  // mobile mode is active AND an inspector is open, force-move both
-  // elements to document.body so they escape the canvas .graph transform.
-  // Replaces the use:portal action which sometimes failed to re-fire on
-  // Svelte's conditional-block remount. The effect cleanup restores the
-  // elements to their original parents so Svelte can unmount cleanly.
-  $effect(() => {
-    if (!isMobile || !menuNode) return;
-    const sheet = nmInlineEl;
-    const backdrop = mobileBackdropEl;
-    if (!sheet) return;
-
-    const sheetHome = sheet.parentNode;
-    const sheetNext = sheet.nextSibling;
-    const backHome = backdrop?.parentNode;
-    const backNext = backdrop?.nextSibling;
-
-    if (sheet.parentNode !== document.body) document.body.appendChild(sheet);
-    if (backdrop && backdrop.parentNode !== document.body) document.body.appendChild(backdrop);
-
-    return () => {
-      // Restore on teardown so Svelte's unmount finds the elements where
-      // it expects them.
-      if (sheetHome && sheetHome.isConnected) {
-        if (sheetNext && sheetNext.parentNode === sheetHome) {
-          sheetHome.insertBefore(sheet, sheetNext);
-        } else {
-          sheetHome.appendChild(sheet);
-        }
-      }
-      if (backdrop && backHome && backHome.isConnected) {
-        if (backNext && backNext.parentNode === backHome) {
-          backHome.insertBefore(backdrop, backNext);
-        } else {
-          backHome.appendChild(backdrop);
-        }
-      }
-    };
-  });
-
   // Global Escape closes the inspector on mobile (in addition to the ✕
-  // button and the backdrop click) — paranoid fallback for cases where
-  // the user can't reach the close affordances.
+  // button and the backdrop click) — fallback for any UI quirk that
+  // makes the close affordances hard to reach.
   $effect(() => {
     if (!isMobile || !menuNode) return;
     const onKey = (e: KeyboardEvent) => {
@@ -4325,28 +4278,29 @@
         </div>
       {/if}
 
-      <!-- Mobile-only backdrop behind the inspector sheet. Portalled to
-           body so it escapes the canvas's pan/zoom transform. -->
+    </div>
+
+      <!-- Inline node inspector. Rendered OUTSIDE the .graph (i.e. outside the
+           canvas pan/zoom transform) so that on mobile the bottom-sheet CSS
+           can pin it to the viewport reliably. Desktop positioning uses
+           SCREEN coords (menuNode.x * zoom + panX) instead of world coords,
+           since we no longer inherit the parent transform. -->
       {#if menuNode && isMobile}
         <button
           class="nm-mobile-backdrop"
           type="button"
           aria-label="Close inspector"
           onclick={closeMenu}
-          bind:this={mobileBackdropEl}
         ></button>
       {/if}
-
-      <!-- Inline context menu -->
       {#if menuNode}
         <div
           class="nm-inline"
           class:nm-inline--mobile={isMobile}
-          style:left="{menuNode.x - 18}px"
-          style:top="{menuNode.y - 18}px"
+          style:left="{menuNode.x * zoom + panX - 18}px"
+          style:top="{menuNode.y * zoom + panY - 18}px"
           role="dialog"
           aria-label="Node inspector"
-          bind:this={nmInlineEl}
         >
           <div class="nm-inline-hdr">
             <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
@@ -5381,8 +5335,6 @@
           </div>
         </div>
       {/if}
-    </div>
-
     <!-- Legend -->
     <div class="legend">
       {#each [['input', 'var(--text-muted)'], ['llm', 'var(--accent)'], ['parse', '#c44'], ['output', 'var(--text-primary)'], ['intel', 'var(--accent)']] as [k, c]}
