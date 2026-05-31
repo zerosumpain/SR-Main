@@ -54,6 +54,44 @@
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
+      <a href="/projects/brass-and-rails/" class="absolute inset-0 z-0" aria-label="Play Brass & Rails"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №2
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Playable · WebGL
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Brass &amp; Rails — An Empire of the Skerne
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        A turn-based 4X empire on a tilt-shift diorama of old Darlington, birthplace of the
+        railway. Settle villages, harvest coal &amp; iron, research the Age of Steam — against an
+        AI that remembers every defeat and rewrites its strategy to beat you next time. Play solo,
+        or watch up to 8 AI houses fight it out autonomously.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          Three.js · tilt-shift · learning AI
+        </span>
+      </div>
+    </div>
+
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
       <a href="/projects/data-convergence" class="absolute inset-0 z-0" aria-label="Open The Spine"></a>
       <div class="flex items-start justify-between mb-3">
         <p

@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BRASS &amp; RAILS — An Empire of the Skerne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#15110c;          /* warm near-black */
+    --bg2:#1d1812;
+    --panel:#211a13;
+    --panel2:#2a2118;
+    --ink:#f5ecdd;
+    --muted:#ab9a82;
+    --faint:#6f6354;
+    --line:#3a3025;
+    --line2:#4a3e2e;
+    --amber:#e8a13a;       /* SR brand amber */
+    --amber2:#f4c06b;
+    --teal:#4cc4b0;
+    --rust:#cf6a3a;
+    --blood:#d14b3f;
+    --paper:#efe6d6;
+    --good:#7bc06b;
+    --bad:#d14b3f;
+    --shadow:0 8px 30px rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:'DM Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  body{position:relative;}
+  /* paper grain overlay */
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  canvas{display:block;}
+  #stage{position:fixed;inset:0;z-index:0;}
+
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .label{font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.14em;font-size:10px;color:var(--muted);}
+  h1,h2,h3{font-family:'Archivo Black',sans-serif;font-weight:400;letter-spacing:-.01em;margin:0;}
+
+  /* ---------- HUD top bar ---------- */
+  #hud{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;gap:18px;
+    padding:10px 16px;background:linear-gradient(180deg,rgba(21,17,12,.96),rgba(21,17,12,.72) 70%,transparent);
+    pointer-events:none;}
+  #hud > *{pointer-events:auto;}
+  .monogram{font-family:'DM Mono',monospace;font-weight:500;font-size:22px;color:var(--amber);
+    border:2px solid var(--amber);border-radius:7px;padding:2px 9px 4px;line-height:1;transform:skewX(-7deg);
+    box-shadow:0 3px 0 rgba(0,0,0,.4);}
+  .title-wrap{display:flex;flex-direction:column;gap:1px;}
+  .title-wrap h1{font-size:16px;line-height:1;}
+  .title-wrap .sub{font-size:9.5px;}
+  .hud-spacer{flex:1;}
+  .stat{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 12px;border-left:1px solid var(--line);}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;line-height:1;}
+  .stat .v small{font-weight:400;font-size:10px;color:var(--muted);}
+  .turn-pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);
+    border-radius:999px;padding:5px 6px 5px 14px;box-shadow:var(--shadow);}
+  .turn-pill .who{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;}
+  .dot{width:12px;height:12px;border-radius:3px;transform:rotate(45deg);box-shadow:0 0 0 2px rgba(0,0,0,.3) inset;}
+
+  /* ---------- panels ---------- */
+  .panel{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line2);
+    border-radius:10px;box-shadow:var(--shadow);}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--line);}
+  .panel-h h3{font-size:11px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.16em;color:var(--amber2);}
+  .panel-b{padding:11px 12px;}
+
+  #leftcol{position:fixed;left:14px;top:64px;width:280px;z-index:25;display:flex;flex-direction:column;gap:12px;
+    max-height:calc(100vh - 150px);}
+  #rightcol{position:fixed;right:14px;top:64px;width:300px;z-index:25;display:flex;flex-direction:column;gap:12px;
+    max-height:calc(100vh - 78px);overflow:hidden;}
+
+  /* selection / city detail */
+  .sel-empty{color:var(--faint);font-size:12.5px;line-height:1.5;}
+  .unit-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .unit-emoji{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;font-size:20px;
+    border:1px solid var(--line2);background:var(--panel2);}
+  .unit-name{font-family:'Archivo Black';font-size:14px;line-height:1.05;}
+  .unit-faction{font-size:10px;color:var(--muted);font-family:'JetBrains Mono';}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0;}
+  .mini{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 4px;text-align:center;}
+  .mini .k{font-size:8.5px;letter-spacing:.12em;color:var(--muted);font-family:'JetBrains Mono';text-transform:uppercase;}
+  .mini .vv{font-family:'JetBrains Mono';font-weight:700;font-size:14px;}
+  .hpbar{height:7px;border-radius:4px;background:#3a201c;overflow:hidden;border:1px solid var(--line);}
+  .hpbar > i{display:block;height:100%;background:linear-gradient(90deg,var(--good),#a7e08c);}
+  .desc{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:6px;}
+
+  .btn{font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:700;
+    background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;cursor:pointer;
+    transition:.12s;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;}
+  .btn:hover{background:#352a1e;border-color:var(--amber);transform:translateY(-1px);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;border-color:var(--line);}
+  .btn .cost{color:var(--amber2);}
+  .btn.primary{background:var(--amber);color:#241a0c;border-color:var(--amber2);}
+  .btn.primary:hover{background:var(--amber2);}
+  .btn.danger{border-color:#5a2a24;}
+  .btn.danger:hover{border-color:var(--blood);background:#3a201c;}
+  .btnrow{display:flex;gap:7px;}
+  .btnrow .btn{width:auto;flex:1;justify-content:center;}
+  .buildlist{display:flex;flex-direction:column;gap:6px;margin-top:4px;max-height:230px;overflow:auto;}
+
+  /* tech list */
+  .tech{display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--line);border-radius:7px;
+    margin-bottom:6px;background:var(--panel2);cursor:pointer;transition:.12s;}
+  .tech:hover{border-color:var(--teal);}
+  .tech.owned{opacity:.55;cursor:default;border-style:dashed;}
+  .tech.locked{opacity:.4;cursor:not-allowed;}
+  .tech .ico{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;background:#1b2a28;color:var(--teal);
+    font-size:14px;border:1px solid #2c4440;flex:none;}
+  .tech .tn{font-family:'JetBrains Mono';font-weight:700;font-size:11.5px;}
+  .tech .nt{font-size:10px;color:var(--muted);line-height:1.25;}
+  .tech .tc{margin-left:auto;font-family:'JetBrains Mono';font-weight:700;color:var(--amber2);font-size:12px;flex:none;}
+
+  /* AI brain */
+  #braincol{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+  .lesson{margin-bottom:9px;}
+  .lesson .lt{display:flex;justify-content:space-between;font-size:11px;font-family:'JetBrains Mono';margin-bottom:3px;}
+  .lesson .lt b{font-weight:700;}
+  .lesson .lt span{color:var(--muted);}
+  .meter{height:6px;border-radius:3px;background:#241c14;overflow:hidden;border:1px solid var(--line);}
+  .meter > i{display:block;height:100%;background:linear-gradient(90deg,var(--rust),var(--amber2));transition:width .4s;}
+  .gen-row{display:flex;align-items:center;gap:7px;font-size:10.5px;font-family:'JetBrains Mono';margin-bottom:4px;}
+  .gen-row .gc{width:9px;height:9px;border-radius:2px;flex:none;transform:rotate(45deg);}
+  .gen-row .gn{width:96px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .gen-row .gw{color:var(--muted);}
+  .bars{display:flex;gap:2px;flex:1;}
+  .barseg{height:8px;flex:1;background:#241c14;border-radius:1px;overflow:hidden;}
+  .barseg > i{display:block;height:100%;}
+
+  /* log */
+  #log{position:fixed;left:14px;bottom:14px;width:280px;max-height:200px;z-index:25;overflow:hidden;display:flex;flex-direction:column;}
+  #logbody{overflow-y:auto;padding:8px 12px;font-family:'JetBrains Mono';font-size:10.5px;line-height:1.5;}
+  .logline{margin-bottom:3px;}
+  .tag{display:inline-block;font-weight:700;border-radius:3px;padding:0 4px;margin-right:5px;font-size:9px;}
+  .tag.war{background:#3a201c;color:#f0998e;}
+  .tag.ai{background:#1b2a28;color:var(--teal);}
+  .tag.city{background:#2a2412;color:var(--amber2);}
+  .tag.tech{background:#1c2236;color:#9db0f0;}
+  .tag.sys{background:#2a2118;color:var(--muted);}
+
+  /* bottom controls */
+  #controls{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:26;display:flex;gap:8px;align-items:center;
+    background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:7px 9px;box-shadow:var(--shadow);}
+  #controls .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:999px;overflow:hidden;}
+  #controls .seg button{font-family:'JetBrains Mono';font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    background:transparent;color:var(--muted);border:0;padding:7px 11px;cursor:pointer;}
+  #controls .seg button.on{background:var(--amber);color:#241a0c;}
+  #endturn{font-family:'JetBrains Mono';font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:12px;
+    background:var(--amber);color:#241a0c;border:1px solid var(--amber2);border-radius:999px;padding:9px 20px;cursor:pointer;}
+  #endturn:hover{background:var(--amber2);}
+  #endturn:disabled{opacity:.4;cursor:not-allowed;}
+  .ctl-ico{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:50%;width:34px;height:34px;
+    cursor:pointer;font-size:15px;display:grid;place-items:center;}
+  .ctl-ico:hover{border-color:var(--amber);}
+
+  /* setup / end modal */
+  .scrim{position:fixed;inset:0;z-index:100;background:rgba(10,8,5,.78);backdrop-filter:blur(7px);display:grid;place-items:center;}
+  .modal{width:min(720px,92vw);max-height:90vh;overflow:auto;}
+  .modal .panel-b{padding:20px 22px;}
+  .hero-title{font-family:'Archivo Black';font-size:40px;line-height:.92;letter-spacing:-.02em;margin-bottom:4px;}
+  .hero-title em{font-style:normal;color:var(--amber);}
+  .hero-sub{font-family:'JetBrains Mono';font-size:11.5px;color:var(--muted);letter-spacing:.04em;margin-bottom:18px;line-height:1.6;max-width:560px;}
+  .field{margin-bottom:16px;}
+  .field > .label{display:block;margin-bottom:7px;}
+  .chip-row{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{font-family:'JetBrains Mono';font-size:11px;font-weight:700;background:var(--panel2);border:1px solid var(--line2);
+    border-radius:7px;padding:8px 13px;cursor:pointer;transition:.12s;}
+  .chip:hover{border-color:var(--amber);}
+  .chip.on{background:var(--amber);color:#241a0c;border-color:var(--amber2);}
+  .fac-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .fac{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line2);border-radius:8px;
+    background:var(--panel2);cursor:pointer;transition:.12s;position:relative;}
+  .fac:hover{border-color:var(--amber);}
+  .fac.on{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset;}
+  .fac .fc{width:18px;height:18px;border-radius:4px;flex:none;transform:rotate(45deg);box-shadow:0 0 0 2px rgba(0,0,0,.3) inset;}
+  .fac .fn{font-family:'JetBrains Mono';font-weight:700;font-size:11.5px;line-height:1.1;}
+  .fac .fm{font-size:9.5px;color:var(--muted);line-height:1.2;}
+  .fac .fb{position:absolute;top:6px;right:8px;font-size:8px;font-family:'JetBrains Mono';color:var(--amber2);text-transform:uppercase;letter-spacing:.1em;}
+  .start-row{display:flex;gap:12px;align-items:center;margin-top:8px;}
+  #startBtn{font-family:'Archivo Black';font-size:16px;background:var(--amber);color:#241a0c;border:2px solid var(--amber2);
+    border-radius:10px;padding:13px 28px;cursor:pointer;letter-spacing:.01em;box-shadow:0 5px 0 rgba(0,0,0,.4);transition:.12s;}
+  #startBtn:hover{background:var(--amber2);transform:translateY(-1px);}
+  .legend{font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono';line-height:1.6;}
+  .endrank{display:flex;flex-direction:column;gap:6px;margin:14px 0;}
+  .rrow{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);}
+  .rrow .rk{font-family:'Archivo Black';font-size:16px;width:26px;color:var(--amber2);}
+  .rrow .rn{font-family:'JetBrains Mono';font-weight:700;font-size:12px;flex:1;}
+  .rrow .rs{font-family:'JetBrains Mono';color:var(--muted);font-size:12px;}
+  .rrow.win{border-color:var(--amber);box-shadow:0 0 18px rgba(232,161,58,.25);}
+
+  .hidden{display:none !important;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  .toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:80;background:var(--panel);border:1px solid var(--amber);
+    border-radius:8px;padding:9px 18px;font-family:'JetBrains Mono';font-size:12px;box-shadow:var(--shadow);opacity:0;transition:.3s;pointer-events:none;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="monogram">sr.</div>
+    <div class="title-wrap">
+      <h1>BRASS &amp; RAILS</h1>
+      <div class="sub label">An Empire of the Skerne</div>
+    </div>
+    <div class="hud-spacer"></div>
+    <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
+    <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
+    <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
+    <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
+    <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
+    <div class="turn-pill">
+      <span class="dot" id="hudDot"></span>
+      <span class="who" id="hudWho">—</span>
+    </div>
+  </div>
+
+  <!-- LEFT: selection / city -->
+  <div id="leftcol" class="hidden">
+    <div class="panel" id="selPanel">
+      <div class="panel-h"><h3 id="selTitle">Selection</h3><span class="label" id="selSub"></span></div>
+      <div class="panel-b" id="selBody">
+        <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>city</b> to build units. Cities grow on their own from the land around them.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: tech + brain -->
+  <div id="rightcol" class="hidden">
+    <div class="panel">
+      <div class="panel-h"><h3>Tech — Age of Steam</h3><span class="label" id="techHint"></span></div>
+      <div class="panel-b" id="techBody"></div>
+    </div>
+    <div class="panel" id="braincol">
+      <div class="panel-h"><h3>AI Brain</h3><span class="label" id="brainGames">0 games</span></div>
+      <div class="panel-b" id="brainBody" style="overflow:auto;"></div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div id="log" class="panel hidden">
+    <div class="panel-h"><h3>Chronicle</h3><span class="label">live</span></div>
+    <div id="logbody"></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls" class="hidden">
+    <button class="ctl-ico" id="btnHome" title="Recentre camera">⌖</button>
+    <div class="seg" id="speedSeg" title="Autoplay speed">
+      <button data-sp="step">Step</button>
+      <button data-sp="slow">Slow</button>
+      <button data-sp="normal" class="on">Normal</button>
+      <button data-sp="fast">Fast</button>
+    </div>
+    <button class="ctl-ico" id="btnAuto" title="Toggle autoplay">▶</button>
+    <button id="endturn">End Turn</button>
+    <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- SETUP MODAL -->
+  <div class="scrim" id="setup">
+    <div class="modal panel">
+      <div class="panel-b">
+        <div class="monogram" style="display:inline-block;margin-bottom:14px;">sr.</div>
+        <div class="hero-title">BRASS &amp; <em>RAILS</em></div>
+        <div class="hero-sub">A turn-based empire on the tilt-shift dioramas of old Darlington — where the world's first
+          railway was born. Settle villages along the Skerne, harvest coal &amp; iron, research the Age of Steam, and out-think
+          rival houses. The opposing AI keeps a <b>memory of every defeat</b> and rewrites its strategy to beat you next time.</div>
+
+        <div class="field">
+          <span class="label">Players <span id="playersHint" style="color:var(--faint)"></span></span>
+          <div class="chip-row" id="countRow"></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Map size</span>
+          <div class="chip-row" id="mapRow">
+            <div class="chip on" data-map="limited">Skirmish — limited (~50 spaces)</div>
+            <div class="chip" data-map="unlimited">Frontier — unlimited (sprawling)</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">Mode</span>
+          <div class="chip-row" id="modeRow">
+            <div class="chip on" data-mode="campaign">You vs AI</div>
+            <div class="chip" data-mode="auto">Autonomous — AI vs AI (observe)</div>
+          </div>
+        </div>
+
+        <div class="field" id="facField">
+          <span class="label">Choose your House <span id="facHintTxt" style="color:var(--faint)"></span></span>
+          <div class="fac-grid" id="facGrid"></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Map seed</span>
+          <div class="start-row">
+            <input id="seedInput" class="mono" style="background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+              border-radius:7px;padding:9px 12px;font-size:13px;width:140px;" value="1825" />
+            <label class="legend" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="marathonChk" /> Auto-rematch (marathon self-play so the AI keeps learning)
+            </label>
+          </div>
+        </div>
+
+        <div class="start-row">
+          <button id="startBtn">FOUND YOUR EMPIRE →</button>
+          <button class="btn danger" id="wipeBtn" style="width:auto;">Wipe AI memory</button>
+          <div class="legend" id="memNote"></div>
+        </div>
+
+        <div class="legend" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;">
+          <b style="color:var(--amber2)">Units</b> ⌂ Founder · ✦ Rambler (scout) · ♟ Quaker Guard · ▮ Skerne Pike · ⌐ Pit Pony ·
+          ☷ Stephenson Gun · ⬢ Ironclad · ✈ Skylark · ◆ Night Mail · ⬛ Brick Colossus (super).
+          &nbsp; Capture every rival capital — or hold the highest score after 50 turns.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- END MODAL -->
+  <div class="scrim hidden" id="endModal">
+    <div class="modal panel" style="width:min(520px,92vw)">
+      <div class="panel-b">
+        <div class="label">The chronicle closes</div>
+        <div class="hero-title" id="endTitle" style="font-size:30px;">—</div>
+        <div class="hero-sub" id="endSub" style="margin-bottom:8px;"></div>
+        <div class="endrank" id="endRank"></div>
+        <div class="start-row">
+          <button id="rematchBtn" class="btn primary" style="width:auto;">Play again</button>
+          <button id="menuBtn2" class="btn" style="width:auto;">Change setup</button>
+          <div class="legend" id="endLearn"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+/* ============================================================================
+   BRASS & RAILS  —  a Polytopia-flavoured 4X on a tilt-shift Darlington diorama
+   Single-file build. Sections:
+     1. Data (units, techs, factions, places)
+     2. Utilities + RNG + map generation
+     3. Game state, economy, combat, tech
+     4. Three.js rendering (isometric + tilt-shift) + picking
+     5. Interaction (human)
+     6. AI engine + learning (localStorage institutional memory)
+     7. Turn scheduler / autonomous self-play
+     8. UI wiring
+   ============================================================================ */
+
+/* ----------------------------- 1. DATA ----------------------------------- */
+let N = 32;                         // grid size (set per map-size mode)
+let FR = 20;                        // camera ortho half-frustum (scaled to board)
+const MAP_SIZES = { limited:10, unlimited:40 };   // ~50-tile skirmish vs sprawling frontier
+const TURN_CAP = 50;                // score victory after this many full turns
+
+const UNIT_TYPES = {
+  founder:  {name:'Founder',       cost:5, hp:10, atk:0, def:1, move:1, range:1, tech:null,        domain:'land', role:'settle', glyph:'⌂', desc:'Settles new villages on open land.'},
+  rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
+  guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
+  pike:     {name:'Skerne Pike',   cost:3, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry',   domain:'land', role:'def',    glyph:'▮', desc:'Stalwart defender — hard to dislodge.'},
+  pony:     {name:'Pit Pony',      cost:3, hp:10, atk:2, def:1, move:2, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Swift raider bred in the colliery.'},
+  gun:      {name:'Stephenson Gun',cost:8, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege',  glyph:'☷', desc:'Long-range siege piece. Strikes without retaliation.'},
+  ironclad: {name:'Ironclad',      cost:10,hp:15, atk:4, def:3, move:2, range:1, tech:'steam',     domain:'land', role:'mil',    glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
+  skylark:  {name:'Skylark',       cost:12,hp:10, atk:3, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil',    glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
+  nightmail:{name:'Night Mail',    cost:10,hp:10, atk:4, def:1, move:2, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — the mail train that runs by dark.'},
+  colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
+};
+
+const TECHS = {
+  husbandry:  {name:'Husbandry',     tier:1, prereq:null,        unlocks:[],          note:'Orchards & cattle feed cities faster.'},
+  masonry:    {name:'Masonry',       tier:1, prereq:null,        unlocks:['pike'],    note:'City walls + Skerne Pike.'},
+  riding:     {name:'Riding',        tier:1, prereq:null,        unlocks:['pony'],    note:'Pit Pony cavalry.'},
+  ironworking:{name:'Ironworking',   tier:2, prereq:'masonry',   unlocks:['gun'],     note:'Mine coal & iron + Stephenson Gun.'},
+  steam:      {name:'Steam Power',   tier:2, prereq:'ironworking',unlocks:['ironclad'],note:'Railways (+1 move to all) + Ironclad.'},
+  trade:      {name:'Quaker Banking',tier:2, prereq:'husbandry', unlocks:[],          note:'+1 ⚒ &amp; +1 🔬 income per city.'},
+  aeronautics:{name:'Aeronautics',   tier:3, prereq:'steam',     unlocks:['skylark'], note:'Skylark aircraft.'},
+  espionage:  {name:'Espionage',     tier:3, prereq:'riding',    unlocks:['nightmail'],note:'Night Mail stealth strikers.'},
+  telegraphy: {name:'Telegraphy',    tier:3, prereq:'trade',     unlocks:[],          note:'+1 vision everywhere, +score.'},
+};
+
+const FACTIONS = [
+  {id:'kelly',     name:'House Kelly',            color:0xe8a13a, motto:'Founders of the line',        bonus:'econ',    bonusTxt:'+1 ⚒ & +1 🔬/turn'},
+  {id:'pease',     name:'Pease Quakers',          color:0x4caf6e, motto:'Faith & finance',             bonus:'tech',    bonusTxt:'science −25%'},
+  {id:'stephenson',name:'Stephenson Enginewrights',color:0xd64b3f, motto:'Steam & steel',               bonus:'move',    bonusTxt:'+1 move'},
+  {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+1 food/city'},
+  {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+25% hill/mtn def'},
+  {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+15% attack'},
+  {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −20%'},
+  {id:'rovers',    name:'Quaker Rovers',          color:0xe4e4e4, motto:'Forward, ever forward',       bonus:'explore', bonusTxt:'Ramblers −1 ⚒'},
+];
+
+const PLACE_NAMES = ['Skerne','Cockerton','Haughton','Hurworth','Heighington','Shildon','Piercebridge',
+  'Barnard Castle','Yarm','Croft','Blackwell','Mowden','Branksome','Faverdale','Sadberge','Coniscliffe',
+  'Staindrop','Gainford','Middleton','Aycliffe','Polam','Harrowgate','Bank Top','Albert Hill','Hartburn',
+  'Eaglescliffe','Norton','Redmarshall','Sedgefield','Bishopton','Stillington','Cleasby','Manfield'];
+
+const TERRAIN = {
+  ocean:   {h:0.22, color:0x2b6f8c, deco:null,     pass:'water'},
+  water:   {h:0.34, color:0x3f93ab, deco:null,     pass:'water'},
+  field:   {h:0.60, color:0x9bc26a, deco:null,     pass:'land'},
+  forest:  {h:0.62, color:0x5f9a4e, deco:'tree',   pass:'land'},
+  hill:    {h:0.95, color:0xb6a05a, deco:'rock',   pass:'land'},
+  mountain:{h:1.55, color:0x8d8378, deco:'peak',   pass:'land'},
+};
+const RESOURCES = {
+  orchard:{glyph:'🍎', color:0xe05a5a, on:['field']},
+  cattle: {glyph:'🐄', color:0xcdb892, on:['field']},
+  fish:   {glyph:'🐟', color:0x7fd0e0, on:['water']},
+  coal:   {glyph:'⬤',  color:0x2a2a2a, on:['hill','mountain']},
+  iron:   {glyph:'◈',  color:0xb0b6c0, on:['hill','mountain']},
+};
+
+/* ------------------------- 2. UTIL + RNG + MAP --------------------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let RNG = mulberry32(1825);
+const rnd = ()=>RNG();
+const rint = (n)=>Math.floor(RNG()*n);
+const pick = (arr)=>arr[rint(arr.length)];
+const key = (x,z)=>x+','+z;
+const inB = (x,z)=>x>=0&&z>=0&&x<N&&z<N;
+const cheb = (ax,az,bx,bz)=>Math.max(Math.abs(ax-bx),Math.abs(az-bz));
+function neigh8(x,z){const o=[];for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dz)continue;const nx=x+dx,nz=z+dz;if(inB(nx,nz))o.push([nx,nz]);}return o;}
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+function lerp(a,b,t){return a+(b-a)*t;}
+
+// smooth value noise from a coarse grid
+function valueNoise(seedFn, cells){
+  const g=[];for(let i=0;i<=cells;i++){g[i]=[];for(let j=0;j<=cells;j++)g[i][j]=seedFn();}
+  return (x,z)=>{ // x,z in 0..1 (clamped — callers sometimes oversample)
+    x=clamp(x,0,1); z=clamp(z,0,1);
+    const fx=x*cells, fz=z*cells;
+    const x0=Math.floor(fx),z0=Math.floor(fz);
+    const x1=Math.min(x0+1,cells),z1=Math.min(z0+1,cells);
+    const tx=fx-x0, tz=fz-z0;
+    const sx=tx*tx*(3-2*tx), sz=tz*tz*(3-2*tz);
+    const a=lerp(g[x0][z0],g[x1][z0],sx);
+    const b=lerp(g[x0][z1],g[x1][z1],sx);
+    return lerp(a,b,sz);
+  };
+}
+
+function generateMap(seed){
+  RNG = mulberry32(seed>>>0);
+  const n1 = valueNoise(rnd, 6);
+  const n2 = valueNoise(rnd, 12);
+  const tiles=[];
+  const cx=(N-1)/2, cz=(N-1)/2, maxd=Math.hypot(cx,cz);
+  for(let z=0;z<N;z++){tiles[z]=[];for(let x=0;x<N;x++){
+    const u=x/(N-1), v=z/(N-1);
+    let h = n1(u,v)*0.7 + n2(u,v)*0.3;
+    // island falloff so the board is a coast-fringed continent
+    const d = Math.hypot(x-cx,z-cz)/maxd;
+    h -= Math.pow(d,2.3)*0.55;
+    let terrain;
+    if(h<0.18) terrain='ocean';
+    else if(h<0.30) terrain='water';
+    else if(h<0.62) terrain= (n2(v*1.3,u*1.3)>0.62?'forest':'field');
+    else if(h<0.78) terrain='hill';
+    else terrain='mountain';
+    tiles[z][x]={x,z,terrain,resource:null,owner:null,city:null,harvested:false};
+  }}
+  // scatter resources
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){
+    const t=tiles[z][x];
+    for(const [rid,r] of Object.entries(RESOURCES)){
+      if(r.on.includes(t.terrain) && rnd()< (t.terrain==='water'?0.10:0.12)){ t.resource=rid; break; }
+    }
+  }
+  return tiles;
+}
+
+/* --------------------------- 3. GAME STATE ------------------------------- */
+const G = {
+  tiles:[], players:[], units:[], cities:[],
+  turn:1, cur:0, started:false, mode:'campaign', observer:false, gameOver:false, winner:null,
+  seed:1825, marathon:false, sel:null, selCity:null, reach:null, atks:null,
+  uid:1, cid:1, nameBag:[],
+};
+let knowledge = null;       // AI institutional memory (localStorage)
+
+const currentPlayer = ()=>G.players[G.cur];
+const tileAt = (x,z)=>G.tiles[z][x];
+const unitAt = (x,z)=>G.units.find(u=>u.x===x&&u.z===z && u.hp>0);
+const cityAt = (x,z)=>G.cities.find(c=>c.x===x&&c.z===z);
+const playerById = (id)=>G.players.find(p=>p.id===id);
+
+function defaultGenome(){
+  return {aggression:.5,expansion:.5,economy:.5,defense:.5,tech:.5,risk:.5};
+}
+
+function setupGame(cfg){
+  G.seed=cfg.seed; G.mode=cfg.mode; G.marathon=cfg.marathon;
+  G.mapSize = cfg.mapSize || 'limited';
+  N = MAP_SIZES[G.mapSize] || 32;
+  G.tiles=generateMap(cfg.seed);
+  G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
+  G.gameOver=false; G.winner=null; G.sel=null; G.selCity=null; G.uid=1; G.cid=1;
+  G.observer = cfg.mode==='auto';
+  G.nameBag = shuffle(PLACE_NAMES.slice());
+
+  // choose factions
+  const facs = shuffle(FACTIONS.slice()).slice(0,cfg.count);
+  // ensure the human's chosen faction is in & first
+  if(cfg.mode==='campaign'){
+    const chosen = FACTIONS.find(f=>f.id===cfg.faction) || FACTIONS[0];
+    const without = facs.filter(f=>f.id!==chosen.id).slice(0,cfg.count-1);
+    facs.length=0; facs.push(chosen,...without);
+  }
+
+  loadKnowledge();
+  const starts = chooseStarts(cfg.count);
+
+  facs.forEach((f,i)=>{
+    const human = (cfg.mode==='campaign' && i===0);
+    const fk = knowledge.factions[f.id] || (knowledge.factions[f.id]={genome:defaultGenome(),wins:0,losses:0});
+    const p = {
+      id:f.id, idx:i, faction:f, name:f.name, color:f.color, isAI:!human, alive:true,
+      prod: 5, science: 3, prodIncome:0, sciIncome:0, techs:new Set(), explored:new Set(),
+      genome: human? defaultGenome() : {...fk.genome},
+      stats:{founded:0,attacks:0,badAttacks:0,kills:0,lossesU:0,peakArmy:1,capDefSum:0,capDefTurns:0,techPeak:0,survived:0},
+      capitalId:null, lastThought:'',
+    };
+    G.players.push(p);
+    // capital
+    const [sx,sz]=starts[i];
+    const capName = (f.id==='kelly')?'Darlington':drawName();
+    foundCity(p, sx, sz, true, capName);
+    // starting units: a founder + a guard near capital
+    spawnUnit(p,'rambler',sx,sz,true) || placeNear(p,'rambler',sx,sz);
+    placeNear(p,'guard',sx,sz);
+    reveal(p, sx, sz, 2);
+  });
+
+  // apply faction passive: rovers cheaper rambler handled at build; vision handled in reveal radius
+  recomputeIncome();
+  G.started=true;
+  buildStaticScene();
+  reframeCamera();
+  rebuildDynamic();
+  refreshAll();
+  logMsg('sys', `A new chronicle opens — ${G.players.length} houses on a ${N}×${N} board (${G.mapSize}), seed ${G.seed}.`);
+  homeCamera();
+}
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rint(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
+function drawName(){ if(!G.nameBag.length) G.nameBag=shuffle(PLACE_NAMES.slice()); return G.nameBag.pop(); }
+
+function chooseStarts(count){
+  // pick spread-out land tiles using farthest-point sampling
+  const land=[];
+  for(let z=2;z<N-2;z++)for(let x=2;x<N-2;x++){const t=G.tiles[z][x];if(TERRAIN[t.terrain].pass==='land')land.push([x,z]);}
+  shuffle(land);
+  const chosen=[land[0]];
+  while(chosen.length<count){
+    let best=null,bestD=-1;
+    for(const c of land){
+      let md=1e9; for(const s of chosen) md=Math.min(md,cheb(c[0],c[1],s[0],s[1]));
+      if(md>bestD){bestD=md;best=c;}
+    }
+    if(!best) break; chosen.push(best);
+  }
+  return chosen;
+}
+
+function placeNear(p,type,x,z){
+  for(const [nx,nz] of shuffle(neigh8(x,z))){
+    const t=tileAt(nx,nz);
+    if(TERRAIN[t.terrain].pass==='land' && !unitAt(nx,nz)) return spawnUnit(p,type,nx,nz,true);
+  }
+  return spawnUnit(p,type,x,z,true);
+}
+
+function spawnUnit(p,type,x,z,free){
+  if(unitAt(x,z)) return null;
+  const def=UNIT_TYPES[type];
+  const u={id:G.uid++,type,owner:p.id,x,z,hp:def.hp,maxHp:def.hp,movesLeft:def.move,hasAttacked:false,spawnTurn:G.turn};
+  G.units.push(u);
+  reveal(p,x,z, type==='rambler'?2:1);
+  return u;
+}
+
+function foundCity(p,x,z,isCapital,name){
+  const t=tileAt(x,z);
+  if(t.terrain==='mountain'){ t.terrain='hill'; }   // level the very tallest ground for the town, keep the rest
+  const c={id:G.cid++,owner:p.id,x,z,name:name||drawName(),level:1,food:0,foodCap:6,bonusProd:isCapital?1:0,
+           walls:false,isCapital:!!isCapital,gaveSuper:false};
+  G.cities.push(c); t.city=c; t.owner=p.id;
+  if(isCapital) p.capitalId=c.id;
+  // claim a ring of borders
+  for(const [nx,nz] of neigh8(x,z)){ const nt=tileAt(nx,nz); if(!nt.owner) nt.owner=p.id; }
+  p.stats.founded++;
+  reveal(p,x,z,1);
+  return c;
+}
+
+function reveal(p,x,z,r){
+  const vb = (p.faction.bonus==='vision'||p.faction.bonus==='explore')?1:0;
+  const tv = p.techs.has('telegraphy')?1:0;
+  const R = r+vb+tv;
+  for(let dz=-R;dz<=R;dz++)for(let dx=-R;dx<=R;dx++){const nx=x+dx,nz=z+dz;if(inB(nx,nz))p.explored.add(key(nx,nz));}
+}
+
+/* ----- economy: a city's yields come from the 9 tiles within one diagonal step -----
+   forest=wood→production · water/ocean=rivers→food · field→food · hill/mountain→science.
+   Food grows the city; Production builds units; Science is banked and spent on tech. */
+function cityYields(c){
+  let food=0, prod=0, sci=0;
+  for(const [x,z] of [[c.x,c.z],...neigh8(c.x,c.z)]){
+    const t=tileAt(x,z);
+    switch(t.terrain){
+      case 'forest':   prod+=2; break;            // timber & charcoal
+      case 'water':    food+=2; break;            // the Skerne — fish & water-meadow
+      case 'ocean':    food+=1; break;
+      case 'field':    food+=1; break;            // pasture & crops
+      case 'hill':     prod+=1; sci+=1; break;    // quarry & survey
+      case 'mountain': sci+=2; break;             // ore-bearing knowledge
+    }
+    if(t.resource==='orchard'||t.resource==='cattle') food+=1;
+    else if(t.resource==='fish') food+=2;
+    else if(t.resource==='coal'||t.resource==='iron') prod+=1;
+  }
+  food+=1; prod+=1; sci+=1;                        // the town itself
+  if(c.isCapital){ food+=1; prod+=1; sci+=1; }
+  prod += c.bonusProd||0;                          // workshops from levelling up
+  const p=playerById(c.owner);
+  if(p && p.faction.bonus==='vision') food+=1;     // Skerne Watermen — the river provides
+  return {food,prod,sci};
+}
+function recomputeIncome(){
+  for(const p of G.players){
+    let prod=0,sci=0;
+    const nCities=G.cities.filter(c=>c.owner===p.id).length;
+    for(const c of G.cities){ if(c.owner!==p.id) continue; const y=cityYields(c); prod+=y.prod; sci+=y.sci; }
+    if(p.techs.has('trade')){ prod+=nCities; sci+=nCities; }   // Quaker Banking
+    if(p.faction.bonus==='econ'){ prod+=1; sci+=1; }            // House Kelly
+    p.prodIncome=prod; p.sciIncome=sci;
+  }
+}
+function growCity(c){
+  while(c.food>=c.foodCap){ c.food-=c.foodCap; c.level++; c.foodCap=(c.level+1)*4; onCityLevel(c); }
+}
+function onCityLevel(c){
+  const p=playerById(c.owner);
+  // alternating rewards, Polytopia-style
+  if(c.level%2===0){ c.bonusProd=(c.bonusProd||0)+1; }  // workshop → +1 production
+  else { c.walls=true; }                                // walls
+  if(c.level>=3){ for(const [nx,nz] of neigh8(c.x,c.z)){const nt=tileAt(nx,nz);if(!nt.owner)nt.owner=c.owner;} }
+  if(c.level>=5 && !c.gaveSuper){ c.gaveSuper=true; if(!unitAt(c.x,c.z)) spawnUnit(p,'colossus',c.x,c.z,true); logMsg('city',`${c.name} forged a BRICK COLOSSUS!`); }
+  logMsg('city',`${c.name} grew to level ${c.level}.`);
+  recomputeIncome();
+}
+
+/* ----- tech ----- */
+function techCost(p,id){
+  const t=TECHS[id];
+  const nCities=G.cities.filter(c=>c.owner===p.id).length;
+  let cost = t.tier*(nCities+3);
+  if(p.faction.bonus==='tech') cost*=(p.faction.id==='scholars'?0.8:0.75);
+  return Math.max(2,Math.round(cost));
+}
+function canResearch(p,id){
+  if(p.techs.has(id)) return false;
+  const t=TECHS[id]; if(t.prereq && !p.techs.has(t.prereq)) return false;
+  return true;
+}
+function research(p,id){
+  if(!canResearch(p,id)) return false;
+  const cost=techCost(p,id); if(p.science<cost) return false;
+  p.science-=cost; p.techs.add(id);
+  if(id==='steam'){ for(const u of G.units){ if(u.owner===p.id) u.movesLeft = unitMove(u); } }
+  recomputeIncome();
+  if(p.techs.size>p.stats.techPeak) p.stats.techPeak=p.techs.size;
+  logMsg('tech', `${p.name} researched ${TECHS[id].name}.`);
+  return true;
+}
+
+function unitMove(u){
+  const p=playerById(u.owner); const base=UNIT_TYPES[u.type].move;
+  let m=base;
+  if(p && p.faction.bonus==='move') m+=1;
+  if(p && p.techs.has('steam')) m+=1;
+  return m;
+}
+
+/* ----- movement reachability (BFS) ----- */
+function canEnter(u,t){
+  const dom=UNIT_TYPES[u.type].domain;
+  if(dom==='air') return true;
+  const pass=TERRAIN[t.terrain].pass;
+  return pass==='land';
+}
+function reachable(u){
+  const mv=unitMove(u);
+  const dist={[key(u.x,u.z)]:0}; const q=[[u.x,u.z]]; const set=new Set();
+  while(q.length){
+    const [x,z]=q.shift(); const d=dist[key(x,z)];
+    if(d>=mv) continue;
+    for(const [nx,nz] of neigh8(x,z)){
+      const k=key(nx,nz); if(k in dist) continue;
+      const t=tileAt(nx,nz);
+      if(!canEnter(u,t)) continue;
+      if(unitAt(nx,nz)) continue;            // can't move through/onto occupied tiles
+      dist[k]=d+1; set.add(k); q.push([nx,nz]);
+    }
+  }
+  return {set,dist};
+}
+function attackTargets(u){
+  const r=UNIT_TYPES[u.type].range; const out=[];
+  for(const e of G.units){ if(e.hp<=0||e.owner===u.owner) continue;
+    if(cheb(u.x,u.z,e.x,e.z)<=r){ if(!isHidden(e,u.owner)) out.push(e); }
+  }
+  return out;
+}
+function isHidden(u,viewerId){
+  // Full-visibility rule: the whole map and every unit is always visible to all.
+  return false;
+}
+
+/* ----- combat (Polytopia damage model) ----- */
+function defenseBonus(u){
+  const t=tileAt(u.x,u.z); let b=1;
+  if(t.terrain==='hill'||t.terrain==='forest') b=1.5;
+  if(t.terrain==='mountain') b=1.6;
+  const c=cityAt(u.x,u.z);
+  if(c && c.owner===u.owner){ b=Math.max(b, c.walls?2:1.4); }
+  const p=playerById(u.owner);
+  if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=1.25;
+  return b;
+}
+function predictCombat(att,def){
+  const A=UNIT_TYPES[att.type].atk * (playerById(att.owner)?.faction.bonus==='atk'?1.15:1);
+  const D=UNIT_TYPES[def.type].def;
+  const aF=A*(att.hp/att.maxHp);
+  const dF=D*(def.hp/def.maxHp)*defenseBonus(def);
+  const tot=aF+dF || 1;
+  const atkDmg=Math.round((aF/tot)*A*4.5);
+  const defDmg=Math.round((dF/tot)*D*4.5);
+  const melee=UNIT_TYPES[att.type].range<=1;
+  const kills = atkDmg>=def.hp;
+  const retaliation = (!kills && melee)? defDmg : 0;
+  return {atkDmg,defDmg:retaliation,kills,melee,selfDies: retaliation>=att.hp};
+}
+function resolveCombat(att,def){
+  const pc=predictCombat(att,def);
+  def.hp-=pc.atkDmg;
+  att.hasAttacked=true;
+  const ap=playerById(att.owner); ap.stats.attacks++;
+  // a "bad attack" = struck but neither killed the foe nor traded up
+  if(!pc.kills && pc.defDmg>=pc.atkDmg) ap.stats.badAttacks++;
+  let captured=false, deadName=null;
+  if(def.hp<=0){
+    deadName=UNIT_TYPES[def.type].name; killUnit(def); ap.stats.kills++;
+    // melee attacker may advance & capture if a city sits there and is now empty
+  } else if(pc.defDmg>0){
+    att.hp-=pc.defDmg;
+    if(att.hp<=0){ killUnit(att); ap.stats.lossesU++; }
+  }
+  logMsg('war', `${ap.name}'s ${UNIT_TYPES[att.type].name} hit ${playerById(def.owner)?.name||'?'}'s ${UNIT_TYPES[def.type].name} for ${pc.atkDmg}${deadName?` — ${deadName} destroyed!`:` (${Math.max(0,def.hp)} hp left)`}`);
+  return {killed:def.hp<=0, pc};
+}
+function killUnit(u){ u.hp=0; const i=G.units.indexOf(u); if(i>=0) G.units.splice(i,1); }
+
+/* ----- capture city ----- */
+function captureCity(p,c){
+  const prev=playerById(c.owner);
+  if(prev) logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`);
+  c.owner=p.id; tileAt(c.x,c.z).owner=p.id; c.walls=false;
+  if(c.isCapital){ c.isCapital=false; if(prev) prev.capitalId=null; }
+  for(const [nx,nz] of neigh8(c.x,c.z)){const nt=tileAt(nx,nz); if(!nt.city) nt.owner=p.id;}
+  recomputeIncome();
+  checkElimination();
+}
+function checkElimination(){
+  for(const p of G.players){
+    if(!p.alive) continue;
+    const owns=G.cities.some(c=>c.owner===p.id);
+    if(!owns){ p.alive=false; logMsg('sys', `${p.name} has been wiped from the map.`); }
+  }
+}
+
+/* ----- move a unit, handle city capture ----- */
+function moveUnit(u,x,z){
+  u.x=x; u.z=z;
+  const p=playerById(u.owner);
+  reveal(p,x,z, u.type==='rambler'?2:1);
+  const c=cityAt(x,z);
+  if(c && c.owner!==u.owner){ captureCity(p,c); }
+  // movesLeft consumed by reachability step distance — recompute on selection; set 0 to keep simple
+  u.movesLeft=0;
+}
+
+/* --------------------------- 4. RENDERING -------------------------------- */
+let renderer,scene,camera,controls,composer,passH,passV,sun;
+let staticGroup,dynGroup,fxGroup,highlightGroup,waterMeshes=[],decoMeshes=[];
+const TILE=1, HSCALE=0.9;
+const raycaster=new THREE.Raycaster(); const pointer=new THREE.Vector2();
+let tilePickMeshes=[]; let hovered=null;
+
+function colorMat(hex,opts={}){ return new THREE.MeshStandardMaterial({color:hex,roughness:opts.r??0.9,metalness:opts.m??0.0,flatShading:true,transparent:opts.t||false,opacity:opts.o??1,emissive:opts.e??0x000000,emissiveIntensity:opts.ei??0}); }
+
+function initThree(){
+  const stage=document.getElementById('stage');
+  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+  stage.appendChild(renderer.domElement);
+
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x101b24);
+  scene.fog=new THREE.Fog(0x101b24, 38, 75);
+
+  const aspect=innerWidth/innerHeight;
+  camera=new THREE.OrthographicCamera(-FR*aspect,FR*aspect,FR,-FR,0.1,1200);
+  camera.position.set(34,40,34); camera.lookAt(0,0,0);
+
+  controls=new OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true; controls.dampingFactor=.08;
+  controls.minZoom=0.55; controls.maxZoom=3.2;
+  controls.maxPolarAngle=Math.PI*0.46; controls.minPolarAngle=Math.PI*0.12;
+  controls.target.set(0,0,0);
+
+  // lights — warm key sun + cool sky fill for the toy-diorama look
+  sun=new THREE.DirectionalLight(0xfff0d6,2.1);
+  sun.position.set(26,46,16); sun.castShadow=true;
+  sun.shadow.mapSize.set(2048,2048);
+  const s=26; const sc=sun.shadow.camera; sc.left=-s;sc.right=s;sc.top=s;sc.bottom=-s;sc.near=1;sc.far=140;
+  sun.shadow.bias=-0.0006; sun.shadow.normalBias=0.02;
+  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0xbfe0ff,0x4a3a28,0.75));
+  const rim=new THREE.DirectionalLight(0x9fd0ff,0.5); rim.position.set(-20,18,-22); scene.add(rim);
+
+  staticGroup=new THREE.Group(); scene.add(staticGroup);
+  dynGroup=new THREE.Group(); scene.add(dynGroup);
+  fxGroup=new THREE.Group(); scene.add(fxGroup);
+  highlightGroup=new THREE.Group(); scene.add(highlightGroup);
+
+  // post-processing: tilt-shift (separable gaussian, strength from focus band) + saturation pop
+  composer=new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene,camera));
+  passH=new ShaderPass(TiltShiftShader); passH.uniforms.uDir.value.set(1,0);
+  passV=new ShaderPass(TiltShiftShader); passV.uniforms.uDir.value.set(0,1); passV.uniforms.uSat.value=1.22;
+  passV.renderToScreen=true;
+  composer.addPass(passH); composer.addPass(passV);
+  onResize();
+
+  renderer.domElement.addEventListener('pointermove',onPointerMove);
+  renderer.domElement.addEventListener('click',onClick);
+  addEventListener('resize',onResize);
+  animate();
+}
+
+const TiltShiftShader = {
+  uniforms:{
+    tDiffuse:{value:null}, uDir:{value:new THREE.Vector2(1,0)}, uTexel:{value:new THREE.Vector2(1/1280,1/720)},
+    uFocus:{value:0.54}, uBand:{value:0.16}, uStrength:{value:7.0}, uSat:{value:1.0},
+  },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform vec2 uDir; uniform vec2 uTexel;
+    uniform float uFocus; uniform float uBand; uniform float uStrength; uniform float uSat;
+    void main(){
+      float d=abs(vUv.y-uFocus);
+      float b=clamp((d-uBand)/(1.0-uBand),0.0,1.0);
+      b=pow(b,1.4)*uStrength;
+      vec2 o=uDir*uTexel*b;
+      vec4 c=texture2D(tDiffuse,vUv)*0.227027;
+      c+=texture2D(tDiffuse,vUv+o*1.3846)*0.3162162;
+      c+=texture2D(tDiffuse,vUv-o*1.3846)*0.3162162;
+      c+=texture2D(tDiffuse,vUv+o*3.2308)*0.0702702;
+      c+=texture2D(tDiffuse,vUv-o*3.2308)*0.0702702;
+      vec3 col=c.rgb; float l=dot(col,vec3(0.299,0.587,0.114));
+      col=mix(vec3(l),col,uSat);
+      col=clamp((col-0.5)*1.04+0.5,0.0,1.0); // gentle contrast
+      gl_FragColor=vec4(col,c.a);
+    }`
+};
+
+function onResize(){
+  const aspect=innerWidth/innerHeight;
+  camera.left=-FR*aspect;camera.right=FR*aspect;camera.top=FR;camera.bottom=-FR;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight);
+  passH.uniforms.uTexel.value.set(1/innerWidth,1/innerHeight);
+  passV.uniforms.uTexel.value.set(1/innerWidth,1/innerHeight);
+}
+
+const wx=(x)=>(x-(N-1)/2)*TILE;
+const wz=(z)=>(z-(N-1)/2)*TILE;
+
+function buildStaticScene(){
+  staticGroup.clear(); tilePickMeshes=[]; waterMeshes=[]; decoMeshes=[];
+  const boxGeo=new THREE.BoxGeometry(TILE*0.99,1,TILE*0.99);
+  const treeGeo=new THREE.ConeGeometry(0.28,0.7,6);
+  const trunkGeo=new THREE.CylinderGeometry(0.06,0.08,0.18,5);
+  const rockGeo=new THREE.DodecahedronGeometry(0.22,0);
+  const peakGeo=new THREE.ConeGeometry(0.46,0.9,5);
+  const matCache={};
+  const getMat=(hex)=>matCache[hex]||(matCache[hex]=colorMat(hex));
+  const treeMat=colorMat(0x3f7a3a), trunkMat=colorMat(0x6b4a2a), rockMat=colorMat(0x9a8f80), snowMat=colorMat(0xf2f2f5,{r:0.6});
+
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){
+    const t=tileAt(x,z); const def=TERRAIN[t.terrain];
+    const h=def.h*HSCALE;
+    const mesh=new THREE.Mesh(boxGeo,getMat(def.color));
+    mesh.scale.y=h; mesh.position.set(wx(x),h/2,wz(z));
+    mesh.receiveShadow=true; mesh.castShadow=false;
+    mesh.userData={tx:x,tz:z,base:def.color};
+    staticGroup.add(mesh); tilePickMeshes.push(mesh);
+    if(def.pass==='water') waterMeshes.push(mesh);
+
+    // decorations
+    if(t.terrain==='forest'){
+      const g=new THREE.Group();
+      const tr=new THREE.Mesh(treeGeo,treeMat); tr.position.y=0.55; tr.castShadow=true;
+      const tk=new THREE.Mesh(trunkGeo,trunkMat); tk.position.y=0.18; tk.castShadow=true;
+      g.add(tk,tr); g.position.set(wx(x),h,wz(z)); g.rotation.y=rnd()*6.28; g.userData.deco=true;
+      staticGroup.add(g); decoMeshes.push({o:g,tx:x,tz:z});
+    } else if(t.terrain==='hill'){
+      const r=new THREE.Mesh(rockGeo,rockMat); r.position.set(wx(x)+(rnd()-.5)*.3,h+0.16,wz(z)+(rnd()-.5)*.3); r.castShadow=true; r.userData.deco=true; staticGroup.add(r); decoMeshes.push({o:r,tx:x,tz:z});
+    } else if(t.terrain==='mountain'){
+      const pk=new THREE.Mesh(peakGeo,rockMat); pk.position.set(wx(x),h+0.42,wz(z)); pk.castShadow=true; pk.userData.deco=true; staticGroup.add(pk); decoMeshes.push({o:pk,tx:x,tz:z});
+      const cap=new THREE.Mesh(new THREE.ConeGeometry(0.2,0.3,5),snowMat); cap.position.set(wx(x),h+0.78,wz(z)); cap.userData.deco=true; staticGroup.add(cap); decoMeshes.push({o:cap,tx:x,tz:z});
+    }
+    // resource markers
+    if(t.resource){
+      const r=RESOURCES[t.resource];
+      const m=new THREE.Mesh(new THREE.IcosahedronGeometry(0.16,0), colorMat(r.color,{e:r.color,ei:0.25,m:0.2,r:0.4}));
+      m.position.set(wx(x)+0.28,h+0.2,wz(z)+0.28); m.castShadow=true; m.userData.deco=true; m.userData.res=true;
+      staticGroup.add(m); decoMeshes.push({o:m,tx:x,tz:z});
+    }
+  }
+  // a soft sea skirt around the board
+  const skirt=new THREE.Mesh(new THREE.BoxGeometry(N*2.2,0.4,N*2.2), colorMat(0x255a72,{r:0.5}));
+  skirt.position.y=-0.2; skirt.receiveShadow=true; staticGroup.add(skirt);
+}
+
+/* unit token meshes — stylised low-poly silhouettes */
+function makeUnitMesh(u){
+  const t=u.type; const p=playerById(u.owner); const col=p?p.color:0xffffff;
+  const g=new THREE.Group();
+  const body=colorMat(col,{r:0.55,m:0.15});
+  const dark=colorMat(0x2a2218,{r:0.7});
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.38,0.1,16), colorMat(0x1a140d,{r:0.8}));
+  base.position.y=0.05; base.receiveShadow=true; g.add(base);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.04,8,20), colorMat(col,{e:col,ei:0.4}));
+  ring.rotation.x=Math.PI/2; ring.position.y=0.06; g.add(ring);
+  const add=(m)=>{m.castShadow=true; g.add(m); return m;};
+  if(t==='founder'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.4,.34,.4),body)); b.position.y=.28;
+    const roof=add(new THREE.Mesh(new THREE.ConeGeometry(.34,.26,4),dark)); roof.position.y=.58; roof.rotation.y=.78; }
+  else if(t==='rambler'){ const c=add(new THREE.Mesh(new THREE.ConeGeometry(.3,.62,7),body)); c.position.y=.42;
+    const top=add(new THREE.Mesh(new THREE.SphereGeometry(.07,8,8),colorMat(0xffe7a8,{e:0xffcf66,ei:0.6}))); top.position.y=.78; }
+  else if(t==='guard'){ const b=add(new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,.5,10),body)); b.position.y=.36;
+    const h=add(new THREE.Mesh(new THREE.SphereGeometry(.16,10,10),dark)); h.position.y=.68; }
+  else if(t==='pike'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.34,.6,.2),body)); b.position.y=.4;
+    const sp=add(new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.7,5),dark)); sp.position.set(.2,.5,0); }
+  else if(t==='pony'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.26,.24),body)); b.position.y=.34;
+    const n=add(new THREE.Mesh(new THREE.BoxGeometry(.16,.26,.16),body)); n.position.set(.26,.46,0); }
+  else if(t==='gun'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.42,.26,.42),dark)); b.position.y=.26;
+    const barrel=add(new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.6,10),body)); barrel.rotation.z=Math.PI/2.6; barrel.position.set(.12,.45,0); }
+  else if(t==='ironclad'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.56,.34,.44),body)); b.position.y=.3;
+    const turret=add(new THREE.Mesh(new THREE.CylinderGeometry(.18,.2,.2,10),dark)); turret.position.y=.55;
+    const stack=add(new THREE.Mesh(new THREE.CylinderGeometry(.06,.07,.34,8),dark)); stack.position.set(-.16,.62,0); }
+  else if(t==='skylark'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.12,.16),body)); b.position.y=.7;
+    const w=add(new THREE.Mesh(new THREE.BoxGeometry(.16,.06,.66),colorMat(col,{e:col,ei:.2}))); w.position.y=.7;
+    const fin=add(new THREE.Mesh(new THREE.BoxGeometry(.12,.18,.04),dark)); fin.position.set(-.2,.8,0);
+    const pole=add(new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.6,5),dark)); pole.position.y=.38; }
+  else if(t==='nightmail'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.22,.26),colorMat(0x20242e,{m:.5,r:.3}))); b.position.y=.3;
+    const eye=add(new THREE.Mesh(new THREE.SphereGeometry(.05,8,8),colorMat(0xff5a4a,{e:0xff3a2a,ei:.9}))); eye.position.set(.24,.34,0);
+    g.children[2].material.opacity=.85; }
+  else if(t==='colossus'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.7,.6,.6),colorMat(0xb1543a,{r:.95}))); b.position.y=.5;
+    const stack=add(new THREE.Mesh(new THREE.CylinderGeometry(.1,.12,.4,8),colorMat(0x7a3a28))); stack.position.set(-.2,.92,0);
+    const eye=add(new THREE.Mesh(new THREE.SphereGeometry(.08,10,10),colorMat(col,{e:col,ei:.8}))); eye.position.set(.3,.6,0); base.scale.set(1.5,1,1.5); }
+  else { const b=add(new THREE.Mesh(new THREE.BoxGeometry(.36,.4,.36),body)); b.position.y=.3; }
+  return g;
+}
+
+function makeCityMesh(c){
+  const p=playerById(c.owner); const col=p?p.color:0x999999;
+  const g=new THREE.Group();
+  const roof=colorMat(col,{r:.55}); const wall=colorMat(0xeaddc4,{r:.85});
+  const stone=colorMat(0xcabfa6,{r:.9}); const dark=colorMat(0x3a2c1d); const brick=colorMat(0x9a5a3a,{r:.9});
+  // cobbled base platform so it reads as a settlement footprint
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(0.56,0.6,0.1,16), stone);
+  base.position.y=0.05; base.receiveShadow=true; g.add(base);
+  // central town hall — grows taller with city level
+  const hallH=0.34+Math.min(c.level,8)*0.06;
+  const hall=new THREE.Mesh(new THREE.BoxGeometry(.3,hallH,.3),wall); hall.position.y=hallH/2+0.08; hall.castShadow=true; g.add(hall);
+  const hallRoof=new THREE.Mesh(new THREE.ConeGeometry(.27,.2,4),roof); hallRoof.position.y=hallH+0.18; hallRoof.rotation.y=.78; hallRoof.castShadow=true; g.add(hall,hallRoof);
+  // a brick smokestack — the industrial age
+  if(c.level>=2){ const stack=new THREE.Mesh(new THREE.CylinderGeometry(.05,.06,.4+c.level*0.03,8),brick); stack.position.set(.2,.3,.16); stack.castShadow=true; g.add(stack); }
+  // ring of cottages around the hall, more as the city grows
+  const houses=Math.min(2+c.level*2,12);
+  for(let i=0;i<houses;i++){
+    const a=(i/houses)*6.28 + i*0.7; const rad=0.34+ (i%2)*0.12;
+    const hh=0.16+((i*97)%5)*0.04;                 // deterministic-ish height, no RNG churn
+    const hx=Math.cos(a)*rad, hz=Math.sin(a)*rad;
+    const b=new THREE.Mesh(new THREE.BoxGeometry(.15,hh,.15),wall); b.position.set(hx,hh/2+0.08,hz); b.castShadow=true; g.add(b);
+    const r=new THREE.Mesh(new THREE.ConeGeometry(.13,.12,4),roof); r.position.set(hx,hh+0.14,hz); r.rotation.y=.78; r.castShadow=true; g.add(r);
+  }
+  if(c.walls){ const w=new THREE.Mesh(new THREE.TorusGeometry(0.55,0.05,6,20),colorMat(0xb8b0a0)); w.rotation.x=Math.PI/2; w.position.y=0.1; g.add(w); }
+  if(c.isCapital){
+    // clock-tower + banner marks the seat of the house
+    const tower=new THREE.Mesh(new THREE.BoxGeometry(.14,hallH+0.5,.14),stone); tower.position.set(0,(hallH+0.5)/2+0.08,0); tower.castShadow=true; g.add(tower);
+    const tRoof=new THREE.Mesh(new THREE.ConeGeometry(.12,.18,4),roof); tRoof.position.y=hallH+0.66; tRoof.rotation.y=.78; g.add(tRoof);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.5,6),dark); pole.position.set(0,hallH+0.95,0); g.add(pole);
+    const flag=new THREE.Mesh(new THREE.BoxGeometry(.02,.16,.26),colorMat(col,{e:col,ei:.5})); flag.position.set(0,hallH+1.08,.13); g.add(flag);
+  }
+  return g;
+}
+
+let bobUnits=[];
+function rebuildDynamic(){
+  dynGroup.clear(); bobUnits=[];
+  // Full visibility: every tile is shown; tint only by territory owner.
+  for(const mesh of tilePickMeshes){
+    const {tx,tz,base}=mesh.userData;
+    const t=tileAt(tx,tz);
+    const c=new THREE.Color(base);
+    if(t.owner){ const op=playerById(t.owner); if(op){ const oc=new THREE.Color(op.color); c.lerp(oc,0.16);} }
+    mesh.material.color.copy(c);
+    mesh.userData.visible=true;
+  }
+  for(const d of decoMeshes){ d.o.visible = true; }
+  // cities
+  for(const c of G.cities){
+    const m=makeCityMesh(c); const h=TERRAIN[tileAt(c.x,c.z).terrain].h*HSCALE;
+    m.position.set(wx(c.x),h,wz(c.z)); m.userData={kind:'city',ref:c}; dynGroup.add(m);
+  }
+  // units
+  for(const u of G.units){
+    if(u.hp<=0) continue;
+    const m=makeUnitMesh(u); const h=TERRAIN[tileAt(u.x,u.z).terrain].h*HSCALE;
+    m.position.set(wx(u.x),h,wz(u.z)); m.userData={kind:'unit',ref:u};
+    const fly = UNIT_TYPES[u.type].domain==='air';
+    m.userData.baseY=h+(fly?0.8:0); m.userData.bob=rnd()*6.28;
+    dynGroup.add(m); bobUnits.push(m);
+    // health ring scale by hp
+  }
+  updateHighlights();
+}
+
+function viewerPlayer(){
+  if(G.mode==='campaign'){ const h=G.players.find(p=>!p.isAI); return h; }
+  return null;
+}
+
+function updateHighlights(){
+  highlightGroup.clear();
+  if(!G.sel) return;
+  const u=G.sel;
+  if(G.reach){
+    for(const k of G.reach.set){ const [x,z]=k.split(',').map(Number); addHL(x,z,0x49b6ff,0.5); }
+  }
+  if(G.atks){ for(const e of G.atks){ addHL(e.x,e.z,0xff5544,0.7); } }
+  // found-city hints for a founder
+  if(UNIT_TYPES[u.type].role==='settle'){ if(canFoundHere(u,u.x,u.z)) addHL(u.x,u.z,0x6fe07a,0.7); }
+  // selected ring
+  addHL(u.x,u.z,0xffe27a,0.85,true);
+}
+function addHL(x,z,hex,op,thick){
+  const h=TERRAIN[tileAt(x,z).terrain].h*HSCALE;
+  const geo=new THREE.RingGeometry(thick?0.30:0.0,0.46,4);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(TILE*0.92,TILE*0.92),
+    new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity:op,depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.position.set(wx(x),h+0.03,wz(z));
+  highlightGroup.add(m);
+}
+
+function onPointerMove(e){ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; }
+
+function pickTile(){
+  raycaster.setFromCamera(pointer,camera);
+  const hits=raycaster.intersectObjects(tilePickMeshes,false);
+  if(!hits.length) return null;
+  return hits[0].object.userData;
+}
+
+function reframeCamera(){
+  // scale the orthographic view, camera distance, sun-shadow box and fog to the board size
+  FR = Math.max(11, N*0.62);
+  const d = Math.max(20, N*1.15);
+  camera.position.set(d, d*1.2, d); camera.lookAt(0,0,0);
+  const aspect=innerWidth/innerHeight;
+  camera.left=-FR*aspect;camera.right=FR*aspect;camera.top=FR;camera.bottom=-FR;
+  camera.zoom=1.0; camera.updateProjectionMatrix();
+  if(sun){ const s=Math.max(20,N*0.85); const sc=sun.shadow.camera; sc.left=-s;sc.right=s;sc.top=s;sc.bottom=-s;sc.far=N*5;
+    if(sc.updateProjectionMatrix) sc.updateProjectionMatrix(); }
+  if(scene&&scene.fog){ scene.fog.near=N*1.15; scene.fog.far=N*2.6; }
+  if(controls) controls.target.set(0,0,0);
+}
+function homeCamera(){
+  controls.target.set(0,0,0);
+  // centre on the human capital if present
+  const v=viewerPlayer();
+  if(v){ const c=G.cities.find(c=>c.owner===v.id&&c.isCapital)||G.cities.find(c=>c.owner===v.id); if(c) controls.target.set(wx(c.x),0,wz(c.z)); }
+  camera.zoom = N<=12 ? 1.15 : 1.0; camera.updateProjectionMatrix();
+}
+
+let lastT=0;
+function animate(t){
+  requestAnimationFrame(animate);
+  const dt=(t-lastT)/1000||0; lastT=t;
+  controls.update();
+  // unit bob + water shimmer
+  const time=t*0.001;
+  for(const m of bobUnits){ m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04; }
+  for(let i=0;i<waterMeshes.length;i++){ const w=waterMeshes[i]; w.material.emissive.setHSL(0.55,0.4,0.04+0.02*Math.sin(time*1.5+i)); }
+  composer.render();
+}
+
+/* --------------------------- 5. INTERACTION ------------------------------ */
+function canFoundHere(u,x,z){
+  if(UNIT_TYPES[u.type].role!=='settle') return false;
+  const t=tileAt(x,z); if(t.city) return false; if(TERRAIN[t.terrain].pass!=='land') return false;
+  for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<=1) return false; }
+  return true;
+}
+
+function onClick(){
+  if(!G.started||G.gameOver) return;
+  const ud=pickTile(); if(!ud) return;
+  const {tx,tz}=ud;
+  const p=currentPlayer();
+  const humanTurn = (G.mode==='campaign' && !p.isAI);
+  if(!humanTurn){ inspectTile(tx,tz); return; }
+
+  const u=unitAt(tx,tz); const c=cityAt(tx,tz);
+
+  // 1. acting with a selected unit
+  if(G.sel){
+    const su=G.sel;
+    // attack?
+    if(G.atks && G.atks.some(e=>e.x===tx&&e.z===tz)){
+      const target=G.atks.find(e=>e.x===tx&&e.z===tz);
+      resolveCombat(su,target); afterAction(); return;
+    }
+    // move?
+    if(G.reach && G.reach.set.has(key(tx,tz)) && su.movesLeft>0){
+      moveUnit(su,tx,tz); selectUnit(su); refreshAll(); rebuildDynamic(); return;
+    }
+    // found city on current tile (clicked self)
+    if(su===u && canFoundHere(su,su.x,su.z)){ /* handled by button */ }
+  }
+
+  // 2. selecting
+  if(u && u.owner===p.id){ selectUnit(u); return; }
+  if(c && c.owner===p.id){ selectCity(c); return; }
+  inspectTile(tx,tz);
+}
+
+function selectUnit(u){
+  G.sel=u; G.selCity=null;
+  const p=currentPlayer();
+  if(u.owner===p.id && !u.hasMovedFlag){ G.reach = u.movesLeft>0? reachable(u): {set:new Set(),dist:{}}; G.atks=attackTargets(u); }
+  else { G.reach=null; G.atks=null; }
+  updateHighlights(); renderSelPanel();
+}
+function selectCity(c){ G.sel=null; G.selCity=c; G.reach=null; G.atks=null; updateHighlights(); renderSelPanel(); }
+function inspectTile(x,z){
+  const u=unitAt(x,z); const c=cityAt(x,z);
+  if(u){ selectUnit(u); return; } if(c){ selectCity(c); return; }
+  G.sel=null;G.selCity=null;G.reach=null;G.atks=null;updateHighlights();
+  const t=tileAt(x,z);
+  selBody.innerHTML=`<div class="sel-empty"><b style="color:var(--ink)">${t.terrain[0].toUpperCase()+t.terrain.slice(1)}</b>${t.resource?` · ${RESOURCES[t.resource].glyph} ${t.resource}`:''}<br>${t.owner?`Territory of ${playerById(t.owner)?.name||'—'}`:'Unclaimed land.'}</div>`;
+  selTitle.textContent='Tile'; selSub.textContent=`${x},${z}`;
+}
+function afterAction(){ if(G.sel&&G.sel.hp>0) selectUnit(G.sel); else {G.sel=null;G.reach=null;G.atks=null;} refreshAll(); rebuildDynamic(); checkWin(); }
+
+/* selection panel rendering */
+const selBody=document.getElementById('selBody'), selTitle=document.getElementById('selTitle'), selSub=document.getElementById('selSub');
+function renderSelPanel(){
+  const p=currentPlayer();
+  if(G.sel){
+    const u=G.sel; const d=UNIT_TYPES[u.type]; const owner=playerById(u.owner);
+    const mine = u.owner===p.id && !p.isAI && G.mode==='campaign';
+    selTitle.textContent='Unit'; selSub.textContent=`#${u.id}`;
+    let h=`<div class="unit-head"><div class="unit-emoji" style="color:#${owner.color.toString(16).padStart(6,'0')}">${d.glyph}</div>
+      <div><div class="unit-name">${d.name}</div><div class="unit-faction">${owner.name}</div></div></div>
+      <div class="hpbar"><i style="width:${Math.round(u.hp/u.maxHp*100)}%"></i></div>
+      <div class="stat-grid">
+        <div class="mini"><div class="k">HP</div><div class="vv">${u.hp}</div></div>
+        <div class="mini"><div class="k">ATK</div><div class="vv">${d.atk}</div></div>
+        <div class="mini"><div class="k">DEF</div><div class="vv">${d.def}</div></div>
+        <div class="mini"><div class="k">MOV</div><div class="vv">${unitMove(u)}</div></div>
+      </div>
+      <div class="desc">${d.desc}</div>`;
+    if(mine){
+      h+=`<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">`;
+      if(canFoundHere(u,u.x,u.z)) h+=`<button class="btn primary" id="foundBtn">⌂ Found a Village</button>`;
+      if(u.movesLeft>0) h+=`<div class="legend">Click a <span style="color:#49b6ff">blue</span> tile to march, a <span style="color:#ff5544">red</span> tile to attack.</div>`;
+      else h+=`<div class="legend">Spent for this turn.</div>`;
+      h+=`</div>`;
+    }
+    selBody.innerHTML=h;
+    if(mine){ const fb=document.getElementById('foundBtn'); if(fb) fb.onclick=()=>{ doFound(u); }; }
+  } else if(G.selCity){
+    renderCityPanel();
+  }
+}
+function renderCityPanel(){
+  const c=G.selCity; const p=currentPlayer(); const owner=playerById(c.owner);
+  const mine = c.owner===p.id && !p.isAI && G.mode==='campaign';
+  selTitle.textContent='City'; selSub.textContent=c.isCapital?'capital':'';
+  const y=cityYields(c);
+  let h=`<div class="unit-head"><div class="unit-emoji" style="color:#${owner.color.toString(16).padStart(6,'0')}">${c.isCapital?'★':'⌂'}</div>
+    <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}</div></div></div>
+    <div class="hpbar" style="background:#2a2412"><i style="width:${Math.round(c.food/c.foodCap*100)}%;background:linear-gradient(90deg,var(--amber),var(--amber2))"></i></div>
+    <div class="legend" style="margin-top:4px">Growth ${c.food}/${c.foodCap} 🌾 → next level ${c.walls?'· walled':''}</div>
+    <div class="stat-grid" style="margin-top:8px">
+      <div class="mini"><div class="k">Food</div><div class="vv">+${y.food}</div></div>
+      <div class="mini"><div class="k">Prod ⚒</div><div class="vv">+${y.prod}</div></div>
+      <div class="mini"><div class="k">Sci 🔬</div><div class="vv">+${y.sci}</div></div>
+    </div>
+    <div class="desc">Yields come from the eight tiles around the city: forest→production, river→food, hills &amp; peaks→science.</div>`;
+  if(mine){
+    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(costs ⚒ ${p.prod} avail)</span></div><div class="buildlist">`;
+    const occupied = !!unitAt(c.x,c.z);
+    for(const [tid,d] of Object.entries(UNIT_TYPES)){
+      if(d.role==='super') continue;
+      const techok = !d.tech || p.techs.has(d.tech);
+      if(!techok) continue;
+      let cost=d.cost; if(tid==='rambler'&&p.faction.bonus==='explore') cost=Math.max(1,cost-1);
+      const dis = occupied || p.prod<cost;
+      h+=`<button class="btn" data-build="${tid}" data-cost="${cost}" ${dis?'disabled':''}>
+        <span>${d.glyph} ${d.name}</span><span class="cost">${cost}⚒</span></button>`;
+    }
+    h+=`</div>`;
+    if(occupied) h+=`<div class="legend" style="margin-top:6px">A unit blocks the city — move it to build.</div>`;
+    h+=`</div>`;
+  }
+  selBody.innerHTML=h;
+  if(mine){
+    selBody.querySelectorAll('[data-build]').forEach(b=>b.onclick=()=>{ doBuild(c,b.dataset.build,+b.dataset.cost); });
+  }
+}
+function doFound(u){ const p=playerById(u.owner); foundCity(p,u.x,u.z,false); killUnit(u); G.sel=null; logMsg('city',`${p.name} founded a village at the Skerne.`); recomputeIncome(); refreshAll(); rebuildDynamic(); }
+function doBuild(c,tid,cost){ const p=playerById(c.owner); if(p.prod<cost||unitAt(c.x,c.z)) return; p.prod-=cost; spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
+
+/* --------------------------- 6. AI + LEARNING ---------------------------- */
+const LESSONS = {
+  defendCapital:{label:'Defend the capital', desc:'Keep guards at home.'},
+  noOverExtend: {label:"Don't over-extend", desc:'Army must match expansion.'},
+  avoidBadOdds: {label:'Avoid low-odds attacks', desc:'Only strike when favoured.'},
+  outTech:      {label:'Out-tech rivals', desc:'Fall behind in tech and you lose.'},
+  massFirst:    {label:'Mass before marching', desc:'Do not poke with a tiny force.'},
+};
+function freshKnowledge(){ const k={version:1,games:0,factions:{},lessons:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
+function loadKnowledge(){
+  try{ const raw=localStorage.getItem('brassrails.ai.v1'); knowledge = raw? JSON.parse(raw): freshKnowledge(); }
+  catch(e){ knowledge=freshKnowledge(); }
+  if(!knowledge.lessons) knowledge.lessons={};
+  for(const id in LESSONS) if(!knowledge.lessons[id]) knowledge.lessons[id]={weight:0};
+  if(!knowledge.factions) knowledge.factions={};
+}
+function saveKnowledge(){ try{ localStorage.setItem('brassrails.ai.v1',JSON.stringify(knowledge)); }catch(e){} }
+function L(id){ return knowledge.lessons[id]?.weight||0; }
+
+/* the AI brain takes a full turn for player p */
+function aiTurn(p){
+  const g=p.genome; const thoughts=[];
+  // institutional caution gate, raised by the "avoid low-odds attacks" lesson and lowered by personal risk appetite
+  const riskGate = clamp(0.34 + 0.40*L('avoidBadOdds')*(1-g.risk) - 0.15*g.risk, 0.18, 0.8);
+  const homeNeed = Math.ceil(1 + 2*L('defendCapital')*g.defense);
+  const massGate = Math.round(1 + 3*L('massFirst')*(1-g.aggression));
+
+  // --- 1. research ---
+  aiResearch(p,thoughts);
+
+  // --- 2. cities grow automatically from their surroundings; spend Production on units ---
+  const myCities=G.cities.filter(c=>c.owner===p.id);
+  const myUnits=()=>G.units.filter(u=>u.owner===p.id&&u.hp>0);
+  // decide builds with available production (loop bounded)
+  let guard=0; for(let i=0;i<14;i++){
+    const cand=aiChooseBuild(p,homeNeed,massGate,thoughts); if(!cand) break;
+    if(p.prod<cand.cost) break;
+    if(unitAt(cand.city.x,cand.city.z)){ /* blocked */ if(++guard>myCities.length+2) break; continue; }
+    p.prod-=cand.cost; spawnUnit(p,cand.type,cand.city.x,cand.city.z,false);
+  }
+
+  // --- 3. units act ---
+  for(const u of shuffle(myUnits())){
+    if(u.hp<=0) continue;
+    aiActUnit(p,u,riskGate,thoughts);
+  }
+
+  // track stats for the post-mortem
+  const army=myUnits().filter(u=>UNIT_TYPES[u.type].role!=='settle').length;
+  p.stats.peakArmy=Math.max(p.stats.peakArmy,army);
+  const cap=G.cities.find(c=>c.id===p.capitalId);
+  if(cap){ const d=myUnits().filter(u=>cheb(u.x,u.z,cap.x,cap.z)<=2 && UNIT_TYPES[u.type].atk>0).length; p.stats.capDefSum+=d; p.stats.capDefTurns++; }
+  p.stats.techPeak=Math.max(p.stats.techPeak,p.techs.size);
+
+  p.lastThought = thoughts.slice(-3).join(' · ') || 'consolidating';
+}
+
+function aiResearch(p,thoughts){
+  const g=p.genome; const want=[];
+  // priorities shaped by genome + the out-tech lesson
+  const order=['masonry','riding','husbandry','ironworking','trade','steam','espionage','aeronautics','telegraphy'];
+  for(const id of order){ if(canResearch(p,id)) want.push(id); }
+  const techBias = g.tech + 0.5*L('outTech');
+  // research from the science stockpile, scaled by tech appetite
+  let budget = p.science*(0.45+0.5*techBias);
+  for(const id of want){ const cost=techCost(p,id); if(cost<=budget && p.science>=cost){ research(p,id); budget-=cost; if(rnd()>techBias) break; } }
+}
+
+function aiChooseBuild(p,homeNeed,massGate,thoughts){
+  const g=p.genome;
+  const myUnits=G.units.filter(u=>u.owner===p.id&&u.hp>0);
+  const army=myUnits.filter(u=>UNIT_TYPES[u.type].role!=='settle');
+  const founders=myUnits.filter(u=>UNIT_TYPES[u.type].role==='settle');
+  const myCities=G.cities.filter(c=>c.owner===p.id);
+  const buildCity = myCities.find(c=>!unitAt(c.x,c.z)) || null;
+  if(!buildCity) return null;
+  // keep standing armies bounded — otherwise the AI just spams units and never commits.
+  // Beyond the cap we bank brass for tech/expansion instead.
+  const armyCap = myCities.length*3 + 2;
+  const atCap = army.length >= armyCap;
+  const avail=(tid)=>{ const d=UNIT_TYPES[tid]; return (!d.tech||p.techs.has(d.tech)); };
+  const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(tid==='rambler'&&p.faction.bonus==='explore') c=Math.max(1,c-1); return c; };
+
+  // capital defence first (defendCapital lesson)
+  const cap=G.cities.find(c=>c.id===p.capitalId)||myCities[0];
+  const capDef = cap? myUnits.filter(u=>cheb(u.x,u.z,cap.x,cap.z)<=1&&UNIT_TYPES[u.type].def>=2).length : 99;
+  if(cap && capDef<homeNeed && p.prod>=cost('guard')){
+    const t = avail('pike')&&p.prod>=cost('pike')? 'pike':'guard';
+    thoughts.push(`reinforce ${cap.name} (lesson: defend the capital, need ${homeNeed})`);
+    return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t, cost:cost(t)};
+  }
+  // expansion vs army balance (noOverExtend lesson)
+  const expandUtil = g.expansion*(1 - 0.6*L('noOverExtend')*(army.length < founders.length+1?1:0));
+  const wantFounder = founders.length<1 && myCities.length<6 && rnd()<0.6*expandUtil+0.2;
+  if(wantFounder && p.prod>=cost('founder') && army.length>=Math.max(1,massGate-1)){
+    thoughts.push('train a Founder to expand');
+    return {city:buildCity,type:'founder',cost:cost('founder')};
+  }
+  if(atCap) return null;   // army full — bank brass for tech / future expansion
+  // otherwise build the best military unit we can afford, weighted by aggression
+  const milPriority=['ironclad','skylark','nightmail','gun','pony','guard'];
+  for(const tid of milPriority){
+    if(!avail(tid)) continue; const cc=cost(tid);
+    if(p.prod>=cc && rnd()<0.5+0.5*g.aggression){ return {city:buildCity,type:tid,cost:cc}; }
+  }
+  // fallback cheap guard if we have spare brass and want mass
+  if(p.prod>=cost('guard') && army.length<massGate+2) return {city:buildCity,type:'guard',cost:cost('guard')};
+  return null;
+}
+
+function aiActUnit(p,u,riskGate,thoughts){
+  const role=UNIT_TYPES[u.type].role;
+  // settlers look for ground
+  if(role==='settle'){
+    if(canFoundHere(u,u.x,u.z) && goodSettleSpot(u.x,u.z)){ doFoundAI(p,u); thoughts.push('founded a village'); return; }
+    const spot=findSettleSpot(p,u); if(spot){ aiStepToward(u,spot[0],spot[1]); if(canFoundHere(u,u.x,u.z)&&goodSettleSpot(u.x,u.z)){ doFoundAI(p,u); } }
+    return;
+  }
+  if(role==='scout'){ aiExplore(p,u); return; }
+  // military: evaluate attacks
+  const target=aiPickAttack(p,u,riskGate,thoughts);
+  if(target){
+    // move adjacent if needed (within range), then strike
+    const rng=UNIT_TYPES[u.type].range;
+    if(cheb(u.x,u.z,target.x,target.z)>rng){
+      const adj=aiStepTowardForAttack(u,target,rng);
+    }
+    if(cheb(u.x,u.z,target.x,target.z)<=rng && !u.hasAttacked){ resolveCombat(u,target); checkWin(); return; }
+  }
+  // no good attack — advance toward nearest enemy city/frontier, or guard capital
+  const g=p.genome;
+  if(rnd()<0.35+0.5*g.aggression){ const tgt=nearestEnemyCity(p,u)||nearestEnemyUnit(p,u); if(tgt) aiStepToward(u,tgt.x,tgt.z); }
+  else { const cap=G.cities.find(c=>c.id===p.capitalId); if(cap) aiStepToward(u,cap.x,cap.z); }
+}
+
+function aiPickAttack(p,u,riskGate,thoughts){
+  if(u.hasAttacked) return null;
+  const rng=UNIT_TYPES[u.type].range;
+  // consider enemies reachable to within range after a move
+  const reach=reachable(u);
+  const candidates=[]; const horizon=unitMove(u)+rng+1;
+  for(const e of G.units){ if(e.hp<=0||e.owner===u.owner) continue;
+    if(cheb(u.x,u.z,e.x,e.z)>horizon) continue;            // prune distant foes (also keeps this O(n) cheap)
+    // can we get within range? either already, or there's a reachable tile within range
+    let canHit = cheb(u.x,u.z,e.x,e.z)<=rng;
+    if(!canHit){ for(const k of reach.set){ const [x,z]=k.split(',').map(Number); if(cheb(x,z,e.x,e.z)<=rng){canHit=true;break;} } }
+    if(!canHit) continue;
+    const pc=predictCombat(u,e);
+    // win probability proxy: did we kill, or trade favourably?
+    const ratio = pc.atkDmg/Math.max(1,e.hp);
+    let score = ratio + (pc.kills?0.6:0) - (pc.selfDies?1.2:0) - (pc.defDmg/Math.max(1,u.hp))*0.6;
+    // capturing a city behind the target is a bonus
+    const onCity=cityAt(e.x,e.z); if(onCity&&onCity.owner!==p.id) score+=0.3;
+    const odds = clamp(ratio*0.8 + (pc.kills?0.4:0) - (pc.defDmg/Math.max(1,u.hp))*0.5, 0, 1);
+    candidates.push({e,score,odds,pc});
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  const best=candidates[0];
+  if(!best) return null;
+  if(best.odds < riskGate){
+    thoughts.push(`declined attack — ${Math.round(best.odds*100)}% < ${Math.round(riskGate*100)}% caution gate (lesson: avoid low-odds attacks)`);
+    return null;
+  }
+  thoughts.push(`attack ${UNIT_TYPES[best.e.type].name} @ ${Math.round(best.odds*100)}% odds`);
+  return best.e;
+}
+
+function aiStepToward(u,tx,tz){
+  if(u.movesLeft<=0) return;
+  const reach=reachable(u); let best=null,bd=1e9;
+  for(const k of reach.set){ const [x,z]=k.split(',').map(Number); const d=cheb(x,z,tx,tz); if(d<bd){bd=d;best=[x,z];} }
+  if(best && bd < cheb(u.x,u.z,tx,tz)){ moveUnit(u,best[0],best[1]); }
+}
+function aiStepTowardForAttack(u,e,rng){
+  if(u.movesLeft<=0) return;
+  const reach=reachable(u); let best=null,bd=1e9;
+  for(const k of reach.set){ const [x,z]=k.split(',').map(Number); const d=cheb(x,z,e.x,e.z); if(d<bd&&d>=Math.min(rng,0)){bd=d;best=[x,z];} }
+  if(best){ moveUnit(u,best[0],best[1]); }
+}
+function aiExplore(p,u){
+  if(u.movesLeft<=0) return;
+  const reach=reachable(u); let best=null,bs=-1;
+  for(const k of reach.set){ const [x,z]=k.split(',').map(Number);
+    let frontier=0; for(const [nx,nz] of neigh8(x,z)){ if(!p.explored.has(key(nx,nz))) frontier++; }
+    const jitter=rnd()*0.5; const s=frontier+jitter;
+    if(s>bs){bs=s;best=[x,z];}
+  }
+  if(best) moveUnit(u,best[0],best[1]);
+}
+function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ if(c.owner===p.id) continue; const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } return best; }
+function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
+function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
+function findSettleSpot(p,u){
+  // search nearby reachable-ish land away from existing cities with resources
+  let best=null,bs=-1;
+  for(let z=Math.max(0,u.z-6);z<Math.min(N,u.z+7);z++)for(let x=Math.max(0,u.x-6);x<Math.min(N,u.x+7);x++){
+    const t=tileAt(x,z); if(TERRAIN[t.terrain].pass!=='land'||t.city) continue;
+    let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<=1){ok=false;break;} } if(!ok) continue;
+    let res=0; for(const [nx,nz] of neigh8(x,z)) if(tileAt(nx,nz).resource) res++;
+    const s=res*2 - cheb(u.x,u.z,x,z)*0.3 + rnd();
+    if(s>bs){bs=s;best=[x,z];}
+  }
+  return best;
+}
+function doFoundAI(p,u){ foundCity(p,u.x,u.z,false); killUnit(u); recomputeIncome(); logMsg('city',`${p.name} founded a village.`); }
+
+/* ----- learning at game end ----- */
+function recordGameResult(){
+  knowledge.games++;
+  // rank by score
+  const ranked=[...G.players].sort((a,b)=>score(b)-score(a));
+  const winner=ranked[0];
+  for(const p of G.players){
+    const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0});
+    if(p.id===winner.id){ fk.wins++; fk.genome={...p.genome}; }
+    else { fk.losses++; }
+  }
+  // post-mortems: bump shared lessons + nudge losers toward the winner
+  const wG=winner.genome;
+  for(const p of G.players){
+    if(p.id===winner.id) continue;
+    const s=p.stats; const avgCapDef = s.capDefTurns? s.capDefSum/s.capDefTurns : 0;
+    const badRate = s.attacks? s.badAttacks/s.attacks : 0;
+    // diagnose why they lost & strengthen the matching lesson
+    if(!p.alive && avgCapDef<1.0) bump('defendCapital');
+    if(s.founded>=3 && s.peakArmy<=s.founded) bump('noOverExtend');
+    if(badRate>0.35 && s.attacks>=3) bump('avoidBadOdds');
+    if(winner.stats.techPeak - s.techPeak >= 2) bump('outTech');
+    if(s.peakArmy<=2 && s.attacks>=2) bump('massFirst');
+    // genome evolution: drift loser toward winner + small mutation
+    const fk=knowledge.factions[p.id];
+    const ng={}; for(const key in p.genome){ ng[key]=clamp(lerp(p.genome[key], wG[key]??0.5, 0.25) + (rnd()-0.5)*0.08, 0.05, 0.95); }
+    // apply targeted corrections from lessons
+    ng.defense=clamp(ng.defense + 0.15*(L('defendCapital')-0.0)*( !p.alive?1:0 ),0.05,0.95);
+    ng.risk   =clamp(ng.risk    - 0.12*L('avoidBadOdds')*(badRate>0.35?1:0),0.05,0.95);
+    ng.expansion=clamp(ng.expansion - 0.12*L('noOverExtend')*(s.founded>s.peakArmy?1:0),0.05,0.95);
+    ng.tech   =clamp(ng.tech    + 0.12*L('outTech')*((winner.stats.techPeak-s.techPeak>=2)?1:0),0.05,0.95);
+    fk.genome=ng;
+  }
+  // gentle decay so stale lessons fade
+  for(const id in knowledge.lessons){ knowledge.lessons[id].weight=clamp(knowledge.lessons[id].weight*0.985,0,1); }
+  saveKnowledge();
+}
+function bump(id){ knowledge.lessons[id].weight=clamp((knowledge.lessons[id].weight||0)+0.12,0,1); }
+
+/* --------------------------- scoring & win ------------------------------- */
+function score(p){
+  let s=0;
+  for(const c of G.cities){ if(c.owner!==p.id) continue; s+=c.level*5 + Math.round(c.food/Math.max(1,c.foodCap)*3); if(c.isCapital)s+=8; }
+  s+=p.techs.size*4;
+  for(const u of G.units){ if(u.owner===p.id&&u.hp>0) s+=2; }
+  let terr=0; for(let z=0;z<N;z++)for(let x=0;x<N;x++) if(G.tiles[z][x].owner===p.id) terr++;
+  s+=terr*0.5 + p.science*0.12 + p.prod*0.06;
+  if(p.techs.has('telegraphy')) s+=10;
+  return Math.round(s);
+}
+function checkWin(){
+  if(G.gameOver) return;
+  const alive=G.players.filter(p=>p.alive);
+  if(alive.length<=1){ endGame(alive[0]||null,'domination'); return; }
+  if(G.turn>TURN_CAP){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); }
+}
+
+/* --------------------------- 7. TURN SCHEDULER --------------------------- */
+let autoplay=false, speed='normal', autoTimer=null;
+const SPEEDS={slow:1100,normal:450,fast:120};
+
+function startTurnFor(p){
+  recomputeIncome();
+  // each city grows from its own food, then production & science flow to the treasury
+  for(const c of G.cities){ if(c.owner!==p.id) continue; const y=cityYields(c); c.food+=y.food; growCity(c); }
+  p.prod += p.prodIncome; p.science += p.sciIncome;
+  // refresh units
+  for(const u of G.units){ if(u.owner===p.id){ u.movesLeft=unitMove(u); u.hasAttacked=false; } }
+  p.stats.survived=G.turn;
+}
+function advance(){
+  if(G.gameOver) return;
+  // skip dead players
+  let safety=0;
+  while(!currentPlayer().alive && safety++<G.players.length) nextIndex();
+  const p=currentPlayer();
+  startTurnFor(p);
+  refreshHUD();
+  if(p.isAI && (G.mode==='auto' || autoplay || true)){
+    // AI plays automatically whenever it is an AI's turn
+    aiTurn(p); checkWin();
+    rebuildDynamic(); refreshAll();
+    if(G.gameOver){ return; }
+    if(G.mode==='auto' && !autoplay && speed==='step'){
+      // wait for manual step
+      return;
+    }
+    const delay = (G.mode==='auto')? SPEEDS[speed]||450 : 320;
+    autoTimer=setTimeout(()=>{ endTurn(); }, delay);
+  } else {
+    // human turn — wait for End Turn button
+    G.sel=null;G.selCity=null;G.reach=null;G.atks=null; updateHighlights(); renderSelPanelEmpty();
+    document.getElementById('endturn').disabled=false;
+    refreshAll();
+  }
+}
+function nextIndex(){ G.cur++; if(G.cur>=G.players.length){ G.cur=0; G.turn++; } }
+function endTurn(){
+  if(G.gameOver) return;
+  document.getElementById('endturn').disabled=true;
+  nextIndex(); checkWin(); if(G.gameOver) return;
+  advance();
+}
+function renderSelPanelEmpty(){ selTitle.textContent='Selection'; selSub.textContent=''; selBody.innerHTML=`<div class="sel-empty">Your turn. Select a <b>unit</b> to move &amp; fight, or a <b>city</b> to build units (cities grow themselves from the surrounding land). Then <b>End Turn</b>.</div>`; }
+
+function manualStep(){ if(G.mode==='auto'){ endTurn(); } }
+
+/* --------------------------- 8. UI WIRING -------------------------------- */
+const $=id=>document.getElementById(id);
+function logMsg(tag,msg){
+  const lb=$('logbody'); const d=document.createElement('div'); d.className='logline';
+  d.innerHTML=`<span class="tag ${tag}">${tag}</span>${msg}`;
+  lb.prepend(d); while(lb.children.length>60) lb.removeChild(lb.lastChild);
+}
+function refreshHUD(){
+  const v = (G.mode==='campaign')? viewerPlayer() : currentPlayer();
+  const p=currentPlayer();
+  $('hudWho').textContent=p.name + (p.isAI?' (AI)':'');
+  $('hudDot').style.background='#'+p.color.toString(16).padStart(6,'0');
+  $('hudTurn').innerHTML=`${G.turn}<small>/${TURN_CAP}</small>`;
+  const show=v||p;
+  $('hudProd').innerHTML=`${show.prod}<small> ⚒ +${show.prodIncome||0}</small>`;
+  $('hudSci').innerHTML=`${show.science}<small> 🔬 +${show.sciIncome||0}</small>`;
+  $('hudCities').textContent=G.cities.filter(c=>c.owner===show.id).length;
+  $('hudScore').textContent=score(show);
+}
+function refreshTech(){
+  const v=(G.mode==='campaign')?viewerPlayer():currentPlayer(); if(!v){ $('techBody').innerHTML=''; return; }
+  const p=v; let h='';
+  for(const [id,t] of Object.entries(TECHS)){
+    const owned=p.techs.has(id);
+    const locked=!owned && t.prereq && !p.techs.has(t.prereq);
+    const cost=techCost(p,id);
+    const can = !owned && !locked && p.science>=cost && !p.isAI && G.mode==='campaign';
+    h+=`<div class="tech ${owned?'owned':''} ${locked?'locked':''}" ${can?`data-tech="${id}"`:''}>
+      <div class="ico">${owned?'✓':(locked?'🔒':'🔬')}</div>
+      <div><div class="tn">${t.name}</div><div class="nt">${t.note}</div></div>
+      ${owned?'':`<div class="tc">${cost}🔬</div>`}</div>`;
+  }
+  $('techBody').innerHTML=h;
+  $('techHint').textContent = (v.isAI||G.mode==='auto')?'observing':'click to research';
+  if(!v.isAI && G.mode==='campaign'){
+    $('techBody').querySelectorAll('[data-tech]').forEach(el=>el.onclick=()=>{ if(research(p,el.dataset.tech)){ refreshAll(); } });
+  }
+}
+function refreshBrain(){
+  $('brainGames').textContent=`${knowledge.games} games`;
+  let h=`<div class="label" style="margin-bottom:8px">Lessons learned from defeat</div>`;
+  const ls=Object.entries(knowledge.lessons).sort((a,b)=>b[1].weight-a[1].weight);
+  for(const [id,l] of ls){
+    const w=Math.round((l.weight||0)*100);
+    h+=`<div class="lesson"><div class="lt"><b>${LESSONS[id].label}</b><span>${w}%</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
+  }
+  h+=`<div class="label" style="margin:12px 0 8px">House strategies <span style="color:var(--faint)">(genome · W/L)</span></div>`;
+  const fk=knowledge.factions;
+  const facs=G.started? G.players.map(p=>p.id) : Object.keys(fk);
+  const seen=new Set();
+  for(const fid of facs){
+    if(seen.has(fid)) continue; seen.add(fid);
+    const rec=fk[fid]; const fdef=FACTIONS.find(f=>f.id===fid); if(!rec||!fdef) continue;
+    const g=rec.genome||defaultGenome();
+    const col='#'+fdef.color.toString(16).padStart(6,'0');
+    h+=`<div class="gen-row"><span class="gc" style="background:${col}"></span><span class="gn" title="${fdef.name}">${fdef.name}</span>
+      <div class="bars">`;
+    for(const k of ['aggression','expansion','economy','defense','tech','risk']){
+      const vv=Math.round((g[k]||0)*100); h+=`<div class="barseg" title="${k} ${vv}%"><i style="width:${vv}%;background:${col}"></i></div>`;
+    }
+    h+=`</div><span class="gw">${rec.wins||0}/${rec.losses||0}</span></div>`;
+  }
+  // live AI thought
+  const p=currentPlayer&&G.started?currentPlayer():null;
+  if(p&&p.isAI&&p.lastThought){ h+=`<div class="label" style="margin:12px 0 6px">Now thinking — ${p.name}</div><div class="desc">${p.lastThought}</div>`; }
+  $('brainBody').innerHTML=h;
+}
+function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); }
+
+function endGame(winner,kind){
+  G.gameOver=true; G.winner=winner;
+  if(autoTimer) clearTimeout(autoTimer);
+  // mark survivors' survival
+  recordGameResult();
+  refreshBrain();
+  // show end modal
+  const ranked=[...G.players].sort((a,b)=>score(b)-score(a));
+  $('endTitle').innerHTML = winner? `${winner.name} <span style="color:var(--amber)">prevails</span>` : 'Stalemate';
+  $('endSub').textContent = kind==='domination'? 'Victory by domination — every rival capital has fallen.' : `Victory by score after ${TURN_CAP} turns.`;
+  let h=''; ranked.forEach((p,i)=>{ h+=`<div class="rrow ${i===0?'win':''}"><div class="rk">${i+1}</div>
+    <span class="dot" style="background:#${p.color.toString(16).padStart(6,'0')};width:12px;height:12px"></span>
+    <div class="rn">${p.name}${p.isAI?'':' (you)'}</div><div class="rs">${score(p)} pts · ${G.cities.filter(c=>c.owner===p.id).length} cities</div></div>`; });
+  $('endRank').innerHTML=h;
+  $('endLearn').textContent=`AI memory updated — ${knowledge.games} games played.`;
+  logMsg('sys', winner? `${winner.name} wins by ${kind}.`:'The game ends in stalemate.');
+  if(G.mode==='auto' && G.marathon){
+    $('endModal').classList.add('hidden');
+    setTimeout(()=>{ setupGame({seed:(G.seed+1)>>>0, mode:'auto', count:G.players.length, marathon:true, mapSize:G.mapSize}); refreshAll(); advance(); }, 1400);
+  } else {
+    $('endModal').classList.remove('hidden');
+  }
+}
+
+/* ---- setup modal wiring ---- */
+let cfg={count:4, mode:'campaign', faction:'kelly', seed:1825, marathon:false, mapSize:'limited'};
+function buildSetupUI(){
+  const cr=$('countRow'); cr.innerHTML='';
+  for(let n=2;n<=8;n++){ const c=document.createElement('div'); c.className='chip'+(n===cfg.count?' on':''); c.textContent=n; c.onclick=()=>{cfg.count=n;syncSetup();}; cr.appendChild(c); }
+  const fg=$('facGrid'); fg.innerHTML='';
+  FACTIONS.forEach(f=>{ const el=document.createElement('div'); el.className='fac'+(f.id===cfg.faction?' on':'');
+    el.innerHTML=`<span class="fc" style="background:#${f.color.toString(16).padStart(6,'0')}"></span>
+      <div><div class="fn">${f.name}</div><div class="fm">${f.motto}</div></div><span class="fb">${f.bonusTxt}</span>`;
+    el.onclick=()=>{cfg.faction=f.id;syncSetup();}; fg.appendChild(el); });
+  loadKnowledge();
+  $('memNote').textContent = `AI memory: ${knowledge.games} games, ${Object.values(knowledge.lessons).filter(l=>l.weight>0.05).length} active lessons.`;
+}
+function syncSetup(){
+  $('countRow').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',+c.textContent===cfg.count));
+  $('mapRow').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.map===cfg.mapSize));
+  $('modeRow').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.mode===cfg.mode));
+  $('facGrid').querySelectorAll('.fac').forEach((el,i)=>el.classList.toggle('on',FACTIONS[i].id===cfg.faction));
+  $('facField').style.opacity = cfg.mode==='auto'?0.4:1;
+  $('facHintTxt').textContent = cfg.mode==='auto'?'— not needed in autonomous mode':'';
+  const sz = MAP_SIZES[cfg.mapSize]||32;
+  $('playersHint').textContent = `· ${sz}×${sz} board (${cfg.mapSize})`;
+}
+$('mapRow').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cfg.mapSize=c.dataset.map;syncSetup();});
+$('modeRow').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cfg.mode=c.dataset.mode;syncSetup();});
+$('marathonChk').onchange=e=>{cfg.marathon=e.target.checked;};
+$('seedInput').oninput=e=>{cfg.seed=parseInt(e.target.value)||1825;};
+$('wipeBtn').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); buildSetupUI(); refreshBrain(); toast('AI memory wiped.'); };
+
+function beginGame(){
+  $('setup').classList.add('hidden');
+  ['hud','leftcol','rightcol','log','controls'].forEach(id=>$(id).classList.remove('hidden'));
+  if(!renderer) initThree();
+  setupGame({seed:cfg.seed,mode:cfg.mode,count:cfg.count,faction:cfg.faction,marathon:cfg.marathon,mapSize:cfg.mapSize});
+  // set speed UI
+  $('speedSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.sp===speed));
+  $('endturn').style.display = (cfg.mode==='auto')?'none':'';
+  $('btnAuto').style.display = (cfg.mode==='auto')?'none':'';
+  autoplay = (cfg.mode==='auto');
+  refreshAll();
+  if(cfg.mode==='auto'){ advance(); }
+  else {
+    // human starts first turn
+    startTurnFor(currentPlayer()); refreshHUD(); $('endturn').disabled=false; renderSelPanelEmpty();
+  }
+}
+$('startBtn').onclick=beginGame;
+$('rematchBtn').onclick=()=>{ $('endModal').classList.add('hidden'); setupGame({seed:(G.seed+1)>>>0,mode:G.mode,count:G.players.length,faction:cfg.faction,marathon:G.marathon,mapSize:G.mapSize}); refreshAll(); if(G.mode==='auto') advance(); else { startTurnFor(currentPlayer()); refreshHUD(); $('endturn').disabled=false; renderSelPanelEmpty(); } };
+$('menuBtn2').onclick=()=>{ $('endModal').classList.add('hidden'); $('setup').classList.remove('hidden'); buildSetupUI(); };
+$('btnMenu').onclick=()=>{ if(autoTimer)clearTimeout(autoTimer); $('setup').classList.remove('hidden'); buildSetupUI(); };
+$('endturn').onclick=()=>{ if(G.sel){G.sel=null;updateHighlights();} endTurn(); };
+$('btnHome').onclick=homeCamera;
+$('btnAuto').onclick=()=>{ autoplay=!autoplay; $('btnAuto').textContent=autoplay?'⏸':'▶'; if(autoplay){ if(currentPlayer().isAI) advance(); } else if(autoTimer) clearTimeout(autoTimer); };
+$('speedSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ speed=b.dataset.sp; $('speedSeg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); if(speed!=='step'&&G.mode==='auto'&&!G.gameOver){ if(autoTimer)clearTimeout(autoTimer); advance(); } });
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+
+// keyboard: space = end turn / step
+addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); if(G.mode==='auto') manualStep(); else if(!$('endturn').disabled) endTurn(); }
+  if(e.key==='Escape'){ G.sel=null;G.selCity=null;G.reach=null;G.atks=null;updateHighlights(); if(G.started)renderSelPanelEmpty(); } });
+
+// boot
+buildSetupUI(); syncSetup();
+</script>
+</body>
+</html>
