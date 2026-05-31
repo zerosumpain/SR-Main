@@ -186,8 +186,6 @@
     else stopHeartbeatTicker();
     return () => stopHeartbeatTicker();
   });
-  // Hide the elapsed counter until 3s — below that it's noise.
-  const SHOW_ELAPSED_AFTER_MS = 3_000;
   // The reasoning panel is "actively streaming" if a thinking delta arrived
   // in the last 2s. While it is, suppress the heartbeat line — the panel
   // itself signals progress.
@@ -220,20 +218,14 @@
       const stallMs = lastModelEventAt > 0 ? hbNow - lastModelEventAt : (hbNow - heartbeat.lastBeatAt + heartbeat.elapsedSec * 1000);
       state = phaseExpectsProgress && stallMs > PROVIDER_SLOW_MS ? 'provider_slow' : 'fresh';
     }
-    // displayedSec ticks 5 → 4 → 3 → 2 → 1 → 0 while fresh, stays at 0 once stalled
-    const displayedSec = Math.max(0, Math.ceil(remainingMs / 1000));
-    // overdueSec counts UP once we've passed the expected beat
-    const overdueSec = Math.max(0, Math.floor(overdueMs / 1000));
-    // total elapsed for the run — keep it live, not frozen at last beat
-    const liveElapsedSec = heartbeat.elapsedSec + Math.floor((hbNow - heartbeat.lastBeatAt) / 1000);
-    // Provider-stall duration (only meaningful in the provider_slow state)
-    const providerStallSec = lastModelEventAt > 0 ? Math.floor((hbNow - lastModelEventAt) / 1000) : liveElapsedSec;
-    const showElapsed = liveElapsedSec * 1000 >= SHOW_ELAPSED_AFTER_MS;
     // Suppress the heartbeat line when reasoning is actively streaming —
     // the Reasoning panel itself is showing live deltas, so the heartbeat
     // is redundant noise.
     const reasoningActive = lastReasoningAt > 0 && hbNow - lastReasoningAt < REASONING_LINGER_MS;
-    return { state, displayedSec, overdueSec, liveElapsedSec, providerStallSec, showElapsed, reasoningActive };
+    // The calm line only distinguishes "stuck" (actionable: Cancel) from
+    // everything else — the intermediate jitter/slow states all read as calm,
+    // so their durations are no longer surfaced.
+    return { state, reasoningActive };
   });
 
   // True when any tool step on the in-flight bubble is still running — the
@@ -1240,27 +1232,21 @@
       role="status"
       aria-live="polite"
       data-phase={heartbeat.phase}
-      data-stall={hbDerived.state}
+      data-stall={hbDerived.state === 'stuck' ? 'stuck' : 'calm'}
     >
       <span class="hb-dot"></span>
       <span class="hb-phase">{phaseHumanLabel(heartbeat.phase)}</span>
       {#if heartbeat.summary && heartbeat.summary !== phaseHumanLabel(heartbeat.phase) + '…'}
         <span class="hb-summary">{heartbeat.summary}</span>
       {/if}
-      {#if hbDerived.showElapsed}
-        <span class="hb-elapsed">{hbDerived.liveElapsedSec}s</span>
-      {/if}
-      {#if hbDerived.state === 'fresh'}
-        <!-- Quietest: no countdown noise while things are healthy. The elapsed
-             counter above is enough signal that work is in progress. -->
-      {:else if hbDerived.state === 'jitter'}
-        <span class="hb-countdown jitter">· checking…</span>
-      {:else if hbDerived.state === 'provider_slow'}
-        <span class="hb-countdown slow">· z.ai slow ({hbDerived.providerStallSec}s no progress)</span>
-      {:else if hbDerived.state === 'server_slow'}
-        <span class="hb-countdown slow">· server slow ({hbDerived.overdueSec}s overdue)</span>
-      {:else}
-        <span class="hb-countdown stuck">· no response for {hbDerived.overdueSec}s</span>
+      <!-- Calm by default: the pulsing dot + phase label are enough signal that
+           work is happening. The transient/infra states (jitter "checking",
+           "z.ai slow", "server slow", a live second-counter) were anxiety-
+           inducing plumbing the user can't act on, so they're gone. The one
+           genuinely actionable escalation — a real stall — still surfaces, with
+           a Cancel. -->
+      {#if hbDerived.state === 'stuck'}
+        <span class="hb-countdown stuck">· taking longer than usual</span>
         <button type="button" class="hb-cancel" onclick={cancelJob}>Cancel</button>
       {/if}
     </div>
@@ -1863,30 +1849,15 @@
     font-size: 10px;
   }
   .heartbeat-line .hb-summary { flex: 1; }
-  .heartbeat-line .hb-elapsed { opacity: 0.7; font-variant-numeric: tabular-nums; }
   .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success, #2a9d4a); }
   .heartbeat-line[data-phase='waiting_llm'] .hb-dot { background: var(--accent); }
   .heartbeat-line[data-phase='subagent'] .hb-dot { background: color-mix(in srgb, var(--accent) 60%, white); }
-  .heartbeat-line .hb-countdown {
-    opacity: 0.55;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-  }
-  .heartbeat-line .hb-countdown.jitter { opacity: 0.75; }
-  .heartbeat-line .hb-countdown.slow {
-    opacity: 1;
-    color: var(--status-warning, #b8860b);
-    font-weight: 600;
-  }
   .heartbeat-line .hb-countdown.stuck {
     opacity: 1;
     color: var(--status-error, #c0392b);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-  }
-  .heartbeat-line[data-stall='slow'] {
-    background: color-mix(in srgb, var(--status-warning, #b8860b) 8%, transparent);
   }
   .heartbeat-line[data-stall='stuck'] {
     background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
