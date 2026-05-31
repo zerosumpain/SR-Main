@@ -41,19 +41,11 @@
     { href: '/jkai/canvas', label: 'Canvases' },
     { href: '/jkai/channels', label: 'Channels' },
   ];
-  const DEEPDIVE_ITEMS: NavItem[] = [
-    { href: '/', label: 'Home' },
-    { href: '/projects', label: 'Projects' },
-    { href: '/jkai/research', label: 'Research' },
-    { href: '/deepdive', label: 'Deep Dive' },
-    { href: '/quickanswer', label: 'Quick' },
-  ];
 
   let resolvedItems = $derived.by(() => {
     if (items) return items;
     const path = page.url.pathname;
     if (path.startsWith('/jkai')) return JKAI_ITEMS;
-    if (path.startsWith('/deepdive') || path.startsWith('/quickanswer')) return DEEPDIVE_ITEMS;
     return SITE_ITEMS;
   });
 </script>

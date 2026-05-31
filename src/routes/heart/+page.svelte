@@ -7,6 +7,7 @@
 <script lang="ts">
   import HeartSimulation from '$lib/components/HeartSimulation.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   let bpm = $state(70);
   let count = $state(9000);
@@ -67,11 +68,15 @@
       <dt>particles</dt><dd>{stats.particleCount}</dd>
     </dl>
   </section>
+
+  <SiteFooter />
 </div>
 
 <style>
   .page {
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
     background: var(--bg);
     color: var(--text-primary);
   }

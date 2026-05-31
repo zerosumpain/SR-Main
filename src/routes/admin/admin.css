@@ -22,18 +22,24 @@
   gap: 0.6rem;
 }
 .banner-success {
-  border-color: rgba(45, 122, 58, 0.45);
-  background: rgba(45, 122, 58, 0.07);
-  color: #2d7a3a;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
 }
 .banner-error {
-  border-color: rgba(196, 68, 68, 0.5);
-  background: rgba(196, 68, 68, 0.07);
-  color: #c44;
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.banner-warn {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 .banner-info {
-  border-color: var(--card-border);
-  color: var(--text-secondary);
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info);
 }
 
 /* ---------- Stat cards ---------- */
@@ -166,26 +172,39 @@
 .nm-pill[data-state="success"],
 .nm-pill[data-state="connected"],
 .nm-pill[data-state="active"],
+.nm-pill[data-state="done"],
+.nm-pill[data-state="completed"],
+.nm-pill[data-state="fired"],
 .nm-pill[data-state="published"] {
-  border-color: rgba(45, 122, 58, 0.5);
-  color: #2d7a3a;
-  background: rgba(45, 122, 58, 0.07);
+  border-color: var(--success-border);
+  color: var(--success);
+  background: var(--success-bg);
 }
-.nm-pill[data-state="warn"],
 .nm-pill[data-state="planning"],
 .nm-pill[data-state="queued"],
 .nm-pill[data-state="running"],
+.nm-pill[data-state="pending"],
 .nm-pill[data-state="syncing"] {
   border-color: rgba(196, 87, 10, 0.5);
   color: var(--accent);
   background: var(--accent-tint-08);
 }
+.nm-pill[data-state="warn"] {
+  border-color: var(--warn-border);
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.nm-pill[data-state="info"] {
+  border-color: var(--info-border);
+  color: var(--info);
+  background: var(--info-bg);
+}
 .nm-pill[data-state="error"],
 .nm-pill[data-state="failed"],
 .nm-pill[data-state="auth_expired"] {
-  border-color: rgba(196, 68, 68, 0.5);
-  color: #c44;
-  background: rgba(196, 68, 68, 0.07);
+  border-color: var(--error-border);
+  color: var(--error);
+  background: var(--error-bg);
 }
 .nm-pill[data-state="draft"],
 .nm-pill[data-state="paused"],
@@ -216,7 +235,7 @@
   color: var(--accent-hover);
   text-decoration: underline;
 }
-.nm-link-btn.danger { color: #c44; }
+.nm-link-btn.danger { color: var(--error); }
 .nm-link-btn.danger:hover { color: #a33; }
 
 /* ---------- Card link tile (used on dashboard) ---------- */

@@ -32,13 +32,28 @@
   --surface-elevated: #e8dece;
   --surface-overlay: rgba(26, 16, 8, 0.05);
 
-  /* Status colours — used by step cards, error/success hints */
-  --status-error: #c25b5b;
-  --status-success: #6ab88a;
+  /* Status colours — canonical hues used by pills, banners, step cards.
+     The --status-* names are legacy aliases kept for back-compat; new code
+     should reference --success / --warn / --info / --error. */
+  --success: #2d7a3a;
+  --success-bg: rgba(45, 122, 58, 0.07);
+  --success-border: rgba(45, 122, 58, 0.5);
+  --warn: #b0892a;
+  --warn-bg: rgba(176, 137, 42, 0.07);
+  --warn-border: rgba(176, 137, 42, 0.5);
+  --info: #2d6cdf;
+  --info-bg: rgba(45, 108, 223, 0.07);
+  --info-border: rgba(45, 108, 223, 0.5);
+  --error: #c44;
+  --error-bg: rgba(196, 68, 68, 0.07);
+  --error-border: rgba(196, 68, 68, 0.5);
+  --status-error: var(--error);
+  --status-success: var(--success);
 
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-brand: 'DM Mono', ui-monospace, monospace;
   --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-sans: var(--font-body);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Type scale */
@@ -60,6 +75,11 @@
   --radius-sharp: 2px;
   --radius-pill: 100px;
   --radius-round: 4px;
+
+  /* Shadow tokens — brutalist hard-offset and softer overlay */
+  --shadow-sm: 2px 2px 0 rgba(26, 16, 8, 0.06);
+  --shadow-md: 4px 4px 0 rgba(26, 16, 8, 0.10);
+  --shadow-lg: 0 8px 24px rgba(26, 16, 8, 0.18);
 
   /* Grain overlay */
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");

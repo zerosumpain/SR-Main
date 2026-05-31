@@ -165,62 +165,65 @@
   />
 
   {#if error}
-    <div class="status-error">{error}</div>
+    <div class="banner banner-error">{error}</div>
   {/if}
 
   <section class="controls">
-    <label class="ctl">
-      <span class="ctl-label">Style influence</span>
+    <div class="nm-field">
+      <span class="sr-label-tight">Style influence</span>
       <textarea
-        class="style-box"
+        class="nm-textarea"
         rows="3"
         placeholder="Tone, themes, references to steer the copy. Leave blank for the default voice."
         bind:value={style}
         disabled={phase === 'generating'}
       ></textarea>
-    </label>
+    </div>
 
     <div class="ctl-row">
-      <label class="ctl">
-        <span class="ctl-label">
+      <div class="nm-field">
+        <span class="sr-label-tight">
           Headline length — {headlineWords} word{headlineWords === 1 ? '' : 's'} max
         </span>
         <input
           type="range"
+          class="nm-range"
           min="1"
           max="6"
           step="1"
           bind:value={headlineWords}
           disabled={phase === 'generating'}
         />
-      </label>
-      <label class="ctl">
-        <span class="ctl-label">Strap length — {strapWords} words max</span>
+      </div>
+      <div class="nm-field">
+        <span class="sr-label-tight">Strap length — {strapWords} words max</span>
         <input
           type="range"
+          class="nm-range"
           min="10"
           max="40"
           step="1"
           bind:value={strapWords}
           disabled={phase === 'generating'}
         />
-      </label>
-      <label class="ctl ctl-narrow">
-        <span class="ctl-label">Variants per bucket</span>
+      </div>
+      <div class="nm-field ctl-narrow">
+        <span class="sr-label-tight">Variants per bucket</span>
         <input
           type="number"
+          class="nm-text-input"
           min="1"
           max="5"
           step="1"
           bind:value={variantsPerBucket}
           disabled={phase === 'generating'}
         />
-      </label>
+      </div>
     </div>
 
     <div class="ctl-actions">
       <button
-        class="btn-primary"
+        class="nm-save-btn"
         onclick={generate}
         disabled={phase === 'generating'}
       >
@@ -264,15 +267,15 @@
             />
             Append to pool
           </label>
-          <button class="btn-primary" onclick={save} disabled={busy}>
+          <button class="nm-save-btn" onclick={save} disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
           </button>
-          <button class="btn-ghost" onclick={discard} disabled={busy}>
+          <button class="nm-btn-ghost" onclick={discard} disabled={busy}>
             Discard
           </button>
         </div>
       </div>
-      <table class="hero-table">
+      <table class="nm-table hero-table">
         <thead>
           <tr>
             <th>HR / Steps / Temp</th>
@@ -286,7 +289,7 @@
               <td class="cell-meta">
                 {row.hrCentroid} / {row.stepsCentroid.toLocaleString('en-GB')} /
                 {row.tempCentroid}°
-                {#if row.failed}<span class="flag">fallback</span>{/if}
+                {#if row.failed}<span class="nm-pill" data-state="warn">fallback</span>{/if}
               </td>
               <td class="cell-headline">
                 {row.primary} <span class="ghost-text">{row.ghost}</span>
@@ -302,17 +305,17 @@
       <div class="panel-bar">
         <span class="panel-title">Saved pool — {data.count} entries</span>
         {#if data.count > 0}
-          <button class="btn-ghost" onclick={clearPool} disabled={busy}>
+          <button class="nm-btn-ghost" onclick={clearPool} disabled={busy}>
             Clear pool
           </button>
         {/if}
       </div>
       {#if data.rows.length === 0}
-        <p class="empty-state">
+        <p class="nm-empty">
           No entries yet. Generate a batch above to populate the pool.
         </p>
       {:else}
-        <table class="hero-table">
+        <table class="nm-table hero-table">
           <thead>
             <tr>
               <th>HR / Steps / Temp</th>
@@ -336,7 +339,7 @@
                 <td class="cell-style">{row.style ?? '—'}</td>
                 <td class="cell-del">
                   <button
-                    class="btn-del"
+                    class="nm-link-btn danger btn-del"
                     onclick={() => deleteRow(row.id)}
                     disabled={busy}
                     aria-label="Delete entry"
@@ -354,66 +357,22 @@
 </PageWrap>
 
 <style>
-  .status-error {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--status-error);
-    margin-bottom: 1rem;
-  }
   .controls {
     display: flex;
     flex-direction: column;
     gap: 1.1rem;
     margin-bottom: 2rem;
   }
-  .ctl {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .ctl-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-  }
-  .style-box {
-    width: 100%;
-    resize: vertical;
-    padding: 0.6rem 0.7rem;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--text-primary);
-    background: transparent;
-    border: 1px solid var(--card-border);
-    border-radius: 2px;
-  }
   .ctl-row {
     display: flex;
     gap: 1.5rem;
     flex-wrap: wrap;
   }
-  .ctl-row .ctl {
+  .ctl-row > .nm-field {
     flex: 1;
     min-width: 200px;
   }
-  .ctl-narrow {
-    flex: 0 0 140px;
-  }
-  .ctl-narrow input {
-    width: 70px;
-    padding: 0.3rem 0.4rem;
-    font-family: var(--font-mono);
-    color: var(--text-primary);
-    background: transparent;
-    border: 1px solid var(--card-border);
-    border-radius: 2px;
-  }
-  input[type='range'] {
-    width: 100%;
-    accent-color: var(--accent);
-  }
+  .ctl-narrow { flex: 0 0 140px; }
   .ctl-actions {
     display: flex;
     align-items: center;
@@ -425,34 +384,7 @@
     font-size: 11px;
     color: var(--text-ghost);
   }
-  .btn-primary,
-  .btn-ghost {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 0.5rem 1rem;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-  .btn-primary {
-    color: #fff;
-    background: var(--accent);
-    border: none;
-  }
-  .btn-ghost {
-    color: var(--text-secondary);
-    background: transparent;
-    border: 1px solid var(--card-border);
-  }
-  .btn-primary:disabled,
-  .btn-ghost:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .panel {
-    margin-top: 1rem;
-  }
+  .panel { margin-top: 1rem; }
   .panel-bar {
     display: flex;
     justify-content: space-between;
@@ -482,60 +414,18 @@
     align-items: center;
     gap: 0.3rem;
   }
-  .hero-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
+  .save-mode input[type='radio'] { accent-color: var(--accent); }
+
+  /* hero-table adds tighter cell padding + special row/cell tints on top of .nm-table */
+  .hero-table { font-size: 12px; }
+  .hero-table tbody tr.row-failed {
+    background: color-mix(in srgb, var(--error) 8%, transparent);
   }
-  .hero-table thead tr {
-    border-bottom: 2px solid var(--card-border);
-    text-align: left;
-  }
-  .hero-table th {
-    padding: 6px 8px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-  }
-  .hero-table tbody tr {
-    border-bottom: 1px solid var(--divider);
-  }
-  .row-failed {
-    background: color-mix(in srgb, var(--status-error) 8%, transparent);
-  }
-  .cell-meta {
-    padding: 6px 8px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-  .flag {
-    margin-left: 0.4rem;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--status-error);
-  }
-  .cell-headline {
-    padding: 6px 8px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-  }
-  .ghost-text {
-    color: var(--text-ghost);
-  }
-  .cell-strap {
-    padding: 6px 8px;
-    color: var(--text-secondary);
-  }
+  .cell-meta { white-space: nowrap; color: var(--text-muted); }
+  .cell-headline { font-family: var(--font-body); font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+  .ghost-text { color: var(--text-ghost); }
+  .cell-strap { color: var(--text-secondary); }
   .cell-style {
-    padding: 6px 8px;
-    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text-ghost);
     max-width: 160px;
@@ -543,29 +433,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .cell-del {
-    padding: 6px 8px;
-    text-align: right;
-  }
-  .btn-del {
-    font-size: 14px;
-    line-height: 1;
-    color: var(--text-muted);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 2px 6px;
-  }
-  .btn-del:hover {
-    color: var(--status-error);
-  }
-  .btn-del:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-  .empty-state {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-muted);
-  }
+  .cell-del { text-align: right; }
+  .btn-del { font-size: 14px; line-height: 1; padding: 2px 6px; }
 </style>

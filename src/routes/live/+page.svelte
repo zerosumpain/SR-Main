@@ -7,6 +7,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   interface LiveState {
     active: boolean;
@@ -183,6 +184,8 @@
       </div>
     {/if}
   {/if}
+
+  <SiteFooter />
 </div>
 
 <style>
@@ -190,7 +193,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: var(--bg-primary);
+    background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-body);
   }

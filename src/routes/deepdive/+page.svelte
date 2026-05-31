@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -437,3 +438,5 @@
     </div>
   {/if}
 </div>
+
+<SiteFooter />

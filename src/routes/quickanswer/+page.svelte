@@ -3,6 +3,7 @@
   import type { PageData, ActionData } from './$types';
   import { enhance } from '$app/forms';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -180,3 +181,5 @@
     </div>
   {/if}
 </div>
+
+<SiteFooter />

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { queueNote, syncPendingNotes, getPendingNotes } from '$lib/jkai/intel/offline-queue';
+  import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   let title = $state('');
   let content = $state('');
@@ -172,100 +173,327 @@
   }
 </script>
 
-<div class="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full">
-  <div class="flex items-center justify-between mb-4">
-    <h1 class="text-lg font-bold">Quick Capture</h1>
-    <a href="/jkai/intel" class="text-xs text-gray-400 hover:text-gray-300">Dashboard</a>
-  </div>
+<svelte:head>
+  <title>Capture — Strange Ramblings</title>
+</svelte:head>
 
-  <div class="flex gap-2 mb-4">
-    <button
-      onclick={() => { mode = 'text'; }}
-      class="flex-1 py-2.5 rounded-lg text-sm font-medium {mode === 'text' ? 'bg-sky-600' : 'bg-gray-800'}"
-    >Text</button>
-    <button
-      onclick={capturePhoto}
-      class="flex-1 py-2.5 rounded-lg text-sm font-medium bg-gray-800 active:bg-gray-700"
-    >Camera</button>
-    <button
-      onclick={() => { mode = 'audio'; }}
-      class="flex-1 py-2.5 rounded-lg text-sm font-medium {mode === 'audio' ? 'bg-sky-600' : 'bg-gray-800'}"
-    >Audio</button>
-  </div>
+<div class="capture-page">
+  <header class="capture-hdr">
+    <a href="/" class="brand">strange ramblings</a>
+    <a href="/jkai/intel" class="capture-hdr-link">Dashboard →</a>
+  </header>
 
-  {#if !online}
-    <div class="bg-amber-900/30 text-amber-400 rounded-lg px-3 py-2 text-xs mb-3 text-center">
-      Offline — notes will be queued and synced when connected
-    </div>
-  {/if}
-  {#if pendingCount > 0}
-    <div class="bg-sky-900/30 text-sky-400 rounded-lg px-3 py-2 text-xs mb-3 text-center">
-      {pendingCount} note{pendingCount > 1 ? 's' : ''} pending sync
-      {#if syncing}<span class="ml-1">syncing...</span>{/if}
-    </div>
-  {/if}
+  <main class="capture-main">
+    <div class="kicker">Quick capture</div>
+    <h1 class="display capture-title">drop a note.</h1>
 
-  {#if mode === 'audio'}
-    <div class="bg-gray-900 rounded-lg p-6 mb-4 text-center">
-      {#if recording}
-        <div class="text-4xl font-mono text-red-400 mb-4">{formatDuration(recordingDuration)}</div>
-        <div class="w-4 h-4 bg-red-500 rounded-full mx-auto mb-4 animate-pulse"></div>
-        <button onclick={stopRecording} class="px-8 py-3 bg-red-600 rounded-lg font-medium">Stop Recording</button>
-      {:else}
-        <div class="text-gray-400 mb-4 text-sm">Tap to start recording a voice memo</div>
-        <button onclick={startRecording} class="w-16 h-16 bg-red-600 rounded-full mx-auto flex items-center justify-center">
-          <div class="w-6 h-6 bg-white rounded-full"></div>
-        </button>
-      {/if}
-    </div>
-  {/if}
-
-  {#if file}
-    <div class="bg-gray-900 rounded-lg p-3 mb-3 flex items-center justify-between">
-      <div class="text-sm">
-        <span class="text-gray-400">{file.type.startsWith('image/') ? '📸' : '🎙️'}</span>
-        <span class="ml-2">{file.name}</span>
-        <span class="text-xs text-gray-500 ml-2">({(file.size / 1024).toFixed(0)} KB)</span>
-      </div>
-      <button onclick={clearFile} class="text-xs text-gray-400 hover:text-red-400 px-2">Remove</button>
-    </div>
-  {/if}
-
-  <input
-    type="text"
-    bind:value={title}
-    placeholder="Title (optional)"
-    class="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-sky-500"
-  />
-
-  <textarea
-    bind:value={content}
-    placeholder={file ? 'Add context for the attachment (optional)...' : 'Type or paste your note...'}
-    rows={8}
-    class="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-sky-500 resize-none flex-1"
-  ></textarea>
-
-  <div class="flex gap-2 mb-4 flex-wrap">
-    {#each formats as f}
+    <div class="mode-row">
       <button
-        onclick={() => { format = f.value; }}
-        class="px-3 py-1.5 rounded-full text-xs {format === f.value ? 'bg-sky-600' : 'bg-gray-800'}"
-      >{f.label}</button>
-    {/each}
-  </div>
+        type="button"
+        class="nm-btn-ghost"
+        data-active={mode === 'text'}
+        onclick={() => { mode = 'text'; }}
+      >Text</button>
+      <button type="button" class="nm-btn-ghost" onclick={capturePhoto}>Camera</button>
+      <button
+        type="button"
+        class="nm-btn-ghost"
+        data-active={mode === 'audio'}
+        onclick={() => { mode = 'audio'; }}
+      >Audio</button>
+    </div>
 
-  {#if error}
-    <div class="text-sm text-red-400 bg-red-900/20 rounded-lg px-3 py-2 mb-3">{error}</div>
-  {/if}
-  {#if success}
-    <div class="text-sm text-emerald-400 bg-emerald-900/20 rounded-lg px-3 py-2 mb-3">{success}</div>
-  {/if}
+    {#if !online}
+      <div class="banner banner-warn">Offline — notes will be queued and synced when connected</div>
+    {/if}
+    {#if pendingCount > 0}
+      <div class="banner banner-info">
+        {pendingCount} note{pendingCount > 1 ? 's' : ''} pending sync
+        {#if syncing}<span class="muted">· syncing…</span>{/if}
+      </div>
+    {/if}
 
-  <button
-    onclick={submit}
-    disabled={submitting || (!content && !file)}
-    class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 rounded-lg py-3.5 font-medium text-sm mt-auto"
-  >
-    {submitting ? 'Submitting...' : 'Capture'}
-  </button>
+    {#if mode === 'audio'}
+      <div class="audio-pad">
+        {#if recording}
+          <div class="audio-dur display">{formatDuration(recordingDuration)}</div>
+          <div class="audio-dot" aria-hidden="true"></div>
+          <button type="button" class="nm-save-btn audio-stop" onclick={stopRecording}>Stop recording</button>
+        {:else}
+          <p class="audio-hint">Tap to start recording a voice memo</p>
+          <button type="button" class="audio-record" onclick={startRecording} aria-label="Start recording">
+            <span class="audio-record-dot"></span>
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if file}
+      <div class="file-row">
+        <div class="file-meta">
+          <span class="file-kind">{file.type.startsWith('image/') ? 'IMG' : file.type.startsWith('audio/') ? 'AUD' : 'FILE'}</span>
+          <span class="file-name">{file.name}</span>
+          <span class="file-size">{(file.size / 1024).toFixed(0)} KB</span>
+        </div>
+        <button type="button" class="nm-link-btn danger" onclick={clearFile}>Remove</button>
+      </div>
+    {/if}
+
+    <div class="nm-field">
+      <label for="capture-title" class="sr-label-tight">Title (optional)</label>
+      <input
+        id="capture-title"
+        type="text"
+        class="nm-text-input"
+        bind:value={title}
+        placeholder="Give it a name…"
+      />
+    </div>
+
+    <div class="nm-field nm-field-grow">
+      <label for="capture-content" class="sr-label-tight">Content</label>
+      <textarea
+        id="capture-content"
+        class="nm-textarea capture-textarea"
+        bind:value={content}
+        placeholder={file ? 'Add context for the attachment (optional)…' : 'Type or paste your note…'}
+        rows="8"
+      ></textarea>
+    </div>
+
+    <div class="format-row">
+      <span class="sr-label-tight">Format</span>
+      <div class="format-chips">
+        {#each formats as f}
+          <button
+            type="button"
+            class="nm-btn-ghost format-chip"
+            data-active={format === f.value}
+            onclick={() => { format = f.value; }}
+          >{f.label}</button>
+        {/each}
+      </div>
+    </div>
+
+    {#if error}
+      <div class="banner banner-error">{error}</div>
+    {/if}
+    {#if success}
+      <div class="banner banner-success">{success}</div>
+    {/if}
+
+    <button
+      type="button"
+      class="nm-save-btn capture-submit"
+      onclick={submit}
+      disabled={submitting || (!content && !file)}
+    >
+      {submitting ? 'Submitting…' : 'Capture →'}
+    </button>
+  </main>
+
+  <SiteFooter variant="compact" />
 </div>
+
+<style>
+  .capture-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+
+  .capture-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .capture-hdr .brand { font-size: 18px; }
+  .capture-hdr-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    transition: color 0.18s ease-out;
+  }
+  .capture-hdr-link:hover { color: var(--accent); }
+
+  .capture-main {
+    flex: 1;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--text-ghost);
+  }
+  .capture-title {
+    font-size: clamp(36px, 9vw, 56px);
+    color: var(--text-primary);
+    margin: 0 0 0.25rem;
+  }
+
+  .mode-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .mode-row .nm-btn-ghost { flex: 1; padding: 10px 14px; font-size: 11px; }
+
+  .banner {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--card-border);
+    background: var(--bg-section);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .banner-success {
+    border-color: var(--success-border);
+    background: var(--success-bg);
+    color: var(--success);
+  }
+  .banner-error {
+    border-color: var(--error-border);
+    background: var(--error-bg);
+    color: var(--error);
+  }
+  .banner-warn {
+    border-color: var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+  .banner-info {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+    color: var(--info);
+  }
+  .banner .muted { color: var(--text-ghost); margin-left: 0.25rem; }
+
+  .audio-pad {
+    border: 1px solid var(--card-border);
+    background: var(--bg-section);
+    padding: 1.5rem 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.85rem;
+  }
+  .audio-dur { font-size: 2.5rem; color: var(--error); margin: 0; }
+  .audio-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: var(--error);
+    animation: capture-pulse 1.2s ease-in-out infinite;
+  }
+  .audio-hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .audio-record {
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    background: var(--error);
+    border: 2px solid var(--accent);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .audio-record-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--bg);
+  }
+  .audio-stop { padding: 10px 20px; }
+
+  @keyframes capture-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.8); }
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid var(--card-border);
+    background: var(--bg-section);
+    padding: 0.55rem 0.75rem;
+  }
+  .file-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    min-width: 0;
+  }
+  .file-kind {
+    font-size: 9px;
+    color: var(--accent);
+    border: 1px solid var(--accent-tint-35);
+    padding: 1px 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .file-name {
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+  .file-size { color: var(--text-ghost); font-size: 10px; }
+
+  .nm-field-grow { flex: 1; }
+  .capture-textarea {
+    width: 100%;
+    min-height: 180px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  .format-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .format-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .format-chip { padding: 5px 12px; font-size: 10px; }
+
+  .capture-submit {
+    padding: 14px;
+    font-size: 12px;
+    margin-top: 0.5rem;
+  }
+</style>

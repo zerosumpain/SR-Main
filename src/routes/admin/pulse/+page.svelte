@@ -379,14 +379,12 @@
     return new Date(ms).toLocaleString(undefined, { hour12: false });
   }
 
-  function statusClass(status: string | null): string {
-    if (!status) return 'st-unknown';
+  function pillState(status: string | null): string {
+    if (!status) return 'idle';
     const s = status.toLowerCase();
-    if (s === 'running' || s === 'syncing' || s === 'pending') return 'st-running';
-    if (s === 'paused') return 'st-paused';
-    if (s === 'completed' || s === 'success' || s === 'idle' || s === 'done') return 'st-ok';
-    if (s === 'failed' || s === 'error' || s === 'cancelled') return 'st-err';
-    return 'st-unknown';
+    if (s === 'completed' || s === 'success' || s === 'done') return 'ok';
+    if (s === 'cancelled') return 'error';
+    return s;
   }
 
   let openRowKey = $state<string | null>(null);
@@ -585,7 +583,7 @@
         {#each live.healthSync as s (s.service)}
           <tr>
             <td>{s.service}</td>
-            <td><span class={`pill ${statusClass(s.status)}`}>{s.status}</span></td>
+            <td><span class="nm-pill" data-state={pillState(s.status)}>{s.status}</span></td>
             <td>{fmtTs(s.lastSyncAt * 1000)}</td>
             <td>{s.recordsSynced ?? 0}</td>
           </tr>
@@ -620,7 +618,7 @@
               <div class="act-name">{a.name}</div>
               <div class="mono-tiny dim">{a.kind} · {a.source}</div>
             </td>
-            <td><span class={`pill st-${a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'err' : 'paused'}`}>{a.status}</span></td>
+            <td><span class="nm-pill" data-state={a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'error' : 'paused'}>{a.status}</span></td>
             <td>{fmtCadence(a.cadenceSeconds)}</td>
             <td>{a.nextRunAt && a.status === 'active' ? fmtRelative(new Date(a.nextRunAt).getTime()) : '—'}</td>
             <td>{a.totalRuns}</td>
@@ -650,7 +648,7 @@
                 </label>
                 <button class="link-btn" onclick={() => runActionNow(a.id)} disabled={runningActionId === a.id || !a.handlerKnown}>{runningActionId === a.id ? 'running…' : 'run now'}</button>
                 {#if a.status !== 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>{/if}
-                <button class="link-btn" style="color: #c44;" onclick={() => deleteAction(a.id)}>delete</button>
+                <button class="link-btn danger" onclick={() => deleteAction(a.id)}>delete</button>
               </div>
 
               {#if pulsesByAction[a.id] && pulsesByAction[a.id].length > 0}
@@ -662,7 +660,7 @@
                       {#each pulsesByAction[a.id] as p (p.id)}
                         <tr>
                           <td>{fmtRelative(new Date(p.ts).getTime())}</td>
-                          <td><span class={`pill st-${p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'err' : p.outcome === 'ok' ? 'info' : 'paused'}`}>{p.outcome}</span></td>
+                          <td><span class="nm-pill" data-state={p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'error' : p.outcome === 'ok' ? 'info' : 'paused'}>{p.outcome}</span></td>
                           <td class="summary-cell">{p.summary}</td>
                           <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
                         </tr>
@@ -706,7 +704,7 @@
               <div class="mono-tiny dim">{c.description.slice(0, 80)}</div>
             </td>
             <td class="mono-tiny">{c.kind}</td>
-            <td><span class={`pill st-${c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'err'}`}>{c.status}</span></td>
+            <td><span class="nm-pill" data-state={c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'error'}>{c.status}</span></td>
             <td>
               {#if c.status === 'pending'}<span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
               {:else}<span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>{/if}
@@ -714,7 +712,7 @@
             <td class="mono-tiny">{fmtMoney(c.totalCostUsd)}</td>
             <td>
               {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
-              {:else}<button class="link-btn" style="color: #c44;" onclick={() => deleteScheduled(c.id)}>delete</button>{/if}
+              {:else}<button class="link-btn danger" onclick={() => deleteScheduled(c.id)}>delete</button>{/if}
               {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>{/if}
             </td>
             <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
@@ -857,17 +855,7 @@
 
   .mono-tiny { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); white-space: nowrap; }
   .summary-cell { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .err-cell { color: #c44; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid currentColor; }
-  .st-running { color: #2d6cdf; }
-  .st-paused { color: #b0892a; }
-  .st-ok { color: #2d7a3a; }
-  .st-err { color: #c44; }
-  .st-unknown { color: var(--text-muted); }
-  .st-info { color: var(--accent); }
-
-  .tab-count { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); border: 1px solid var(--card-border); padding: 1px 5px; border-radius: 8px; margin-left: 0.4rem; }
+  .err-cell { color: var(--error); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .row-detail { background: var(--bg-section); }
   .row-detail .kv { display: flex; gap: 1rem; padding: 3px 0; font-family: var(--font-mono); font-size: 11px; }
@@ -876,7 +864,7 @@
   .row-detail .raw { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); background: var(--bg-base); border: 1px solid var(--card-border); padding: 0.7rem; margin: 0.4rem 0; max-height: 400px; overflow: auto; }
 
   .toggle-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--card-border); background: var(--bg-section); color: var(--text-muted); cursor: pointer; }
-  .toggle-btn.on { color: #2d7a3a; border-color: rgba(45, 122, 58, 0.5); background: rgba(45, 122, 58, 0.06); }
+  .toggle-btn.on { color: var(--success); border-color: var(--success-border); background: var(--success-bg); }
   .toggle-btn:hover { color: var(--text-primary); }
 
   .sys-grid { display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
@@ -901,21 +889,21 @@
   .layer-card .layer-cad { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); margin-bottom: 0.3rem; }
   .layer-card .layer-name { font-family: var(--font-brand); font-size: 1.1rem; font-weight: 500; text-transform: lowercase; letter-spacing: -0.005em; color: var(--text-primary); margin-bottom: 0.3rem; }
   .layer-card .layer-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
-  .layer-min { border-left-color: #2d7a3a; }
-  .layer-sec { border-left-color: #2d6cdf; }
-  .layer-actions { border-left-color: #c44; }
-  .layer-poll { border-left-color: #b0892a; }
+  .layer-min { border-left-color: var(--success); }
+  .layer-sec { border-left-color: var(--info); }
+  .layer-actions { border-left-color: var(--error); }
+  .layer-poll { border-left-color: var(--warn); }
   .layer-content { border-left-color: var(--accent); }
-  .layer-gap { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid #c44; background: var(--bg-base); }
-  .layer-fill { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid #2d7a3a; background: var(--bg-base); }
+  .layer-gap { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--error); background: var(--bg-base); }
+  .layer-fill { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--success); background: var(--bg-base); }
 
   .bar-row { display: flex; align-items: center; gap: 0.55rem; }
   .bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-base); border: 1px solid var(--card-border); }
   .bar-fill { height: 100%; background: var(--accent); transition: width 200ms ease; }
-  .warn { color: #b0892a; }
-  .warn .bar-fill { background: #b0892a; }
-  .danger { color: #c44; }
-  .danger .bar-fill { background: #c44; }
+  .warn { color: var(--warn); }
+  .warn .bar-fill { background: var(--warn); }
+  .danger { color: var(--error); }
+  .danger .bar-fill { background: var(--error); }
 
   .pulse-stream { list-style: none; padding: 0; margin: 0; max-height: 480px; overflow-y: auto; border: 1px solid var(--card-border); background: var(--bg-base); }
   .pulse-stream .pulse { display: grid; grid-template-columns: 80px 110px 80px 100px 60px 1fr; gap: 0.6rem; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--divider); font-family: var(--font-mono); font-size: 10px; }
@@ -926,13 +914,13 @@
   .pulse-stream .pulse-phase { color: var(--text-secondary); text-transform: lowercase; }
   .pulse-stream .pulse-elapsed { color: var(--text-muted); text-align: right; }
   .pulse-stream .pulse-summary { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pulse-heartbeat .pulse-kind { color: #2d6cdf; }
+  .pulse-heartbeat .pulse-kind { color: var(--info); }
   .pulse-phase_change .pulse-kind { color: var(--accent); }
-  .pulse-job_start .pulse-kind { color: #2d7a3a; }
-  .pulse-job_done .pulse-kind { color: #2d7a3a; }
-  .pulse-job_error .pulse-kind { color: #c44; }
-  .pulse-watchdog_kill { background: rgba(196, 68, 68, 0.06); }
-  .pulse-watchdog_kill .pulse-kind { color: #c44; }
+  .pulse-job_start .pulse-kind { color: var(--success); }
+  .pulse-job_done .pulse-kind { color: var(--success); }
+  .pulse-job_error .pulse-kind { color: var(--error); }
+  .pulse-watchdog_kill { background: var(--error-bg); }
+  .pulse-watchdog_kill .pulse-kind { color: var(--error); }
   @media (max-width: 720px) {
     .pulse-stream .pulse { grid-template-columns: 70px 90px 1fr; }
     .pulse-stream .pulse > :nth-child(n+4) { display: none; }
