@@ -1567,16 +1567,26 @@ function dirLabel(dx,dz){
 
 /* --------------------------- 6. AI + LEARNING ---------------------------- */
 const LESSONS = {
-  defendCapital:{label:'Defend the capital', desc:'Lost a capital that was left poorly garrisoned.',
+  // ---- cautions (learned from defeat) ----
+  defendCapital:{type:'caution', label:'Defend the capital', desc:'Lost a capital that was left poorly garrisoned.',
     mitigation:'Garrisons the capital with ⌈1 + 2·weight·defense⌉ defenders before sending units out to attack.'},
-  noOverExtend: {label:"Don't over-extend", desc:'Sprawled into too many cities with too small an army to hold them.',
+  noOverExtend: {type:'caution', label:"Don't over-extend", desc:'Sprawled into too many cities with too small an army to hold them.',
     mitigation:'Suppresses Founder production while the army is smaller than the empire it must protect.'},
-  avoidBadOdds: {label:'Avoid low-odds attacks', desc:'Threw away units on attacks it was unlikely to win.',
+  avoidBadOdds: {type:'caution', label:'Avoid low-odds attacks', desc:'Threw away units on attacks it was unlikely to win.',
     mitigation:'Raises the minimum predicted win-chance required before committing to an open-field attack.'},
-  outTech:      {label:'Out-tech rivals', desc:'Fell behind on the tech tree and was out-gunned.',
+  outTech:      {type:'caution', label:'Out-tech rivals', desc:'Fell behind on the tech tree and was out-gunned.',
     mitigation:'Diverts a larger share of its science income into research to keep pace.'},
-  massFirst:    {label:'Mass before marching', desc:'Marched out with a token force and was picked apart.',
+  massFirst:    {type:'caution', label:'Mass before marching', desc:'Marched out with a token force and was picked apart.',
     mitigation:'Waits until it has massed ⌈1 + 3·weight⌉ units before launching an offensive.'},
+  // ---- winning patterns (learned from victory) ----
+  economicEngine:{type:'pattern', label:'Build a deep economy', desc:'Winners grew tall, productive cities before fighting.',
+    mitigation:'Favours expansion and city growth early, banking production rather than over-arming.'},
+  scientificEdge:{type:'pattern', label:'Win the science race', desc:'Winners out-teched the field — often by Great Exhibition.',
+    mitigation:'Pours a larger share of science income into the tech tree to stay ahead.'},
+  rapidExpansion:{type:'pattern', label:'Settle early & wide', desc:'Winners founded cities aggressively to claim land.',
+    mitigation:'Trains Founders sooner and spreads to more sites.'},
+  boldOffense:   {type:'pattern', label:'Strike decisively', desc:'Winners pressed the attack and took capitals fast.',
+    mitigation:'Commits to offensives earlier and accepts keener odds.'},
 };
 function freshKnowledge(){ const k={version:1,games:0,factions:{},lessons:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
 function loadKnowledge(){
@@ -1594,25 +1604,30 @@ function L(id){ return knowledge.lessons[id]?.weight||0; }
 // Used both by the live AI and by the dossier so the two always agree.
 function aiParams(g){
   return {
-    riskGate: clamp(0.34 + 0.40*L('avoidBadOdds')*(1-g.risk) - 0.15*g.risk, 0.18, 0.8),
+    // cautions raise the bar; the boldOffense pattern lowers it
+    riskGate: clamp(0.34 + 0.40*L('avoidBadOdds')*(1-g.risk) - 0.15*g.risk - 0.16*L('boldOffense'), 0.16, 0.8),
     homeNeed: Math.ceil(1 + 2*L('defendCapital')*g.defense),
     massGate: Math.round(1 + 3*L('massFirst')*(1-g.aggression)),
-    techBias: g.tech + 0.5*L('outTech'),
+    // drives blend the house's own genome with what has been WINNING across games
+    techDrive:   clamp(g.tech      + 0.5*L('outTech')       + 0.45*L('scientificEdge'), 0, 1.6),
+    expandDrive: clamp(g.expansion + 0.45*L('rapidExpansion') + 0.25*L('economicEngine'), 0, 1.6),
+    aggDrive:    clamp(g.aggression + 0.45*L('boldOffense'), 0, 1.6),
+    econDrive:   clamp(g.economy   + 0.4*L('economicEngine'), 0, 1.6),
   };
 }
 function aiTurn(p){
   const g=p.genome; const thoughts=[];
-  const {riskGate,homeNeed,massGate} = aiParams(g);
+  const pr = aiParams(g); const {riskGate,homeNeed,massGate} = pr;
 
   // --- 1. research ---
-  aiResearch(p,thoughts);
+  aiResearch(p,thoughts,pr);
 
   // --- 2. cities grow automatically from their surroundings; spend Production on units ---
   const myCities=G.cities.filter(c=>c.owner===p.id);
   const myUnits=()=>G.units.filter(u=>u.owner===p.id&&u.hp>0);
   // decide builds with available production (loop bounded)
   let guard=0; for(let i=0;i<14;i++){
-    const cand=aiChooseBuild(p,homeNeed,massGate,thoughts); if(!cand) break;
+    const cand=aiChooseBuild(p,homeNeed,massGate,thoughts,pr); if(!cand) break;
     if(p.prod<cand.cost) break;
     if(unitAt(cand.city.x,cand.city.z)){ /* blocked */ if(++guard>myCities.length+2) break; continue; }
     p.prod-=cand.cost; spawnUnit(p,cand.type,cand.city.x,cand.city.z,false);
@@ -1634,19 +1649,19 @@ function aiTurn(p){
   p.lastThought = thoughts.slice(-3).join(' · ') || 'consolidating';
 }
 
-function aiResearch(p,thoughts){
+function aiResearch(p,thoughts,pr){
   const g=p.genome; const want=[];
-  // priorities shaped by genome + the out-tech lesson
+  // priorities shaped by genome + the out-tech caution + the science-edge winning pattern
   const order=['masonry','riding','husbandry','ironworking','trade','steam','espionage','aeronautics','telegraphy'];
   for(const id of order){ if(canResearch(p,id)) want.push(id); }
-  const techBias = g.tech + 0.5*L('outTech');
+  const techBias = (pr?pr.techDrive:g.tech);
   // research from the science stockpile, scaled by tech appetite
   let budget = p.science*(0.45+0.5*techBias);
   for(const id of want){ const cost=techCost(p,id); if(cost<=budget && p.science>=cost){ research(p,id); budget-=cost; if(rnd()>techBias) break; } }
 }
 
-function aiChooseBuild(p,homeNeed,massGate,thoughts){
-  const g=p.genome;
+function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
+  const g=p.genome; pr=pr||aiParams(g);
   const myUnits=G.units.filter(u=>u.owner===p.id&&u.hp>0);
   const army=myUnits.filter(u=>UNIT_TYPES[u.type].role!=='settle');
   const founders=myUnits.filter(u=>UNIT_TYPES[u.type].role==='settle');
@@ -1668,19 +1683,22 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts){
     thoughts.push(`reinforce ${cap.name} (lesson: defend the capital, need ${homeNeed})`);
     return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t, cost:cost(t)};
   }
-  // expansion vs army balance (noOverExtend lesson)
-  const expandUtil = g.expansion*(1 - 0.6*L('noOverExtend')*(army.length < founders.length+1?1:0));
-  const wantFounder = founders.length<1 && myCities.length<6 && rnd()<0.6*expandUtil+0.2;
+  // expansion (rapidExpansion + economicEngine patterns push this up; noOverExtend caution reins it in)
+  const expandUtil = pr.expandDrive*(1 - 0.6*L('noOverExtend')*(army.length < founders.length+1?1:0));
+  const cityCap = 5 + Math.round(L('rapidExpansion')*3 + L('economicEngine')*2);
+  const wantFounder = founders.length<1 && myCities.length<cityCap && rnd()<0.55*expandUtil+0.18;
   if(wantFounder && p.prod>=cost('founder') && army.length>=Math.max(1,massGate-1)){
-    thoughts.push('train a Founder to expand');
+    thoughts.push('train a Founder to expand (pattern: settle wide)');
     return {city:buildCity,type:'founder',cost:cost('founder')};
   }
-  if(atCap) return null;   // army full — bank brass for tech / future expansion
-  // otherwise build the best military unit we can afford, weighted by aggression
+  if(atCap) return null;   // army full — bank production for tech / future expansion
+  // otherwise build the best military unit we can afford. The economicEngine pattern restrains
+  // military spend (let the economy compound); aggression/boldOffense pushes it back up.
+  const milChance = clamp(0.42 + 0.5*pr.aggDrive - 0.28*pr.econDrive, 0.12, 0.95);
   const milPriority=['ironclad','skylark','nightmail','gun','pony','guard'];
   for(const tid of milPriority){
     if(!avail(tid)) continue; const cc=cost(tid);
-    if(p.prod>=cc && rnd()<0.5+0.5*g.aggression){ return {city:buildCity,type:tid,cost:cc}; }
+    if(p.prod>=cc && rnd()<milChance){ return {city:buildCity,type:tid,cost:cc}; }
   }
   // fallback cheap guard if we have spare brass and want mass
   if(p.prod>=cost('guard') && army.length<massGate+2) return {city:buildCity,type:'guard',cost:cost('guard')};
@@ -1821,17 +1839,34 @@ function findSettleSpot(p,u){
 function doFoundAI(p,u){ foundCity(p,u.x,u.z,false); killUnit(u); recomputeIncome(); logMsg('city',`${p.name} founded a village.`); }
 
 /* ----- learning at game end ----- */
-function recordGameResult(){
+function recordGameResult(winner, kind){
   knowledge.games++;
-  // rank by score
-  const ranked=[...G.players].sort((a,b)=>score(b)-score(a));
-  const winner=ranked[0];
+  if(!winner) winner=[...G.players].sort((a,b)=>score(b)-score(a))[0];
   for(const p of G.players){
     const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0});
     if(p.id===winner.id){ fk.wins++; fk.genome={...p.genome}; }
     else { fk.losses++; }
   }
-  // post-mortems: bump shared lessons + nudge losers toward the winner
+  // ---- learn the WINNER's patterns (what worked) ----
+  const ws=winner.stats||{};
+  let wLevels=0, wCities=0; for(const c of G.cities){ if(c.owner===winner.id){ wLevels+=c.level; wCities++; } }
+  if(kind==='science' || (ws.techPeak||0)>=Object.keys(TECHS).length-1) bump('scientificEdge');
+  if(kind==='economy' || wLevels>=45) bump('economicEngine');
+  if((ws.founded||0)>=3 || wCities>=4) bump('rapidExpansion');
+  if(kind==='domination'){ bump('boldOffense'); if(G.turn<=40) bump('boldOffense'); }
+  // a tall, peaceful winner reinforces development patterns even on a score win
+  if(kind==='score' && wLevels>=40){ bump('economicEngine'); if((ws.techPeak||0)>=Object.keys(TECHS).length-2) bump('scientificEdge'); }
+  // the whole meta drifts a little toward whatever has been winning lately
+  const metaPull={ economy:0.05*L('economicEngine'), tech:0.05*L('scientificEdge'), expansion:0.05*L('rapidExpansion'), aggression:0.05*L('boldOffense') };
+  // the winner reinforces its own strongest traits (success breeds conviction)
+  const wfk=knowledge.factions[winner.id]; const wg={...winner.genome};
+  for(const key of ['aggression','expansion','economy','defense','tech','risk']){
+    let v=wg[key]; if(metaPull[key]) v=clamp(v+metaPull[key],0.05,0.97);
+    if(v>=0.55) v=clamp(v+0.03,0.05,0.97);   // double down on what carried the win
+    wg[key]=v;
+  }
+  wfk.genome=wg;
+  // post-mortems: bump cautionary lessons + nudge losers toward the winner & the winning meta
   const wG=winner.genome;
   for(const p of G.players){
     if(p.id===winner.id) continue;
@@ -1851,6 +1886,11 @@ function recordGameResult(){
     ng.risk   =clamp(ng.risk    - 0.12*L('avoidBadOdds')*(badRate>0.35?1:0),0.05,0.95);
     ng.expansion=clamp(ng.expansion - 0.12*L('noOverExtend')*(s.founded>s.peakArmy?1:0),0.05,0.95);
     ng.tech   =clamp(ng.tech    + 0.12*L('outTech')*((winner.stats.techPeak-s.techPeak>=2)?1:0),0.05,0.95);
+    // drift toward the winning meta (positive patterns), so good development strategies spread
+    ng.economy   =clamp((ng.economy??0.5) + metaPull.economy,   0.05,0.95);
+    ng.tech      =clamp(ng.tech            + metaPull.tech,      0.05,0.95);
+    ng.expansion =clamp(ng.expansion       + metaPull.expansion, 0.05,0.95);
+    ng.aggression=clamp((ng.aggression??0.5)+ metaPull.aggression,0.05,0.95);
     fk.genome=ng;
   }
   // gentle decay so stale lessons fade
@@ -1981,11 +2021,12 @@ function refreshTech(){
 }
 function refreshBrain(){
   $('brainGames').textContent=`${knowledge.games} games`;
-  let h=`<div class="label" style="margin-bottom:8px">Lessons learned from defeat</div>`;
-  const ls=Object.entries(knowledge.lessons).sort((a,b)=>b[1].weight-a[1].weight);
+  let h=`<div class="label" style="margin-bottom:8px">What the AI has learned</div>`;
+  const ls=Object.entries(knowledge.lessons).filter(([id])=>LESSONS[id]).sort((a,b)=>b[1].weight-a[1].weight);
   for(const [id,l] of ls){
-    const w=Math.round((l.weight||0)*100);
-    h+=`<div class="lesson"><div class="lt"><b>${LESSONS[id].label}</b><span>${w}%</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
+    const w=Math.round((l.weight||0)*100); const pat=(LESSONS[id].type==='pattern');
+    h+=`<div class="lesson"><div class="lt"><b>${pat?'★ ':'⚠ '}${LESSONS[id].label}</b><span>${w}%</span></div>
+      <div class="meter"><i style="width:${w}%;background:${pat?'linear-gradient(90deg,#5a9e4e,#9bd07f)':'linear-gradient(90deg,var(--rust),var(--amber2))'}"></i></div></div>`;
   }
   h+=`<div class="label" style="margin:12px 0 8px">House strategies <span style="color:var(--faint)">(genome · W/L)</span></div>`;
   const fk=knowledge.factions;
@@ -2015,17 +2056,25 @@ function renderDossier(){
   loadKnowledge();
   $('dossierGames').textContent=`${knowledge.games} games played`;
   const mono="font-family:'JetBrains Mono',monospace";
-  let h=`<div class="label" style="margin-bottom:8px">Institutional memory — lessons drawn from defeat</div>`;
-  const ls=Object.entries(knowledge.lessons).sort((a,b)=>(b[1].weight||0)-(a[1].weight||0));
-  for(const [id,l] of ls){
-    const w=Math.round((l.weight||0)*100); const def=LESSONS[id]; if(!def) continue;
-    h+=`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">
-      <div style="display:flex;justify-content:space-between;${mono};font-size:12px"><b>${def.label}</b><span style="color:var(--amber2)">conviction ${w}%</span></div>
-      <div class="meter" style="margin:6px 0"><i style="width:${w}%"></i></div>
-      <div class="desc" style="margin:4px 0 2px"><span style="color:#f0998e">⚠ Mistake&nbsp;</span> ${def.desc}</div>
-      <div class="desc"><span style="color:var(--teal)">✓ Counter&nbsp;</span> ${def.mitigation}</div>
-    </div>`;
-  }
+  let h='';
+  const ls=Object.entries(knowledge.lessons).filter(([id])=>LESSONS[id]).sort((a,b)=>(b[1].weight||0)-(a[1].weight||0));
+  const section=(title,type)=>{
+    h+=`<div class="label" style="margin:4px 0 8px">${title}</div>`;
+    let any=false;
+    for(const [id,l] of ls){ const def=LESSONS[id]; if((def.type||'caution')!==type) continue; any=true;
+      const w=Math.round((l.weight||0)*100);
+      const head = type==='pattern' ? `<span style="color:var(--good,#7bc06b)">★ Works&nbsp;</span>` : `<span style="color:#f0998e">⚠ Mistake&nbsp;</span>`;
+      const tail = type==='pattern' ? `<span style="color:var(--teal)">↟ Applies&nbsp;</span>` : `<span style="color:var(--teal)">✓ Counter&nbsp;</span>`;
+      h+=`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">
+        <div style="display:flex;justify-content:space-between;${mono};font-size:12px"><b>${def.label}</b><span style="color:var(--amber2)">conviction ${w}%</span></div>
+        <div class="meter" style="margin:6px 0"><i style="width:${w}%"></i></div>
+        <div class="desc" style="margin:4px 0 2px">${head} ${def.desc}</div>
+        <div class="desc">${tail} ${def.mitigation}</div></div>`;
+    }
+    if(!any) h+=`<div class="legend" style="margin-bottom:10px">— nothing learned yet —</div>`;
+  };
+  section('Winning patterns — learned from victory','pattern');
+  section('Cautions — learned from defeat','caution');
   h+=`<div class="label" style="margin:16px 0 8px">Houses — capabilities &amp; current doctrine</div>`;
   const fk=knowledge.factions||{};
   const ids = G.started ? G.players.map(p=>p.id) : FACTIONS.map(f=>f.id);
@@ -2057,8 +2106,7 @@ function renderDossier(){
 function endGame(winner,kind){
   G.gameOver=true; G.winner=winner;
   if(autoTimer) clearTimeout(autoTimer);
-  // mark survivors' survival
-  recordGameResult();
+  recordGameResult(winner, kind);
   refreshBrain();
   // show end modal
   const ranked=[...G.players].sort((a,b)=>score(b)-score(a));
