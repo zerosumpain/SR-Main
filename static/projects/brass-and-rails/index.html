@@ -262,10 +262,26 @@
     </div>
     <button class="ctl-ico" id="btnAuto" title="Toggle autoplay">▶</button>
     <button id="endturn">End Turn</button>
+    <button class="ctl-ico" id="btnDossier" title="AI dossier — capabilities &amp; what it has learned">🧠</button>
     <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- AI DOSSIER MODAL -->
+  <div class="scrim hidden" id="dossier">
+    <div class="modal panel" style="width:min(880px,94vw)">
+      <div class="panel-h"><h3>AI Dossier — capabilities &amp; learned counter-strategy</h3><span class="label" id="dossierGames"></span></div>
+      <div class="panel-b" id="dossierBody" style="max-height:72vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row">
+          <button id="dossierClose" class="btn primary" style="width:auto;">Close</button>
+          <button id="dossierWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
+          <div class="legend">Lessons are shared across all houses; the genome is each house's own evolving strategy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- SETUP MODAL -->
   <div class="scrim" id="setup">
@@ -851,8 +867,8 @@ function initThree(){
   stage.appendChild(renderer.domElement);
 
   scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x101b24);
-  scene.fog=new THREE.Fog(0x101b24, 38, 75);
+  scene.background=new THREE.Color(0x1d2f40);
+  scene.fog=null;   // no distance fog — the whole board must read evenly, corner to corner
 
   const aspect=innerWidth/innerHeight;
   camera=new THREE.OrthographicCamera(-FR*aspect,FR*aspect,FR,-FR,0.1,1200);
@@ -864,15 +880,16 @@ function initThree(){
   controls.maxPolarAngle=Math.PI*0.46; controls.minPolarAngle=Math.PI*0.12;
   controls.target.set(0,0,0);
 
-  // lights — warm key sun + cool sky fill for the toy-diorama look
-  sun=new THREE.DirectionalLight(0xfff0d6,2.1);
+  // lights — even, flat-ish illumination so every corner reads, plus a soft sun for gentle depth
+  sun=new THREE.DirectionalLight(0xfff0d6,1.5);
   sun.position.set(26,46,16); sun.castShadow=true;
   sun.shadow.mapSize.set(2048,2048);
   const s=26; const sc=sun.shadow.camera; sc.left=-s;sc.right=s;sc.top=s;sc.bottom=-s;sc.near=1;sc.far=140;
   sun.shadow.bias=-0.0006; sun.shadow.normalBias=0.02;
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0xbfe0ff,0x4a3a28,0.75));
-  const rim=new THREE.DirectionalLight(0x9fd0ff,0.5); rim.position.set(-20,18,-22); scene.add(rim);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.45));                    // flat fill — lifts shadowed sides so every corner reads
+  scene.add(new THREE.HemisphereLight(0xdfeeff, 0x6a5a44, 0.9));        // sky/ground fill
+  const fill=new THREE.DirectionalLight(0xcfe2ff,0.55); fill.position.set(-24,30,-22); scene.add(fill);  // counter-fill from the shadow side
 
   staticGroup=new THREE.Group(); scene.add(staticGroup);
   dynGroup=new THREE.Group(); scene.add(dynGroup);
@@ -1303,11 +1320,16 @@ function doBuild(c,tid,cost){ const p=playerById(c.owner); if(p.prod<cost||unitA
 
 /* --------------------------- 6. AI + LEARNING ---------------------------- */
 const LESSONS = {
-  defendCapital:{label:'Defend the capital', desc:'Keep guards at home.'},
-  noOverExtend: {label:"Don't over-extend", desc:'Army must match expansion.'},
-  avoidBadOdds: {label:'Avoid low-odds attacks', desc:'Only strike when favoured.'},
-  outTech:      {label:'Out-tech rivals', desc:'Fall behind in tech and you lose.'},
-  massFirst:    {label:'Mass before marching', desc:'Do not poke with a tiny force.'},
+  defendCapital:{label:'Defend the capital', desc:'Lost a capital that was left poorly garrisoned.',
+    mitigation:'Garrisons the capital with ⌈1 + 2·weight·defense⌉ defenders before sending units out to attack.'},
+  noOverExtend: {label:"Don't over-extend", desc:'Sprawled into too many cities with too small an army to hold them.',
+    mitigation:'Suppresses Founder production while the army is smaller than the empire it must protect.'},
+  avoidBadOdds: {label:'Avoid low-odds attacks', desc:'Threw away units on attacks it was unlikely to win.',
+    mitigation:'Raises the minimum predicted win-chance required before committing to an open-field attack.'},
+  outTech:      {label:'Out-tech rivals', desc:'Fell behind on the tech tree and was out-gunned.',
+    mitigation:'Diverts a larger share of its science income into research to keep pace.'},
+  massFirst:    {label:'Mass before marching', desc:'Marched out with a token force and was picked apart.',
+    mitigation:'Waits until it has massed ⌈1 + 3·weight⌉ units before launching an offensive.'},
 };
 function freshKnowledge(){ const k={version:1,games:0,factions:{},lessons:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
 function loadKnowledge(){
@@ -1321,12 +1343,19 @@ function saveKnowledge(){ try{ localStorage.setItem('brassrails.ai.v1',JSON.stri
 function L(id){ return knowledge.lessons[id]?.weight||0; }
 
 /* the AI brain takes a full turn for player p */
+// derive the concrete behavioural thresholds from a genome + the shared lessons.
+// Used both by the live AI and by the dossier so the two always agree.
+function aiParams(g){
+  return {
+    riskGate: clamp(0.34 + 0.40*L('avoidBadOdds')*(1-g.risk) - 0.15*g.risk, 0.18, 0.8),
+    homeNeed: Math.ceil(1 + 2*L('defendCapital')*g.defense),
+    massGate: Math.round(1 + 3*L('massFirst')*(1-g.aggression)),
+    techBias: g.tech + 0.5*L('outTech'),
+  };
+}
 function aiTurn(p){
   const g=p.genome; const thoughts=[];
-  // institutional caution gate, raised by the "avoid low-odds attacks" lesson and lowered by personal risk appetite
-  const riskGate = clamp(0.34 + 0.40*L('avoidBadOdds')*(1-g.risk) - 0.15*g.risk, 0.18, 0.8);
-  const homeNeed = Math.ceil(1 + 2*L('defendCapital')*g.defense);
-  const massGate = Math.round(1 + 3*L('massFirst')*(1-g.aggression));
+  const {riskGate,homeNeed,massGate} = aiParams(g);
 
   // --- 1. research ---
   aiResearch(p,thoughts);
@@ -1725,7 +1754,51 @@ function refreshBrain(){
   if(p&&p.isAI&&p.lastThought){ h+=`<div class="label" style="margin:12px 0 6px">Now thinking — ${p.name}</div><div class="desc">${p.lastThought}</div>`; }
   $('brainBody').innerHTML=h;
 }
-function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); }
+function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); if(!$('dossier').classList.contains('hidden')) renderDossier(); }
+
+/* full AI dossier — capabilities (genomes) + what it learned (lessons) + how it counters */
+function renderDossier(){
+  loadKnowledge();
+  $('dossierGames').textContent=`${knowledge.games} games played`;
+  const mono="font-family:'JetBrains Mono',monospace";
+  let h=`<div class="label" style="margin-bottom:8px">Institutional memory — lessons drawn from defeat</div>`;
+  const ls=Object.entries(knowledge.lessons).sort((a,b)=>(b[1].weight||0)-(a[1].weight||0));
+  for(const [id,l] of ls){
+    const w=Math.round((l.weight||0)*100); const def=LESSONS[id]; if(!def) continue;
+    h+=`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">
+      <div style="display:flex;justify-content:space-between;${mono};font-size:12px"><b>${def.label}</b><span style="color:var(--amber2)">conviction ${w}%</span></div>
+      <div class="meter" style="margin:6px 0"><i style="width:${w}%"></i></div>
+      <div class="desc" style="margin:4px 0 2px"><span style="color:#f0998e">⚠ Mistake&nbsp;</span> ${def.desc}</div>
+      <div class="desc"><span style="color:var(--teal)">✓ Counter&nbsp;</span> ${def.mitigation}</div>
+    </div>`;
+  }
+  h+=`<div class="label" style="margin:16px 0 8px">Houses — capabilities &amp; current doctrine</div>`;
+  const fk=knowledge.factions||{};
+  const ids = G.started ? G.players.map(p=>p.id) : FACTIONS.map(f=>f.id);
+  for(const fid of ids){
+    const fdef=FACTIONS.find(f=>f.id===fid); if(!fdef) continue;
+    const rec=fk[fid]; const g=(rec&&rec.genome)||defaultGenome(); const col='#'+fdef.color.toString(16).padStart(6,'0');
+    const pr=aiParams(g);
+    h+=`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="background:${col};width:13px;height:13px;border-radius:3px;transform:rotate(45deg);flex:none"></span>
+        <b style="${mono};font-size:12.5px">${fdef.name}</b>
+        <span style="color:var(--muted);font-size:10.5px">${fdef.bonusTxt}</span>
+        <span style="margin-left:auto;color:var(--muted);${mono};font-size:11px">${rec?rec.wins:0}W / ${rec?rec.losses:0}L</span>
+      </div>`;
+    for(const k of ['aggression','expansion','economy','defense','tech','risk']){
+      const vv=Math.round((g[k]||0)*100);
+      h+=`<div style="display:flex;align-items:center;gap:8px;${mono};font-size:10px;margin-bottom:3px">
+        <span style="width:74px;color:var(--muted)">${k}</span>
+        <div class="meter" style="flex:1"><i style="width:${vv}%;background:${col}"></i></div>
+        <span style="width:30px;text-align:right;color:var(--muted)">${vv}%</span></div>`;
+    }
+    h+=`<div class="desc" style="margin-top:7px"><b style="color:var(--amber2)">Doctrine —</b> attacks only above
+      <b>${Math.round(pr.riskGate*100)}%</b> odds (much lower to storm a city), keeps <b>${pr.homeNeed}</b> defender(s)
+      at the capital, and masses <b>${pr.massGate}</b> unit(s) before marching out.</div></div>`;
+  }
+  $('dossierBody').innerHTML=h;
+}
 
 function endGame(winner,kind){
   G.gameOver=true; G.winner=winner;
@@ -1809,6 +1882,9 @@ $('menuBtn2').onclick=()=>{ $('endModal').classList.add('hidden'); $('setup').cl
 $('btnMenu').onclick=()=>{ if(autoTimer)clearTimeout(autoTimer); $('setup').classList.remove('hidden'); buildSetupUI(); };
 $('endturn').onclick=()=>{ if(G.sel){G.sel=null;updateHighlights();} endTurn(); };
 $('btnHome').onclick=homeCamera;
+$('btnDossier').onclick=()=>{ renderDossier(); $('dossier').classList.remove('hidden'); };
+$('dossierClose').onclick=()=>$('dossier').classList.add('hidden');
+$('dossierWipe').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); renderDossier(); refreshBrain(); toast('AI memory wiped.'); };
 $('btnAuto').onclick=()=>{ autoplay=!autoplay; $('btnAuto').textContent=autoplay?'⏸':'▶'; if(autoplay){ if(currentPlayer().isAI) advance(); } else if(autoTimer) clearTimeout(autoTimer); };
 $('speedSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ speed=b.dataset.sp; $('speedSeg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); if(speed!=='step'&&G.mode==='auto'&&!G.gameOver){ if(autoTimer)clearTimeout(autoTimer); advance(); } });
 
