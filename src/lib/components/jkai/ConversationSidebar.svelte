@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import DraftsPanel from './DraftsPanel.svelte';
 
   interface ConversationItem {
     id: string;
@@ -230,6 +231,9 @@
         {/if}
       {/each}
     </div>
+
+    <!-- Drafts (offline-first, IndexedDB) -->
+    <DraftsPanel />
 
     <!-- Footer actions -->
     <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
