@@ -45,10 +45,15 @@ export const slashAffordances: SlashAffordance[] = [
   {
     id: 'hermes-approval',
     detect: isApprovalPrompt,
+    // Safe-by-default: this is a "dangerous command" gate, so the SAFE action
+    // (Deny) is the dominant, recommended button and comes first. Approving
+    // proceeds with the dangerous command, so it's marked as a caution
+    // (outlined, not filled) and requires a deliberate click; "Approve always"
+    // is quieter still.
     buttons: [
-      { label: 'Approve', command: '/approve', style: 'primary' },
+      { label: 'Deny', command: '/deny', style: 'primary' },
+      { label: 'Approve', command: '/approve', style: 'danger' },
       { label: 'Approve always', command: '/approve always', style: 'subtle' },
-      { label: 'Deny', command: '/deny', style: 'danger' },
     ],
   },
 ];

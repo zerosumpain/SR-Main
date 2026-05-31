@@ -87,11 +87,15 @@
   function styleFor(s?: SlashButton['style']): string {
     switch (s) {
       case 'danger':
-        return 'background: var(--danger, #b54242); color: white;';
+        // The action that proceeds with the dangerous command. Marked as a
+        // caution (red outline) and deliberately NOT filled, so it can't
+        // out-weigh the safe primary action above.
+        return 'background: transparent; color: var(--danger, #b54242); border: 1px solid var(--danger, #b54242);';
       case 'subtle':
         return 'background: transparent; color: var(--text-secondary); border: 1px solid var(--card-border);';
       default:
-        return 'background: var(--accent); color: var(--bg);';
+        // Safe / recommended action — filled and bold so it's the dominant tap.
+        return 'background: var(--accent); color: var(--bg); border: 1px solid var(--accent); font-weight: 600;';
     }
   }
 </script>
