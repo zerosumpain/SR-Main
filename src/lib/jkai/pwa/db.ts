@@ -96,3 +96,64 @@ export async function openJkaiDB(): Promise<IDBPDatabase> {
 		},
 	});
 }
+
+export async function putConversation(r: ConversationCacheRecord): Promise<void> {
+	const db = await openJkaiDB();
+	await db.put('conversations', r);
+	db.close();
+}
+
+export async function listConversations(): Promise<ConversationCacheRecord[]> {
+	const db = await openJkaiDB();
+	const all = await db.getAllFromIndex('conversations', 'updatedAt');
+	db.close();
+	return all.reverse() as ConversationCacheRecord[];
+}
+
+export async function evictConversations(): Promise<void> {
+	const db = await openJkaiDB();
+	const tx = db.transaction(['conversations', 'messages'], 'readwrite');
+	const idx = tx.objectStore('conversations').index('updatedAt');
+	const all = (await idx.getAll()).reverse() as ConversationCacheRecord[];
+	const keep = new Set(all.slice(0, CONVERSATION_BUDGET).map((c) => c.id));
+	for (const c of all) {
+		if (keep.has(c.id)) continue;
+		await tx.objectStore('conversations').delete(c.id);
+		const msgIdx = tx.objectStore('messages').index('byConversation');
+		let cursor = await msgIdx.openCursor(IDBKeyRange.only(c.id));
+		while (cursor) {
+			await cursor.delete();
+			cursor = await cursor.continue();
+		}
+	}
+	await tx.done;
+	db.close();
+}
+
+export async function putBuild(r: BuildCacheRecord): Promise<void> {
+	const db = await openJkaiDB();
+	await db.put('builds', r);
+	db.close();
+}
+
+export async function listBuilds(): Promise<BuildCacheRecord[]> {
+	const db = await openJkaiDB();
+	const all = await db.getAllFromIndex('builds', 'createdAt');
+	db.close();
+	return all.reverse() as BuildCacheRecord[];
+}
+
+export async function evictBuilds(): Promise<void> {
+	const db = await openJkaiDB();
+	const tx = db.transaction(['builds', 'buildDetail'], 'readwrite');
+	const idx = tx.objectStore('builds').index('createdAt');
+	const all = (await idx.getAll()).reverse() as BuildCacheRecord[];
+	const keep = new Set(all.slice(0, BUILDS_BUDGET).map((b) => b.id));
+	for (const b of all) {
+		if (keep.has(b.id)) continue;
+		await tx.objectStore('builds').delete(b.id);
+		await tx.objectStore('buildDetail').delete(b.id);
+	}
+	await tx.done;
+	db.close();
+}

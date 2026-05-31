@@ -2,6 +2,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { openJkaiDB, JKAI_DB_NAME, JKAI_DB_VERSION } from '../db';
+import {
+	putConversation,
+	putBuild,
+	listConversations,
+	listBuilds,
+	evictConversations,
+	evictBuilds,
+} from '../db';
 
 describe('openJkaiDB', () => {
 	beforeEach(async () => {
@@ -22,5 +30,49 @@ describe('openJkaiDB', () => {
 		]);
 		expect(db.version).toBe(JKAI_DB_VERSION);
 		db.close();
+	});
+});
+
+describe('conversation cache', () => {
+	beforeEach(async () => {
+		indexedDB.deleteDatabase(JKAI_DB_NAME);
+	});
+
+	it('lists conversations newest first and evicts to budget', async () => {
+		for (let i = 0; i < 60; i++) {
+			await putConversation({
+				id: `c${i}`,
+				title: `Convo ${i}`,
+				updatedAt: new Date(2026, 0, 1, 0, i).toISOString(),
+			});
+		}
+		const before = await listConversations();
+		expect(before).toHaveLength(60);
+		await evictConversations();
+		const after = await listConversations();
+		expect(after).toHaveLength(50);
+		expect(after[0].id).toBe('c59');
+		expect(after[49].id).toBe('c10');
+	});
+});
+
+describe('build cache', () => {
+	beforeEach(async () => {
+		indexedDB.deleteDatabase(JKAI_DB_NAME);
+	});
+
+	it('evicts builds to budget', async () => {
+		for (let i = 0; i < 40; i++) {
+			await putBuild({
+				id: `b${i}`,
+				title: `Build ${i}`,
+				status: 'done',
+				createdAt: new Date(2026, 0, 1, 0, i).toISOString(),
+			});
+		}
+		await evictBuilds();
+		const builds = await listBuilds();
+		expect(builds).toHaveLength(30);
+		expect(builds[0].id).toBe('b39');
 	});
 });
