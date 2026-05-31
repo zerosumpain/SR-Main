@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { JKAI_DB_NAME } from '../db';
 import { enqueueMessage, listOutbox } from '../outbox';
-import { flushOutbox } from '../syncManager';
+import { flushOutbox, syncAll, startAutoSync } from '../syncManager';
+import { putConversation, listConversations, listBuilds } from '../db';
 
 beforeEach(() => indexedDB.deleteDatabase(JKAI_DB_NAME));
 
@@ -45,5 +46,47 @@ describe('flushOutbox', () => {
 		expect(report.flushed).toBe(0);
 		expect(report.skipped).toBe(1);
 		expect(fetchMock).toHaveBeenCalledTimes(5);
+	});
+});
+
+describe('syncAll', () => {
+	beforeEach(() => indexedDB.deleteDatabase(JKAI_DB_NAME));
+
+	it('refreshes conversations and builds and runs eviction', async () => {
+		for (let i = 0; i < 60; i++) {
+			await putConversation({ id: `c${i}`, title: `c${i}`, updatedAt: new Date(2026, 0, 1, 0, i).toISOString() });
+		}
+		const fresh = [
+			{ id: 'c100', title: 'fresh', updatedAt: new Date(2026, 0, 2).toISOString() },
+		];
+		const freshBuilds = [
+			{ id: 'b1', title: 'b1', status: 'done', createdAt: '2026-01-01T00:00:00Z' },
+		];
+		const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes('/api/jkai/conversations')) return { ok: true, json: async () => fresh } as Response;
+			if (url.includes('/api/jkai/builds')) return { ok: true, json: async () => freshBuilds } as Response;
+			throw new Error(`unexpected ${url}`);
+		});
+		const report = await syncAll({ fetchImpl });
+		expect(report.refreshed.conversations).toBe(1);
+		expect(report.refreshed.builds).toBe(1);
+		expect((await listConversations()).length).toBeLessThanOrEqual(50);
+		expect(await listBuilds()).toHaveLength(1);
+		expect(report.durationMs).toBeGreaterThanOrEqual(0);
+	});
+});
+
+describe('startAutoSync', () => {
+	beforeEach(() => indexedDB.deleteDatabase(JKAI_DB_NAME));
+
+	it('runs syncAll on visibilitychange visible and returns a dispose function', async () => {
+		const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+		const dispose = startAutoSync({ fetchImpl, debounceMs: 0, intervalMs: 0 });
+		Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+		document.dispatchEvent(new Event('visibilitychange'));
+		await new Promise((r) => setTimeout(r, 20));
+		expect(fetchImpl).toHaveBeenCalled();
+		dispose();
 	});
 });

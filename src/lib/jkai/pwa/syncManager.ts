@@ -1,5 +1,13 @@
 import { listOutbox, markOutboxFailure, deleteOutboxEntry, MAX_OUTBOX_ATTEMPTS, type SendMessagePayload } from './outbox';
-import type { OutboxRecord } from './db';
+import {
+	putConversation,
+	putBuild,
+	evictConversations,
+	evictBuilds,
+	type OutboxRecord,
+	type ConversationCacheRecord,
+	type BuildCacheRecord,
+} from './db';
 
 export interface SyncReport {
 	flushed: number;
@@ -50,4 +58,80 @@ export async function flushOutbox(opts: FlushOpts = {}): Promise<Pick<SyncReport
 		}
 	}
 	return { flushed, failed, skipped };
+}
+
+export interface SyncAllOpts {
+	fetchImpl?: typeof fetch;
+}
+
+async function refreshConversations(fetchImpl: typeof fetch): Promise<number> {
+	const res = await fetchImpl('/api/jkai/conversations', { credentials: 'include' });
+	if (!res.ok) throw new Error(`conversations HTTP ${res.status}`);
+	const list = (await res.json()) as ConversationCacheRecord[];
+	for (const c of list) await putConversation(c);
+	return list.length;
+}
+
+async function refreshBuilds(fetchImpl: typeof fetch): Promise<number> {
+	const res = await fetchImpl('/api/jkai/builds', { credentials: 'include' });
+	if (!res.ok) throw new Error(`builds HTTP ${res.status}`);
+	const list = (await res.json()) as BuildCacheRecord[];
+	for (const b of list) await putBuild(b);
+	return list.length;
+}
+
+export async function syncAll(opts: SyncAllOpts = {}): Promise<SyncReport> {
+	const started = Date.now();
+	const fetchImpl = opts.fetchImpl ?? fetch;
+	const outboxStats = await flushOutbox({ fetchImpl });
+	let conversations = 0;
+	let builds = 0;
+	try { conversations = await refreshConversations(fetchImpl); } catch { /* offline / 401 surfaces via banner */ }
+	try { builds = await refreshBuilds(fetchImpl); } catch { /* same */ }
+	await evictConversations();
+	await evictBuilds();
+	return {
+		flushed: outboxStats.flushed,
+		failed: outboxStats.failed,
+		skipped: outboxStats.skipped,
+		refreshed: { conversations, builds },
+		durationMs: Date.now() - started,
+	};
+}
+
+export interface AutoSyncOpts extends SyncAllOpts {
+	debounceMs?: number;
+	intervalMs?: number;
+}
+
+export function startAutoSync(opts: AutoSyncOpts = {}): () => void {
+	const { fetchImpl, debounceMs = 2000, intervalMs = 60_000 } = opts;
+	let debounce: ReturnType<typeof setTimeout> | undefined;
+	let interval: ReturnType<typeof setInterval> | undefined;
+	let active = true;
+
+	const trigger = () => {
+		if (!active) return;
+		clearTimeout(debounce);
+		debounce = setTimeout(() => { void syncAll({ fetchImpl }); }, debounceMs);
+	};
+
+	const onVisibility = () => { if (document.visibilityState === 'visible') trigger(); };
+	const onOnline = () => trigger();
+
+	window.addEventListener('online', onOnline);
+	document.addEventListener('visibilitychange', onVisibility);
+	if (intervalMs > 0) {
+		interval = setInterval(() => {
+			if (document.visibilityState === 'visible') void syncAll({ fetchImpl });
+		}, intervalMs);
+	}
+
+	return () => {
+		active = false;
+		clearTimeout(debounce);
+		if (interval) clearInterval(interval);
+		window.removeEventListener('online', onOnline);
+		document.removeEventListener('visibilitychange', onVisibility);
+	};
 }
