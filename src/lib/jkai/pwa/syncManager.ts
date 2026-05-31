@@ -24,11 +24,16 @@ export interface FlushOpts {
 async function flushOne(entry: OutboxRecord, fetchImpl: typeof fetch): Promise<void> {
 	if (entry.type === 'sendMessage') {
 		const payload = entry.payload as SendMessagePayload;
-		const res = await fetchImpl(`/api/jkai/messages`, {
+		const res = await fetchImpl(`/api/workflows/orchestrator/chat`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			credentials: 'include',
-			body: JSON.stringify(payload),
+			body: JSON.stringify({
+				message: payload.body,
+				conversationId: payload.conversationId,
+				attachmentIds: payload.attachments ?? [],
+				useIntelContext: false,
+			}),
 		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		return;

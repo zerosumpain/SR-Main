@@ -18,7 +18,14 @@ describe('flushOutbox', () => {
 		expect(report.failed).toBe(0);
 		expect(await listOutbox()).toHaveLength(0);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(fetchMock.mock.calls[0][0]).toMatch(/^\/api\/jkai\/messages/);
+		expect(fetchMock.mock.calls[0][0]).toMatch(/^\/api\/workflows\/orchestrator\/chat/);
+		const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+		expect(sentBody).toMatchObject({
+			message: 'one',
+			conversationId: 'c1',
+			attachmentIds: [],
+			useIntelContext: false,
+		});
 	});
 
 	it('keeps entry and increments attempts on failure', async () => {
