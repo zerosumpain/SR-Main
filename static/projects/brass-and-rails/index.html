@@ -325,7 +325,9 @@
         <div class="legend" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;">
           <b style="color:var(--amber2)">Units</b> ⌂ Founder · ✦ Rambler (scout) · ♟ Quaker Guard · ▮ Skerne Pike · ⌐ Pit Pony ·
           ☷ Stephenson Gun · ⬢ Ironclad · ✈ Skylark · ◆ Night Mail · ⬛ Brick Colossus (super).
-          &nbsp; Capture every rival capital — or hold the highest score after 50 turns.
+          <br><b style="color:var(--amber2)">Win by</b> <b>Domination</b> (take every rival capital) ·
+          <b>Great Exhibition</b> (all tech + a deep science treasury) ·
+          <b>Railway Empire</b> (combined city levels) · or top <b>score</b> at turn 70.
         </div>
       </div>
     </div>
@@ -384,6 +386,9 @@ const MAP_SIZES = { small:20, medium:28, large:38, huge:46 };   // selectable bo
 const MIN_CITY_DIST = 10;          // target spacing between cities (clamped to board)
 function cityMinDist(){ return clamp(Math.round(N/3.5), 5, MIN_CITY_DIST); }
 const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
+const ALT_WIN_TURN = 50;            // alternative victories only open up late, after conquest's window
+const SCIENCE_WIN = 320;            // science banked AFTER all tech → host the Great Exhibition
+const ECON_WIN = 85;                // combined level of your cities → a railway empire
 
 const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:5, hp:10, atk:0, def:1, move:1, range:1, tech:null,        domain:'land', role:'settle', glyph:'⌂', desc:'Settles new villages on open land.'},
@@ -838,9 +843,10 @@ function colorMat(hex,opts={}){ return new THREE.MeshStandardMaterial({color:hex
 function initThree(){
   const stage=document.getElementById('stage');
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));   // the tilt-shift passes are per-pixel — cap DPR
   renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate=false;   // the sun is static — only recompute shadows when the board changes (per turn)
   renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
   stage.appendChild(renderer.domElement);
 
@@ -932,14 +938,14 @@ function buildStaticScene(){
   const trunkGeo=new THREE.CylinderGeometry(0.06,0.08,0.18,5);
   const rockGeo=new THREE.DodecahedronGeometry(0.22,0);
   const peakGeo=new THREE.ConeGeometry(0.46,0.9,5);
-  const matCache={};
-  const getMat=(hex)=>matCache[hex]||(matCache[hex]=colorMat(hex));
+  // Each tile gets its OWN material so per-tile recolouring (territory tint, fog) is correct.
+  // (Sharing one material per terrain made the whole terrain take the last tile's colour.)
   const treeMat=colorMat(0x3f7a3a), trunkMat=colorMat(0x6b4a2a), rockMat=colorMat(0x9a8f80), snowMat=colorMat(0xf2f2f5,{r:0.6});
 
   for(let z=0;z<N;z++)for(let x=0;x<N;x++){
     const t=tileAt(x,z); const def=TERRAIN[t.terrain];
     const h=def.h*HSCALE;
-    const mesh=new THREE.Mesh(boxGeo,getMat(def.color));
+    const mesh=new THREE.Mesh(boxGeo,colorMat(def.color));
     mesh.scale.y=h; mesh.position.set(wx(x),h/2,wz(z));
     mesh.receiveShadow=true; mesh.castShadow=false;
     mesh.userData={tx:x,tz:z,base:def.color};
@@ -973,8 +979,14 @@ function buildStaticScene(){
 }
 
 /* unit token meshes — stylised low-poly silhouettes */
+const _unitTpl={};
 function makeUnitMesh(u){
-  const t=u.type; const p=playerById(u.owner); const col=p?p.color:0xffffff;
+  const p=playerById(u.owner); const col=p?p.color:0xffffff;
+  const k=u.type+'|'+col;
+  let tpl=_unitTpl[k]; if(!tpl){ tpl=buildUnitTemplate(u.type,col); _unitTpl[k]=tpl; }
+  return tpl.clone(true);   // clones the hierarchy but SHARES geometry/material → no per-turn allocation
+}
+function buildUnitTemplate(t,col){
   const g=new THREE.Group();
   const body=colorMat(col,{r:0.55,m:0.15});
   const dark=colorMat(0x2a2218,{r:0.7});
@@ -1012,8 +1024,14 @@ function makeUnitMesh(u){
   return g;
 }
 
+const _cityTpl={};
 function makeCityMesh(c){
   const p=playerById(c.owner); const col=p?p.color:0x999999;
+  const k=col+'|'+c.level+'|'+(c.walls?1:0)+'|'+(c.isCapital?1:0);
+  let tpl=_cityTpl[k]; if(!tpl){ tpl=buildCityTemplate(c,col); _cityTpl[k]=tpl; }
+  return tpl.clone(true);
+}
+function buildCityTemplate(c,col){
   const g=new THREE.Group();
   const roof=colorMat(col,{r:.55}); const wall=colorMat(0xeaddc4,{r:.85});
   const stone=colorMat(0xcabfa6,{r:.9}); const dark=colorMat(0x3a2c1d); const brick=colorMat(0x9a5a3a,{r:.9});
@@ -1082,6 +1100,7 @@ function rebuildDynamic(){
     // health ring scale by hp
   }
   updateHighlights();
+  if(renderer) renderer.shadowMap.needsUpdate=true;   // board changed — refresh shadows once
 }
 
 function viewerPlayer(){
@@ -1132,6 +1151,7 @@ function reframeCamera(){
     if(sc.updateProjectionMatrix) sc.updateProjectionMatrix(); }
   if(scene&&scene.fog){ scene.fog.near=N*1.15; scene.fog.far=N*2.6; }
   if(controls) controls.target.set(0,0,0);
+  if(renderer) renderer.shadowMap.needsUpdate=true;
 }
 function homeCamera(){
   controls.target.set(0,0,0);
@@ -1144,12 +1164,11 @@ function homeCamera(){
 let lastT=0;
 function animate(t){
   requestAnimationFrame(animate);
-  const dt=(t-lastT)/1000||0; lastT=t;
-  controls.update();
-  // unit bob + water shimmer
+  controls.update();                       // keep damping responsive every frame
+  if(t-lastT < 33) return;                 // but only draw at ~30fps (turn-based — no need for 60)
+  lastT=t;
   const time=t*0.001;
   for(const m of bobUnits){ m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04; }
-  for(let i=0;i<waterMeshes.length;i++){ const w=waterMeshes[i]; w.material.emissive.setHSL(0.55,0.4,0.04+0.02*Math.sin(time*1.5+i)); }
   composer.render();
 }
 
@@ -1574,6 +1593,18 @@ function checkWin(){
   if(G.gameOver) return;
   const alive=G.players.filter(p=>p.alive);
   if(alive.length<=1){ endGame(alive[0]||null,'domination'); return; }
+  // Alternative paths — only once the mid-game has passed, so conquest stays primary but a
+  // defensive stalemate still resolves before the clock:
+  if(G.turn>ALT_WIN_TURN){
+    const nTech=Object.keys(TECHS).length;
+    for(const p of alive){
+      // Great Exhibition — total mastery of the Age of Steam
+      if(p.techs.size>=nTech && p.science>=SCIENCE_WIN){ endGame(p,'science'); return; }
+      // Railway Empire — overwhelming industrial might
+      let sumLvl=0; for(const c of G.cities){ if(c.owner===p.id) sumLvl+=c.level; }
+      if(sumLvl>=ECON_WIN){ endGame(p,'economy'); return; }
+    }
+  }
   if(G.turn>TURN_CAP){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); }
 }
 
@@ -1705,7 +1736,13 @@ function endGame(winner,kind){
   // show end modal
   const ranked=[...G.players].sort((a,b)=>score(b)-score(a));
   $('endTitle').innerHTML = winner? `${winner.name} <span style="color:var(--amber)">prevails</span>` : 'Stalemate';
-  $('endSub').textContent = kind==='domination'? 'Victory by domination — every rival capital has fallen.' : `Victory by score after ${TURN_CAP} turns.`;
+  const SUBS={
+    domination:'Victory by domination — every rival capital has fallen.',
+    science:'Victory by science — the Great Exhibition crowns the Age of Steam.',
+    economy:'Victory by industry — a railway empire of unrivalled wealth.',
+    score:`Victory by score after ${TURN_CAP} turns.`,
+  };
+  $('endSub').textContent = SUBS[kind]||SUBS.score;
   let h=''; ranked.forEach((p,i)=>{ h+=`<div class="rrow ${i===0?'win':''}"><div class="rk">${i+1}</div>
     <span class="dot" style="background:#${p.color.toString(16).padStart(6,'0')};width:12px;height:12px"></span>
     <div class="rn">${p.name}${p.isAI?'':' (you)'}</div><div class="rs">${score(p)} pts · ${G.cities.filter(c=>c.owner===p.id).length} cities</div></div>`; });
