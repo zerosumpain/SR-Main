@@ -157,3 +157,40 @@ export async function evictBuilds(): Promise<void> {
 	await tx.done;
 	db.close();
 }
+
+export async function putMessages(messages: MessageCacheRecord[]): Promise<void> {
+	if (messages.length === 0) return;
+	const db = await openJkaiDB();
+	const tx = db.transaction('messages', 'readwrite');
+	for (const m of messages) {
+		await tx.store.put(m);
+	}
+	await tx.done;
+	db.close();
+}
+
+export async function listMessages(conversationId: string): Promise<MessageCacheRecord[]> {
+	const db = await openJkaiDB();
+	const msgs = (await db.getAllFromIndex('messages', 'byConversation', conversationId)) as MessageCacheRecord[];
+	db.close();
+	return msgs.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export async function replaceMessagesForConversation(
+	conversationId: string,
+	messages: MessageCacheRecord[],
+): Promise<void> {
+	const db = await openJkaiDB();
+	const tx = db.transaction('messages', 'readwrite');
+	const idx = tx.store.index('byConversation');
+	let cursor = await idx.openCursor(IDBKeyRange.only(conversationId));
+	while (cursor) {
+		await cursor.delete();
+		cursor = await cursor.continue();
+	}
+	for (const m of messages) {
+		await tx.store.put(m);
+	}
+	await tx.done;
+	db.close();
+}
