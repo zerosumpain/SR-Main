@@ -3,6 +3,8 @@
   import { registerJkaiSW } from '$lib/jkai/pwa/register';
   import { startAutoSync } from '$lib/jkai/pwa/syncManager';
   import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
+  import PushOptInCard from '$lib/components/jkai/PushOptInCard.svelte';
+  import { PUBLIC_VAPID_PUBLIC_KEY } from '$env/static/public';
 
   let { children } = $props();
 
@@ -24,6 +26,7 @@
 
 <div class="jkai-root">
   <OfflineBanner />
+  <PushOptInCard vapidPublicKey={PUBLIC_VAPID_PUBLIC_KEY} />
   {@render children()}
 </div>
 
