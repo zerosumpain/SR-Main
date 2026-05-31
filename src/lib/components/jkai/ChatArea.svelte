@@ -113,8 +113,7 @@
     /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
      *  reloaded history, `new Date().toISOString()` stamped at the moment
      *  the message lands in the in-memory list for live turns). Used by
-     *  ChatMessage.svelte to render a per-bubble timestamp and inter-bubble
-     *  gaps so John can eyeball response latency. */
+     *  ChatMessage.svelte to render the hover-reveal per-bubble timestamp. */
     createdAt?: string;
     attachments?: Array<{
       id: string;
@@ -1580,7 +1579,6 @@
                 onSilentSend={msg.role === 'assistant' ? silentSend : undefined}
                 isLatest={msgIndex === lastAssistantMessageIndex}
                 createdAt={msg.createdAt}
-                prevCreatedAt={msgIndex > 0 ? messages[msgIndex - 1].createdAt : undefined}
                 queued={msg.queued === true}
               />
               {#if msg.attachments && msg.attachments.length > 0}

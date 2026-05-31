@@ -17,7 +17,6 @@
     approvalUi,
     isLatest = false,
     createdAt,
-    prevCreatedAt,
     queued = false,
   }: {
     role: 'user' | 'assistant' | 'system';
@@ -37,13 +36,8 @@
     approvalUi?: ApprovalUiSettings;
     isLatest?: boolean;
     /** ISO timestamp the bubble was created. Drives the "10:42:13" wall-clock
-     *  mark rendered under each bubble. */
+     *  mark that fades in under each bubble on hover. */
     createdAt?: string;
-    /** ISO timestamp of the bubble immediately before this one in the
-     *  thread. Used to render an "↳ Xs after" gap so John can eyeball
-     *  response latency between consecutive bubbles without doing the
-     *  subtraction in his head. */
-    prevCreatedAt?: string;
     /** True when the bubble represents a message that was queued offline by
      *  the outbox (`$lib/jkai/pwa/outbox`) rather than POSTed live. Drives
      *  the inline "queued" badge so John can see at a glance that the
@@ -63,26 +57,7 @@
     });
   }
 
-  function formatGap(prev: string | undefined, curr: string | undefined): string {
-    if (!prev || !curr) return '';
-    const a = new Date(prev).getTime();
-    const b = new Date(curr).getTime();
-    if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return '';
-    const ms = b - a;
-    if (ms < 1000) return `+${ms}ms`;
-    if (ms < 60_000) return `+${(ms / 1000).toFixed(1)}s`;
-    if (ms < 3_600_000) {
-      const m = Math.floor(ms / 60_000);
-      const s = Math.round((ms % 60_000) / 1000);
-      return s > 0 ? `+${m}m ${s}s` : `+${m}m`;
-    }
-    const h = Math.floor(ms / 3_600_000);
-    const m = Math.round((ms % 3_600_000) / 60_000);
-    return m > 0 ? `+${h}h ${m}m` : `+${h}h`;
-  }
-
   let clockTime = $derived(formatClockTime(createdAt));
-  let gap = $derived(formatGap(prevCreatedAt, createdAt));
 
   const marked = new Marked({ gfm: true, breaks: true });
 
@@ -115,6 +90,10 @@
   let thinkingOpen = $state(true);
   let hasThinking = $derived(thinking && thinking.steps && thinking.steps.length > 0);
   let heartbeat = $derived(metadata?.heartbeat ?? null);
+  // User messages and heartbeat-sourced messages keep their distinct card
+  // treatment; ordinary assistant replies render bubbleless as open prose so
+  // long markdown can breathe at full reading width.
+  let bubbled = $derived(isUser || !!heartbeat);
   let isHeartbeatTrigger = $derived(heartbeat?.kind === 'user-trigger');
   let heartbeatLabel = $derived.by(() => {
     if (!heartbeat) return '';
@@ -125,16 +104,14 @@
   });
 </script>
 
-<div class="flex flex-col {isUser ? 'items-end' : 'items-start'} mb-3">
+<div class="msg-row flex flex-col {isUser ? 'items-end' : bubbled ? 'items-start' : 'items-stretch'} mb-3">
   <div
-    class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
+    class="text-sm {bubbled ? 'max-w-[85%] rounded-lg px-3 py-2' : 'msg-plain w-full'}"
     class:hb-msg={!!heartbeat}
     class:hb-msg-trigger={isHeartbeatTrigger}
-    style="
-      background: {isUser ? 'var(--accent)' : 'var(--card-bg)'};
-      color: {isUser ? 'white' : 'var(--text-primary)'};
-      border: {isUser ? 'none' : '1px solid var(--card-border)'};
-    "
+    style={bubbled
+      ? `background: ${isUser ? 'var(--accent)' : 'var(--card-bg)'}; color: ${isUser ? 'white' : 'var(--text-primary)'}; border: ${isUser ? 'none' : '1px solid var(--card-border)'};`
+      : 'color: var(--text-primary);'}
   >
     {#if heartbeat}
       <div class="hb-badge">
@@ -183,7 +160,6 @@
   {#if clockTime || queued}
     <div class="msg-timestamp">
       {#if clockTime}<span class="ts-clock">{clockTime}</span>{/if}
-      {#if gap}<span class="ts-gap" title="Time since the previous bubble">{gap}</span>{/if}
       {#if queued}
         <QueuedMessageBadge />
       {/if}
@@ -193,7 +169,7 @@
 
 <style>
   .msg-timestamp {
-    margin-top: 4px;
+    margin-top: 3px;
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text-ghost);
@@ -202,11 +178,23 @@
     align-items: center;
     line-height: 1;
   }
+  /* Wall-clock mark is quiet by default and fades in when the row is hovered,
+     so it stays available for reference without cluttering the thread. */
   .ts-clock {
     letter-spacing: 0.04em;
+    opacity: 0;
+    transition: opacity 0.15s ease;
   }
-  .ts-gap {
-    opacity: 0.7;
+  .msg-row:hover .ts-clock,
+  .msg-row:focus-within .ts-clock {
+    opacity: 0.55;
+  }
+  /* Bubbleless assistant prose: no fill/border, just open text at full
+     reading width with a hair of horizontal padding to align its optical
+     left edge with the user bubble above it. */
+  .msg-plain {
+    padding: 2px 2px 0;
+    line-height: 1.5;
   }
   .chat-markdown :global(p) {
     margin: 0 0 0.5em;
