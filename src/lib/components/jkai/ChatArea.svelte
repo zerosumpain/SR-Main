@@ -1601,7 +1601,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="p-2 sm:p-4 border-t relative"
-      style="border-color: var(--card-border);"
+      style="border-color: var(--card-border); padding-bottom: max(1.25rem, env(safe-area-inset-bottom));"
       ondragenter={(e) => { e.preventDefault(); dragOver = true; }}
       ondragover={(e) => e.preventDefault()}
       ondragleave={() => { dragOver = false; }}
