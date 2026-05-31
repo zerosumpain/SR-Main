@@ -4297,8 +4297,8 @@
         <div
           class="nm-inline"
           class:nm-inline--mobile={isMobile}
-          style:left="{menuNode.x * zoom + panX - 18}px"
-          style:top="{menuNode.y * zoom + panY - 18}px"
+          style:left="{(menuNode.x - 18) * zoom + panX}px"
+          style:top="{(menuNode.y - 18) * zoom + panY}px"
           role="dialog"
           aria-label="Node inspector"
         >
