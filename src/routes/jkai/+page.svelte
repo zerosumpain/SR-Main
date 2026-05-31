@@ -241,11 +241,11 @@
         class="sm:hidden fixed inset-0 z-40"
         onclick={() => { sidebarOpen = false; }}
       >
-        <div class="absolute inset-0" style="background: rgba(0,0,0,0.4);"></div>
+        <div class="absolute inset-0" style="background: var(--bg);"></div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="absolute left-0 top-0 bottom-0 flex"
-          style="background: var(--bg); width: min(85vw, 18rem);"
+          style="background: var(--bg); width: min(85vw, 18rem); box-shadow: 2px 0 8px rgba(0,0,0,0.08);"
           onclick={(e) => e.stopPropagation()}
         >
           <ConversationSidebar
