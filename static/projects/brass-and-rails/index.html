@@ -608,7 +608,7 @@ function setupGame(cfg){
   G.tiles=generateMap(cfg.seed);
   G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
   G.gameOver=false; G.winner=null; G.sel=null; G.selCity=null; G.uid=1; G.cid=1;
-  G.scoreHist=[]; G._histTurn=0;
+  G.scoreHist=[]; G._histTurn=0; G._clash={}; G._cap={};
   G.observer = cfg.mode==='auto';
   G.nameBag = shuffle(PLACE_NAMES.slice());
 
@@ -874,11 +874,13 @@ function predictCombat(att,def){
   const retaliation = (!kills && melee)? defDmg : 0;
   return {atkDmg,defDmg:retaliation,kills,melee,selfDies: retaliation>=att.hp};
 }
+function recRel(store,a,b){ if(a===b||a==null||b==null) return; store[a]=store[a]||{}; store[a][b]=(store[a][b]||0)+1; }
 function resolveCombat(att,def){
   const pc=predictCombat(att,def);
   def.hp-=pc.atkDmg;
   att.hasAttacked=true;
   const ap=playerById(att.owner); ap.stats.attacks++;
+  recRel(G._clash, att.owner, def.owner);   // who attacks whom (per-pair history)
   // a "bad attack" = struck but neither killed the foe nor traded up
   if(!pc.kills && pc.defDmg>=pc.atkDmg) ap.stats.badAttacks++;
   let captured=false, deadName=null;
@@ -897,7 +899,7 @@ function killUnit(u){ u.hp=0; const i=G.units.indexOf(u); if(i>=0) G.units.splic
 /* ----- capture city ----- */
 function captureCity(p,c){
   const prev=playerById(c.owner);
-  if(prev) logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`);
+  if(prev){ logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`); recRel(G._cap, p.id, prev.id); }   // who takes whose cities
   c.owner=p.id; tileAt(c.x,c.z).owner=p.id; c.walls=false;
   if(c.isCapital){ c.isCapital=false; if(prev) prev.capitalId=null; }
   for(const [nx,nz] of neigh8(c.x,c.z)){const nt=tileAt(nx,nz); if(!nt.city) nt.owner=p.id;}
@@ -1612,7 +1614,7 @@ const LESSONS = {
   boldOffense:   {type:'pattern', label:'Strike decisively', desc:'Winners pressed the attack and took capitals fast.',
     mitigation:'Commits to offensives earlier and accepts keener odds.'},
 };
-function freshKnowledge(){ const k={version:2,games:0,factions:{},lessons:{},unitStats:{},profiles:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
+function freshKnowledge(){ const k={version:2,games:0,factions:{},lessons:{},unitStats:{},profiles:{},rels:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
 function loadKnowledge(){
   try{ const raw=localStorage.getItem('brassrails.ai.v1'); knowledge = raw? JSON.parse(raw): freshKnowledge(); }
   catch(e){ knowledge=freshKnowledge(); }
@@ -1621,6 +1623,17 @@ function loadKnowledge(){
   if(!knowledge.factions) knowledge.factions={};
   if(!knowledge.unitStats) knowledge.unitStats={};   // per-unit usage/outcome tally
   if(!knowledge.profiles) knowledge.profiles={};      // observed per-rival behaviour profiles
+  if(!knowledge.rels) knowledge.rels={};              // directed per-pair history A->B {clashes,caps,games}
+}
+function relOf(a,b){ return (knowledge.rels[a]&&knowledge.rels[a][b])||{clashes:0,caps:0,games:0}; }
+// A's directed read of B: B's dominant observed trait + A's stance toward B from their shared history
+function pairStance(aFid,bFid){
+  const bp=knowledge.profiles[bFid]; const rab=relOf(aFid,bFid), rba=relOf(bFid,aFid);
+  const engage=rab.clashes+rba.clashes, caps=rab.caps, lost=rba.caps;
+  let trait='unscouted';
+  if(bp&&bp.games){ trait=[['aggressive',bp.aggr],['expansive',bp.expand],['scholarly',bp.tech],['defensive',bp.def]].sort((x,y)=>y[1]-x[1])[0][0]; }
+  let stance = (caps||lost)?'at war' : engage>=3?'rival' : (bp&&bp.aggr>0.6)?'wary' : (bp&&bp.def<0.45)?'prey' : 'neutral';
+  return {trait,stance,engage,caps,lost};
 }
 function unitStat(t){ return knowledge.unitStats[t]||(knowledge.unitStats[t]={built:0,winBuilt:0,lossBuilt:0}); }
 function rivalProfile(fid){ return knowledge.profiles[fid]||{games:0,aggr:0.5,expand:0.5,tech:0.5,def:0.5}; }
@@ -1900,6 +1913,11 @@ function recordGameResult(winner, kind){
     pr.aggr=lerp(pr.aggr,obsAggr,a); pr.expand=lerp(pr.expand,obsExpand,a); pr.tech=lerp(pr.tech,obsTech,a); pr.def=lerp(pr.def,obsDef,a);
     pr.games++;
   }
+  // ---- directed per-pair relationship history (A's record against B) ----
+  for(const a of G.players) for(const b of G.players){ if(a.id===b.id) continue;
+    const rel=(knowledge.rels[a.id]=knowledge.rels[a.id]||{}); const r=(rel[b.id]=rel[b.id]||{clashes:0,caps:0,games:0});
+    r.games++; r.clashes+=(G._clash[a.id]&&G._clash[a.id][b.id])||0; r.caps+=(G._cap[a.id]&&G._cap[a.id][b.id])||0;
+  }
   // ---- learn the WINNER's patterns (what worked) ----
   const ws=winner.stats||{};
   let wLevels=0, wCities=0; for(const c of G.cities){ if(c.owner===winner.id){ wLevels+=c.level; wCities++; } }
@@ -2156,6 +2174,22 @@ function renderDossier(){
     if(rp&&rp.games){
       const pct=v=>Math.round(v*100); const dom=[['aggressive',rp.aggr],['expansive',rp.expand],['scholarly',rp.tech],['defensive',rp.def]].sort((a,b)=>b[1]-a[1]);
       h+=`<div class="desc" style="margin-top:4px"><b style="color:var(--teal)">Rivals read it as —</b> ${dom[0][0]} (${pct(dom[0][1])}%), ${dom[1][0]} (${pct(dom[1][1])}%) · over ${rp.games} game(s). Soft empires get raided first.</div>`;
+    }
+    // this house's view of every other house (per-pair: trait read + stance + shared history)
+    const others=(G.started?G.players.map(p=>p.id):FACTIONS.map(f=>f.id)).filter(x=>x!==fid);
+    if(others.length){
+      h+=`<div class="desc" style="margin-top:6px"><b style="color:var(--amber2)">Views on rivals —</b></div>`;
+      for(const bid of others){ const bf=FACTIONS.find(f=>f.id===bid); if(!bf) continue; const st=pairStance(fid,bid);
+        const c2='#'+bf.color.toString(16).padStart(6,'0');
+        const sc=st.stance==='at war'?'#f0998e':st.stance==='rival'?'#e8a13a':st.stance==='prey'?'var(--good,#7bc06b)':st.stance==='wary'?'#e8c06b':'var(--muted)';
+        h+=`<div style="display:flex;align-items:center;gap:6px;font-size:10px;font-family:'JetBrains Mono';margin:2px 0 0 4px">
+          <span style="width:8px;height:8px;border-radius:2px;background:${c2};flex:none"></span>
+          <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${bf.name}</span>
+          <span style="color:var(--faint)">${st.trait}</span>
+          <span style="color:${sc};width:52px;text-align:right">${st.stance}</span>
+          <span style="color:var(--faint);width:60px;text-align:right">${st.engage?st.engage+'⚔':''}${(st.caps||st.lost)?` ${st.caps}/${st.lost}⌂`:''}</span>
+        </div>`;
+      }
     }
     h+=`</div>`;
   }
