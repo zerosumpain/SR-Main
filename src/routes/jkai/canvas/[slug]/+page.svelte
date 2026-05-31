@@ -1853,11 +1853,9 @@
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
     if (isInteractiveTarget(e.target)) return;
-    // On mobile, hand touch input over to the browser so native pinch-zoom
-    // works. setPointerCapture() on the first touch otherwise prevents the
-    // browser from seeing the second finger and disables pinch entirely.
-    // Pan still works on mobile via the native browser scroll/pan that
-    // touch-action: manipulation allows.
+    // Touch on mobile is handled by the touch handlers below (single-finger
+    // pan + two-finger pinch). Skip the pointer-based pan so the two
+    // systems don't both try to pan at once.
     if (isMobile && e.pointerType === 'touch') return;
     selectedId = null;
     selectedEdgeId = null;
@@ -2194,16 +2192,58 @@
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let longPressStart: { x: number; y: number } | null = null;
 
+  // Touch pan + pinch state (mobile only). Single-finger drag pans the
+  // canvas; two-finger pinch zooms (around the pinch midpoint). Set on
+  // touchstart, updated on touchmove, cleared on touchend.
+  let touchPan: { startX: number; startY: number; panX0: number; panY0: number } | null = null;
+  let pinch: {
+    dist0: number;
+    midX0: number;
+    midY0: number;
+    worldX: number;
+    worldY: number;
+    zoom0: number;
+  } | null = null;
+
+  function pinchDistance(t1: Touch, t2: Touch): number {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  }
+
   function onViewportTouchStart(e: TouchEvent) {
+    // Mobile: dedicated touch handlers manage pan + pinch directly.
+    if (isMobile) {
+      if (e.touches.length >= 2) {
+        // Pinch start — record initial distance + midpoint + the world
+        // coord under the midpoint so we can keep that point under the
+        // fingers as zoom changes.
+        const [t1, t2] = [e.touches[0], e.touches[1]];
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+        const world = screenToWorld(midX, midY);
+        pinch = {
+          dist0: pinchDistance(t1, t2),
+          midX0: midX,
+          midY0: midY,
+          worldX: world.x,
+          worldY: world.y,
+          zoom0: zoom,
+        };
+        touchPan = null; // pinch supersedes pan
+        return;
+      }
+      // Single finger: pan from this point.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('.chat-node, .wf-node')) return;
+      const t = e.touches[0];
+      if (!t) return;
+      touchPan = { startX: t.clientX, startY: t.clientY, panX0: panX, panY0: panY };
+      return;
+    }
+
+    // Desktop: original long-press-to-add behaviour.
     if (!NEW_PALETTE) return;
     if (paletteOpen) return;
-    // Multi-touch (pinch) — let the browser handle pinch-zoom; don't arm
-    // the long-press add-node timer. Fixes the gesture conflict where any
-    // brief pause during a pinch opens the node palette.
     if (e.touches.length > 1) return;
-    // Mobile is inspect/chat/light-edit only per the design — no add-node
-    // gesture. Authoring happens at desktop.
-    if (isMobile) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.chat-node, .wf-node')) return;
     const t = e.touches[0];
@@ -2227,9 +2267,36 @@
     };
   });
   function onViewportTouchMove(e: TouchEvent) {
+    // Mobile: handle pan + pinch via touch directly.
+    if (isMobile) {
+      // Pinch in progress: update zoom + pan to keep the world point that
+      // was under the initial midpoint under the current midpoint.
+      if (pinch && e.touches.length >= 2) {
+        e.preventDefault(); // stop the browser from also pinch-zooming the page
+        const [t1, t2] = [e.touches[0], e.touches[1]];
+        const dist1 = pinchDistance(t1, t2);
+        const midX1 = (t1.clientX + t2.clientX) / 2;
+        const midY1 = (t1.clientY + t2.clientY) / 2;
+        const ratio = dist1 / pinch.dist0;
+        // Clamp zoom to a sensible range.
+        const z1 = Math.max(0.1, Math.min(4, pinch.zoom0 * ratio));
+        zoom = z1;
+        panX = midX1 - pinch.worldX * z1;
+        panY = midY1 - pinch.worldY * z1;
+        return;
+      }
+      // Single-finger pan.
+      if (touchPan && e.touches.length === 1) {
+        e.preventDefault();
+        const t = e.touches[0];
+        panX = touchPan.panX0 + (t.clientX - touchPan.startX);
+        panY = touchPan.panY0 + (t.clientY - touchPan.startY);
+      }
+      return;
+    }
+
+    // Desktop: original long-press tracker.
     if (!longPressStart) return;
-    // A second finger landed mid-press — that's a pinch starting. Cancel
-    // the pending palette-open timer and let the browser handle pinch-zoom.
     if (e.touches.length > 1) {
       if (longPressTimer) clearTimeout(longPressTimer);
       longPressTimer = null;
@@ -2244,7 +2311,23 @@
       longPressStart = null;
     }
   }
-  function onViewportTouchEnd() {
+  function onViewportTouchEnd(e: TouchEvent) {
+    // Mobile: clear pinch / pan state. If a pinch drops to one finger,
+    // optionally restart pan from the remaining finger so transitions are
+    // smooth — for now just clear (simpler).
+    if (isMobile) {
+      if (e.touches.length === 0) {
+        touchPan = null;
+        pinch = null;
+      } else if (e.touches.length === 1) {
+        // Coming out of pinch with one finger left — start a fresh pan
+        // anchor at the remaining finger to avoid a jump.
+        pinch = null;
+        const t = e.touches[0];
+        touchPan = { startX: t.clientX, startY: t.clientY, panX0: panX, panY0: panY };
+      }
+      return;
+    }
     if (longPressTimer) clearTimeout(longPressTimer);
     longPressTimer = null;
     longPressStart = null;
@@ -4183,13 +4266,15 @@
         </div>
       {/if}
 
-      <!-- Mobile-only backdrop behind the inspector sheet -->
+      <!-- Mobile-only backdrop behind the inspector sheet. Portalled to
+           body so it escapes the canvas's pan/zoom transform. -->
       {#if menuNode && isMobile}
         <button
           class="nm-mobile-backdrop"
           type="button"
           aria-label="Close inspector"
           onclick={closeMenu}
+          use:portal={'body'}
         ></button>
       {/if}
 
@@ -4197,6 +4282,7 @@
       {#if menuNode}
         <div
           class="nm-inline"
+          class:nm-inline--mobile={isMobile}
           style:left="{menuNode.x - 18}px"
           style:top="{menuNode.y - 18}px"
           role="dialog"
@@ -7621,25 +7707,30 @@
   }
 
   /* ── Mobile mode (viewport <=768px) ──────────────────────────────── */
+  /* touch-action: none stays on .viewport (desktop default) so our touch
+   * handlers manage single-finger pan + two-finger pinch directly — keeps
+   * pinch scoped to canvas content rather than zooming the whole page. */
 
-  /* Let the browser handle pinch-zoom + native pan on mobile. The .viewport
-   * sets `touch-action: none` by default (so we can implement our own pan),
-   * but on mobile we trade canvas-pan for native pinch which is the higher
-   * priority for inspection. */
-  .canvas--mobile .viewport {
-    touch-action: manipulation !important;
+  /* Debug pill: rendered as a conditional element when isMobile. */
+  .mobile-debug-pill {
+    position: fixed;
+    top: 4px;
+    right: 4px;
+    z-index: 9999;
+    font: 600 11px / 1 system-ui, sans-serif;
+    background: #2c8a3f;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0.9;
   }
 
-  /* CSS-only morph of the inline node inspector into a bottom-sheet.
-   * Triggered by the .canvas--mobile class on .page-shell (driven by the
-   * useIsMobile reactive helper). The nm-inline div is normally
-   * absolute-positioned at the node's screen coordinates; on mobile we
-   * pin it to the bottom edge, full width, with a slide-up animation. */
-
-  .canvas--mobile :global(.nm-inline) {
+  /* Inspector-as-bottom-sheet. The .nm-inline--mobile class is on the
+   * element (added when isMobile) — this works regardless of where the
+   * element lives in the DOM after the portal action moves it to body. */
+  :global(.nm-inline--mobile) {
     position: fixed !important;
-    /* longhand !important wins against inline style:left/style:top on the
-     * .nm-inline div (shorthand inset can lose to longhand inline styles). */
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
@@ -7656,28 +7747,7 @@
     z-index: 1001 !important;
     transform: none !important;
   }
-
-  /* Debug pill: rendered as a real conditional element below (cleaner than
-   * CSS pseudo-element on body, which can't be targeted via a parent
-   * class). Remove the element + this rule once mobile UX is stable. */
-  .mobile-debug-pill {
-    position: fixed;
-    top: 4px;
-    right: 4px;
-    z-index: 9999;
-    font: 600 11px / 1 system-ui, sans-serif;
-    background: #2c8a3f;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 3px;
-    pointer-events: none;
-    opacity: 0.9;
-  }
-
-  /* Drag-handle visual at the top of the sheet (purely decorative — the
-   * existing ✕ button in the header is what dismisses; backdrop click
-   * also dismisses via the .nm-mobile-backdrop element). */
-  .canvas--mobile :global(.nm-inline::before) {
+  :global(.nm-inline--mobile::before) {
     content: '';
     display: block;
     width: 40px;
@@ -7687,16 +7757,15 @@
     margin: 8px auto 4px;
     flex: 0 0 auto;
   }
-
-  /* Inspector body scrolls when content overflows. */
-  .canvas--mobile :global(.nm-inline-body) {
+  :global(.nm-inline--mobile .nm-inline-body) {
     overflow-y: auto !important;
     flex: 1 1 auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Backdrop: dims the canvas behind the sheet; tap to dismiss. */
-  .nm-mobile-backdrop {
+  /* Backdrop: dims the rest of the screen behind the sheet. Portalled to
+   * body so it escapes the canvas transform too. */
+  :global(.nm-mobile-backdrop) {
     position: fixed;
     inset: 0;
     z-index: 1000;
