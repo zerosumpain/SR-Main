@@ -285,8 +285,10 @@
         <div class="field">
           <span class="label">Map size</span>
           <div class="chip-row" id="mapRow">
-            <div class="chip on" data-map="limited">Skirmish — limited (~50 spaces)</div>
-            <div class="chip" data-map="unlimited">Frontier — unlimited (sprawling)</div>
+            <div class="chip" data-map="small">Small · 20×20</div>
+            <div class="chip on" data-map="medium">Medium · 28×28</div>
+            <div class="chip" data-map="large">Large · 38×38</div>
+            <div class="chip" data-map="huge">Huge · 46×46</div>
           </div>
         </div>
 
@@ -378,8 +380,10 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 /* ----------------------------- 1. DATA ----------------------------------- */
 let N = 32;                         // grid size (set per map-size mode)
 let FR = 20;                        // camera ortho half-frustum (scaled to board)
-const MAP_SIZES = { limited:10, unlimited:40 };   // ~50-tile skirmish vs sprawling frontier
-const TURN_CAP = 50;                // score victory after this many full turns
+const MAP_SIZES = { small:20, medium:28, large:38, huge:46 };   // selectable board sizes
+const MIN_CITY_DIST = 10;          // target spacing between cities (clamped to board)
+function cityMinDist(){ return clamp(Math.round(N/3.5), 5, MIN_CITY_DIST); }
+const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
 
 const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:5, hp:10, atk:0, def:1, move:1, range:1, tech:null,        domain:'land', role:'settle', glyph:'⌂', desc:'Settles new villages on open land.'},
@@ -518,8 +522,8 @@ function defaultGenome(){
 
 function setupGame(cfg){
   G.seed=cfg.seed; G.mode=cfg.mode; G.marathon=cfg.marathon;
-  G.mapSize = cfg.mapSize || 'limited';
-  N = MAP_SIZES[G.mapSize] || 32;
+  G.mapSize = cfg.mapSize || 'medium';
+  N = MAP_SIZES[G.mapSize] || 28;
   G.tiles=generateMap(cfg.seed);
   G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
   G.gameOver=false; G.winner=null; G.sel=null; G.selCity=null; G.uid=1; G.cid=1;
@@ -741,17 +745,21 @@ function attackTargets(u){
   return out;
 }
 function isHidden(u,viewerId){
-  // Full-visibility rule: the whole map and every unit is always visible to all.
-  return false;
+  if(UNIT_TYPES[u.type].role!=='stealth') return false;
+  if(viewerId==null) return false;
+  // Night Mail stays hidden unless one of the viewer's units/cities is adjacent
+  for(const x of G.units){ if(x.owner===viewerId && x.hp>0 && cheb(x.x,x.z,u.x,u.z)<=1) return false; }
+  for(const c of G.cities){ if(c.owner===viewerId && cheb(c.x,c.z,u.x,u.z)<=1) return false; }
+  return true;
 }
 
 /* ----- combat (Polytopia damage model) ----- */
 function defenseBonus(u){
   const t=tileAt(u.x,u.z); let b=1;
-  if(t.terrain==='hill'||t.terrain==='forest') b=1.5;
-  if(t.terrain==='mountain') b=1.6;
+  if(t.terrain==='hill'||t.terrain==='forest') b=1.4;
+  if(t.terrain==='mountain') b=1.5;
   const c=cityAt(u.x,u.z);
-  if(c && c.owner===u.owner){ b=Math.max(b, c.walls?2:1.4); }
+  if(c && c.owner===u.owner){ b=Math.max(b, c.walls?1.5:1.25); }   // cities are defensible but not impregnable
   const p=playerById(u.owner);
   if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=1.25;
   return b;
@@ -1041,24 +1049,31 @@ function makeCityMesh(c){
 let bobUnits=[];
 function rebuildDynamic(){
   dynGroup.clear(); bobUnits=[];
-  // Full visibility: every tile is shown; tint only by territory owner.
+  // Fog of war: in a campaign we render from the human's explored set; an AI-vs-AI
+  // observer game reveals everything (you're watching all houses).
+  const viewer = (G.mode==='campaign')? viewerPlayer() : null;
+  const fog = !!viewer;
   for(const mesh of tilePickMeshes){
     const {tx,tz,base}=mesh.userData;
+    const seen = !fog || viewer.explored.has(key(tx,tz));
     const t=tileAt(tx,tz);
     const c=new THREE.Color(base);
-    if(t.owner){ const op=playerById(t.owner); if(op){ const oc=new THREE.Color(op.color); c.lerp(oc,0.16);} }
+    if(!seen){ c.multiplyScalar(0.16); c.offsetHSL(0,-0.45,-0.02); }
+    else if(t.owner){ const op=playerById(t.owner); if(op){ const oc=new THREE.Color(op.color); c.lerp(oc,0.16);} }
     mesh.material.color.copy(c);
-    mesh.userData.visible=true;
+    mesh.userData.visible=seen;
   }
-  for(const d of decoMeshes){ d.o.visible = true; }
+  for(const d of decoMeshes){ d.o.visible = !fog || viewer.explored.has(key(d.tx,d.tz)); }
   // cities
   for(const c of G.cities){
+    if(fog && !viewer.explored.has(key(c.x,c.z))) continue;
     const m=makeCityMesh(c); const h=TERRAIN[tileAt(c.x,c.z).terrain].h*HSCALE;
     m.position.set(wx(c.x),h,wz(c.z)); m.userData={kind:'city',ref:c}; dynGroup.add(m);
   }
   // units
   for(const u of G.units){
     if(u.hp<=0) continue;
+    if(fog){ if(!viewer.explored.has(key(u.x,u.z))) continue; if(u.owner!==viewer.id && isHidden(u,viewer.id)) continue; }
     const m=makeUnitMesh(u); const h=TERRAIN[tileAt(u.x,u.z).terrain].h*HSCALE;
     m.position.set(wx(u.x),h,wz(u.z)); m.userData={kind:'unit',ref:u};
     const fly = UNIT_TYPES[u.type].domain==='air';
@@ -1142,7 +1157,8 @@ function animate(t){
 function canFoundHere(u,x,z){
   if(UNIT_TYPES[u.type].role!=='settle') return false;
   const t=tileAt(x,z); if(t.city) return false; if(TERRAIN[t.terrain].pass!=='land') return false;
-  for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<=1) return false; }
+  const md=cityMinDist();
+  for(const c of G.cities){ if(cheb(c.x,c.z,x,z) < md) return false; }
   return true;
 }
 
@@ -1344,7 +1360,7 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts){
   if(!buildCity) return null;
   // keep standing armies bounded — otherwise the AI just spams units and never commits.
   // Beyond the cap we bank brass for tech/expansion instead.
-  const armyCap = myCities.length*3 + 2;
+  const armyCap = myCities.length*4 + 3;
   const atCap = army.length >= armyCap;
   const avail=(tid)=>{ const d=UNIT_TYPES[tid]; return (!d.tech||p.techs.has(d.tech)); };
   const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(tid==='rambler'&&p.faction.bonus==='explore') c=Math.max(1,c-1); return c; };
@@ -1385,20 +1401,47 @@ function aiActUnit(p,u,riskGate,thoughts){
     return;
   }
   if(role==='scout'){ aiExplore(p,u); return; }
-  // military: evaluate attacks
-  const target=aiPickAttack(p,u,riskGate,thoughts);
-  if(target){
-    // move adjacent if needed (within range), then strike
-    const rng=UNIT_TYPES[u.type].range;
-    if(cheb(u.x,u.z,target.x,target.z)>rng){
-      const adj=aiStepTowardForAttack(u,target,rng);
-    }
-    if(cheb(u.x,u.z,target.x,target.z)<=rng && !u.hasAttacked){ resolveCombat(u,target); checkWin(); return; }
-  }
-  // no good attack — advance toward nearest enemy city/frontier, or guard capital
   const g=p.genome;
-  if(rnd()<0.35+0.5*g.aggression){ const tgt=nearestEnemyCity(p,u)||nearestEnemyUnit(p,u); if(tgt) aiStepToward(u,tgt.x,tgt.z); }
-  else { const cap=G.cities.find(c=>c.id===p.capitalId); if(cap) aiStepToward(u,cap.x,cap.z); }
+  // 1. SEIZE: if an undefended enemy/neutral city is reachable this turn, take it
+  const grab=reachableEmptyEnemyCity(u);
+  if(grab){ aiStepToward(u,grab.x,grab.z); thoughts.push(`seizing ${grab.name}!`); if(cityAt(u.x,u.z)===grab){ checkWin(); return; } }
+  // 2. attack if the odds clear the (relaxed-vs-cities) gate
+  const target=aiPickAttack(p,u,riskGate,thoughts);
+  if(target && !u.hasAttacked){
+    const rng=UNIT_TYPES[u.type].range;
+    if(cheb(u.x,u.z,target.x,target.z)>rng) aiStepTowardForAttack(u,target,rng);
+    if(cheb(u.x,u.z,target.x,target.z)<=rng){
+      resolveCombat(u,target); checkWin(); if(G.gameOver) return;
+      const grab2=reachableEmptyEnemyCity(u); if(grab2) aiStepToward(u,grab2.x,grab2.z);  // walk into the city we just cleared
+      return;
+    }
+  }
+  // 3. besiege the nearest enemy city. Keep only ONE defender home (the closest unit)
+  //    when the capital is actually threatened — everyone else presses the attack.
+  const enemyCity=nearestEnemyCity(p,u);
+  const cap=G.cities.find(c=>c.id===p.capitalId);
+  let defend=false;
+  if(cap && capUnderThreat(p)){
+    let closest=null,cd=1e9;
+    for(const f of G.units){ if(f.owner===p.id && f.hp>0 && UNIT_TYPES[f.type].atk>0){ const d=cheb(f.x,f.z,cap.x,cap.z); if(d<cd){cd=d;closest=f;} } }
+    if(closest===u) defend=true;
+  }
+  if(defend && cap){ aiStepToward(u,cap.x,cap.z); thoughts.push('hold the capital'); }
+  else if(enemyCity){ aiStepToward(u,enemyCity.x,enemyCity.z); thoughts.push('march on '+enemyCity.name); }
+  else if(cap){ aiStepToward(u,cap.x,cap.z); }
+}
+// an empty (capturable) enemy/neutral city whose tile we can step onto this turn
+function reachableEmptyEnemyCity(u){
+  if(u.movesLeft<=0) return null;
+  const reach=reachable(u); let best=null,bd=1e9;
+  for(const c of G.cities){ if(c.owner===u.owner) continue;
+    if(reach.set.has(key(c.x,c.z))){ const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } }
+  return best;
+}
+function capUnderThreat(p){
+  const cap=G.cities.find(c=>c.id===p.capitalId); if(!cap) return false;
+  for(const e of G.units){ if(e.owner!==p.id && e.hp>0 && UNIT_TYPES[e.type].atk>0 && cheb(e.x,e.z,cap.x,cap.z)<=3) return true; }
+  return false;
 }
 
 function aiPickAttack(p,u,riskGate,thoughts){
@@ -1417,16 +1460,20 @@ function aiPickAttack(p,u,riskGate,thoughts){
     // win probability proxy: did we kill, or trade favourably?
     const ratio = pc.atkDmg/Math.max(1,e.hp);
     let score = ratio + (pc.kills?0.6:0) - (pc.selfDies?1.2:0) - (pc.defDmg/Math.max(1,u.hp))*0.6;
-    // capturing a city behind the target is a bonus
-    const onCity=cityAt(e.x,e.z); if(onCity&&onCity.owner!==p.id) score+=0.3;
+    // breaking the garrison that holds an enemy city is a high priority (opens it for capture)
+    const onCity=cityAt(e.x,e.z); const enemyCityHere = !!(onCity&&onCity.owner!==p.id);
+    if(enemyCityHere) score+=0.9;
     const odds = clamp(ratio*0.8 + (pc.kills?0.4:0) - (pc.defDmg/Math.max(1,u.hp))*0.5, 0, 1);
-    candidates.push({e,score,odds,pc});
+    candidates.push({e,score,odds,pc,enemyCityHere});
   }
   candidates.sort((a,b)=>b.score-a.score);
   const best=candidates[0];
   if(!best) return null;
-  if(best.odds < riskGate){
-    thoughts.push(`declined attack — ${Math.round(best.odds*100)}% < ${Math.round(riskGate*100)}% caution gate (lesson: avoid low-odds attacks)`);
+  // A garrison must be ground down: attack a unit holding an enemy city almost regardless of
+  // odds (stacked besiegers wear it out, then a follow-up unit walks into the cleared tile).
+  const gate = best.enemyCityHere ? 0.02 : riskGate;
+  if(best.odds < gate){
+    thoughts.push(`declined attack — ${Math.round(best.odds*100)}% < ${Math.round(gate*100)}% caution gate (lesson: avoid low-odds attacks)`);
     return null;
   }
   thoughts.push(`attack ${UNIT_TYPES[best.e.type].name} @ ${Math.round(best.odds*100)}% odds`);
@@ -1459,11 +1506,12 @@ function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ 
 function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
 function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
 function findSettleSpot(p,u){
-  // search nearby reachable-ish land away from existing cities with resources
+  // search nearby land that respects the minimum spacing, favouring resources
+  const md=cityMinDist(); const W=md+3;
   let best=null,bs=-1;
-  for(let z=Math.max(0,u.z-6);z<Math.min(N,u.z+7);z++)for(let x=Math.max(0,u.x-6);x<Math.min(N,u.x+7);x++){
+  for(let z=Math.max(0,u.z-W);z<Math.min(N,u.z+W+1);z++)for(let x=Math.max(0,u.x-W);x<Math.min(N,u.x+W+1);x++){
     const t=tileAt(x,z); if(TERRAIN[t.terrain].pass!=='land'||t.city) continue;
-    let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<=1){ok=false;break;} } if(!ok) continue;
+    let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z) < md){ok=false;break;} } if(!ok) continue;
     let res=0; for(const [nx,nz] of neigh8(x,z)) if(tileAt(nx,nz).resource) res++;
     const s=res*2 - cheb(u.x,u.z,x,z)*0.3 + rnd();
     if(s>bs){bs=s;best=[x,z];}
@@ -1673,7 +1721,7 @@ function endGame(winner,kind){
 }
 
 /* ---- setup modal wiring ---- */
-let cfg={count:4, mode:'campaign', faction:'kelly', seed:1825, marathon:false, mapSize:'limited'};
+let cfg={count:4, mode:'campaign', faction:'kelly', seed:1825, marathon:false, mapSize:'medium'};
 function buildSetupUI(){
   const cr=$('countRow'); cr.innerHTML='';
   for(let n=2;n<=8;n++){ const c=document.createElement('div'); c.className='chip'+(n===cfg.count?' on':''); c.textContent=n; c.onclick=()=>{cfg.count=n;syncSetup();}; cr.appendChild(c); }
