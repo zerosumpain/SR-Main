@@ -1062,6 +1062,20 @@
     }
   }
 
+  // Starter prompts shown on the empty-state hero. Clicking one drops it into
+  // the composer and sends immediately — a one-tap way to discover what jkai
+  // can do instead of staring at a blank thread.
+  const EXAMPLE_PROMPTS = [
+    { icon: '🏠', label: 'Check the house', text: 'Give me a quick status of my home — is everything secure, and is anything off or needing attention?' },
+    { icon: '💓', label: "Today's health", text: 'Summarise my health data for today — sleep, recovery and strain.' },
+    { icon: '⚡', label: "What's running?", text: 'What workflows and scheduled tasks do I have running right now?' },
+    { icon: '✨', label: 'What can you do?', text: 'What can you help me with? Give me a short tour of your capabilities.' },
+  ];
+  function usePrompt(text: string) {
+    input = text;
+    void send();
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading || !conversationId) return;
@@ -1276,11 +1290,20 @@
         </p>
       </div>
     {:else if messages.length === 0}
-      <div class="flex items-center justify-center h-full">
-        <div class="text-center max-w-md">
-          <p class="text-sm mb-2" style="color: var(--text-ghost);">
-            Ask me anything — control your smart home, check health data, manage blog posts, start builds, or create workflows.
+      <div class="flex items-center justify-center h-full px-4">
+        <div class="hero">
+          <h1 class="hero-title">What can I help with?</h1>
+          <p class="hero-sub">
+            Control your smart home, check health data, manage blog posts, start builds, or create workflows — just ask.
           </p>
+          <div class="hero-chips">
+            {#each EXAMPLE_PROMPTS as p (p.label)}
+              <button type="button" class="hero-chip" onclick={() => usePrompt(p.text)}>
+                <span class="hero-chip-icon" aria-hidden="true">{p.icon}</span>
+                {p.label}
+              </button>
+            {/each}
+          </div>
         </div>
       </div>
     {:else}
@@ -1672,6 +1695,60 @@
    * for potential future spacing/positioning tweaks; the line itself
    * styles its own margins. */
   .hb-wrap { margin-bottom: 0.75rem; }
+
+  /* Empty-state hero — a centred greeting + tappable starter prompts shown on
+   * a fresh conversation. The composer stays docked at the bottom; clicking a
+   * chip sends its prompt and the hero gives way to the thread. */
+  .hero {
+    text-align: center;
+    max-width: 34rem;
+    animation: hero-in 0.3s ease both;
+  }
+  @keyframes hero-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 5vw, 2rem);
+    line-height: 1.1;
+    color: var(--text-primary);
+    margin: 0 0 0.6rem;
+  }
+  .hero-sub {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-ghost);
+    margin: 0 auto 1.5rem;
+    max-width: 28rem;
+  }
+  .hero-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  .hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 14px;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+  .hero-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .hero-chip-icon { font-size: 13px; }
 
   /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
   .reasoning-panel {
