@@ -1,5 +1,6 @@
-import { publishJobEvent, createWaiter } from './job-store';
+import { publishJobEvent, createWaiter, getJob } from './job-store';
 import type { PlanPayload } from './job-store';
+import { notifyAllSubscribers } from '$lib/server/push';
 
 const PLAN_RE = /<plan>([\s\S]*?)<\/plan>/;
 
@@ -38,6 +39,17 @@ export async function awaitPlanApproval(
 ): Promise<{ decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }> {
   const planId = crypto.randomUUID();
   publishJobEvent(jobId, { type: 'plan', planId, plan });
+  try {
+    const conversationId = getJob(jobId)?.scope.conversationId ?? null;
+    const summary = plan.summary?.trim() || `Plan with ${plan.steps.length} step(s) ready for review`;
+    void notifyAllSubscribers({
+      title: 'Approval needed',
+      body: summary.slice(0, 200),
+      url: conversationId ? `/jkai?c=${conversationId}` : '/jkai',
+    }).catch((e) => console.warn('[jkai-pwa] approval push failed', e));
+  } catch (e) {
+    console.warn('[jkai-pwa] approval push failed', e);
+  }
   const { awaitResponse } = createWaiter<{ decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }>(
     jobId,
     `plan:${planId}`,

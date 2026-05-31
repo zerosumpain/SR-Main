@@ -1,5 +1,6 @@
-import { publishJobEvent, createWaiter } from './job-store';
+import { publishJobEvent, createWaiter, getJob } from './job-store';
 import type { ClarifyQuestion } from './job-store';
+import { notifyAllSubscribers } from '$lib/server/push';
 
 const CLARIFY_RE = /<clarify>([\s\S]*?)<\/clarify>/;
 
@@ -28,6 +29,18 @@ export async function awaitClarifyAnswers(
 ): Promise<{ answers: Record<string, string> }> {
   const clarifyId = crypto.randomUUID();
   publishJobEvent(jobId, { type: 'clarify', clarifyId, questions });
+  try {
+    const conversationId = getJob(jobId)?.scope.conversationId ?? null;
+    const first = questions[0]?.text ?? '';
+    const extra = questions.length > 1 ? ` (+${questions.length - 1} more)` : '';
+    void notifyAllSubscribers({
+      title: 'Clarification needed',
+      body: `${first}${extra}`.slice(0, 200),
+      url: conversationId ? `/jkai?c=${conversationId}` : '/jkai',
+    }).catch((e) => console.warn('[jkai-pwa] approval push failed', e));
+  } catch (e) {
+    console.warn('[jkai-pwa] approval push failed', e);
+  }
   const { awaitResponse } = createWaiter<{ answers: Record<string, string> }>(
     jobId,
     `clarify:${clarifyId}`,

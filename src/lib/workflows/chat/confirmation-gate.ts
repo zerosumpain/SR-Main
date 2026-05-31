@@ -1,4 +1,5 @@
-import { publishJobEvent, createWaiter } from './job-store';
+import { publishJobEvent, createWaiter, getJob } from './job-store';
+import { notifyAllSubscribers } from '$lib/server/push';
 
 /** Tool names that must ask the user before running. */
 export const DESTRUCTIVE_TOOLS: ReadonlySet<string> = new Set([
@@ -50,6 +51,16 @@ export async function requireConfirmation(
     destructive: opts.destructive ?? true,
     details,
   });
+  try {
+    const conversationId = getJob(jobId)?.scope.conversationId ?? null;
+    void notifyAllSubscribers({
+      title: 'Confirmation needed',
+      body: prompt.slice(0, 200),
+      url: conversationId ? `/jkai?c=${conversationId}` : '/jkai',
+    }).catch((e) => console.warn('[jkai-pwa] approval push failed', e));
+  } catch (e) {
+    console.warn('[jkai-pwa] approval push failed', e);
+  }
   const { awaitResponse } = createWaiter<{ decision: 'approved' | 'rejected' }>(
     jobId,
     `confirm:${confirmId}`,
