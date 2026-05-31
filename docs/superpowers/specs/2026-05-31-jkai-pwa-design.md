@@ -158,7 +158,7 @@ Returns a `SyncReport` `{flushed, failed, refreshed, durationMs}` for telemetry 
 ## Push notifications
 
 ### Schema (Drizzle)
-Add to `src/lib/server/db/schema.ts`:
+Add to `src/lib/db/schema.ts`:
 
 ```ts
 export const pushSubscriptions = pgTable('push_subscriptions', {
@@ -313,11 +313,11 @@ Documented checklist in spec § Acceptance below; cannot be automated.
 - `vite.config.ts` — add `SvelteKitPWA(...)`. Note `manifestFilename` / `filename` option names vary between `@vite-pwa/sveltekit` releases; confirm against the installed version before wiring.
 - `package.json` — add `@vite-pwa/sveltekit`, `vite-plugin-pwa`, `workbox-window`, `idb`, `web-push`, `@types/web-push`.
 - `.env` (and `.env.example`) — `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `PUSH_TEST_KEY`.
-- `src/lib/server/db/schema.ts` — `pushSubscriptions` table.
+- `src/lib/db/schema.ts` — `pushSubscriptions` table.
 - `src/routes/jkai/+layout.svelte` — manifest, SW register, banner, opt-in card.
 - `src/routes/jkai/+page.svelte` — DraftsPanel, outbox-aware send.
 - `src/routes/jkai/builds/+page.svelte` and `[id]/+page.svelte` — IndexedDB-first read.
-- `src/lib/components/jkai/ChatArea.svelte` / `MessageBubble.svelte` — queued state rendering.
+- `src/lib/components/jkai/ChatArea.svelte` / `ChatMessage.svelte` — queued state rendering.
 - Wire `notifyUser` into:
   - jkai-builder completion handler (sidecar event handler in main app).
   - Orchestrator approval-gate emit path.
