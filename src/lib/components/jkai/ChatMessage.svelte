@@ -2,6 +2,7 @@
   import { Marked } from 'marked';
   import ThinkingTimeline from './ThinkingTimeline.svelte';
   import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
+  import QueuedMessageBadge from './QueuedMessageBadge.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
@@ -17,6 +18,7 @@
     isLatest = false,
     createdAt,
     prevCreatedAt,
+    queued = false,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -42,6 +44,11 @@
      *  response latency between consecutive bubbles without doing the
      *  subtraction in his head. */
     prevCreatedAt?: string;
+    /** True when the bubble represents a message that was queued offline by
+     *  the outbox (`$lib/jkai/pwa/outbox`) rather than POSTed live. Drives
+     *  the inline "queued" badge so John can see at a glance that the
+     *  message hasn't actually been sent to the server yet. */
+    queued?: boolean;
   } = $props();
 
   function formatClockTime(iso: string | undefined): string {
@@ -173,10 +180,13 @@
       </div>
     {/if}
   </div>
-  {#if clockTime}
+  {#if clockTime || queued}
     <div class="msg-timestamp">
-      <span class="ts-clock">{clockTime}</span>
+      {#if clockTime}<span class="ts-clock">{clockTime}</span>{/if}
       {#if gap}<span class="ts-gap" title="Time since the previous bubble">{gap}</span>{/if}
+      {#if queued}
+        <QueuedMessageBadge />
+      {/if}
     </div>
   {/if}
 </div>

@@ -20,6 +20,7 @@
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
+  import { enqueueMessage } from '$lib/jkai/pwa/outbox';
   import { onMount, tick } from 'svelte';
 
   let {
@@ -123,6 +124,12 @@
       sizeBytes: number;
       source: 'web' | 'whatsapp' | 'generated';
     }>;
+    /** True when this user bubble represents a message that was queued via
+     *  the offline outbox (`$lib/jkai/pwa/outbox`) instead of POSTed live —
+     *  drives the "queued" badge on the bubble. The PWA sync manager flushes
+     *  the outbox in the background and the next conversation reload will
+     *  replace the bubble with the persisted server row (no queued flag). */
+    queued?: boolean;
   }
 
   function artifactsForMessage(m: Message): ArtifactT[] {
@@ -1096,8 +1103,9 @@
       .map(a => ({ id: a.id, kind: a.kind as any, mimeType: a.mimeType, originalName: a.originalName, sizeBytes: a.sizeBytes, source: 'web' as const }));
     pendingAttachments = [];
 
+    const userMsgId = crypto.randomUUID();
     const userMsg: Message = {
-      id: crypto.randomUUID(),
+      id: userMsgId,
       role: 'user',
       content: text,
       source: 'web',
@@ -1106,6 +1114,23 @@
     };
     messages = [...messages, userMsg];
     scrollToBottom();
+
+    // Offline short-circuit: if the browser reports it's offline, skip the
+    // POST entirely, enqueue via the PWA outbox, and mark the user bubble
+    // queued so the badge renders. The sync manager will flush the outbox
+    // once connectivity returns; no progress bubble / SSE stream because
+    // there's no server-side job to stream from yet.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      try {
+        await enqueueMessage(conversationId, text, attachmentIds.length > 0 ? attachmentIds : undefined);
+      } catch (err) {
+        console.warn('[ChatArea] offline enqueue failed:', err);
+      }
+      messages = messages.map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
+      loading = false;
+      scrollToBottom();
+      return;
+    }
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
@@ -1156,10 +1181,31 @@
         chatStream = null;
       }
     } catch (err) {
+      // Network-level failure (fetch threw, e.g. lost connectivity between
+      // the onLine check above and the POST, or a transient DNS/TLS error)
+      // OR a non-2xx server response. Fall back to the outbox so the user's
+      // message isn't lost. Drop the in-flight progress bubble and mark the
+      // user bubble queued so it gets the badge.
       const errMsg = err instanceof Error ? err.message : String(err);
-      messages = messages.map((m) =>
-        m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
-      );
+      const isNetworkError = err instanceof TypeError; // `fetch` throws TypeError on network failure
+      if (isNetworkError) {
+        try {
+          await enqueueMessage(conversationId, text, attachmentIds.length > 0 ? attachmentIds : undefined);
+          messages = messages
+            .filter((m) => m.id !== progressId)
+            .map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
+          pendingTtft.delete(progressId);
+        } catch (enqErr) {
+          console.warn('[ChatArea] fallback enqueue failed:', enqErr);
+          messages = messages.map((m) =>
+            m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
+          );
+        }
+      } else {
+        messages = messages.map((m) =>
+          m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
+        );
+      }
     }
 
     loading = false;
@@ -1535,6 +1581,7 @@
                 isLatest={msgIndex === lastAssistantMessageIndex}
                 createdAt={msg.createdAt}
                 prevCreatedAt={msgIndex > 0 ? messages[msgIndex - 1].createdAt : undefined}
+                queued={msg.queued === true}
               />
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />
