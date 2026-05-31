@@ -8,16 +8,44 @@
  * The canvas page applies `transform: translate(panX,panY) scale(zoom)`
  * on the world layer, so any modal rendered as a child of a node lands
  * inside that transform without a portal.
+ *
+ * Pass `false` to disable the portal (no-op). Useful for responsive
+ * cases like mobile mode where we want portaling on phones but the
+ * element stays in place on desktop. Toggling at runtime (via the
+ * action's `update`) restores to the original parent.
  */
-export function portal(node: HTMLElement, target: HTMLElement | string = 'body') {
-  function mount(t: HTMLElement | string) {
+export type PortalTarget = HTMLElement | string | false;
+
+export function portal(node: HTMLElement, target: PortalTarget = 'body') {
+  const originalParent = node.parentNode;
+  const originalNextSibling = node.nextSibling;
+
+  function applyTarget(t: PortalTarget) {
+    if (t === false) {
+      // Restore to original parent at original position.
+      if (originalParent && originalParent.isConnected) {
+        if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
+          originalParent.insertBefore(node, originalNextSibling);
+        } else {
+          originalParent.appendChild(node);
+        }
+      }
+      return;
+    }
     const el = typeof t === 'string' ? document.querySelector(t) : t;
     if (!el) return;
-    el.appendChild(node);
+    if (node.parentNode !== el) el.appendChild(node);
   }
-  mount(target);
+
+  applyTarget(target);
   return {
-    update(next: HTMLElement | string) { mount(next); },
-    destroy() { node.remove(); },
+    update(next: PortalTarget) { applyTarget(next); },
+    destroy() {
+      // Restore to original parent so Svelte can unmount cleanly (it expects
+      // to find the node where it created it).
+      if (originalParent && originalParent.isConnected && node.parentNode !== originalParent) {
+        originalParent.appendChild(node);
+      }
+    },
   };
 }

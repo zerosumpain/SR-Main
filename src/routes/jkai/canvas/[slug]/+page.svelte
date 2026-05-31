@@ -6,6 +6,7 @@
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
+  import { portal } from '$lib/canvas/portal';
   import type { Execution as InspectorExecution } from '$lib/canvas/InspectorHistory.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TimeFilter from '$lib/canvas/stats/TimeFilter.svelte';
@@ -1852,6 +1853,12 @@
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
     if (isInteractiveTarget(e.target)) return;
+    // On mobile, hand touch input over to the browser so native pinch-zoom
+    // works. setPointerCapture() on the first touch otherwise prevents the
+    // browser from seeing the second finger and disables pinch entirely.
+    // Pan still works on mobile via the native browser scroll/pan that
+    // touch-action: manipulation allows.
+    if (isMobile && e.pointerType === 'touch') return;
     selectedId = null;
     selectedEdgeId = null;
     // Intentionally do NOT clear menuForNodeId here — the inline config menu
@@ -4194,6 +4201,7 @@
           style:top="{menuNode.y - 18}px"
           role="dialog"
           aria-label="Node inspector"
+          use:portal={isMobile ? 'body' : false}
         >
           <div class="nm-inline-hdr">
             <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
@@ -7613,6 +7621,15 @@
   }
 
   /* ── Mobile mode (viewport <=768px) ──────────────────────────────── */
+
+  /* Let the browser handle pinch-zoom + native pan on mobile. The .viewport
+   * sets `touch-action: none` by default (so we can implement our own pan),
+   * but on mobile we trade canvas-pan for native pinch which is the higher
+   * priority for inspection. */
+  .canvas--mobile .viewport {
+    touch-action: manipulation !important;
+  }
+
   /* CSS-only morph of the inline node inspector into a bottom-sheet.
    * Triggered by the .canvas--mobile class on .page-shell (driven by the
    * useIsMobile reactive helper). The nm-inline div is normally
