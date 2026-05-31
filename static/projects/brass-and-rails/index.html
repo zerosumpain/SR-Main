@@ -46,6 +46,7 @@
   #hud{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;gap:18px;
     padding:10px 16px;background:linear-gradient(180deg,rgba(21,17,12,.96),rgba(21,17,12,.72) 70%,transparent);
     pointer-events:none;}
+  .turn-pill{margin-left:auto;}
   #hud > *{pointer-events:auto;}
   .monogram{font-family:'DM Mono',monospace;font-weight:500;font-size:22px;color:var(--amber);
     border:2px solid var(--amber);border-radius:7px;padding:2px 9px 4px;line-height:1;transform:skewX(-7deg);
@@ -53,10 +54,16 @@
   .title-wrap{display:flex;flex-direction:column;gap:1px;}
   .title-wrap h1{font-size:16px;line-height:1;}
   .title-wrap .sub{font-size:9.5px;}
-  .hud-spacer{flex:1;}
-  .stat{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 12px;border-left:1px solid var(--line);}
-  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;line-height:1;}
-  .stat .v small{font-weight:400;font-size:10px;color:var(--muted);}
+  /* stats are absolutely centred so they never shift when the player name length changes */
+  .hud-stats{position:absolute;left:50%;top:8px;transform:translateX(-50%);display:flex;align-items:stretch;
+    background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line2);border-radius:10px;
+    box-shadow:var(--shadow);overflow:hidden;}
+  .stat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:7px 16px;border-left:1px solid var(--line);}
+  .stat:first-child{border-left:0;}
+  .stat .label{font-size:9px;}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;line-height:1;color:var(--ink);}
+  .stat .v small{font-weight:500;font-size:11px;color:var(--amber2);}
+  @media(max-width:1080px){ .hud-stats{position:static;transform:none;margin:0 auto;} .stat{padding:5px 9px;} .stat .v{font-size:16px;} }
   .turn-pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);
     border-radius:999px;padding:5px 6px 5px 14px;box-shadow:var(--shadow);}
   .turn-pill .who{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;}
@@ -217,13 +224,14 @@
       <h1>BRASS &amp; RAILS</h1>
       <div class="sub label">An Empire of the Skerne</div>
     </div>
-    <div class="hud-spacer"></div>
-    <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
-    <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
-    <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
-    <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
-    <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
-    <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
+    <div class="hud-stats">
+      <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
+      <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
+      <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
+      <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
+      <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
+      <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
+    </div>
     <div class="turn-pill">
       <span class="dot" id="hudDot"></span>
       <span class="who" id="hudWho">—</span>
@@ -236,6 +244,14 @@
       <div class="panel-h"><h3 id="selTitle">Selection</h3><span class="label" id="selSub"></span></div>
       <div class="panel-b" id="selBody">
         <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>city</b> to build units. Cities grow on their own from the land around them.</div>
+      </div>
+    </div>
+    <div class="panel hidden" id="scorePanel">
+      <div class="panel-h"><h3>AI Scoreboard</h3><span class="label" id="scoreTurn"></span></div>
+      <div class="panel-b">
+        <div class="chip-row" id="domainRow" style="margin-bottom:9px;gap:5px;"></div>
+        <div id="scoreChart"></div>
+        <div id="scoreLegend" style="margin-top:8px;"></div>
       </div>
     </div>
   </div>
@@ -592,6 +608,7 @@ function setupGame(cfg){
   G.tiles=generateMap(cfg.seed);
   G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
   G.gameOver=false; G.winner=null; G.sel=null; G.selCity=null; G.uid=1; G.cid=1;
+  G.scoreHist=[]; G._histTurn=0;
   G.observer = cfg.mode==='auto';
   G.nameBag = shuffle(PLACE_NAMES.slice());
 
@@ -631,6 +648,10 @@ function setupGame(cfg){
   // apply faction passive: rovers cheaper rambler handled at build; vision handled in reveal radius
   recomputeIncome();
   G.started=true;
+  // mode-specific panels: scoreboard for AI-vs-AI, selection for campaign
+  const auto = G.mode==='auto';
+  if(typeof document!=='undefined'){ const sp=document.getElementById('scorePanel'), sel=document.getElementById('selPanel');
+    if(sp) sp.classList.toggle('hidden', !auto); if(sel) sel.classList.toggle('hidden', auto); }
   buildStaticScene();
   reframeCamera();
   rebuildDynamic();
@@ -930,7 +951,7 @@ function initThree(){
 
   controls=new OrbitControls(camera,renderer.domElement);
   controls.enableDamping=true; controls.dampingFactor=.08;
-  controls.minZoom=0.55; controls.maxZoom=3.2;
+  controls.minZoom=0.55; controls.maxZoom=6.0;
   controls.maxPolarAngle=Math.PI*0.46; controls.minPolarAngle=Math.PI*0.12;
   controls.target.set(0,0,0);
 
@@ -1308,27 +1329,43 @@ function homeCamera(){
 }
 
 const panKeys=new Set();
-function applyPan(){
-  if(!panKeys.size || !controls || !camera) return;
+let panV=null, panRamp=0, lastPanT=0;
+// Silky WASD / arrow panning: eases in from a slow start, accelerates gently while held,
+// then glides to a halt on release. Frame-rate independent (uses real dt).
+function applyPan(t){
+  const moving = panKeys.size>0;
+  if(!moving && (!panV || panV.lengthSq()<1e-6)){ panRamp=0; lastPanT=t; return false; }
+  if(!controls||!camera) return false;
+  let dt=(t-lastPanT)/1000; lastPanT=t; if(!(dt>0)||dt>0.12) dt=0.016;
+  if(!panV) panV=new THREE.Vector3();
   const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); fwd.y=0;
-  if(fwd.lengthSq()<1e-6) fwd.set(0,0,-1);
-  fwd.normalize();
+  if(fwd.lengthSq()<1e-6) fwd.set(0,0,-1); fwd.normalize();
   const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion); right.y=0; right.normalize();
-  const mv=new THREE.Vector3();
-  if(panKeys.has('up')) mv.add(fwd);
-  if(panKeys.has('down')) mv.addScaledVector(fwd,-1);
-  if(panKeys.has('right')) mv.add(right);
-  if(panKeys.has('left')) mv.addScaledVector(right,-1);
-  if(mv.lengthSq()===0) return;
-  mv.normalize().multiplyScalar(FR*0.035);   // pan speed scales with zoom-out
-  camera.position.add(mv); controls.target.add(mv);
+  const dir=new THREE.Vector3();
+  if(panKeys.has('up')) dir.add(fwd);
+  if(panKeys.has('down')) dir.addScaledVector(fwd,-1);
+  if(panKeys.has('right')) dir.add(right);
+  if(panKeys.has('left')) dir.addScaledVector(right,-1);
+  let target;
+  if(moving && dir.lengthSq()>0){
+    dir.normalize();
+    panRamp=Math.min(1, panRamp + dt/1.3);              // ~1.3s to reach full speed
+    const start=FR*0.16, max=FR*1.25;                   // slow start → brisk cruise, scales with zoom
+    target=dir.multiplyScalar(start + (max-start)*panRamp*panRamp);   // ease-in acceleration
+  } else { panRamp=0; target=new THREE.Vector3(); }       // released → ease to a halt
+  const a = 1 - Math.exp(-dt*(target.lengthSq()>0?6.5:9));  // exponential smoothing (silk + glide-out)
+  panV.x += (target.x-panV.x)*a; panV.z += (target.z-panV.z)*a;
+  if(panV.lengthSq()<2e-4 && !moving){ panV.set(0,0,0); return false; }
+  camera.position.x += panV.x*dt; camera.position.z += panV.z*dt;
+  controls.target.x += panV.x*dt; controls.target.z += panV.z*dt;
+  return true;
 }
 let lastT=0;
 function animate(t){
   requestAnimationFrame(animate);
-  applyPan();                              // WASD / arrow-key panning
+  const panning = applyPan(t);             // WASD / arrow-key panning
   controls.update();                       // keep damping responsive every frame
-  if(t-lastT < 33) return;                 // but only draw at ~30fps (turn-based — no need for 60)
+  if(!panning && t-lastT < 33) return;     // render every frame while panning (silky); else cap ~30fps
   lastT=t;
   const time=t*0.001;
   for(const m of bobUnits){ m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04; }
@@ -1870,6 +1907,7 @@ function advance(){
   // skip dead players
   let safety=0;
   while(!currentPlayer().alive && safety++<G.players.length) nextIndex();
+  if(G.turn!==G._histTurn){ G._histTurn=G.turn; recordScoreSnapshot(); }   // one scoreboard sample per turn
   const p=currentPlayer();
   startTurnFor(p);
   refreshHUD();
@@ -1970,7 +2008,7 @@ function refreshBrain(){
   if(p&&p.isAI&&p.lastThought){ h+=`<div class="label" style="margin:12px 0 6px">Now thinking — ${p.name}</div><div class="desc">${p.lastThought}</div>`; }
   $('brainBody').innerHTML=h;
 }
-function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); if(!$('dossier').classList.contains('hidden')) renderDossier(); }
+function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); if(!$('dossier').classList.contains('hidden')) renderDossier(); if(G.mode==='auto') renderScoreChart(); }
 
 /* full AI dossier — capabilities (genomes) + what it learned (lessons) + how it counters */
 function renderDossier(){
@@ -2105,6 +2143,56 @@ $('btnAuto').onclick=()=>{ autoplay=!autoplay; $('btnAuto').textContent=autoplay
 $('speedSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ speed=b.dataset.sp; $('speedSeg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); if(speed!=='step'&&G.mode==='auto'&&!G.gameOver){ if(autoTimer)clearTimeout(autoTimer); advance(); } });
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+/* ---- AI scoreboard: per-player domain values tracked over time + line chart ---- */
+const DOMAINS = {
+  score:    {label:'Score',    fn:p=>score(p)},
+  economy:  {label:'Economy',  fn:p=>{ let s=0; for(const c of G.cities) if(c.owner===p.id) s+=c.level; return Math.round(s + (p.prodIncome||0)); }},
+  military: {label:'Military', fn:p=>{ let s=0; for(const u of G.units) if(u.owner===p.id&&u.hp>0) s+=unitValue(UNIT_TYPES[u.type]); return Math.round(s); }},
+  science:  {label:'Science',  fn:p=>Math.round(p.techs.size*8 + (p.sciIncome||0))},
+  cities:   {label:'Cities',   fn:p=>G.cities.filter(c=>c.owner===p.id).length},
+};
+let scoreDomain='score';
+function recordScoreSnapshot(){
+  const snap={turn:G.turn, v:{}};
+  for(const p of G.players){ const o={}; for(const k in DOMAINS) o[k]=DOMAINS[k].fn(p); snap.v[p.id]=o; }
+  G.scoreHist.push(snap);
+  if(G.scoreHist.length>140) G.scoreHist.shift();
+}
+function renderScoreChart(){
+  if(G.mode!=='auto'){ return; }
+  $('scoreTurn').textContent=`turn ${G.turn}`;
+  // domain selector chips
+  $('domainRow').innerHTML=Object.entries(DOMAINS).map(([k,d])=>`<div class="chip ${k===scoreDomain?'on':''}" data-dom="${k}" style="padding:5px 9px;font-size:10px">${d.label}</div>`).join('');
+  $('domainRow').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{ scoreDomain=c.dataset.dom; renderScoreChart(); });
+  const H=G.scoreHist; const W=252, HT=128, pad=4;
+  if(H.length<2){ $('scoreChart').innerHTML=`<div class="legend" style="height:${HT}px;display:grid;place-items:center">gathering data…</div>`; }
+  else {
+    let max=1; for(const s of H) for(const p of G.players){ const val=s.v[p.id]?.[scoreDomain]||0; if(val>max)max=val; }
+    const t0=H[0].turn, t1=H[H.length-1].turn||t0+1; const span=Math.max(1,t1-t0);
+    const xx=t=>pad+ (t-t0)/span*(W-2*pad);
+    const yy=v=>HT-pad - v/max*(HT-2*pad);
+    let svg=`<svg viewBox="0 0 ${W} ${HT}" width="100%" style="display:block;background:var(--bg-base,#16110b);border:1px solid var(--line);border-radius:7px">`;
+    // gridlines
+    for(let i=0;i<=2;i++){ const gy=pad+i*(HT-2*pad)/2; svg+=`<line x1="${pad}" y1="${gy}" x2="${W-pad}" y2="${gy}" stroke="#3a3025" stroke-width="0.5"/>`; }
+    for(const p of G.players){
+      const col='#'+p.color.toString(16).padStart(6,'0');
+      const pts=H.map(s=>`${xx(s.turn).toFixed(1)},${yy(s.v[p.id]?.[scoreDomain]||0).toFixed(1)}`).join(' ');
+      svg+=`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="${p.alive?2:1}" stroke-opacity="${p.alive?1:0.35}" stroke-linejoin="round"/>`;
+    }
+    svg+=`<text x="${pad}" y="11" fill="var(--muted)" font-size="9" font-family="monospace">${max}</text></svg>`;
+    $('scoreChart').innerHTML=svg;
+  }
+  // legend with current values, sorted desc
+  const cur=H.length?H[H.length-1].v:{};
+  const rows=G.players.map(p=>({p,val:cur[p.id]?.[scoreDomain]||0})).sort((a,b)=>b.val-a.val);
+  $('scoreLegend').innerHTML=rows.map(({p,val})=>{
+    const col='#'+p.color.toString(16).padStart(6,'0');
+    return `<div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-family:'JetBrains Mono';margin-bottom:3px;opacity:${p.alive?1:0.45}">
+      <span style="width:9px;height:9px;border-radius:2px;background:${col};flex:none"></span>
+      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${p.alive?'':' ✝'}</span>
+      <b style="color:var(--ink)">${val}</b></div>`;
+  }).join('');
+}
 // rough "power" rating of a unit, used by the roster table and the balance check
 function unitValue(d){
   return d.atk*1.1 + d.def*1.0 + d.hp*0.16 + d.move*0.9 + (d.range-1)*0.9
