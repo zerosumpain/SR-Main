@@ -139,7 +139,7 @@
   .barseg > i{display:block;height:100%;}
 
   /* log */
-  #log{position:fixed;left:14px;bottom:14px;width:280px;max-height:200px;z-index:25;overflow:hidden;display:flex;flex-direction:column;}
+  #log{position:fixed;left:14px;bottom:14px;width:min(560px,44vw);max-height:200px;z-index:25;overflow:hidden;display:flex;flex-direction:column;}
   #logbody{overflow-y:auto;padding:8px 12px;font-family:'JetBrains Mono';font-size:10.5px;line-height:1.5;}
   .logline{margin-bottom:3px;}
   .tag{display:inline-block;font-weight:700;border-radius:3px;padding:0 4px;margin-right:5px;font-size:9px;}
@@ -258,9 +258,9 @@
 
   <!-- RIGHT: tech + brain -->
   <div id="rightcol" class="hidden">
-    <div class="panel">
-      <div class="panel-h"><h3>Tech — Age of Steam</h3><span class="label" id="techHint"></span></div>
-      <div class="panel-b" id="techBody"></div>
+    <div class="panel" id="techPanel">
+      <div class="panel-h" id="techHead" style="cursor:pointer"><h3>Tech — Age of Steam</h3><span class="label"><span id="techHint"></span> <span id="techChevron">▸</span></span></div>
+      <div class="panel-b hidden" id="techBody"></div>
     </div>
     <div class="panel" id="braincol">
       <div class="panel-h"><h3>AI Brain</h3><span class="label" id="brainGames">0 games</span></div>
@@ -492,10 +492,10 @@ const TECHS = {
 };
 
 const FACTIONS = [
-  {id:'kelly',     name:'House Kelly',            color:0xe8a13a, motto:'Founders of the line',        bonus:'econ',    bonusTxt:'+1 ⚒ & +1 🔬/turn'},
+  {id:'kelly',     name:'House Kelly',            color:0xe8a13a, motto:'Founders of the line',        bonus:'econ',    bonusTxt:'+1 ⚒ & +1 🔬 per city'},
   {id:'pease',     name:'Pease Quakers',          color:0x4caf6e, motto:'Faith & finance',             bonus:'tech',    bonusTxt:'science −25%'},
   {id:'stephenson',name:'Stephenson Enginewrights',color:0xd64b3f, motto:'Steam & steel',               bonus:'move',    bonusTxt:'+1 move'},
-  {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+1 food/city'},
+  {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+2 food/city, +1 vision'},
   {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+25% hill/mtn def'},
   {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+15% attack'},
   {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −20%'},
@@ -631,7 +631,7 @@ function setupGame(cfg){
       id:f.id, idx:i, faction:f, name:f.name, color:f.color, isAI:!human, alive:true,
       prod: 5, science: 3, wood: 0, prodIncome:0, sciIncome:0, techs:new Set(), explored:new Set(),
       genome: human? defaultGenome() : {...fk.genome},
-      stats:{founded:0,attacks:0,badAttacks:0,kills:0,lossesU:0,peakArmy:1,capDefSum:0,capDefTurns:0,techPeak:0,survived:0},
+      stats:{founded:0,attacks:0,badAttacks:0,kills:0,lossesU:0,peakArmy:1,capDefSum:0,capDefTurns:0,techPeak:0,survived:0,built:{}},
       capitalId:null, lastThought:'',
     };
     G.players.push(p);
@@ -693,6 +693,7 @@ function spawnUnit(p,type,x,z,free){
   const def=UNIT_TYPES[type];
   const u={id:G.uid++,type,owner:p.id,x,z,hp:def.hp,maxHp:def.hp,movesLeft:def.move,hasAttacked:false,spawnTurn:G.turn};
   G.units.push(u);
+  if(p.stats&&p.stats.built) p.stats.built[type]=(p.stats.built[type]||0)+1;   // roster usage tally
   reveal(p,x,z, type==='rambler'?2:1);
   return u;
 }
@@ -751,7 +752,7 @@ function cityYields(c){
   if(c.isCapital){ food+=1; prod+=1; sci+=1; }
   prod += c.bonusProd||0;                          // workshops from levelling up
   const p=playerById(c.owner);
-  if(p && p.faction.bonus==='vision') food+=1;     // Skerne Watermen — the river provides
+  if(p && p.faction.bonus==='vision') food+=2;     // Skerne Watermen — the river provides (strong growth)
   return {food,prod,sci};
 }
 function recomputeIncome(){
@@ -760,7 +761,7 @@ function recomputeIncome(){
     const nCities=G.cities.filter(c=>c.owner===p.id).length;
     for(const c of G.cities){ if(c.owner!==p.id) continue; const y=cityYields(c); prod+=y.prod; sci+=y.sci; }
     if(p.techs.has('trade')){ prod+=nCities; sci+=nCities; }   // Quaker Banking
-    if(p.faction.bonus==='econ'){ prod+=1; sci+=1; }            // House Kelly
+    if(p.faction.bonus==='econ'){ prod+=nCities; sci+=nCities; }   // House Kelly — economy scales with the empire
     p.prodIncome=prod; p.sciIncome=sci;
   }
 }
@@ -931,7 +932,7 @@ function moveUnit(u,x,z){
 /* --------------------------- 4. RENDERING -------------------------------- */
 let renderer,scene,camera,controls,composer,passH,passV,sun;
 let staticGroup,dynGroup,fxGroup,highlightGroup,waterMeshes=[],decoMeshes=[];
-const TILE=1, HSCALE=0.9;
+const TILE=1, HSCALE=0.9, UNIT_GAP=0.015;   // tiny consistent gap so tokens read flat on the tile
 const raycaster=new THREE.Raycaster(); const pointer=new THREE.Vector2();
 let tilePickMeshes=[]; let hovered=null;
 
@@ -1266,16 +1267,17 @@ function rebuildDynamic(){
     if(u.hp<=0) continue;
     if(fog && u.owner!==viewer.id){ if(!inSightOf(viewer,u.x,u.z) || isHidden(u,viewer.id)) continue; }
     const m=makeUnitMesh(u); const h=TERRAIN[tileAt(u.x,u.z).terrain].h*HSCALE;
-    m.position.set(wx(u.x),h,wz(u.z)); m.userData={kind:'unit',ref:u};
     const fly = UNIT_TYPES[u.type].domain==='air';
-    m.userData.baseY=h+(fly?0.8:0); m.userData.bob=rnd()*6.28;
-    // attach an in-flight glide if this unit just moved
+    const baseY=h+UNIT_GAP+(fly?0.8:0);          // sit flat on the tile (hair-line gap); aircraft fly above
+    m.userData={kind:'unit',ref:u}; m.userData.baseY=baseY;
+    m.position.set(wx(u.x),baseY,wz(u.z));
+    // attach an in-flight glide if this unit just moved (slides along the surface, no hover)
     if(u._animFrom){
       const elapsed=_now()-(u._animStart||0), dur=u._animDur||300;
       if(elapsed<dur && inB(u._animFrom.x,u._animFrom.z)){
-        const fh=TERRAIN[tileAt(u._animFrom.x,u._animFrom.z).terrain].h*HSCALE+(fly?0.8:0);
-        m.userData.anim={ fx:wx(u._animFrom.x), fz:wz(u._animFrom.z), tx:wx(u.x), tz:wz(u.z), fy:fh, ty:m.userData.baseY, start:u._animStart||0, dur, unit:u };
-        m.position.x=m.userData.anim.fx; m.position.z=m.userData.anim.fz;   // start at the origin tile
+        const fh=TERRAIN[tileAt(u._animFrom.x,u._animFrom.z).terrain].h*HSCALE+UNIT_GAP+(fly?0.8:0);
+        m.userData.anim={ fx:wx(u._animFrom.x), fz:wz(u._animFrom.z), tx:wx(u.x), tz:wz(u.z), fy:fh, ty:baseY, start:u._animStart||0, dur, unit:u };
+        m.position.x=m.userData.anim.fx; m.position.z=m.userData.anim.fz; m.position.y=fh;
       } else { u._animFrom=null; }
     }
     dynGroup.add(m); bobUnits.push(m);
@@ -1382,16 +1384,14 @@ function animate(t){
   const animating = t < (G._animUntil||0); // units gliding between tiles
   if(!panning && !animating && t-lastT < 33) return;   // full-rate while panning/animating; else cap ~30fps
   lastT=t;
-  const time=t*0.001;
   for(const m of bobUnits){
     const a=m.userData.anim;
     if(a){
       let p=(t-a.start)/a.dur; if(p>=1){ p=1; m.userData.anim=null; if(a.unit&&a.unit._animFrom) a.unit._animFrom=null; }
-      const e=1-Math.pow(1-p,3);            // ease-out glide
+      const e=1-Math.pow(1-p,3);            // ease-out glide, flat along the surface (no hover)
       m.position.x=a.fx+(a.tx-a.fx)*e; m.position.z=a.fz+(a.tz-a.fz)*e;
-      m.userData.baseY=a.fy+(a.ty-a.fy)*e + Math.sin(p*Math.PI)*0.13;   // little hop over the move
-    }
-    m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04;
+      m.position.y=a.fy+(a.ty-a.fy)*e;
+    } else { m.position.y=m.userData.baseY; }
   }
   composer.render();
 }
@@ -1612,14 +1612,18 @@ const LESSONS = {
   boldOffense:   {type:'pattern', label:'Strike decisively', desc:'Winners pressed the attack and took capitals fast.',
     mitigation:'Commits to offensives earlier and accepts keener odds.'},
 };
-function freshKnowledge(){ const k={version:1,games:0,factions:{},lessons:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
+function freshKnowledge(){ const k={version:2,games:0,factions:{},lessons:{},unitStats:{},profiles:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
 function loadKnowledge(){
   try{ const raw=localStorage.getItem('brassrails.ai.v1'); knowledge = raw? JSON.parse(raw): freshKnowledge(); }
   catch(e){ knowledge=freshKnowledge(); }
   if(!knowledge.lessons) knowledge.lessons={};
   for(const id in LESSONS) if(!knowledge.lessons[id]) knowledge.lessons[id]={weight:0};
   if(!knowledge.factions) knowledge.factions={};
+  if(!knowledge.unitStats) knowledge.unitStats={};   // per-unit usage/outcome tally
+  if(!knowledge.profiles) knowledge.profiles={};      // observed per-rival behaviour profiles
 }
+function unitStat(t){ return knowledge.unitStats[t]||(knowledge.unitStats[t]={built:0,winBuilt:0,lossBuilt:0}); }
+function rivalProfile(fid){ return knowledge.profiles[fid]||{games:0,aggr:0.5,expand:0.5,tech:0.5,def:0.5}; }
 function saveKnowledge(){ try{ localStorage.setItem('brassrails.ai.v1',JSON.stringify(knowledge)); }catch(e){} }
 function L(id){ return knowledge.lessons[id]?.weight||0; }
 
@@ -1641,7 +1645,12 @@ function aiParams(g){
 }
 function aiTurn(p){
   const g=p.genome; const thoughts=[];
-  const pr = aiParams(g); const {riskGate,homeNeed,massGate} = pr;
+  const pr = aiParams(g); const {riskGate,massGate} = pr; let {homeNeed} = pr;
+
+  // --- opponent modelling: read living rivals' known tendencies and adapt this turn ---
+  let maxRivalAggr=0, rivalNote='';
+  for(const o of G.players){ if(o.id===p.id||!o.alive) continue; const rp=rivalProfile(o.id); if(rp.aggr>maxRivalAggr){maxRivalAggr=rp.aggr; rivalNote=o.name;} }
+  if(maxRivalAggr>0.6){ homeNeed+=1; thoughts.push(`wary of ${rivalNote} (known aggressor) — hold more at home`); }
 
   // --- 1. research ---
   aiResearch(p,thoughts,pr);
@@ -1754,9 +1763,9 @@ function aiActUnit(p,u,riskGate,thoughts){
       return;
     }
   }
-  // 3. besiege the nearest enemy city. Keep only ONE defender home (the closest unit)
-  //    when the capital is actually threatened — everyone else presses the attack.
-  const enemyCity=nearestEnemyCity(p,u);
+  // 3. besiege the best target — opponent modelling steers toward the SOFTEST scouted empire
+  //    (low known defence). Keep only ONE defender home when the capital is threatened.
+  const enemyCity=bestEnemyCity(p,u)||nearestEnemyCity(p,u);
   const cap=G.cities.find(c=>c.id===p.capitalId);
   let defend=false;
   if(cap && capUnderThreat(p)){
@@ -1845,6 +1854,10 @@ function aiExplore(p,u){
 }
 // fog-aware: only cities it has actually scouted (cities are remembered once seen)
 function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ if(c.owner===p.id) continue; if(!seenByPlayer(p,c.x,c.z)) continue; const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } return best; }
+// opponent-aware: among scouted enemy cities, prefer the closest belonging to a rival known to be soft (low defence, low aggression)
+function bestEnemyCity(p,u){ let best=null,bs=-1e9; for(const c of G.cities){ if(c.owner===p.id||!seenByPlayer(p,c.x,c.z)) continue;
+  const rp=rivalProfile(c.owner); const d=cheb(u.x,u.z,c.x,c.z);
+  const s = -d*0.5 - rp.def*3 - rp.aggr*0.8; if(s>bs){bs=s;best=c;} } return best; }
 // fog-aware: only enemy units currently in its line of sight
 function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; if(!inSightOf(p,e.x,e.z)) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
 function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
@@ -1871,6 +1884,21 @@ function recordGameResult(winner, kind){
     const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0});
     if(p.id===winner.id){ fk.wins++; fk.genome={...p.genome}; }
     else { fk.losses++; }
+  }
+  const nTech=Object.keys(TECHS).length;
+  // ---- roster usage stats + observed opponent profiles ----
+  for(const p of G.players){
+    const s=p.stats||{};
+    for(const t in (s.built||{})){ const us=unitStat(t); us.built+=s.built[t]; if(p.id===winner.id) us.winBuilt++; else us.lossBuilt++; }
+    // blend this game's observed behaviour into the rival's persistent profile
+    const pr=knowledge.profiles[p.id]||(knowledge.profiles[p.id]={games:0,aggr:0.5,expand:0.5,tech:0.5,def:0.5});
+    const obsAggr=clamp((s.attacks||0)/Math.max(6,(s.survived||1)),0,1);
+    const obsExpand=clamp((s.founded||0)/5,0,1);
+    const obsTech=clamp((s.techPeak||0)/nTech,0,1);
+    const obsDef=clamp((s.capDefTurns? s.capDefSum/s.capDefTurns:0)/3,0,1);
+    const a=pr.games?0.3:1;   // first observation sets the baseline
+    pr.aggr=lerp(pr.aggr,obsAggr,a); pr.expand=lerp(pr.expand,obsExpand,a); pr.tech=lerp(pr.tech,obsTech,a); pr.def=lerp(pr.def,obsDef,a);
+    pr.games++;
   }
   // ---- learn the WINNER's patterns (what worked) ----
   const ws=winner.stats||{};
@@ -2123,7 +2151,13 @@ function renderDossier(){
     }
     h+=`<div class="desc" style="margin-top:7px"><b style="color:var(--amber2)">Doctrine —</b> attacks only above
       <b>${Math.round(pr.riskGate*100)}%</b> odds (much lower to storm a city), keeps <b>${pr.homeNeed}</b> defender(s)
-      at the capital, and masses <b>${pr.massGate}</b> unit(s) before marching out.</div></div>`;
+      at the capital, and masses <b>${pr.massGate}</b> unit(s) before marching out.</div>`;
+    const rp=knowledge.profiles&&knowledge.profiles[fid];
+    if(rp&&rp.games){
+      const pct=v=>Math.round(v*100); const dom=[['aggressive',rp.aggr],['expansive',rp.expand],['scholarly',rp.tech],['defensive',rp.def]].sort((a,b)=>b[1]-a[1]);
+      h+=`<div class="desc" style="margin-top:4px"><b style="color:var(--teal)">Rivals read it as —</b> ${dom[0][0]} (${pct(dom[0][1])}%), ${dom[1][0]} (${pct(dom[1][1])}%) · over ${rp.games} game(s). Soft empires get raided first.</div>`;
+    }
+    h+=`</div>`;
   }
   $('dossierBody').innerHTML=h;
 }
@@ -2275,21 +2309,25 @@ function unitValue(d){
 function unitCostVal(d){ return (d.cost||0) + (d.wood||0)*0.9; }
 function renderRoster(){
   const mono="font-family:'JetBrains Mono',monospace";
-  let h=`<table style="width:100%;border-collapse:collapse;${mono};font-size:11px">
+  loadKnowledge();
+  const games=knowledge.games||0;
+  let h=`<table style="width:100%;border-collapse:collapse;${mono};font-size:10.5px">
     <thead><tr style="color:var(--amber2);text-align:right">
       <th style="text-align:left;padding:6px 4px">Unit</th><th>Cost</th><th>HP</th><th>ATK</th><th>DEF</th><th>MOV</th><th>RNG</th>
-      <th style="text-align:left;padding-left:8px">Requires</th><th>Value</th><th>V/⚒</th></tr></thead><tbody>`;
+      <th>V/⚒</th><th title="total ever built">Built</th><th title="built per game">/game</th><th title="of builders, how often they won">Win%</th></tr></thead><tbody>`;
   for(const [tid,d] of Object.entries(UNIT_TYPES)){
     const v=unitValue(d), cv=unitCostVal(d); const vpc=d.role==='super'?'—':(v/Math.max(0.5,cv)).toFixed(2);
-    const cost = d.role==='super' ? 'reward' : `${d.cost}⚒${d.wood?` ${d.wood}🪵`:''}`;
-    const req = d.tech ? TECHS[d.tech].name : (d.role==='super'?'city Lv 5':'—');
+    const cost = d.role==='super' ? 'rwd' : `${d.cost}⚒${d.wood?` ${d.wood}🪵`:''}`;
+    const us=knowledge.unitStats[tid]||{built:0,winBuilt:0,lossBuilt:0};
+    const perGame = games? (us.built/games).toFixed(1):'—';
+    const denom=(us.winBuilt+us.lossBuilt); const winPct = denom? Math.round(100*us.winBuilt/denom)+'%':'—';
     h+=`<tr style="text-align:right;border-top:1px solid var(--line)">
-      <td style="text-align:left;padding:6px 4px"><b style="color:var(--ink)">${d.glyph} ${d.name}</b><div style="color:var(--faint);font-size:9.5px;${mono}">${d.role}${d.domain==='air'?' · air':''}</div></td>
+      <td style="text-align:left;padding:5px 4px"><b style="color:var(--ink)">${d.glyph} ${d.name}</b><div style="color:var(--faint);font-size:9px;${mono}">${d.role}${d.domain==='air'?' · air':''} · ${d.tech?TECHS[d.tech].name:'no tech'}</div></td>
       <td>${cost}</td><td>${d.hp}</td><td>${d.atk}</td><td>${d.def}</td><td>${d.move}</td><td>${d.range}</td>
-      <td style="text-align:left;padding-left:8px;color:var(--muted)">${req}</td><td>${v.toFixed(1)}</td><td style="color:var(--amber2)">${vpc}</td></tr>`;
+      <td style="color:var(--amber2)">${vpc}</td><td>${us.built||0}</td><td>${perGame}</td><td style="color:${denom&&us.winBuilt/denom>0.5?'var(--good,#7bc06b)':'var(--muted)'}">${winPct}</td></tr>`;
   }
   h+=`</tbody></table>
-    <div class="desc" style="margin-top:10px">Found timber by felling forests (🪵), then forge <b>Armed Guards</b>. Fish a city's shoreline for a burst of food (5-turn cooldown) to grow — and build — faster. The <b>Brick Colossus</b> is earned, not bought, when a city reaches level 5.</div>`;
+    <div class="desc" style="margin-top:10px"><b>Built / /game / Win%</b> are recorded across the ${games} game(s) played (Win% = of the players who built that unit, how many won). Found timber by felling forests (🪵) then forge <b>Armed Guards</b>; fish a shoreline for a food burst; the <b>Brick Colossus</b> is earned at city level 5.</div>`;
   $('rosterBody').innerHTML=h;
 }
 function openHelp(){ $('help').classList.remove('hidden'); }
@@ -2299,6 +2337,7 @@ $('helpClose').onclick=closeHelp;
 $('helpBtn2').onclick=openHelp;
 $('btnRoster').onclick=()=>{ renderRoster(); $('roster').classList.remove('hidden'); };
 $('rosterClose').onclick=()=>$('roster').classList.add('hidden');
+$('techHead').onclick=()=>{ const hidden=$('techBody').classList.toggle('hidden'); $('techChevron').textContent=hidden?'▸':'▾'; };
 
 // keyboard: space = end turn / step · WASD + arrows pan the camera
 const PAN_MAP={KeyW:'up',ArrowUp:'up',KeyS:'down',ArrowDown:'down',KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right'};
