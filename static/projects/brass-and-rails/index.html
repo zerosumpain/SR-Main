@@ -192,6 +192,12 @@
   .rrow .rs{font-family:'JetBrains Mono';color:var(--muted);font-size:12px;}
   .rrow.win{border-color:var(--amber);box-shadow:0 0 18px rgba(232,161,58,.25);}
 
+  .help-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:620px){.help-grid{grid-template-columns:1fr;}}
+  .help-card{display:flex;gap:11px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;}
+  .help-card .help-ic{font-size:22px;line-height:1;flex:none;width:30px;text-align:center;}
+  .help-card b{font-family:'JetBrains Mono',monospace;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--amber2);}
+  .help-card p{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--text-secondary,var(--muted));}
   .hidden{display:none !important;}
   ::-webkit-scrollbar{width:9px;height:9px;}
   ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
@@ -214,6 +220,7 @@
     <div class="hud-spacer"></div>
     <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
     <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
+    <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
     <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
     <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
     <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
@@ -263,6 +270,8 @@
     <button class="ctl-ico" id="btnAuto" title="Toggle autoplay">▶</button>
     <button id="endturn">End Turn</button>
     <button class="ctl-ico" id="btnDossier" title="AI dossier — capabilities &amp; what it has learned">🧠</button>
+    <button class="ctl-ico" id="btnRoster" title="Unit roster — costs &amp; stats">📋</button>
+    <button class="ctl-ico" id="btnHelp" title="How to play (?)">?</button>
     <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
   </div>
 
@@ -279,6 +288,39 @@
           <button id="dossierWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
           <div class="legend">Lessons are shared across all houses; the genome is each house's own evolving strategy.</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div class="scrim hidden" id="help">
+    <div class="modal panel" style="width:min(720px,94vw)">
+      <div class="panel-h"><h3>How to play — Brass &amp; Rails</h3><span class="label">a quick guide</span></div>
+      <div class="panel-b" style="max-height:74vh;overflow:auto;">
+        <div class="help-grid">
+          <div class="help-card"><div class="help-ic">🎯</div><div><b>Goal</b><p>Out-build and out-fight rival houses. Win by <b>Domination</b> (take every capital), the <b>Great Exhibition</b> (all tech + deep science), a <b>Railway Empire</b> (huge combined city levels), or top <b>score</b> at turn 70.</p></div></div>
+          <div class="help-card"><div class="help-ic">⌖</div><div><b>Get around</b><p>Drag to rotate, scroll to zoom, and pan with <b>W A S D</b> or the <b>arrow keys</b>. The ⌖ button recentres on your capital.</p></div></div>
+          <div class="help-card"><div class="help-ic">♟</div><div><b>Units</b><p>Click your unit to select it. <span style="color:#49b6ff">Blue</span> tiles = where it can march; <span style="color:#ff5544">red</span> = enemies it can strike. The panel shows exactly what that unit can do — <b>found</b>, <b>scout</b>, attack or move.</p></div></div>
+          <div class="help-card"><div class="help-ic">⌂</div><div><b>Cities</b><p>Click a city to <b>build units</b> with Production ⚒ and <b>develop the land</b> nearby — plant forests (⚒), build farms (food), clear woods, or sink mines. Cities grow on their own from the surrounding land.</p></div></div>
+          <div class="help-card"><div class="help-ic">⚒</div><div><b>Economy</b><p>Each city's surroundings give yields: <b>forest → production</b>, <b>rivers → food</b> (grows the city), <b>hills &amp; peaks → science</b> (funds the tech tree). Spend Science 🔬 in the Tech panel.</p></div></div>
+          <div class="help-card"><div class="help-ic">🌫</div><div><b>Fog &amp; the AI</b><p>You only see what your units &amp; cities can — scout to reveal the map. The AI plays under the same fog, and it <b>learns from every defeat</b> (see the 🧠 dossier) and adapts to beat you.</p></div></div>
+        </div>
+      </div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="helpClose" class="btn primary" style="width:auto;">Got it — play</button>
+          <div class="legend">Reopen any time with the ? button or by pressing <b>?</b>.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNIT ROSTER -->
+  <div class="scrim hidden" id="roster">
+    <div class="modal panel" style="width:min(840px,95vw)">
+      <div class="panel-h"><h3>Unit Roster — costs, stats &amp; value</h3><span class="label">📋</span></div>
+      <div class="panel-b" id="rosterBody" style="max-height:74vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="rosterClose" class="btn primary" style="width:auto;">Close</button>
+          <div class="legend">⚒ Production · 🪵 Wood · Value rates raw combat/utility; <b>V/⚒</b> is value per cost (higher = more efficient).</div></div>
       </div>
     </div>
   </div>
@@ -334,6 +376,7 @@
 
         <div class="start-row">
           <button id="startBtn">FOUND YOUR EMPIRE →</button>
+          <button class="btn" id="helpBtn2" style="width:auto;">How to play</button>
           <button class="btn danger" id="wipeBtn" style="width:auto;">Wipe AI memory</button>
           <div class="legend" id="memNote"></div>
         </div>
@@ -402,14 +445,15 @@ const MAP_SIZES = { small:20, medium:28, large:38, huge:46 };   // selectable bo
 const MIN_CITY_DIST = 10;          // target spacing between cities (clamped to board)
 function cityMinDist(){ return clamp(Math.round(N/3.5), 5, MIN_CITY_DIST); }
 const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
-const ALT_WIN_TURN = 50;            // alternative victories only open up late, after conquest's window
-const SCIENCE_WIN = 320;            // science banked AFTER all tech → host the Great Exhibition
-const ECON_WIN = 85;                // combined level of your cities → a railway empire
+const ALT_WIN_TURN = 48;            // alternative victories only open up late, after conquest's window
+const SCIENCE_WIN = 430;            // science banked AFTER all tech → host the Great Exhibition
+const ECON_WIN = 58;                // combined level of your cities → a railway empire (rewards going wide)
 
 const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:5, hp:10, atk:0, def:1, move:1, range:1, tech:null,        domain:'land', role:'settle', glyph:'⌂', desc:'Settles new villages on open land.'},
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
   guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
+  armed:    {name:'Armed Guard',   cost:4, wood:4, hp:12, atk:3, def:2, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard forged steel weapons from felled timber — harder-hitting.'},
   pike:     {name:'Skerne Pike',   cost:3, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry',   domain:'land', role:'def',    glyph:'▮', desc:'Stalwart defender — hard to dislodge.'},
   pony:     {name:'Pit Pony',      cost:3, hp:10, atk:2, def:1, move:2, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Swift raider bred in the colliery.'},
   gun:      {name:'Stephenson Gun',cost:8, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege',  glyph:'☷', desc:'Long-range siege piece. Strikes without retaliation.'},
@@ -510,7 +554,7 @@ function generateMap(seed){
     else if(h<0.62) terrain= (n2(v*1.3,u*1.3)>0.62?'forest':'field');
     else if(h<0.78) terrain='hill';
     else terrain='mountain';
-    tiles[z][x]={x,z,terrain,resource:null,owner:null,city:null,harvested:false};
+    tiles[z][x]={x,z,terrain,resource:null,owner:null,city:null,harvested:false,improved:null};
   }}
   // scatter resources
   for(let z=0;z<N;z++)for(let x=0;x<N;x++){
@@ -568,7 +612,7 @@ function setupGame(cfg){
     const fk = knowledge.factions[f.id] || (knowledge.factions[f.id]={genome:defaultGenome(),wins:0,losses:0});
     const p = {
       id:f.id, idx:i, faction:f, name:f.name, color:f.color, isAI:!human, alive:true,
-      prod: 5, science: 3, prodIncome:0, sciIncome:0, techs:new Set(), explored:new Set(),
+      prod: 5, science: 3, wood: 0, prodIncome:0, sciIncome:0, techs:new Set(), explored:new Set(),
       genome: human? defaultGenome() : {...fk.genome},
       stats:{founded:0,attacks:0,badAttacks:0,kills:0,lossesU:0,peakArmy:1,capDefSum:0,capDefTurns:0,techPeak:0,survived:0},
       capitalId:null, lastThought:'',
@@ -646,12 +690,20 @@ function foundCity(p,x,z,isCapital,name){
   return c;
 }
 
+function visionBonus(p){ return ((p.faction.bonus==='vision'||p.faction.bonus==='explore')?1:0) + (p.techs.has('telegraphy')?1:0); }
 function reveal(p,x,z,r){
-  const vb = (p.faction.bonus==='vision'||p.faction.bonus==='explore')?1:0;
-  const tv = p.techs.has('telegraphy')?1:0;
-  const R = r+vb+tv;
+  const R = r+visionBonus(p);
   for(let dz=-R;dz<=R;dz++)for(let dx=-R;dx<=R;dx++){const nx=x+dx,nz=z+dz;if(inB(nx,nz))p.explored.add(key(nx,nz));}
 }
+// can player p SEE tile (x,z) right now? (live sight — for spotting enemy units through the fog)
+function inSightOf(p,x,z){
+  const vb=visionBonus(p);
+  for(const u of G.units){ if(u.owner!==p.id||u.hp<=0) continue; if(cheb(u.x,u.z,x,z) <= (u.type==='rambler'?2:1)+vb) return true; }
+  for(const c of G.cities){ if(c.owner!==p.id) continue; if(cheb(c.x,c.z,x,z) <= 1+vb) return true; }
+  return false;
+}
+// p remembers terrain & cities it has ever explored
+function seenByPlayer(p,x,z){ return p.explored.has(key(x,z)); }
 
 /* ----- economy: a city's yields come from the 9 tiles within one diagonal step -----
    forest=wood→production · water/ocean=rivers→food · field→food · hill/mountain→science.
@@ -671,6 +723,8 @@ function cityYields(c){
     if(t.resource==='orchard'||t.resource==='cattle') food+=1;
     else if(t.resource==='fish') food+=2;
     else if(t.resource==='coal'||t.resource==='iron') prod+=1;
+    if(t.improved==='farm') food+=2;          // cultivated land
+    else if(t.improved==='mine') prod+=2;     // worked seam
   }
   food+=1; prod+=1; sci+=1;                        // the town itself
   if(c.isCapital){ food+=1; prod+=1; sci+=1; }
@@ -948,51 +1002,70 @@ function onResize(){
 const wx=(x)=>(x-(N-1)/2)*TILE;
 const wz=(z)=>(z-(N-1)/2)*TILE;
 
+// shared, reusable decoration geometry/materials (built once)
+let _deco=null, _tileGeo=null;
+function decoAssets(){
+  if(_deco) return _deco;
+  _deco={
+    tree:new THREE.ConeGeometry(0.28,0.7,6), trunk:new THREE.CylinderGeometry(0.06,0.08,0.18,5),
+    rock:new THREE.DodecahedronGeometry(0.22,0), peak:new THREE.ConeGeometry(0.46,0.9,5),
+    snow:new THREE.ConeGeometry(0.2,0.3,5), gem:new THREE.IcosahedronGeometry(0.16,0),
+    farm:new THREE.BoxGeometry(0.62,0.05,0.62), mine:new THREE.BoxGeometry(0.2,0.18,0.2),
+    treeMat:colorMat(0x3f7a3a), trunkMat:colorMat(0x6b4a2a), rockMat:colorMat(0x9a8f80),
+    snowMat:colorMat(0xf2f2f5,{r:.6}), farmMat:colorMat(0xd8b24a,{r:.85}), mineMat:colorMat(0x36302a,{r:.7}),
+  };
+  return _deco;
+}
+// add every decoration for one tile (deterministic — no RNG, so single-tile refresh is stable)
+function addTileDeco(x,z,t,h){
+  const D=decoAssets();
+  const push=(o)=>{ o.userData.deco=true; staticGroup.add(o); decoMeshes.push({o,tx:x,tz:z}); };
+  if(t.terrain==='forest'){
+    const g=new THREE.Group();
+    const tr=new THREE.Mesh(D.tree,D.treeMat); tr.position.y=0.55; tr.castShadow=true;
+    const tk=new THREE.Mesh(D.trunk,D.trunkMat); tk.position.y=0.18; tk.castShadow=true;
+    g.add(tk,tr); g.position.set(wx(x),h,wz(z)); g.rotation.y=((x*7+z*13)%62)/10; push(g);
+  } else if(t.terrain==='hill'){
+    const r=new THREE.Mesh(D.rock,D.rockMat); r.position.set(wx(x)+0.16,h+0.16,wz(z)-0.12); r.castShadow=true; push(r);
+  } else if(t.terrain==='mountain'){
+    const pk=new THREE.Mesh(D.peak,D.rockMat); pk.position.set(wx(x),h+0.42,wz(z)); pk.castShadow=true; push(pk);
+    const cap=new THREE.Mesh(D.snow,D.snowMat); cap.position.set(wx(x),h+0.78,wz(z)); push(cap);
+  }
+  if(t.resource){
+    const r=RESOURCES[t.resource];
+    const m=new THREE.Mesh(D.gem, colorMat(r.color,{e:r.color,ei:0.25,m:0.2,r:0.4}));
+    m.position.set(wx(x)+0.28,h+0.2,wz(z)+0.28); m.castShadow=true; m.userData.res=true; push(m);
+  }
+  if(t.improved==='farm'){ const f=new THREE.Mesh(D.farm,D.farmMat); f.position.set(wx(x),h+0.02,wz(z)); push(f); }
+  else if(t.improved==='mine'){ const mm=new THREE.Mesh(D.mine,D.mineMat); mm.position.set(wx(x)-0.18,h+0.09,wz(z)-0.18); mm.castShadow=true; push(mm); }
+}
 function buildStaticScene(){
   staticGroup.clear(); tilePickMeshes=[]; waterMeshes=[]; decoMeshes=[];
-  const boxGeo=new THREE.BoxGeometry(TILE*0.99,1,TILE*0.99);
-  const treeGeo=new THREE.ConeGeometry(0.28,0.7,6);
-  const trunkGeo=new THREE.CylinderGeometry(0.06,0.08,0.18,5);
-  const rockGeo=new THREE.DodecahedronGeometry(0.22,0);
-  const peakGeo=new THREE.ConeGeometry(0.46,0.9,5);
-  // Each tile gets its OWN material so per-tile recolouring (territory tint, fog) is correct.
-  // (Sharing one material per terrain made the whole terrain take the last tile's colour.)
-  const treeMat=colorMat(0x3f7a3a), trunkMat=colorMat(0x6b4a2a), rockMat=colorMat(0x9a8f80), snowMat=colorMat(0xf2f2f5,{r:0.6});
-
+  if(!_tileGeo) _tileGeo=new THREE.BoxGeometry(TILE*0.99,1,TILE*0.99);
   for(let z=0;z<N;z++)for(let x=0;x<N;x++){
     const t=tileAt(x,z); const def=TERRAIN[t.terrain];
     const h=def.h*HSCALE;
-    const mesh=new THREE.Mesh(boxGeo,colorMat(def.color));
+    // Each tile gets its OWN material so per-tile recolouring (territory tint, fog) is correct.
+    const mesh=new THREE.Mesh(_tileGeo,colorMat(def.color));
     mesh.scale.y=h; mesh.position.set(wx(x),h/2,wz(z));
     mesh.receiveShadow=true; mesh.castShadow=false;
     mesh.userData={tx:x,tz:z,base:def.color};
     staticGroup.add(mesh); tilePickMeshes.push(mesh);
     if(def.pass==='water') waterMeshes.push(mesh);
-
-    // decorations
-    if(t.terrain==='forest'){
-      const g=new THREE.Group();
-      const tr=new THREE.Mesh(treeGeo,treeMat); tr.position.y=0.55; tr.castShadow=true;
-      const tk=new THREE.Mesh(trunkGeo,trunkMat); tk.position.y=0.18; tk.castShadow=true;
-      g.add(tk,tr); g.position.set(wx(x),h,wz(z)); g.rotation.y=rnd()*6.28; g.userData.deco=true;
-      staticGroup.add(g); decoMeshes.push({o:g,tx:x,tz:z});
-    } else if(t.terrain==='hill'){
-      const r=new THREE.Mesh(rockGeo,rockMat); r.position.set(wx(x)+(rnd()-.5)*.3,h+0.16,wz(z)+(rnd()-.5)*.3); r.castShadow=true; r.userData.deco=true; staticGroup.add(r); decoMeshes.push({o:r,tx:x,tz:z});
-    } else if(t.terrain==='mountain'){
-      const pk=new THREE.Mesh(peakGeo,rockMat); pk.position.set(wx(x),h+0.42,wz(z)); pk.castShadow=true; pk.userData.deco=true; staticGroup.add(pk); decoMeshes.push({o:pk,tx:x,tz:z});
-      const cap=new THREE.Mesh(new THREE.ConeGeometry(0.2,0.3,5),snowMat); cap.position.set(wx(x),h+0.78,wz(z)); cap.userData.deco=true; staticGroup.add(cap); decoMeshes.push({o:cap,tx:x,tz:z});
-    }
-    // resource markers
-    if(t.resource){
-      const r=RESOURCES[t.resource];
-      const m=new THREE.Mesh(new THREE.IcosahedronGeometry(0.16,0), colorMat(r.color,{e:r.color,ei:0.25,m:0.2,r:0.4}));
-      m.position.set(wx(x)+0.28,h+0.2,wz(z)+0.28); m.castShadow=true; m.userData.deco=true; m.userData.res=true;
-      staticGroup.add(m); decoMeshes.push({o:m,tx:x,tz:z});
-    }
+    addTileDeco(x,z,t,h);
   }
   // a soft sea skirt around the board
   const skirt=new THREE.Mesh(new THREE.BoxGeometry(N*2.2,0.4,N*2.2), colorMat(0x255a72,{r:0.5}));
   skirt.position.y=-0.2; skirt.receiveShadow=true; staticGroup.add(skirt);
+}
+// update a single tile in place (terrain/improvement changed) — no full rebuild, no reshuffle
+function refreshTile(x,z){
+  const t=tileAt(x,z); const def=TERRAIN[t.terrain]; const h=def.h*HSCALE;
+  const mesh=tilePickMeshes.find(m=>m.userData.tx===x && m.userData.tz===z);
+  if(mesh){ mesh.scale.y=h; mesh.position.y=h/2; mesh.userData.base=def.color; mesh.material.color.set(def.color); }
+  for(let i=decoMeshes.length-1;i>=0;i--){ const d=decoMeshes[i]; if(d.tx===x&&d.tz===z){ staticGroup.remove(d.o); decoMeshes.splice(i,1); } }
+  addTileDeco(x,z,t,h);
+  rebuildDynamic();
 }
 
 /* unit token meshes — stylised low-poly silhouettes */
@@ -1006,38 +1079,94 @@ function makeUnitMesh(u){
 function buildUnitTemplate(t,col){
   const g=new THREE.Group();
   const body=colorMat(col,{r:0.55,m:0.15});
-  const dark=colorMat(0x2a2218,{r:0.7});
+  const accent=colorMat(col,{e:col,ei:0.2});
+  const dark=colorMat(0x2a2218,{r:0.7}), steel=colorMat(0x8a9099,{r:0.4,m:0.7}),
+        wood=colorMat(0x7a5230,{r:0.85}), skin=colorMat(0xe6bb88,{r:0.7}),
+        cream=colorMat(0xeae0c8,{r:0.85}), glow=colorMat(0xff5a4a,{e:0xff3a2a,ei:0.9});
   const base=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.38,0.1,16), colorMat(0x1a140d,{r:0.8}));
   base.position.y=0.05; base.receiveShadow=true; g.add(base);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.04,8,20), colorMat(col,{e:col,ei:0.4}));
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.04,8,20), accent);
   ring.rotation.x=Math.PI/2; ring.position.y=0.06; g.add(ring);
-  const add=(m)=>{m.castShadow=true; g.add(m); return m;};
-  if(t==='founder'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.4,.34,.4),body)); b.position.y=.28;
-    const roof=add(new THREE.Mesh(new THREE.ConeGeometry(.34,.26,4),dark)); roof.position.y=.58; roof.rotation.y=.78; }
-  else if(t==='rambler'){ const c=add(new THREE.Mesh(new THREE.ConeGeometry(.3,.62,7),body)); c.position.y=.42;
-    const top=add(new THREE.Mesh(new THREE.SphereGeometry(.07,8,8),colorMat(0xffe7a8,{e:0xffcf66,ei:0.6}))); top.position.y=.78; }
-  else if(t==='guard'){ const b=add(new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,.5,10),body)); b.position.y=.36;
-    const h=add(new THREE.Mesh(new THREE.SphereGeometry(.16,10,10),dark)); h.position.y=.68; }
-  else if(t==='pike'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.34,.6,.2),body)); b.position.y=.4;
-    const sp=add(new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.7,5),dark)); sp.position.set(.2,.5,0); }
-  else if(t==='pony'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.26,.24),body)); b.position.y=.34;
-    const n=add(new THREE.Mesh(new THREE.BoxGeometry(.16,.26,.16),body)); n.position.set(.26,.46,0); }
-  else if(t==='gun'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.42,.26,.42),dark)); b.position.y=.26;
-    const barrel=add(new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.6,10),body)); barrel.rotation.z=Math.PI/2.6; barrel.position.set(.12,.45,0); }
-  else if(t==='ironclad'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.56,.34,.44),body)); b.position.y=.3;
-    const turret=add(new THREE.Mesh(new THREE.CylinderGeometry(.18,.2,.2,10),dark)); turret.position.y=.55;
-    const stack=add(new THREE.Mesh(new THREE.CylinderGeometry(.06,.07,.34,8),dark)); stack.position.set(-.16,.62,0); }
-  else if(t==='skylark'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.12,.16),body)); b.position.y=.7;
-    const w=add(new THREE.Mesh(new THREE.BoxGeometry(.16,.06,.66),colorMat(col,{e:col,ei:.2}))); w.position.y=.7;
-    const fin=add(new THREE.Mesh(new THREE.BoxGeometry(.12,.18,.04),dark)); fin.position.set(-.2,.8,0);
-    const pole=add(new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.6,5),dark)); pole.position.y=.38; }
-  else if(t==='nightmail'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.5,.22,.26),colorMat(0x20242e,{m:.5,r:.3}))); b.position.y=.3;
-    const eye=add(new THREE.Mesh(new THREE.SphereGeometry(.05,8,8),colorMat(0xff5a4a,{e:0xff3a2a,ei:.9}))); eye.position.set(.24,.34,0);
-    g.children[2].material.opacity=.85; }
-  else if(t==='colossus'){ const b=add(new THREE.Mesh(new THREE.BoxGeometry(.7,.6,.6),colorMat(0xb1543a,{r:.95}))); b.position.y=.5;
-    const stack=add(new THREE.Mesh(new THREE.CylinderGeometry(.1,.12,.4,8),colorMat(0x7a3a28))); stack.position.set(-.2,.92,0);
-    const eye=add(new THREE.Mesh(new THREE.SphereGeometry(.08,10,10),colorMat(col,{e:col,ei:.8}))); eye.position.set(.3,.6,0); base.scale.set(1.5,1,1.5); }
-  else { const b=add(new THREE.Mesh(new THREE.BoxGeometry(.36,.4,.36),body)); b.position.y=.3; }
+  // add(mesh, x,y,z, rx,ry,rz) — position/rotation via assignment (avoids .set on rotation for stub safety)
+  const add=(m,x,y,z,rx,ry,rz)=>{ m.castShadow=true;
+    if(x!==undefined){m.position.x=x;m.position.y=y;m.position.z=z;}
+    if(rx!==undefined){m.rotation.x=rx;m.rotation.y=ry||0;m.rotation.z=rz||0;} g.add(m); return m; };
+  const box=(w,hh,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,hh,d),m||body);
+  const cyl=(rt,rb,hh,m,s)=>new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,hh,s||10),m||body);
+  const con=(r,hh,m,s)=>new THREE.Mesh(new THREE.ConeGeometry(r,hh,s||8),m||body);
+  const sph=(r,m)=>new THREE.Mesh(new THREE.SphereGeometry(r,10,10),m||body);
+  const figure=(m)=>{ add(cyl(.13,.16,.32,m||body),0,.3,0); add(sph(.12,skin),0,.55,0); };
+
+  if(t==='founder'){                              // covered wagon
+    add(box(.42,.2,.3,wood),0,.22,0);
+    add(cyl(.2,.2,.42,cream,12),0,.42,0,0,0,Math.PI/2);
+    add(cyl(.12,.12,.05,dark,12),.16,.13,.18,Math.PI/2,0,0);
+    add(cyl(.12,.12,.05,dark,12),-.16,.13,.18,Math.PI/2,0,0);
+  } else if(t==='rambler'){                        // hiker with pack & staff
+    figure(body);
+    add(box(.12,.16,.09,dark),-.12,.4,0);
+    add(cyl(.02,.02,.6,wood,5),.17,.4,0);
+    add(con(.1,.1,accent),0,.7,0);
+  } else if(t==='guard'){                           // soldier, round shield + spear
+    figure(body);
+    add(cyl(.16,.16,.04,accent,16),.2,.34,0,0,0,Math.PI/2);
+    add(cyl(.02,.02,.58,steel,5),-.18,.4,0);
+  } else if(t==='armed'){                           // soldier with musket & bayonet
+    figure(body);
+    add(box(.04,.4,.3,steel),.2,.4,0);             // pavise
+    add(box(.04,.5,.04,wood),-.16,.44,.05,0.18,0,0);
+    add(cyl(.015,.015,.16,steel,5),-.16,.72,.08);  // bayonet
+  } else if(t==='pike'){                            // pikeman, tower shield + long pike
+    add(box(.22,.48,.16,body),0,.36,0);
+    add(sph(.12,skin),0,.66,0);
+    add(box(.04,.36,.26,accent),-.18,.38,0);
+    add(cyl(.02,.02,1.0,steel,5),.18,.58,0);
+    add(con(.04,.12,steel),.18,1.12,0);
+  } else if(t==='pony'){                            // mounted rider
+    add(box(.46,.18,.2,wood),0,.3,0);
+    add(box(.12,.2,.12,wood),.24,.4,0);
+    add(box(.18,.12,.12,wood),.32,.48,0);
+    add(box(.05,.22,.05,dark),.18,.12,.13); add(box(.05,.22,.05,dark),-.18,.12,.13);
+    add(box(.05,.22,.05,dark),.18,.12,-.13); add(box(.05,.22,.05,dark),-.18,.12,-.13);
+    add(box(.16,.18,.16,body),-.04,.5,0);
+    add(sph(.1,skin),-.04,.64,0);
+  } else if(t==='gun'){                             // field artillery
+    add(box(.3,.12,.18,dark),0,.2,0);
+    add(cyl(.06,.07,.6,steel,12),.06,.34,0,0,0,-0.5);
+    add(box(.34,.05,.05,dark),-.22,.12,0);
+    add(cyl(.18,.18,.05,wood,14),0,.18,.16,Math.PI/2,0,0);
+    add(cyl(.18,.18,.05,wood,14),0,.18,-.16,Math.PI/2,0,0);
+  } else if(t==='ironclad'){                        // steam tank
+    add(box(.5,.14,.12,dark),0,.13,.16); add(box(.5,.14,.12,dark),0,.13,-.16);
+    add(box(.44,.18,.34,body),0,.3,0);
+    add(cyl(.16,.18,.16,steel,12),0,.46,0);
+    add(cyl(.05,.05,.34,steel,8),.26,.46,0,0,0,Math.PI/2);
+    add(cyl(.04,.05,.18,dark,8),-.16,.55,0);
+  } else if(t==='skylark'){                         // biplane on a stand
+    add(cyl(.02,.02,.6,dark,5),0,.38,0);
+    add(box(.5,.1,.1,body),0,.72,0);
+    add(box(.12,.04,.6,accent),0,.8,0);
+    add(box(.12,.04,.6,accent),0,.64,0);
+    add(box(.1,.16,.03,dark),-.22,.8,0);
+    add(cyl(.02,.02,.24,dark,5),.27,.72,0,Math.PI/2,0,0);
+    add(sph(.04,steel),.28,.72,0);
+  } else if(t==='nightmail'){                        // sleek dark engine, red lamp
+    add(cyl(.12,.12,.42,colorMat(0x20242e,{m:.5,r:.3}),12),.08,.28,0,0,0,Math.PI/2);
+    add(box(.16,.24,.26,colorMat(0x16181f)),-.18,.34,0);
+    add(cyl(.04,.05,.16,dark,8),.14,.46,0);
+    add(sph(.05,glow),.3,.28,0);
+    add(cyl(.08,.08,.04,steel,12),.02,.13,.14,Math.PI/2,0,0);
+    add(cyl(.08,.08,.04,steel,12),.02,.13,-.14,Math.PI/2,0,0);
+  } else if(t==='colossus'){                         // huge brick locomotive
+    const brick=colorMat(0xb1543a,{r:.95}), brick2=colorMat(0x8a4030,{r:.95});
+    add(cyl(.22,.22,.62,brick,14),.05,.42,0,0,0,Math.PI/2);
+    add(box(.3,.4,.5,brick2),-.32,.46,0);
+    add(cyl(.1,.12,.4,dark,10),.26,.84,0);
+    add(sph(.09,accent),.42,.46,0);
+    add(cyl(.16,.16,.06,dark,14),.18,.18,.26,Math.PI/2,0,0); add(cyl(.16,.16,.06,dark,14),.18,.18,-.26,Math.PI/2,0,0);
+    add(cyl(.16,.16,.06,dark,14),-.18,.18,.26,Math.PI/2,0,0); add(cyl(.16,.16,.06,dark,14),-.18,.18,-.26,Math.PI/2,0,0);
+    base.scale.set(1.7,1,1.7);
+  } else { add(box(.36,.4,.36,body),0,.3,0); }
   return g;
 }
 
@@ -1105,10 +1234,10 @@ function rebuildDynamic(){
     const m=makeCityMesh(c); const h=TERRAIN[tileAt(c.x,c.z).terrain].h*HSCALE;
     m.position.set(wx(c.x),h,wz(c.z)); m.userData={kind:'city',ref:c}; dynGroup.add(m);
   }
-  // units
+  // units — own always shown; enemies only while in live sight (proper fog of war)
   for(const u of G.units){
     if(u.hp<=0) continue;
-    if(fog){ if(!viewer.explored.has(key(u.x,u.z))) continue; if(u.owner!==viewer.id && isHidden(u,viewer.id)) continue; }
+    if(fog && u.owner!==viewer.id){ if(!inSightOf(viewer,u.x,u.z) || isHidden(u,viewer.id)) continue; }
     const m=makeUnitMesh(u); const h=TERRAIN[tileAt(u.x,u.z).terrain].h*HSCALE;
     m.position.set(wx(u.x),h,wz(u.z)); m.userData={kind:'unit',ref:u};
     const fly = UNIT_TYPES[u.type].domain==='air';
@@ -1178,9 +1307,26 @@ function homeCamera(){
   camera.zoom = N<=12 ? 1.15 : 1.0; camera.updateProjectionMatrix();
 }
 
+const panKeys=new Set();
+function applyPan(){
+  if(!panKeys.size || !controls || !camera) return;
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); fwd.y=0;
+  if(fwd.lengthSq()<1e-6) fwd.set(0,0,-1);
+  fwd.normalize();
+  const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion); right.y=0; right.normalize();
+  const mv=new THREE.Vector3();
+  if(panKeys.has('up')) mv.add(fwd);
+  if(panKeys.has('down')) mv.addScaledVector(fwd,-1);
+  if(panKeys.has('right')) mv.add(right);
+  if(panKeys.has('left')) mv.addScaledVector(right,-1);
+  if(mv.lengthSq()===0) return;
+  mv.normalize().multiplyScalar(FR*0.035);   // pan speed scales with zoom-out
+  camera.position.add(mv); controls.target.add(mv);
+}
 let lastT=0;
 function animate(t){
   requestAnimationFrame(animate);
+  applyPan();                              // WASD / arrow-key panning
   controls.update();                       // keep damping responsive every frame
   if(t-lastT < 33) return;                 // but only draw at ~30fps (turn-based — no need for 60)
   lastT=t;
@@ -1267,14 +1413,28 @@ function renderSelPanel(){
       </div>
       <div class="desc">${d.desc}</div>`;
     if(mine){
-      h+=`<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">`;
-      if(canFoundHere(u,u.x,u.z)) h+=`<button class="btn primary" id="foundBtn">⌂ Found a Village</button>`;
-      if(u.movesLeft>0) h+=`<div class="legend">Click a <span style="color:#49b6ff">blue</span> tile to march, a <span style="color:#ff5544">red</span> tile to attack.</div>`;
-      else h+=`<div class="legend">Spent for this turn.</div>`;
+      h+=`<div class="label" style="margin-top:10px">Orders</div>`;
+      h+=`<div style="display:flex;flex-direction:column;gap:6px;margin-top:5px;">`;
+      if(d.role==='settle'){
+        if(canFoundHere(u,u.x,u.z)) h+=`<button class="btn primary" data-act="found">⌂ Found a village here</button>`;
+        else h+=`<div class="legend">⌂ Move to open land at least <b>${cityMinDist()}</b> tiles from any city, then found.</div>`;
+      }
+      if(d.role==='scout' && u.movesLeft>0) h+=`<button class="btn" data-act="scout">✦ Scout ahead (reveal the fog)</button>`;
+      if(G.atks && G.atks.length) h+=`<div class="legend">⚔ <b>${G.atks.length}</b> target(s) in range — click a <span style="color:#ff5544">red</span> tile to strike.</div>`;
+      if(u.movesLeft>0) h+=`<div class="legend">→ Click a <span style="color:#49b6ff">blue</span> tile to march there.</div>`;
+      if(u.movesLeft>0 || !u.hasAttacked) h+=`<button class="btn" data-act="skip">✓ Done for this turn</button>`;
+      else h+=`<div class="legend">This unit has spent its turn.</div>`;
       h+=`</div>`;
     }
     selBody.innerHTML=h;
-    if(mine){ const fb=document.getElementById('foundBtn'); if(fb) fb.onclick=()=>{ doFound(u); }; }
+    if(mine){
+      selBody.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
+        const a=b.dataset.act;
+        if(a==='found') doFound(u);
+        else if(a==='scout') humanScout(u);
+        else if(a==='skip'){ u.movesLeft=0; u.hasAttacked=true; selectUnit(u); refreshAll(); }
+      });
+    }
   } else if(G.selCity){
     renderCityPanel();
   }
@@ -1295,28 +1455,78 @@ function renderCityPanel(){
     </div>
     <div class="desc">Yields come from the eight tiles around the city: forest→production, river→food, hills &amp; peaks→science.</div>`;
   if(mine){
-    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(costs ⚒ ${p.prod} avail)</span></div><div class="buildlist">`;
+    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood})</span></div><div class="buildlist">`;
     const occupied = !!unitAt(c.x,c.z);
     for(const [tid,d] of Object.entries(UNIT_TYPES)){
       if(d.role==='super') continue;
       const techok = !d.tech || p.techs.has(d.tech);
       if(!techok) continue;
       let cost=d.cost; if(tid==='rambler'&&p.faction.bonus==='explore') cost=Math.max(1,cost-1);
-      const dis = occupied || p.prod<cost;
+      const woodCost=d.wood||0;
+      const dis = occupied || p.prod<cost || p.wood<woodCost;
       h+=`<button class="btn" data-build="${tid}" data-cost="${cost}" ${dis?'disabled':''}>
-        <span>${d.glyph} ${d.name}</span><span class="cost">${cost}⚒</span></button>`;
+        <span>${d.glyph} ${d.name}</span><span class="cost">${cost}⚒${woodCost?` ${woodCost}🪵`:''}</span></button>`;
     }
     h+=`</div>`;
     if(occupied) h+=`<div class="legend" style="margin-top:6px">A unit blocks the city — move it to build.</div>`;
+    // ---- develop the land ----
+    h+=`<div class="label" style="margin:12px 0 6px">Develop the land</div><div class="buildlist">`;
+    let any=false;
+    for(const [x,z] of [[c.x,c.z],...neigh8(c.x,c.z)]){
+      const t=tileAt(x,z); if(t.owner!==p.id || t.city) continue;
+      for(const o of landOptionsFor(t)){ any=true; const dis=o.disabled||p.prod<o.cost;
+        h+=`<button class="btn" data-land="${x},${z},${o.id}" ${dis?'disabled':''} title="${o.note}">
+          <span>${o.glyph} ${o.label} <span style="color:var(--faint)">· ${dirLabel(x-c.x,z-c.z)} ${t.terrain}</span></span><span class="cost">${o.disabled?'—':o.cost+'⚒'}</span></button>`;
+      }
+    }
+    if(!any) h+=`<div class="legend">No workable land yet — grow the city to claim more tiles.</div>`;
+    h+=`</div>`;
     h+=`</div>`;
   }
   selBody.innerHTML=h;
   if(mine){
     selBody.querySelectorAll('[data-build]').forEach(b=>b.onclick=()=>{ doBuild(c,b.dataset.build,+b.dataset.cost); });
+    selBody.querySelectorAll('[data-land]').forEach(b=>b.onclick=()=>{ const a=b.dataset.land.split(','); doLand(c,+a[0],+a[1],a[2]); });
   }
 }
+function humanScout(u){ const p=playerById(u.owner); aiExplore(p,u); selectUnit(u); refreshAll(); rebuildDynamic(); }
 function doFound(u){ const p=playerById(u.owner); foundCity(p,u.x,u.z,false); killUnit(u); G.sel=null; logMsg('city',`${p.name} founded a village at the Skerne.`); recomputeIncome(); refreshAll(); rebuildDynamic(); }
-function doBuild(c,tid,cost){ const p=playerById(c.owner); if(p.prod<cost||unitAt(c.x,c.z)) return; p.prod-=cost; spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
+function doBuild(c,tid,cost){ const p=playerById(c.owner); const wd=UNIT_TYPES[tid].wood||0; if(p.prod<cost||p.wood<wd||unitAt(c.x,c.z)) return; p.prod-=cost; p.wood-=wd; spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
+
+/* ----- land development: city actions that reshape the surrounding tiles ----- */
+function landOptionsFor(t){
+  const o=[];
+  if(t.terrain==='field'){
+    o.push({id:'forest',label:'Plant Forest',glyph:'🌲',cost:6,note:'+production'});
+    if(t.improved!=='farm') o.push({id:'farm',label:'Build Farm',glyph:'🌾',cost:5,note:'+food'});
+  } else if(t.terrain==='forest'){
+    o.push({id:'fell',label:'Fell Timber',glyph:'🪓',cost:4,note:'+6 wood; clears to field'});
+  } else if(t.terrain==='hill'||t.terrain==='mountain'){
+    if(t.improved!=='mine') o.push({id:'mine',label:'Sink a Mine',glyph:'⛏',cost:7,note:'+production'});
+  } else if(t.terrain==='water'||t.terrain==='ocean'){
+    const ready = G.turn >= (t.fishedUntil||0);
+    o.push({id:'fish',label: ready?'Fish the shallows':'Fished out',glyph:'🐟',cost:2,note: ready?'+3 food now':`recovers in ${(t.fishedUntil||0)-G.turn} turn(s)`, disabled:!ready});
+  }
+  return o;
+}
+function doLand(c,x,z,id){
+  const p=playerById(c.owner); const t=tileAt(x,z);
+  if(!t||t.city||t.owner!==p.id) return;
+  const opt=landOptionsFor(t).find(o=>o.id===id); if(!opt||opt.disabled||p.prod<opt.cost) return;
+  let changed=true;
+  if(id==='forest'){ t.terrain='forest'; t.improved=null; }
+  else if(id==='fell'){ t.terrain='field'; t.improved=null; p.wood+=6; }
+  else if(id==='farm'){ t.improved='farm'; }
+  else if(id==='mine'){ t.improved='mine'; }
+  else if(id==='fish'){ c.food+=3; growCity(c); t.fishedUntil=G.turn+5; changed=false; }   // fishing doesn't reshape the tile
+  p.prod-=opt.cost;
+  logMsg('city',`${c.name}: ${opt.label.toLowerCase()}.`);
+  recomputeIncome(); if(changed) refreshTile(x,z); else rebuildDynamic(); refreshAll(); renderCityPanel();
+}
+function dirLabel(dx,dz){
+  if(!dx&&!dz) return 'centre';
+  return (dz<0?'N':dz>0?'S':'')+(dx<0?'W':dx>0?'E':'');
+}
 
 /* --------------------------- 6. AI + LEARNING ---------------------------- */
 const LESSONS = {
@@ -1476,19 +1686,21 @@ function aiActUnit(p,u,riskGate,thoughts){
   }
   if(defend && cap){ aiStepToward(u,cap.x,cap.z); thoughts.push('hold the capital'); }
   else if(enemyCity){ aiStepToward(u,enemyCity.x,enemyCity.z); thoughts.push('march on '+enemyCity.name); }
-  else if(cap){ aiStepToward(u,cap.x,cap.z); }
+  else { aiExplore(p,u); thoughts.push('scouting through the fog'); }   // no foe in sight — advance into the unknown
 }
-// an empty (capturable) enemy/neutral city whose tile we can step onto this turn
+// an empty (capturable) enemy/neutral city it has scouted and can step onto this turn
 function reachableEmptyEnemyCity(u){
   if(u.movesLeft<=0) return null;
+  const p=playerById(u.owner);
   const reach=reachable(u); let best=null,bd=1e9;
-  for(const c of G.cities){ if(c.owner===u.owner) continue;
+  for(const c of G.cities){ if(c.owner===u.owner || !seenByPlayer(p,c.x,c.z)) continue;
     if(reach.set.has(key(c.x,c.z))){ const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } }
   return best;
 }
 function capUnderThreat(p){
   const cap=G.cities.find(c=>c.id===p.capitalId); if(!cap) return false;
-  for(const e of G.units){ if(e.owner!==p.id && e.hp>0 && UNIT_TYPES[e.type].atk>0 && cheb(e.x,e.z,cap.x,cap.z)<=3) return true; }
+  // only threats it can actually see
+  for(const e of G.units){ if(e.owner!==p.id && e.hp>0 && UNIT_TYPES[e.type].atk>0 && cheb(e.x,e.z,cap.x,cap.z)<=3 && inSightOf(p,e.x,e.z)) return true; }
   return false;
 }
 
@@ -1500,6 +1712,7 @@ function aiPickAttack(p,u,riskGate,thoughts){
   const candidates=[]; const horizon=unitMove(u)+rng+1;
   for(const e of G.units){ if(e.hp<=0||e.owner===u.owner) continue;
     if(cheb(u.x,u.z,e.x,e.z)>horizon) continue;            // prune distant foes (also keeps this O(n) cheap)
+    if(!inSightOf(p,e.x,e.z)) continue;                    // fog of war — can't target what it can't see
     // can we get within range? either already, or there's a reachable tile within range
     let canHit = cheb(u.x,u.z,e.x,e.z)<=rng;
     if(!canHit){ for(const k of reach.set){ const [x,z]=k.split(',').map(Number); if(cheb(x,z,e.x,e.z)<=rng){canHit=true;break;} } }
@@ -1550,8 +1763,10 @@ function aiExplore(p,u){
   }
   if(best) moveUnit(u,best[0],best[1]);
 }
-function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ if(c.owner===p.id) continue; const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } return best; }
-function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
+// fog-aware: only cities it has actually scouted (cities are remembered once seen)
+function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ if(c.owner===p.id) continue; if(!seenByPlayer(p,c.x,c.z)) continue; const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } return best; }
+// fog-aware: only enemy units currently in its line of sight
+function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; if(!inSightOf(p,e.x,e.z)) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
 function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
 function findSettleSpot(p,u){
   // search nearby land that respects the minimum spacing, favouring resources
@@ -1703,6 +1918,7 @@ function refreshHUD(){
   const show=v||p;
   $('hudProd').innerHTML=`${show.prod}<small> ⚒ +${show.prodIncome||0}</small>`;
   $('hudSci').innerHTML=`${show.science}<small> 🔬 +${show.sciIncome||0}</small>`;
+  $('hudWood').innerHTML=`${show.wood||0}<small> 🪵</small>`;
   $('hudCities').textContent=G.cities.filter(c=>c.owner===show.id).length;
   $('hudScore').textContent=score(show);
 }
@@ -1889,13 +2105,55 @@ $('btnAuto').onclick=()=>{ autoplay=!autoplay; $('btnAuto').textContent=autoplay
 $('speedSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ speed=b.dataset.sp; $('speedSeg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); if(speed!=='step'&&G.mode==='auto'&&!G.gameOver){ if(autoTimer)clearTimeout(autoTimer); advance(); } });
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+// rough "power" rating of a unit, used by the roster table and the balance check
+function unitValue(d){
+  return d.atk*1.1 + d.def*1.0 + d.hp*0.16 + d.move*0.9 + (d.range-1)*0.9
+    + (d.role==='settle'?3:0) + (d.role==='scout'?1.6:0) + (d.role==='siege'?1.2:0)
+    + (d.role==='stealth'?1.5:0) + (d.domain==='air'?1.5:0) + (d.role==='super'?7:0);
+}
+function unitCostVal(d){ return (d.cost||0) + (d.wood||0)*0.9; }
+function renderRoster(){
+  const mono="font-family:'JetBrains Mono',monospace";
+  let h=`<table style="width:100%;border-collapse:collapse;${mono};font-size:11px">
+    <thead><tr style="color:var(--amber2);text-align:right">
+      <th style="text-align:left;padding:6px 4px">Unit</th><th>Cost</th><th>HP</th><th>ATK</th><th>DEF</th><th>MOV</th><th>RNG</th>
+      <th style="text-align:left;padding-left:8px">Requires</th><th>Value</th><th>V/⚒</th></tr></thead><tbody>`;
+  for(const [tid,d] of Object.entries(UNIT_TYPES)){
+    const v=unitValue(d), cv=unitCostVal(d); const vpc=d.role==='super'?'—':(v/Math.max(0.5,cv)).toFixed(2);
+    const cost = d.role==='super' ? 'reward' : `${d.cost}⚒${d.wood?` ${d.wood}🪵`:''}`;
+    const req = d.tech ? TECHS[d.tech].name : (d.role==='super'?'city Lv 5':'—');
+    h+=`<tr style="text-align:right;border-top:1px solid var(--line)">
+      <td style="text-align:left;padding:6px 4px"><b style="color:var(--ink)">${d.glyph} ${d.name}</b><div style="color:var(--faint);font-size:9.5px;${mono}">${d.role}${d.domain==='air'?' · air':''}</div></td>
+      <td>${cost}</td><td>${d.hp}</td><td>${d.atk}</td><td>${d.def}</td><td>${d.move}</td><td>${d.range}</td>
+      <td style="text-align:left;padding-left:8px;color:var(--muted)">${req}</td><td>${v.toFixed(1)}</td><td style="color:var(--amber2)">${vpc}</td></tr>`;
+  }
+  h+=`</tbody></table>
+    <div class="desc" style="margin-top:10px">Found timber by felling forests (🪵), then forge <b>Armed Guards</b>. Fish a city's shoreline for a burst of food (5-turn cooldown) to grow — and build — faster. The <b>Brick Colossus</b> is earned, not bought, when a city reaches level 5.</div>`;
+  $('rosterBody').innerHTML=h;
+}
+function openHelp(){ $('help').classList.remove('hidden'); }
+function closeHelp(){ $('help').classList.add('hidden'); try{localStorage.setItem('brassrails.seenHelp','1');}catch(e){} }
+$('btnHelp').onclick=openHelp;
+$('helpClose').onclick=closeHelp;
+$('helpBtn2').onclick=openHelp;
+$('btnRoster').onclick=()=>{ renderRoster(); $('roster').classList.remove('hidden'); };
+$('rosterClose').onclick=()=>$('roster').classList.add('hidden');
 
-// keyboard: space = end turn / step
-addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); if(G.mode==='auto') manualStep(); else if(!$('endturn').disabled) endTurn(); }
-  if(e.key==='Escape'){ G.sel=null;G.selCity=null;G.reach=null;G.atks=null;updateHighlights(); if(G.started)renderSelPanelEmpty(); } });
+// keyboard: space = end turn / step · WASD + arrows pan the camera
+const PAN_MAP={KeyW:'up',ArrowUp:'up',KeyS:'down',ArrowDown:'down',KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right'};
+addEventListener('keydown',e=>{
+  const tag=(e.target&&e.target.tagName)||''; if(tag==='INPUT'||tag==='TEXTAREA') return;
+  if(PAN_MAP[e.code]){ e.preventDefault(); panKeys.add(PAN_MAP[e.code]); return; }
+  if(e.code==='Space'){ e.preventDefault(); if(G.mode==='auto') manualStep(); else if(!$('endturn').disabled) endTurn(); }
+  if(e.key==='Escape'){ G.sel=null;G.selCity=null;G.reach=null;G.atks=null;updateHighlights(); if(G.started)renderSelPanelEmpty(); }
+  if(e.key==='?'||(e.shiftKey&&e.code==='Slash')){ openHelp(); }
+});
+addEventListener('keyup',e=>{ if(PAN_MAP[e.code]) panKeys.delete(PAN_MAP[e.code]); });
+addEventListener('blur',()=>panKeys.clear());
 
 // boot
 buildSetupUI(); syncSetup();
+if(!localStorage.getItem('brassrails.seenHelp')) openHelp();   // first-time onboarding
 </script>
 </body>
 </html>
