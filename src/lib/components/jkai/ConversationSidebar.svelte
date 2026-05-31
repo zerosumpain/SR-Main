@@ -1,6 +1,14 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import DraftsPanel from './DraftsPanel.svelte';
+  import MetricsStrip from './MetricsStrip.svelte';
+
+  interface SpendByPeriod {
+    day: number;
+    week: number;
+    month: number;
+    lifetime: number;
+  }
 
   interface ConversationItem {
     id: string;
@@ -28,6 +36,8 @@
     collapsed = false,
     onToggleCollapse,
     liveConversationIds = [],
+    metrics,
+    spendByPeriod,
   }: {
     conversations: ConversationItem[];
     whatsappThread: WhatsAppThread | null;
@@ -39,6 +49,8 @@
     collapsed?: boolean;
     onToggleCollapse: () => void;
     liveConversationIds?: string[];
+    metrics: { scheduled: number; running: number; completed: number; failed: number };
+    spendByPeriod: SpendByPeriod;
   } = $props();
 
   const liveSet = $derived(new Set(liveConversationIds));
@@ -237,6 +249,9 @@
 
     <!-- Footer actions -->
     <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
+      <div class="pb-1">
+        <MetricsStrip {metrics} {spendByPeriod} />
+      </div>
       <a
         href="/jkai/builds"
         class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"

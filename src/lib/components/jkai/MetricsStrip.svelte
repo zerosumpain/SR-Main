@@ -30,26 +30,19 @@
   }
 </script>
 
-<div
-  class="flex items-center gap-4 text-[11px] overflow-x-auto whitespace-nowrap min-w-0"
-  style="font-family: var(--font-mono); color: var(--text-ghost); scrollbar-width: none;"
->
-  <span>{metrics.scheduled} scheduled</span>
-  <span style="color: var(--text-ghost);">|</span>
-  {#if metrics.running > 0}
-    <span style="color: #569cd6;">{metrics.running} running</span>
-  {:else}
-    <span>{metrics.running} running</span>
-  {/if}
-  <span style="color: var(--text-ghost);">|</span>
-  <span>{metrics.completed} completed</span>
-  <span style="color: var(--text-ghost);">|</span>
-  {#if metrics.failed > 0}
-    <span style="color: #b43232;">{metrics.failed} failed</span>
-  {:else}
-    <span>{metrics.failed} failed</span>
-  {/if}
-  <span style="color: var(--text-ghost);">|</span>
+<!-- Stacked, sidebar-footer layout: abbreviated job counts wrap on the first
+     row, the click-to-cycle spend window sits on its own row beneath. Kept off
+     the chat header so the conversation surface stays uncluttered. -->
+<div class="metrics-strip" style="font-family: var(--font-mono); color: var(--text-ghost);">
+  <div class="counts">
+    <span>{metrics.scheduled} sched</span>
+    <span class="sep">·</span>
+    <span class:run-active={metrics.running > 0}>{metrics.running} run</span>
+    <span class="sep">·</span>
+    <span>{metrics.completed} done</span>
+    <span class="sep">·</span>
+    <span class:fail-active={metrics.failed > 0}>{metrics.failed} fail</span>
+  </div>
   <button
     type="button"
     class="spend"
@@ -61,6 +54,27 @@
 </div>
 
 <style>
+  .metrics-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .counts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 6px;
+  }
+  .sep {
+    opacity: 0.5;
+  }
+  .run-active {
+    color: #569cd6;
+  }
+  .fail-active {
+    color: #b43232;
+  }
   .spend {
     background: transparent;
     border: none;
@@ -69,6 +83,7 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
+    text-align: left;
     white-space: nowrap;
   }
   .spend:hover {

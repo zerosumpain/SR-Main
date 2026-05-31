@@ -1,6 +1,5 @@
 <script lang="ts">
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
-  import MetricsStrip from '$lib/components/jkai/MetricsStrip.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import type { ModelContext } from '$lib/server/models/types';
@@ -201,18 +200,15 @@
       </button>
     {/snippet}
     {#snippet meta()}
-      <div class="flex items-center gap-3">
-        <MetricsStrip {metrics} spendByPeriod={data.spendByPeriod} />
-        <a
-          href="https://hermes.strangeramblings.com/"
-          target="_blank"
-          rel="noopener"
-          class="hermes-admin-link"
-          title="Hermes app — sessions, skills, providers, MCP, chat"
-        >
-          Hermes ↗
-        </a>
-      </div>
+      <a
+        href="https://hermes.strangeramblings.com/"
+        target="_blank"
+        rel="noopener"
+        class="hermes-admin-link"
+        title="Hermes app — sessions, skills, providers, MCP, chat"
+      >
+        Hermes ↗
+      </a>
     {/snippet}
   </PageHeader>
 
@@ -231,6 +227,8 @@
         collapsed={false}
         onToggleCollapse={() => {}}
         {liveConversationIds}
+        {metrics}
+        spendByPeriod={data.spendByPeriod}
       />
     </div>
 
@@ -259,6 +257,8 @@
             collapsed={false}
             onToggleCollapse={() => { sidebarOpen = false; }}
             {liveConversationIds}
+            {metrics}
+            spendByPeriod={data.spendByPeriod}
           />
         </div>
       </div>
