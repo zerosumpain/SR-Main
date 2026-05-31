@@ -48,3 +48,8 @@ scraper-scripts/
 .claude/worktrees/
 .claude/settings.json
 .claude/skills/
+
+# Playwright artifacts
+test-results/
+playwright-report/
+.playwright/
