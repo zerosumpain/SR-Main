@@ -470,7 +470,7 @@ const UNIT_TYPES = {
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
   guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
   armed:    {name:'Armed Guard',   cost:4, wood:4, hp:12, atk:3, def:2, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard forged steel weapons from felled timber — harder-hitting.'},
-  pike:     {name:'Skerne Pike',   cost:3, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry',   domain:'land', role:'def',    glyph:'▮', desc:'Stalwart defender — hard to dislodge.'},
+  pike:     {name:'Skerne Pike',   cost:4, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry',   domain:'land', role:'def',    glyph:'▮', desc:'Stalwart defender — hard to dislodge.'},
   pony:     {name:'Pit Pony',      cost:3, hp:10, atk:2, def:1, move:2, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Swift raider bred in the colliery.'},
   gun:      {name:'Stephenson Gun',cost:8, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege',  glyph:'☷', desc:'Long-range siege piece. Strikes without retaliation.'},
   ironclad: {name:'Ironclad',      cost:10,hp:15, atk:4, def:3, move:2, range:1, tech:'steam',     domain:'land', role:'mil',    glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
@@ -499,7 +499,7 @@ const FACTIONS = [
   {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+25% hill/mtn def'},
   {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+15% attack'},
   {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −20%'},
-  {id:'rovers',    name:'Quaker Rovers',          color:0xe4e4e4, motto:'Forward, ever forward',       bonus:'explore', bonusTxt:'Ramblers −1 ⚒'},
+  {id:'rovers',    name:'Quaker Rovers',          color:0xe4e4e4, motto:'Forward, ever forward',       bonus:'cheap',   bonusTxt:'all units −1 ⚒'},
 ];
 
 const PLACE_NAMES = ['Skerne','Cockerton','Haughton','Hurworth','Heighington','Shildon','Piercebridge',
@@ -912,8 +912,14 @@ function checkElimination(){
 }
 
 /* ----- move a unit, handle city capture ----- */
+const _now=()=>(typeof performance!=='undefined'&&performance.now)?performance.now():0;
+function moveAnimDur(){ return G.mode==='auto' ? clamp((SPEEDS[speed]||450)*0.78, 90, 360) : 300; }
 function moveUnit(u,x,z){
+  const ox=u.x, oz=u.z;
   u.x=x; u.z=z;
+  // record a glide animation from the old tile to the new one (consumed by the render loop)
+  u._animFrom={x:ox,z:oz}; u._animStart=_now(); u._animDur=moveAnimDur();
+  G._animUntil=Math.max(G._animUntil||0, u._animStart+u._animDur+50);   // keep full-rate render during the glide
   const p=playerById(u.owner);
   reveal(p,x,z, u.type==='rambler'?2:1);
   const c=cityAt(x,z);
@@ -1263,8 +1269,16 @@ function rebuildDynamic(){
     m.position.set(wx(u.x),h,wz(u.z)); m.userData={kind:'unit',ref:u};
     const fly = UNIT_TYPES[u.type].domain==='air';
     m.userData.baseY=h+(fly?0.8:0); m.userData.bob=rnd()*6.28;
+    // attach an in-flight glide if this unit just moved
+    if(u._animFrom){
+      const elapsed=_now()-(u._animStart||0), dur=u._animDur||300;
+      if(elapsed<dur && inB(u._animFrom.x,u._animFrom.z)){
+        const fh=TERRAIN[tileAt(u._animFrom.x,u._animFrom.z).terrain].h*HSCALE+(fly?0.8:0);
+        m.userData.anim={ fx:wx(u._animFrom.x), fz:wz(u._animFrom.z), tx:wx(u.x), tz:wz(u.z), fy:fh, ty:m.userData.baseY, start:u._animStart||0, dur, unit:u };
+        m.position.x=m.userData.anim.fx; m.position.z=m.userData.anim.fz;   // start at the origin tile
+      } else { u._animFrom=null; }
+    }
     dynGroup.add(m); bobUnits.push(m);
-    // health ring scale by hp
   }
   updateHighlights();
   if(renderer) renderer.shadowMap.needsUpdate=true;   // board changed — refresh shadows once
@@ -1365,10 +1379,20 @@ function animate(t){
   requestAnimationFrame(animate);
   const panning = applyPan(t);             // WASD / arrow-key panning
   controls.update();                       // keep damping responsive every frame
-  if(!panning && t-lastT < 33) return;     // render every frame while panning (silky); else cap ~30fps
+  const animating = t < (G._animUntil||0); // units gliding between tiles
+  if(!panning && !animating && t-lastT < 33) return;   // full-rate while panning/animating; else cap ~30fps
   lastT=t;
   const time=t*0.001;
-  for(const m of bobUnits){ m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04; }
+  for(const m of bobUnits){
+    const a=m.userData.anim;
+    if(a){
+      let p=(t-a.start)/a.dur; if(p>=1){ p=1; m.userData.anim=null; if(a.unit&&a.unit._animFrom) a.unit._animFrom=null; }
+      const e=1-Math.pow(1-p,3);            // ease-out glide
+      m.position.x=a.fx+(a.tx-a.fx)*e; m.position.z=a.fz+(a.tz-a.fz)*e;
+      m.userData.baseY=a.fy+(a.ty-a.fy)*e + Math.sin(p*Math.PI)*0.13;   // little hop over the move
+    }
+    m.position.y=m.userData.baseY+Math.sin(time*2+m.userData.bob)*0.04;
+  }
   composer.render();
 }
 
@@ -1498,7 +1522,7 @@ function renderCityPanel(){
       if(d.role==='super') continue;
       const techok = !d.tech || p.techs.has(d.tech);
       if(!techok) continue;
-      let cost=d.cost; if(tid==='rambler'&&p.faction.bonus==='explore') cost=Math.max(1,cost-1);
+      let cost=d.cost; if(p.faction.bonus==='cheap') cost=Math.max(1,cost-1);
       const woodCost=d.wood||0;
       const dis = occupied || p.prod<cost || p.wood<woodCost;
       h+=`<button class="btn" data-build="${tid}" data-cost="${cost}" ${dis?'disabled':''}>
@@ -1673,13 +1697,14 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   const armyCap = myCities.length*4 + 3;
   const atCap = army.length >= armyCap;
   const avail=(tid)=>{ const d=UNIT_TYPES[tid]; return (!d.tech||p.techs.has(d.tech)); };
-  const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(tid==='rambler'&&p.faction.bonus==='explore') c=Math.max(1,c-1); return c; };
+  const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(p.faction.bonus==='cheap') c=Math.max(1,c-1); return c; };
 
   // capital defence first (defendCapital lesson)
   const cap=G.cities.find(c=>c.id===p.capitalId)||myCities[0];
   const capDef = cap? myUnits.filter(u=>cheb(u.x,u.z,cap.x,cap.z)<=1&&UNIT_TYPES[u.type].def>=2).length : 99;
   if(cap && capDef<homeNeed && p.prod>=cost('guard')){
-    const t = avail('pike')&&p.prod>=cost('pike')? 'pike':'guard';
+    // alternate Pike/Guard for defence rather than always reaching for the cheapest wall
+    const t = (avail('pike') && p.prod>=cost('pike') && rnd()<0.4) ? 'pike':'guard';
     thoughts.push(`reinforce ${cap.name} (lesson: defend the capital, need ${homeNeed})`);
     return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t, cost:cost(t)};
   }
