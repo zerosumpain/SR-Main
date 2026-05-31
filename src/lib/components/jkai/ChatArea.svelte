@@ -1581,22 +1581,19 @@
               {/if}
             {/if}
             <div class="relative">
-              {#if msg.source === 'followup'}
-                <span
-                  class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
-                  style="background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);"
-                  title="Async follow-up"
-                >
-                  FU
-                </span>
-              {:else if msg.source === 'whatsapp'}
-                <span
-                  class="absolute -left-6 top-2 text-[9px] px-1 py-0.5 rounded"
-                  style="background: rgba(37, 211, 102, 0.15); color: #25d366;"
-                  title="From WhatsApp"
-                >
-                  WA
-                </span>
+              {#if msg.source === 'followup' || msg.source === 'whatsapp'}
+                <div class="src-tag-row" class:justify-end={msg.role === 'user'}>
+                  {#if msg.source === 'whatsapp'}
+                    <span class="src-tag src-tag-wa" title="Received via WhatsApp">
+                      WhatsApp
+                    </span>
+                  {:else}
+                    <span class="src-tag src-tag-fu" title="Proactive follow-up from jkai — sent without a prompt from you">
+                      <span class="src-tag-glyph" aria-hidden="true">↩</span>
+                      Follow-up
+                    </span>
+                  {/if}
+                </div>
               {/if}
               <ChatMessage
                 role={msg.role}
@@ -1749,6 +1746,35 @@
     background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
   .hero-chip-icon { font-size: 13px; }
+
+  /* Message-origin tags — replaces the cryptic "FU"/"WA" gutter pills with
+   * clearly labelled, in-flow chips aligned to the message's side. */
+  .src-tag-row {
+    display: flex;
+    margin-bottom: 4px;
+  }
+  .src-tag-row.justify-end { justify-content: flex-end; }
+  .src-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.4;
+  }
+  .src-tag-fu {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .src-tag-wa {
+    color: #1c8c4e;
+    background: rgba(37, 211, 102, 0.15);
+  }
+  .src-tag-glyph { font-size: 10px; line-height: 1; }
 
   /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
   .reasoning-panel {
