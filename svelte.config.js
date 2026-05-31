@@ -14,7 +14,8 @@ const config = {
 		// session cookies are sameSite=lax (browser-level CSRF protection
 		// on the rest of the site) and /dav/* requires Basic Auth against
 		// webdav_credentials.
-		csrf: { checkOrigin: false }
+		csrf: { checkOrigin: false },
+		serviceWorker: { register: false }
 	},
 	vitePlugin: {
 		dynamicCompileOptions: ({ filename }) =>
