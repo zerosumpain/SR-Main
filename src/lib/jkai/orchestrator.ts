@@ -17,6 +17,7 @@ import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
 import { emitStage } from './stage-events';
+import { notifyAllSubscribers } from '$lib/server/push';
 
 export { onBuildLog } from './log-emitter';
 
@@ -1035,6 +1036,15 @@ class Orchestrator {
             ? `/api/jkai/proxy/${buildId}/`
             : null;
           await emitStage(buildId, { stage: 'completed', previewUrl });
+          try {
+            await notifyAllSubscribers({
+              title: 'Build complete',
+              body: build.title ?? 'jkai build finished',
+              url: `/jkai/builds/${buildId}`,
+            });
+          } catch (e) {
+            console.warn('[jkai-pwa] push failed', e);
+          }
           this.activeBuildId = null;
           await this.dequeueNext();
           return;
@@ -1084,6 +1094,16 @@ class Orchestrator {
       `Build aborted: ${failure.kind} — ${failure.message}`,
     );
     await emitStage(buildId, { stage: 'failed', failureKind: failure.kind, message: failure.message });
+
+    try {
+      await notifyAllSubscribers({
+        title: 'Build failed',
+        body: (failure.message ?? '').slice(0, 140) || 'jkai build failed',
+        url: `/jkai/builds/${buildId}`,
+      });
+    } catch (e) {
+      console.warn('[jkai-pwa] push failed', e);
+    }
 
     this.activeBuildId = null;
     if (this.loopTimer) clearTimeout(this.loopTimer);

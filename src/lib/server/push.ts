@@ -44,3 +44,31 @@ export async function notifyUser(userId: string, payload: PushPayload): Promise<
 		}),
 	);
 }
+
+/**
+ * Notify every distinct subscriber across every authenticated user. Used by
+ * background jobs that don't own a userId (e.g. the jkai builder orchestrator
+ * — `jkai_builds` has no owner column because this is a single-user
+ * personal site; everyone allowlisted via AUTH_ALLOWED_EMAILS is "the user").
+ */
+export async function notifyAllSubscribers(payload: PushPayload): Promise<void> {
+	configure();
+	const subs = await db.select().from(pushSubscriptions);
+	const body = JSON.stringify(payload);
+
+	await Promise.all(
+		subs.map(async (s) => {
+			try {
+				await webpush.sendNotification(
+					{ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+					body,
+				);
+			} catch (err) {
+				const status = (err as { statusCode?: number }).statusCode;
+				if (status === 404 || status === 410) {
+					await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, s.endpoint));
+				}
+			}
+		}),
+	);
+}
