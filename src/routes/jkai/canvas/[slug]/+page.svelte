@@ -3023,6 +3023,7 @@
 </svelte:head>
 
 <div class="page-shell" class:canvas--mobile={isMobile}>
+  {#if isMobile}<div class="mobile-debug-pill">MOBILE</div>{/if}
   <PageHeader title={canvas.title} titleHref="/jkai/canvas">
     {#snippet meta()}
       <span class="canvas-head-meta">
@@ -7639,21 +7640,21 @@
     transform: none !important;
   }
 
-  /* Tiny debug pill so John can confirm at a glance whether mobile mode is
-   * actually active on his phone. Remove once mobile UX is stable. */
-  .canvas--mobile :global(body)::after {
-    content: 'MOBILE';
+  /* Debug pill: rendered as a real conditional element below (cleaner than
+   * CSS pseudo-element on body, which can't be targeted via a parent
+   * class). Remove the element + this rule once mobile UX is stable. */
+  .mobile-debug-pill {
     position: fixed;
     top: 4px;
     right: 4px;
     z-index: 9999;
-    font: 600 9px / 1 system-ui, sans-serif;
-    background: var(--status-success, #2c8a3f);
+    font: 600 11px / 1 system-ui, sans-serif;
+    background: #2c8a3f;
     color: white;
-    padding: 3px 6px;
+    padding: 4px 8px;
     border-radius: 3px;
     pointer-events: none;
-    opacity: 0.7;
+    opacity: 0.9;
   }
 
   /* Drag-handle visual at the top of the sheet (purely decorative — the
