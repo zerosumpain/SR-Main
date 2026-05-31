@@ -178,7 +178,7 @@
     display: flex;
     flex-direction: column;
     min-width: 190px;
-    background: var(--card-bg);
+    background: var(--bg);
     border: 1px solid var(--card-border);
     box-shadow: 0 8px 24px rgba(26, 16, 8, 0.18);
   }
