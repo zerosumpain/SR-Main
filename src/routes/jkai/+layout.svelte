@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { registerJkaiSW } from '$lib/jkai/pwa/register';
   import { startAutoSync } from '$lib/jkai/pwa/syncManager';
+  import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
 
   let { children } = $props();
 
@@ -22,6 +23,7 @@
 </svelte:head>
 
 <div class="jkai-root">
+  <OfflineBanner />
   {@render children()}
 </div>
 
