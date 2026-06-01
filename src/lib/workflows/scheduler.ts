@@ -60,7 +60,18 @@ export function registerCronJob(schedule: {
   activeJobs.get(schedule.id)?.stop();
   activeJobs.delete(schedule.id);
 
-  const expression = (schedule.config as Record<string, unknown>)?.expression as string | undefined;
+  // Accept both `config.expression` (canonical) and `config.cron`. The
+  // workflow_add_schedule / workflow_update_schedule MCP tools historically
+  // stored the cron string under `config.cron` (per their own description),
+  // but this runner only ever read `config.expression` — so any schedule added
+  // via those tools saved fine but silently never registered in the in-memory
+  // cron runner (enabled-but-dormant). Tolerating both keys here makes those
+  // existing rows register on the next reload/boot without a data rewrite.
+  const cfg = (schedule.config ?? {}) as Record<string, unknown>;
+  const expression =
+    (typeof cfg.expression === 'string' && cfg.expression) ||
+    (typeof cfg.cron === 'string' && cfg.cron) ||
+    undefined;
   if (!expression) {
     console.warn(`[scheduler] Schedule ${schedule.id} has no cron expression — skipping`);
     return;

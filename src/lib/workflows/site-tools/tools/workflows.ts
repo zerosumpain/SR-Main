@@ -1319,6 +1319,21 @@ register({
 // Update Tools — Schedules
 // ==========================================
 
+/**
+ * Normalise a schedule config so the cron string lands on `config.expression`
+ * — the only key the in-memory cron runner (scheduler.registerCronJob) reads.
+ * These tools' descriptions historically suggested `{ cron: "..." }`, which
+ * saved fine but never registered (enabled-but-dormant). Accept either key and
+ * canonicalise to `expression` so new schedules actually fire.
+ */
+function normalizeScheduleConfig(config: Record<string, unknown> | undefined): Record<string, unknown> {
+  const cfg = { ...(config ?? {}) };
+  if (typeof cfg.expression !== 'string' && typeof cfg.cron === 'string') {
+    cfg.expression = cfg.cron;
+  }
+  return cfg;
+}
+
 register({
   name: 'workflow_add_schedule',
   description: 'Add a cron schedule to a workflow',
@@ -1327,7 +1342,7 @@ register({
     properties: {
       workflowId: { type: 'string', description: 'Workflow ID' },
       type: { type: 'string', description: 'Schedule type (e.g. "cron")' },
-      config: { type: 'object', description: 'Schedule config (e.g. { "cron": "0 8 * * *" } for daily at 8am)' },
+      config: { type: 'object', description: 'Schedule config. For cron, set the 5-field cron string as { "expression": "0 8 * * *" } (daily at 8am). "cron" is accepted as an alias.' },
     },
     required: ['workflowId', 'type', 'config'],
   },
@@ -1337,7 +1352,7 @@ register({
     const [schedule] = await db.insert(workflowSchedules).values({
       workflowId: args.workflowId as string,
       type: args.type as string,
-      config: args.config as Record<string, unknown>,
+      config: normalizeScheduleConfig(args.config as Record<string, unknown>),
     }).returning();
     const { reloadSchedule } = await import('$lib/workflows/scheduler');
     await reloadSchedule(schedule.id);
@@ -1362,7 +1377,7 @@ register({
   handler: async (args) => {
     const updates: Record<string, unknown> = {};
     if (args.enabled !== undefined) updates.enabled = args.enabled;
-    if (args.config) updates.config = args.config;
+    if (args.config) updates.config = normalizeScheduleConfig(args.config as Record<string, unknown>);
     const scheduleId = args.scheduleId as string;
     const [schedule] = await db
       .update(workflowSchedules)
