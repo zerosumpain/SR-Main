@@ -497,8 +497,13 @@ const UNIT_TYPES = {
   ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:15, atk:4, def:3, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
   skylark:  {name:'Skylark',       cost:8, wood:3, hp:10, atk:3, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
   nightmail:{name:'Night Mail',    cost:7, wood:2, hp:10, atk:4, def:1, move:2, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — the mail train that runs by dark.'},
+  monitor:  {name:'Skerne Monitor',cost:6, wood:3, hp:14, atk:4, def:3, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, glyph:'⛴', desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port.'},
+  lighter:  {name:'Tees Lighter',  cost:5, wood:2, hp:12, atk:0, def:1, move:3, range:0, tech:'harbours', domain:'sea', role:'transport', cargo:2, port:true, glyph:'⛵', desc:'A flat-bottomed barge — ferries up to 2 land units across the water. Needs a Port.'},
   colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
 };
+// food eaten per turn by a unit (scarcity sink — scales with the unit's heft)
+const UNIT_UPKEEP = {founder:3, rambler:1, guard:2, armed:2, pike:2, pony:2, gun:2, ironclad:3, skylark:3, nightmail:2, monitor:3, lighter:2, colossus:5};
+function unitUpkeep(u){ return UNIT_UPKEEP[u.type]!=null ? UNIT_UPKEEP[u.type] : 1; }
 
 const TECHS = {
   husbandry:  {name:'Husbandry',     tier:1, prereq:null,        unlocks:[],          improvement:'farm',  note:'Orchards & cattle + build Farms on fields.'},
@@ -518,7 +523,7 @@ const TECHS = {
 const IMPROVEMENTS = {
   farm:     {label:'Farm',       glyph:'🌾', tech:'husbandry', on:['field'],                   cost:{prod:5},          yield:{food:1},          note:'+1 food on a field.'},
   lumber:   {label:'Lumber Mill',glyph:'🪚', tech:'forestry',  on:['lightforest','denseforest'],cost:{prod:5},         yield:{wood:2,prod:1},   note:'+wood from a forest.'},
-  port:     {label:'Port',       glyph:'⚓', tech:'harbours',  on:['water','ocean'],           cost:{prod:6},          yield:{food:1,prod:1},   note:'+food & trade on water.'},
+  port:     {label:'Port',       glyph:'⚓', tech:'harbours',  on:['water','ocean'],           cost:{prod:6},          yield:{food:2,prod:1},   note:'+food & trade on water — a Port also lets this city build ships.'},
   watermill:{label:'Water Mill', glyph:'🜄', tech:'milling',   on:['river'],                   cost:{prod:5},          yield:{prod:2,food:1},   note:'+production & food on a river.'},
   mine:     {label:'Mine',       glyph:'⛏', tech:'ironworking',on:['hill','mountain'],         cost:{prod:7},          yield:{stone:2,prod:1},  note:'+stone & production on rock.'},
 };
@@ -825,7 +830,15 @@ function seenByPlayer(p,x,z){ return p.explored.has(key(x,z)); }
 const CITY_MAX = 10;                                            // hard ceiling on city level
 function borderRadius(c){ return Math.min(c.level, 4); }       // visual/owned territory (capped at 4)
 function workRadius(c){ return Math.min(c.level, 4); }   // worked tiles grow with level up to 4
-function growCost(c){ return (c.level+1)*(c.level+1)*4; }     // food to tick a level up once unlocked (quadratic → a real food sink)
+function growCost(c){ return (c.level+1)*(c.level+1)*3; }     // food to tick a level up once unlocked (quadratic → a real food sink)
+// total food a player's standing army + cities eat each turn (the binding scarcity sink)
+function foodUpkeep(p){
+  let up=0;
+  for(const u of G.units){ if(u.owner===p.id&&u.hp>0) up+=unitUpkeep(u); }
+  // a city's population eats more the bigger it grows (super-linear so tall empires feel the pinch)
+  for(const c of G.cities){ if(c.owner===p.id){ const L=c.level; up += L*0.8 + L*L*0.08; } }
+  return Math.round(up);
+}
 // how many infrastructure improvements have been built inside this city's worked territory
 function cityImprovements(c){
   let n=0; const r=workRadius(c);
@@ -958,8 +971,22 @@ function canEnter(u,t){
   const dom=UNIT_TYPES[u.type].domain;
   if(dom==='air') return true;
   const pass=TERRAIN[t.terrain].pass;
+  if(dom==='sea') return pass==='water';   // ships ride open water/ocean only (rivers are fordable land)
   return pass==='land';
 }
+// is tile (x,z) open sea/ocean a ship can occupy?
+function isSeaTile(x,z){ return inB(x,z) && TERRAIN[tileAt(x,z).terrain].pass==='water'; }
+// a land/coast tile a transported unit could disembark onto (passable land, in bounds)
+function isDisembarkTile(x,z){ return inB(x,z) && TERRAIN[tileAt(x,z).terrain].pass==='land'; }
+// is this city able to build ships? (reused Port improvement as the harbour/shipyard:
+// a city is a naval yard when the owner has Harbours tech AND a Port improvement sits in its land)
+function cityHasPort(c){
+  const r=workRadius(c);
+  for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){ const x=c.x+dx,z=c.z+dz; if(!inB(x,z))continue; const t=tileAt(x,z);
+    if(t.cityId===c.id && t.improved==='port') return true; }
+  return false;
+}
+function cityCoastal(c){ for(const [nx,nz] of neigh8(c.x,c.z)) if(isSeaTile(nx,nz)) return true; return false; }
 function reachable(u){
   const mv=unitMove(u);
   const dist={[key(u.x,u.z)]:0}; const q=[[u.x,u.z]]; const set=new Set();
@@ -1072,6 +1099,34 @@ function moveUnit(u,x,z){
   if(c && c.owner!==u.owner){ captureCity(p,c); }
   // movesLeft consumed by reachability step distance — recompute on selection; set 0 to keep simple
   u.movesLeft=0;
+}
+
+/* ----- naval transport: embark / disembark land units ----- */
+const transportCap=(u)=>UNIT_TYPES[u.type].cargo||0;
+// transports a unit may board: friendly sea transports with spare room, adjacent to (x,z)
+function nearbyTransports(p,x,z){
+  return G.units.filter(t=>t.owner===p.id && t.hp>0 && transportCap(t)>0 && (t.cargo||[]).length<transportCap(t) && cheb(t.x,t.z,x,z)<=1);
+}
+// load land unit u onto transport t (consumes u's turn; u leaves the board into t.cargo)
+function embarkUnit(u,t){
+  if(UNIT_TYPES[u.type].domain!=='land') return false;
+  if((t.cargo||[]).length>=transportCap(t)) return false;
+  t.cargo=t.cargo||[]; t.cargo.push({type:u.type,hp:u.hp});
+  killUnit(u);     // removed from the board; carried as cargo data
+  return true;
+}
+// land cargo slot `idx` from transport t onto an adjacent coast tile (x,z); consumes t's turn
+function disembarkUnit(t,idx,x,z){
+  const p=playerById(t.owner); const cargo=t.cargo||[];
+  if(idx<0||idx>=cargo.length) return false;
+  if(cheb(t.x,t.z,x,z)>1 || !isDisembarkTile(x,z) || unitAt(x,z)) return false;
+  const slot=cargo[idx]; const u=spawnUnit(p,slot.type,x,z,true);
+  if(!u) return false;
+  u.hp=Math.min(u.maxHp, slot.hp||u.maxHp); u.movesLeft=0; u.hasAttacked=true;
+  cargo.splice(idx,1);
+  const c=cityAt(x,z); if(c && c.owner!==p.id) captureCity(p,c);
+  t.movesLeft=0;
+  return true;
 }
 
 /* --------------------------- 4. RENDERING -------------------------------- */
@@ -1369,6 +1424,22 @@ function buildUnitTemplate(t,col){
     add(cyl(.16,.16,.06,dark,14),.18,.18,.26,Math.PI/2,0,0); add(cyl(.16,.16,.06,dark,14),.18,.18,-.26,Math.PI/2,0,0);
     add(cyl(.16,.16,.06,dark,14),-.18,.18,.26,Math.PI/2,0,0); add(cyl(.16,.16,.06,dark,14),-.18,.18,-.26,Math.PI/2,0,0);
     base.scale.set(1.7,1,1.7);
+  } else if(t==='monitor'){                          // iron gunboat — low hull, turret, funnel
+    const hull=colorMat(0x2c3540,{m:.4,r:.4});
+    add(box(.6,.12,.26,hull),0,.16,0);
+    add(box(.5,.08,.2,hull),0,.26,0);                // deck
+    add(cyl(.12,.14,.12,steel,12),-.02,.36,0);       // turret
+    add(cyl(.05,.05,.28,steel,8),.14,.4,0,0,0,Math.PI/2);  // gun barrel
+    add(cyl(.04,.05,.18,dark,8),-.16,.42,0);          // funnel
+    add(box(.04,.18,.04,body),.0,.46,0);              // mast w/ house colour
+    add(con(.06,.1,accent),0,.6,0);
+  } else if(t==='lighter'){                            // flat barge — open hold for cargo
+    const hull=colorMat(0x6b4a2c,{r:.85});
+    add(box(.62,.14,.3,hull),0,.16,0);
+    add(box(.5,.04,.22,colorMat(0x4a3320)),0,.24,0);  // open hold floor
+    add(box(.04,.34,.04,wood),-.18,.4,0);             // mast
+    add(box(.02,.26,.22,cream),-.06,.42,0,0,0,0);     // sail
+    add(box(.62,.03,.04,wood),0,.24,.15); add(box(.62,.03,.04,wood),0,.24,-.15);  // gunwales
   } else { add(box(.36,.4,.36,body),0,.3,0); }
   return g;
 }
@@ -1716,6 +1787,22 @@ function renderSelPanel(){
         if(u.movesLeft>0) h+=`<button class="btn" data-act="scout">✦ Scout ahead (reveal the fog)</button>`;
         h+=`<button class="btn ${u.autoExplore?'primary':''}" data-act="auto">⤳ Auto-explore${u.autoExplore?' — ON':''}</button>`;
       }
+      // embark: a land unit beside a friendly transport with room can board it
+      if(d.domain==='land' && u.movesLeft>0){
+        const ts=nearbyTransports(p,u.x,u.z);
+        for(const t of ts) h+=`<button class="btn" data-embark="${t.id}">⛵ Board the Tees Lighter (${(t.cargo||[]).length}/${transportCap(t)})</button>`;
+      }
+      // transport: show cargo + disembark onto an adjacent coast
+      if(d.role==='transport'){
+        const cargo=u.cargo||[];
+        h+=`<div class="legend" style="margin-top:4px">Cargo <b>${cargo.length}/${transportCap(u)}</b>${cargo.length?': '+cargo.map(s=>UNIT_TYPES[s.type].glyph+' '+UNIT_TYPES[s.type].name).join(', '):' — empty'}</div>`;
+        if(cargo.length){
+          const land=neigh8(u.x,u.z).filter(([x,z])=>isDisembarkTile(x,z)&&!unitAt(x,z));
+          if(land.length) for(let i=0;i<cargo.length;i++){ const [lx,lz]=land[0];
+            h+=`<button class="btn" data-disembark="${i},${lx},${lz}">⌂ Land ${UNIT_TYPES[cargo[i].type].glyph} ${UNIT_TYPES[cargo[i].type].name} (${dirLabel(lx-u.x,lz-u.z)})</button>`; }
+          else h+=`<div class="legend">Move beside open land to disembark.</div>`;
+        }
+      }
       if(G.atks && G.atks.length) h+=`<div class="legend">⚔ <b>${G.atks.length}</b> target(s) in range — click a <span style="color:#ff5544">red</span> tile to strike.</div>`;
       if(u.movesLeft>0) h+=`<div class="legend">→ Click a <span style="color:#49b6ff">blue</span> tile to march there.</div>`;
       if(u.movesLeft>0 || !u.hasAttacked) h+=`<button class="btn" data-act="skip">✓ Done for this turn</button>`;
@@ -1731,6 +1818,8 @@ function renderSelPanel(){
         else if(a==='auto'){ u.autoExplore=!u.autoExplore; if(u.autoExplore){ toast('Auto-explore on — this scout roams the fog at the start of each turn.'); humanScout(u); } selectUnit(u); refreshAll(); }
         else if(a==='skip'){ u.movesLeft=0; u.hasAttacked=true; selectUnit(u); refreshAll(); }
       });
+      selBody.querySelectorAll('[data-embark]').forEach(b=>b.onclick=()=>{ const t=G.units.find(x=>x.id==b.dataset.embark); if(t&&embarkUnit(u,t)){ G.sel=null; toast('Boarded the lighter.'); refreshAll(); rebuildDynamic(); maybeAutoEndTurn(); } });
+      selBody.querySelectorAll('[data-disembark]').forEach(b=>b.onclick=()=>{ const a=b.dataset.disembark.split(',').map(Number); if(disembarkUnit(u,a[0],a[1],a[2])){ toast('Unit landed.'); selectUnit(u); refreshAll(); rebuildDynamic(); maybeAutoEndTurn(); } });
     }
   } else if(G.selCity){
     renderCityPanel();
@@ -1759,16 +1848,19 @@ function renderCityPanel(){
   if(mine){
     const cap=playerUnitCap(p), have=playerUnitCount(p);
     h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood} · 🪨 ${p.stone}) · units ${have}/${cap}</span></div><div class="buildlist">`;
-    const occupied = !!unitAt(c.x,c.z); const full = have>=cap;
+    const occupied = !!unitAt(c.x,c.z); const full = have>=cap; const navalYard=cityHasPort(c);
     for(const [tid,d] of Object.entries(UNIT_TYPES)){
       if(d.role==='super') continue;
       if(d.tech && !p.techs.has(d.tech)) continue;
+      if(d.port && !navalYard) continue;            // ships need a Port improvement in the city's land
       const ct=unitCost(tid,p);
-      const dis = occupied || full || !canAfford(p,tid);
+      const dis = occupied || full || !canAfford(p,tid) || (d.domain==='sea' && !shipLaunchTile(c));
       h+=`<button class="btn" data-build="${tid}" ${dis?'disabled':''}>
         <span>${d.glyph} ${d.name}</span><span class="cost">${ct.prod}⚒${ct.wood?` ${ct.wood}🪵`:''}${ct.stone?` ${ct.stone}🪨`:''}${ct.food?` ${ct.food}🌾`:''}</span></button>`;
     }
     h+=`</div>`;
+    if(navalYard) h+=`<div class="legend" style="margin-top:6px">⚓ This city has a <b>Port</b> — it can build ships, launched onto adjacent open water.</div>`;
+    else if(cityCoastal(c) && p.techs.has('harbours')) h+=`<div class="legend" style="margin-top:6px">⚓ Build a <b>Port</b> on adjacent water below to make this a shipyard.</div>`;
     if(full) h+=`<div class="legend" style="margin-top:6px">Unit cap reached (${have}/${cap}) — grow cities to support more.</div>`;
     if(occupied) h+=`<div class="legend" style="margin-top:6px">A unit blocks the city — move it to build.</div>`;
     // ---- build infrastructure (grows the city) ----
@@ -1790,10 +1882,15 @@ function renderCityPanel(){
 }
 function humanScout(u){ const p=playerById(u.owner); aiExplore(p,u); selectUnit(u); refreshAll(); rebuildDynamic(); }
 function doFound(u){ const p=playerById(u.owner); foundCity(p,u.x,u.z,false); killUnit(u); G.sel=null; logMsg('city',`${p.name} founded a village at the Skerne.`); recomputeIncome(); refreshAll(); rebuildDynamic(); }
-function doBuild(c,tid){ const p=playerById(c.owner);
-  if(unitAt(c.x,c.z) || !canAfford(p,tid)) return;
+// open sea tile next to the city to launch a ship onto (null if landlocked / all occupied)
+function shipLaunchTile(c){ for(const [nx,nz] of neigh8(c.x,c.z)){ if(isSeaTile(nx,nz)&&!unitAt(nx,nz)) return [nx,nz]; } return null; }
+function doBuild(c,tid){ const p=playerById(c.owner); const sea=UNIT_TYPES[tid].domain==='sea';
+  if(!canAfford(p,tid)) return;
   if(playerUnitCount(p)>=playerUnitCap(p)){ toast('Unit cap reached — grow your cities to support more.'); return; }
-  payFor(p,tid); spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
+  let sx=c.x, sz=c.z;
+  if(sea){ const t=shipLaunchTile(c); if(!t){ toast('No open water beside the port to launch.'); return; } [sx,sz]=t; }
+  else if(unitAt(c.x,c.z)) return;
+  payFor(p,tid); spawnUnit(p,tid,sx,sz,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
 
 /* ----- infrastructure improvements: terrain-specific, tech-gated, grow the city ----- */
 // can this player build the improvement for tile t right now? returns {ok, id, reason}
@@ -1925,6 +2022,10 @@ function aiTurn(p){
   // --- 2a. build infrastructure to GROW cities (each improvement unlocks a level) ---
   aiBuildImprovements(p,thoughts,pr);
 
+  // --- 2a-bis. NAVAL BREAKOUT: an island-locked house must escape by sea even at its tiny unit cap.
+  //     This bypasses the military unit cap so a 1-city island start can still build a ferry + settler. ---
+  aiNavalBreakout(p,thoughts,pr);
+
   // --- 2b. cities grow from infrastructure; spend remaining Production on units ---
   const myCities=G.cities.filter(c=>c.owner===p.id);
   const myUnits=()=>G.units.filter(u=>u.owner===p.id&&u.hp>0);
@@ -1960,7 +2061,9 @@ function aiResearch(p,thoughts,pr){
   const econLean = (pr?pr.econDrive+pr.expandDrive:g.economy+g.expansion) > 1.05;
   const econFirst=['husbandry','forestry','harbours','ironworking','milling','masonry','riding','trade','steam','espionage','aeronautics','telegraphy'];
   const milFirst =['masonry','ironworking','riding','husbandry','forestry','steam','trade','milling','harbours','espionage','aeronautics','telegraphy'];
-  const order = econLean ? econFirst : milFirst;
+  let order = econLean ? econFirst : milFirst;
+  // island-locked houses MUST get Harbours to escape by sea — pull it to the front
+  if(!p.techs.has('harbours') && !hasLandExpansion(p)) order=['harbours',...order.filter(t=>t!=='harbours')];
   for(const id of order){ if(canResearch(p,id)) want.push(id); }
   const techBias = (pr?pr.techDrive:g.tech);
   // research from the science stockpile, scaled by tech appetite
@@ -1972,13 +2075,16 @@ function aiBuildImprovements(p,thoughts,pr){
   const myCities=G.cities.filter(c=>c.owner===p.id); if(!myCities.length) return;
   // appetite: defensive/aggressive houses still develop, but econ houses pour more brass into it
   const appetite = clamp(0.45 + 0.5*pr.econDrive + 0.3*pr.expandDrive, 0.4, 1.4);
-  let built=0; const maxBuild = Math.ceil(myCities.length*appetite);
+  let built=0; let maxBuild = Math.ceil(myCities.length*appetite);
   // collect build-able improvements across the empire — but stop improving a city already a few
   // levels short of full (no point over-building once growth is unlocked beyond reach).
   const opts=[];
   for(const c of myCities){ if(c.level>=CITY_MAX) continue; if(cityImprovements(c) >= c.level+3) continue;
     for(const o of improvementOptions(c,p)){ if(!o.disabled) opts.push({c,...o}); } }
-  opts.sort((a,b)=>a.cost-b.cost);
+  // island-locked houses with Harbours should prioritise a PORT (their only way off the island)
+  const needPort = p.techs.has('harbours') && !myCities.some(c=>cityHasPort(c)) && !hasLandExpansion(p);
+  opts.sort((a,b)=> (needPort?((b.id==='port')-(a.id==='port')):0) || (a.cost-b.cost));
+  if(needPort) maxBuild=Math.max(maxBuild,1);
   for(const o of opts){
     if(built>=maxBuild) break;
     // bank some production for defence/units unless this house is very economy-minded
@@ -1991,6 +2097,29 @@ function aiBuildImprovements(p,thoughts,pr){
   if(built){ recomputeIncome(); thoughts.push(`built ${built} improvement(s) to grow cities`); }
 }
 
+// island-locked breakout builder — cap-exempt so a tiny island start can still escape by sea
+function aiNavalBreakout(p,thoughts,pr){
+  if(!p.techs.has('harbours')) return;
+  if(hasLandExpansion(p)) return;                              // not island-locked — normal rules apply
+  const myCities=G.cities.filter(c=>c.owner===p.id);
+  const portCity=myCities.find(c=>cityHasPort(c) && shipLaunchTile(c));
+  if(!portCity) return;
+  const myUnits=G.units.filter(u=>u.owner===p.id&&u.hp>0);
+  const transports=myUnits.filter(u=>UNIT_TYPES[u.type].role==='transport');
+  const founders=myUnits.filter(u=>UNIT_TYPES[u.type].role==='settle');
+  const cityCap=Math.round(4+6*pr.expandDrive);
+  if(myCities.length>=cityCap) return;
+  // build a ferry if we have none and room to expand
+  if(transports.length<1 && canAfford(p,'lighter')){
+    const t=shipLaunchTile(portCity); if(t && !unitAt(t[0],t[1])){ payFor(p,'lighter'); spawnUnit(p,'lighter',t[0],t[1],false);
+      thoughts.push('island-locked — launched a Tees Lighter to break out by sea'); } }
+  // build a founder to ferry (only if a ferry exists with room and no founder yet waiting/aboard)
+  const cargoFounders=transports.reduce((s,t)=>s+((t.cargo||[]).filter(c=>UNIT_TYPES[c.type].role==='settle').length),0);
+  const ferryRoom=transports.some(t=>(t.cargo||[]).length<transportCap(t));
+  if(transports.length>=1 && ferryRoom && founders.length+cargoFounders<1 && canAfford(p,'founder')){
+    const bc=myCities.find(c=>!unitAt(c.x,c.z));
+    if(bc){ payFor(p,'founder'); spawnUnit(p,'founder',bc.x,bc.z,false); thoughts.push('train a settler to sail to new shores'); } }
+}
 function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   const g=p.genome; pr=pr||aiParams(g);
   const myUnits=G.units.filter(u=>u.owner===p.id&&u.hp>0);
@@ -2014,6 +2143,22 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
     const t = (avail('pike') && canAfford(p,'pike') && rnd()<0.55) ? 'pike':'guard';
     thoughts.push(`reinforce ${cap.name} (defend the capital, need ${homeNeed})`);
     return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t};
+  }
+  // --- NAVAL: break island-lock by sea, and contest the water ---
+  const portCity = myCities.find(c=>cityHasPort(c) && shipLaunchTile(c));
+  if(portCity && p.techs.has('harbours')){
+    const transports=myUnits.filter(u=>UNIT_TYPES[u.type].role==='transport');
+    const warships=myUnits.filter(u=>UNIT_TYPES[u.type].domain==='sea'&&UNIT_TYPES[u.type].atk>0);
+    const landLocked = !hasLandExpansion(p);
+    // island-locked & wants to expand: build a lighter (ferry) to carry a founder out
+    if(landLocked && transports.length<1 && myCities.length<Math.round(4+6*pr.expandDrive) && canAfford(p,'lighter')){
+      thoughts.push('island-locked — build a Tees Lighter to ferry a settler out'); return {city:portCity,type:'lighter'};
+    }
+    // a navy needs escorts: build a warship if rivals are near the sea or we have transports to guard
+    const wantWarship = (warships.length < (landLocked?1:0) + Math.round(pr.aggDrive*2)) && rnd()<0.4+0.4*pr.aggDrive;
+    if(wantWarship && canAfford(p,'monitor') && army.length>=Math.max(1,massGate-1)){
+      thoughts.push('build a Skerne Monitor to contest the water'); return {city:portCity,type:'monitor'};
+    }
   }
   // expansion — expansionist houses flood Founders (allow several in flight); others build at most one
   const expandUtil = pr.expandDrive*(1 - 0.5*L('noOverExtend')*(army.length < founders.length+1?1:0));
@@ -2041,10 +2186,33 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
 
 function aiActUnit(p,u,riskGate,thoughts){
   const role=UNIT_TYPES[u.type].role;
+  const dom=UNIT_TYPES[u.type].domain;
+  // --- TRANSPORT: ferry a founder to unsettled coast, then disembark ---
+  if(role==='transport'){ aiActTransport(p,u,thoughts); return; }
+  // --- WARSHIP: bombard reachable enemies (uses standard attack logic), else patrol toward foes ---
+  if(dom==='sea'){
+    const target=aiPickAttack(p,u,riskGate,thoughts);
+    if(target && !u.hasAttacked){ const rng=UNIT_TYPES[u.type].range;
+      if(cheb(u.x,u.z,target.x,target.z)>rng) aiStepShipToward(u,target.x,target.z);
+      if(cheb(u.x,u.z,target.x,target.z)<=rng){ resolveCombat(u,target); checkWin(); return; } }
+    // guard friendly transports, else patrol toward nearest seen enemy city's coast
+    const tr=G.units.find(t=>t.owner===p.id&&t.hp>0&&UNIT_TYPES[t.type].role==='transport');
+    if(tr){ aiStepShipToward(u,tr.x,tr.z); return; }
+    const ec=nearestEnemyCity(p,u); if(ec){ aiStepShipToward(u,ec.x,ec.z); thoughts.push('patrol the coast'); }
+    return;
+  }
   // settlers look for ground
   if(role==='settle'){
     if(canFoundHere(u,u.x,u.z) && goodSettleSpot(u.x,u.z)){ doFoundAI(p,u); thoughts.push('founded a village'); return; }
-    const spot=findSettleSpot(p,u); if(spot){ aiStepToward(u,spot[0],spot[1]); if(canFoundHere(u,u.x,u.z)&&goodSettleSpot(u.x,u.z)){ doFoundAI(p,u); } }
+    // ISLAND-LOCKED: no reachable land on foot — board a friendly lighter instead of wandering
+    if(!hasLandExpansion(p)){
+      const ts=nearbyTransports(p,u.x,u.z);
+      if(ts.length){ embarkUnit(u,ts[0]); thoughts.push('founder boards the lighter to sail out'); return; }
+      const tr=G.units.find(t=>t.owner===p.id&&t.hp>0&&UNIT_TYPES[t.type].role==='transport'&&(t.cargo||[]).length<transportCap(t));
+      if(tr){ aiStepToward(u,tr.x,tr.z); const ts2=nearbyTransports(p,u.x,u.z); if(ts2.length){ embarkUnit(u,ts2[0]); thoughts.push('founder boards the lighter'); } return; }
+      return;   // wait by the coast for a ferry rather than march to an unreachable site
+    }
+    const spot=findSettleSpot(p,u); if(spot){ aiStepToward(u,spot[0],spot[1]); if(canFoundHere(u,u.x,u.z)&&goodSettleSpot(u.x,u.z)){ doFoundAI(p,u); } return; }
     return;
   }
   if(role==='scout'){ aiExplore(p,u); return; }
@@ -2176,6 +2344,62 @@ function findSettleSpot(p,u){
 }
 function doFoundAI(p,u){ foundCity(p,u.x,u.z,false); killUnit(u); recomputeIncome(); logMsg('city',`${p.name} founded a village.`); }
 
+// transport AI: if carrying cargo, ferry to the nearest unsettled coast and land it; else pick up.
+function aiActTransport(p,u,thoughts){
+  const cargo=u.cargo||[];
+  if(cargo.length){
+    // already beside open land far enough from cities? drop the cargo (founds a city if it's a founder)
+    const tryDrop=()=>{ const md=cityMinDist();
+      for(const [x,z] of neigh8(u.x,u.z)){ if(!isDisembarkTile(x,z)||unitAt(x,z)) continue;
+        let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<md){ ok=false; break; } }
+        // for non-founder cargo, any coast tile will do; for founders we want a legal settle site
+        const isFounder=UNIT_TYPES[cargo[0].type].role==='settle';
+        if(isFounder && !ok) continue;
+        if(disembarkUnit(u,0,x,z)){ const last=G.units[G.units.length-1];
+          if(isFounder && last && canFoundHere(last,last.x,last.z)){ doFoundAI(p,last); thoughts.push('ferried a settler ashore & founded a colony by sea'); }
+          else thoughts.push('disembarked a unit on a new shore'); return true; } }
+      return false; };
+    if(tryDrop()) return;
+    const coast=nearestUnsettledCoast(p,u.x,u.z);
+    if(coast){ aiStepShipToward(u,coast[0],coast[1]); thoughts.push('ferrying a settler to unclaimed coast'); tryDrop(); return; }
+    // nowhere new to settle — drop anywhere coastal to free the unit
+    for(const [x,z] of neigh8(u.x,u.z)){ if(isDisembarkTile(x,z)&&!unitAt(x,z)){ disembarkUnit(u,0,x,z); return; } }
+    return;
+  }
+  // empty: return toward a friendly coastal city to load a waiting founder
+  const home=G.cities.filter(c=>c.owner===p.id&&cityCoastal(c)).sort((a,b)=>cheb(u.x,u.z,a.x,a.z)-cheb(u.x,u.z,b.x,b.z))[0];
+  if(home) aiStepShipToward(u,home.x,home.z);
+}
+
+/* ----- naval AI: detect island-lock & break out by sea ----- */
+// flood-fill over passable LAND from all of p's cities; is there any legal, far-enough settle site reachable on foot?
+function hasLandExpansion(p){
+  const md=cityMinDist(); const seen=new Set(); const q=[];
+  for(const c of G.cities){ if(c.owner===p.id){ const k=key(c.x,c.z); if(!seen.has(k)){ seen.add(k); q.push([c.x,c.z]); } } }
+  let steps=0; const CAP=1600;            // bound the flood on epic maps
+  while(q.length && steps++<CAP){ const [x,z]=q.shift();
+    for(const [nx,nz] of neigh8(x,z)){ const k=key(nx,nz); if(seen.has(k)) continue; const t=tileAt(nx,nz);
+      if(TERRAIN[t.terrain].pass!=='land') continue; seen.add(k);
+      if(!t.city){ let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,nx,nz)<md){ ok=false; break; } } if(ok) return true; }
+      q.push([nx,nz]); } }
+  return false;
+}
+// nearest unsettled coast tile (land beside open water) NOT owned by p and far enough from cities
+function nearestUnsettledCoast(p,fromX,fromZ){
+  const md=cityMinDist(); let best=null,bd=1e9;
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tileAt(x,z); if(TERRAIN[t.terrain].pass!=='land'||t.city) continue;
+    let coast=false; for(const [nx,nz] of neigh8(x,z)) if(isSeaTile(nx,nz)){ coast=true; break; } if(!coast) continue;
+    let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z)<md){ ok=false; break; } } if(!ok) continue;
+    const d=cheb(fromX,fromZ,x,z); if(d<bd){ bd=d; best=[x,z]; } }
+  return best;
+}
+// move a ship toward a sea tile adjacent to (tx,tz), staying on water
+function aiStepShipToward(u,tx,tz){
+  if(u.movesLeft<=0) return; const reach=reachable(u); let best=null,bd=1e9;
+  for(const k of reach.set){ const [x,z]=k.split(',').map(Number); const d=cheb(x,z,tx,tz); if(d<bd){bd=d;best=[x,z];} }
+  if(best && bd<cheb(u.x,u.z,tx,tz)) moveUnit(u,best[0],best[1]);
+}
+
 /* ----- learning at game end ----- */
 function recordGameResult(winner, kind){
   knowledge.games++;
@@ -2264,6 +2488,7 @@ function recordGameResult(winner, kind){
   knowledge.history.push({ g:knowledge.games, t:G.turn, kind, size:G.mapSize, winner:winner.id, warch:wArch,
     players:G.players.map(p=>({id:p.id,alive:p.alive,cities:G.cities.filter(c=>c.owner===p.id).length,score:score(p),
       food:Math.round(p.food||0),wood:Math.round(p.wood||0),stone:Math.round(p.stone||0),prod:Math.round(p.prod||0),sci:Math.round(p.science||0),
+      starveTurns:p.stats.starveTurns||0,
       arch:knowledge.factions[p.id]?.archetype})) });
   if(knowledge.history.length>250) knowledge.history.shift();
   saveKnowledge();
@@ -2306,14 +2531,57 @@ const SPEEDS={slow:1100,normal:450,fast:120,ultra:24};   // ultra = 5× faster t
 
 function startTurnFor(p){
   recomputeIncome();
-  // all five resources flow into the treasury from the land the empire holds
-  p.prod += p.prodIncome; p.science += p.sciIncome; p.food += p.foodIncome;
+  // production / science / wood / stone flow into the treasury from the land the empire holds
+  p.prod += p.prodIncome; p.science += p.sciIncome;
   p.wood = (p.wood||0) + p.woodIncome; p.stone = (p.stone||0) + p.stoneIncome;
-  // then food is spent to grow cities (capped by the land's richness)
-  growCities(p);
+  // FOOD (scarcity loop): add income, then pay upkeep for the standing army + city sizes.
+  const up = foodUpkeep(p); p.foodUpkeep = up;
+  p.food = (p.food||0) + p.foodIncome - up;
+  // STARVATION: a deficit the stockpile can't absorb stalls growth and, if still under,
+  // disbands the most-distant / weakest unit (or drops a city level) until the books balance.
+  // Recoverable, not a death spiral: at most a couple of losses per turn.
+  let starving=false;
+  if(p.food < 0){
+    starving=true; let guard=0;
+    while(p.food < 0 && guard++ < 3){
+      const culled = cullForStarvation(p);
+      if(!culled) break;          // nothing left to disband — clamp to zero (city base income carries it)
+      p.food += culled;           // freeing a unit/city level restores that turn's upkeep slice
+    }
+    if(p.food < 0) p.food = 0;     // floor — never goes negative once we've trimmed what we can
+  }
+  p.starving = starving; if(starving){ p.stats.starveTurns=(p.stats.starveTurns||0)+1; }
+  // then surplus food is spent to grow cities (capped by the land's richness) — skipped while starving
+  if(!starving) growCities(p);
+  // GRANARY CAP: a treasury can only store so much grain — surplus beyond it spoils. This stops food
+  // piling into the thousands and keeps it a near-zero, turn-to-turn constraint rather than a hoard.
+  const nCities=G.cities.filter(c=>c.owner===p.id).length;
+  p.foodCap = 24 + 14*nCities;
+  if(p.food > p.foodCap) p.food = p.foodCap;
   // refresh units
   for(const u of G.units){ if(u.owner===p.id){ u.movesLeft=unitMove(u); u.hasAttacked=false; } }
   p.stats.survived=G.turn;
+}
+// disband the cheapest/most-distant unit to recover food; if none, drop a non-capital city a level.
+// returns the food relief gained (so the caller can re-balance), or 0 if nothing could be cut.
+function cullForStarvation(p){
+  const cap=G.cities.find(c=>c.id===p.capitalId);
+  const mine=G.units.filter(u=>u.owner===p.id&&u.hp>0);
+  if(mine.length){
+    // weakest first (lowest combat value), then most distant from the capital
+    let worst=null,ws=1e9;
+    for(const u of mine){ const d=UNIT_TYPES[u.type];
+      const val = (d.atk+d.def)*0.5 + d.hp*0.04 + (d.role==='settle'?-1:0);
+      const dist = cap? cheb(u.x,u.z,cap.x,cap.z) : 0;
+      const s = val - dist*0.05;     // low value + far away = first to go
+      if(s<ws){ ws=s; worst=u; } }
+    if(worst){ const relief=unitUpkeep(worst); logMsg('sys',`${p.name} disbanded a ${UNIT_TYPES[worst.type].name} — not enough food (famine).`); killUnit(worst); return relief; }
+  }
+  // no units to cut: shrink the largest non-capital city by a level
+  let big=null,bl=0; for(const c of G.cities){ if(c.owner===p.id && !c.isCapital && c.level>1 && c.level>bl){ bl=c.level; big=c; } }
+  if(!big){ for(const c of G.cities){ if(c.owner===p.id && c.level>1 && c.level>bl){ bl=c.level; big=c; } } }   // last resort: shrink the capital
+  if(big){ big.level--; recomputeTerritory(); recomputeIncome(); logMsg('city',`${big.name} shrank a level — its people went hungry.`); return 2; }
+  return 0;
 }
 function advance(){
   if(G.gameOver) return;
@@ -2393,7 +2661,8 @@ function refreshHUD(){
   $('hudDot').style.background='#'+p.color.toString(16).padStart(6,'0');
   $('hudTurn').innerHTML=`${G.turn}${G.endless?'':'<small>/'+TURN_CAP+'</small>'}`;
   const show=v||p;
-  $('hudFood').innerHTML=`${show.food||0}<small> 🌾 +${show.foodIncome||0}</small>`;
+  const fUp=(show.foodUpkeep!=null)?show.foodUpkeep:foodUpkeep(show); const fNet=(show.foodIncome||0)-fUp;
+  $('hudFood').innerHTML=`${Math.round(show.food||0)}<small> 🌾 <span style="color:${fNet<0?'#e87a5a':fNet>0?'#9bd07f':'var(--faint)'}">${fNet>=0?'+':''}${fNet}</span> <span style="color:var(--faint)">(${show.foodIncome||0}−${fUp}🍴)</span>${show.starving?' ⚠':''}</small>`;
   $('hudWood').innerHTML=`${show.wood||0}<small> 🪵 +${show.woodIncome||0}</small>`;
   $('hudStone').innerHTML=`${show.stone||0}<small> 🪨 +${show.stoneIncome||0}</small>`;
   $('hudProd').innerHTML=`${show.prod}<small> ⚒ +${show.prodIncome||0}</small>`;
@@ -2785,6 +3054,12 @@ function renderAnalysis(){
     else if(avg<5) h+=rec(`<b>${resLabel[k]}</b> runs to near-zero (avg <b>${Math.round(avg)}</b>) — a starvation bottleneck. Add a source (improvement/terrain) or lower the costs that drain it.`,'bad');
     else h+=rec(`<b>${resLabel[k]}</b>: avg <b>${Math.round(avg)}</b> banked at end — reasonably balanced.`,'good'); }
   if(!anyR) h+=`<div class="legend">Resource snapshots collected from newer games only.</div>`;
+  // food-as-binding-constraint readout: how often players hit famine (upkeep > stockpile)
+  let starveGames=0, starvePlayers=0, totPlayers=0;
+  for(const g of hist) for(const pl of (g.players||[])){ if(pl.starveTurns==null) continue; totPlayers++; if(pl.starveTurns>0){ starvePlayers++; } }
+  for(const g of hist){ if((g.players||[]).some(pl=>pl.starveTurns>0)) starveGames++; }
+  if(totPlayers){ const pct=Math.round(starvePlayers/totPlayers*100);
+    h+=rec(`Food upkeep (army + city size) is a live sink: <b>${pct}%</b> of houses hit famine at least once${pct>5?' — food is a binding constraint ✓':' (rarely binding — consider raising upkeep)'} . Starvation disbands the weakest/most-distant unit, then recovers.`, pct>5?'good':'mid'); }
 
   // --- 4. Unit balance (under/over-used) ---
   h+=`<div class="label" style="margin:10px 0 4px;color:var(--teal)">Unit balance</div>`;
