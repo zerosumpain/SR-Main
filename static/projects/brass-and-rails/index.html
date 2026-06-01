@@ -656,14 +656,14 @@ const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:3, food:5, hp:10, atk:0, def:1, move:1, range:1, tech:null, domain:'land', role:'settle', glyph:'⌂', desc:'A colony of settlers — costs food. Founds new villages on open land.'},
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
   guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
-  armed:    {name:'Armed Guard',   cost:3, wood:2, hp:14, atk:4, def:3, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard with steel weapons forged from felled timber — a worthwhile upgrade. Needs wood.'},
+  armed:    {name:'Armed Guard',   cost:3, wood:2, hp:14, atk:4, def:3, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', needs:['iron'], desc:'A Guard with steel weapons forged from iron & felled timber. Needs wood + an iron deposit.'},
   pike:     {name:'Skerne Pike',   cost:3, stone:2, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry', domain:'land', role:'def', glyph:'▮', desc:'Stalwart defender behind stone works — hard to dislodge. Needs stone.'},
   pony:     {name:'Pit Pony',      cost:2, hp:10, atk:3, def:1, move:3, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Cheap, swift raider bred in the colliery — out-paces and out-numbers.'},
-  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:11, atk:6, def:1, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', desc:'Long-range siege piece — wrecks walls & garrisons. Strikes without retaliation.'},
-  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:20, atk:6, def:5, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works — a real powerhouse.'},
-  skylark:  {name:'Skylark',       cost:8, wood:3, hp:12, atk:5, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
-  nightmail:{name:'Night Mail',    cost:6, wood:1, hp:11, atk:6, def:1, move:3, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — a fast, hard-hitting assassin train that runs by dark.'},
-  monitor:  {name:'Skerne Monitor',cost:6, wood:3, hp:14, atk:4, def:3, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, glyph:'⛴', desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port.'},
+  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:11, atk:6, def:1, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', needs:['coal','iron'], desc:'Long-range siege piece — wrecks walls & garrisons. Strikes without retaliation. Needs coal + iron.'},
+  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:20, atk:6, def:5, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', needs:['coal','iron'], desc:'Steam-armoured juggernaut off the locomotive works — a real powerhouse. Needs coal + iron.'},
+  skylark:  {name:'Skylark',       cost:8, wood:3, hp:12, atk:5, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', needs:['whinstone'], desc:'Flying striker forged on the Great Whin Sill — ignores all terrain. Needs whinstone.'},
+  nightmail:{name:'Night Mail',    cost:6, wood:1, hp:11, atk:6, def:1, move:3, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', needs:['lead'], desc:'Hidden until it strikes — a fast, hard-hitting assassin train that runs by dark. Needs lead for its shot.'},
+  monitor:  {name:'Skerne Monitor',cost:6, wood:3, hp:14, atk:4, def:3, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, needs:['iron','coal'], desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port + iron & coal.'},
   lighter:  {name:'Tees Lighter',  cost:5, wood:2, hp:12, atk:0, def:1, move:3, range:0, tech:'harbours', domain:'sea', role:'transport', cargo:2, port:true, glyph:'⛵', desc:'A flat-bottomed barge — ferries up to 2 land units across the water. Needs a Port.'},
   colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
 };
@@ -721,13 +721,21 @@ const TERRAIN = {
   hill:       {h:0.95, color:0xb6a05a, deco:'rock',   pass:'land'},
   mountain:   {h:1.55, color:0x8d8378, deco:'peak',   pass:'land'},
 };
+// Resources are now placed in CLUSTERED deposits seeded per biome region (see generateMap).
+//   `on`     = terrains a deposit may occupy.   `regions` = which biome regions seed it.
+//   `strategic` = a gateable war material (controlled if a deposit sits in your territory).
+//   `rarity` = relative deposit weight when a region seeds deposits (lower = scarcer).
 const RESOURCES = {
-  orchard:{glyph:'🍎', color:0xe05a5a, on:['field']},
-  cattle: {glyph:'🐄', color:0xcdb892, on:['field']},
-  fish:   {glyph:'🐟', color:0x7fd0e0, on:['water']},
-  coal:   {glyph:'⬤',  color:0x2a2a2a, on:['hill','mountain']},
-  iron:   {glyph:'◈',  color:0xb0b6c0, on:['hill','mountain']},
+  orchard:  {glyph:'🍎', color:0xe05a5a, on:['field'],            regions:['dale'],            rarity:1.0},
+  cattle:   {glyph:'🐄', color:0xcdb892, on:['field'],            regions:['dale'],            rarity:1.0},
+  fish:     {glyph:'🐟', color:0x7fd0e0, on:['water'],            regions:['coast'],           rarity:1.1},
+  coal:     {glyph:'⬤',  color:0x2a2a2a, on:['hill','mountain'],  regions:['pennine','weald'], rarity:1.3, strategic:true},
+  iron:     {glyph:'◈',  color:0xb0b6c0, on:['hill','mountain'],  regions:['pennine','weald'], rarity:1.2, strategic:true},
+  lead:     {glyph:'◇',  color:0x9aa6b8, on:['mountain'],         regions:['pennine'],         rarity:0.45, strategic:true},
+  limestone:{glyph:'▤',  color:0xd8d2bd, on:['hill','mountain'],  regions:['pennine'],         rarity:0.7,  strategic:true},
+  whinstone:{glyph:'▦',  color:0x3a3f48, on:['mountain'],         regions:['pennine'],         rarity:0.16, strategic:true},
 };
+const STRATEGIC = Object.keys(RESOURCES).filter(r=>RESOURCES[r].strategic);   // gateable war materials
 
 /* ------------------------- 2. UTIL + RNG + MAP --------------------------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -758,11 +766,33 @@ function valueNoise(seedFn, cells){
   };
 }
 
+// ----- biome regions: a few low-frequency Voronoi seeds partition the board into
+//   Pennine uplands / fertile dales / wealds (forest) / coast. Each region biases terrain
+//   tendency AND which resource deposits seed there. Region count scales with map size.
+const REGION_KINDS=['pennine','dale','weald','coast'];
+function buildRegions(){
+  const nSeed = clamp(Math.round(N/9), 3, 12);
+  const seeds=[];
+  // weighted kind mix — uplands & dales dominate, wealds + an explicit coast band
+  const bag=[]; for(let i=0;i<nSeed;i++){ const r=rnd();
+    bag.push(r<0.34?'pennine':r<0.66?'dale':r<0.86?'weald':'coast'); }
+  for(let i=0;i<nSeed;i++) seeds.push({x:rint(N),z:rint(N),kind:bag[i]});
+  // a little domain warp so region borders aren't straight Voronoi lines
+  const wx=valueNoise(rnd,4), wz=valueNoise(rnd,4);
+  return (x,z)=>{
+    const px=x + (wx(x/(N-1),z/(N-1))-0.5)*N*0.18;
+    const pz=z + (wz(x/(N-1),z/(N-1))-0.5)*N*0.18;
+    let best=seeds[0], bd=1e9;
+    for(const s of seeds){ const d=(s.x-px)*(s.x-px)+(s.z-pz)*(s.z-pz); if(d<bd){bd=d;best=s;} }
+    return best.kind;
+  };
+}
 function generateMap(seed){
   RNG = mulberry32(seed>>>0);
   const n1 = valueNoise(rnd, 6);
   const n2 = valueNoise(rnd, 12);
   const n3 = valueNoise(rnd, Math.max(8,Math.round(N/5)));   // forest density field
+  const regionAt = buildRegions();
   const tiles=[];
   const H=[];                                                 // height field (for river routing)
   const cx=(N-1)/2, cz=(N-1)/2, maxd=Math.hypot(cx,cz);
@@ -772,14 +802,23 @@ function generateMap(seed){
     // island falloff so the board is a coast-fringed continent
     const d = Math.hypot(x-cx,z-cz)/maxd;
     h -= Math.pow(d,2.3)*0.55;
+    // region bias: uplands push terrain UP, dales/wealds keep it middling, coast pulls it DOWN
+    const region = regionAt(x,z);
+    if(region==='pennine') h += 0.16;
+    else if(region==='coast') h -= 0.14;
+    else if(region==='weald') h -= 0.02;
     H[z][x]=h;
     let terrain;
     if(h<0.18) terrain='ocean';
     else if(h<0.30) terrain='water';
-    else if(h<0.62) terrain= (n2(v*1.3,u*1.3)>0.62? (n3(u,v)>0.5?'denseforest':'lightforest') : 'field');
+    else if(h<0.62){
+      // forest emphasis is strongest in wealds, modest in dales
+      const fThresh = region==='weald'?0.40 : region==='dale'?0.70 : 0.62;
+      terrain = (n2(v*1.3,u*1.3)>fThresh ? (n3(u,v)>0.5?'denseforest':'lightforest') : 'field');
+    }
     else if(h<0.78) terrain='hill';
     else terrain='mountain';
-    tiles[z][x]={x,z,terrain,resource:null,owner:null,city:null,harvested:false,improved:null};
+    tiles[z][x]={x,z,terrain,region,resource:null,owner:null,city:null,harvested:false,improved:null};
   }}
   // ----- carve winding rivers: random-walk descending from high ground toward water -----
   const isWater=(x,z)=> inB(x,z) && (tiles[z][x].terrain==='ocean'||tiles[z][x].terrain==='water');
@@ -805,11 +844,39 @@ function generateMap(seed){
     }
     if(len<2) r--;   // too short to count — try again
   }
-  // scatter resources
-  for(let z=0;z<N;z++)for(let x=0;x<N;x++){
-    const t=tiles[z][x];
-    for(const [rid,r] of Object.entries(RESOURCES)){
-      if(r.on.includes(t.terrain) && rnd()< (t.terrain==='water'?0.10:0.12)){ t.resource=rid; break; }
+  // ----- CLUSTERED deposits: seed a few deposit points per region in eligible terrain, then grow
+  //   a tight blob (size ~1–4) around each. Resources end up SCARCE and LUMPY — you find a
+  //   coalfield, not coal smeared everywhere. Deposit count scales with board area & rarity. ------
+  const area=N*N;
+  const eligible=(rid,t)=>{ const r=RESOURCES[rid];
+    return r.on.includes(t.terrain) && (!r.regions || r.regions.includes(t.region)); };
+  // collect eligible tiles per resource once (cheap, single sweep)
+  const pool={}; for(const rid of Object.keys(RESOURCES)) pool[rid]=[];
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tiles[z][x];
+    for(const rid of Object.keys(RESOURCES)) if(eligible(rid,t)) pool[rid].push(t); }
+  for(const [rid,r] of Object.entries(RESOURCES)){
+    const elig=pool[rid]; if(!elig.length) continue;
+    // deposits roughly = area × density × rarity; scarce strategics get few seeds (but not so few
+    // that the elite roster goes extinct — coal/iron must be reachable by an expanding house).
+    const density = r.strategic ? 0.0030 : 0.0032;
+    let nDep = Math.round(area*density*(r.rarity||1));
+    // common strategics (coal/iron) guarantee at least a couple of fields even on small boards;
+    // very rare ones (whinstone) may yield none on tiny maps.
+    const floor = r.rarity<0.3 ? 0 : r.rarity>=0.85 ? 2 : 1;
+    nDep = clamp(nDep, floor, 70);
+    for(let d=0;d<nDep;d++){
+      const seed=elig[rint(elig.length)]; if(!seed||seed.resource) continue;
+      // blob: claim the seed, then a tight ring of 0..3 eligible neighbours
+      seed.resource=rid;
+      const blob = 1 + rint(r.strategic?3:4);                  // total tiles 1..4 (or 1..3 for strategics)
+      let placed=1, frontier=[seed];
+      while(placed<blob && frontier.length){
+        const from=frontier[rint(frontier.length)];
+        const ns=shuffle(neigh8(from.x,from.z).map(([nx,nz])=>tiles[nz][nx]));
+        let grew=false;
+        for(const nt of ns){ if(!nt.resource && eligible(rid,nt) && rnd()<0.7){ nt.resource=rid; frontier.push(nt); placed++; grew=true; break; } }
+        if(!grew){ frontier.splice(frontier.indexOf(from),1); }
+      }
     }
   }
   return tiles;
@@ -1064,8 +1131,15 @@ function recomputeTerritory(){
       const d=Math.max(Math.abs(dx),Math.abs(dz));
       if(t.cityId==null || d < t._d){ if(t.cityId==null) G._ownedTiles.push(t); t.owner=c.owner; t.cityId=c.id; t._d=d; t.worked = d<=wr; } } }
   // cache per-player owned-tile counts so score() needn't sweep the whole board (epic-map perf)
-  if(G.players){ for(const p of G.players) p.terrCount=0; for(const t of G._ownedTiles){ const p=playerById(t.owner); if(p) p.terrCount++; } }
+  if(G.players){ for(const p of G.players){ p.terrCount=0; p.resources=p.resources||new Set(); p.resources.clear(); }
+    for(const t of G._ownedTiles){ const p=playerById(t.owner); if(!p) continue; p.terrCount++;
+      if(t.resource && RESOURCES[t.resource]?.strategic) p.resources.add(t.resource); } }
 }
+// does player p control a deposit of strategic resource rid within their territory?
+function playerHasResource(p,rid){ return !!(p && p.resources && p.resources.has(rid)); }
+// strategic resources a unit type needs that the player does NOT yet control
+function missingResources(p,tid){ const d=UNIT_TYPES[tid]; if(!d||!d.needs) return [];
+  return d.needs.filter(r=>!playerHasResource(p,r)); }
 function tileYield(t){
   let food=0,wood=0,stone=0,prod=0,sci=0;
   switch(t.terrain){
@@ -1081,6 +1155,9 @@ function tileYield(t){
   if(t.resource==='orchard'||t.resource==='cattle') food+=1;
   else if(t.resource==='fish') food+=2;
   else if(t.resource==='coal'||t.resource==='iron') prod+=1;
+  else if(t.resource==='limestone'){ stone+=1; prod+=1; }   // flux for smelting
+  else if(t.resource==='lead') prod+=1;                      // a little brass
+  else if(t.resource==='whinstone') stone+=1;                // hard quarried rock
   // infrastructure improvements (feature 1) permanently boost the tile
   const im=t.improved && IMPROVEMENTS[t.improved];
   if(im){ const y=im.yield; food+=y.food||0; wood+=y.wood||0; stone+=y.stone||0; prod+=y.prod||0; sci+=y.sci||0; }
@@ -1133,7 +1210,9 @@ function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.fact
   // challenger rubber-band: trailing houses build a touch cheaper so they can contest the leader
   if(p){ const cf=challengerFactor(p); if(cf>0) prod=Math.max(1,Math.round(prod*(1-BAL.rubberProdMax*cf))); }
   return {prod, wood:d.wood||0, stone:d.stone||0, food:d.food||0}; }
-function canAfford(p,tid){ const c=unitCost(tid,p); return p.prod>=c.prod && (p.wood||0)>=c.wood && (p.stone||0)>=c.stone && (p.food||0)>=c.food; }
+function canAfford(p,tid){ const c=unitCost(tid,p);
+  const d=UNIT_TYPES[tid]; if(d&&d.needs){ for(const r of d.needs) if(!playerHasResource(p,r)) return false; }   // strategic-resource gate
+  return p.prod>=c.prod && (p.wood||0)>=c.wood && (p.stone||0)>=c.stone && (p.food||0)>=c.food; }
 function payFor(p,tid){ const c=unitCost(tid,p); p.prod-=c.prod; p.wood=(p.wood||0)-c.wood; p.stone=(p.stone||0)-c.stone; p.food=(p.food||0)-c.food; }
 
 /* ----- tech ----- */
@@ -1983,7 +2062,9 @@ function inspectTile(x,z){
   if(u){ selectUnit(u); return; } if(c){ selectCity(c); return; }
   G.sel=null;G.selCity=null;G.reach=null;G.atks=null;updateHighlights();
   const t=tileAt(x,z);
-  selBody.innerHTML=`<div class="sel-empty"><b style="color:var(--ink)">${t.terrain[0].toUpperCase()+t.terrain.slice(1)}</b>${t.resource?` · ${RESOURCES[t.resource].glyph} ${t.resource}`:''}<br>${t.owner?`Territory of ${playerById(t.owner)?.name||'—'}`:'Unclaimed land.'}</div>`;
+  const regLabel={pennine:'Pennine uplands',dale:'Fertile dale',weald:'Weald',coast:'Coast & estuary'}[t.region]||'';
+  const rStrat = t.resource && RESOURCES[t.resource].strategic;
+  selBody.innerHTML=`<div class="sel-empty"><b style="color:var(--ink)">${t.terrain[0].toUpperCase()+t.terrain.slice(1)}</b>${regLabel?` · <span style="color:var(--muted)">${regLabel}</span>`:''}${t.resource?`<br>${RESOURCES[t.resource].glyph} <b style="color:var(--amber2)">${t.resource}</b>${rStrat?' <span style="color:var(--teal)">⚙ strategic</span>':''}`:''}<br>${t.owner?`Territory of ${playerById(t.owner)?.name||'—'}`:'Unclaimed land.'}</div>`;
   selTitle.textContent='Tile'; selSub.textContent=`${x},${z}`;
 }
 function afterAction(){ if(G.sel&&G.sel.hp>0) selectUnit(G.sel); else {G.sel=null;G.reach=null;G.atks=null;} refreshAll(); rebuildDynamic(); checkWin(); maybeAutoEndTurn(); }
@@ -2006,6 +2087,8 @@ function renderSelPanel(){
         <div class="mini"><div class="k">MOV</div><div class="vv">${unitMove(u)}</div></div>
       </div>
       <div class="desc">${d.desc}</div>`;
+    if(d.needs){ const owner2=playerById(u.owner);
+      h+=`<div class="legend" style="margin-top:4px">⚙ Strategic: ${d.needs.map(r=>{ const have=playerHasResource(owner2,r); return `<span style="color:${have?'var(--teal)':'#f0998e'}">${RESOURCES[r].glyph} ${r}${have?'':' ✗'}</span>`; }).join(' · ')}</div>`; }
     if(mine){
       h+=`<div class="label" style="margin-top:10px">Orders</div>`;
       h+=`<div style="display:flex;flex-direction:column;gap:6px;margin-top:5px;">`;
@@ -2078,16 +2161,21 @@ function renderCityPanel(){
     <div class="desc">Each <b>improvement</b> built in this city's land unlocks one more level (hamlet → skyscrapers at Lv 10). Farms→food, Lumber Mills→wood, Ports/Water Mills→food &amp; production, Mines→stone.</div>`;
   if(mine){
     const cap=playerUnitCap(p), have=playerUnitCount(p);
-    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood} · 🪨 ${p.stone}) · units ${have}/${cap}</span></div><div class="buildlist">`;
+    // controlled strategic resources — legend so the player can read what gated units they can build
+    const ctrl=STRATEGIC.filter(r=>playerHasResource(p,r));
+    h+=`<div class="legend" style="margin-top:8px">Strategic resources: ${ctrl.length?ctrl.map(r=>`<span style="color:var(--teal)">${RESOURCES[r].glyph} ${r}</span>`).join(' · '):'<span style="color:var(--faint)">none controlled — expand to a coalfield / iron field to unlock the elite roster</span>'}</div>`;
+    h+=`<div style="margin-top:8px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood} · 🪨 ${p.stone}) · units ${have}/${cap}</span></div><div class="buildlist">`;
     const occupied = !!unitAt(c.x,c.z); const full = have>=cap; const navalYard=cityHasPort(c);
     for(const [tid,d] of Object.entries(UNIT_TYPES)){
       if(d.role==='super') continue;
       if(d.tech && !p.techs.has(d.tech)) continue;
       if(d.port && !navalYard) continue;            // ships need a Port improvement in the city's land
       const ct=unitCost(tid,p);
+      const miss=missingResources(p,tid);           // strategic resources not yet controlled
       const dis = occupied || full || !canAfford(p,tid) || (d.domain==='sea' && !shipLaunchTile(c));
-      h+=`<button class="btn" data-build="${tid}" ${dis?'disabled':''}>
-        <span>${d.glyph} ${d.name}</span><span class="cost">${ct.prod}⚒${ct.wood?` ${ct.wood}🪵`:''}${ct.stone?` ${ct.stone}🪨`:''}${ct.food?` ${ct.food}🌾`:''}</span></button>`;
+      const needTag = d.needs ? `<span class="cost" style="color:${miss.length?'#f0998e':'var(--teal)'};margin-left:4px">${d.needs.map(r=>RESOURCES[r].glyph).join('')}${miss.length?' needs '+miss.join('+'):''}</span>` : '';
+      h+=`<button class="btn" data-build="${tid}" ${dis?'disabled':''} title="${d.needs?('Requires '+d.needs.join(' + ')+(miss.length?' — you control none of: '+miss.join(', '):' (controlled)')):''}">
+        <span>${d.glyph} ${d.name}${needTag}</span><span class="cost">${ct.prod}⚒${ct.wood?` ${ct.wood}🪵`:''}${ct.stone?` ${ct.stone}🪨`:''}${ct.food?` ${ct.food}🌾`:''}</span></button>`;
     }
     h+=`</div>`;
     if(navalYard) h+=`<div class="legend" style="margin-top:6px">⚓ This city has a <b>Port</b> — it can build ships, launched onto adjacent open water.</div>`;
@@ -2401,11 +2489,13 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
       thoughts.push('build a Skerne Monitor to contest the water'); return {city:portCity,type:'monitor'};
     }
   }
-  // expansion — expansionist houses flood Founders (allow several in flight); others build at most one
-  const expandUtil = pr.expandDrive*(1 - 0.5*L('noOverExtend')*(army.length < founders.length+1?1:0));
-  const cityCap = Math.round(4 + 6*pr.expandDrive + L('rapidExpansion')*2);
-  const maxFounders = pr.expandDrive>0.85 ? 2 : 1;   // expansionists keep multiple settlers out
-  const wantFounder = founders.length<maxFounders && myCities.length<cityCap && rnd()<0.55*expandUtil+0.14;
+  // expansion — expansionist houses flood Founders (allow several in flight); others build at most one.
+  // RESOURCE HUNGER: a house lacking strategics its doctrine wants expands harder to go grab a deposit.
+  const resHunger = wantedStrategics(p).size>0 ? 1 : 0;
+  const expandUtil = (pr.expandDrive + 0.35*resHunger)*(1 - 0.5*L('noOverExtend')*(army.length < founders.length+1?1:0));
+  const cityCap = Math.round(4 + 6*pr.expandDrive + L('rapidExpansion')*2 + resHunger);
+  const maxFounders = (pr.expandDrive>0.85 || resHunger) ? 2 : 1;   // expansionists & resource-hungry houses keep multiple settlers out
+  const wantFounder = founders.length<maxFounders && myCities.length<cityCap && rnd()<0.55*expandUtil+0.14+0.12*resHunger;
   if(wantFounder && canAfford(p,'founder') && army.length>=Math.max(1,massGate-1)){
     thoughts.push('train a Founder to expand (settle wide)');
     return {city:buildCity,type:'founder'};
@@ -2587,10 +2677,16 @@ function aiStepTowardForAttack(u,e,rng){
 }
 function aiExplore(p,u){
   if(u.movesLeft<=0) return;
+  const wanted=wantedStrategics(p);
+  // is there a known unclaimed deposit of a wanted strategic the scout should steer toward?
+  let lure=null,ld=1e9;
+  if(wanted.size){ for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tileAt(x,z);
+    if(t.resource&&!t.owner&&wanted.has(t.resource)&&seenByPlayer(p,x,z)){ const d=cheb(u.x,u.z,x,z); if(d<ld){ld=d;lure=[x,z];} } } }
   const reach=reachable(u); let best=null,bs=-1;
   for(const k of reach.set){ const [x,z]=k.split(',').map(Number);
     let frontier=0; for(const [nx,nz] of neigh8(x,z)){ if(!p.explored.has(key(nx,nz))) frontier++; }
-    const jitter=rnd()*0.5; const s=frontier+jitter;
+    let s=frontier+rnd()*0.5;
+    if(lure) s += 4/(1+cheb(x,z,lure[0],lure[1]));     // pull toward a known unclaimed needed deposit
     if(s>bs){bs=s;best=[x,z];}
   }
   if(best) moveUnit(u,best[0],best[1]);
@@ -2610,16 +2706,43 @@ function bestEnemyCity(p,u){ const leader=coalitionLeaderId(); let best=null,bs=
   if(s>bs){bs=s;best=c;} } return best; }
 // fog-aware: only enemy units currently in its line of sight
 function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; if(!inSightOf(p,e.x,e.z)) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
+// strategic resources this house's doctrine WANTS for its elite units but doesn't yet control.
+// Cached briefly per turn so settle/explore scoring doesn't recompute it for every tile.
+function wantedStrategics(p){
+  if(p._wantStratTurn===G.turn && p._wantStrat) return p._wantStrat;
+  const set=new Set();
+  // iron & coal gate the BACKBONE roster (armed, gun, ironclad, monitor) — every house wants them.
+  if(!playerHasResource(p,'iron')) set.add('iron');
+  if(!playerHasResource(p,'coal')) set.add('coal');
+  for(const tid of Object.keys(UNIT_TYPES)){ const d=UNIT_TYPES[tid]; if(!d.needs) continue;
+    // care about a deeper gated unit (lead/whinstone) if its tech is plausibly reachable
+    const techOk = !d.tech || p.techs.has(d.tech) || (TECHS[d.tech] && (!TECHS[d.tech].prereq || p.techs.has(TECHS[d.tech].prereq)));
+    if(!techOk) continue;
+    for(const r of d.needs) if(!playerHasResource(p,r)) set.add(r);
+  }
+  p._wantStrat=set; p._wantStratTurn=G.turn; return set;
+}
+// score the strategic deposits a prospective city at (x,z) would bring under control
+function depositValue(p,x,z,wanted){
+  let v=0; const r=2;   // a level-2 city's eventual catchment
+  for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){ const nx=x+dx,nz=z+dz; if(!inB(nx,nz)) continue;
+    const t=tileAt(nx,nz); const rid=t.resource; if(!rid||t.owner) continue;
+    const R=RESOURCES[rid]; if(!R.strategic) continue;
+    v += wanted.has(rid) ? 5 : 1.2;     // a needed war material is worth a real detour
+  }
+  return v;
+}
 function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
 function findSettleSpot(p,u){
-  // search nearby land that respects the minimum spacing, favouring resources
-  const md=cityMinDist(); const W=md+3;
+  // search nearby land that respects the minimum spacing, favouring resources & needed strategics
+  const md=cityMinDist(); const W=md+4;   // slightly wider so it can reach toward a coalfield
+  const wanted=wantedStrategics(p);
   let best=null,bs=-1;
   for(let z=Math.max(0,u.z-W);z<Math.min(N,u.z+W+1);z++)for(let x=Math.max(0,u.x-W);x<Math.min(N,u.x+W+1);x++){
     const t=tileAt(x,z); if(TERRAIN[t.terrain].pass!=='land'||t.city) continue;
     let ok=true; for(const c of G.cities){ if(cheb(c.x,c.z,x,z) < md){ok=false;break;} } if(!ok) continue;
     let res=0; for(const [nx,nz] of neigh8(x,z)) if(tileAt(nx,nz).resource) res++;
-    const s=res*2 - cheb(u.x,u.z,x,z)*0.3 + rnd();
+    const s=res*2 + depositValue(p,x,z,wanted)*2.4 - cheb(u.x,u.z,x,z)*0.25 + rnd();
     if(s>bs){bs=s;best=[x,z];}
   }
   return best;
@@ -3420,6 +3543,14 @@ function renderAnalysis(){
   for(const [tid,d] of Object.entries(UNIT_TYPES)){ const us=K.unitStats[tid]||{built:0,winBuilt:0,lossBuilt:0}; const den=us.winBuilt+us.lossBuilt;
     h+=`<div style="display:flex;justify-content:space-between"><span>${d.glyph} ${d.name}</span><span style="color:var(--muted)">${us.built} built · ${den?Math.round(100*us.winBuilt/den)+'% win':'—'}</span></div>`; }
   h+=`</div>`;
+  // strategic-resource control snapshot (current board, if a game is live)
+  if(G.players&&G.players.length&&G.cities.length){
+    recomputeTerritory();
+    h+=`<div class="label" style="margin:10px 0 6px">Strategic control <span style="color:var(--faint)">(live board — who holds which war material)</span></div><div style="${mono};font-size:10.5px;margin-bottom:10px">`;
+    for(const r of STRATEGIC){ const holders=G.players.filter(p=>playerHasResource(p,r));
+      h+=`<div style="display:flex;justify-content:space-between"><span>${RESOURCES[r].glyph} ${r}</span><span style="color:${holders.length?'var(--teal)':'var(--faint)'}">${holders.length?holders.map(p=>p.name).join(', '):'unclaimed'}</span></div>`; }
+    h+=`</div>`;
+  }
   // rivalry matrix
   h+=`<div class="label" style="margin:10px 0 6px">Rivalry matrix <span style="color:var(--faint)">(row's attacks / captures vs column)</span></div><div style="overflow:auto"><table style="${mono};font-size:9.5px;border-collapse:collapse">`;
   h+=`<tr><td></td>`; for(const b of FACTIONS) h+=`<th style="padding:2px 5px;color:#${b.color.toString(16).padStart(6,'0')}">${b.id.slice(0,3)}</th>`; h+=`</tr>`;
