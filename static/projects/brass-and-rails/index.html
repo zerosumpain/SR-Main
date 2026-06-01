@@ -335,6 +335,7 @@
     <button id="endturn">End Turn</button>
     <button class="ctl-ico" id="btnDossier" title="AI dossier — capabilities &amp; what it has learned">🧠</button>
     <button class="ctl-ico" id="btnAnalysis" title="Analysis — multi-game stats">📊</button>
+    <button class="ctl-ico" id="btnLab" title="Sandbox Lab — tune balance dials &amp; run headless batches">🧪</button>
     <button class="ctl-ico" id="btnRoster" title="Unit roster — costs &amp; stats">📋</button>
     <button class="ctl-ico" id="btnHelp" title="How to play (?)">?</button>
     <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
@@ -399,6 +400,47 @@
         <div class="start-row"><button id="analysisClose" class="btn primary" style="width:auto;">Close</button>
           <button id="analysisWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
           <div class="legend">Everything here is accumulated across every game played in this browser.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SANDBOX LAB (B6) -->
+  <div class="scrim hidden" id="lab">
+    <div class="modal panel" style="width:min(1040px,96vw)">
+      <div class="panel-h"><h3>🧪 Sandbox Lab — tune &amp; simulate</h3><span class="label">headless balance testbench</span></div>
+      <div class="panel-b" style="max-height:80vh;overflow:auto;display:grid;grid-template-columns:minmax(300px,360px) 1fr;gap:16px">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="label">Balance dials</div>
+            <button id="labReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset defaults</button>
+          </div>
+          <div class="legend" style="margin-bottom:8px">Dials mutate the shared config — they affect the live game too (caps/income recompute on change).</div>
+          <div id="labDials" style="display:flex;flex-direction:column;gap:7px"></div>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom:6px">Run a batch</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:'JetBrains Mono';font-size:11px;margin-bottom:8px">
+            <label>games
+              <select id="labN" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option>10</option><option selected>25</option><option>50</option></select></label>
+            <label>houses
+              <select id="labCount" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option>2</option><option selected>4</option><option>6</option><option>8</option></select></label>
+            <label>map
+              <select id="labSize" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option value="small">small</option><option value="medium">medium</option><option value="mixed" selected>mixed</option></select></label>
+            <button id="labRun" class="btn primary" style="width:auto;padding:5px 14px">Run batch</button>
+          </div>
+          <div id="labProg" class="hidden" style="margin-bottom:10px">
+            <div class="meter" style="height:9px"><i id="labProgBar" style="width:0%;transition:width .1s"></i></div>
+            <div class="legend" id="labProgTxt" style="margin-top:3px">0 / 0</div>
+          </div>
+          <div id="labResults"></div>
+        </div>
+      </div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="labClose" class="btn primary" style="width:auto;">Close</button>
+          <div class="legend">Sims run pure game logic (no rendering) and snapshot/restore the live match — running a batch never corrupts your game. Each run keeps the previous batch for a before/after comparison.</div></div>
       </div>
     </div>
   </div>
@@ -526,10 +568,13 @@ let FR = 20;                        // camera ortho half-frustum (scaled to boar
 const MAP_SIZES = { small:20, medium:28, large:38, huge:46, epic:100 };   // selectable board sizes
 const MIN_CITY_DIST = 5;           // cities may not be founded within 5 tiles of one another
 function cityMinDist(){ return MIN_CITY_DIST; }
-const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
-const ALT_WIN_TURN = 48;            // alternative victories only open up late, after conquest's window
-const SCIENCE_WIN = 280;            // science banked AFTER all tech → host the Great Exhibition (tree is now far costlier, so the bank threshold is lower)
-const ECON_WIN = 68;                // combined level of your cities → a railway empire (rewards going wide)
+// NOTE: the LIVE win thresholds live in BAL (BAL.turnCap / altWinTurn / scienceWin / econWin) so the
+// Lab can tune them at runtime. These const aliases are kept ONLY for static labels/help text; all
+// gameplay logic reads the mutable BAL values. Keep them in sync with the BAL defaults above.
+const TURN_CAP = 70;                // (display alias of BAL.turnCap)
+const ALT_WIN_TURN = 48;            // (display alias of BAL.altWinTurn)
+const SCIENCE_WIN = 280;            // (display alias of BAL.scienceWin)
+const ECON_WIN = 68;                // (display alias of BAL.econWin)
 
 /* ====================== BALANCE TUNABLES (grouped for live sliders) ======================
    Every knob added in the 2026 balance overhaul lives here so a later stage can wire them to
@@ -573,7 +618,14 @@ const BAL = {
   techFreeDepth: 6,     // first N techs scale mildly (steam→Ironclad reachable); tail ramps hard after
   techCityMult: 1.0,    // multiplies the per-city term
   scholarSciCost: 0.60, // scholar/pease science cost multiplier (real edge — bites harder now)
+  // --- win thresholds (were standalone consts; routed through BAL so the Lab can tune them live) ---
+  turnCap:    70,       // score victory after this many full turns (conquest needs room to finish)
+  altWinTurn: 48,       // alternative victories only open up after this turn (conquest stays primary)
+  scienceWin: 280,      // science banked AFTER all tech → host the Great Exhibition
+  econWin:    68,       // combined level of your cities → a railway empire (rewards going wide)
 };
+// frozen pristine defaults so the Lab's "reset" always restores the shipped balance (deep copy)
+const BAL_DEFAULTS = JSON.parse(JSON.stringify(BAL));
 function infraCount(p){ let n=0; for(const c of G.cities){ if(c.owner===p.id) n+=cityImprovements(c); } return n; }
 // universal resource cap (scaled to empire size) — surplus spoils, killing the warchest snowball
 function resourceCap(p, kind){
@@ -2757,15 +2809,15 @@ function checkWin(){
   if(G.endless){ if(G.turn>500){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); } return; }
   // Alternative paths — once the mid-game has passed, so conquest stays primary but a
   // defensive stalemate still resolves before the clock:
-  if(G.turn>ALT_WIN_TURN){
+  if(G.turn>BAL.altWinTurn){
     const nTech=Object.keys(TECHS).length;
     for(const p of alive){
-      if(p.techs.size>=nTech && p.science>=SCIENCE_WIN){ endGame(p,'science'); return; }
+      if(p.techs.size>=nTech && p.science>=BAL.scienceWin){ endGame(p,'science'); return; }
       let sumLvl=0; for(const c of G.cities){ if(c.owner===p.id) sumLvl+=c.level; }
-      if(sumLvl>=ECON_WIN){ endGame(p,'economy'); return; }
+      if(sumLvl>=BAL.econWin){ endGame(p,'economy'); return; }
     }
   }
-  if(G.turn>TURN_CAP){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); }
+  if(G.turn>BAL.turnCap){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); }
 }
 
 /* --------------------------- 7. TURN SCHEDULER --------------------------- */
@@ -2857,6 +2909,11 @@ function advance(){
   if(G.turn!==G._histTurn){ G._histTurn=G.turn; recordScoreSnapshot(); }   // one scoreboard sample per turn
   const p=currentPlayer();
   startTurnFor(p);
+  if(G._headless){
+    // headless Lab sim: pure logic only — no HUD/scene/timer (the Lab loop drives nextIndex/checkWin)
+    if(p.isAI){ aiTurn(p); checkWin(); }
+    return;
+  }
   refreshHUD();
   if(p.isAI && (G.mode==='auto' || autoplay || true)){
     // AI plays automatically whenever it is an AI's turn
@@ -2931,7 +2988,7 @@ function refreshHUD(){
   const p=currentPlayer();
   $('hudWho').textContent=p.name + (p.isAI?' (AI)':'');
   $('hudDot').style.background='#'+p.color.toString(16).padStart(6,'0');
-  $('hudTurn').innerHTML=`${G.turn}${G.endless?'':'<small>/'+TURN_CAP+'</small>'}`;
+  $('hudTurn').innerHTML=`${G.turn}${G.endless?'':'<small>/'+BAL.turnCap+'</small>'}`;
   const show=v||p;
   const fUp=(show.foodUpkeep!=null)?show.foodUpkeep:foodUpkeep(show); const fNet=(show.foodIncome||0)-fUp;
   $('hudFood').innerHTML=`${Math.round(show.food||0)}<small> 🌾 <span style="color:${fNet<0?'#e87a5a':fNet>0?'#9bd07f':'var(--faint)'}">${fNet>=0?'+':''}${fNet}</span> <span style="color:var(--faint)">(${show.foodIncome||0}−${fUp}🍴)</span>${show.starving?' ⚠':''}</small>`;
@@ -3078,7 +3135,9 @@ function renderDossier(){
 }
 
 function endGame(winner,kind){
-  G.gameOver=true; G.winner=winner;
+  G.gameOver=true; G.winner=winner; G._winKind=kind;
+  // headless Lab sim: stash result, but DON'T touch the DOM, AI memory (knowledge) or marathon loop.
+  if(G._headless) return;
   if(winner) pivotal('win','👑', `<b>${winner.name}</b> win by ${kind} on turn ${G.turn}.`);
   if(autoTimer) clearTimeout(autoTimer);
   if(G.mode==='auto'){ G._obsTurn=-1; G._pivN=-1; renderScoreChart(); renderTicker(); renderPivots(); }   // final spectator snapshot
@@ -3195,12 +3254,12 @@ function recordScoreSnapshot(){
     }
   }
   // B3 — win-condition closing in (science / economy paths), warned once per house
-  if(!G.endless && G.turn>ALT_WIN_TURN){
+  if(!G.endless && G.turn>BAL.altWinTurn){
     const nTech=Object.keys(TECHS).length;
     for(const p of alive){
       let sumLvl=0; for(const c of G.cities){ if(c.owner===p.id) sumLvl+=c.level; }
-      if(p.techs.size>=nTech && p.science>=SCIENCE_WIN*0.8 && p.science<SCIENCE_WIN && !G._winWarned['sci'+p.id]){ G._winWarned['sci'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near a <b>science</b> victory.`); }
-      if(sumLvl>=ECON_WIN*0.85 && sumLvl<ECON_WIN && !G._winWarned['eco'+p.id]){ G._winWarned['eco'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near an <b>economic</b> victory.`); }
+      if(p.techs.size>=nTech && p.science>=BAL.scienceWin*0.8 && p.science<BAL.scienceWin && !G._winWarned['sci'+p.id]){ G._winWarned['sci'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near a <b>science</b> victory.`); }
+      if(sumLvl>=BAL.econWin*0.85 && sumLvl<BAL.econWin && !G._winWarned['eco'+p.id]){ G._winWarned['eco'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near an <b>economic</b> victory.`); }
     }
   }
 }
@@ -3438,6 +3497,234 @@ function renderAnalysis(){
 
   $('analysisBody').innerHTML=h;
 }
+/* ===================== B6 — TUNABLE SANDBOX "LAB" =====================
+   Run many headless games in-browser with the CURRENT BAL dials, chart the run dynamics, and compare
+   batches before/after a tweak. Pure logic only — guarded render path (G._headless) keeps the WebGL
+   scene & DOM untouched, and we snapshot/restore the live G so an in-progress match isn't corrupted. */
+
+// the curated high-impact dials exposed in the Lab (path into BAL, label, help, step, range)
+const LAB_DIALS = [
+  {k:'turnCap',     path:['turnCap'],            label:'Turn cap',           help:'Score victory fires after this many turns.', min:30, max:140, step:1},
+  {k:'scienceWin',  path:['scienceWin'],         label:'Science-win bank',   help:'Science banked (after full tech) for a science victory.', min:80, max:600, step:5},
+  {k:'econWin',     path:['econWin'],            label:'Economy-win levels', help:'Combined city levels for a railway-empire win.', min:30, max:160, step:1},
+  {k:'woodCap',     path:['woodCap','base'],     label:'Wood cap (base)',    help:'Base wood ceiling before surplus spoils.', min:0, max:120, step:2},
+  {k:'stoneCap',    path:['stoneCap','base'],    label:'Stone cap (base)',   help:'Base stone ceiling before surplus spoils.', min:0, max:120, step:2},
+  {k:'prodCap',     path:['prodCap','base'],     label:'Prod cap (base)',    help:'Base production ceiling — the worst hoard offender.', min:0, max:160, step:2},
+  {k:'rubberSciMax',path:['rubberSciMax'],       label:'Rubber-band (sci)',  help:'Max science discount for a trailing house (0–1).', min:0, max:0.9, step:0.05},
+  {k:'rubberProdMax',path:['rubberProdMax'],     label:'Rubber-band (prod)', help:'Max build discount for a trailing house (0–1).', min:0, max:0.9, step:0.05},
+  {k:'captureProdCost',path:['captureProdCost'], label:'Capture cost',       help:'Production friction paid to take a city.', min:0, max:40, step:1},
+  {k:'unrestTurns', path:['unrestTurns'],        label:'Unrest duration',    help:'Turns a captured city yields nothing / cannot grow.', min:0, max:12, step:1},
+  {k:'coalitionLeaderBias',path:['coalitionLeaderBias'], label:'Coalition bias', help:'How hard the AI gangs up on the score leader.', min:0, max:16, step:0.5},
+  {k:'econBonusTaper',path:['econBonusTaper'],   label:'Kelly econ taper',   help:'Per-city econ bonus fraction beyond the first N cities.', min:0, max:1, step:0.05},
+  {k:'techTierMult',path:['techTierMult'],       label:'Tech cost ×',        help:'Multiplier on the per-tier tech base cost.', min:0.3, max:3, step:0.05},
+  {k:'techCountPow',path:['techCountPow'],       label:'Tech tail power',    help:'How steeply the late tech tree ramps in cost.', min:1, max:2.5, step:0.05},
+];
+function dialGet(d){ let o=BAL; for(let i=0;i<d.path.length-1;i++) o=o[d.path[i]]; return o[d.path[d.path.length-1]]; }
+function dialSet(d,v){ let o=BAL; for(let i=0;i<d.path.length-1;i++) o=o[d.path[i]]; o[d.path[d.path.length-1]]=v; }
+function dialDefault(d){ let o=BAL_DEFAULTS; for(let i=0;i<d.path.length-1;i++) o=o[d.path[i]]; return o[d.path[d.path.length-1]]; }
+
+// snapshot/restore the LIVE game so a Lab batch can't corrupt an in-progress match. setupGame
+// reassigns G's array/scalar props (it doesn't mutate them in place), so a shallow snapshot of G's
+// own props + restore via Object.assign fully rewinds it. We also save module globals the sim touches.
+function snapshotLive(){
+  // freeze the live auto-loop: its pending setTimeout baton would otherwise fire mid-sim (against the
+  // sim's swapped-in state) and the self-rescheduling chain would never resume for the live game.
+  // the live auto-loop is the self-rescheduling endTurn→advance baton: it runs whenever we're in an
+  // unfinished auto game not paused on manual 'step' (autoplay is forced true in auto mode).
+  const wasAuto = G.started && G.mode==='auto' && !G.gameOver && speed!=='step';
+  if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
+  return { G:{...G}, N, RNG, knowledge, _autoplay:autoplay, _headless:G._headless, wasAuto };
+}
+function restoreLive(s){
+  for(const k of Object.keys(G)) if(!(k in s.G)) delete G[k];
+  Object.assign(G, s.G);
+  N=s.N; RNG=s.RNG; knowledge=s.knowledge; autoplay=s._autoplay; G._headless=s._headless;
+  if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
+  // repaint the restored board and resume the auto-loop baton if it was running
+  if(G.started && !G._headless){ rebuildDynamic(); refreshAll(); }
+  if(s.wasAuto && !G.gameOver){ autoTimer=setTimeout(()=>{ endTurn(); }, SPEEDS[speed]||450); }
+}
+
+// run ONE headless game to completion; collect run-dynamics metrics. Mirrors /tmp/br_harness2 loop.
+function simOneGame(seed, count, mapSize){
+  setupGame({seed, mode:'auto', count, marathon:false, mapSize, endless:false});
+  G._headless=true;
+  let lastLeader=null, leadChanges=0, t1Leader=null, earlyLeader=null;
+  const earlyT=15;
+  function leaderNow(){ const al=G.players.filter(p=>p.alive); if(!al.length) return null;
+    return al.slice().sort((a,b)=>score(b)-score(a))[0].id; }
+  let lastTurn=0; t1Leader=leaderNow(); lastLeader=t1Leader;
+  let safety=0;
+  while(!G.gameOver && safety++<200000){
+    advance();
+    if(G.gameOver) break;
+    nextIndex(); checkWin();
+    if(G.turn!==lastTurn){ lastTurn=G.turn;
+      const ld=leaderNow();
+      if(ld!==lastLeader && lastLeader!==null) leadChanges++;
+      lastLeader=ld;
+      if(earlyLeader===null && G.turn>=earlyT) earlyLeader=ld;
+    }
+  }
+  if(earlyLeader===null) earlyLeader=lastLeader;
+  let maxLvl=0; for(const c of G.cities) if(c.level>maxLvl) maxLvl=c.level;
+  const winner=G.winner?G.winner.id:null;
+  return { seed, turns:G.turn, gameOver:G.gameOver, winner, kind:G._winKind||'?',
+    maxCityLevel:maxLvl, leadChanges, earlyLeaderWon:(earlyLeader!=null && earlyLeader===winner) };
+}
+
+// run N games asynchronously (yields between games so the progress bar paints & the UI stays live)
+async function simulateBatch(n, opts){
+  opts=opts||{};
+  const count=opts.count||4, sizes=opts.sizes||['small','medium'];
+  const snap=snapshotLive();
+  const recs=[]; let exceptions=0;
+  const seed0=(opts.seed0|0)||((Date.now()>>>0)&0x7ffffff);
+  try{
+    for(let i=0;i<n;i++){
+      const size=sizes[i%sizes.length];
+      try{ recs.push(simOneGame((seed0+i*7)>>>0, count, size)); }
+      catch(e){ exceptions++; console.error('Lab sim exception',i,e); }
+      if(opts.onProgress) opts.onProgress(i+1, n);
+      await new Promise(r=>setTimeout(r));   // yield to the event loop
+    }
+  } finally { restoreLive(snap); }
+  return summariseBatch(recs, exceptions, n);
+}
+
+function summariseBatch(recs, exceptions, requested){
+  const done=recs.filter(r=>r.gameOver);
+  const N=done.length||1;
+  const kinds={domination:0,science:0,economy:0,score:0};
+  const facWins={}; for(const f of FACTIONS) facWins[f.id]=0;
+  let tsum=0, lvlsum=0, leadsum=0, earlyWins=0;
+  for(const r of done){
+    if(kinds[r.kind]!=null) kinds[r.kind]++; else kinds[r.kind]=(kinds[r.kind]||0)+1;
+    if(r.winner && facWins[r.winner]!=null) facWins[r.winner]++;
+    tsum+=r.turns; lvlsum+=r.maxCityLevel; leadsum+=r.leadChanges; if(r.earlyLeaderWon) earlyWins++;
+  }
+  return { recs, exceptions, requested, completed:done.length,
+    kinds, facWins, avgTurns:tsum/N, avgMaxLevel:lvlsum/N, avgLeadChanges:leadsum/N,
+    earlyLeaderWinPct:100*earlyWins/N };
+}
+
+let LAB_PREV=null, LAB_CUR=null, LAB_RUNNING=false;
+const KCOL={domination:'#d14b3f',economy:'#e8a13a',science:'#5b6ee1',score:'#8a8a8a'};
+
+function buildLabDials(){
+  let h='';
+  for(const d of LAB_DIALS){ const v=dialGet(d), def=dialDefault(d); const off=Math.abs(v-def)>1e-9;
+    h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--panel2)">
+      <div style="display:flex;align-items:baseline;gap:6px"><b style="flex:1;font-size:11px">${d.label}</b>
+        <input type="number" id="labnum_${d.k}" value="${v}" min="${d.min}" max="${d.max}" step="${d.step}"
+          style="width:64px;background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:2px 4px;font-family:'JetBrains Mono';font-size:11px;text-align:right">
+        <span class="legend" style="width:60px;text-align:right;color:${off?'var(--amber2)':'var(--faint)'}">def ${def}</span></div>
+      <input type="range" id="labrng_${d.k}" value="${v}" min="${d.min}" max="${d.max}" step="${d.step}" style="width:100%;margin:5px 0 2px;accent-color:var(--amber)">
+      <div class="legend" style="font-size:9.5px">${d.help}</div></div>`;
+  }
+  $('labDials').innerHTML=h;
+  for(const d of LAB_DIALS){ const rng=$('labrng_'+d.k), num=$('labnum_'+d.k);
+    const apply=(val)=>{ let v=parseFloat(val); if(isNaN(v)) return; v=clamp(v,d.min,d.max); dialSet(d,v); rng.value=v; num.value=v;
+      // recompute live caps/income so a mid-campaign dial change takes effect immediately
+      if(G.started){ for(const p of G.players){ p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap'); } recomputeIncome(); if(!G._headless) refreshHUD(); }
+      buildLabDials(); };
+    rng.oninput=()=>apply(rng.value);
+    num.onchange=()=>apply(num.value);
+  }
+}
+function labResetDials(){ for(const d of LAB_DIALS) dialSet(d, dialDefault(d));
+  if(G.started){ for(const p of G.players){ p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap'); } recomputeIncome(); if(!G._headless) refreshHUD(); }
+  buildLabDials(); toast('Dials reset to shipped defaults.'); }
+
+function labBarRow(label, segs){   // segs:[{w,col,title}] horizontal stacked bar
+  let h=`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-family:'JetBrains Mono';font-size:10px">
+    <span style="width:96px;color:var(--muted)">${label}</span>
+    <div style="flex:1;display:flex;height:13px;border-radius:3px;overflow:hidden;border:1px solid var(--line);background:#241c14">`;
+  for(const s of segs) if(s.w>0) h+=`<div title="${s.title||''}" style="width:${s.w}%;background:${s.col}"></div>`;
+  return h+`</div></div>`;
+}
+function labStatCards(b){
+  const mono="font-family:'JetBrains Mono'";
+  return `<div style="display:flex;gap:18px;flex-wrap:wrap;${mono};margin:4px 0 8px">
+    <div><b style="font-size:20px;color:var(--amber2)">${b.completed}/${b.requested}</b><div class="legend">games</div></div>
+    <div><b style="font-size:20px">${b.avgTurns.toFixed(1)}</b><div class="legend">avg turns</div></div>
+    <div><b style="font-size:20px">${b.avgMaxLevel.toFixed(1)}</b><div class="legend">avg max city lvl</div></div>
+    <div><b style="font-size:20px">${b.avgLeadChanges.toFixed(2)}</b><div class="legend">avg lead changes</div></div>
+    <div><b style="font-size:20px;color:${b.earlyLeaderWinPct>70?'#f0998e':'var(--teal)'}">${b.earlyLeaderWinPct.toFixed(0)}%</b><div class="legend">early-leader wins</div></div>
+    ${b.exceptions?`<div><b style="font-size:20px;color:#f0998e">${b.exceptions}</b><div class="legend">errors</div></div>`:''}
+  </div>`;
+}
+function delta(cur, prev, dp=1){ if(prev==null) return ''; const d=cur-prev; if(Math.abs(d)<Math.pow(10,-dp)/2) return ` <span style="color:var(--faint)">±0</span>`;
+  return ` <span style="color:${d>0?'#9bd07f':'#f0998e'}">${d>0?'▲':'▼'}${Math.abs(d).toFixed(dp)}</span>`; }
+
+function renderLabResults(){
+  const cur=LAB_CUR, prev=LAB_PREV; let h='';
+  if(!cur){ $('labResults').innerHTML=`<div class="legend">Set your dials, choose a batch size, then <b>Run batch</b>. Each batch uses the current dial values; the previous batch is kept for before/after comparison.</div>`; return; }
+  const mono="font-family:'JetBrains Mono'";
+  const winBar=(b)=>{ const tot=Object.values(b.kinds).reduce((a,x)=>a+x,0)||1;
+    return labBarRow('win type', Object.keys(KCOL).map(k=>({w:100*(b.kinds[k]||0)/tot, col:KCOL[k], title:`${k} ${b.kinds[k]||0}`}))); };
+  const facBar=(b)=>{ const tot=Object.values(b.facWins).reduce((a,x)=>a+x,0)||1;
+    return labBarRow('per-house', FACTIONS.map(f=>({w:100*(b.facWins[f.id]||0)/tot, col:'#'+f.color.toString(16).padStart(6,'0'), title:`${f.name} ${b.facWins[f.id]||0}`}))); };
+
+  // overview cards with deltas vs previous batch
+  h+=`<div class="label" style="margin-bottom:4px">Latest batch — run dynamics</div>`;
+  h+=labStatCards(cur);
+  if(prev){ h+=`<div class="legend" style="margin:-4px 0 8px">Δ vs previous: turns${delta(cur.avgTurns,prev.avgTurns)} · max-lvl${delta(cur.avgMaxLevel,prev.avgMaxLevel)} · lead-chg${delta(cur.avgLeadChanges,prev.avgLeadChanges,2)} · early-leader-win${delta(cur.earlyLeaderWinPct,prev.earlyLeaderWinPct,0)}%</div>`; }
+
+  // win-type distribution (legend chips)
+  h+=`<div class="label" style="margin:10px 0 4px;color:var(--teal)">Win-type distribution</div>`;
+  h+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;${mono};font-size:10px">`;
+  for(const k of Object.keys(KCOL)) h+=`<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${KCOL[k]};vertical-align:middle"></span> ${k} ${cur.kinds[k]||0}${prev?`<span style="color:var(--faint)"> (was ${prev.kinds[k]||0})</span>`:''}</span>`;
+  h+=`</div>`;
+  h+=`<div class="legend" style="margin:2px 0">CURRENT</div>`+winBar(cur);
+  if(prev){ h+=`<div class="legend" style="margin:2px 0">PREVIOUS</div>`+winBar(prev); }
+
+  // per-faction win rate vs fair baseline
+  const baseline=Math.round(100/FACTIONS.length);
+  h+=`<div class="label" style="margin:12px 0 4px;color:var(--teal)">Per-house win rate <span style="color:var(--faint)">(fair ≈ ${baseline}%)</span></div>`;
+  h+=`<div class="legend" style="margin:2px 0">CURRENT</div>`+facBar(cur);
+  if(prev){ h+=`<div class="legend" style="margin:2px 0">PREVIOUS</div>`+facBar(prev); }
+  // per-house table with vs-baseline tint
+  const totC=Object.values(cur.facWins).reduce((a,x)=>a+x,0)||1;
+  h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;margin-top:6px;${mono};font-size:10px">`;
+  for(const f of FACTIONS){ const w=cur.facWins[f.id]||0; const pct=100*w/totC; const off=pct-baseline; const col='#'+f.color.toString(16).padStart(6,'0');
+    h+=`<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:${col};transform:rotate(45deg)"></span>
+      <span style="flex:1">${f.name.replace('House ','')}</span><b style="color:${Math.abs(off)>baseline?'#f0998e':'var(--ink)'}">${pct.toFixed(0)}%</b></div>`; }
+  h+=`</div>`;
+
+  // side-by-side summary table (latest vs previous)
+  if(prev){ h+=`<div class="label" style="margin:12px 0 4px;color:var(--teal)">Before / after</div>
+    <table style="${mono};font-size:10.5px;border-collapse:collapse;width:100%">
+    <tr style="color:var(--muted)"><th style="text-align:left;padding:2px 6px">metric</th><th style="text-align:right;padding:2px 6px">previous</th><th style="text-align:right;padding:2px 6px">latest</th><th style="text-align:right;padding:2px 6px">Δ</th></tr>`;
+    const row=(lbl,c,p,dp=1)=>`<tr><td style="padding:2px 6px">${lbl}</td><td style="text-align:right;padding:2px 6px;color:var(--muted)">${p.toFixed(dp)}</td><td style="text-align:right;padding:2px 6px"><b>${c.toFixed(dp)}</b></td><td style="text-align:right;padding:2px 6px">${delta(c,p,dp).replace(/<[^>]*>/g,m=>m)}</td></tr>`;
+    h+=row('avg turns',cur.avgTurns,prev.avgTurns);
+    h+=row('avg max city lvl',cur.avgMaxLevel,prev.avgMaxLevel);
+    h+=row('avg lead changes',cur.avgLeadChanges,prev.avgLeadChanges,2);
+    h+=row('early-leader win %',cur.earlyLeaderWinPct,prev.earlyLeaderWinPct,0);
+    for(const k of Object.keys(KCOL)) h+=row(k+' wins',cur.kinds[k]||0,prev.kinds[k]||0,0);
+    h+=`</table>`; }
+
+  $('labResults').innerHTML=h;
+}
+
+async function labRun(){
+  if(LAB_RUNNING) return; LAB_RUNNING=true;
+  const n=parseInt($('labN').value,10)||10;
+  const count=parseInt($('labCount').value,10)||4;
+  const sizeSel=$('labSize').value;
+  const sizes = sizeSel==='mixed'? ['small','medium'] : [sizeSel];
+  const btn=$('labRun'); btn.disabled=true; const bar=$('labProgBar'), txt=$('labProgTxt');
+  $('labProg').classList.remove('hidden'); bar.style.width='0%'; txt.textContent=`0 / ${n}`;
+  const t0=performance.now();
+  const b=await simulateBatch(n, {count, sizes, onProgress:(done,total)=>{ bar.style.width=(100*done/total)+'%'; txt.textContent=`${done} / ${total}`; }});
+  const ms=Math.round(performance.now()-t0);
+  LAB_PREV=LAB_CUR; LAB_CUR=b;
+  txt.textContent=`${b.completed} / ${n} · ${ms}ms`;
+  LAB_RUNNING=false; btn.disabled=false;
+  renderLabResults();
+}
+function openLab(){ buildLabDials(); renderLabResults(); $('lab').classList.remove('hidden'); }
+
 function openHelp(){ $('help').classList.remove('hidden'); }
 function closeHelp(){ $('help').classList.add('hidden'); try{localStorage.setItem('brassrails.seenHelp','1');}catch(e){} }
 $('btnHelp').onclick=openHelp;
@@ -3448,6 +3735,10 @@ $('rosterClose').onclick=()=>$('roster').classList.add('hidden');
 $('btnAnalysis').onclick=()=>{ renderAnalysis(); $('analysis').classList.remove('hidden'); };
 $('analysisClose').onclick=()=>$('analysis').classList.add('hidden');
 $('analysisWipe').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); renderAnalysis(); toast('AI memory wiped.'); };
+$('btnLab').onclick=openLab;
+$('labClose').onclick=()=>$('lab').classList.add('hidden');
+$('labRun').onclick=labRun;
+$('labReset').onclick=labResetDials;
 $('techHead').onclick=()=>{ const hidden=$('techBody').classList.toggle('hidden'); $('techChevron').textContent=hidden?'▸':'▾'; };
 
 // keyboard: space = end turn / step · WASD + arrows pan the camera
@@ -3461,6 +3752,10 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{ if(PAN_MAP[e.code]) panKeys.delete(PAN_MAP[e.code]); });
 addEventListener('blur',()=>panKeys.clear());
+
+// debug/QA handle (read-only window hook so headless tests can inspect Lab + game state)
+window.__lab={ get G(){return G;}, get BAL(){return BAL;}, get BAL_DEFAULTS(){return BAL_DEFAULTS;},
+  get cur(){return LAB_CUR;}, get prev(){return LAB_PREV;}, get running(){return LAB_RUNNING;} };
 
 // boot
 buildSetupUI(); syncSetup();
