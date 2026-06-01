@@ -215,3 +215,27 @@ describe('adaptFrameToCanvasSse — approval frame', () => {
     expect(adaptFrameToCanvasSse(approvalFrame(null))).toEqual([]);
   });
 });
+
+describe('adaptToolFrameToJobEvents — delegate_task children (sub-agent viz)', () => {
+  const completedFrame = (children: unknown): SseFrame => ({
+    kind: 'tool',
+    chat_id: 'c1',
+    message_id: 'm1',
+    content: '',
+    metadata: { tool: { phase: 'completed', tool: 'delegate_task', tool_call_id: 'tc1', result: '1 task', children } },
+    ts: 1,
+  });
+
+  it('attaches per-child rows to the tool_result for delegate_task', () => {
+    const kids = [{ index: 0, status: 'completed', summary: 'did x', apiCalls: 7, durationSeconds: 30, toolTrace: [{ tool: 'read_file', status: 'success' }] }];
+    const ev = adaptToolFrameToJobEvents(completedFrame(kids));
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ type: 'tool_result', tool: 'delegate_task', children: kids });
+  });
+
+  it('omits children when absent or non-array (normal tools unaffected)', () => {
+    expect((adaptToolFrameToJobEvents(completedFrame(undefined))[0] as { children?: unknown }).children).toBeUndefined();
+    expect((adaptToolFrameToJobEvents(completedFrame('nope'))[0] as { children?: unknown }).children).toBeUndefined();
+    expect((adaptToolFrameToJobEvents(completedFrame([]))[0] as { children?: unknown }).children).toBeUndefined();
+  });
+});

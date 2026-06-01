@@ -17,7 +17,7 @@
  *               caller; per-frame JobEvent is not emitted.
  */
 import type { SseFrame, SseFrameToolCall } from '$lib/jkai/hermes-client';
-import type { JobEvent } from '$lib/workflows/chat/job-store';
+import type { JobEvent, DelegateChild } from '$lib/workflows/chat/job-store';
 
 const RESULT_PREVIEW_MAX = 400;
 
@@ -112,7 +112,11 @@ export function adaptToolFrameToJobEvents(
       // Mid-call free-text progress → status bubble (parity with the bus's
       // `progress` → `status` mapping). No summary, nothing to surface.
       return summary ? [{ type: 'status', text: summary }] : [];
-    case 'completed':
+    case 'completed': {
+      // `delegate_task` completed frames carry parsed per-child rows (the
+      // sub-agent visualizer); undefined for every other tool, so they ride
+      // through unchanged.
+      const children = Array.isArray(tc.children) ? (tc.children as DelegateChild[]) : undefined;
       return [{
         type: 'tool_result',
         tool: toolName,
@@ -120,7 +124,9 @@ export function adaptToolFrameToJobEvents(
         status: 'done',
         toolCallId,
         summary: summary ?? (previewResult(tc.result) || undefined),
+        ...(children && children.length ? { children } : {}),
       }];
+    }
     case 'failed':
       return [{
         type: 'tool_result',

@@ -84,6 +84,11 @@ export interface SseFrameToolCall {
   /** Short human-readable summary for the UI (parity with the legacy
    * emitter's `summary` field). */
   summary?: string;
+  /** Sub-agent rows on a `delegate_task` completed frame — the adapter parses
+   * the delegation result into per-child rows before the result preview cap
+   * (adapter.py `_extract_delegate_children`). Loose-typed here; sse-adapter
+   * narrows it to `DelegateChild[]` for the tool-step UI. */
+  children?: unknown[];
 }
 
 /** Payload for a `kind: 'approval'` frame — a dangerous-command approval gate

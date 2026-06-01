@@ -1,9 +1,25 @@
+/** One sub-agent row under a `delegate_task` tool step (sub-agent visualizer).
+ *  Parsed adapter-side from the delegation result, so the full child summary +
+ *  tool trace survive the per-tool result preview cap. */
+export interface DelegateChild {
+  index: number;
+  status: string;
+  summary: string;
+  apiCalls?: number;
+  durationSeconds?: number;
+  model?: string | null;
+  exitReason?: string | null;
+  toolTrace: { tool: string; status: string }[];
+}
+
 export interface ToolProgressStep {
   tool: string;
   toolCallId: string;
   args: Record<string, unknown>;
   result?: unknown;
   status: 'running' | 'done' | 'error';
+  // Sub-agent rows for a `delegate_task` step (one per child task).
+  children?: DelegateChild[];
 }
 
 export interface PlanStep {
@@ -47,7 +63,7 @@ export type JobEvent =
   // token arrives.
   | { type: 'thinking'; delta: string; messageId?: string }
   | { type: 'tool_start'; tool: string; args: Record<string, unknown>; toolCallId?: string; summary?: string }
-  | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string }
+  | { type: 'tool_result'; tool: string; result: unknown; status: 'done' | 'error'; toolCallId?: string; summary?: string; children?: DelegateChild[] }
   | { type: 'status'; text: string }
   | { type: 'heartbeat'; summary: string; phase: JobPhase; elapsedMs: number }
   | { type: 'plan'; planId: string; plan: PlanPayload }
