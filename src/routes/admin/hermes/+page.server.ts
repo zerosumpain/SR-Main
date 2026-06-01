@@ -1,8 +1,5 @@
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
-import { db } from '$lib/db';
-import { hermesSessions } from '$lib/db/schema';
-import { desc, isNull } from 'drizzle-orm';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
@@ -114,19 +111,7 @@ async function runShell(
 }
 
 export const load: PageServerLoad = async () => {
-  const [openSessions, health, gatewayState, dashboardState, version] = await Promise.all([
-    db
-      .select({
-        id: hermesSessions.id,
-        hermesSessionId: hermesSessions.hermesSessionId,
-        kind: hermesSessions.kind,
-        kindId: hermesSessions.kindId,
-        createdAt: hermesSessions.createdAt,
-      })
-      .from(hermesSessions)
-      .where(isNull(hermesSessions.closedAt))
-      .orderBy(desc(hermesSessions.createdAt))
-      .limit(50),
+  const [health, gatewayState, dashboardState, version] = await Promise.all([
     probeHealth(),
     serviceState(GATEWAY_UNIT),
     serviceState(DASHBOARD_UNIT),
@@ -134,7 +119,6 @@ export const load: PageServerLoad = async () => {
   ]);
 
   return {
-    openSessions,
     health,
     flagEnabled: env.JKAI_HERMES_CANVAS_CHAT === '1',
     canManage: IS_HOMESERV,

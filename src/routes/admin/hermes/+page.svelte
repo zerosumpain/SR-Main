@@ -5,13 +5,6 @@
 
   let { data, form } = $props();
 
-  type SessionRow = {
-    id: number;
-    hermesSessionId: string;
-    kind: 'build' | 'canvas_chat' | 'manual';
-    kindId: string;
-    createdAt: string | Date;
-  };
   type ServiceState = 'active' | 'inactive' | 'failed' | 'activating' | 'unknown';
   type ActionForm = {
     action?: string;
@@ -25,10 +18,6 @@
   let pending = $state<string | null>(null);
   const result = $derived(form as ActionForm);
 
-  function fmtDate(d: string | Date): string {
-    const dt = typeof d === 'string' ? new Date(d) : d;
-    return dt.toLocaleString();
-  }
   function fmtMs(ms: number): string {
     return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
   }
@@ -170,26 +159,14 @@
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Open sessions</span>
-      <span class="nm-sec-meta">
-        {data.openSessions.length} {data.openSessions.length === 1 ? 'session' : 'sessions'}
-      </span>
+      <span class="sr-label-tight">Engine sessions</span>
+      <a class="nm-sec-meta sessions-link" href="/admin/hermes/sessions">Open inspector →</a>
     </div>
-
-    {#if data.openSessions.length === 0}
-      <div class="empty mono">No open Hermes sessions.</div>
-    {:else}
-      <ul class="rows">
-        {#each data.openSessions as s (s.id)}
-          <li class="row">
-            <span class="kind-pill mono">{s.kind}</span>
-            <span class="mono kind-id">{s.kindId}</span>
-            <span class="mono session-id">{s.hermesSessionId}</span>
-            <span class="mono created">{fmtDate(s.createdAt)}</span>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    <p class="sessions-note mono">
+      Browse, full-text-search, and read the engine's real session store (with
+      jkai-conversation correlation) in the
+      <a href="/admin/hermes/sessions">session inspector</a>.
+    </p>
   </section>
 </div>
 
@@ -263,6 +240,12 @@
     flex-shrink: 0;
   }
   .back-link:hover { text-decoration: underline; }
+
+  .sessions-link { color: var(--accent); text-decoration: none; }
+  .sessions-link:hover { text-decoration: underline; }
+  .sessions-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0.4rem 0 0; }
+  .sessions-note a { color: var(--accent); text-decoration: none; }
+  .sessions-note a:hover { text-decoration: underline; }
 
   .mono {
     font-family: var(--font-mono);
