@@ -316,7 +316,15 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
     );
   }
 
-  const installRes = await execInSandbox(`cd ${dev} && npm install 2>&1 | tail -5`, 300000);
+  // The agent writes a `serve.json` (preview-server config) into the workspace.
+  // Exclude it locally (NOT via the repo's tracked .gitignore) so the later
+  // `git add -A` in publishViaGit never stages it into the PR.
+  await execInSandbox(`cd ${dev} && echo 'serve.json' >> .git/info/exclude`, 30000);
+
+  // `--include=dev` is required: the builder runs under NODE_ENV=production,
+  // which makes a plain `npm install` skip devDependencies → the gate's
+  // `vite build` would fail (exit 127, vite missing). The gate needs devDeps.
+  const installRes = await execInSandbox(`cd ${dev} && npm install --include=dev 2>&1 | tail -5`, 300000);
   if (installRes.exitCode !== 0) {
     throw new Error(`npm install failed in git workspace: ${installRes.stdout}\n${installRes.stderr}`.slice(0, 2000));
   }
@@ -326,6 +334,13 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
 
 export interface PublishViaGitOptions {
   summary?: string;
+  /**
+   * PR title + commit-message subject. This is the build's own `title` column
+   * (set at create-time to `Forge: <prompt slice>`), used verbatim so the PR
+   * isn't titled with the agent's verbose evaluation text. Already carries any
+   * `Forge:` prefix, so `prTitlePrefix` is NOT re-applied when this is set.
+   */
+  title?: string;
   /** Extra body content for the PR (gate report + diff stat, etc.). */
   body?: string;
 }
@@ -350,7 +365,12 @@ export async function publishViaGit(
   const dev = `/home/jkai/workspace/${buildId}/dev`;
   const branch = gitTargetBranchName(buildId, cfg);
   const summary = (opts.summary ?? 'autonomous changes').replace(/\r?\n/g, ' ').slice(0, 200);
-  const commitMessage = `${cfg.prTitlePrefix ?? ''}${summary}`;
+  // Prefer the build's own title (already prefixed) for the PR title + commit
+  // subject so we don't surface the agent's verbose evaluation. Fall back to
+  // prTitlePrefix+summary, then a sensible default.
+  const cleanTitle = (opts.title ?? '').replace(/\r?\n/g, ' ').trim().slice(0, 200);
+  const commitMessage =
+    cleanTitle || `${cfg.prTitlePrefix ?? ''}${summary}`.trim() || 'Forge: automated change';
   const prTitle = commitMessage;
 
   // Detect changes before committing. `git status --porcelain` is empty when

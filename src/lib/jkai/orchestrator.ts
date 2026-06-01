@@ -1082,6 +1082,9 @@ class Orchestrator {
               result.evaluation ? `**Summary:**\n${result.evaluation.slice(0, 1500)}` : '',
             ].filter(Boolean).join('\n');
             const published = await publishViaGit(buildId, build.gitTargetConfig as GitTargetConfig, {
+              // Build's own title column (`Forge: <prompt slice>`) — clean PR
+              // title + commit subject, not the agent's verbose evaluation.
+              title: build.title || 'Forge: automated change',
               summary,
               body: prBody,
             });
