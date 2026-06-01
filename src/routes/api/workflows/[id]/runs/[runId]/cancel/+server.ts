@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
+import { engine } from '$lib/workflows';
 
 export const POST: RequestHandler = async ({ params }) => {
   const [run] = await db
@@ -34,5 +35,11 @@ export const POST: RequestHandler = async ({ params }) => {
       ),
     );
 
-  return json({ ok: true });
+  // #11 CANCEL: abort the in-flight run in this process AFTER the DB status is
+  // already 'failed', so the engine's post-run persister can't resurrect a
+  // 'running' status. No-op if the run isn't executing in this process (e.g.
+  // it was started on a different node, or already settled).
+  const aborted = engine.cancelRun(params.runId);
+
+  return json({ ok: true, aborted });
 };
