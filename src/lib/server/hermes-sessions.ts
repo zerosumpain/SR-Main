@@ -187,3 +187,120 @@ export async function searchSessions(
      ORDER BY rank LIMIT ${limit};`,
   );
 }
+
+// ── Telemetry (engine usage analytics over the session store) ──────────────
+// Direct aggregation over sessions/messages — same data Hermes' InsightsEngine
+// reads, but as plain SQL (no fragile SessionDB subprocess, no prose parsing).
+// The only interpolated value is `days` (clamped integer), so this is safe.
+
+export function clampDays(d: number | string | null | undefined, fallback = 30): number {
+  const n = typeof d === 'string' ? parseInt(d, 10) : d;
+  if (!n || !Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.round(n), 1), 365);
+}
+
+export interface TelemetryModel {
+  model: string;
+  sessions: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+export interface TelemetryPlatform {
+  source: string;
+  sessions: number;
+  costUsd: number;
+}
+export interface TelemetryDay {
+  day: string;
+  sessions: number;
+}
+export interface TelemetryTool {
+  tool: string;
+  calls: number;
+}
+export interface TelemetryTopSession {
+  id: string;
+  title: string | null;
+  source: string;
+  costUsd: number | null;
+  messageCount: number;
+  startedAt: number;
+}
+export interface Telemetry {
+  days: number;
+  overview: {
+    sessions: number;
+    messages: number;
+    toolCalls: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    reasoningTokens: number;
+    costUsd: number;
+  };
+  byModel: TelemetryModel[];
+  byPlatform: TelemetryPlatform[];
+  activity: TelemetryDay[];
+  topTools: TelemetryTool[];
+  topSessions: TelemetryTopSession[];
+}
+
+const COST = 'COALESCE(actual_cost_usd, estimated_cost_usd, 0)';
+
+export async function getTelemetry(daysIn = 30): Promise<Telemetry> {
+  const days = clampDays(daysIn);
+  const since = `strftime('%s','now') - ${days} * 86400`; // started_at/timestamp are REAL epoch seconds
+
+  const [ov] = await querySqlite<Record<string, number>>(
+    `SELECT count(*) sessions, COALESCE(sum(message_count),0) messages,
+            COALESCE(sum(tool_call_count),0) toolCalls, COALESCE(sum(input_tokens),0) inputTokens,
+            COALESCE(sum(output_tokens),0) outputTokens, COALESCE(sum(cache_read_tokens),0) cacheReadTokens,
+            COALESCE(sum(reasoning_tokens),0) reasoningTokens, COALESCE(sum(${COST}),0) costUsd
+     FROM sessions WHERE started_at >= ${since};`,
+  );
+  const byModel = await querySqlite<TelemetryModel>(
+    `SELECT COALESCE(NULLIF(model,''),'(unknown)') model, count(*) sessions, COALESCE(sum(${COST}),0) costUsd,
+            COALESCE(sum(input_tokens),0) inputTokens, COALESCE(sum(output_tokens),0) outputTokens
+     FROM sessions WHERE started_at >= ${since} GROUP BY model ORDER BY sessions DESC LIMIT 10;`,
+  );
+  const byPlatform = await querySqlite<TelemetryPlatform>(
+    `SELECT source, count(*) sessions, COALESCE(sum(${COST}),0) costUsd
+     FROM sessions WHERE started_at >= ${since} GROUP BY source ORDER BY sessions DESC;`,
+  );
+  const activity = await querySqlite<TelemetryDay>(
+    `SELECT date(started_at,'unixepoch') day, count(*) sessions
+     FROM sessions WHERE started_at >= ${since} GROUP BY day ORDER BY day;`,
+  );
+  const topTools = await querySqlite<TelemetryTool>(
+    `SELECT tool_name tool, count(*) calls FROM messages
+     WHERE tool_name IS NOT NULL AND tool_name != '' AND timestamp >= ${since}
+     GROUP BY tool_name ORDER BY calls DESC LIMIT 12;`,
+  );
+  const topSessions = await querySqlite<TelemetryTopSession>(
+    `SELECT id, title, source, COALESCE(actual_cost_usd, estimated_cost_usd) costUsd,
+            message_count messageCount, started_at startedAt
+     FROM sessions WHERE started_at >= ${since}
+     ORDER BY ${COST} DESC, message_count DESC LIMIT 8;`,
+  );
+
+  const num = (v: unknown) => Number(v ?? 0) || 0;
+  return {
+    days,
+    overview: {
+      sessions: num(ov?.sessions),
+      messages: num(ov?.messages),
+      toolCalls: num(ov?.toolCalls),
+      inputTokens: num(ov?.inputTokens),
+      outputTokens: num(ov?.outputTokens),
+      cacheReadTokens: num(ov?.cacheReadTokens),
+      reasoningTokens: num(ov?.reasoningTokens),
+      costUsd: num(ov?.costUsd),
+    },
+    byModel,
+    byPlatform,
+    activity,
+    topTools,
+    topSessions,
+  };
+}

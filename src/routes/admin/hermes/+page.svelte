@@ -21,6 +21,14 @@
   function fmtMs(ms: number): string {
     return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
   }
+  function fmtNum(n: number): string {
+    return (n ?? 0).toLocaleString();
+  }
+  function fmtTok(n: number): string {
+    if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+    return String(n ?? 0);
+  }
   function stateLabel(s: ServiceState): string {
     return s === 'active' ? 'running' : s === 'inactive' ? 'stopped' : s;
   }
@@ -159,6 +167,84 @@
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
+      <span class="sr-label-tight">Telemetry</span>
+      <span class="tele-days">
+        {#each [7, 30, 90] as d (d)}
+          <a class="day-pill" class:active={data.telemetryDays === d} href={`?days=${d}`} data-sveltekit-noscroll>{d}d</a>
+        {/each}
+      </span>
+    </div>
+
+    {#if !data.telemetry}
+      <p class="tele-note mono">
+        Telemetry reads the engine's session store on the Hermes host — open
+        <code>http://homeserv:5173/admin/hermes</code> to see it.
+      </p>
+    {:else}
+      {@const t = data.telemetry}
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-v">{fmtNum(t.overview.sessions)}</span><span class="stat-l">sessions</span></div>
+        <div class="stat"><span class="stat-v">{fmtNum(t.overview.messages)}</span><span class="stat-l">messages</span></div>
+        <div class="stat"><span class="stat-v">{fmtNum(t.overview.toolCalls)}</span><span class="stat-l">tool calls</span></div>
+        <div class="stat"><span class="stat-v">{fmtTok(t.overview.inputTokens)}</span><span class="stat-l">input tok</span></div>
+        <div class="stat"><span class="stat-v">{fmtTok(t.overview.outputTokens)}</span><span class="stat-l">output tok</span></div>
+        <div class="stat"><span class="stat-v">${t.overview.costUsd.toFixed(2)}</span><span class="stat-l">est. cost</span></div>
+      </div>
+
+      {#if t.activity.length > 0}
+        {@const peak = Math.max(...t.activity.map((a) => a.sessions), 1)}
+        <div class="spark" role="img" aria-label="sessions per day">
+          {#each t.activity as a (a.day)}
+            <div class="spark-col" title={`${a.day}: ${a.sessions} sessions`}>
+              <div class="spark-bar" style={`height:${Math.max(6, Math.round((a.sessions / peak) * 100))}%`}></div>
+            </div>
+          {/each}
+        </div>
+        <div class="spark-cap mono">sessions/day · last {t.days}d</div>
+      {/if}
+
+      <div class="tele-cols">
+        <div class="tele-col">
+          <div class="tele-col-h mono">Models</div>
+          {#each t.byModel as m (m.model)}
+            <div class="tele-row"><span class="tr-name mono">{m.model}</span><span class="tr-v mono">{m.sessions} · ${m.costUsd.toFixed(2)}</span></div>
+          {/each}
+        </div>
+        <div class="tele-col">
+          <div class="tele-col-h mono">Tools</div>
+          {#each t.topTools as tool (tool.tool)}
+            <div class="tele-row"><span class="tr-name mono">{tool.tool}</span><span class="tr-v mono">{fmtNum(tool.calls)}</span></div>
+          {/each}
+        </div>
+        <div class="tele-col">
+          <div class="tele-col-h mono">Platforms</div>
+          {#each t.byPlatform as p (p.source)}
+            <div class="tele-row"><span class="tr-name mono">{p.source}</span><span class="tr-v mono">{p.sessions} · ${p.costUsd.toFixed(2)}</span></div>
+          {/each}
+        </div>
+      </div>
+
+      {#if t.topSessions.length > 0}
+        <div class="tele-col-h mono costliest-h">Costliest sessions</div>
+        {#each t.topSessions as s (s.id)}
+          <a class="tele-row link" href={`/admin/hermes/sessions/${s.id}`}>
+            <span class="tr-name">{s.title || '(untitled)'}</span>
+            <span class="tr-v mono">{s.messageCount} msg · {s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : '—'}</span>
+          </a>
+        {/each}
+      {/if}
+    {/if}
+
+    {#if data.curator}
+      <details class="curator">
+        <summary class="mono">curator status</summary>
+        <pre>{data.curator}</pre>
+      </details>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
       <span class="sr-label-tight">Engine sessions</span>
       <a class="nm-sec-meta sessions-link" href="/admin/hermes/sessions">Open inspector →</a>
     </div>
@@ -246,6 +332,33 @@
   .sessions-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0.4rem 0 0; }
   .sessions-note a { color: var(--accent); text-decoration: none; }
   .sessions-note a:hover { text-decoration: underline; }
+
+  /* ── Telemetry ── */
+  .tele-days { display: inline-flex; gap: 0.3rem; }
+  .day-pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border: 1px solid var(--card-border); border-radius: 4px; color: var(--text-secondary); text-decoration: none; }
+  .day-pill.active { color: var(--bg, #fff); background: var(--accent); border-color: var(--accent); }
+  .tele-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0.6rem 0 0; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.6rem; margin: 0.8rem 0; }
+  .stat { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.7rem; border: 1px solid var(--card-border); border-radius: 7px; background: var(--bg-section); }
+  .stat-v { font-family: var(--font-mono); font-size: 1.15rem; color: var(--text-primary); font-weight: 600; }
+  .stat-l { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 0.4rem; }
+  .spark-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .spark-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; opacity: 0.8; min-height: 3px; }
+  .spark-cap { font-size: 10px; color: var(--text-ghost, var(--text-muted)); margin-top: 0.25rem; }
+  .tele-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.5rem; margin-top: 1rem; }
+  .tele-col-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.35rem; }
+  .costliest-h { margin-top: 1rem; }
+  .tele-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid var(--card-border); font-size: 12px; }
+  .tele-row:last-child { border-bottom: none; }
+  .tr-name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tr-v { color: var(--text-primary); white-space: nowrap; flex-shrink: 0; }
+  a.tele-row.link { text-decoration: none; }
+  a.tele-row.link:hover { background: var(--bg-section); }
+  a.tele-row.link .tr-name { color: var(--accent); }
+  .curator { margin-top: 1rem; }
+  .curator summary { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+  .curator pre { margin: 0.5rem 0 0; font-size: 11px; line-height: 1.45; color: var(--text-secondary); background: var(--bg-section); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.7rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 22rem; overflow-y: auto; }
 
   .mono {
     font-family: var(--font-mono);

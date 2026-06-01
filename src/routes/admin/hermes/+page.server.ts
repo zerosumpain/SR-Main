@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
 import { fail } from '@sveltejs/kit';
+import { getTelemetry, clampDays, type Telemetry } from '$lib/server/hermes-sessions';
 
 const execFileP = promisify(execFile);
 
@@ -73,6 +74,22 @@ async function hermesVersion(): Promise<string | null> {
   }
 }
 
+async function curatorStatus(): Promise<string | null> {
+  if (!IS_HOMESERV) return null;
+  try {
+    const { stdout } = await execFileP(HERMES_BIN, ['curator', 'status'], {
+      timeout: 8000,
+      env: { ...process.env, HERMES_HOME },
+      maxBuffer: 1024 * 1024,
+    });
+    return stdout.toString().trim() || null;
+  } catch (e: unknown) {
+    // `curator status` can exit non-zero in some states but still print useful text.
+    const out = (e as { stdout?: Buffer | string })?.stdout?.toString().trim();
+    return out || null;
+  }
+}
+
 async function runShell(
   action: string,
   cmd: string,
@@ -110,16 +127,22 @@ async function runShell(
   }
 }
 
-export const load: PageServerLoad = async () => {
-  const [health, gatewayState, dashboardState, version] = await Promise.all([
+export const load: PageServerLoad = async ({ url }) => {
+  const days = clampDays(url.searchParams.get('days'));
+  const [health, gatewayState, dashboardState, version, telemetry, curator] = await Promise.all([
     probeHealth(),
     serviceState(GATEWAY_UNIT),
     serviceState(DASHBOARD_UNIT),
     hermesVersion(),
+    IS_HOMESERV ? getTelemetry(days).catch(() => null) : Promise.resolve<Telemetry | null>(null),
+    curatorStatus(),
   ]);
 
   return {
     health,
+    telemetry,
+    curator,
+    telemetryDays: days,
     flagEnabled: env.JKAI_HERMES_CANVAS_CHAT === '1',
     canManage: IS_HOMESERV,
     hostname: os.hostname(),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ftsMatchLiteral, isValidSessionId, convIdFromUserId } from './hermes-sessions';
+import { ftsMatchLiteral, isValidSessionId, convIdFromUserId, clampDays } from './hermes-sessions';
 
 describe('hermes-sessions: session id validation (SQL-interp safety)', () => {
   it('accepts the real Hermes id format', () => {
@@ -36,5 +36,18 @@ describe('hermes-sessions: FTS match literal (injection + FTS safety)', () => {
   });
   it('doubles double-quotes so input is a literal FTS phrase, not operators', () => {
     expect(ftsMatchLiteral('say "hi"')).toBe(`'"say ""hi"""'`);
+  });
+});
+
+describe('hermes-sessions: clampDays (telemetry window)', () => {
+  it('clamps to 1..365 and falls back on junk', () => {
+    expect(clampDays(30)).toBe(30);
+    expect(clampDays('7')).toBe(7);
+    expect(clampDays(0)).toBe(30); // falsy → fallback
+    expect(clampDays(-5)).toBe(1);
+    expect(clampDays(99999)).toBe(365);
+    expect(clampDays('abc')).toBe(30);
+    expect(clampDays(null)).toBe(30);
+    expect(clampDays(undefined)).toBe(30);
   });
 });
