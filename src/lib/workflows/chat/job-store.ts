@@ -56,6 +56,11 @@ export type JobEvent =
   | { type: 'confirm_ack'; confirmId: string; decision: 'approved' | 'rejected' }
   | { type: 'clarify'; clarifyId: string; questions: ClarifyQuestion[] }
   | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> }
+  // Dangerous-command approval gate surfaced by the Hermes plugin's
+  // `send_exec_approval` (kind="approval" frame). The card's buttons reply
+  // `/approve` | `/deny`, resolved gateway-side by the chat's session_key — so
+  // there's no `_ack` correlation event, unlike confirm/clarify.
+  | { type: 'approval'; command: string; description: string; sessionKey: string }
   | { type: 'subagent_start'; agentId: string; parentStepId: string | null; task: string }
   // Recursive reference: consumers that narrow on `event.type` inside a `subagent_event`
   // must do so non-generically to avoid TS instantiation-depth issues. The SSE path

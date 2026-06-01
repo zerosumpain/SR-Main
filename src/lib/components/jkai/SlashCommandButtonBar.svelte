@@ -4,7 +4,7 @@
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
 
   let {
-    content,
+    content = '',
     /** Send a slash command to Hermes WITHOUT persisting it as a user message.
      *  The chat handler accepts `silent: true` for exactly this. */
     onSilentSend,
@@ -15,11 +15,17 @@
     /** Only the most recent assistant message should run the auto-timer and
      *  remain clickable. Earlier prompts in history get static, disabled UI. */
     isLatest,
+    /** When provided, render this affordance directly instead of detecting it
+     *  from `content`. Lets the structured `pendingApproval` card reuse this
+     *  component (buttons + auto-select) without synthesising the prose prompt
+     *  it would otherwise have to match. */
+    affordance: affordanceProp = null,
   }: {
-    content: string;
+    content?: string;
     onSilentSend: (command: string) => void | Promise<void>;
     autoSelect?: ApprovalUiSettings;
     isLatest?: boolean;
+    affordance?: SlashAffordance | null;
   } = $props();
 
   // Map admin's `defaultAction` enum onto the registry command strings so a
@@ -31,7 +37,7 @@
     none: null,
   };
 
-  const affordance = $derived<SlashAffordance | null>(findAffordance(content));
+  const affordance = $derived<SlashAffordance | null>(affordanceProp ?? findAffordance(content));
   let triggered = $state<string | null>(null);
   let countdownMs = $state<number | null>(null);
   let timer: ReturnType<typeof setInterval> | null = null;

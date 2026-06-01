@@ -86,6 +86,17 @@ export interface SseFrameToolCall {
   summary?: string;
 }
 
+/** Payload for a `kind: 'approval'` frame — a dangerous-command approval gate
+ * emitted by the plugin's `send_exec_approval`. Rides in `metadata.approval`
+ * (the way tool payloads ride in `metadata.tool`). `adaptFrameToCanvasSse`
+ * reads it defensively and raises a `pendingApproval` card whose buttons reply
+ * `/approve` | `/deny`. */
+export interface SseFrameApproval {
+  command: string;
+  description?: string;
+  session_key?: string;
+}
+
 export interface SseFrame {
   /** `send`/`replace`/`finalize` are text-bubble frames; `thinking` carries
    *  a reasoning-delta for the collapsible Reasoning panel (rendered
@@ -96,7 +107,7 @@ export interface SseFrame {
    *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
    *  back to; `tool` carries per-tool-call telemetry (see `SseFrameToolCall`)
    *  surfaced onto the tool-step panel. */
-  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool';
+  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool' | 'approval';
   chat_id: string;
   message_id: string;
   content: string;

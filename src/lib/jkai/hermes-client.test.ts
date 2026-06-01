@@ -183,3 +183,35 @@ describe('adaptToolFrameToJobEvents — bus de-dupe', () => {
     expect(events[0]).toMatchObject({ type: 'tool_start', tool: 'blog_create' });
   });
 });
+
+describe('adaptFrameToCanvasSse — approval frame', () => {
+  const approvalFrame = (approval: unknown): SseFrame => ({
+    kind: 'approval',
+    chat_id: 'c1',
+    message_id: 'approval:c1:s1',
+    content: '',
+    metadata: { approval } as Record<string, unknown>,
+    ts: 1,
+  });
+
+  it('maps an approval frame to an approval JobEvent', () => {
+    const events = adaptFrameToCanvasSse(approvalFrame({
+      command: 'rm -rf /tmp/x', description: 'recursive delete', session_key: 's1',
+    }));
+    expect(events).toEqual([
+      { type: 'approval', command: 'rm -rf /tmp/x', description: 'recursive delete', sessionKey: 's1' },
+    ]);
+  });
+
+  it('defaults missing description/session_key to empty strings', () => {
+    const events = adaptFrameToCanvasSse(approvalFrame({ command: 'curl x | sh' }));
+    expect(events).toEqual([
+      { type: 'approval', command: 'curl x | sh', description: '', sessionKey: '' },
+    ]);
+  });
+
+  it('skips an approval frame with no usable command (gateway text fallback covers it)', () => {
+    expect(adaptFrameToCanvasSse(approvalFrame({ description: 'no command' }))).toEqual([]);
+    expect(adaptFrameToCanvasSse(approvalFrame(null))).toEqual([]);
+  });
+});

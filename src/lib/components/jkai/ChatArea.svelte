@@ -9,6 +9,8 @@
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
   import ClarifyCard from '$lib/components/jkai/ClarifyCard.svelte';
+  import SlashCommandButtonBar from '$lib/components/jkai/SlashCommandButtonBar.svelte';
+  import { approvalAffordance } from '$lib/jkai/slash-commands';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
@@ -251,6 +253,10 @@
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
+  // Dangerous-command approval gate (Hermes `send_exec_approval` → kind="approval").
+  // No waiter/id: the card's buttons reply /approve|/deny, resolved gateway-side by
+  // the chat's session_key. Cleared on button click, turn end, or cancel.
+  let pendingApproval = $state<{ command: string; description: string; sessionKey: string } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
   // Per-bubble reasoning state from Hermes `thinking` frames. Keyed by
   // the assistant bubble's `message.id` (the in-flight `progressId`) so
@@ -388,6 +394,17 @@
           const next = new Map(thinkingByBubble);
           next.set(progressId, { ...prev, text: prev.text + data.delta });
           thinkingByBubble = next;
+          return;
+        }
+        if (data.type === 'approval') {
+          // A chained dangerous command can surface during a silent turn (e.g.
+          // clicking Approve continues the agent into another gated command).
+          // Re-raise the card so the user can resolve it.
+          pendingApproval = {
+            command: data.command,
+            description: data.description,
+            sessionKey: data.sessionKey,
+          };
           return;
         }
         if (data.type === 'done') {
@@ -916,6 +933,16 @@
         return;
       }
 
+      if (data.type === 'approval') {
+        pendingApproval = {
+          command: data.command,
+          description: data.description,
+          sessionKey: data.sessionKey,
+        };
+        heartbeat = null;
+        return;
+      }
+
       if (data.type === 'subagent_start') {
         subAgents[data.agentId] = {
           agentId: data.agentId,
@@ -974,6 +1001,7 @@
         pendingPlan = null;
         pendingConfirm = null;
         pendingClarify = null;
+        pendingApproval = null;
         const result = (data.result || {}) as {
           message?: string;
           error?: string;
@@ -1006,6 +1034,7 @@
         pendingPlan = null;
         pendingConfirm = null;
         pendingClarify = null;
+        pendingApproval = null;
         messages = messages.map((m) =>
           m.id === progressId
             ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -1029,6 +1058,7 @@
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
+    pendingApproval = null;
     subAgents = {};
 
     const progressId = crypto.randomUUID();
@@ -1060,6 +1090,7 @@
       pendingPlan = null;
       pendingConfirm = null;
       pendingClarify = null;
+      pendingApproval = null;
       scrollToBottom();
     }
   }
@@ -1207,6 +1238,7 @@
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
+    pendingApproval = null;
     subAgents = {};
 
     const attachmentIds = pendingAttachments
@@ -1328,6 +1360,7 @@
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
+    pendingApproval = null;
     scrollToBottom();
   }
 
@@ -1537,6 +1570,24 @@
                     jobId={currentJobId ?? ''}
                     onresolve={() => { pendingClarify = null; }}
                   />
+                {/if}
+                {#if pendingApproval}
+                  <div class="approval-card">
+                    <div class="approval-head">
+                      <span aria-hidden="true">⚠️</span>
+                      <span>Dangerous command requires approval</span>
+                    </div>
+                    <pre class="approval-cmd">{pendingApproval.command}</pre>
+                    {#if pendingApproval.description}
+                      <div class="approval-reason">{pendingApproval.description}</div>
+                    {/if}
+                    <SlashCommandButtonBar
+                      affordance={approvalAffordance}
+                      autoSelect={approvalUi}
+                      isLatest={true}
+                      onSilentSend={(cmd) => { pendingApproval = null; void silentSend(cmd); }}
+                    />
+                  </div>
                 {/if}
                 {@render heartbeatLine()}
                 {#if connectionWarning}
@@ -1979,6 +2030,41 @@
   .model-opt.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
   .model-opt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .model-opt-provider { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* ── Dangerous-command approval card (structured `pendingApproval`) ── */
+  .approval-card {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--danger, #b54242);
+    border-radius: 6px;
+    background: var(--card-bg);
+  }
+  .approval-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--danger, #b54242);
+    margin-bottom: 6px;
+  }
+  .approval-cmd {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 0 0 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 8rem;
+    overflow: auto;
+  }
+  .approval-reason { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
 
   /* Empty-state hero — a centred greeting + tappable starter prompts shown on
    * a fresh conversation. The composer stays docked at the bottom; clicking a

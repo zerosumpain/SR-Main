@@ -41,22 +41,27 @@ function isApprovalPrompt(content: string): boolean {
   return content.includes(APPROVAL_PROMPT_PREFIX);
 }
 
-export const slashAffordances: SlashAffordance[] = [
-  {
-    id: 'hermes-approval',
-    detect: isApprovalPrompt,
-    // Safe-by-default: this is a "dangerous command" gate, so the SAFE action
-    // (Deny) is the dominant, recommended button and comes first. Approving
-    // proceeds with the dangerous command, so it's marked as a caution
-    // (outlined, not filled) and requires a deliberate click; "Approve always"
-    // is quieter still.
-    buttons: [
-      { label: 'Deny', command: '/deny', style: 'primary' },
-      { label: 'Approve', command: '/approve', style: 'danger' },
-      { label: 'Approve always', command: '/approve always', style: 'subtle' },
-    ],
-  },
-];
+// Safe-by-default: this is a "dangerous command" gate, so the SAFE action
+// (Deny) is the dominant, recommended button and comes first. Approving
+// proceeds with the dangerous command, so it's marked as a caution (outlined,
+// not filled) and requires a deliberate click; "Approve always" is quieter
+// still.
+//
+// Exported so the structured approval card (`pendingApproval` in
+// ChatArea.svelte) can hand this object straight to SlashCommandButtonBar —
+// the same buttons + auto-select behaviour the prose-fallback path uses, with
+// no second source of truth for the command strings.
+export const approvalAffordance: SlashAffordance = {
+  id: 'hermes-approval',
+  detect: isApprovalPrompt,
+  buttons: [
+    { label: 'Deny', command: '/deny', style: 'primary' },
+    { label: 'Approve', command: '/approve', style: 'danger' },
+    { label: 'Approve always', command: '/approve always', style: 'subtle' },
+  ],
+};
+
+export const slashAffordances: SlashAffordance[] = [approvalAffordance];
 
 /** Returns the first affordance whose `detect` matches, or null. */
 export function findAffordance(content: string): SlashAffordance | null {

@@ -155,6 +155,24 @@ export function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
       // while making the tool path explicit rather than silently dropping it
       // through the default branch.
       return [];
+    case 'approval': {
+      // Dangerous-command gate. The payload rides in `metadata.approval`
+      // (mirrors the tool-frame convention). Read every field defensively so a
+      // malformed frame is skipped rather than crashing the stream; a missing
+      // command is unusable, so skip it — the gateway's text fallback + the
+      // slash-affordance matcher still cover that case.
+      const raw = (frame.metadata as Record<string, unknown> | undefined)?.['approval'];
+      if (!raw || typeof raw !== 'object') return [];
+      const o = raw as Record<string, unknown>;
+      const command = typeof o.command === 'string' ? o.command : '';
+      if (!command) return [];
+      return [{
+        type: 'approval',
+        command,
+        description: typeof o.description === 'string' ? o.description : '',
+        sessionKey: typeof o.session_key === 'string' ? o.session_key : '',
+      }];
+    }
     case 'finalize':
       // The jkai adapter emits a synthetic `finalize` with empty content
       // once `handle_message` finishes — the actual reply text has already
