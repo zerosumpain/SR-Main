@@ -11,7 +11,7 @@ import { buildGraph, topologicalSort } from './graph';
 import type { WorkflowGraph } from './graph';
 import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events';
 import { diagnoseAndFix } from './orchestrator/healing';
-import type { HealingContext, UndoEntry, NodeDefinition } from './types';
+import type { HealingContext, UndoEntry, NodeDefinition, NodeOnErrorConfig } from './types';
 import {
   executionContext,
   rollupUsage,
@@ -209,10 +209,29 @@ export class WorkflowEngine {
             mergedInput = { ...initialInput };
           } else {
             mergedInput = {};
+            // Track which upstream source contributed each top-level key so we
+            // can warn on fan-in collisions (two sources providing the same key
+            // with differing values). The merge itself stays last-writer-wins;
+            // this only surfaces the silent overwrite for debuggability.
+            const keyProvenance = new Map<string, string>();
             for (const edge of incomingEdges) {
               if (skippedNodes.has(edge.sourceNodeId)) continue;
               const upstream = nodeOutputs.get(edge.sourceNodeId);
               if (upstream) {
+                for (const [k, v] of Object.entries(upstream)) {
+                  const prevSource = keyProvenance.get(k);
+                  if (
+                    prevSource !== undefined &&
+                    prevSource !== edge.sourceNodeId &&
+                    JSON.stringify(mergedInput[k]) !== JSON.stringify(v)
+                  ) {
+                    console.warn(
+                      `[engine] fan-in collision run=${runId} node=${nodeId} key=${k}: ` +
+                      `value from ${edge.sourceNodeId} overwrites differing value from ${prevSource} (last-writer-wins)`,
+                    );
+                  }
+                  keyProvenance.set(k, edge.sourceNodeId);
+                }
                 Object.assign(mergedInput, upstream);
               }
             }
@@ -304,14 +323,12 @@ export class WorkflowEngine {
             },
             _currentNodeId: nodeId,
             _registry: this.registry,
-          } as ExecutionContext & { _currentNodeId: string; _registry: NodeRegistry };
+          };
 
           // Per-node "On failure" config (set in the canvas inspector). Read
           // before the try block so retry/continue/route modes wrap the
           // executor call uniformly. Default is 'stop' (legacy behaviour).
-          const onErrorCfg = (nodeDef.config?._onError as
-            | { mode?: 'stop' | 'continue' | 'retry' | 'route'; retries?: number; retryDelayMs?: number }
-            | undefined) ?? { mode: 'stop' };
+          const onErrorCfg = (nodeDef.config?._onError as NodeOnErrorConfig | undefined) ?? { mode: 'stop' };
           const onErrorMode = onErrorCfg.mode ?? 'stop';
           const onErrorRetries = Math.max(0, Math.min(10, Number(onErrorCfg.retries ?? 0)));
           const onErrorDelayMs = Math.max(0, Number(onErrorCfg.retryDelayMs ?? 0));
@@ -537,8 +554,13 @@ export class WorkflowEngine {
                   };
                   healingHistory.push(undoEntry);
 
+                  // Apply the healed config to the per-run local copy only.
+                  // Do NOT mutate nodeDef.config — that object is the persistent
+                  // node definition (shared via graph.nodeMap) and gets written
+                  // back to workflow_nodes by the persister, which would silently
+                  // rewrite the user's saved workflow. The retry below executes
+                  // with `currentConfig`, so the heal is scoped to this run.
                   currentConfig = newConfig;
-                  nodeDef.config = newConfig;
 
                   emit('healing_fix_applied', nodeId, {
                     fixType: 'config',

@@ -1087,6 +1087,63 @@ register({
 });
 
 register({
+  name: 'workflow_describe_node',
+  description:
+    'Get the FULL detail for a single node type — its config schema (every field with type, required flag, enum values and defaults), its input/output ports, usage guidance, and concrete example configs. ' +
+    'Call this after workflow_list_node_types (which only returns type/label/category/description) when you need to know exactly what config keys a node accepts before adding or updating it. ' +
+    'This returns the same grounding the orchestrator sees in its Node Registry, scoped to one type — use it to avoid guessing config shapes and getting rejected at write time.',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: {
+        type: 'string',
+        description: 'The registered node type to describe (e.g. "llm-call", "stealth-scrape", "conditional"). Must match exactly — call workflow_list_node_types if unsure.',
+      },
+    },
+    required: ['type'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const type = typeof args.type === 'string' ? args.type.trim() : '';
+    if (!type) return { success: false, error: '`type` (string) is required.' };
+
+    const { registry } = await import('$lib/workflows');
+    const def = registry.getDefinition(type);
+    if (!def) {
+      const valid = registry
+        .listDefinitions()
+        .map((d) => d.type)
+        .sort();
+      return {
+        success: false,
+        error: `Unknown node type "${type}". Valid types: ${valid.join(', ')}. Call workflow_list_node_types for labels/descriptions.`,
+      };
+    }
+
+    const { buildSingleNodeGrounding } = await import('$lib/workflows/orchestrator/grounding');
+    const grounding = buildSingleNodeGrounding(def, []);
+
+    return {
+      success: true,
+      data: {
+        type: def.type,
+        label: def.label,
+        category: def.category,
+        description: def.description,
+        inputs: def.inputs,
+        outputs: def.outputs,
+        configSchema: def.configSchema,
+        defaultConfig: def.defaultConfig ?? {},
+        required: def.configSchema?.required ?? [],
+        examples: def.llmExamples ?? [],
+        grounding,
+      },
+    };
+  },
+});
+
+register({
   name: 'workflow_remove_node',
   description: 'Remove a node from a workflow (also removes all connected edges)',
   parameters: {

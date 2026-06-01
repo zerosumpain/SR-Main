@@ -40,6 +40,14 @@ export const codeExecuteExecutor: NodeExecutor = {
       return { output: { error: 'No code provided' }, logs: ['No code provided'], rowCount: 1 };
     }
 
+    if (context.dryRun) {
+      return {
+        output: { simulated: true, would_execute: { language, code } },
+        rowCount: 1,
+        logs: [`[dry-run] skipped-for-dry-run: would execute ${language} code (${code.length} chars)`],
+      };
+    }
+
     await ensureSandboxRunning();
 
     const sandboxEnv = await collectSandboxEnv();

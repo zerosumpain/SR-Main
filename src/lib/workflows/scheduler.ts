@@ -183,7 +183,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
           completedAt: new Date(),
           ...(usage ?? {}),
         })
-        .where(eq(nodeExecutions.nodeId, nodeId));
+        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
     }
 
     for (const [nodeId, error] of result.nodeErrors) {
@@ -197,7 +197,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
           completedAt: new Date(),
           ...(usage ?? {}),
         })
-        .where(eq(nodeExecutions.nodeId, nodeId));
+        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
     }
 
     // Update lastRunAt/nextRunAt on the schedule

@@ -99,4 +99,15 @@ describe('accumulatorDef', () => {
   it('default config has empty collectField', () => {
     expect(accumulatorDef.defaultConfig).toEqual({ collectField: '' });
   });
+
+  it('describes within-run collection honestly (no cross-run claims)', () => {
+    // The node does NOT persist across runs; descriptions must not imply it does.
+    expect(accumulatorDef.description.toLowerCase()).not.toContain('across runs');
+    expect(accumulatorDef.llmDescription?.toLowerCase()).toContain('single run');
+    expect(accumulatorDef.llmDescription?.toLowerCase()).toContain('does not persist');
+    // Output schema descriptions are honest too.
+    const out = accumulatorExecutor.getOutputSchema?.({});
+    const itemsDesc = (out?.properties?.items as { description?: string } | undefined)?.description ?? '';
+    expect(itemsDesc.toLowerCase()).not.toContain('across runs');
+  });
 });

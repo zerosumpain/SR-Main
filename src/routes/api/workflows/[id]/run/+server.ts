@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
@@ -127,7 +127,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         completedAt: new Date(),
         ...(usage ?? {}),
       }).where(
-        eq(nodeExecutions.nodeId, nodeId),
+        and(eq(nodeExecutions.runId, run.id), eq(nodeExecutions.nodeId, nodeId)),
       );
     }
 
@@ -140,7 +140,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         completedAt: new Date(),
         ...(usage ?? {}),
       }).where(
-        eq(nodeExecutions.nodeId, nodeId),
+        and(eq(nodeExecutions.runId, run.id), eq(nodeExecutions.nodeId, nodeId)),
       );
     }
 

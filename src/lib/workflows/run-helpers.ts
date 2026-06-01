@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from './types';
 import { emitWorkflowEvent, onWorkflowEvent } from './events';
@@ -152,7 +152,7 @@ export function runWorkflowAndPersist(
               completedAt: new Date(),
               ...(usage ?? {}),
             })
-            .where(eq(nodeExecutions.nodeId, nodeId));
+            .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
         }
 
         for (const [nodeId, error] of result.nodeErrors) {
@@ -166,7 +166,7 @@ export function runWorkflowAndPersist(
               completedAt: new Date(),
               ...(usage ?? {}),
             })
-            .where(eq(nodeExecutions.nodeId, nodeId));
+            .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
         }
 
         for (const entry of healingHistory) {
