@@ -23,6 +23,13 @@ import { sql } from 'drizzle-orm';
 export const SCHEDULER_LOCK_LANE = 'jkai:workflow-scheduler';
 
 /**
+ * Advisory-lock lane for the Forge trigger scheduler (scheduled + autonomous
+ * brass-and-rails builds). DISTINCT lane so the Forge scheduler elects its own
+ * leader independently of the workflow scheduler — they must not share a lock.
+ */
+export const FORGE_SCHEDULER_LOCK_LANE = 'jkai:forge-scheduler';
+
+/**
  * PURE: derive a stable signed-32-bit advisory-lock key from a lane name.
  * Deterministic (FNV-1a-ish) so the same lane always maps to the same key
  * across processes/restarts. Exported for tests.

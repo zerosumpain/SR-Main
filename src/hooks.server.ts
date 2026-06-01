@@ -1,5 +1,6 @@
 import { startScheduler } from '$lib/health/scheduler';
 import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
+import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startHeroTitlesScheduler,
   stopHeroTitlesScheduler,
@@ -37,6 +38,12 @@ startScheduler();
 // Start the workflow cron scheduler
 startWorkflowScheduler().catch((err) => {
   console.error('[hooks.server] Workflow scheduler failed to start:', err);
+});
+
+// Start the Forge trigger scheduler (scheduled + autonomous brass-and-rails
+// builds). Leader-elected on its own advisory-lock lane.
+startForgeScheduler().catch((err) => {
+  console.error('[hooks.server] Forge scheduler failed to start:', err);
 });
 
 // Start the landing-page hero-title regeneration scheduler
@@ -96,6 +103,7 @@ async function gracefulShutdown() {
   stopScheduledEngine();
   stopHealthScheduler();
   stopWorkflowScheduler();
+  stopForgeScheduler();
   stopHeroTitlesScheduler();
   stopGmailWatcher();
   unregisterGmailBridge();

@@ -1640,3 +1640,21 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Forge triggers — cron-scheduled and autonomous (backlog-driven) git-target
+// jkai builds against the brass-and-rails game repo. Mirrors the workflow
+// scheduler pattern (croner Cron + leader-elected dispatcher). The forge
+// scheduler reads `enabled` rows and registers one cron job per row.
+export const forgeSchedules = pgTable('forge_schedules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cron: text('cron').notNull(),            // croner expression, e.g. '0 9 * * 1'
+  directive: text('directive').notNull(),  // the prompt (scheduled) / note (autonomous)
+  mode: text('mode').notNull().default('scheduled'), // 'scheduled' | 'autonomous'
+  enabled: boolean('enabled').notNull().default(true),
+  lastRunAt: timestamp('last_run_at'),
+  lastBuildId: text('last_build_id'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export type ForgeSchedule = typeof forgeSchedules.$inferSelect;
+export type NewForgeSchedule = typeof forgeSchedules.$inferInsert;

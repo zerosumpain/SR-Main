@@ -1,12 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
-import { snapshotPrice } from '$lib/server/models/price-snapshot';
+import { createForgeBuild } from '$lib/jkai/forge';
 
 // Owner allowlist — mirrors getAllowedEmails() in src/hooks.server.ts and
 // /api/auth/me (the AUTH_ALLOWED_EMAILS env var, comma-separated, lower-cased
@@ -20,14 +15,6 @@ function allowedEmails(): string[] {
 
 // Hard scope: the Forge may only ever drive the brass-and-rails game repo.
 const ALLOWED_REPO = 'brass-and-rails';
-const FORGE_GIT_TARGET = {
-  repoUrl: 'git@github.com:zerosumpain/brass-and-rails.git',
-  baseBranch: 'master',
-  branchPrefix: 'forge/',
-  gateCommand: 'npm run gate',
-  openPr: true,
-  prTitlePrefix: 'Forge: ',
-} as const;
 
 /**
  * POST /api/jkai/forge/propose — owner-gated. Creates a git-target jkai build
@@ -66,49 +53,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, { status: 400 });
   }
 
-  const DEFAULT_BUDGET = {
-    maxIterations: 25,
-    maxTotalMinutes: 120,
-    maxTokensPerHour: 1_000_000,
-    activeMinutesPerHour: 45,
-  };
-
-  const ctx = await resolveDefaultModel('builder');
-  const priceSnapshot = await snapshotPrice(ctx);
-
-  const title = typeof trigger === 'string' && trigger
-    ? `Forge (${trigger}): ${prompt.slice(0, 60)}`
-    : `Forge: ${prompt.slice(0, 60)}`;
-
-  const [build] = await db
-    .insert(jkaiBuilds)
-    .values({
-      title,
-      prompt,
-      origin: 'forge',
-      // Git-target mode: the entire flagged builder path keys off this column.
-      gitTargetConfig: { ...FORGE_GIT_TARGET },
-      // The game owns its own design checks (inside `npm run gate`); the SR
-      // warm-brutalist linter doesn't apply to the game's source tree.
-      enforceDesignSystem: false,
-      // No plan-approval gate — go straight to iterating.
-      planStatus: 'approved',
-      budgetConfig: DEFAULT_BUDGET,
-      modelProvider: ctx.provider,
-      modelId: ctx.modelId,
-      priceSnapshot,
-    } as any)
-    .returning();
-
   try {
-    await builderClient.startBuild(build.id);
+    const { buildId } = await createForgeBuild({
+      prompt,
+      trigger: typeof trigger === 'string' && trigger ? trigger : undefined,
+    });
+    return json({ buildId }, { status: 201 });
   } catch (err: any) {
-    await db.update(jkaiBuilds).set({ status: 'failed' }).where(eq(jkaiBuilds.id, build.id));
     return json(
-      { error: `Build created but failed to start: ${err.message}`, buildId: build.id },
+      { error: `Build created but failed to start: ${err?.message ?? String(err)}` },
       { status: 500 },
     );
   }
-
-  return json({ buildId: build.id }, { status: 201 });
 };
