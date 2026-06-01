@@ -8,6 +8,8 @@ import { transformDef } from './nodes/transform';
 import { delayDef } from './nodes/delay';
 import { httpRequestDef } from './nodes/http-request';
 import { conditionalDef } from './nodes/conditional';
+import { switchDef } from './nodes/switch.def';
+import { approvalDef } from './nodes/approval.def';
 import { textParserDef } from './nodes/text-parser';
 import { validatorDef } from './nodes/validator';
 import { mergeDef } from './nodes/merge';
@@ -836,6 +838,8 @@ const builtInDefinitions: NodeDefinition[] = [
   dataStoreDef,
   loopDef,
   conditionalDef,
+  switchDef,
+  approvalDef,
   whoopDef,
   stravaDef,
   openrouterDef,

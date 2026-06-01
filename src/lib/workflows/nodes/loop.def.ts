@@ -20,7 +20,8 @@ export const loopDef: NodeDefinition = {
       },
       concurrency: {
         type: 'number',
-        description: 'Concurrency limit (default 1; reserved for future use)',
+        description:
+          'How many items to process at once (default 1 = sequential). Higher values run the per-item transform with that many in flight; output order always matches input order.',
       },
     },
     required: ['arrayPath'],
