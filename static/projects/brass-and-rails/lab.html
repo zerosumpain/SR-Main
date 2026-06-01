@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BRASS &amp; RAILS — AI Performance Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="./assets/lab-CRYWhAC_.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/styles-BLTLzfMz.js">
+  <link rel="modulepreload" crossorigin href="./assets/map-BLE1V2-I.js">
+  <link rel="stylesheet" crossorigin href="./assets/styles-XG4B-5u8.css">
+</head>
+<body style="overflow:auto;">
+  <!-- LAB PAGE — the batch-sim console promoted from the in-game modal into the page body. -->
+  <div style="max-width:1120px;margin:34px auto 60px;padding:0 22px;">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px;">
+      <div class="monogram">sr.</div>
+      <a class="btn" href="./index.html" style="width:auto;margin-left:auto;text-decoration:none;display:inline-flex;align-items:center;">← Back to the Game</a>
+    </div>
+    <div class="hero-title">AI Performance <em>Lab</em></div>
+    <div class="hero-sub" style="margin-bottom:18px;">Balance dials, per-house tuning &amp; headless batch sims — pure game logic, no rendering. Tweak the rules, run a batch, and read the win-rate / dynamics shift.</div>
+
+    <!-- analytics launchers -->
+    <div class="start-row" style="margin-bottom:22px;">
+      <button id="btnAnalysis" class="btn" style="width:auto;">📊 Analysis</button>
+      <button id="btnRoster" class="btn" style="width:auto;">📋 Unit roster</button>
+      <button id="btnDossier" class="btn" style="width:auto;">🧠 AI dossier</button>
+    </div>
+
+    <!-- SANDBOX LAB — promoted from the #lab modal body -->
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="panel-h"><h3>🧪 Sandbox Lab — tune &amp; simulate</h3><span class="label">headless balance testbench</span></div>
+      <div class="panel-b" style="display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:16px;align-items:start;">
+        <div>
+          <!-- TAB SWITCHER: Rules (global dials) | Houses (per-faction) -->
+          <div style="display:flex;gap:4px;margin-bottom:8px">
+            <button id="labTabRules" class="lab-tab on" style="flex:1">Rules</button>
+            <button id="labTabHouses" class="lab-tab" style="flex:1">Houses</button>
+          </div>
+          <!-- RULES TAB: the global balance dials -->
+          <div id="labPaneRules">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="label">Balance dials</div>
+              <button id="labReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset defaults</button>
+            </div>
+            <div class="legend" style="margin-bottom:8px">Dials mutate the shared config — the next batch (and the live game) recompute caps/income on change.</div>
+            <div id="labDials" style="display:flex;flex-direction:column;gap:7px"></div>
+          </div>
+          <!-- HOUSES TAB: per-faction bonus knobs, free starting units, archetype -->
+          <div id="labPaneHouses" class="hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="label">Per-house tuning</div>
+              <button id="labHousesReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset all houses</button>
+            </div>
+            <div class="legend" style="margin-bottom:8px">Edit a house's bonus, free starting units &amp; archetype, then run a batch to see its win rate shift.</div>
+            <div id="labHouses" style="display:flex;flex-direction:column;gap:9px"></div>
+          </div>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom:6px">Run a batch</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:'JetBrains Mono';font-size:11px;margin-bottom:8px">
+            <label>games
+              <select id="labN" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option>10</option><option selected>25</option><option>50</option></select></label>
+            <label>houses
+              <select id="labCount" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option>2</option><option selected>4</option><option>6</option><option>8</option></select></label>
+            <label>map
+              <select id="labSize" style="background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:3px 5px;margin-left:4px">
+                <option value="small">small</option><option value="medium">medium</option><option value="mixed" selected>mixed</option></select></label>
+            <button id="labRun" class="btn primary" style="width:auto;padding:5px 14px">Run batch</button>
+          </div>
+          <div id="labProg" class="hidden" style="margin-bottom:10px">
+            <div class="meter" style="height:9px"><i id="labProgBar" style="width:0%;transition:width .1s"></i></div>
+            <div class="legend" id="labProgTxt" style="margin-top:3px">0 / 0</div>
+          </div>
+          <div id="labResults"></div>
+        </div>
+      </div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="legend">Sims run pure game logic (no rendering). Each run keeps the previous batch for a before/after comparison.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYSIS (multi-game) -->
+  <div class="scrim hidden" id="analysis">
+    <div class="modal panel" style="width:min(1000px,96vw)">
+      <div class="panel-h"><h3>Analysis — multi-game intelligence</h3><span class="label" id="analysisGames"></span></div>
+      <div class="panel-b" id="analysisBody" style="max-height:80vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="analysisClose" class="btn primary" style="width:auto;">Close</button>
+          <button id="analysisWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
+          <div class="legend">Everything here is accumulated across every game played in this browser.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNIT ROSTER -->
+  <div class="scrim hidden" id="roster">
+    <div class="modal panel" style="width:min(840px,95vw)">
+      <div class="panel-h"><h3>Unit Roster — costs, stats &amp; value</h3><span class="label">📋</span></div>
+      <div class="panel-b" id="rosterBody" style="max-height:74vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="rosterClose" class="btn primary" style="width:auto;">Close</button>
+          <div class="legend">⚒ Production · 🪵 Wood · Value rates raw combat/utility; <b>V/⚒</b> is value per cost (higher = more efficient).</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI DOSSIER -->
+  <div class="scrim hidden" id="dossier">
+    <div class="modal panel" style="width:min(880px,94vw)">
+      <div class="panel-h"><h3>AI Dossier — capabilities &amp; learned counter-strategy</h3><span class="label" id="dossierGames"></span></div>
+      <div class="panel-b" id="dossierBody" style="max-height:72vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row">
+          <button id="dossierClose" class="btn primary" style="width:auto;">Close</button>
+          <button id="dossierWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
+          <div class="legend">Lessons are shared across all houses; the genome is each house's own evolving strategy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+</body>
+</html>
