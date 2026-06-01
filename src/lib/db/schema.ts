@@ -584,7 +584,20 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
-  origin: text('origin', { enum: ['manual', 'hermes'] }).notNull().default('manual'),
+  origin: text('origin', { enum: ['manual', 'hermes', 'forge'] }).notNull().default('manual'),
+  // Git-target mode (Brass & Rails Forge). NULL for every normal build —
+  // when null the builder behaves byte-identically to before (same workspace,
+  // same publish). When set, the build clones a git repo, branches, runs the
+  // gate as its test, and publishes via a GitHub PR instead of the static
+  // publish path. The resulting PR/branch URL is recorded in `publishedSlug`.
+  gitTargetConfig: jsonb('git_target_config').$type<{
+    repoUrl: string;
+    baseBranch: string;
+    branchPrefix: string;
+    gateCommand: string;
+    openPr: boolean;
+    prTitlePrefix?: string;
+  } | null>().default(null),
   milestones: jsonb('milestones').$type<Array<{ id: string; title: string; done: boolean; iter?: number }>>().notNull().default(sql`'[]'::jsonb`),
   requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),
   thinkingLevel: text('thinking_level').notNull().default('medium'),

@@ -5,9 +5,13 @@ import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
   ensureWorkspace,
+  ensureGitWorkspace,
+  publishViaGit,
   listWorkspaceFiles,
   seedDevFromLive,
   snapshotIteration,
+  execInSandbox,
+  type GitTargetConfig,
 } from './sandbox';
 import { manageServeConfig } from './serve-manager';
 import { failOrphanedIterations } from './orchestrator-helpers';
@@ -464,10 +468,18 @@ class Orchestrator {
 
   private async initAndPlan(buildId: string): Promise<void> {
     await ensureSandboxRunning();
-    await ensureWorkspace(buildId);
 
     const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!buildRecord || this.stopped) return;
+
+    // Workspace creation branch-point. Normal builds get the empty dev/live
+    // skeleton; git-target builds clone the target repo + branch off base.
+    if (buildRecord.gitTargetConfig) {
+      await emitLog(buildId, 'system', `Git-target mode — cloning ${buildRecord.gitTargetConfig.repoUrl} and branching off ${buildRecord.gitTargetConfig.baseBranch}.`);
+      await ensureGitWorkspace(buildId, buildRecord.gitTargetConfig as GitTargetConfig);
+    } else {
+      await ensureWorkspace(buildId);
+    }
 
     // Honour planStatus from the create-build form. When planFirst=false
     // the API sets planStatus='approved' at insert time — meaning the user
@@ -972,10 +984,30 @@ class Orchestrator {
         }
       }
 
-      // Run test suite
-      await emitLog(buildId, 'system', 'Running tests...', iteration.id);
-      await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
-      const testResult = await runTests(buildId, `/home/jkai/workspace/${buildId}/dev`);
+      // Run test suite. Test/eval branch-point: git-target builds run the
+      // configured gate command (e.g. `npm run gate`) as their test — a
+      // non-zero exit is a failed iteration whose output feeds the next
+      // iteration's context (same shape/contract as runTests, so all the
+      // downstream post-processing is unchanged).
+      let testResult: { passed: boolean; output: string; testCount: number; failCount: number };
+      if (build.gitTargetConfig) {
+        await emitLog(buildId, 'system', `Running gate: ${build.gitTargetConfig.gateCommand} ...`, iteration.id);
+        await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
+        const dev = `/home/jkai/workspace/${buildId}/dev`;
+        const gate = await execInSandbox(`cd ${dev} && ${build.gitTargetConfig.gateCommand} 2>&1`, 600000);
+        const gateOut = (gate.stdout + '\n' + gate.stderr).trim();
+        const gatePassed = gate.exitCode === 0;
+        testResult = {
+          passed: gatePassed,
+          output: gateOut.slice(0, 5000),
+          testCount: 1,
+          failCount: gatePassed ? 0 : 1,
+        };
+      } else {
+        await emitLog(buildId, 'system', 'Running tests...', iteration.id);
+        await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
+        testResult = await runTests(buildId, `/home/jkai/workspace/${buildId}/dev`);
+      }
       const testEmoji = testResult.passed ? 'PASS' : 'FAIL';
       const testSummary = `${testEmoji} Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? ` (${testResult.failCount} failed)` : ''}`;
       await emitLog(buildId, testResult.passed ? 'system' : 'error', `${testSummary}\n${testResult.output.slice(0, 2000)}`, iteration.id);
@@ -999,15 +1031,21 @@ class Orchestrator {
           .where(eq(jkaiIterations.id, iteration.id));
       }
 
-      // Always surface a preview, even when tests failed — the user
-      // explicitly wants link visibility from iteration #1, and seeing
-      // a broken running prototype is more useful than seeing nothing.
-      // Failure context still flows back to the agent via the iteration
-      // evaluation log appended above.
-      if (!testResult.passed) {
-        await emitLog(buildId, 'system', 'Tests failed — promoting anyway so the live preview reflects the latest iteration. Failure context is included for the next iteration.', iteration.id);
+      // Preview/promote branch-point. Normal builds promote dev→live and
+      // start a static preview server. Git-target builds have no static
+      // preview (the dev/ tree is a cloned git repo on a branch) and must NOT
+      // promote to live/ — they publish via a GitHub PR at completion instead.
+      if (!build.gitTargetConfig) {
+        // Always surface a preview, even when tests failed — the user
+        // explicitly wants link visibility from iteration #1, and seeing
+        // a broken running prototype is more useful than seeing nothing.
+        // Failure context still flows back to the agent via the iteration
+        // evaluation log appended above.
+        if (!testResult.passed) {
+          await emitLog(buildId, 'system', 'Tests failed — promoting anyway so the live preview reflects the latest iteration. Failure context is included for the next iteration.', iteration.id);
+        }
+        await manageServeConfig(buildId);
       }
-      await manageServeConfig(buildId);
 
       // Log iteration summary
       const summary = [
@@ -1019,8 +1057,68 @@ class Orchestrator {
       ].filter(Boolean).join('\n');
       await emitLog(buildId, 'system', summary, iteration.id);
 
-      // Check if the iteration signals project completion
-      if (detectCompletion(result.evaluation)) {
+      // Completion/publish branch-point (git-target). The gate is the
+      // authoritative completion signal: when it passes, the work is
+      // mergeable → publish via a GitHub PR and mark the build completed
+      // with the PR URL recorded (in publishedSlug). DO NOT auto-merge —
+      // the human merges on GitHub. When the gate fails, keep iterating:
+      // the gate output is already appended to the evaluation above and
+      // flows into the next iteration (same as the design-lint loop). The
+      // budget cap (max iterations / minutes) is enforced by checkBudget at
+      // the top of runIteration, so a never-passing gate still terminates.
+      if (build.gitTargetConfig) {
+        if (testResult.passed) {
+          await emitLog(buildId, 'system', 'Gate passed — publishing via GitHub PR (no auto-merge; human review required).', iteration.id);
+          let prUrl: string | null = null;
+          try {
+            const summary = (build.title || result.goals || build.prompt || 'autonomous changes').slice(0, 120);
+            const prBody = [
+              `Autonomous change proposed by the Forge.`,
+              ``,
+              `**Prompt:** ${build.prompt.slice(0, 1000)}`,
+              ``,
+              `**Gate:** \`${build.gitTargetConfig.gateCommand}\` passed.`,
+              ``,
+              result.evaluation ? `**Summary:**\n${result.evaluation.slice(0, 1500)}` : '',
+            ].filter(Boolean).join('\n');
+            const published = await publishViaGit(buildId, build.gitTargetConfig as GitTargetConfig, {
+              summary,
+              body: prBody,
+            });
+            prUrl = published?.prUrl ?? published?.branchRef ?? null;
+          } catch (err: any) {
+            // Publish failed (push/PR error). Don't silently complete — surface
+            // it and keep the build available for retry via the normal failure
+            // path. The branch may already be pushed; the human can inspect.
+            await this.abortBuild(buildId, {
+              kind: 'nonzero_exit',
+              message: `Gate passed but git publish failed: ${err.message}`,
+              attempts: 1,
+            });
+            return;
+          }
+          await db
+            .update(jkaiBuilds)
+            .set({ status: 'completed', publishedSlug: prUrl, updatedAt: new Date() })
+            .where(eq(jkaiBuilds.id, buildId));
+          await emitLog(buildId, 'system', prUrl ? `Build complete — PR: ${prUrl}` : 'Build complete — no changes to publish.', iteration.id);
+          await emitStage(buildId, { stage: 'completed', message: prUrl ?? undefined } as any);
+          try {
+            await notifyAllSubscribers({
+              title: 'Forge PR ready',
+              body: prUrl ? prUrl : (build.title ?? 'Forge build finished'),
+              url: `/jkai/builds/${buildId}`,
+            });
+          } catch (e) {
+            console.warn('[jkai-pwa] push failed', e);
+          }
+          this.activeBuildId = null;
+          await this.dequeueNext();
+          return;
+        }
+        // Gate failed — keep iterating (subject to budget cap). Fall through
+        // to the per-iteration approval gate / scheduleNext below.
+      } else if (detectCompletion(result.evaluation)) {
         await emitLog(buildId, 'system', 'Completion detected — entering re-planning phase.');
         const shouldContinue = await replanBuild(buildId);
         if (!shouldContinue) {

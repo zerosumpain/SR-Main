@@ -3,6 +3,7 @@ import { mkdirSync } from 'fs';
 import os from 'os';
 import { join } from 'path';
 import { promisify } from 'util';
+import { emitLog } from './log-emitter';
 
 const execAsync = promisify(exec);
 
@@ -232,6 +233,182 @@ export async function ensureWorkspace(buildId: string): Promise<string> {
   const base = `/home/jkai/workspace/${buildId}`;
   await execInSandbox(`mkdir -p ${base}/dev ${base}/live`);
   return `${base}/dev`;
+}
+
+// --- Git-target workspace (Brass & Rails Forge — flagged) ---
+//
+// All functions below are only reached when a build carries a non-null
+// `gitTargetConfig`. Normal builds never touch this code. Instead of the
+// empty dev/live skeleton above, a git-target build clones a real git repo
+// into dev/, branches off the base branch, and (at the end) publishes via a
+// GitHub PR rather than the static-file publish path.
+
+export interface GitTargetConfig {
+  repoUrl: string;
+  baseBranch: string;
+  branchPrefix: string;
+  gateCommand: string;
+  openPr: boolean;
+  prTitlePrefix?: string;
+}
+
+// Git identity used for the autonomous commit. The host already has the
+// `zerosumpain` SSH key authed for push (see plan prereq 2); this only sets
+// the author/committer name+email so `git commit` doesn't fail on a missing
+// identity inside the sandbox / under the build user.
+const FORGE_GIT_NAME = 'jkai-forge';
+const FORGE_GIT_EMAIL = 'forge@strangeramblings.com';
+
+/**
+ * Deterministic branch name for a git-target build. Same build id always
+ * yields the same branch, so a restart re-uses (and force-updates) the same
+ * branch rather than orphaning a new one. Short id keeps the ref readable.
+ */
+export function gitTargetBranchName(buildId: string, cfg: GitTargetConfig): string {
+  const shortId = buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'build';
+  return `${cfg.branchPrefix}${shortId}`;
+}
+
+/**
+ * Clone the target repo into the build's dev/ workspace, branch off the base
+ * branch, and install deps. Returns the dev path (same contract as
+ * `ensureWorkspace`) so the rest of the iteration loop is unchanged.
+ */
+export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig): Promise<string> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const dev = `${base}/dev`;
+  const branch = gitTargetBranchName(buildId, cfg);
+
+  // Fresh, isolated clone. Wipe any prior dev/ so a restart starts clean.
+  await execInSandbox(`mkdir -p ${base} && rm -rf ${dev} && mkdir -p ${base}/live`, 30000);
+
+  const cloneRes = await execInSandbox(
+    `git clone --depth 50 --branch ${cfg.baseBranch} ${cfg.repoUrl} ${dev} 2>&1`,
+    300000,
+  );
+  if (cloneRes.exitCode !== 0) {
+    throw new Error(`git clone failed: ${cloneRes.stdout}\n${cloneRes.stderr}`.slice(0, 2000));
+  }
+
+  // Configure identity locally + create/reset the work branch off base.
+  const setupRes = await execInSandbox(
+    `cd ${dev} && ` +
+      `git config user.name "${FORGE_GIT_NAME}" && ` +
+      `git config user.email "${FORGE_GIT_EMAIL}" && ` +
+      `git checkout -B ${branch} ${cfg.baseBranch} 2>&1`,
+    60000,
+  );
+  if (setupRes.exitCode !== 0) {
+    throw new Error(`git branch setup failed: ${setupRes.stdout}\n${setupRes.stderr}`.slice(0, 2000));
+  }
+
+  const installRes = await execInSandbox(`cd ${dev} && npm install 2>&1 | tail -5`, 300000);
+  if (installRes.exitCode !== 0) {
+    throw new Error(`npm install failed in git workspace: ${installRes.stdout}\n${installRes.stderr}`.slice(0, 2000));
+  }
+
+  return dev;
+}
+
+export interface PublishViaGitOptions {
+  summary?: string;
+  /** Extra body content for the PR (gate report + diff stat, etc.). */
+  body?: string;
+}
+
+export interface PublishViaGitResult {
+  branch: string;
+  prUrl?: string;
+  branchRef?: string;
+}
+
+/**
+ * Commit the agent's work on the build's branch, push it, and (when
+ * cfg.openPr) open a GitHub PR. Returns the PR URL (openPr) or the branch
+ * ref (push-only). Returns null with a log line when there's nothing to
+ * commit. NEVER merges — the human merges on GitHub.
+ */
+export async function publishViaGit(
+  buildId: string,
+  cfg: GitTargetConfig,
+  opts: PublishViaGitOptions = {},
+): Promise<PublishViaGitResult | null> {
+  const dev = `/home/jkai/workspace/${buildId}/dev`;
+  const branch = gitTargetBranchName(buildId, cfg);
+  const summary = (opts.summary ?? 'autonomous changes').replace(/\r?\n/g, ' ').slice(0, 200);
+  const commitMessage = `${cfg.prTitlePrefix ?? ''}${summary}`;
+  const prTitle = commitMessage;
+
+  // Detect changes before committing. `git status --porcelain` is empty when
+  // nothing changed → nothing to publish.
+  const statusRes = await execInSandbox(`cd ${dev} && git status --porcelain 2>&1`, 30000);
+  if (statusRes.exitCode === 0 && !statusRes.stdout.trim()) {
+    await emitLog(buildId, 'system', 'publishViaGit: no changes to commit — skipping publish.');
+    return null;
+  }
+
+  // Commit (identity is set locally in ensureGitWorkspace; re-assert with -c
+  // so a re-clone or fresh checkout can still commit).
+  const commitB64 = Buffer.from(commitMessage).toString('base64');
+  const commitRes = await execInSandbox(
+    `cd ${dev} && git add -A && ` +
+      `git -c user.name="${FORGE_GIT_NAME}" -c user.email="${FORGE_GIT_EMAIL}" ` +
+      `commit -m "$(echo '${commitB64}' | base64 -d)" 2>&1`,
+    60000,
+  );
+  if (commitRes.exitCode !== 0) {
+    // "nothing to commit" can still surface here if only ignored files changed.
+    if (/nothing to commit/i.test(commitRes.stdout + commitRes.stderr)) {
+      await emitLog(buildId, 'system', 'publishViaGit: nothing to commit after add — skipping publish.');
+      return null;
+    }
+    throw new Error(`git commit failed: ${commitRes.stdout}\n${commitRes.stderr}`.slice(0, 2000));
+  }
+
+  // Push the branch.
+  const pushRes = await execInSandbox(
+    `cd ${dev} && git push -u origin ${branch} --force-with-lease 2>&1`,
+    180000,
+  );
+  if (pushRes.exitCode !== 0) {
+    throw new Error(`git push failed: ${pushRes.stdout}\n${pushRes.stderr}`.slice(0, 2000));
+  }
+
+  if (!cfg.openPr) {
+    const branchRef = `${cfg.baseBranch}...${branch}`;
+    await emitLog(buildId, 'system', `publishViaGit: pushed branch ${branch} (no PR requested).`);
+    return { branch, branchRef };
+  }
+
+  // Open a PR via gh. The repo slug is derived from the configured repoUrl so
+  // the API's hard scope (brass-and-rails only) is the single source of truth.
+  const repoSlug = repoSlugFromUrl(cfg.repoUrl);
+  const bodyText = opts.body ?? `Autonomous change proposed by the Forge.\n\n${summary}`;
+  const bodyB64 = Buffer.from(bodyText).toString('base64');
+  const titleB64 = Buffer.from(prTitle).toString('base64');
+  const prRes = await execInSandbox(
+    `cd ${dev} && gh pr create --repo ${repoSlug} ` +
+      `--base ${cfg.baseBranch} --head ${branch} ` +
+      `--title "$(echo '${titleB64}' | base64 -d)" ` +
+      `--body "$(echo '${bodyB64}' | base64 -d)" 2>&1`,
+    120000,
+  );
+  // gh prints the PR URL on success; on "already exists" it still exits
+  // non-zero but the URL is usually in the output — try to recover it.
+  const urlMatch = (prRes.stdout + '\n' + prRes.stderr).match(/https:\/\/github\.com\/\S+\/pull\/\d+/);
+  if (prRes.exitCode !== 0 && !urlMatch) {
+    throw new Error(`gh pr create failed: ${prRes.stdout}\n${prRes.stderr}`.slice(0, 2000));
+  }
+  const prUrl = urlMatch ? urlMatch[0] : prRes.stdout.trim();
+  await emitLog(buildId, 'system', `publishViaGit: PR ready → ${prUrl}`);
+  return { branch, prUrl };
+}
+
+/** Derive an `owner/repo` slug from an SSH or HTTPS git URL. */
+function repoSlugFromUrl(repoUrl: string): string {
+  // git@github.com:owner/repo.git  |  https://github.com/owner/repo.git
+  const m = repoUrl.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
+  return m ? m[1] : repoUrl;
 }
 
 export async function listWorkspaceFiles(buildId: string): Promise<string> {
