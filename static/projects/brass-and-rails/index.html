@@ -118,6 +118,25 @@
   .btn.danger:hover{border-color:var(--blood);background:#3a201c;}
   .btnrow{display:flex;gap:7px;}
   .btnrow .btn{width:auto;flex:1;justify-content:center;}
+  /* Sandbox Lab tab switcher (Rules | Houses) */
+  .lab-tab{font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.1em;font-size:10px;font-weight:700;
+    background:var(--panel2);color:var(--muted);border:1px solid var(--line2);border-radius:7px;padding:7px 10px;cursor:pointer;transition:.12s;}
+  .lab-tab:hover{border-color:var(--amber);color:var(--ink);}
+  .lab-tab.on{background:var(--amber);color:#241a0c;border-color:var(--amber2);}
+  .house-card{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel2);}
+  .house-card .hc-head{display:flex;align-items:center;gap:7px;margin-bottom:6px;}
+  .house-card .hc-dot{width:11px;height:11px;border-radius:2px;transform:rotate(45deg);flex:none;}
+  .house-card .hc-name{font-size:11.5px;font-weight:700;flex:1;}
+  .hc-knob{display:flex;align-items:center;gap:6px;margin:3px 0;font-family:'JetBrains Mono';font-size:10px;}
+  .hc-knob>span.k{flex:1;color:var(--muted);}
+  .hc-num{width:56px;background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:2px 4px;font-family:'JetBrains Mono';font-size:10px;text-align:right;}
+  .hc-step{display:flex;align-items:center;gap:0;}
+  .hc-step button{width:20px;height:20px;line-height:1;background:var(--panel);border:1px solid var(--line2);color:var(--ink);border-radius:4px;cursor:pointer;font-size:12px;padding:0;}
+  .hc-step button:hover{border-color:var(--amber);}
+  .hc-step .v{width:22px;text-align:center;font-weight:700;}
+  .hc-sel{background:var(--bg2);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:2px 4px;font-family:'JetBrains Mono';font-size:10px;}
+  .hc-reset{background:none;border:none;color:var(--faint);font-size:9px;cursor:pointer;text-decoration:underline;padding:0;font-family:'JetBrains Mono';}
+  .hc-reset:hover{color:var(--amber2);}
   .buildlist{display:flex;flex-direction:column;gap:6px;margin-top:4px;max-height:230px;overflow:auto;}
 
   /* tech list */
@@ -418,14 +437,31 @@
   <div class="scrim hidden" id="lab" style="z-index:120">
     <div class="modal panel" style="width:min(1040px,96vw)">
       <div class="panel-h"><h3>🧪 Sandbox Lab — tune &amp; simulate</h3><span class="label">headless balance testbench</span></div>
-      <div class="panel-b" style="max-height:80vh;overflow:auto;display:grid;grid-template-columns:minmax(300px,360px) 1fr;gap:16px">
+      <div class="panel-b" style="max-height:80vh;overflow:auto;display:grid;grid-template-columns:minmax(320px,400px) 1fr;gap:16px">
         <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <div class="label">Balance dials</div>
-            <button id="labReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset defaults</button>
+          <!-- TAB SWITCHER: Rules (global dials) | Houses (per-faction) -->
+          <div style="display:flex;gap:4px;margin-bottom:8px">
+            <button id="labTabRules" class="lab-tab on" style="flex:1">Rules</button>
+            <button id="labTabHouses" class="lab-tab" style="flex:1">Houses</button>
           </div>
-          <div class="legend" style="margin-bottom:8px">Dials mutate the shared config — they affect the live game too (caps/income recompute on change).</div>
-          <div id="labDials" style="display:flex;flex-direction:column;gap:7px"></div>
+          <!-- RULES TAB: the existing global balance dials -->
+          <div id="labPaneRules">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="label">Balance dials</div>
+              <button id="labReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset defaults</button>
+            </div>
+            <div class="legend" style="margin-bottom:8px">Dials mutate the shared config — they affect the live game too (caps/income recompute on change).</div>
+            <div id="labDials" style="display:flex;flex-direction:column;gap:7px"></div>
+          </div>
+          <!-- HOUSES TAB: per-faction bonus knobs, free starting units, archetype -->
+          <div id="labPaneHouses" class="hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="label">Per-house tuning</div>
+              <button id="labHousesReset" class="btn" style="width:auto;padding:4px 10px;font-size:9.5px">Reset all houses</button>
+            </div>
+            <div class="legend" style="margin-bottom:8px">Edit a house's bonus, free starting units &amp; archetype, then run a batch to see its win rate shift. Edits apply to the live game &amp; next sim.</div>
+            <div id="labHouses" style="display:flex;flex-direction:column;gap:9px"></div>
+          </div>
         </div>
         <div>
           <div class="label" style="margin-bottom:6px">Run a batch</div>
@@ -1009,12 +1045,40 @@ function factionArchetype(fid){
   let h=0; for(let i=0;i<fid.length;i++) h=(h*31+fid.charCodeAt(i))>>>0;
   return ARCH_LIST[h % ARCH_LIST.length];
 }
-function archetypeGenome(fid){ return normGenome({...ARCHETYPES[factionArchetype(fid)]}); }
+function archetypeGenome(fid){ return normGenome({...ARCHETYPES[factionArch(fid)]}); }
 // which archetype does a genome most resemble? (used by analytics / reinforcement)
 function classifyGenome(g){
   let best='balanced',bd=1e9; for(const a of ARCH_LIST){ const t=normGenome({...ARCHETYPES[a]}); let d=0; for(const k of GENOME_KEYS) d+=Math.abs((g[k]||0)-t[k]); if(d<bd){bd=d;best=a;} }
   return best;
 }
+
+/* ---- PER-FACTION config (Houses-tab tunable) -------------------------------------------------
+   ONE source of truth for each house's bonus magnitude(s), archetype and free starting units.
+   Defaults are seeded from the shipped BAL faction consts + FACTION_ARCHETYPE so behaviour is
+   IDENTICAL to before; the Houses tab in the Lab edits FACTION_CFG[id] live, and the gameplay
+   reads below go through FACTION_CFG dynamically so an edit takes effect on the next sim/turn. */
+const FACTION_CFG = {
+  kelly:      { archetype:FACTION_ARCHETYPE.kelly,      startUnits:{founder:0,rambler:0,guard:0},
+                econBonusFull:BAL.econBonusFull, econBonusTaper:BAL.econBonusTaper },          // per-city ⚒/🔬 taper threshold + beyond-taper fraction
+  pease:      { archetype:FACTION_ARCHETYPE.pease,      startUnits:{founder:0,rambler:0,guard:0},
+                sciCost:BAL.scholarSciCost },                                                  // flat science multiplier
+  stephenson: { archetype:FACTION_ARCHETYPE.stephenson, startUnits:{founder:0,rambler:0,guard:0},
+                moveTurns:BAL.stephensonMoveTurns },                                           // # opening turns the +1 move applies
+  watermen:   { archetype:FACTION_ARCHETYPE.watermen,   startUnits:{founder:1,rambler:0,guard:0},
+                cityFood:2, visionBonus:1 },                                                   // +food/city, +vision (extra founder now via startUnits)
+  highland:   { archetype:FACTION_ARCHETYPE.highland,   startUnits:{founder:0,rambler:0,guard:0},
+                defMult:BAL.highlandDefMult, hillProd:BAL.highlandHillProd, hillStone:BAL.highlandHillStone }, // hill/mtn def mult + worked-rock ⚒/🪨
+  iron:       { archetype:FACTION_ARCHETYPE.iron,       startUnits:{founder:0,rambler:0,guard:0},
+                atkMult:BAL.ironAtkMult },                                                     // attack multiplier
+  scholars:   { archetype:FACTION_ARCHETYPE.scholars,   startUnits:{founder:0,rambler:0,guard:0},
+                sciCost:BAL.scholarTechCost, techLimit:BAL.scholarTechLimit },                 // science multiplier while under the tech limit + the limit
+  rovers:     { archetype:FACTION_ARCHETYPE.rovers,     startUnits:{founder:0,rambler:0,guard:0},
+                unitDiscount:1 },                                                              // ⚒ knocked off every unit's build cost
+};
+// frozen pristine defaults so the Houses tab's "reset" restores the shipped per-faction balance
+const FACTION_CFG_DEFAULTS = JSON.parse(JSON.stringify(FACTION_CFG));
+// archetype now routes through the (mutable) per-faction config so the Houses tab can reassign it
+function factionArch(fid){ return (FACTION_CFG[fid] && FACTION_CFG[fid].archetype) || factionArchetype(fid); }
 
 function setupGame(cfg){
   G.seed=cfg.seed; G.mode=cfg.mode; G.marathon=cfg.marathon;
@@ -1046,7 +1110,7 @@ function setupGame(cfg){
     const human = (cfg.mode==='campaign' && i===0);
     // first time we see a house, seed it from its archetype attractor (distinct personality), not a flat genome
     const fk = knowledge.factions[f.id] || (knowledge.factions[f.id]={genome:archetypeGenome(f.id),wins:0,losses:0});
-    if(!fk.archetype) fk.archetype=factionArchetype(f.id);
+    if(!fk.archetype) fk.archetype=factionArch(f.id);
     const p = {
       id:f.id, idx:i, faction:f, name:f.name, color:f.color, isAI:!human, alive:true,
       prod: 5, science: 3, wood: 2, stone: 2, food: 4,
@@ -1063,8 +1127,10 @@ function setupGame(cfg){
     // starting units: a founder + a guard near capital
     spawnUnit(p,'rambler',sx,sz,true) || placeNear(p,'rambler',sx,sz);
     placeNear(p,'guard',sx,sz);
-    // Skerne Watermen start with an EXTRA Founder so the river-house can plant a 2nd city fast (B-pass settler buff)
-    if(f.bonus==='vision') placeNear(p,'founder',sx,sz);
+    // per-house FREE starting units (Houses-tab tunable). Watermen default to +1 Founder so the
+    // river-house can plant a 2nd city fast (B-pass settler buff) — now config-driven for ANY house.
+    const su=FACTION_CFG[f.id]?.startUnits||{};
+    for(const t of ['founder','rambler','guard']){ for(let k=0;k<(su[t]||0);k++) placeNear(p,t,sx,sz); }
     reveal(p, sx, sz, 2);
   });
 
@@ -1141,7 +1207,7 @@ function foundCity(p,x,z,isCapital,name){
   return c;
 }
 
-function visionBonus(p){ return ((p.faction.bonus==='vision'||p.faction.bonus==='explore')?1:0) + (p.techs.has('telegraphy')?1:0); }
+function visionBonus(p){ return ((p.faction.bonus==='vision'||p.faction.bonus==='explore')?(FACTION_CFG[p.faction.id]?.visionBonus??1):0) + (p.techs.has('telegraphy')?1:0); }
 function reveal(p,x,z,r){
   const R = r+visionBonus(p);
   for(let dz=-R;dz<=R;dz++)for(let dx=-R;dx<=R;dx++){const nx=x+dx,nz=z+dz;if(inB(nx,nz))p.explored.add(key(nx,nz));}
@@ -1239,7 +1305,7 @@ function tileYield(t){
   // hill/mountain in their territory yields bonus ⚒ & 🪨 (B-pass turtle buff).
   if((t.terrain==='hill'||t.terrain==='mountain') && t.owner){
     const op=playerById(t.owner);
-    if(op && op.faction.bonus==='def'){ prod+=BAL.highlandHillProd; stone+=BAL.highlandHillStone; }
+    if(op && op.faction.bonus==='def'){ const hc=FACTION_CFG[op.faction.id]; prod+=hc.hillProd; stone+=hc.hillStone; }
   }
   return {food,wood,stone,prod,sci};
 }
@@ -1250,7 +1316,7 @@ function cityYields(c){
     if(t.cityId!==c.id||t.city||!t.worked) continue; const ty=tileYield(t); y.food+=ty.food;y.wood+=ty.wood;y.stone+=ty.stone;y.prod+=ty.prod;y.sci+=ty.sci; }
   y.prod+=1+(c.bonusProd||0); y.sci+=1; y.food+=1;
   if(c.isCapital){ y.prod+=1; y.sci+=1; y.food+=1; }
-  const p=playerById(c.owner); if(p && p.faction.bonus==='vision') y.food+=2;
+  const p=playerById(c.owner); if(p && p.faction.bonus==='vision') y.food+=FACTION_CFG[p.faction.id].cityFood;
   return y;
 }
 // PERF: sum per-city yields (each over a small neighbourhood) instead of an O(N^2) board sweep.
@@ -1261,11 +1327,11 @@ function recomputeIncome(){
       if(t.cityId!==c.id||t.city||!t.worked) continue; const y=tileYield(t);
       p.foodIncome+=y.food;p.woodIncome+=y.wood;p.stoneIncome+=y.stone;p.prodIncome+=y.prod;p.sciIncome+=y.sci; } }
   for(const p of G.players){ const cs=G.cities.filter(c=>c.owner===p.id);
-    for(const c of cs){ if(c.unrest>0) continue; p.prodIncome+=1+(c.bonusProd||0)+(c.isCapital?1:0); p.sciIncome+=1+(c.isCapital?1:0); p.foodIncome+=1+(c.isCapital?1:0); if(p.faction.bonus==='vision') p.foodIncome+=2; }
+    for(const c of cs){ if(c.unrest>0) continue; p.prodIncome+=1+(c.bonusProd||0)+(c.isCapital?1:0); p.sciIncome+=1+(c.isCapital?1:0); p.foodIncome+=1+(c.isCapital?1:0); if(p.faction.bonus==='vision') p.foodIncome+=FACTION_CFG[p.faction.id].cityFood; }
     const n=cs.length; if(p.techs.has('trade')){ p.prodIncome+=n; p.sciIncome+=n; }
     // Kelly's econ bonus TAPERS: first econBonusFull cities give the full +1⚒/+1🔬, extras only a
-    // fraction — so going wide no longer compounds into a runaway (A3 nerf).
-    if(p.faction.bonus==='econ'){ const full=Math.min(n,BAL.econBonusFull); const taper=Math.max(0,n-BAL.econBonusFull)*BAL.econBonusTaper;
+    // fraction — so going wide no longer compounds into a runaway (A3 nerf). Tunable per-house.
+    if(p.faction.bonus==='econ'){ const kc=FACTION_CFG[p.faction.id]; const full=Math.min(n,kc.econBonusFull); const taper=Math.max(0,n-kc.econBonusFull)*kc.econBonusTaper;
       const eb=Math.round(full+taper); p.prodIncome+=eb; p.sciIncome+=eb; } }
 }
 // spend the player's food pool to tick up cities whose improvement-unlocked max exceeds their level
@@ -1288,7 +1354,7 @@ function onCityLevel(c){
 function playerUnitCap(p){ let cap=0; for(const c of G.cities){ if(c.owner===p.id) cap+=c.level+1; } return cap; }
 function playerUnitCount(p){ let n=0; for(const u of G.units){ if(u.owner===p.id&&u.hp>0) n++; } return n; }
 // resource cost of a unit type
-function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.faction.bonus==='cheap') prod=Math.max(1,prod-1);
+function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.faction.bonus==='cheap') prod=Math.max(1,prod-FACTION_CFG[p.faction.id].unitDiscount);
   // challenger rubber-band: trailing houses build a touch cheaper so they can contest the leader
   if(p){ const cf=challengerFactor(p); if(cf>0) prod=Math.max(1,Math.round(prod*(1-BAL.rubberProdMax*cf))); }
   return {prod, wood:d.wood||0, stone:d.stone||0, food:d.food||0}; }
@@ -1313,8 +1379,9 @@ function techCost(p,id){
   // but only while they're still climbing the early tree (first scholarTechLimit techs) — an
   // early tempo boost, not a perpetual runaway (B-pass scholars buff, isolated from Pease).
   if(p.faction.bonus==='tech'){
-    if(p.faction.id==='scholars') cost *= (p.techs.size < BAL.scholarTechLimit ? BAL.scholarTechCost : 1);
-    else cost *= BAL.scholarSciCost;
+    const tc=FACTION_CFG[p.faction.id];
+    if(p.faction.id==='scholars') cost *= (p.techs.size < tc.techLimit ? tc.sciCost : 1);
+    else cost *= tc.sciCost;
   }
   // challenger rubber-band: houses trailing the leader research cheaper (contested race, not handouts)
   cost *= (1 - BAL.rubberSciMax*challengerFactor(p));
@@ -1341,7 +1408,7 @@ function research(p,id){
 function unitMove(u){
   const p=playerById(u.owner); const base=UNIT_TYPES[u.type].move;
   let m=base;
-  if(p && p.faction.bonus==='move' && G.turn<=BAL.stephensonMoveTurns) m+=1;   // early-tempo edge only (turns 1..N)
+  if(p && p.faction.bonus==='move' && G.turn<=FACTION_CFG[p.faction.id].moveTurns) m+=1;   // early-tempo edge only (turns 1..N)
   if(p && p.techs.has('steam')) m+=1;
   return m;
 }
@@ -1416,7 +1483,7 @@ function defenseBonus(u){
     else if(myCities<=2) b += BAL.fewCitiesBonus;
   }
   const p=playerById(u.owner);
-  if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=BAL.highlandDefMult;
+  if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=FACTION_CFG[p.faction.id].defMult;
   // FORTIFY: a unit dug in (held position without moving/acting last turn) defends harder.
   if(u.fortified) b += BAL.fortifyBonus;
   return b;
@@ -1441,7 +1508,7 @@ function flankCount(att,def){
 function flankMult(att,def){ return 1 + Math.min(BAL.flankCap, flankCount(att,def)*BAL.flankPerUnit); }
 // full attack multiplier from the layered factors (returns the breakdown too, for the human predictor)
 function attackFactors(att,def){
-  const facBon = playerById(att.owner)?.faction.bonus==='atk'?BAL.ironAtkMult:1;
+  const _ap=playerById(att.owner); const facBon = _ap?.faction.bonus==='atk'?FACTION_CFG[_ap.faction.id].atkMult:1;
   const counter = counterMult(att,def);               // 0 or BAL.counterBonus
   const counterM = 1+counter;
   const elev = elevationMult(att,def);
@@ -2427,7 +2494,7 @@ function loadKnowledge(){
   if(!knowledge.history) knowledge.history=[];        // per-game results for multi-game analysis
   if(!knowledge.archetypeWins) knowledge.archetypeWins={};   // per-archetype win tally (feature 4/7)
   // backfill archetype on any stored faction record (older saves)
-  for(const fid in knowledge.factions){ if(!knowledge.factions[fid].archetype) knowledge.factions[fid].archetype=factionArchetype(fid); }
+  for(const fid in knowledge.factions){ if(!knowledge.factions[fid].archetype) knowledge.factions[fid].archetype=factionArch(fid); }
 }
 function relOf(a,b){ return (knowledge.rels[a]&&knowledge.rels[a][b])||{clashes:0,caps:0,games:0}; }
 // A's directed read of B: B's dominant observed trait + A's stance toward B from their shared history
@@ -2604,7 +2671,7 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   const armyCap = Math.round(myCities.length*(2 + 2.6*pr.aggDrive + 1.8*pr.massStyle) + 2);  // trimmed: curbs warlord/swarm runaway armies
   const atCap = army.length >= armyCap;
   const avail=(tid)=>{ const d=UNIT_TYPES[tid]; return (!d.tech||p.techs.has(d.tech)); };
-  const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(p.faction.bonus==='cheap') c=Math.max(1,c-1); return c; };
+  const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(p.faction.bonus==='cheap') c=Math.max(1,c-FACTION_CFG[p.faction.id].unitDiscount); return c; };
 
   // capital defence first (defendCapital lesson)
   const cap=G.cities.find(c=>c.id===p.capitalId)||myCities[0];
@@ -2653,7 +2720,7 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   // A2 ROSTER DIVERSITY: each ARCHETYPE has a distinct unit doctrine (preference order). We try the
   // list in order but value ROLE diversity — if the army already leans one role, skip toward another.
   // Lists deliberately spread builds across pony/gun/ironclad/nightmail/armed/skylark, not just guard.
-  const arch = (knowledge.factions[p.id]&&knowledge.factions[p.id].archetype) || factionArchetype(p.id);
+  const arch = (knowledge.factions[p.id]&&knowledge.factions[p.id].archetype) || factionArch(p.id);
   const DOCTRINE = {
     warlord:    ['pony','gun','armed','ironclad','nightmail','guard','skylark'],   // fast aggression + siege
     swarm:      ['guard','pony','armed','gun','nightmail','ironclad','skylark'],   // cheap mass (kept)
@@ -2973,8 +3040,8 @@ function recordGameResult(winner, kind){
   knowledge.games++;
   if(!winner) winner=[...G.players].sort((a,b)=>score(b)-score(a))[0];
   for(const p of G.players){
-    const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0,archetype:factionArchetype(p.id)});
-    if(!fk.archetype) fk.archetype=factionArchetype(p.id);
+    const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0,archetype:factionArch(p.id)});
+    if(!fk.archetype) fk.archetype=factionArch(p.id);
     if(p.id===winner.id) fk.wins++; else fk.losses++;   // genome evolution handled below
   }
   const nTech=Object.keys(TECHS).length;
@@ -3026,9 +3093,9 @@ function recordGameResult(winner, kind){
   }
   const counter = domArch? ARCH_COUNTER[domArch] : null;
   for(const p of G.players){
-    const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0,archetype:factionArchetype(p.id)});
+    const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0,archetype:factionArch(p.id)});
     const won=(p.id===winner.id);
-    const archRaw=ARCHETYPES[fk.archetype||factionArchetype(p.id)];
+    const archRaw=ARCHETYPES[fk.archetype||factionArch(p.id)];
     const s=p.stats||{}; const avgCapDef = s.capDefTurns? s.capDefSum/s.capDefTurns : 0;
     const badRate = s.attacks? s.badAttacks/s.attacks : 0;
     // SHARPENING: as a house gains experience it specialises HARDER — its effective attractor is the
@@ -3379,7 +3446,7 @@ function renderDossier(){
   for(const fid of ids){
     const fdef=FACTIONS.find(f=>f.id===fid); if(!fdef) continue;
     const rec=fk[fid]; const g=(rec&&rec.genome)||defaultGenome(); const col='#'+fdef.color.toString(16).padStart(6,'0');
-    const pr=aiParams(g); const arch=(rec&&rec.archetype)||factionArchetype(fid);
+    const pr=aiParams(g); const arch=(rec&&rec.archetype)||factionArch(fid);
     h+=`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
         <span style="background:${col};width:13px;height:13px;border-radius:3px;transform:rotate(45deg);flex:none"></span>
@@ -3604,7 +3671,7 @@ function renderTicker(){
   const rankNow={}; ranked.forEach((r,i)=>{ if(r.p.alive) rankNow[r.p.id]=i+1; });
   let h='';
   ranked.forEach((r,i)=>{ const p=r.p; const col='#'+p.color.toString(16).padStart(6,'0');
-    const arch=(knowledge.factions[p.id]&&knowledge.factions[p.id].archetype)||factionArchetype(p.id);
+    const arch=(knowledge.factions[p.id]&&knowledge.factions[p.id].archetype)||factionArch(p.id);
     const g=p.genome||{}; const cities=G.cities.filter(c=>c.owner===p.id).length;
     const units=G.units.filter(u=>u.owner===p.id&&u.hp>0).length;
     const prev=G._prevRank[p.id]; const now=rankNow[p.id];
@@ -3789,7 +3856,7 @@ function renderAnalysis(){
   const awEntries=Object.entries(aw).sort((a,b)=>b[1]-a[1]);
   if(awEntries.length){ h+=rec(`Winning archetypes: ${awEntries.map(([a,c])=>`<b>${a}</b> ${c}`).join(' · ')}. ${awEntries[0][1]>games*0.5&&games>4?`The <b>${awEntries[0][0]}</b> style is dominant — counter it by buffing what beats it.`:'No single style dominates — well balanced.'}`,'mid'); }
   h+=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">`;
-  for(const f of FACTIONS){ const a=K.factions[f.id]?.archetype||factionArchetype(f.id); const col='#'+f.color.toString(16).padStart(6,'0');
+  for(const f of FACTIONS){ const a=K.factions[f.id]?.archetype||factionArch(f.id); const col='#'+f.color.toString(16).padStart(6,'0');
     h+=`<div style="${mono};font-size:9.5px;border:1px solid var(--line);border-radius:6px;padding:4px 7px"><span style="color:${col}">${f.name.replace('House ','')}</span> → <b>${a}</b></div>`; }
   h+=`</div>`;
 
@@ -3813,7 +3880,6 @@ const LAB_DIALS = [
   {k:'captureProdCost',path:['captureProdCost'], label:'Capture cost',       help:'Production friction paid to take a city.', min:0, max:40, step:1},
   {k:'unrestTurns', path:['unrestTurns'],        label:'Unrest duration',    help:'Turns a captured city yields nothing / cannot grow.', min:0, max:12, step:1},
   {k:'coalitionLeaderBias',path:['coalitionLeaderBias'], label:'Coalition bias', help:'How hard the AI gangs up on the score leader.', min:0, max:16, step:0.5},
-  {k:'econBonusTaper',path:['econBonusTaper'],   label:'Kelly econ taper',   help:'Per-city econ bonus fraction beyond the first N cities.', min:0, max:1, step:0.05},
   {k:'techTierMult',path:['techTierMult'],       label:'Tech cost ×',        help:'Multiplier on the per-tier tech base cost.', min:0.3, max:3, step:0.05},
   {k:'techCountPow',path:['techCountPow'],       label:'Tech tail power',    help:'How steeply the late tech tree ramps in cost.', min:1, max:2.5, step:0.05},
 ];
@@ -3934,6 +4000,115 @@ function labResetDials(){ for(const d of LAB_DIALS) dialSet(d, dialDefault(d));
   if(G.started){ for(const p of G.players){ p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap'); } recomputeIncome(); if(!G._headless) refreshHUD(); }
   buildLabDials(); toast('Dials reset to shipped defaults.'); }
 
+/* ---- HOUSES TAB: per-faction tuning (bonus knobs + free starting units + archetype) ----------
+   The knob set DIFFERS per house (each bonus has its own parameters). Each knob is a numeric field
+   on FACTION_CFG[id]; the free starting units are steppers on FACTION_CFG[id].startUnits; the
+   archetype is a <select>. All edits mutate the live config the gameplay reads. */
+const HOUSE_KNOBS = {
+  kelly:      [ {k:'econBonusFull',  label:'Taper after N cities', min:1,  max:12,  step:1,    help:'First N cities give the full +1⚒/+1🔬.'},
+                {k:'econBonusTaper', label:'Beyond-taper fraction', min:0, max:1,   step:0.05, help:'Each city past N contributes only this fraction.'} ],
+  pease:      [ {k:'sciCost',        label:'Science cost ×',        min:0.2,max:1,   step:0.05, help:'Flat science multiplier (lower = cheaper tech).'} ],
+  stephenson: [ {k:'moveTurns',      label:'+1 move for N turns',   min:0,  max:74,  step:1,    help:'Opening turns the +1 move bonus applies.'} ],
+  watermen:   [ {k:'cityFood',       label:'Food per city',         min:0,  max:6,   step:1,    help:'Bonus food added to every Watermen city.'},
+                {k:'visionBonus',    label:'Vision bonus',          min:0,  max:4,   step:1,    help:'Extra sight radius for units & cities.'} ],
+  highland:   [ {k:'defMult',        label:'Hill/mtn def ×',        min:1,  max:2.5, step:0.05, help:'Defence multiplier on hills & mountains.'},
+                {k:'hillProd',       label:'Worked-rock ⚒',         min:0,  max:6,   step:1,    help:'Bonus production from each worked hill/mtn.'},
+                {k:'hillStone',      label:'Worked-rock 🪨',        min:0,  max:6,   step:1,    help:'Bonus stone from each worked hill/mtn.'} ],
+  iron:       [ {k:'atkMult',        label:'Attack ×',              min:1,  max:1.5, step:0.005,help:'Attack multiplier on every Ironmaster strike.'} ],
+  scholars:   [ {k:'sciCost',        label:'Science cost ×',        min:0.2,max:1,   step:0.05, help:'Science multiplier while under the tech limit.'},
+                {k:'techLimit',      label:'Discount tech limit',   min:0,  max:40,  step:1,    help:'Discount applies only for the first N techs.'} ],
+  rovers:     [ {k:'unitDiscount',   label:'Unit ⚒ discount',       min:0,  max:3,   step:1,    help:'⚒ knocked off every unit’s build cost.'} ],
+};
+const START_UNIT_KEYS = [ {k:'founder', label:'Founders'}, {k:'rambler', label:'Ramblers'}, {k:'guard', label:'Guards'} ];
+// when an archetype is reassigned, re-seed the persisted AI memory for that house so the lever
+// drives behaviour immediately (not only on the next memory wipe). Reseeds genome from the new
+// archetype attractor and stamps the record's archetype.
+function reseedFactionArchetype(fid){
+  if(!knowledge||!knowledge.factions) return;
+  const fk = knowledge.factions[fid] || (knowledge.factions[fid]={wins:0,losses:0});
+  fk.archetype = FACTION_CFG[fid].archetype;
+  fk.genome = archetypeGenome(fid);
+  saveKnowledge();
+  // refresh the genome of a matching LIVE player so a mid-campaign change is visible too
+  if(G.started){ const lp=G.players.find(p=>p.id===fid&&p.isAI); if(lp) lp.genome={...fk.genome}; }
+}
+function buildLabHouses(){
+  let h='';
+  for(const f of FACTIONS){
+    const cfg=FACTION_CFG[f.id], def=FACTION_CFG_DEFAULTS[f.id];
+    const col='#'+f.color.toString(16).padStart(6,'0');
+    // dirty = any knob / start-unit / archetype differs from default
+    let dirty = cfg.archetype!==def.archetype;
+    for(const kn of (HOUSE_KNOBS[f.id]||[])) if(Math.abs(cfg[kn.k]-def[kn.k])>1e-9) dirty=true;
+    for(const su of START_UNIT_KEYS) if((cfg.startUnits[su.k]||0)!==(def.startUnits[su.k]||0)) dirty=true;
+    h+=`<div class="house-card" data-fid="${f.id}">
+      <div class="hc-head"><span class="hc-dot" style="background:${col}"></span>
+        <span class="hc-name">${f.name.replace('House ','')}</span>
+        <span class="legend" style="font-size:8.5px">${f.bonusTxt||''}</span>
+        ${dirty?`<button class="hc-reset" data-reset="${f.id}">reset</button>`:''}</div>`;
+    // bonus knobs
+    for(const kn of (HOUSE_KNOBS[f.id]||[])){
+      const v=cfg[kn.k], dv=def[kn.k], off=Math.abs(v-dv)>1e-9;
+      h+=`<div class="hc-knob"><span class="k" title="${kn.help}">${kn.label}</span>
+        <input type="number" class="hc-num" data-fid="${f.id}" data-knob="${kn.k}" value="${v}" min="${kn.min}" max="${kn.max}" step="${kn.step}">
+        <span class="legend" style="width:42px;text-align:right;font-size:8.5px;color:${off?'var(--amber2)':'var(--faint)'}">${dv}</span></div>`;
+    }
+    // free starting units (steppers)
+    h+=`<div class="legend" style="font-size:8.5px;margin:5px 0 1px">Free starting units</div>`;
+    for(const su of START_UNIT_KEYS){
+      const v=cfg.startUnits[su.k]||0, dv=def.startUnits[su.k]||0, off=v!==dv;
+      h+=`<div class="hc-knob"><span class="k">${su.label}</span>
+        <span class="hc-step">
+          <button data-fid="${f.id}" data-su="${su.k}" data-d="-1">−</button>
+          <span class="v" style="color:${off?'var(--amber2)':'var(--ink)'}">${v}</span>
+          <button data-fid="${f.id}" data-su="${su.k}" data-d="1">+</button>
+        </span></div>`;
+    }
+    // archetype
+    const archOff=cfg.archetype!==def.archetype;
+    h+=`<div class="hc-knob"><span class="k">Archetype</span>
+      <select class="hc-sel" id="hcarch_${f.id}" data-fid="${f.id}" style="color:${archOff?'var(--amber2)':'var(--ink)'}">
+        ${ARCH_LIST.map(a=>`<option value="${a}"${a===cfg.archetype?' selected':''}>${a}</option>`).join('')}
+      </select></div>`;
+    h+=`</div>`;
+  }
+  $('labHouses').innerHTML=h;
+  const recompute=()=>{ if(G.started){ for(const p of G.players){ p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap'); } recomputeIncome(); if(!G._headless) refreshHUD(); } };
+  // bonus-knob inputs
+  $('labHouses').querySelectorAll('input.hc-num').forEach(inp=>{
+    inp.onchange=()=>{ const fid=inp.dataset.fid, k=inp.dataset.knob; const meta=HOUSE_KNOBS[fid].find(x=>x.k===k);
+      let v=parseFloat(inp.value); if(isNaN(v)) return; v=clamp(v,meta.min,meta.max); FACTION_CFG[fid][k]=v; recompute(); buildLabHouses(); };
+  });
+  // start-unit steppers
+  $('labHouses').querySelectorAll('.hc-step button').forEach(btn=>{
+    btn.onclick=()=>{ const fid=btn.dataset.fid, k=btn.dataset.su, d=parseInt(btn.dataset.d,10);
+      const cur=FACTION_CFG[fid].startUnits[k]||0; FACTION_CFG[fid].startUnits[k]=clamp(cur+d,0,9); buildLabHouses(); };
+  });
+  // archetype selects
+  $('labHouses').querySelectorAll('select.hc-sel').forEach(sel=>{
+    sel.onchange=()=>{ const fid=sel.dataset.fid; FACTION_CFG[fid].archetype=sel.value; reseedFactionArchetype(fid); buildLabHouses(); };
+  });
+  // per-house reset
+  $('labHouses').querySelectorAll('button.hc-reset').forEach(btn=>{
+    btn.onclick=()=>{ const fid=btn.dataset.reset; FACTION_CFG[fid]=JSON.parse(JSON.stringify(FACTION_CFG_DEFAULTS[fid]));
+      reseedFactionArchetype(fid); recompute(); buildLabHouses(); toast(`${fid} reset to default.`); };
+  });
+}
+function labResetHouses(){
+  for(const id in FACTION_CFG_DEFAULTS){ FACTION_CFG[id]=JSON.parse(JSON.stringify(FACTION_CFG_DEFAULTS[id])); reseedFactionArchetype(id); }
+  if(G.started){ for(const p of G.players){ p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap'); } recomputeIncome(); if(!G._headless) refreshHUD(); }
+  buildLabHouses(); toast('All houses reset to shipped defaults.');
+}
+// tab switch
+function labShowTab(tab){
+  const rules=tab==='rules';
+  $('labPaneRules').classList.toggle('hidden', !rules);
+  $('labPaneHouses').classList.toggle('hidden', rules);
+  $('labTabRules').classList.toggle('on', rules);
+  $('labTabHouses').classList.toggle('on', !rules);
+  if(rules) buildLabDials(); else buildLabHouses();
+}
+
 function labBarRow(label, segs){   // segs:[{w,col,title}] horizontal stacked bar
   let h=`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-family:'JetBrains Mono';font-size:10px">
     <span style="width:96px;color:var(--muted)">${label}</span>
@@ -4021,7 +4196,7 @@ async function labRun(){
   LAB_RUNNING=false; btn.disabled=false;
   renderLabResults();
 }
-function openLab(){ buildLabDials(); renderLabResults(); $('lab').classList.remove('hidden'); }
+function openLab(){ labShowTab('rules'); buildLabHouses(); renderLabResults(); $('lab').classList.remove('hidden'); }
 
 function openHelp(){ $('help').classList.remove('hidden'); }
 function closeHelp(){ $('help').classList.add('hidden'); try{localStorage.setItem('brassrails.seenHelp','1');}catch(e){} }
@@ -4040,6 +4215,9 @@ $('labBtnStart').onclick=openLab;
 $('labClose').onclick=()=>$('lab').classList.add('hidden');
 $('labRun').onclick=labRun;
 $('labReset').onclick=labResetDials;
+$('labTabRules').onclick=()=>labShowTab('rules');
+$('labTabHouses').onclick=()=>labShowTab('houses');
+$('labHousesReset').onclick=labResetHouses;
 $('techHead').onclick=()=>{ const hidden=$('techBody').classList.toggle('hidden'); $('techChevron').textContent=hidden?'▸':'▾'; };
 
 // keyboard: space = end turn / step · WASD + arrows pan the camera
@@ -4056,6 +4234,7 @@ addEventListener('blur',()=>panKeys.clear());
 
 // debug/QA handle (read-only window hook so headless tests can inspect Lab + game state)
 window.__lab={ get G(){return G;}, get BAL(){return BAL;}, get BAL_DEFAULTS(){return BAL_DEFAULTS;},
+  get FACTION_CFG(){return FACTION_CFG;}, get FACTION_CFG_DEFAULTS(){return FACTION_CFG_DEFAULTS;},
   get cur(){return LAB_CUR;}, get prev(){return LAB_PREV;}, get running(){return LAB_RUNNING;},
   selectUnit:(u)=>{ G.cur=0; selectUnit(u); refreshAll(); }, predict:(a,b)=>predictCombat(a,b) };
 
