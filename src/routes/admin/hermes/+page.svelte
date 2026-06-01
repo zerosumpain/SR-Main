@@ -54,11 +54,12 @@
       <div class="kicker">Hermes</div>
       <h1>Engine sessions, health, service control</h1>
       <p class="sub">
-        {#if data.canManage}
+        {#if data.direct}
           Running on <code>{data.hostname}</code>. Service-control actions are live.
+        {:else if data.canManage}
+          Proxying to homeserv over Tailscale (this host: <code>{data.hostname}</code>). Reads + actions are live.
         {:else}
-          Read-only view (host <code>{data.hostname}</code> is not the Hermes runtime).
-          Visit <code>http://homeserv:5173/admin/hermes</code> to manage services.
+          Unavailable — host <code>{data.hostname}</code> has no homeserv route configured.
         {/if}
       </p>
     </div>
@@ -252,6 +253,18 @@
       Browse, full-text-search, and read the engine's real session store (with
       jkai-conversation correlation) in the
       <a href="/admin/hermes/sessions">session inspector</a>.
+    </p>
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Cron jobs</span>
+      <a class="nm-sec-meta sessions-link" href="/admin/hermes/cron">Open cron →</a>
+    </div>
+    <p class="sessions-note mono">
+      Schedule engine jobs — reminders, watchdogs, recurring agent runs — on the
+      <a href="/admin/hermes/cron">cron authoring panel</a>. Distinct from the
+      Postgres workflow schedules at <a href="/admin/scheduled">/admin/scheduled</a>.
     </p>
   </section>
 </div>

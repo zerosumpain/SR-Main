@@ -26,6 +26,12 @@ const PUBLIC_PATHS = [
   '/api/scraper/run',
   '/api/scraper/interactive',
   '/api/scraper/node',
+  // VPS→homeserv proxy for the Hermes admin pages (session inspector, telemetry,
+  // cron). Auth is enforced per-handler via a mandatory HERMES_BRIDGE_SECRET
+  // Bearer (assertHermesServiceRequest) — not Google OAuth, because the caller
+  // is the VPS reaching homeserv over Tailscale. Dropping the cookie gate here
+  // does NOT make the data public; the bearer is the real gate.
+  '/api/admin/hermes',
 ];
 
 export function isPublicPath(pathname: string): boolean {
