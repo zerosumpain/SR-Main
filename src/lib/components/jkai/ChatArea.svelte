@@ -1156,6 +1156,27 @@
     }
   }
 
+  // Skill picker — pins a jkai domain skill for the conversation (general chat),
+  // sent as `pinnedSkill` on each turn. 'Auto' (null) leaves jkai-general to
+  // route. Switchable any time; sticky until changed. Server + adapter both
+  // allowlist the value, so an off-list name can't load an arbitrary skill.
+  let pinnedSkill = $state<string | null>(null);
+  let skillMenuOpen = $state(false);
+  const SKILL_OPTIONS: { value: string | null; label: string }[] = [
+    { value: null, label: 'Auto' },
+    { value: 'jkai-blog', label: 'Blog' },
+    { value: 'jkai-gmail', label: 'Email' },
+    { value: 'jkai-health', label: 'Health' },
+    { value: 'jkai-research', label: 'Research' },
+    { value: 'jkai-scheduled', label: 'Scheduled' },
+    { value: 'jkai-scraper', label: 'Scraper' },
+    { value: 'jkai-home-assistant', label: 'Home' },
+    { value: 'jkai-files', label: 'Files' },
+    { value: 'jkai-utility', label: 'Utility' },
+    { value: 'jkai-node-builder', label: 'Node Builder' },
+  ];
+  const pinnedSkillLabel = $derived(SKILL_OPTIONS.find((o) => o.value === pinnedSkill)?.label ?? 'Auto');
+
   // Model switcher — switchable only on a fresh conversation (no messages yet).
   // The conversation's model locks after the first message (the PATCH returns
   // 409, and a mid-chat switch churns the prefix cache), so after that we just
@@ -1301,6 +1322,7 @@
           conversationId,
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           useIntelContext,
+          pinnedSkill: pinnedSkill ?? undefined,
         }),
       });
 
@@ -1457,6 +1479,39 @@
       </p>
     </div>
     {#if hermesEnabled && conversationId}
+      <div class="model-switcher skill-switcher">
+        <button
+          type="button"
+          class="model-btn"
+          onclick={() => (skillMenuOpen = !skillMenuOpen)}
+          disabled={loading}
+          title="Pin a domain skill for this chat (or Auto-route)"
+        >
+          <span class="skill-glyph" aria-hidden="true">◈</span>
+          <span class="model-name">{pinnedSkillLabel}</span>
+          <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        {#if skillMenuOpen}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
+          <div class="model-menu" role="listbox" aria-label="Pin a skill">
+            {#each SKILL_OPTIONS as opt (opt.label)}
+              <button
+                type="button"
+                role="option"
+                aria-selected={opt.value === pinnedSkill}
+                class="model-opt"
+                class:active={opt.value === pinnedSkill}
+                onclick={() => { pinnedSkill = opt.value; skillMenuOpen = false; }}
+              >
+                <span class="model-opt-name">{opt.label}</span>
+                {#if opt.value === null}<span class="model-opt-provider">auto-route</span>{/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <div class="model-switcher">
         {#if messages.length === 0 && modelOptions.length > 1}
           <button
@@ -2030,6 +2085,7 @@
   .model-opt.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
   .model-opt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .model-opt-provider { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .skill-glyph { font-size: 11px; color: var(--accent); flex-shrink: 0; line-height: 1; }
 
   /* ── Dangerous-command approval card (structured `pendingApproval`) ── */
   .approval-card {

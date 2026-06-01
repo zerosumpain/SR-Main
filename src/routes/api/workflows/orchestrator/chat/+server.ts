@@ -33,6 +33,16 @@ const MAX_MESSAGE_LEN = 20_000;
 const isBusServedTool = (toolName: string): boolean =>
   toolName === JKAI_EXTENDED_TOOL.name || isRegisteredTool(toolName);
 
+// jkai domain skills a user may pin from the composer (general chat only). When
+// pinned, the turn is sent as kind='skill' with the name in kindId so the Hermes
+// adapter loads it directly, skipping jkai-general's LLM routing turn. Validated
+// here AND allowlisted again adapter-side. MUST match _PICKABLE_SKILLS in
+// ~/.hermes-jkai/extensions/jkai_platform/adapter.py.
+const PICKABLE_SKILLS = new Set([
+  'jkai-blog', 'jkai-gmail', 'jkai-health', 'jkai-research', 'jkai-scheduled',
+  'jkai-scraper', 'jkai-home-assistant', 'jkai-files', 'jkai-utility', 'jkai-node-builder',
+]);
+
 // Feature flag (Hermes Phase 1). When `JKAI_HERMES_CANVAS_CHAT=1`, canvas
 // orchestrator chat is proxied through the Hermes gateway via HermesClient +
 // JkaiPlatformAdapter; otherwise we keep running the legacy generalChat /
@@ -114,13 +124,13 @@ function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null
 
 async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
   const { request } = reqEvent;
-  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string; silent?: boolean };
+  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string; silent?: boolean; pinnedSkill?: string };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const { message, workflowId, conversationId, chatNodeId, silent } = body;
+  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill } = body;
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
   }
@@ -144,7 +154,24 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId ?? Date.now()}`;
   const userKey = conversationId ?? chatNodeId ?? 'anon';
   const sessionId = `sess_${userKey}_${chatId}`;
-  const kindId = chatId;
+
+  // Pinned-skill override (general chat only): when the user pins a jkai domain
+  // in the composer, force kind='skill' so the Hermes adapter loads that skill
+  // directly (name in kindId), skipping jkai-general's LLM routing turn. Ignored
+  // in canvas context (jkai-canvas owns that) and validated against the
+  // allowlist. For 'skill', kindId carries the skill name rather than chatId —
+  // safe because the inbound verifier checks the token scope against the request
+  // body (they agree by construction) and tool/MCP routing keys on chat_id.
+  const pinnedSkillName =
+    !workflowId && typeof pinnedSkill === 'string' && PICKABLE_SKILLS.has(pinnedSkill)
+      ? pinnedSkill
+      : null;
+  const kind = workflowId
+    ? ('canvas_chat' as const)
+    : pinnedSkillName
+      ? ('skill' as const)
+      : ('manual' as const);
+  const kindId = pinnedSkillName ?? chatId;
 
   const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
@@ -274,10 +301,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // as it always has.
   (async () => {
     console.log(`[hermes-chat] Job ${jobId} started — workflowId=${workflowId ?? 'none'} chatId=${chatId} message="${message.slice(0, 100)}"`);
-    // kind drives Hermes' auto_skill: 'canvas_chat' → jkai-canvas (workflow DAG
-    // edits); 'manual' → jkai-general (top-level chat router for /jkai). Without
-    // a workflowId we're in the general chat hub, not the canvas.
-    const kind = workflowId ? 'canvas_chat' as const : 'manual' as const;
+    // `kind` / `kindId` were resolved above (they gate the auth scope + the
+    // adapter's skill selection): 'canvas_chat' → jkai-canvas, 'skill' → the
+    // pinned jkai-* domain (carried in kindId), 'manual' → jkai-general routing.
     try {
       await client.sendMessage({
         chatId,

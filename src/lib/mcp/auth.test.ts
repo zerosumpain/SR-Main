@@ -77,4 +77,16 @@ describe('mcp/auth bridge tokens', () => {
     // After the JSON payload migration, this MUST verify cleanly:
     expect(result.ok).toBe(true);
   });
+
+  it('mints and verifies a kind="skill" token (in-chat skill picker)', () => {
+    // Must round-trip, and the Python verifier's VALID_KINDS must include
+    // 'skill' too or every pinned message 403s.
+    const pinned: TokenScope = { ...scope, kind: 'skill', kindId: 'jkai-blog' };
+    const token = mintBridgeToken(pinned, SECRET);
+    const result = verifyBridgeToken(token, pinned, SECRET);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.scope.kind).toBe('skill');
+    expect(result.scope.kindId).toBe('jkai-blog');
+  });
 });
