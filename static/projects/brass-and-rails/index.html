@@ -483,20 +483,89 @@ const MIN_CITY_DIST = 5;           // cities may not be founded within 5 tiles o
 function cityMinDist(){ return MIN_CITY_DIST; }
 const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
 const ALT_WIN_TURN = 48;            // alternative victories only open up late, after conquest's window
-const SCIENCE_WIN = 460;            // science banked AFTER all tech → host the Great Exhibition
+const SCIENCE_WIN = 280;            // science banked AFTER all tech → host the Great Exhibition (tree is now far costlier, so the bank threshold is lower)
 const ECON_WIN = 68;                // combined level of your cities → a railway empire (rewards going wide)
+
+/* ====================== BALANCE TUNABLES (grouped for live sliders) ======================
+   Every knob added in the 2026 balance overhaul lives here so a later stage can wire them to
+   sliders. Caps stop the multi-thousand warchest; rubber-band keeps the race contested; capture
+   friction + coalition targeting break the snowball; the Kelly taper + tech scaling de-runaway the
+   wide/swarm meta. Keep names descriptive — these ARE the dials. */
+const BAL = {
+  // --- A1 universal resource caps (food already capped separately) ---
+  // cap = base + perCity*#cities + perInfra*total-improvements. Surplus above the cap spoils.
+  woodCap:   { base: 30, perCity: 18, perInfra: 6 },
+  stoneCap:  { base: 24, perCity: 14, perInfra: 5 },
+  prodCap:   { base: 40, perCity: 22, perInfra: 7 },   // production hoard was the worst offender
+  // --- A1 challenger / rubber-band: trailing houses get cheaper science & production ---
+  rubberMaxGap: 110,    // score gap (vs current leader) at which the discount saturates (kicks in earlier)
+  rubberSciMax: 0.50,   // up to -50% science cost when far behind
+  rubberProdMax:0.40,   // up to -40% production cost (build discount) when far behind
+  rubberIncomeMax:0.40, // up to +40% prod/sci income when far behind (a conquered house can rebuild)
+  // --- A1 costlier conquest ---
+  captureProdCost: 10,  // production paid by the captor on taking a city (friction; clamped to stock)
+  unrestTurns: 5,       // freshly-captured city yields nothing & can't grow for this many turns
+  captureScoreLag: 5,   // a captured city scores at reduced value for this many turns (no instant snowball)
+  captureScaleCost: 3,  // extra production per city already owned (wide conquest = diminishing returns)
+  unrestScaleMax: 4,    // a large empire digests captures slower (up to +this many unrest turns)
+  defenderCityBonus: 0.35, // extra defensive multiplier for a unit standing in a friendly city
+  lastStandBonus: 1.0,  // a house's FINAL city defends much harder → fewer early eliminations / blowouts
+  fewCitiesBonus: 0.4,  // a house down to its last 2 cities also defends harder (slows the death spiral)
+  // --- A1 coalition targeting: how hard the AI gangs up on the score leader ---
+  coalitionLeaderBias: 6.0,   // bonus weight in target selection for hitting the current score leader
+  coalitionLeadMargin: 1.08,  // only gang up once the leader is >8% ahead of the field mean
+  mercyTurn: 40,        // before this turn, AI avoids finishing off a house at its last city (non-leaders)
+  earlyMercyPenalty: 5, // siege-priority penalty for piling onto a soon-to-be-eliminated weak house
+  // --- A3 Kelly / wide taper: the +1⚒/+1🔬 per-city bonus tapers after N cities ---
+  econBonusFull: 3,     // first N cities give the full per-city econ bonus
+  econBonusTaper: 0.4,  // each city beyond that contributes only this fraction
+  // --- A3 laggard buffs ---
+  turtleHoldScore: 0.6, // score per (city-level × turns-held-without-loss) — rewards holding ground
+  industrialProdToScore: 0.10, // industrial houses convert capped prod overflow into a little score
+  // --- A2 tech scaling: steeper so the tree no longer auto-completes for everyone ---
+  techTierMult: 1.0,    // multiplies the per-tier base cost
+  techCountPow: 1.55,   // TAIL cost grows with (techs-beyond-free)^this — keeps the late tree partial
+  techFreeDepth: 6,     // first N techs scale mildly (steam→Ironclad reachable); tail ramps hard after
+  techCityMult: 1.0,    // multiplies the per-city term
+  scholarSciCost: 0.60, // scholar/pease science cost multiplier (real edge — bites harder now)
+};
+function infraCount(p){ let n=0; for(const c of G.cities){ if(c.owner===p.id) n+=cityImprovements(c); } return n; }
+// universal resource cap (scaled to empire size) — surplus spoils, killing the warchest snowball
+function resourceCap(p, kind){
+  const k=BAL[kind]; if(!k) return Infinity;
+  const nC=G.cities.filter(c=>c.owner===p.id).length;
+  return k.base + k.perCity*nC + k.perInfra*infraCount(p);
+}
+// how far behind the leader is this house? returns 0..1 (1 = saturated rubber-band help)
+// A1 coalition targeting: who is the current score leader, and only if they're meaningfully ahead
+// of the field mean (so the AI gangs up on a front-runner instead of fighting random neighbours).
+function coalitionLeaderId(){
+  if(!G.players) return null;
+  const alive=G.players.filter(p=>p.alive); if(alive.length<3) return null;
+  let lead=null,ls=-1e9,sum=0; for(const p of alive){ const s=score(p); sum+=s; if(s>ls){ls=s;lead=p;} }
+  const mean=sum/alive.length;
+  if(lead && ls > mean*BAL.coalitionLeadMargin) return lead.id;
+  return null;
+}
+function challengerFactor(p){
+  if(!G.players||G.players.length<2) return 0;
+  let lead=-1e9; for(const o of G.players){ if(!o.alive) continue; const s=score(o); if(s>lead) lead=s; }
+  const mine=score(p);
+  const gap=lead-mine; if(gap<=0) return 0;
+  return clamp(gap/BAL.rubberMaxGap, 0, 1);
+}
 
 const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:3, food:5, hp:10, atk:0, def:1, move:1, range:1, tech:null, domain:'land', role:'settle', glyph:'⌂', desc:'A colony of settlers — costs food. Founds new villages on open land.'},
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
   guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
-  armed:    {name:'Armed Guard',   cost:3, wood:3, hp:12, atk:3, def:2, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard with steel weapons forged from felled timber — harder-hitting. Needs wood.'},
+  armed:    {name:'Armed Guard',   cost:3, wood:2, hp:14, atk:4, def:3, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard with steel weapons forged from felled timber — a worthwhile upgrade. Needs wood.'},
   pike:     {name:'Skerne Pike',   cost:3, stone:2, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry', domain:'land', role:'def', glyph:'▮', desc:'Stalwart defender behind stone works — hard to dislodge. Needs stone.'},
-  pony:     {name:'Pit Pony',      cost:3, hp:10, atk:2, def:1, move:2, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Swift raider bred in the colliery.'},
-  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', desc:'Long-range siege piece on a timber carriage. Strikes without retaliation.'},
-  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:15, atk:4, def:3, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
-  skylark:  {name:'Skylark',       cost:8, wood:3, hp:10, atk:3, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
-  nightmail:{name:'Night Mail',    cost:7, wood:2, hp:10, atk:4, def:1, move:2, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — the mail train that runs by dark.'},
+  pony:     {name:'Pit Pony',      cost:2, hp:10, atk:3, def:1, move:3, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Cheap, swift raider bred in the colliery — out-paces and out-numbers.'},
+  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:11, atk:6, def:1, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', desc:'Long-range siege piece — wrecks walls & garrisons. Strikes without retaliation.'},
+  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:20, atk:6, def:5, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works — a real powerhouse.'},
+  skylark:  {name:'Skylark',       cost:8, wood:3, hp:12, atk:5, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
+  nightmail:{name:'Night Mail',    cost:6, wood:1, hp:11, atk:6, def:1, move:3, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — a fast, hard-hitting assassin train that runs by dark.'},
   monitor:  {name:'Skerne Monitor',cost:6, wood:3, hp:14, atk:4, def:3, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, glyph:'⛴', desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port.'},
   lighter:  {name:'Tees Lighter',  cost:5, wood:2, hp:12, atk:0, def:1, move:3, range:0, tech:'harbours', domain:'sea', role:'transport', cargo:2, port:true, glyph:'⛵', desc:'A flat-bottomed barge — ferries up to 2 land units across the water. Needs a Port.'},
   colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
@@ -535,7 +604,7 @@ const FACTIONS = [
   {id:'stephenson',name:'Stephenson Enginewrights',color:0xd64b3f, motto:'Steam & steel',               bonus:'move',    bonusTxt:'+1 move'},
   {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+2 food/city, +1 vision'},
   {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+25% hill/mtn def'},
-  {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+15% attack'},
+  {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+5% attack'},
   {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −20%'},
   {id:'rovers',    name:'Quaker Rovers',          color:0xe4e4e4, motto:'Forward, ever forward',       bonus:'cheap',   bonusTxt:'all units −1 ⚒'},
 ];
@@ -671,18 +740,42 @@ const playerById = (id)=>G.players.find(p=>p.id===id);
 const GENOME_KEYS=['aggression','expansion','economy','defense','tech','risk'];
 const GENOME_BUDGET=3.0;   // sum of the 6 traits is normalised to this → trade-offs are enforced
 const ARCHETYPES = {
-  warlord:    {aggression:.85,expansion:.45,economy:.30,defense:.40,tech:.35,risk:.75},  // mass/aggression
-  turtle:     {aggression:.20,expansion:.30,economy:.55,defense:.90,tech:.45,risk:.20},  // defensive
+  warlord:    {aggression:.78,expansion:.45,economy:.35,defense:.42,tech:.40,risk:.68},  // mass/aggression (softened)
+  turtle:     {aggression:.20,expansion:.35,economy:.62,defense:.88,tech:.50,risk:.20},  // defensive (more econ/tech to convert holds to wins)
   settler:    {aggression:.35,expansion:.90,economy:.65,defense:.40,tech:.30,risk:.50},  // expansionist
-  scholar:    {aggression:.30,expansion:.40,economy:.55,defense:.45,tech:.90,risk:.40},  // science/tech
-  industrial: {aggression:.40,expansion:.55,economy:.90,defense:.45,tech:.55,risk:.35},  // economy/tall
-  swarm:      {aggression:.75,expansion:.60,economy:.40,defense:.30,tech:.20,risk:.85},  // volume/mass, low tech
+  scholar:    {aggression:.30,expansion:.42,economy:.58,defense:.45,tech:.92,risk:.40},  // science/tech
+  industrial: {aggression:.40,expansion:.55,economy:.92,defense:.45,tech:.58,risk:.35},  // economy/tall
+  swarm:      {aggression:.60,expansion:.58,economy:.52,defense:.36,tech:.34,risk:.66},  // volume/mass, low tech (softened)
 };
 const ARCH_LIST=Object.keys(ARCHETYPES);
+// A3 anti-champion: which traits COUNTER a dominant archetype. Losing houses nudge slightly toward
+// these when one archetype has been winning repeatedly — the field adapts to dethrone a champion.
+const ARCH_COUNTER = {
+  warlord:    {defense:+1, tech:+1},      // out-defend & out-tech raw aggression
+  swarm:      {defense:+1, economy:+1, tech:+1},   // walls + economy + tech weather the rush
+  scholar:    {aggression:+1, risk:+1},   // rush the bookish before they spike
+  industrial: {aggression:+1, expansion:+1}, // pressure & out-expand the tall economy
+  settler:    {aggression:+1, tech:+1},   // punish the over-extended expander
+  turtle:     {expansion:+1, economy:+1}, // go wide around the shell you can't crack
+};
+// EXPLICIT per-faction archetype assignment (replaces the old hash, which gave 0 warlord and
+// doubled others). All six archetypes are represented; the two aggressive houses anchor
+// warlord/swarm, the river/scholar houses take scholar/turtle, etc.
+const FACTION_ARCHETYPE = {
+  kelly:     'industrial', // House Kelly: econ bonus → tall industry (nerfed off runaway swarm)
+  pease:     'scholar',    // Pease Quakers: science discount → scholar
+  stephenson:'warlord',    // Stephenson Enginewrights: +move, steam & steel → warlord aggression
+  watermen:  'settler',    // Skerne Watermen: river food → expansionist settler
+  highland:  'turtle',     // Teesdale Highlanders: hill/mtn def → turtle
+  iron:      'swarm',      // Cleveland Ironmasters: +atk → swarm volume
+  scholars:  'scholar',    // Bishopgate Scholars: science discount → scholar
+  rovers:    'warlord',    // Quaker Rovers: cheap units, "forward ever forward" → warlord
+};
 function normGenome(g){ let s=0; for(const k of GENOME_KEYS) s+=(g[k]||0); if(s<=0) s=1; const f=GENOME_BUDGET/s; const o={}; for(const k of GENOME_KEYS) o[k]=clamp(g[k]*f,0.05,0.97); return o; }
 function defaultGenome(){ return normGenome({aggression:.5,expansion:.5,economy:.5,defense:.5,tech:.5,risk:.5}); }
-// deterministic per-faction archetype attractor — gives every house a stable personality seed
+// per-faction archetype attractor — explicit map (warlord now present, none doubled at its expense)
 function factionArchetype(fid){
+  if(FACTION_ARCHETYPE[fid]) return FACTION_ARCHETYPE[fid];
   let h=0; for(let i=0;i<fid.length;i++) h=(h*31+fid.charCodeAt(i))>>>0;
   return ARCH_LIST[h % ARCH_LIST.length];
 }
@@ -904,17 +997,21 @@ function cityYields(c){
 // PERF: sum per-city yields (each over a small neighbourhood) instead of an O(N^2) board sweep.
 function recomputeIncome(){
   for(const p of G.players){ p.foodIncome=0;p.woodIncome=0;p.stoneIncome=0;p.prodIncome=0;p.sciIncome=0; }
-  for(const c of G.cities){ const p=playerById(c.owner); if(!p) continue; const r=workRadius(c);
+  for(const c of G.cities){ const p=playerById(c.owner); if(!p) continue; if(c.unrest>0) continue; const r=workRadius(c);   // unrest cities yield nothing
     for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){ const x=c.x+dx,z=c.z+dz; if(!inB(x,z))continue; const t=tileAt(x,z);
       if(t.cityId!==c.id||t.city||!t.worked) continue; const y=tileYield(t);
       p.foodIncome+=y.food;p.woodIncome+=y.wood;p.stoneIncome+=y.stone;p.prodIncome+=y.prod;p.sciIncome+=y.sci; } }
   for(const p of G.players){ const cs=G.cities.filter(c=>c.owner===p.id);
-    for(const c of cs){ p.prodIncome+=1+(c.bonusProd||0)+(c.isCapital?1:0); p.sciIncome+=1+(c.isCapital?1:0); p.foodIncome+=1+(c.isCapital?1:0); if(p.faction.bonus==='vision') p.foodIncome+=2; }
-    const n=cs.length; if(p.techs.has('trade')){ p.prodIncome+=n; p.sciIncome+=n; } if(p.faction.bonus==='econ'){ p.prodIncome+=n; p.sciIncome+=n; } }
+    for(const c of cs){ if(c.unrest>0) continue; p.prodIncome+=1+(c.bonusProd||0)+(c.isCapital?1:0); p.sciIncome+=1+(c.isCapital?1:0); p.foodIncome+=1+(c.isCapital?1:0); if(p.faction.bonus==='vision') p.foodIncome+=2; }
+    const n=cs.length; if(p.techs.has('trade')){ p.prodIncome+=n; p.sciIncome+=n; }
+    // Kelly's econ bonus TAPERS: first econBonusFull cities give the full +1⚒/+1🔬, extras only a
+    // fraction — so going wide no longer compounds into a runaway (A3 nerf).
+    if(p.faction.bonus==='econ'){ const full=Math.min(n,BAL.econBonusFull); const taper=Math.max(0,n-BAL.econBonusFull)*BAL.econBonusTaper;
+      const eb=Math.round(full+taper); p.prodIncome+=eb; p.sciIncome+=eb; } }
 }
 // spend the player's food pool to tick up cities whose improvement-unlocked max exceeds their level
 function growCities(p){
-  for(const c of G.cities){ if(c.owner!==p.id) continue;
+  for(const c of G.cities){ if(c.owner!==p.id) continue; if(c.unrest>0) continue;   // a city in unrest can't grow
     if(c.level<maxCityLevel(c) && p.food>=growCost(c)){ p.food-=growCost(c); c.level++; onCityLevel(c); recomputeTerritory(); }
   }
 }
@@ -930,7 +1027,10 @@ function onCityLevel(c){
 function playerUnitCap(p){ let cap=0; for(const c of G.cities){ if(c.owner===p.id) cap+=c.level+1; } return cap; }
 function playerUnitCount(p){ let n=0; for(const u of G.units){ if(u.owner===p.id&&u.hp>0) n++; } return n; }
 // resource cost of a unit type
-function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.faction.bonus==='cheap') prod=Math.max(1,prod-1); return {prod, wood:d.wood||0, stone:d.stone||0, food:d.food||0}; }
+function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.faction.bonus==='cheap') prod=Math.max(1,prod-1);
+  // challenger rubber-band: trailing houses build a touch cheaper so they can contest the leader
+  if(p){ const cf=challengerFactor(p); if(cf>0) prod=Math.max(1,Math.round(prod*(1-BAL.rubberProdMax*cf))); }
+  return {prod, wood:d.wood||0, stone:d.stone||0, food:d.food||0}; }
 function canAfford(p,tid){ const c=unitCost(tid,p); return p.prod>=c.prod && (p.wood||0)>=c.wood && (p.stone||0)>=c.stone && (p.food||0)>=c.food; }
 function payFor(p,tid){ const c=unitCost(tid,p); p.prod-=c.prod; p.wood=(p.wood||0)-c.wood; p.stone=(p.stone||0)-c.stone; p.food=(p.food||0)-c.food; }
 
@@ -938,8 +1038,18 @@ function payFor(p,tid){ const c=unitCost(tid,p); p.prod-=c.prod; p.wood=(p.wood|
 function techCost(p,id){
   const t=TECHS[id];
   const nCities=G.cities.filter(c=>c.owner===p.id).length;
-  let cost = t.tier*(nCities+3);
-  if(p.faction.bonus==='tech') cost*=(p.faction.id==='scholars'?0.8:0.75);
+  // STEEPER scaling (A2): a gentle tier weight (so tier-2 unit techs stay reachable) × cities, then
+  // multiplied by (techs-known)^techCountPow so the TAIL of the tree costs dramatically more — the
+  // tree no longer auto-completes for everyone, but mid-tier units (steam→ironclad) still unlock.
+  let cost = BAL.techTierMult*(0.5+0.5*t.tier)*(BAL.techCityMult*nCities+3);
+  // the first techFreeDepth techs scale mildly (so steam→Ironclad lands mid-game); only the TAIL of
+  // the tree ramps hard via techCountPow, so completion stays partial without starving unit techs.
+  const depth=Math.max(0, p.techs.size - BAL.techFreeDepth);
+  cost *= (1 + 0.12*Math.min(p.techs.size,BAL.techFreeDepth)) * Math.pow(1 + depth, BAL.techCountPow);
+  // scholar/pease science discount — now a REAL edge (bites harder than the generic tech bonus)
+  if(p.faction.bonus==='tech') cost*=BAL.scholarSciCost;
+  // challenger rubber-band: houses trailing the leader research cheaper (contested race, not handouts)
+  cost *= (1 - BAL.rubberSciMax*challengerFactor(p));
   return Math.max(2,Math.round(cost));
 }
 function canResearch(p,id){
@@ -1026,13 +1136,19 @@ function defenseBonus(u){
   if(t.terrain==='denseforest') b=1.45;
   if(t.terrain==='mountain') b=1.5;
   const c=cityAt(u.x,u.z);
-  if(c && c.owner===u.owner){ b=Math.max(b, c.walls?1.5:1.25); }   // cities are defensible but not impregnable
+  if(c && c.owner===u.owner){ b=Math.max(b, c.walls?1.5:1.25) + BAL.defenderCityBonus;   // cities are defensible (A1: stronger garrison) but not impregnable
+    // LAST STAND: a house's final city defends much harder, so houses survive longer and stay in the
+    // score race rather than being snowballed out early (keeps the field contested, fewer blowouts).
+    const myCities=G.cities.filter(cc=>cc.owner===u.owner).length;
+    if(myCities<=1) b += BAL.lastStandBonus;
+    else if(myCities<=2) b += BAL.fewCitiesBonus;
+  }
   const p=playerById(u.owner);
   if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=1.25;
   return b;
 }
 function predictCombat(att,def){
-  const A=UNIT_TYPES[att.type].atk * (playerById(att.owner)?.faction.bonus==='atk'?1.15:1);
+  const A=UNIT_TYPES[att.type].atk * (playerById(att.owner)?.faction.bonus==='atk'?1.05:1);
   const D=UNIT_TYPES[def.type].def;
   const aF=A*(att.hp/att.maxHp);
   const dF=D*(def.hp/def.maxHp)*defenseBonus(def);
@@ -1070,6 +1186,12 @@ function killUnit(u){ u.hp=0; const i=G.units.indexOf(u); if(i>=0) G.units.splic
 function captureCity(p,c){
   const prev=playerById(c.owner);
   if(prev){ logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`); recRel(G._cap, p.id, prev.id); }   // who takes whose cities
+  // A1 CONQUEST FRICTION: pay a production cost (RISING with empire size, so a wide conqueror faces
+  // diminishing returns), and the new city is in UNREST for a few turns — it yields nothing and can't
+  // grow until order is restored. Momentum is no longer free, and the swarm can't roll the map.
+  const nOwn=G.cities.filter(cc=>cc.owner===p.id).length;
+  p.prod = Math.max(0, (p.prod||0) - BAL.captureProdCost - nOwn*BAL.captureScaleCost);
+  c.unrest = BAL.unrestTurns + Math.min(BAL.unrestScaleMax, Math.floor(nOwn/3));   // bigger empires digest slower
   c.owner=p.id; tileAt(c.x,c.z).owner=p.id; c.walls=false;
   if(c.isCapital){ c.isCapital=false; if(prev) prev.capitalId=null; }
   recomputeTerritory();
@@ -1833,7 +1955,8 @@ function renderCityPanel(){
   const imps=cityImprovements(c); const lcap=cityLandCap(c);
   const prog = atMax ? 1 : clamp((p.food||0)/gc,0,1);
   let h=`<div class="unit-head"><div class="unit-emoji" style="color:#${owner.color.toString(16).padStart(6,'0')}">${c.isCapital?'★':'⌂'}</div>
-    <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}/${CITY_MAX} · border ${borderRadius(c)}</div></div></div>
+    <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}/${CITY_MAX} · border ${borderRadius(c)}${c.unrest>0?` · <span style="color:#e87a5a">⚑ unrest ${c.unrest}t</span>`:''}</div></div></div>
+    ${c.unrest>0?`<div class="legend" style="margin-top:4px;color:#e87a5a">Newly captured — in unrest for <b>${c.unrest}</b> more turn(s): yields nothing & cannot grow until order is restored.</div>`:''}
     <div class="hpbar" style="background:#2a2412"><i style="width:${Math.round(prog*100)}%;background:linear-gradient(90deg,var(--amber),var(--amber2))"></i></div>
     <div class="legend" style="margin-top:4px">${c.level<maxL?`Ready to grow — next level costs <b>${gc}</b> 🌾 (you have ${p.food||0})`:(c.level>=Math.min(CITY_MAX,lcap)?'At the limit of its land':`Build <b>infrastructure</b> nearby to unlock level ${c.level+1}`)} ${c.walls?'· walled':''}</div>
     <div class="legend" style="margin-top:2px">Improvements: <b>${imps}</b> built → caps growth at Lv <b>${maxL}</b></div>
@@ -2060,8 +2183,14 @@ function aiResearch(p,thoughts,pr){
   // science/aggression houses push military/advanced techs. Order shifts with the genome.
   const econLean = (pr?pr.econDrive+pr.expandDrive:g.economy+g.expansion) > 1.05;
   const econFirst=['husbandry','forestry','harbours','ironworking','milling','masonry','riding','trade','steam','espionage','aeronautics','telegraphy'];
-  const milFirst =['masonry','ironworking','riding','husbandry','forestry','steam','trade','milling','harbours','espionage','aeronautics','telegraphy'];
+  const milFirst =['masonry','ironworking','riding','steam','husbandry','forestry','espionage','trade','milling','aeronautics','harbours','telegraphy'];
   let order = econLean ? econFirst : milFirst;
+  // aggressive/scholar houses chase the techs that unlock their doctrine's powerhouse units
+  // (steam→Ironclad, aeronautics→Skylark, espionage→Night Mail) so advanced units actually appear
+  if((pr?pr.aggDrive:g.aggression)>0.55 || (pr?pr.techDrive:g.tech)>0.6){
+    const unitTechs=['masonry','ironworking','steam','riding','espionage','aeronautics'];
+    order=[...unitTechs.filter(t=>!order.slice(0,3).includes(t)), ...order].filter((t,i,a)=>a.indexOf(t)===i);
+  }
   // island-locked houses MUST get Harbours to escape by sea — pull it to the front
   if(!p.techs.has('harbours') && !hasLandExpansion(p)) order=['harbours',...order.filter(t=>t!=='harbours')];
   for(const id of order){ if(canResearch(p,id)) want.push(id); }
@@ -2130,7 +2259,7 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   if(!buildCity) return null;
   // standing-army cap scales with the house's aggression/mass style — swarm & warlord houses
   // field big armies; turtles & scholars keep them small. This makes mass-vs-tech visibly different.
-  const armyCap = Math.round(myCities.length*(2 + 3.5*pr.aggDrive + 2.5*pr.massStyle) + 2);
+  const armyCap = Math.round(myCities.length*(2 + 2.6*pr.aggDrive + 1.8*pr.massStyle) + 2);  // trimmed: curbs warlord/swarm runaway armies
   const atCap = army.length >= armyCap;
   const avail=(tid)=>{ const d=UNIT_TYPES[tid]; return (!d.tech||p.techs.has(d.tech)); };
   const cost=(tid)=>{ let c=UNIT_TYPES[tid].cost; if(p.faction.bonus==='cheap') c=Math.max(1,c-1); return c; };
@@ -2138,9 +2267,12 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   // capital defence first (defendCapital lesson)
   const cap=G.cities.find(c=>c.id===p.capitalId)||myCities[0];
   const capDef = cap? myUnits.filter(u=>cheb(u.x,u.z,cap.x,cap.z)<=1&&UNIT_TYPES[u.type].def>=2).length : 99;
-  if(cap && capDef<homeNeed && canAfford(p,'guard')){
-    // prefer a stone Pike for defence when stone allows, else a Guard
-    const t = (avail('pike') && canAfford(p,'pike') && rnd()<0.55) ? 'pike':'guard';
+  if(cap && capDef<homeNeed && (canAfford(p,'guard')||canAfford(p,'pike')||canAfford(p,'armed'))){
+    // prefer real defenders — stone Pike, then Armed Guard (wood) — and only fall back to a plain Guard
+    let t='guard';
+    if(avail('pike') && canAfford(p,'pike') && rnd()<0.7) t='pike';
+    else if(avail('armed') && canAfford(p,'armed') && (p.wood||0)>=2 && rnd()<0.6) t='armed';
+    else if(!canAfford(p,'guard') && canAfford(p,'pike')) t='pike';
     thoughts.push(`reinforce ${cap.name} (defend the capital, need ${homeNeed})`);
     return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t};
   }
@@ -2173,13 +2305,45 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   // build a military unit. mass/volume houses prefer CHEAP units in numbers; tech/scholar houses
   // hold out for the strongest AFFORDABLE advanced unit (fewer but better).
   const milChance = clamp(0.40 + 0.55*pr.aggDrive + 0.30*pr.massStyle - 0.30*pr.econDrive, 0.10, 0.96);
-  if(rnd()>=milChance) { if(canAfford(p,'guard') && army.length<massGate+2) return {city:buildCity,type:'guard'}; return null; }
-  const cheapFirst=['guard','pony','armed','gun','nightmail','ironclad','skylark'];
-  const techFirst =['skylark','ironclad','nightmail','gun','armed','pony','guard'];
-  // turtles favour the stone Pike defender; otherwise mass-style picks cheap, tech-style picks advanced
-  if(pr.defDrive>0.65 && avail('pike') && canAfford(p,'pike') && rnd()<0.6) return {city:buildCity,type:'pike'};
-  const milPriority = pr.massStyle>0.6 ? cheapFirst : techFirst;
-  for(const tid of milPriority){ if(!avail(tid)||!canAfford(p,tid)) continue; return {city:buildCity,type:tid}; }
+  if(rnd()>=milChance) { return null; }   // bank resources rather than reflexively spamming a Guard
+  // A2 ROSTER DIVERSITY: each ARCHETYPE has a distinct unit doctrine (preference order). We try the
+  // list in order but value ROLE diversity — if the army already leans one role, skip toward another.
+  // Lists deliberately spread builds across pony/gun/ironclad/nightmail/armed/skylark, not just guard.
+  const arch = (knowledge.factions[p.id]&&knowledge.factions[p.id].archetype) || factionArchetype(p.id);
+  const DOCTRINE = {
+    warlord:    ['pony','gun','armed','ironclad','nightmail','guard','skylark'],   // fast aggression + siege
+    swarm:      ['guard','pony','armed','gun','nightmail','ironclad','skylark'],   // cheap mass (kept)
+    scholar:    ['ironclad','skylark','gun','nightmail','armed','pike','guard'],   // few, advanced, tech-gated
+    turtle:     ['pike','armed','gun','guard','ironclad','nightmail','skylark'],   // walls & defenders
+    settler:    ['guard','armed','pike','pony','gun','ironclad','skylark'],        // balanced escorts
+    industrial: ['armed','ironclad','gun','pike','guard','nightmail','skylark'],   // quality over quantity
+  };
+  // stealth-leaning houses (high risk + aggression) slot Night Mail in early once unlocked
+  const stealthLean = pr.aggDrive>0.6 && pr.riskDrive>0.6;
+  let order = (DOCTRINE[arch]||DOCTRINE.swarm).slice();
+  if(stealthLean) order = ['nightmail','pony',...order.filter(t=>t!=='nightmail'&&t!=='pony')];
+  // turtles still throw up a Pike when the capital wants more shielding
+  if(pr.defDrive>0.65 && avail('pike') && canAfford(p,'pike') && rnd()<0.55) return {city:buildCity,type:'pike'};
+  // role-diversity: count what we already field; deprioritise a role we're already saturated in
+  const roleCount={}; for(const u of army){ const r=UNIT_TYPES[u.type].role; roleCount[r]=(roleCount[r]||0)+1; }
+  const guardCount=army.filter(u=>u.type==='guard').length;
+  const scoreUnit=(tid)=>{ const d=UNIT_TYPES[tid]; let s=0;
+    s += (d.atk+d.def)*0.5 + (d.range>1?1.2:0) + (d.role==='stealth'?1.0:0) + (d.role==='siege'?1.4:0);
+    s -= (roleCount[d.role]||0)*0.4;                 // diversity: penalise an over-stacked role
+    s -= d.cost*0.10;                                // mild cost sensitivity
+    if(tid==='guard') s -= 0.8 + guardCount*0.35;    // stop the guard-spam default — prefer upgrades
+    if(tid==='armed' && (p.wood||0)>=2) s += 1.6;    // an Armed Guard is a clear upgrade when wood allows
+    if(tid==='ironclad') s += 1.8;                   // the powerhouse — worth the premium once unlocked
+    if(pr.massStyle>0.7) s += (4-d.cost)*0.4;        // mass houses bias cheaper
+    return s; };
+  // walk the doctrine but, among the top affordable+available picks, take the best-scoring for diversity
+  const picks=order.filter(t=>avail(t)&&canAfford(p,t));
+  if(picks.length){
+    // tech/quality houses take the strongest; mass/swarm take the first (cheapest-doctrine) often
+    if(pr.massStyle>0.7 && rnd()<0.6) return {city:buildCity,type:picks[0]};
+    picks.sort((a,b)=>scoreUnit(b)-scoreUnit(a));
+    return {city:buildCity,type:picks[0]};
+  }
   if(canAfford(p,'guard') && army.length<massGate+2) return {city:buildCity,type:'guard'};
   return null;
 }
@@ -2263,6 +2427,7 @@ function capUnderThreat(p){
 
 function aiPickAttack(p,u,riskGate,thoughts){
   if(u.hasAttacked) return null;
+  const leader=coalitionLeaderId();   // A1: bias toward whoever is the current score leader
   const rng=UNIT_TYPES[u.type].range;
   // consider enemies reachable to within range after a move
   const reach=reachable(u);
@@ -2281,6 +2446,7 @@ function aiPickAttack(p,u,riskGate,thoughts){
     // breaking the garrison that holds an enemy city is a high priority (opens it for capture)
     const onCity=cityAt(e.x,e.z); const enemyCityHere = !!(onCity&&onCity.owner!==p.id);
     if(enemyCityHere) score+=0.9;
+    if(leader && e.owner===leader && p.id!==leader) score+=0.8;   // coalition: prefer striking the leader's forces
     const odds = clamp(ratio*0.8 + (pc.kills?0.4:0) - (pc.defDmg/Math.max(1,u.hp))*0.5, 0, 1);
     candidates.push({e,score,odds,pc,enemyCityHere});
   }
@@ -2323,9 +2489,16 @@ function aiExplore(p,u){
 // fog-aware: only cities it has actually scouted (cities are remembered once seen)
 function nearestEnemyCity(p,u){ let best=null,bd=1e9; for(const c of G.cities){ if(c.owner===p.id) continue; if(!seenByPlayer(p,c.x,c.z)) continue; const d=cheb(u.x,u.z,c.x,c.z); if(d<bd){bd=d;best=c;} } return best; }
 // opponent-aware: among scouted enemy cities, prefer the closest belonging to a rival known to be soft (low defence, low aggression)
-function bestEnemyCity(p,u){ let best=null,bs=-1e9; for(const c of G.cities){ if(c.owner===p.id||!seenByPlayer(p,c.x,c.z)) continue;
+function bestEnemyCity(p,u){ const leader=coalitionLeaderId(); let best=null,bs=-1e9;
+  const ownCount={}; for(const c of G.cities){ ownCount[c.owner]=(ownCount[c.owner]||0)+1; }
+  for(const c of G.cities){ if(c.owner===p.id||!seenByPlayer(p,c.x,c.z)) continue;
   const rp=rivalProfile(c.owner); const d=cheb(u.x,u.z,c.x,c.z);
-  const s = -d*0.5 - rp.def*3 - rp.aggr*0.8; if(s>bs){bs=s;best=c;} } return best; }
+  let s = -d*0.5 - rp.def*3 - rp.aggr*0.8;
+  if(leader && c.owner===leader && p.id!==leader) s += BAL.coalitionLeaderBias;   // gang up on the front-runner
+  // EARLY MERCY: don't pile onto a house already at its last city before mid-game — keeps the field
+  // alive longer and the race contested (eliminations were the main blowout driver).
+  if(ownCount[c.owner]<=1 && G.turn<BAL.mercyTurn && c.owner!==leader) s -= BAL.earlyMercyPenalty;
+  if(s>bs){bs=s;best=c;} } return best; }
 // fog-aware: only enemy units currently in its line of sight
 function nearestEnemyUnit(p,u){ let best=null,bd=1e9; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; if(!inSightOf(p,e.x,e.z)) continue; const d=cheb(u.x,u.z,e.x,e.z); if(d<bd){bd=d;best=e;} } return best; }
 function goodSettleSpot(x,z){ let res=0; for(const [nx,nz] of neigh8(x,z)){ if(tileAt(nx,nz).resource) res++; } return res>=1 || rnd()<0.4; }
@@ -2449,6 +2622,14 @@ function recordGameResult(winner, kind){
      rising rather than converging. */
   // population mean of each trait — we push houses AWAY from it so they don't all converge
   const popMean={}; for(const k of GENOME_KEYS){ let s=0,n=0; for(const f of FACTIONS){ const gg=knowledge.factions[f.id]?.genome; if(gg){ s+=gg[k]||0; n++; } } popMean[k]=n?s/n:0.5; }
+  // A3 ANTI-CHAMPION: find the most-dominant archetype over RECENT games. If one style is running away
+  // across games, LOSING houses will nudge toward its counter so the field adapts to dethrone it.
+  let domArch=null; { const recent=knowledge.history.slice(-20); const tally={};
+    for(const h of recent) if(h.warch) tally[h.warch]=(tally[h.warch]||0)+1;
+    let bd=0; for(const a in tally){ if(tally[a]>bd){ bd=tally[a]; domArch=a; } }
+    if(bd < Math.max(3, recent.length*0.34)) domArch=null;   // only react to a CLEAR champion
+  }
+  const counter = domArch? ARCH_COUNTER[domArch] : null;
   for(const p of G.players){
     const fk=knowledge.factions[p.id]||(knowledge.factions[p.id]={genome:{...p.genome},wins:0,losses:0,archetype:factionArchetype(p.id)});
     const won=(p.id===winner.id);
@@ -2477,6 +2658,8 @@ function recordGameResult(winner, kind){
       if(s.founded>=3 && s.peakArmy<=s.founded){ ng.expansion=clamp(ng.expansion-0.07,0.05,0.97); bump('noOverExtend'); }
       if((winner.stats.techPeak||0)-(s.techPeak||0)>=2){ ng.tech=clamp(ng.tech+0.08,0.05,0.97); bump('outTech'); }
       if(s.peakArmy<=2 && s.attacks>=2) bump('massFirst');
+      // anti-champion: nudge toward the counter of the dominant archetype (don't nudge that archetype itself)
+      if(counter && (fk.archetype!==domArch)){ for(const k in counter){ ng[k]=clamp(ng[k]+0.07*counter[k],0.05,0.97); } }
     }
     // trade-offs: renormalise to the fixed budget so raising one trait lowers the others
     fk.genome=normGenome(ng);
@@ -2498,12 +2681,15 @@ function bump(id){ knowledge.lessons[id].weight=clamp((knowledge.lessons[id].wei
 /* --------------------------- scoring & win ------------------------------- */
 function score(p){
   let s=0;
-  for(const c of G.cities){ if(c.owner!==p.id) continue; s+=c.level*5; if(c.isCapital)s+=8; }
+  // a freshly-captured city in unrest scores at HALF value — conquest no longer gives an instant
+  // score spike, which is the main driver of the mid-game blowout (A1).
+  for(const c of G.cities){ if(c.owner!==p.id) continue; const m=(c.unrest>0)?0.5:1; s+=c.level*5*m; if(c.isCapital)s+=8; }
   s+=p.techs.size*4;
-  for(const u of G.units){ if(u.owner===p.id&&u.hp>0) s+=2; }
+  for(const u of G.units){ if(u.owner===p.id&&u.hp>0) s+=1.5; }   // trimmed from 2 → curbs unit-hoarding swarm's score
   const terr=p.terrCount||0;   // cached in recomputeTerritory (avoids an O(N^2) sweep each call)
   s+=terr*0.5 + p.science*0.12 + p.prod*0.06;
   if(p.techs.has('telegraphy')) s+=10;
+  s+=(p.bankedScore||0);   // A3 laggard rewards: industrial prod-overflow + turtle hold-ground bonuses
   return Math.round(s);
 }
 function checkWin(){
@@ -2530,7 +2716,13 @@ let autoplay=false, speed='normal', autoTimer=null;
 const SPEEDS={slow:1100,normal:450,fast:120,ultra:24};   // ultra = 5× faster than fast
 
 function startTurnFor(p){
+  // A1 unrest: freshly-captured cities calm down one notch per owner-turn (then resume yielding/growing)
+  for(const c of G.cities){ if(c.owner===p.id && c.unrest>0){ c.unrest--; if(c.unrest===0) logMsg('city',`${c.name} settled under ${p.name}'s rule.`); } }
   recomputeIncome();
+  // A1 challenger income boost: a trailing house also gets a small flat prod/sci top-up scaled to how
+  // far behind it is — a conquered-down house can still rebuild & contest rather than being dead weight.
+  const cf=challengerFactor(p);
+  if(cf>0){ p.prodIncome=Math.round(p.prodIncome*(1+BAL.rubberIncomeMax*cf)); p.sciIncome=Math.round(p.sciIncome*(1+BAL.rubberIncomeMax*cf)); }
   // production / science / wood / stone flow into the treasury from the land the empire holds
   p.prod += p.prodIncome; p.science += p.sciIncome;
   p.wood = (p.wood||0) + p.woodIncome; p.stone = (p.stone||0) + p.stoneIncome;
@@ -2558,6 +2750,23 @@ function startTurnFor(p){
   const nCities=G.cities.filter(c=>c.owner===p.id).length;
   p.foodCap = 24 + 14*nCities;
   if(p.food > p.foodCap) p.food = p.foodCap;
+  // A1 UNIVERSAL CAPS: wood, stone & production also spoil above a granary-style ceiling (scaled to
+  // cities + infrastructure). This kills the multi-thousand warchest and forces the empire to SPEND.
+  p.woodCap=resourceCap(p,'woodCap'); p.stoneCap=resourceCap(p,'stoneCap'); p.prodCap=resourceCap(p,'prodCap');
+  // A3 industrial payoff: production that WOULD spoil is partly converted to score — capped prod still
+  // rewards the tall/industrial house instead of being wasted entirely.
+  if(p.faction.bonus==='econ' || (p.genome && p.genome.economy>0.55)){
+    const overflow=Math.max(0,(p.prod||0)-p.prodCap); if(overflow>0) p.bankedScore=(p.bankedScore||0)+overflow*BAL.industrialProdToScore;
+  }
+  if((p.wood||0) > p.woodCap) p.wood=p.woodCap;
+  if((p.stone||0) > p.stoneCap) p.stone=p.stoneCap;
+  if((p.prod||0) > p.prodCap) p.prod=p.prodCap;
+  // A3 turtle/defensive reward: score for holding cities intact (no capture last turn) — converts
+  // successful defence into a winning condition rather than mere survival.
+  if(p.genome && p.genome.defense>0.6){
+    let held=0; for(const c of G.cities){ if(c.owner===p.id && !c.unrest){ c.heldTurns=(c.heldTurns||0)+1; held+=c.level; } }
+    p.bankedScore=(p.bankedScore||0)+held*BAL.turtleHoldScore*0.02;
+  }
   // refresh units
   for(const u of G.units){ if(u.owner===p.id){ u.movesLeft=unitMove(u); u.hasAttacked=false; } }
   p.stats.survived=G.turn;
@@ -2663,9 +2872,12 @@ function refreshHUD(){
   const show=v||p;
   const fUp=(show.foodUpkeep!=null)?show.foodUpkeep:foodUpkeep(show); const fNet=(show.foodIncome||0)-fUp;
   $('hudFood').innerHTML=`${Math.round(show.food||0)}<small> 🌾 <span style="color:${fNet<0?'#e87a5a':fNet>0?'#9bd07f':'var(--faint)'}">${fNet>=0?'+':''}${fNet}</span> <span style="color:var(--faint)">(${show.foodIncome||0}−${fUp}🍴)</span>${show.starving?' ⚠':''}</small>`;
-  $('hudWood').innerHTML=`${show.wood||0}<small> 🪵 +${show.woodIncome||0}</small>`;
-  $('hudStone').innerHTML=`${show.stone||0}<small> 🪨 +${show.stoneIncome||0}</small>`;
-  $('hudProd').innerHTML=`${show.prod}<small> ⚒ +${show.prodIncome||0}</small>`;
+  // show the universal caps so the human sees when surplus will spoil (A1)
+  const wCap=resourceCap(show,'woodCap'), sCap=resourceCap(show,'stoneCap'), pCap=resourceCap(show,'prodCap');
+  const capTxt=(v,c)=> (v>=c*0.85)? `<span style="color:#e8b35a">/${c}</span>` : `<span style="color:var(--faint)">/${c}</span>`;
+  $('hudWood').innerHTML=`${show.wood||0}<small> 🪵${capTxt(show.wood||0,wCap)} +${show.woodIncome||0}</small>`;
+  $('hudStone').innerHTML=`${show.stone||0}<small> 🪨${capTxt(show.stone||0,sCap)} +${show.stoneIncome||0}</small>`;
+  $('hudProd').innerHTML=`${show.prod}<small> ⚒${capTxt(show.prod||0,pCap)} +${show.prodIncome||0}</small>`;
   $('hudSci').innerHTML=`${show.science}<small> 🔬 +${show.sciIncome||0}</small>`;
   $('hudCities').textContent=G.cities.filter(c=>c.owner===show.id).length;
   $('hudScore').textContent=score(show);
