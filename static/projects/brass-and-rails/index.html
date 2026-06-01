@@ -54,16 +54,26 @@
   .title-wrap{display:flex;flex-direction:column;gap:1px;}
   .title-wrap h1{font-size:16px;line-height:1;}
   .title-wrap .sub{font-size:9.5px;}
-  /* stats are absolutely centred so they never shift when the player name length changes */
+  /* stats are absolutely centred so they never shift when the player name length changes.
+     FIXED WIDTH: the bar reserves a fixed total width and each stat a fixed slot (with tabular numerals
+     + a min-width on the value) so adding/removing a strategic indicator or a value going 2→3 digits
+     does NOT resize or re-centre the bar — it stays rock-steady as the numbers tick. */
   .hud-stats{position:absolute;left:50%;top:8px;transform:translateX(-50%);display:flex;align-items:stretch;
     background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line2);border-radius:10px;
-    box-shadow:var(--shadow);overflow:hidden;}
-  .stat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:7px 16px;border-left:1px solid var(--line);}
+    box-shadow:var(--shadow);overflow:hidden;width:max-content;}
+  .stat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:7px 10px;
+    border-left:1px solid var(--line);box-sizing:border-box;flex:none;}
   .stat:first-child{border-left:0;}
-  .stat .label{font-size:9px;}
-  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;line-height:1;color:var(--ink);}
-  .stat .v small{font-weight:500;font-size:11px;color:var(--amber2);}
-  @media(max-width:1080px){ .hud-stats{position:static;transform:none;margin:0 auto;} .stat{padding:5px 9px;} .stat .v{font-size:16px;} }
+  .stat.wide{width:148px;}                 /* food slot carries the +net (income−upkeep) sub-string */
+  .stat.med{width:96px;}                   /* wood/stone/prod/sci carry a cap / +income tag */
+  .stat.num{width:64px;}                   /* cities / score / turn — short integers */
+  .stat .label{font-size:9px;white-space:nowrap;}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;line-height:1;color:var(--ink);
+    font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;white-space:nowrap;overflow:hidden;
+    text-overflow:clip;max-width:100%;display:block;text-align:center;}
+  .stat .v small{font-weight:500;font-size:11px;color:var(--amber2);font-variant-numeric:tabular-nums;}
+  @media(max-width:1080px){ .hud-stats{position:static;transform:none;margin:0 auto;} .stat{padding:5px 9px;} .stat .v{font-size:16px;}
+    .stat.wide{width:120px;} .stat.med{width:80px;} .stat.num{width:52px;} }
   .turn-pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);
     border-radius:999px;padding:5px 6px 5px 14px;box-shadow:var(--shadow);}
   .turn-pill .who{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;}
@@ -259,14 +269,14 @@
       <div class="sub label">An Empire of the Skerne</div>
     </div>
     <div class="hud-stats">
-      <div class="stat"><span class="label">Food</span><span class="v" id="hudFood">0<small> 🌾</small></span></div>
-      <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
-      <div class="stat"><span class="label">Stone</span><span class="v" id="hudStone">0<small> 🪨</small></span></div>
-      <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
-      <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
-      <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
-      <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
-      <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
+      <div class="stat wide"><span class="label">Food</span><span class="v" id="hudFood">0<small> 🌾</small></span></div>
+      <div class="stat med"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
+      <div class="stat med"><span class="label">Stone</span><span class="v" id="hudStone">0<small> 🪨</small></span></div>
+      <div class="stat med"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
+      <div class="stat med"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
+      <div class="stat num"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
+      <div class="stat num"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
+      <div class="stat num"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
     </div>
     <div class="turn-pill">
       <span class="dot" id="hudDot"></span>
@@ -405,7 +415,7 @@
   </div>
 
   <!-- SANDBOX LAB (B6) -->
-  <div class="scrim hidden" id="lab">
+  <div class="scrim hidden" id="lab" style="z-index:120">
     <div class="modal panel" style="width:min(1040px,96vw)">
       <div class="panel-h"><h3>🧪 Sandbox Lab — tune &amp; simulate</h3><span class="label">headless balance testbench</span></div>
       <div class="panel-b" style="max-height:80vh;overflow:auto;display:grid;grid-template-columns:minmax(300px,360px) 1fr;gap:16px">
@@ -501,6 +511,7 @@
         <div class="start-row">
           <button id="startBtn">FOUND YOUR EMPIRE →</button>
           <button class="btn" id="helpBtn2" style="width:auto;">How to play</button>
+          <button class="btn" id="labBtnStart" style="width:auto;">🧪 Balance Lab</button>
           <button class="btn danger" id="wipeBtn" style="width:auto;">Wipe AI memory</button>
           <div class="legend" id="memNote"></div>
         </div>
@@ -510,7 +521,7 @@
           ☷ Stephenson Gun · ⬢ Ironclad · ✈ Skylark · ◆ Night Mail · ⬛ Brick Colossus (super).
           <br><b style="color:var(--amber2)">Win by</b> <b>Domination</b> (take every rival capital) ·
           <b>Great Exhibition</b> (all tech + a deep science treasury) ·
-          <b>Railway Empire</b> (combined city levels) · or top <b>score</b> at turn 70.
+          <b>Railway Empire</b> (combined city levels) · or top <b>score</b> at turn 74.
         </div>
       </div>
     </div>
@@ -571,7 +582,7 @@ function cityMinDist(){ return MIN_CITY_DIST; }
 // NOTE: the LIVE win thresholds live in BAL (BAL.turnCap / altWinTurn / scienceWin / econWin) so the
 // Lab can tune them at runtime. These const aliases are kept ONLY for static labels/help text; all
 // gameplay logic reads the mutable BAL values. Keep them in sync with the BAL defaults above.
-const TURN_CAP = 70;                // (display alias of BAL.turnCap)
+const TURN_CAP = 74;                // (display alias of BAL.turnCap)
 const ALT_WIN_TURN = 48;            // (display alias of BAL.altWinTurn)
 const SCIENCE_WIN = 280;            // (display alias of BAL.scienceWin)
 const ECON_WIN = 68;                // (display alias of BAL.econWin)
@@ -599,8 +610,8 @@ const BAL = {
   captureScaleCost: 3,  // extra production per city already owned (wide conquest = diminishing returns)
   unrestScaleMax: 4,    // a large empire digests captures slower (up to +this many unrest turns)
   defenderCityBonus: 0.35, // extra defensive multiplier for a unit standing in a friendly city
-  lastStandBonus: 1.0,  // a house's FINAL city defends much harder → fewer early eliminations / blowouts
-  fewCitiesBonus: 0.4,  // a house down to its last 2 cities also defends harder (slows the death spiral)
+  lastStandBonus: 0.8,  // a house's FINAL city defends much harder → fewer early eliminations / blowouts (trimmed: the combat rework's fortify+terrain already protect defenders, so conquest can still close)
+  fewCitiesBonus: 0.3,  // a house down to its last 2 cities also defends harder (slows the death spiral)
   // --- A1 coalition targeting: how hard the AI gangs up on the score leader ---
   coalitionLeaderBias: 6.0,   // bonus weight in target selection for hitting the current score leader
   coalitionLeadMargin: 1.08,  // only gang up once the leader is >8% ahead of the field mean
@@ -619,10 +630,23 @@ const BAL = {
   techCityMult: 1.0,    // multiplies the per-city term
   scholarSciCost: 0.60, // scholar/pease science cost multiplier (real edge — bites harder now)
   // --- win thresholds (were standalone consts; routed through BAL so the Lab can tune them live) ---
-  turnCap:    70,       // score victory after this many full turns (conquest needs room to finish)
+  turnCap:    74,       // score victory after this many full turns (conquest needs room to finish; +4 so decisive wins land before the clock)
   altWinTurn: 48,       // alternative victories only open up after this turn (conquest stays primary)
   scienceWin: 280,      // science banked AFTER all tech → host the Great Exhibition
   econWin:    68,       // combined level of your cities → a railway empire (rewards going wide)
+  // --- combat rework tuning (layered model; all Lab-tunable) ---
+  counterBonus:  0.50,  // +50% attack when the attacker's type counters the defender's role/type
+  terrainField:  1.00,  // defender terrain-defense multipliers (folded into defenseBonus)
+  terrainRiver:  0.85,  // exposed on a river crossing
+  terrainForest: 1.25,  // light/dense forest cover
+  terrainHill:   1.40,  // high ground
+  terrainMtn:    1.60,  // a mountain fastness is brutal to assault
+  uphillPenalty: 0.15,  // attacker attack penalty PER unit of terrain-height the defender stands above (capped)
+  uphillCap:     0.32,  // max uphill penalty (so a mountain assault is hard but not impossible)
+  downhillBonus: 0.05,  // small attack edge striking DOWN onto a lower defender
+  fortifyBonus:  0.22,  // defense bonus for a dug-in unit that did NOT move/act last turn (trimmed so an early leader can't simply turtle to a snowball)
+  flankPerUnit:  0.10,  // +attack per ADDITIONAL friendly unit adjacent to the defender
+  flankCap:      0.30,  // max flanking bonus (3 flankers)
 };
 // frozen pristine defaults so the Lab's "reset" always restores the shipped balance (deep copy)
 const BAL_DEFAULTS = JSON.parse(JSON.stringify(BAL));
@@ -671,6 +695,33 @@ const UNIT_TYPES = {
 const UNIT_UPKEEP = {founder:3, rambler:1, guard:2, armed:2, pike:2, pony:2, gun:2, ironclad:3, skylark:3, nightmail:2, monitor:3, lighter:2, colossus:5};
 function unitUpkeep(u){ return UNIT_UPKEEP[u.type]!=null ? UNIT_UPKEEP[u.type] : 1; }
 
+// --- COUNTER MATRIX (rock-paper-scissors): attacker type -> set of defender TYPES it gets +counterBonus vs.
+// Plus a human-readable "strong vs" label for the UI. Keep this in sync with the design brief. ---
+const COUNTERS = {
+  pike:     {beats:['pony','ironclad'],                       label:'cavalry & armour'},          // braced spears stop horse & steel
+  pony:     {beats:['gun','rambler','founder'],               label:'siege, scouts & settlers'},  // fast raiders run down soft targets
+  gun:      {beats:['guard','armed','pike','ironclad'],       label:'massed infantry & armour'},  // long-range siege wrecks formations
+  guard:    {beats:['nightmail'],                             label:'(generalist — small edge vs stealth)'}, // solid baseline
+  armed:    {beats:['nightmail'],                             label:'(generalist — small edge vs stealth)'},
+  skylark:  {beats:['guard','armed','pike','pony','gun','ironclad','nightmail'], label:'all ground (fragile)'}, // air dominates ground
+  nightmail:{beats:['gun','founder'],                         label:'siege, settlers & the wounded'}, // assassin train; +vs wounded handled in code
+  monitor:  {beats:['lighter'],                               label:'coastal land units & barges'},   // coastal land handled in code (adjacency)
+};
+// does attacker `att` counter defender `def`? returns the multiplier delta (BAL.counterBonus or 0).
+// Handles the special cases the static matrix can't express (nightmail vs wounded / revealed by a Rambler,
+// monitor vs any coastal land unit).
+function counterMult(att, def){
+  const at=att.type, dt=def.type, c=COUNTERS[at];
+  let hit = c && c.beats.includes(dt);
+  // Night Mail: also counters WOUNDED units (any type below half HP)…
+  if(at==='nightmail' && def.hp < def.maxHp*0.5) hit=true;
+  // …but a Rambler in vision range strips its ambush bonus entirely.
+  if(at==='nightmail'){ for(const r of G.units){ if(r.owner===att.owner) continue; if(r.type==='rambler'&&r.hp>0&&cheb(r.x,r.z,att.x,att.z)<=2) return 0; } }
+  // Monitor: counters ANY land unit standing on a coastal tile (beyond the matrix's lighter entry).
+  if(at==='monitor' && UNIT_TYPES[dt] && UNIT_TYPES[dt].domain==='land'){ for(const [nx,nz] of neigh8(def.x,def.z)) if(isSeaTile(nx,nz)){ hit=true; break; } }
+  return hit ? BAL.counterBonus : 0;
+}
+
 const TECHS = {
   husbandry:  {name:'Husbandry',     tier:1, prereq:null,        unlocks:[],          improvement:'farm',  note:'Orchards & cattle + build Farms on fields.'},
   masonry:    {name:'Masonry',       tier:1, prereq:null,        unlocks:['pike'],    note:'City walls + Skerne Pike.'},
@@ -681,7 +732,7 @@ const TECHS = {
   steam:      {name:'Steam Power',   tier:2, prereq:'ironworking',unlocks:['ironclad'],note:'Railways (+1 move to all) + Ironclad.'},
   milling:    {name:'Milling',       tier:2, prereq:'forestry',  unlocks:[],          improvement:'watermill',note:'Build Water Mills on rivers.'},
   trade:      {name:'Quaker Banking',tier:2, prereq:'husbandry', unlocks:[],          note:'+1 ⚒ &amp; +1 🔬 income per city.'},
-  aeronautics:{name:'Aeronautics',   tier:3, prereq:'steam',     unlocks:['skylark'], note:'Skylark aircraft.'},
+  aeronautics:{name:'Aeronautics',   tier:2, prereq:'steam',     unlocks:['skylark'], note:'Skylark aircraft.'},
   espionage:  {name:'Espionage',     tier:3, prereq:'riding',    unlocks:['nightmail'],note:'Night Mail stealth strikers.'},
   telegraphy: {name:'Telegraphy',    tier:3, prereq:'trade',     unlocks:[],          note:'+1 vision everywhere, +score.'},
 };
@@ -733,7 +784,7 @@ const RESOURCES = {
   iron:     {glyph:'◈',  color:0xb0b6c0, on:['hill','mountain'],  regions:['pennine','weald'], rarity:1.2, strategic:true},
   lead:     {glyph:'◇',  color:0x9aa6b8, on:['mountain'],         regions:['pennine'],         rarity:0.45, strategic:true},
   limestone:{glyph:'▤',  color:0xd8d2bd, on:['hill','mountain'],  regions:['pennine'],         rarity:0.7,  strategic:true},
-  whinstone:{glyph:'▦',  color:0x3a3f48, on:['mountain'],         regions:['pennine'],         rarity:0.16, strategic:true},
+  whinstone:{glyph:'▦',  color:0x3a3f48, on:['mountain','hill'],   regions:['pennine','weald'], rarity:0.34, strategic:true},
 };
 const STRATEGIC = Object.keys(RESOURCES).filter(r=>RESOURCES[r].strategic);   // gateable war materials
 
@@ -1010,12 +1061,16 @@ function setupGame(cfg){
     // observability overlays: standings ticker + pivotal chronicle — auto (AI-vs-AI) mode only
     for(const id of ['ticker','pivots']){ const el=document.getElementById(id); if(el) el.classList.toggle('hidden', !auto); }
   }
-  buildStaticScene();
-  reframeCamera();
-  rebuildDynamic();
-  refreshAll();
+  // skip the WebGL/DOM render path when headless (Lab batch sim) or before initThree (Lab opened from
+  // the landing screen — no renderer yet). The sim is pure logic; the live game repaints separately.
+  if(!G._headless && typeof renderer!=='undefined' && renderer){
+    buildStaticScene();
+    reframeCamera();
+    rebuildDynamic();
+    refreshAll();
+    homeCamera();
+  }
   logMsg('sys', `A new chronicle opens — ${G.players.length} houses on a ${N}×${N} board (${G.mapSize}), seed ${G.seed}.`);
-  homeCamera();
 }
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rint(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -1049,7 +1104,7 @@ function placeNear(p,type,x,z){
 function spawnUnit(p,type,x,z,free){
   if(unitAt(x,z)) return null;
   const def=UNIT_TYPES[type];
-  const u={id:G.uid++,type,owner:p.id,x,z,hp:def.hp,maxHp:def.hp,movesLeft:def.move,hasAttacked:false,spawnTurn:G.turn};
+  const u={id:G.uid++,type,owner:p.id,x,z,hp:def.hp,maxHp:def.hp,movesLeft:def.move,hasAttacked:false,spawnTurn:G.turn,fortified:false,movedThisTurn:true};
   G.units.push(u);
   if(p.stats&&p.stats.built) p.stats.built[type]=(p.stats.built[type]||0)+1;   // roster usage tally
   reveal(p,x,z, type==='rambler'?2:1);
@@ -1312,12 +1367,14 @@ function isHidden(u,viewerId){
   return true;
 }
 
-/* ----- combat (Polytopia damage model) ----- */
+/* ----- combat (layered damage model) ----- */
+// generalized terrain-defense multiplier for the tile the unit stands on (+ city/walls/last-stand/faction)
 function defenseBonus(u){
-  const t=tileAt(u.x,u.z); let b=1;
-  if(t.terrain==='hill'||t.terrain==='lightforest') b=1.4;
-  if(t.terrain==='denseforest') b=1.45;
-  if(t.terrain==='mountain') b=1.5;
+  const t=tileAt(u.x,u.z); let b=BAL.terrainField;
+  if(t.terrain==='river') b=BAL.terrainRiver;
+  else if(t.terrain==='lightforest'||t.terrain==='denseforest') b=BAL.terrainForest;
+  else if(t.terrain==='hill') b=BAL.terrainHill;
+  else if(t.terrain==='mountain') b=BAL.terrainMtn;
   const c=cityAt(u.x,u.z);
   if(c && c.owner===u.owner){ b=Math.max(b, c.walls?1.5:1.25) + BAL.defenderCityBonus;   // cities are defensible (A1: stronger garrison) but not impregnable
     // LAST STAND: a house's final city defends much harder, so houses survive longer and stay in the
@@ -1328,26 +1385,61 @@ function defenseBonus(u){
   }
   const p=playerById(u.owner);
   if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=1.25;
+  // FORTIFY: a unit dug in (held position without moving/acting last turn) defends harder.
+  if(u.fortified) b += BAL.fortifyBonus;
   return b;
 }
+// terrain "height" used for the uphill/downhill modifier — air units ignore elevation entirely.
+function tileHeight(x,z){ const t=tileAt(x,z); return TERRAIN[t.terrain]?TERRAIN[t.terrain].h:0.6; }
+// uphill penalty: attacking UP onto a higher defender saps the attacker's punch (capped). Air ignores it.
+// returns a multiplier on attacker attack (1.0 = none; <1 uphill penalty; >1 small downhill edge).
+function elevationMult(att,def){
+  if(UNIT_TYPES[att.type].domain==='air') return 1;
+  const gap=tileHeight(def.x,def.z) - tileHeight(att.x,att.z);
+  if(gap>0.001) return 1 - Math.min(BAL.uphillCap, gap*BAL.uphillPenalty);   // climbing into the foe
+  if(gap<-0.001) return 1 + BAL.downhillBonus;                               // striking downhill
+  return 1;
+}
+// flanking: each ADDITIONAL friendly attacker adjacent to the defender adds a stacking bonus (capped).
+function flankCount(att,def){
+  let n=0; for(const f of G.units){ if(f===att||f.owner!==att.owner||f.hp<=0) continue;
+    if(UNIT_TYPES[f.type].atk>0 && cheb(f.x,f.z,def.x,def.z)<=1) n++; }
+  return n;
+}
+function flankMult(att,def){ return 1 + Math.min(BAL.flankCap, flankCount(att,def)*BAL.flankPerUnit); }
+// full attack multiplier from the layered factors (returns the breakdown too, for the human predictor)
+function attackFactors(att,def){
+  const facBon = playerById(att.owner)?.faction.bonus==='atk'?1.05:1;
+  const counter = counterMult(att,def);               // 0 or BAL.counterBonus
+  const counterM = 1+counter;
+  const elev = elevationMult(att,def);
+  const flank = flankMult(att,def);
+  return { facBon, counter, counterM, elev, flank, mult: facBon*counterM*elev*flank };
+}
 function predictCombat(att,def){
-  const A=UNIT_TYPES[att.type].atk * (playerById(att.owner)?.faction.bonus==='atk'?1.05:1);
+  const f=attackFactors(att,def);
+  const Abase=UNIT_TYPES[att.type].atk;
+  const A=Abase*f.mult;
   const D=UNIT_TYPES[def.type].def;
+  const dBon=defenseBonus(def);
   const aF=A*(att.hp/att.maxHp);
-  const dF=D*(def.hp/def.maxHp)*defenseBonus(def);
+  const dF=D*(def.hp/def.maxHp)*dBon;
   const tot=aF+dF || 1;
   const atkDmg=Math.round((aF/tot)*A*4.5);
   const defDmg=Math.round((dF/tot)*D*4.5);
+  // INITIATIVE: attacker strikes first; a MELEE defender retaliates only if it survives.
+  // Ranged/siege attackers (Gun, Monitor — range>1) take no retaliation.
   const melee=UNIT_TYPES[att.type].range<=1;
   const kills = atkDmg>=def.hp;
   const retaliation = (!kills && melee)? defDmg : 0;
-  return {atkDmg,defDmg:retaliation,kills,melee,selfDies: retaliation>=att.hp};
+  return {atkDmg,defDmg:retaliation,kills,melee,selfDies: retaliation>=att.hp,
+    factors:f, defBon:dBon, flankers:flankCount(att,def)};
 }
 function recRel(store,a,b){ if(a===b||a==null||b==null) return; store[a]=store[a]||{}; store[a][b]=(store[a][b]||0)+1; }
 function resolveCombat(att,def){
   const pc=predictCombat(att,def);
   def.hp-=pc.atkDmg;
-  att.hasAttacked=true;
+  att.hasAttacked=true; att.fortified=false; att.movedThisTurn=true;   // attacking is an action — no longer dug in
   const ap=playerById(att.owner); ap.stats.attacks++;
   recRel(G._clash, att.owner, def.owner);   // who attacks whom (per-pair history)
   // a "bad attack" = struck but neither killed the foe nor traded up
@@ -1398,6 +1490,7 @@ function moveAnimDur(){ if(G.mode!=='auto') return 300; if(speed==='ultra') retu
 function moveUnit(u,x,z){
   const ox=u.x, oz=u.z;
   u.x=x; u.z=z;
+  u.fortified=false; u.movedThisTurn=true;   // marching out of position breaks the dig-in
   // record a glide animation from the old tile to the new one (consumed by the render loop)
   u._animFrom={x:ox,z:oz}; u._animStart=_now(); u._animDur=moveAnimDur();
   G._animUntil=Math.max(G._animUntil||0, u._animStart+u._animDur+50);   // keep full-rate render during the glide
@@ -2087,6 +2180,9 @@ function renderSelPanel(){
         <div class="mini"><div class="k">MOV</div><div class="vv">${unitMove(u)}</div></div>
       </div>
       <div class="desc">${d.desc}</div>`;
+    // counter "strong vs" + fortify badge — legible tactics for the human
+    if(COUNTERS[u.type]) h+=`<div class="legend" style="margin-top:4px">⚔ Strong vs <b style="color:var(--amber2)">${COUNTERS[u.type].label}</b></div>`;
+    h+=`<div class="legend" style="margin-top:2px">${u.fortified?'<b style="color:var(--teal)">🛡 Fortified</b> — dug in (+def). ':'Not fortified — end the turn without moving to dig in. '}</div>`;
     if(d.needs){ const owner2=playerById(u.owner);
       h+=`<div class="legend" style="margin-top:4px">⚙ Strategic: ${d.needs.map(r=>{ const have=playerHasResource(owner2,r); return `<span style="color:${have?'var(--teal)':'#f0998e'}">${RESOURCES[r].glyph} ${r}${have?'':' ✗'}</span>`; }).join(' · ')}</div>`; }
     if(mine){
@@ -2116,7 +2212,19 @@ function renderSelPanel(){
           else h+=`<div class="legend">Move beside open land to disembark.</div>`;
         }
       }
-      if(G.atks && G.atks.length) h+=`<div class="legend">⚔ <b>${G.atks.length}</b> target(s) in range — click a <span style="color:#ff5544">red</span> tile to strike.</div>`;
+      if(G.atks && G.atks.length){
+        h+=`<div class="legend">⚔ <b>${G.atks.length}</b> target(s) in range — click a <span style="color:#ff5544">red</span> tile to strike.</div>`;
+        // ATTACK PREDICTOR: forecast + a short breakdown of the live modifiers, so tactics are legible
+        for(const e of G.atks){ const pc=predictCombat(u,e); const f=pc.factors; const ed=UNIT_TYPES[e.type];
+          const mods=[];
+          if(f.counter>0) mods.push(`<span style="color:#9bd07f">counter +${Math.round(f.counter*100)}%</span>`);
+          if(Math.abs(f.elev-1)>0.001) mods.push(`<span style="color:${f.elev<1?'#f0998e':'#9bd07f'}">${f.elev<1?'uphill':'downhill'} ${f.elev<1?'−':'+'}${Math.round(Math.abs(f.elev-1)*100)}%</span>`);
+          if(pc.flankers>0) mods.push(`<span style="color:#9bd07f">flank +${Math.round(Math.min(BAL.flankCap,pc.flankers*BAL.flankPerUnit)*100)}% (${pc.flankers})</span>`);
+          if(pc.defBon>1.001) mods.push(`<span style="color:#f0998e">terrain/def ×${pc.defBon.toFixed(2)}${e.fortified?' 🛡':''}</span>`);
+          h+=`<div class="legend" style="margin-top:3px;border-left:2px solid var(--line2);padding-left:6px">
+            ⚔ vs ${ed.glyph} <b>${ed.name}</b> (${e.hp}hp): deal <b style="color:#ff7a5a">${pc.atkDmg}</b>${pc.kills?' <b style="color:#9bd07f">— KILL</b>':(pc.defDmg>0?`, take <b style="color:#f0998e">${pc.defDmg}</b> back`:', no retaliation')}${mods.length?`<br><span style="font-size:9px">${mods.join(' · ')}</span>`:''}</div>`;
+        }
+      }
       if(u.movesLeft>0) h+=`<div class="legend">→ Click a <span style="color:#49b6ff">blue</span> tile to march there.</div>`;
       if(u.movesLeft>0 || !u.hasAttacked) h+=`<button class="btn" data-act="skip">✓ Done for this turn</button>`;
       else h+=`<div class="legend">This unit has spent its turn.</div>`;
@@ -2526,6 +2634,13 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   // role-diversity: count what we already field; deprioritise a role we're already saturated in
   const roleCount={}; for(const u of army){ const r=UNIT_TYPES[u.type].role; roleCount[r]=(roleCount[r]||0)+1; }
   const guardCount=army.filter(u=>u.type==='guard').length;
+  // SCOUT THE ENEMY COMPOSITION (only what we can see) so we can BUILD COUNTERS to it.
+  const enemyTypes={}; for(const e of G.units){ if(e.owner===p.id||e.hp<=0) continue; if(!inSightOf(p,e.x,e.z)) continue; enemyTypes[e.type]=(enemyTypes[e.type]||0)+1; }
+  const seen=(t)=>enemyTypes[t]||0;
+  const enemyCav   = seen('pony');
+  const enemyArmor = seen('ironclad');
+  const enemyInf   = seen('guard')+seen('armed')+seen('pike');
+  const enemySiege = seen('gun');
   const scoreUnit=(tid)=>{ const d=UNIT_TYPES[tid]; let s=0;
     s += (d.atk+d.def)*0.5 + (d.range>1?1.2:0) + (d.role==='stealth'?1.0:0) + (d.role==='siege'?1.4:0);
     s -= (roleCount[d.role]||0)*0.4;                 // diversity: penalise an over-stacked role
@@ -2533,7 +2648,12 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
     if(tid==='guard') s -= 0.8 + guardCount*0.35;    // stop the guard-spam default — prefer upgrades
     if(tid==='armed' && (p.wood||0)>=2) s += 1.6;    // an Armed Guard is a clear upgrade when wood allows
     if(tid==='ironclad') s += 1.8;                   // the powerhouse — worth the premium once unlocked
+    if(tid==='skylark') s += 2.6;                    // a rare late-game prize: when whinstone+aeronautics line up, take it
     if(pr.massStyle>0.7) s += (4-d.cost)*0.4;        // mass houses bias cheaper
+    // COUNTER-BUILDING: bias toward the unit that hard-counters what the enemy is actually fielding
+    if(tid==='pike')     s += (enemyCav+enemyArmor)*0.8;   // pikes wall off horse & steel
+    if(tid==='gun')      s += (enemyInf*0.5+enemyArmor*0.6);// siege shreds massed infantry & armour
+    if(tid==='pony')     s += (enemySiege+seen('rambler'))*0.7; // ponies run down siege & scouts
     return s; };
   // walk the doctrine but, among the top affordable+available picks, take the best-scoring for diversity
   const picks=order.filter(t=>avail(t)&&canAfford(p,t));
@@ -2638,10 +2758,16 @@ function aiPickAttack(p,u,riskGate,thoughts){
     let canHit = cheb(u.x,u.z,e.x,e.z)<=rng;
     if(!canHit){ for(const k of reach.set){ const [x,z]=k.split(',').map(Number); if(cheb(x,z,e.x,e.z)<=rng){canHit=true;break;} } }
     if(!canHit) continue;
-    const pc=predictCombat(u,e);
+    const pc=predictCombat(u,e); const f=pc.factors;
     // win probability proxy: did we kill, or trade favourably?
     const ratio = pc.atkDmg/Math.max(1,e.hp);
     let score = ratio + (pc.kills?0.6:0) - (pc.selfDies?1.2:0) - (pc.defDmg/Math.max(1,u.hp))*0.6;
+    // COMBAT MODEL AWARENESS: favour matchups we counter; shun assaults uphill into dug-in defenders;
+    // reward ganging up (existing flankers already in place make this strike land harder).
+    if(f.counter>0) score+=0.7;                              // prefer a counter matchup
+    if(f.elev<0.999) score -= (1-f.elev)*1.6;                // climbing into the foe is bad
+    if(e.fortified) score -= 0.5;                            // dug-in defenders are costly to dislodge
+    if(pc.flankers>0) score += Math.min(BAL.flankCap, pc.flankers*BAL.flankPerUnit)*1.5;   // coordinate
     // breaking the garrison that holds an enemy city is a high priority (opens it for capture)
     const onCity=cityAt(e.x,e.z); const enemyCityHere = !!(onCity&&onCity.owner!==p.id);
     if(enemyCityHere) score+=0.9;
@@ -2999,8 +3125,11 @@ function startTurnFor(p){
     let held=0; for(const c of G.cities){ if(c.owner===p.id && !c.unrest){ c.heldTurns=(c.heldTurns||0)+1; held+=c.level; } }
     p.bankedScore=(p.bankedScore||0)+held*BAL.turtleHoldScore*0.02;
   }
-  // refresh units
-  for(const u of G.units){ if(u.owner===p.id){ u.movesLeft=unitMove(u); u.hasAttacked=false; } }
+  // refresh units. FORTIFY: a unit that held position (no move/attack last turn) is now dug in for defense.
+  for(const u of G.units){ if(u.owner===p.id){
+    u.fortified = !u.movedThisTurn;   // held position last turn → fortified going into this one
+    u.movedThisTurn=false;
+    u.movesLeft=unitMove(u); u.hasAttacked=false; } }
   p.stats.survived=G.turn;
 }
 // disband the cheapest/most-distant unit to recover food; if none, drop a non-capital city a level.
@@ -3096,7 +3225,8 @@ function manualStep(){ if(G.mode==='auto'){ endTurn(); } }
 /* --------------------------- 8. UI WIRING -------------------------------- */
 const $=id=>document.getElementById(id);
 function logMsg(tag,msg){
-  const lb=$('logbody'); const d=document.createElement('div'); d.className='logline';
+  if(G._headless) return;   // no log panel during a headless batch sim
+  const lb=$('logbody'); if(!lb) return; const d=document.createElement('div'); d.className='logline';
   d.innerHTML=`<span class="tag ${tag}">${tag}</span>${msg}`;
   lb.prepend(d); while(lb.children.length>60) lb.removeChild(lb.lastChild);
 }
@@ -3490,7 +3620,7 @@ function renderRoster(){
     const perGame = games? (us.built/games).toFixed(1):'—';
     const denom=(us.winBuilt+us.lossBuilt); const winPct = denom? Math.round(100*us.winBuilt/denom)+'%':'—';
     h+=`<tr style="text-align:right;border-top:1px solid var(--line)">
-      <td style="text-align:left;padding:5px 4px"><b style="color:var(--ink)">${d.glyph} ${d.name}</b><div style="color:var(--faint);font-size:9px;${mono}">${d.role}${d.domain==='air'?' · air':''} · ${d.tech?TECHS[d.tech].name:'no tech'}</div></td>
+      <td style="text-align:left;padding:5px 4px"><b style="color:var(--ink)">${d.glyph} ${d.name}</b><div style="color:var(--faint);font-size:9px;${mono}">${d.role}${d.domain==='air'?' · air':''} · ${d.tech?TECHS[d.tech].name:'no tech'}${COUNTERS[tid]?` · <span style="color:var(--amber2)">⚔ vs ${COUNTERS[tid].label}</span>`:''}</div></td>
       <td>${cost}</td><td>${d.hp}</td><td>${d.atk}</td><td>${d.def}</td><td>${d.move}</td><td>${d.range}</td>
       <td style="color:var(--amber2)">${vpc}</td><td>${us.built||0}</td><td>${perGame}</td><td style="color:${denom&&us.winBuilt/denom>0.5?'var(--good,#7bc06b)':'var(--muted)'}">${winPct}</td></tr>`;
   }
@@ -3678,8 +3808,8 @@ function restoreLive(s){
 
 // run ONE headless game to completion; collect run-dynamics metrics. Mirrors /tmp/br_harness2 loop.
 function simOneGame(seed, count, mapSize){
+  G._headless=true;   // set BEFORE setup so the headless render-skip kicks in (works pre-game / no renderer)
   setupGame({seed, mode:'auto', count, marathon:false, mapSize, endless:false});
-  G._headless=true;
   let lastLeader=null, leadChanges=0, t1Leader=null, earlyLeader=null;
   const earlyT=15;
   function leaderNow(){ const al=G.players.filter(p=>p.alive); if(!al.length) return null;
@@ -3867,6 +3997,9 @@ $('btnAnalysis').onclick=()=>{ renderAnalysis(); $('analysis').classList.remove(
 $('analysisClose').onclick=()=>$('analysis').classList.add('hidden');
 $('analysisWipe').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); renderAnalysis(); toast('AI memory wiped.'); };
 $('btnLab').onclick=openLab;
+// Landing-screen Lab: opens the Sandbox WITHOUT starting a live game. The headless batch sim spins up
+// its own throwaway setupGame state and restores cleanly, so it works pre-game; closing returns here.
+$('labBtnStart').onclick=openLab;
 $('labClose').onclick=()=>$('lab').classList.add('hidden');
 $('labRun').onclick=labRun;
 $('labReset').onclick=labResetDials;
@@ -3886,7 +4019,8 @@ addEventListener('blur',()=>panKeys.clear());
 
 // debug/QA handle (read-only window hook so headless tests can inspect Lab + game state)
 window.__lab={ get G(){return G;}, get BAL(){return BAL;}, get BAL_DEFAULTS(){return BAL_DEFAULTS;},
-  get cur(){return LAB_CUR;}, get prev(){return LAB_PREV;}, get running(){return LAB_RUNNING;} };
+  get cur(){return LAB_CUR;}, get prev(){return LAB_PREV;}, get running(){return LAB_RUNNING;},
+  selectUnit:(u)=>{ G.cur=0; selectUnit(u); refreshAll(); }, predict:(a,b)=>predictCombat(a,b) };
 
 // boot
 buildSetupUI(); syncSetup();
