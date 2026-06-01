@@ -7,7 +7,7 @@ export const httpRequestExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const method = (config.method as string) || 'GET';
     const rawUrl = (config.url as string) || '';
@@ -54,6 +54,14 @@ export const httpRequestExecutor: NodeExecutor = {
 
     if (allMissing.length > 0) {
       throw new Error(`Template references unresolved: ${allMissing.join(', ')}. Check upstream node output.`);
+    }
+
+    if (context.dryRun) {
+      return {
+        output: { simulated: true, would_request: { method, url, headers, body: interpolatedBody || undefined } },
+        rowCount: 1,
+        logs: [`[dry-run] skipped-for-dry-run: would ${method} ${url}`],
+      };
     }
 
     const fetchInit: RequestInit = { method, headers };

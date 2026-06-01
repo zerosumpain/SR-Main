@@ -1,5 +1,5 @@
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
-import { getPatternsForOrchestrator } from './patterns';
+import { getPatternsForOrchestrator, getGoldenExemplarsForOrchestrator } from './patterns';
 
 export function buildToolUseSystemPrompt(
   nodeGrounding: string,
@@ -76,6 +76,12 @@ Only set \`_onError\` when overriding the default. Plain \`{ mode: 'stop' }\` is
 ## Composable Patterns
 
 ${getPatternsForOrchestrator()}
+
+## Worked Examples (request → concrete graph)
+
+These are fully worked translations from a user request to a real node graph — real node types, the load-bearing config on each node (with literal \`{{input.X}}\` / \`{{trigger.output.X}}\` data references), and exact edge wiring including conditional handles. Mirror the closest one when the user's request resembles it; don't copy node types that aren't relevant.
+
+${getGoldenExemplarsForOrchestrator()}
 
 ## Common Pitfalls (Read Before Calling Tools)
 
@@ -211,5 +217,9 @@ Every node accepts an optional \`_onError\` block: \`{ mode: 'stop' | 'continue'
 
 ## Composable Patterns
 
-${getPatternsForOrchestrator()}`;
+${getPatternsForOrchestrator()}
+
+## Worked Examples (request → concrete graph)
+
+${getGoldenExemplarsForOrchestrator()}`;
 }

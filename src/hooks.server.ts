@@ -76,9 +76,22 @@ startScheduledEngine().catch((err) => {
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
+import { engine as workflowEngine } from '$lib/workflows';
 
-function gracefulShutdown() {
+let shuttingDown = false;
+async function gracefulShutdown() {
+  // SIGTERM can fire more than once during a deploy; only drain/stop once.
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log('[hooks.server] Shutting down...');
+  // #10 GRACEFUL DRAIN: let in-flight workflow runs finish (bounded) BEFORE we
+  // tear down schedulers and exit, so a deploy mid-run doesn't orphan it.
+  // Bounded at 25s so shutdown can never hang past the supervisor's kill grace.
+  try {
+    await workflowEngine.drain(25_000);
+  } catch (err) {
+    console.warn('[hooks.server] engine drain failed:', err);
+  }
   stopHeartbeatEngine();
   stopScheduledEngine();
   stopHealthScheduler();
@@ -89,8 +102,8 @@ function gracefulShutdown() {
   process.exit(0);
 }
 
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', () => void gracefulShutdown());
+process.on('SIGINT', () => void gracefulShutdown());
 
 // Build recovery moved to packages/jkai-builder/bin/start.ts.
 // hooks.server.ts intentionally does NOT call orchestrator.recoverOnStartup()

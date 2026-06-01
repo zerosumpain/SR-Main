@@ -62,6 +62,23 @@ function buildExamplesSection(def: NodeDefinition): string | null {
   return `**Example configs:**\n${lines.join('\n')}`;
 }
 
+/**
+ * Render the full grounding block for a single node definition, reusing the
+ * exact same renderer used for the orchestrator's Node Registry section. Used by
+ * the `workflow_describe_node` MCP tool so the agent sees the same detail
+ * (config fields with required flags / enums / defaults, input/output ports,
+ * usage examples) it would get from the registry — on demand, for one type.
+ */
+export function buildSingleNodeGrounding(
+  def: NodeDefinition,
+  recentExecutions: ExecutionExample[] = [],
+): string {
+  // buildNodeGrounding skips `hidden` nodes (they're omitted from the registry
+  // view), but an explicit describe_node lookup should always render — clear the
+  // flag so a deliberately-requested hidden type still gets its full detail.
+  return buildNodeGrounding([{ ...def, hidden: false }], recentExecutions);
+}
+
 export function buildNodeGrounding(
   nodeDefinitions: NodeDefinition[],
   recentExecutions: ExecutionExample[],

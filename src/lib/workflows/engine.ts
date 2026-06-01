@@ -11,7 +11,7 @@ import { buildGraph, topologicalSort } from './graph';
 import type { WorkflowGraph } from './graph';
 import { emitWorkflowEvent, onWorkflowEvent, cleanupRunEmitter } from './events';
 import { diagnoseAndFix } from './orchestrator/healing';
-import type { HealingContext, UndoEntry, NodeDefinition } from './types';
+import type { HealingContext, UndoEntry, NodeDefinition, NodeOnErrorConfig } from './types';
 import {
   executionContext,
   rollupUsage,
@@ -25,7 +25,79 @@ import {
   nodeTimeoutMs,
   startHeartbeat,
   withNodeTimeout,
+  RunAbortedError,
 } from './engine-runtime';
+import { db } from '$lib/db';
+import { nodeExecutions } from '$lib/db/schema';
+import { and, eq } from 'drizzle-orm';
+import { mergeUpstreamInput } from './engine-node-runner';
+
+/**
+ * Module-level run registry (shared across the singleton engine instance).
+ *
+ * #11 CANCEL: runId -> AbortController for the run. Aborting this controller
+ *   stops scheduling further levels (checked between levels) and aborts every
+ *   in-flight per-node timeout controller (linked at node start), which causes
+ *   withNodeTimeout to reject and the node to surface as a failure.
+ *
+ * #10 DRAIN: runId -> the in-flight execute() promise so graceful shutdown can
+ *   await outstanding runs (bounded). `draining` makes new execute() calls
+ *   no-op cleanly so we don't start fresh work while shutting down.
+ */
+const runAbortControllers = new Map<string, AbortController>();
+const inFlightRuns = new Map<string, Promise<EngineResult>>();
+let draining = false;
+
+/** Cancellation error thrown internally when a run is cancelled mid-flight. */
+class RunCancelledError extends Error {
+  constructor() {
+    super('Run cancelled');
+    this.name = 'RunCancelledError';
+  }
+}
+
+/**
+ * #20 INCREMENTAL PERSIST: write a node's terminal output/status to its
+ * pre-created node_executions row AT COMPLETION (rather than only in the
+ * post-run persister). Best-effort and runId-scoped: the UPDATE matches the
+ * row pre-created with status 'pending' (run route / scheduler). A no-match
+ * UPDATE (e.g. unit tests that never insert rows) is harmless. Never throws —
+ * a DB hiccup must not fail the node. The post-run persister still runs and is
+ * idempotent (same runId+nodeId .where), so this only moves the write earlier
+ * so engine-resume sees completed outputs even if the process dies mid-run.
+ */
+async function persistNodeCompletion(
+  runId: string,
+  nodeId: string,
+  fields: {
+    status: 'completed' | 'failed';
+    startedAt?: Date;
+    inputData?: Record<string, unknown> | null;
+    outputData?: Record<string, unknown> | null;
+    error?: string;
+    usage?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await db
+      .update(nodeExecutions)
+      .set({
+        status: fields.status,
+        startedAt: fields.startedAt ?? undefined,
+        ...(fields.inputData !== undefined ? { inputData: fields.inputData } : {}),
+        ...(fields.outputData !== undefined ? { outputData: fields.outputData } : {}),
+        ...(fields.error !== undefined ? { error: fields.error } : {}),
+        completedAt: new Date(),
+        ...(fields.usage ?? {}),
+      })
+      .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
+  } catch (e) {
+    console.warn(
+      `[engine] incremental persist failed run=${runId} node=${nodeId}:`,
+      e instanceof Error ? e.message : e,
+    );
+  }
+}
 
 /** Thrown internally by the engine when a node returns a pause sentinel. */
 export class PauseForHumanSignal {
@@ -60,6 +132,54 @@ export class WorkflowEngine {
   private activeBreakpoints = new Map<string, Set<string>>();
 
   constructor(private registry: NodeRegistry) {}
+
+  /**
+   * #11 CANCEL — abort an in-flight run. Aborts the run-level controller (which
+   * also aborts every linked in-flight per-node timeout controller and stops
+   * the engine scheduling further levels) and forgets the controller. No-op if
+   * the run isn't currently tracked (already settled or never started here).
+   * The cancel route calls this AFTER it has written the DB status, so the
+   * engine's own post-run persister can't resurrect a 'running' status.
+   */
+  cancelRun(runId: string): boolean {
+    const controller = runAbortControllers.get(runId);
+    if (!controller) return false;
+    try {
+      controller.abort();
+    } catch {
+      /* noop */
+    }
+    runAbortControllers.delete(runId);
+    return true;
+  }
+
+  /**
+   * #10 GRACEFUL DRAIN — stop accepting new runs and wait for outstanding ones
+   * to settle, bounded by timeoutMs so shutdown can never hang. Sets the
+   * module-level `draining` flag (new execute() calls no-op cleanly), then
+   * races the outstanding in-flight promises against the timeout. Returns the
+   * number of runs that were still in flight when drain began.
+   */
+  async drain(timeoutMs: number): Promise<number> {
+    draining = true;
+    const outstanding = Array.from(inFlightRuns.values());
+    const count = outstanding.length;
+    if (count === 0) return 0;
+    console.log(`[engine] draining ${count} in-flight run(s), waiting up to ${Math.round(timeoutMs / 1000)}s`);
+    // Promises here are the execute() result promises; they never reject
+    // (execute catches internally and resolves with status:'failed'), so
+    // Promise.all is safe. Bound with a timeout regardless.
+    const allSettled = Promise.all(outstanding).then(() => undefined);
+    const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, timeoutMs));
+    await Promise.race([allSettled, timeout]);
+    const remaining = inFlightRuns.size;
+    if (remaining > 0) {
+      console.warn(`[engine] drain timed out with ${remaining} run(s) still in flight`);
+    } else {
+      console.log('[engine] drain complete — all in-flight runs settled');
+    }
+    return count;
+  }
 
   setBreakpoints(runId: string, nodes: Set<string>): void {
     this.activeBreakpoints.set(runId, nodes);
@@ -124,10 +244,63 @@ export class WorkflowEngine {
     return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs);
   }
 
+  /**
+   * Public entry point. Thin wrapper that:
+   *  - #10: rejects/no-ops cleanly while draining (returns a failed result so
+   *    callers' .then persisters run normally without special-casing),
+   *  - #11: registers a run-level AbortController so cancelRun() can reach it,
+   *  - #10: tracks the in-flight promise so drain() can await it,
+   *  - cleans both up when the run settles.
+   * All real work stays in executeInner — control flow / events unchanged.
+   */
   async execute(
     workflow: WorkflowDefinition,
     runId: string,
     initialInput: Record<string, unknown>,
+    breakpoints?: Set<string>,
+    workflowId?: string,
+    options?: { selfHealing?: boolean; dryRun?: boolean },
+    preSeededOutputs?: Record<string, Record<string, unknown>>,
+  ): Promise<EngineResult> {
+    if (draining) {
+      console.warn(`[engine] refusing run ${runId} — engine is draining for shutdown`);
+      return {
+        status: 'failed',
+        nodeOutputs: new Map(),
+        nodeInputs: new Map(),
+        nodeErrors: new Map(),
+        nodeUsage: new Map(),
+        nodeStartTimes: new Map(),
+        error: 'Engine is shutting down (draining)',
+        healingHistory: [],
+      };
+    }
+
+    const abortController = new AbortController();
+    runAbortControllers.set(runId, abortController);
+
+    const promise = this.executeInner(
+      workflow,
+      runId,
+      initialInput,
+      abortController,
+      breakpoints,
+      workflowId,
+      options,
+      preSeededOutputs,
+    ).finally(() => {
+      inFlightRuns.delete(runId);
+      runAbortControllers.delete(runId);
+    });
+    inFlightRuns.set(runId, promise);
+    return promise;
+  }
+
+  private async executeInner(
+    workflow: WorkflowDefinition,
+    runId: string,
+    initialInput: Record<string, unknown>,
+    abortController: AbortController,
     breakpoints?: Set<string>,
     workflowId?: string,
     options?: { selfHealing?: boolean; dryRun?: boolean },
@@ -147,7 +320,6 @@ export class WorkflowEngine {
         nodeOutputs.set(id, output);
       }
     }
-    const abortController = new AbortController();
     const healingHistory: UndoEntry[] = [];
 
     // Concurrency cap: queue if MAX_CONCURRENT_RUNS already in-flight. Cheap
@@ -182,6 +354,16 @@ export class WorkflowEngine {
       const levels = topologicalSort(graph);
 
       for (const level of levels) {
+        // #11 CANCEL: stop scheduling further node levels once the run has been
+        // cancelled. In-flight nodes from the previous level have already been
+        // aborted (their per-node controllers fired); we simply don't dispatch
+        // the next level. The final status falls out as 'failed' /
+        // 'completed_with_errors' from whatever nodeErrors were recorded.
+        if (abortController.signal.aborted) {
+          console.warn(`[engine] run ${runId} cancelled — halting before next level`);
+          break;
+        }
+
         const promises = level.map(async (nodeId) => {
           // If this node is skipped, emit event and skip execution
           if (skippedNodes.has(nodeId)) {
@@ -201,22 +383,16 @@ export class WorkflowEngine {
             throw new Error(`No executor found for node type: ${nodeDef.type}`);
           }
 
-          // Gather input from upstream nodes (only non-skipped sources)
-          const incomingEdges = graph.edgesByTarget.get(nodeId) || [];
-          let mergedInput: Record<string, unknown>;
-
-          if (incomingEdges.length === 0) {
-            mergedInput = { ...initialInput };
-          } else {
-            mergedInput = {};
-            for (const edge of incomingEdges) {
-              if (skippedNodes.has(edge.sourceNodeId)) continue;
-              const upstream = nodeOutputs.get(edge.sourceNodeId);
-              if (upstream) {
-                Object.assign(mergedInput, upstream);
-              }
-            }
-          }
+          // Gather input from upstream nodes (only non-skipped sources).
+          // #13: extracted verbatim to engine-node-runner.mergeUpstreamInput.
+          let mergedInput: Record<string, unknown> = mergeUpstreamInput(
+            nodeId,
+            runId,
+            graph,
+            nodeOutputs,
+            skippedNodes,
+            initialInput,
+          );
 
           // Check breakpoint
           if (effectiveBreakpoints?.has(nodeId)) {
@@ -262,8 +438,13 @@ export class WorkflowEngine {
             const rollup = rollupUsage(llmCalls);
             if (rollup) nodeUsage.set(nodeId, rollup);
           };
+          // Set after the per-node abort listener is registered (below); the
+          // finish helpers call it so we don't leak listeners on the run-level
+          // controller across the lifetime of a long run.
+          let cleanupNodeAbort = () => {};
           const finishNodeOk = () => {
             drain();
+            cleanupNodeAbort();
             const u = nodeUsage.get(nodeId);
             emitObs('node.completed', {
               workflowId: workflowId ?? workflow.id,
@@ -275,9 +456,20 @@ export class WorkflowEngine {
               tokensInput: u?.tokensInput ?? null,
               tokensOutput: u?.tokensOutput ?? null,
             });
+            // #20 INCREMENTAL PERSIST: write the node's completed output to its
+            // node_executions row now (best-effort, fire-and-forget). The
+            // post-run persister re-writes the same runId+nodeId row idempotently.
+            void persistNodeCompletion(runId, nodeId, {
+              status: 'completed',
+              startedAt: nodeStartTimes.get(nodeId),
+              inputData: nodeInputs.get(nodeId) ?? null,
+              outputData: nodeOutputs.get(nodeId) ?? null,
+              usage: u as Record<string, unknown> | undefined,
+            });
           };
           const finishNodeFailed = (error: string) => {
             drain();
+            cleanupNodeAbort();
             emitObs('node.failed', {
               workflowId: workflowId ?? workflow.id,
               runId,
@@ -285,7 +477,32 @@ export class WorkflowEngine {
               completedAt: new Date().toISOString(),
               error,
             });
+            // #20 INCREMENTAL PERSIST: write the failure to its row now.
+            void persistNodeCompletion(runId, nodeId, {
+              status: 'failed',
+              startedAt: nodeStartTimes.get(nodeId),
+              error,
+              usage: nodeUsage.get(nodeId) as Record<string, unknown> | undefined,
+            });
           };
+
+          // Per-node abort controller. Its own timeout (via withNodeTimeout)
+          // aborts THIS controller only, so a single node's timeout no longer
+          // signals its concurrent siblings. #11 CANCEL links the run-level
+          // controller to it: when the run is cancelled (abortController fires)
+          // we propagate the abort to this node controller, which (a) aborts
+          // the executor's abortSignal and (b) makes withNodeTimeout reject
+          // with RunAbortedError so even an abort-ignoring node is interrupted.
+          const nodeController = new AbortController();
+          const propagateRunAbort = () => {
+            try { nodeController.abort(); } catch { /* noop */ }
+          };
+          if (abortController.signal.aborted) {
+            propagateRunAbort();
+          } else {
+            abortController.signal.addEventListener('abort', propagateRunAbort, { once: true });
+            cleanupNodeAbort = () => abortController.signal.removeEventListener('abort', propagateRunAbort);
+          }
 
           const context: ExecutionContext = {
             runId,
@@ -295,7 +512,7 @@ export class WorkflowEngine {
             emit: (event) => emitWorkflowEvent(event),
             getNodeOutput: (id) => nodeOutputs.get(id),
             checkBreakpoint: async () => {},
-            abortSignal: abortController.signal,
+            abortSignal: nodeController.signal,
             getOutgoingEdges: (id) => graph.edgesBySource.get(id) || [],
             getIncomingEdges: (id) => graph.edgesByTarget.get(id) || [],
             getNodeConfig: (id) => {
@@ -304,14 +521,12 @@ export class WorkflowEngine {
             },
             _currentNodeId: nodeId,
             _registry: this.registry,
-          } as ExecutionContext & { _currentNodeId: string; _registry: NodeRegistry };
+          };
 
           // Per-node "On failure" config (set in the canvas inspector). Read
           // before the try block so retry/continue/route modes wrap the
           // executor call uniformly. Default is 'stop' (legacy behaviour).
-          const onErrorCfg = (nodeDef.config?._onError as
-            | { mode?: 'stop' | 'continue' | 'retry' | 'route'; retries?: number; retryDelayMs?: number }
-            | undefined) ?? { mode: 'stop' };
+          const onErrorCfg = (nodeDef.config?._onError as NodeOnErrorConfig | undefined) ?? { mode: 'stop' };
           const onErrorMode = onErrorCfg.mode ?? 'stop';
           const onErrorRetries = Math.max(0, Math.min(10, Number(onErrorCfg.retries ?? 0)));
           const onErrorDelayMs = Math.max(0, Number(onErrorCfg.retryDelayMs ?? 0));
@@ -332,7 +547,7 @@ export class WorkflowEngine {
             const maxAttempts = onErrorMode === 'retry' ? onErrorRetries + 1 : 1;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               try {
-                result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, abortController, () =>
+                result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, nodeController, () =>
                   executionContext.run(execCtx, () =>
                     executor.execute(mergedInput, nodeDef.config, context),
                   ),
@@ -382,6 +597,18 @@ export class WorkflowEngine {
           } catch (err: unknown) {
             // Let pause signals propagate immediately — do not heal them.
             if (err instanceof PauseForHumanSignal) throw err;
+
+            // #11 CANCEL: a node aborted by run cancellation must NOT enter
+            // self-healing (which would fire a wasteful LLM diagnosis call on a
+            // run the user already killed). Record it as a failure and return;
+            // the between-levels signal check halts further scheduling.
+            if (err instanceof RunAbortedError || abortController.signal.aborted) {
+              const abortMsg = err instanceof Error ? err.message : 'Run cancelled';
+              nodeErrors.set(nodeId, abortMsg);
+              emit('node_failed', nodeId, { error: abortMsg });
+              finishNodeFailed(abortMsg);
+              return;
+            }
 
             const message = err instanceof Error ? err.message : String(err);
             console.warn(`[engine] node.fail run=${runId} node=${nodeId} type=${nodeDef.type} duration=${Date.now() - nodeStartedAt}ms err=${message.slice(0, 200)}`);
@@ -537,8 +764,13 @@ export class WorkflowEngine {
                   };
                   healingHistory.push(undoEntry);
 
+                  // Apply the healed config to the per-run local copy only.
+                  // Do NOT mutate nodeDef.config — that object is the persistent
+                  // node definition (shared via graph.nodeMap) and gets written
+                  // back to workflow_nodes by the persister, which would silently
+                  // rewrite the user's saved workflow. The retry below executes
+                  // with `currentConfig`, so the heal is scoped to this run.
                   currentConfig = newConfig;
-                  nodeDef.config = newConfig;
 
                   emit('healing_fix_applied', nodeId, {
                     fixType: 'config',
@@ -553,7 +785,7 @@ export class WorkflowEngine {
                 emit('node_started', nodeId);
                 try {
                   const retryResult: NodeResult = await withNodeTimeout(
-                    nodeId, nodeDef.type, timeoutMs, abortController,
+                    nodeId, nodeDef.type, timeoutMs, nodeController,
                     () => executionContext.run(execCtx, () =>
                       executor.execute(mergedInput, currentConfig, context),
                     ),

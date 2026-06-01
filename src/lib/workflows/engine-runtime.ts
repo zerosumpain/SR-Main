@@ -39,11 +39,26 @@ export class NodeTimeoutError extends Error {
   }
 }
 
+/** Raised when an in-flight node is aborted by run cancellation (#11) rather
+ *  than by its own per-node timeout. Surfaces as a node-level failure. */
+export class RunAbortedError extends Error {
+  constructor(public readonly nodeId: string, public readonly nodeType: string) {
+    super(`Node ${nodeId} (${nodeType}) aborted: run cancelled`);
+    this.name = 'RunAbortedError';
+  }
+}
+
 /**
  * Race a promise against a hard timeout. On timeout we abort the supplied
  * controller (so well-behaved executors can short-circuit) AND reject the
  * race so the caller surfaces a node-level failure even if the executor
  * never observed the abort.
+ *
+ * #11 CANCEL: the race ALSO rejects if `controller` becomes aborted from the
+ * outside (run cancellation aborts it). This lets a cancel interrupt a node
+ * that ignores its abortSignal, even before its timeout fires. (The timeout
+ * path already aborts this same controller, so adding the abort listener
+ * changes nothing about the timeout behaviour.)
  */
 export async function withNodeTimeout<T>(
   nodeId: string,
@@ -53,16 +68,27 @@ export async function withNodeTimeout<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // If the controller is already aborted before we even start, surface a
+  // cancellation immediately rather than launching the executor.
+  if (controller.signal.aborted) {
+    throw new RunAbortedError(nodeId, nodeType);
+  }
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       try { controller.abort(); } catch { /* noop */ }
       reject(new NodeTimeoutError(nodeId, nodeType, timeoutMs));
     }, timeoutMs);
   });
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new RunAbortedError(nodeId, nodeType));
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+  });
   try {
-    return await Promise.race([fn(), timeout]);
+    return await Promise.race([fn(), timeout, aborted]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
   }
 }
 

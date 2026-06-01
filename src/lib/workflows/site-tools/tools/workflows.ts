@@ -631,19 +631,47 @@ register({
       issues,
     });
 
+    // BLOCKING verification (#5). Errors are no longer advisory text inside a
+    // success response — when verification finds error-severity issues, the
+    // canvas was still persisted (so the user can open it), but the tool
+    // result reports `success:false` with the structured issues so the agent
+    // MUST resolve them (via workflow_update_node / workflow_add_edge) before
+    // declaring the workflow done. Warnings stay advisory.
+    //
+    // Backward-compat: every field the old success payload carried is still
+    // present in `data` (workflowId, slug, url, summaryMarkdown, …) plus the
+    // structured `verificationIssues`, so existing callers that read those keep
+    // working. We add `status` + `formattedIssues` for the blocking path.
+    const errorIssues = issues.filter((i) => i.severity === 'error');
+    const { formatIssues } = await import('$lib/workflows/orchestrator/verify');
+    const data = {
+      workflowId,
+      slug,
+      name: spec.name,
+      description: spec.description,
+      nodeCount: persistedNodes.length,
+      url,
+      summaryMarkdown,
+      linkMarkdown: `[${spec.name}](${url})`,
+      verificationIssues: issues,
+      verificationPassed: errorIssues.length === 0,
+      status: errorIssues.length === 0 ? 'built' : 'needs_fix',
+    };
+
+    if (errorIssues.length > 0) {
+      return {
+        success: false,
+        error:
+          `Workflow "${spec.name}" was created at ${url} but verification found ${errorIssues.length} blocking error(s) — fix them before telling the user it's done:\n\n` +
+          formatIssues(errorIssues) +
+          `\n\nUse workflow_update_node to correct each node's config (the nodes are already on the canvas), then workflow_lint to confirm the errors are gone.`,
+        data,
+      };
+    }
+
     return {
       success: true,
-      data: {
-        workflowId,
-        slug,
-        name: spec.name,
-        description: spec.description,
-        nodeCount: persistedNodes.length,
-        url,
-        summaryMarkdown,
-        linkMarkdown: `[${spec.name}](${url})`,
-        verificationIssues: issues,
-      },
+      data,
     };
   },
 });
@@ -1083,6 +1111,63 @@ register({
       description: d.description,
     })).sort((a, b) => a.type.localeCompare(b.type));
     return { success: true, data: defs };
+  },
+});
+
+register({
+  name: 'workflow_describe_node',
+  description:
+    'Get the FULL detail for a single node type — its config schema (every field with type, required flag, enum values and defaults), its input/output ports, usage guidance, and concrete example configs. ' +
+    'Call this after workflow_list_node_types (which only returns type/label/category/description) when you need to know exactly what config keys a node accepts before adding or updating it. ' +
+    'This returns the same grounding the orchestrator sees in its Node Registry, scoped to one type — use it to avoid guessing config shapes and getting rejected at write time.',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: {
+        type: 'string',
+        description: 'The registered node type to describe (e.g. "llm-call", "stealth-scrape", "conditional"). Must match exactly — call workflow_list_node_types if unsure.',
+      },
+    },
+    required: ['type'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const type = typeof args.type === 'string' ? args.type.trim() : '';
+    if (!type) return { success: false, error: '`type` (string) is required.' };
+
+    const { registry } = await import('$lib/workflows');
+    const def = registry.getDefinition(type);
+    if (!def) {
+      const valid = registry
+        .listDefinitions()
+        .map((d) => d.type)
+        .sort();
+      return {
+        success: false,
+        error: `Unknown node type "${type}". Valid types: ${valid.join(', ')}. Call workflow_list_node_types for labels/descriptions.`,
+      };
+    }
+
+    const { buildSingleNodeGrounding } = await import('$lib/workflows/orchestrator/grounding');
+    const grounding = buildSingleNodeGrounding(def, []);
+
+    return {
+      success: true,
+      data: {
+        type: def.type,
+        label: def.label,
+        category: def.category,
+        description: def.description,
+        inputs: def.inputs,
+        outputs: def.outputs,
+        configSchema: def.configSchema,
+        defaultConfig: def.defaultConfig ?? {},
+        required: def.configSchema?.required ?? [],
+        examples: def.llmExamples ?? [],
+        grounding,
+      },
+    };
   },
 });
 
@@ -1695,5 +1780,185 @@ register({
         report: issues.length === 0 ? 'No issues found.' : formatIssues(issues),
       },
     };
+  },
+});
+
+// ==========================================
+// workflow_generate — rich generator entry point (#4).
+//
+// Hand-authoring a DAG node-by-node (workflow_add_node / workflow_build_from_spec)
+// bypasses the in-repo orchestrator generator, which already does node-registry
+// grounding, a critic-revision debate round, post-build verification, and a
+// targeted self-heal pass. This tool exposes that generator directly to the
+// agent: give it the natural-language request and (optionally) a workflowId to
+// modify, and it grounds + builds + critiques + verifies + heals, persists the
+// result, then runs a final blocking verification sweep so the agent gets the
+// same needs_fix signal workflow_build_from_spec produces.
+// ==========================================
+register({
+  name: 'workflow_generate',
+  description:
+    'Generate (or modify) a complete workflow from a natural-language request using the in-repo rich generator. ' +
+    'PREFER THIS over hand-authoring a DAG with workflow_build_from_spec / workflow_add_node when the user describes what they want in prose. ' +
+    'The generator grounds itself in the live node registry, plans the nodes + wiring, runs a critic-revision round, then verifies and self-heals the result before saving — so you get a correct, runnable workflow instead of guessing config shapes yourself. ' +
+    'Pass `prompt` with the full request (e.g. "every morning at 8am, fetch my Hacker News front page and WhatsApp me the top 5 titles"). ' +
+    'Omit `workflowId` to create a brand-new canvas; pass an existing `workflowId` to regenerate/modify that workflow in place. ' +
+    'Returns the workflowId, canvas URL, a human summary, and the final verification status. ' +
+    'If `verificationPassed` is false, the workflow was saved but has blocking errors you must resolve with workflow_update_node before telling the user it is done.',
+  parameters: {
+    type: 'object',
+    properties: {
+      prompt: {
+        type: 'string',
+        description:
+          'The natural-language workflow request — what should the workflow do, when should it fire, and what should it produce. Be specific; the generator builds directly from this.',
+      },
+      workflowId: {
+        type: 'string',
+        description:
+          'Optional. When provided, the generator modifies THIS existing workflow (its current nodes/edges are replaced with the regenerated graph). Omit to create a new canvas.',
+      },
+    },
+    required: ['prompt'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args, ctx) => {
+    const emit = ctx?.emit ?? (() => {});
+    const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+    if (!prompt) return { success: false, error: '`prompt` (string) is required.' };
+
+    // If a canvas chat threads its workflow_id through as conversationId, and
+    // the caller didn't pass an explicit workflowId, default to modifying the
+    // current canvas — same UUID-shaped signal workflow_build_from_spec uses.
+    const isUuid = (v: unknown): v is string =>
+      typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    let workflowId: string | null =
+      typeof args.workflowId === 'string' && args.workflowId.trim()
+        ? args.workflowId.trim()
+        : (isUuid(ctx?.conversationId) ? (ctx!.conversationId as string) : null);
+
+    // Lazy-import the rich generator + persistence helpers. Matches the rest of
+    // this file (orchestrator deps are always lazily imported to avoid circular
+    // init between site-tools and the workflow registry).
+    const { generateWorkflow, saveWorkflowFromGenerated, runWorkflowVerification } =
+      await import('$lib/workflows/orchestrator');
+    const { formatIssues } = await import('$lib/workflows/orchestrator/verify');
+
+    // The generator's onChunk maps cleanly onto ctx.emit — every planning step
+    // ("Adding cron trigger", "Reviewing with the critic", "Verification …")
+    // surfaces as a `status` progress event on the chat stream, exactly like
+    // the orchestrator chat route does via onProgress.
+    let result;
+    try {
+      result = await generateWorkflow(prompt, workflowId, (text) => emit(text.trimEnd()));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Workflow generation failed: ${msg}` };
+    }
+
+    // The generator can pause to ask a clarifying question instead of building.
+    if (result.followUp) {
+      return {
+        success: true,
+        data: {
+          status: 'needs_clarification',
+          workflowId: workflowId ?? undefined,
+          followUp: result.followUp,
+          message: result.followUp,
+        },
+      };
+    }
+
+    const workflow = result.workflow;
+    if (!workflow || workflow.nodes.length === 0) {
+      return {
+        success: false,
+        error:
+          'The generator could not produce a valid workflow from that prompt. Try being more specific about the trigger, the steps, and the desired output.',
+      };
+    }
+
+    // Persist. Existing workflow → replace nodes/edges in place. New canvas →
+    // allocate a name and insert the whole graph atomically (mirrors the
+    // orchestrator chat route's generate path).
+    const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
+    let slug: string;
+    try {
+      if (workflowId) {
+        await saveWorkflowFromGenerated(workflowId, workflow);
+        const [row] = await db.select({ name: workflows.name }).from(workflows).where(eq(workflows.id, workflowId)).limit(1);
+        slug = row?.name?.startsWith('canvas:') ? row.name.slice('canvas:'.length) : workflowId;
+      } else {
+        const { allocateCanvasName } = await import('$lib/canvas/adapter.server');
+        const { name: canvasName, slug: canvasSlug } = await allocateCanvasName(workflow.name || 'generated workflow');
+        slug = canvasSlug;
+        workflowId = await db.transaction(async (tx) => {
+          const [createdRow] = await tx.insert(workflows).values({
+            name: canvasName,
+            description: workflow.description || workflow.name || null,
+            trigger: workflow.trigger ?? { type: 'manual' },
+          }).returning();
+          await tx.insert(workflowNodes).values(
+            workflow.nodes.map((n) => ({ id: n.id, workflowId: createdRow.id, type: n.type, position: n.position, config: n.config, label: n.label })),
+          );
+          if (workflow.edges.length > 0) {
+            await tx.insert(workflowEdges).values(
+              workflow.edges.map((e) => ({ id: e.id, workflowId: createdRow.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
+            );
+          }
+          return createdRow.id;
+        });
+      }
+    } catch (dbErr: unknown) {
+      const msg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
+      return { success: false, error: `Generated workflow but failed to save it: ${msg}` };
+    }
+
+    const url = `${baseUrl}/jkai/canvas/${slug}`;
+    publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Generated', ts: Date.now() });
+
+    // Final blocking verification over the PERSISTED graph — same semantics as
+    // workflow_build_from_spec (#5). The generator already verifies+heals
+    // internally, but this sweep is the authoritative gate on the saved state.
+    const issues = runWorkflowVerification(workflow.nodes, workflow.edges) as SummaryIssue[];
+    const errorIssues = issues.filter((i) => i.severity === 'error');
+
+    const summaryMarkdown = buildWorkflowSummaryMarkdown({
+      linkLabel: workflow.name || 'Workflow',
+      url,
+      description: workflow.description,
+      nodes: workflow.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, config: (n.config ?? {}) as Record<string, unknown> })),
+      edges: workflow.edges.map((e) => ({ sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId })),
+      issues,
+    });
+
+    const data = {
+      workflowId,
+      slug,
+      name: workflow.name,
+      description: workflow.description,
+      nodeCount: workflow.nodes.length,
+      url,
+      summaryMarkdown,
+      linkMarkdown: `[${workflow.name || 'Workflow'}](${url})`,
+      verificationIssues: issues,
+      verificationPassed: errorIssues.length === 0,
+      status: errorIssues.length === 0 ? 'generated' : 'needs_fix',
+      explanation: workflow.explanation,
+    };
+
+    if (errorIssues.length > 0) {
+      return {
+        success: false,
+        error:
+          `Workflow "${workflow.name}" was generated and saved at ${url}, but verification found ${errorIssues.length} blocking error(s) — fix them before telling the user it's done:\n\n` +
+          formatIssues(errorIssues) +
+          `\n\nUse workflow_update_node to correct each node's config, then workflow_lint to confirm.`,
+        data,
+      };
+    }
+
+    return { success: true, data };
   },
 });

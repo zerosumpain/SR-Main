@@ -10,6 +10,8 @@ import { emailDef, emailExecutor } from './nodes/email';
 import { dataStoreDef, dataStoreExecutor } from './nodes/data-store';
 import { loopDef, loopExecutor } from './nodes/loop';
 import { conditionalDef, conditionalExecutor } from './nodes/conditional';
+import { switchDef, switchExecutor } from './nodes/switch';
+import { approvalDef, approvalExecutor } from './nodes/approval';
 import { whoopDef, whoopExecutor } from './nodes/whoop';
 import { stravaDef, stravaExecutor } from './nodes/strava';
 import { openrouterDef, openrouterExecutor } from './nodes/openrouter';
@@ -110,6 +112,8 @@ registry.register(emailDef, emailExecutor);
 registry.register(dataStoreDef, dataStoreExecutor);
 registry.register(loopDef, loopExecutor);
 registry.register(conditionalDef, conditionalExecutor);
+registry.register(switchDef, switchExecutor);
+registry.register(approvalDef, approvalExecutor);
 registry.register(whoopDef, whoopExecutor);
 registry.register(stravaDef, stravaExecutor);
 registry.register(openrouterDef, openrouterExecutor);
@@ -337,6 +341,22 @@ if (RUN_PLATFORM_SERVICES) {
   // /api/health/workflow-engine probe can report blockage.
   startReaper();
   initEventLoopMonitor();
+
+  // #19 DURABLE RUN-WORKER (ADDITIVE, FEATURE-FLAGGED): only when
+  // JKAI_RUN_WORKER === '1' AND the operator opted the web process into hosting
+  // the worker in-process (JKAI_RUN_WORKER_IN_WEB === '1'). The normal topology
+  // runs the worker as a SEPARATE process (packages/jkai-run-worker), so by
+  // default the web process does NOT start a worker even when the flag is on —
+  // that avoids two pollers in one host racing the queue. The cron-leader gate
+  // in startScheduler() already handles double-firing for the flag-on case.
+  // When the flag is OFF this block is inert and behaviour is unchanged.
+  if (process.env.JKAI_RUN_WORKER === '1' && process.env.JKAI_RUN_WORKER_IN_WEB === '1') {
+    import('./run-worker')
+      .then(({ startRunWorker }) => startRunWorker())
+      .catch((err: unknown) =>
+        console.error('[run-worker] in-web boot failed:', err instanceof Error ? err.message : err),
+      );
+  }
 }
 
 export const engine = new WorkflowEngine(registry);

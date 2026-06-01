@@ -1,3 +1,5 @@
+import type { NodeRegistry } from './registry';
+
 export interface Position {
   x: number;
   y: number;
@@ -151,6 +153,17 @@ export interface ExecutionContext {
   getIncomingEdges: (nodeId: string) => WorkflowEdgeDef[];
   /** Get a node's type, config, and label by ID */
   getNodeConfig: (nodeId: string) => { type: string; config: Record<string, unknown>; label: string } | undefined;
+  /**
+   * Engine-injected fields. These are populated by the engine when it builds
+   * the per-node execution context and read by certain executors (e.g. agentic
+   * nodes that need the current node id or the registry to resolve sub-tools).
+   * Optional because not every caller/context constructs them, but typed here
+   * so engine + executors avoid `as ExecutionContext & {...}` casts.
+   */
+  /** The id of the node currently executing. */
+  _currentNodeId?: string;
+  /** The node registry, for executors that resolve other node types at runtime. */
+  _registry?: NodeRegistry;
 }
 
 export interface NodeExecutor {
@@ -292,6 +305,17 @@ export interface UndoEntry {
     removedEdgeIds: string[];
     addedNodes: WorkflowNodeDef[];
   };
+}
+
+/**
+ * Per-node "On failure" behaviour, stored under the reserved `_onError` key in
+ * a node's config (set in the canvas inspector). Read by the engine to wrap the
+ * executor call in retry/continue/route handling. Absent ⇒ legacy 'stop'.
+ */
+export interface NodeOnErrorConfig {
+  mode?: 'stop' | 'continue' | 'retry' | 'route';
+  retries?: number;
+  retryDelayMs?: number;
 }
 
 export interface EngineOptions {

@@ -16,6 +16,21 @@ export function getActiveJobs(): ReadonlyMap<string, Cron> {
 }
 
 export async function startScheduler(): Promise<void> {
+  // #19 LEADER ELECTION (ADDITIVE, FEATURE-FLAGGED): when the durable run-worker
+  // is enabled, the cron lane could fire in BOTH the web process and the worker
+  // process. Gate cron registration on a pg advisory lock so exactly one process
+  // owns scheduling and crons don't double-fire. When the flag is OFF this guard
+  // is skipped entirely and the scheduler behaves exactly as today.
+  if (process.env.JKAI_RUN_WORKER === '1') {
+    const { tryAdvisoryLock, SCHEDULER_LOCK_LANE } = await import('./leader-lock');
+    const isLeader = await tryAdvisoryLock(SCHEDULER_LOCK_LANE);
+    if (!isLeader) {
+      console.log('[scheduler] Not cron leader (advisory lock held elsewhere) — skipping cron registration');
+      return;
+    }
+    console.log('[scheduler] Acquired cron leader lock');
+  }
+
   console.log('[scheduler] Starting cron scheduler...');
   const schedules = await db
     .select()
@@ -76,11 +91,17 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
     return;
   }
 
+  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): in worker mode the row is
+  // created 'pending' so the out-of-process worker claims it (vs 'running' for
+  // the in-process path below). When the flag is OFF this is exactly the
+  // original 'running' insert.
+  const workerMode = process.env.JKAI_RUN_WORKER === '1';
+
   const [runRow] = await db
     .insert(workflowRuns)
     .values({
       workflowId,
-      status: 'running',
+      status: workerMode ? 'pending' : 'running',
       trigger: 'scheduled',
       startedAt: new Date(),
     })
@@ -144,6 +165,24 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
       });
     }
 
+    // #19 DISPATCH SWITCH: in worker mode, ENQUEUE the (already-'pending') run
+    // for the out-of-process worker and return — the worker persists results +
+    // updates the schedule's lastRunAt/nextRunAt is still handled below for the
+    // schedule bookkeeping. We update the schedule timestamps then bail out of
+    // the in-process execute/persist path. When the flag is OFF this branch is
+    // skipped and execution proceeds in-process exactly as before.
+    if (workerMode) {
+      const { enqueue } = await import('./run-queue');
+      await enqueue(runId);
+      const job = activeJobs.get(scheduleId);
+      await db
+        .update(workflowSchedules)
+        .set({ lastRunAt: now, nextRunAt: job?.nextRun() ?? null })
+        .where(eq(workflowSchedules.id, scheduleId));
+      console.log(`[scheduler] Enqueued run ${runId} for run-worker (worker mode)`);
+      return;
+    }
+
     const result = await engine.execute(definition, runId, {}, undefined, workflowId);
 
     const completedAt = new Date();
@@ -183,7 +222,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
           completedAt: new Date(),
           ...(usage ?? {}),
         })
-        .where(eq(nodeExecutions.nodeId, nodeId));
+        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
     }
 
     for (const [nodeId, error] of result.nodeErrors) {
@@ -197,7 +236,7 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
           completedAt: new Date(),
           ...(usage ?? {}),
         })
-        .where(eq(nodeExecutions.nodeId, nodeId));
+        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
     }
 
     // Update lastRunAt/nextRunAt on the schedule

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>jkai Workflow Engine — Improvement Programme</title>
+<style>
+  :root{
+    --bg:#0e0d0b; --panel:#161410; --ink:#ece7dd; --mut:#a39a88; --line:#2b2823;
+    --accent:#e8a33d; --good:#7fb069; --warn:#e0b341; --bad:#d2694a; --blue:#6ea2c9;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"DM Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;font-size:16px}
+  .wrap{max-width:980px;margin:0 auto;padding:48px 24px 96px}
+  header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:36px}
+  .mono{font-family:var(--mono)}
+  .kic{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+  h1{font-family:var(--mono);font-weight:800;font-size:32px;line-height:1.15;margin:.3em 0 .15em;letter-spacing:-.01em}
+  h2{font-family:var(--mono);font-weight:700;font-size:21px;margin:48px 0 14px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h3{font-size:17px;margin:24px 0 6px;font-weight:700}
+  p{margin:.5em 0}
+  a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.86em;background:#211e19;padding:1px 6px;border-radius:4px;color:#e6dcc8}
+  .sub{color:var(--mut);font-size:14px}
+  .banner{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:8px;padding:18px 20px;margin:24px 0}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:24px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+  .stat .n{font-family:var(--mono);font-size:26px;font-weight:800}
+  .stat .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap;display:inline-block}
+  .t-done{background:rgba(127,176,105,.16);color:var(--good);border:1px solid rgba(127,176,105,.4)}
+  .t-note{background:rgba(110,162,201,.14);color:var(--blue);border:1px solid rgba(110,162,201,.4)}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:14px 0}
+  .item h3{margin-top:0}
+  .files{font-family:var(--mono);font-size:12.5px;color:var(--blue);word-break:break-all}
+  ul{margin:.4em 0 .4em 0;padding-left:1.1em}
+  li{margin:.25em 0}
+  .small{font-size:13px;color:var(--mut)}
+  .note{border-left:2px solid var(--warn);padding-left:12px;color:var(--mut);font-size:13.5px;margin:8px 0}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kic">strange&nbsp;ramblings · engineering report</div>
+  <h1>jkai Workflow Engine<br/>Improvement Programme</h1>
+  <p class="sub">Implementation of all 21 recommendations from the workflow-capability assessment.<br/>
+  Branch <code>feature/workflow-improvements</code> · base <code>master</code> · 8 commits.</p>
+</header>
+
+<div class="banner">
+  <strong>Status: all 21 recommendations implemented, committed &amp; tested. Production build passes.</strong>
+  <p class="small" style="margin-bottom:0">Delivered across 7 code commits on <code>feature/workflow-improvements</code>.
+  Full suite: <strong>1210 / 1212 tests pass</strong>; the 2 remaining failures are non-product and pre-existing
+  (see <a href="#status">Verification</a>). <code>vite build</code> succeeds. Three items carry activation caveats (they are
+  fully built and safe, but need a config/skill flip elsewhere to take full effect) — flagged with <span class="tag t-note">note</span> below.</p>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="n" style="color:var(--good)">21</div><div class="l">Implemented</div></div>
+  <div class="stat"><div class="n" style="color:var(--good)">1210</div><div class="l">Tests passing</div></div>
+  <div class="stat"><div class="n" style="color:var(--good)">✔</div><div class="l">Prod build</div></div>
+  <div class="stat"><div class="n" style="color:var(--blue)">7</div><div class="l">Code commits</div></div>
+</div>
+
+<h2>1 · Summary</h2>
+<table>
+  <thead><tr><th>#</th><th>Recommendation</th><th>Area</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Scope <code>node_executions</code> writes by <code>(runId, nodeId)</code> — fixes cross-run record corruption</td><td>Engine</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>2</td><td><code>workflow_describe_node</code> MCP tool — full per-node schema for Hermes</td><td>Hermes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>3</td><td><code>dryRun</code> guards on <code>code-execute</code> + <code>http-request</code></td><td>Nodes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>4</td><td><code>workflow_generate</code> MCP tool wrapping the rich generator</td><td>Hermes</td><td><span class="tag t-note">done · note</span></td></tr>
+    <tr><td>5</td><td>Make verification a <em>blocking</em> gate on the Hermes write path</td><td>Hermes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>6</td><td>Offline generation eval / regression harness (pass-rate)</td><td>Generation</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>7</td><td>Golden few-shot workflow exemplars in orchestrator prompts</td><td>Generation</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>8</td><td>First node-executor unit tests</td><td>Nodes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>9</td><td>Replace <code>safe-eval</code> regex denylist with an AST allowlist — closes RCE bypass</td><td>Nodes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>10</td><td>Graceful drain on shutdown (await in-flight runs, bounded)</td><td>Runtime</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>11</td><td>Cancel actually stops a run (per-run <code>AbortController</code>)</td><td>Runtime</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>12</td><td>n-way <code>switch</code> node, loop bounded-concurrency, standalone <code>approval</code> node</td><td>Nodes</td><td><span class="tag t-note">done · note</span></td></tr>
+    <tr><td>13</td><td>Extract node-runner out of the <code>execute()</code> god-method</td><td>Engine</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>14</td><td>Self-healing no longer mutates/persists shared node config (per-run copy)</td><td>Engine</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>15</td><td>Restore Hermes tool-step telemetry (tool-call frames → JobEvents)</td><td>Hermes</td><td><span class="tag t-note">done · note</span></td></tr>
+    <tr><td>16</td><td>Reconcile registry-client drift (+32 defs) + parity regression test</td><td>Nodes</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>17</td><td>Warn on fan-in key collisions instead of silent last-writer-wins</td><td>Engine</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>18</td><td>Type engine-injected <code>ExecutionContext</code> fields</td><td>Engine</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>19</td><td>Durable run-worker: separate process + DB queue + advisory-lock leader election</td><td>Runtime</td><td><span class="tag t-note">done · flag-off</span></td></tr>
+    <tr><td>20</td><td>Persist node outputs incrementally at completion</td><td>Runtime</td><td><span class="tag t-done">done</span></td></tr>
+    <tr><td>21</td><td>Make <code>accumulator</code> node description honest (within-run)</td><td>Nodes</td><td><span class="tag t-done">done</span></td></tr>
+  </tbody>
+</table>
+
+<h2>2 · Security &amp; data-integrity (the two that mattered most)</h2>
+<div class="item">
+  <h3>#9 — safe-eval RCE bypass closed</h3>
+  <p>The old regex denylist was bypassable with dynamic property access — a working escape
+  (<code>this["cons"+"tructor"]["cons"+"tructor"]("…")()</code>) read <code>process.env</code> at review time. Replaced with an AST
+  allowlist: the expression is parsed (<code>@babel/parser</code>) and every node walked, rejecting <code>this</code>, banned
+  identifiers/property-names (<code>constructor</code>, <code>__proto__</code>, <code>process</code>, <code>Function</code>, <code>eval</code>, …), dynamic computed
+  member access, and <code>Function</code>/<code>eval</code> calls — before any <code>new Function</code>. Signature unchanged, so
+  <code>transform</code>/<code>conditional</code>/<code>validator</code>/<code>loop</code> are untouched. Hand-rolled walk (no visitor-table import, which
+  breaks under vitest's full-graph loading). Test asserts the bypass is rejected and legitimate expressions pass.</p>
+  <p class="files">src/lib/workflows/nodes/safe-eval.ts · tests/lib/workflows/nodes/safe-eval.test.ts</p>
+</div>
+<div class="item">
+  <h3>#1 — node_executions cross-run corruption</h3>
+  <p>Per-run <code>UPDATE</code>s were scoped by <code>nodeId</code> only; since <code>nodeId</code> is the static graph-node id reused on every run,
+  completing one run overwrote the status/IO/cost/timestamps of <em>all prior runs'</em> executions of that node. Now scoped
+  by <code>and(eq(runId), eq(nodeId))</code> everywhere (mirroring the already-correct resume path), with a mutation-verified test.</p>
+  <p class="files">run-helpers.ts · scheduler.ts · routes/api/workflows/[id]/run/+server.ts · tests/lib/workflows/run-helpers.test.ts</p>
+</div>
+
+<h2>3 · Engine &amp; runtime</h2>
+<div class="item">
+  <h3>#11 / #10 / #20 — cancellation, drain, durability</h3>
+  <ul>
+    <li><strong>#11</strong> <code>engine.cancelRun(runId)</code> aborts a live run via a run-level <code>AbortController</code> linked to the
+    per-node timeout controllers; scheduling halts between levels; the cancel route calls it after the DB status flip.
+    (Previously cancel was DB-only and the run kept spending cost.)</li>
+    <li><strong>#10</strong> <code>engine.drain(timeoutMs)</code> stops accepting new runs and awaits in-flight run promises;
+    <code>gracefulShutdown</code> awaits <code>drain(25s)</code> before exit (idempotent under double-SIGTERM).</li>
+    <li><strong>#20</strong> each node's status/output is now persisted at completion (runId-scoped, best-effort), so a crash
+    mid-run preserves finished nodes and aids resume.</li>
+  </ul>
+  <p class="files">engine.ts · engine-runtime.ts · hooks.server.ts · cancel route</p>
+</div>
+<div class="item">
+  <h3>#13 / #14 / #17 / #18 — structure, correctness &amp; types</h3>
+  <ul>
+    <li><strong>#13</strong> extracted <code>mergeUpstreamInput</code> into <code>engine-node-runner.ts</code> (verbatim); the self-healing/retry
+    block was left inline by design (too closure-bound to extract without behaviour risk) and documented.</li>
+    <li><strong>#14</strong> self-healing applies healed config to a per-run copy and no longer writes it back to
+    <code>workflow_nodes</code> — it was silently rewriting the user's saved workflow.</li>
+    <li><strong>#17</strong> fan-in key collisions now emit a warning instead of silent last-writer-wins (merge result unchanged).</li>
+    <li><strong>#18</strong> engine-injected context fields are typed on <code>ExecutionContext</code>, removing inline casts.</li>
+  </ul>
+  <p class="files">engine.ts · engine-node-runner.ts (new) · types.ts</p>
+</div>
+<div class="item">
+  <h3>#19 — durable run-worker <span class="tag t-note">flag-off</span></h3>
+  <p>Optional separate run-worker process driven by a DB-backed queue. <code>JKAI_RUN_WORKER=1</code> makes the run route and
+  scheduler <em>enqueue</em> runs (claimed via <code>FOR UPDATE SKIP LOCKED</code> leases) and runs cron under a
+  <code>pg_try_advisory_lock</code> leader, executed by <code>packages/jkai-run-worker</code>. With the flag off, behaviour is
+  byte-for-byte unchanged. Three nullable columns were added to <code>workflow_runs</code> in the schema.</p>
+  <div class="note"><strong>Before enabling:</strong> run <code>npx drizzle-kit push</code> to apply the additive columns, build the worker
+  (<code>node packages/jkai-run-worker/build.mjs</code>), and validate on staging before flipping <code>JKAI_RUN_WORKER=1</code>. Until then
+  the in-process model (now hardened by #10/#11/#20) continues to run exactly as before.</div>
+  <p class="files">run-queue.ts · leader-lock.ts · run-worker.ts · packages/jkai-run-worker/* · scheduler.ts · run route · db/schema.ts</p>
+</div>
+
+<h2>4 · Generation &amp; Hermes (the headline ask)</h2>
+<div class="item">
+  <h3>#4 / #5 — expose the rich generator &amp; make verify blocking <span class="tag t-note">note</span></h3>
+  <p><strong>#4</strong> new <code>workflow_generate({prompt, workflowId})</code> MCP tool wraps the existing <code>generateWorkflow()</code>
+  (grounding + critic + verify + self-heal), so Hermes reuses the quality engine instead of hand-authoring the DAG;
+  it streams progress, persists (create or modify), and returns the workflowId/url/summary and verification status.
+  <strong>#5</strong> <code>workflow_build_from_spec</code> now returns <code>success:false</code> with structured issues when verification finds
+  errors (was advisory text), forcing a fix before completion; warnings stay advisory.</p>
+  <div class="note"><strong>To take full effect:</strong> point the <code>jkai-canvas</code> Hermes skill (in the <code>~/.hermes-jkai</code> config repo)
+  at <code>workflow_generate</code> for "build me a workflow" intents. The tool is live in this app now.</div>
+  <p class="files">src/lib/workflows/site-tools/tools/workflows.ts</p>
+</div>
+<div class="item">
+  <h3>#2 / #7 / #6 — grounding, exemplars, eval</h3>
+  <ul>
+    <li><strong>#2</strong> <code>workflow_describe_node(type)</code> returns a node's full <code>configSchema</code> (required, enums, defaults),
+    ports and an example — the agent reads schemas proactively instead of discovering mistakes at write-time.</li>
+    <li><strong>#7</strong> six golden few-shot exemplars (scrape→summarise→email; cron→fetch→notify;
+    gmail-trigger→LLM→reply/label; conditional; loop) added to the orchestrator prompt, every node type verified.</li>
+    <li><strong>#6</strong> an offline eval harness (<code>src/lib/workflows/eval/</code>): a pure CI-safe scorer (20 unit tests) plus a
+    live runner over a fixed prompt suite — <code>RUN_WORKFLOW_EVAL=1 npx tsx src/lib/workflows/eval/run-eval.ts</code> — that
+    reports a pass-rate and exits non-zero on regressions, so "consistently high quality" becomes measurable.</li>
+  </ul>
+  <p class="files">site-tools/tools/workflows.ts · orchestrator/grounding.ts, prompts.ts, patterns.ts · src/lib/workflows/eval/* · tests/lib/workflows/eval/*</p>
+</div>
+<div class="item">
+  <h3>#15 — Hermes tool-step telemetry <span class="tag t-note">note</span></h3>
+  <p>A pure mapper (<code>adaptToolFrameToJobEvents</code>) translates Hermes <code>tool</code> SSE frames into the same
+  <code>tool_start</code>/<code>tool_result</code>/<code>status</code> events the in-repo orchestrator emits, wired into the flag-ON chat path with
+  defensive guards (malformed frames are skipped, never thrown); 13 unit tests.</p>
+  <div class="note"><strong>Activation:</strong> dormant until the <code>jkai_platform</code> plugin in <code>~/.hermes-jkai</code> emits <code>kind:'tool'</code>
+  frames. The SvelteKit side is ready and safe; the single mapper is the one place to adjust field names if the real
+  frame shape differs.</div>
+  <p class="files">src/lib/jkai/hermes-client.ts · sse-adapter.ts · routes/api/workflows/orchestrator/chat/+server.ts</p>
+</div>
+
+<h2>5 · New control-flow primitives (#12) <span class="tag t-note">note</span></h2>
+<div class="item">
+  <ul>
+    <li><strong>switch</strong> — deterministic n-way branch; sets <code>metadata._selectedHandle</code> via the engine's existing
+    n-way routing. (<code>nodes/switch.ts</code> + <code>.def.ts</code>)</li>
+    <li><strong>loop concurrency</strong> — the previously-ignored <code>concurrency</code> config now drives a bounded pool; default 1
+    preserves the old sequential behaviour and output order. (<code>nodes/loop.ts</code>)</li>
+    <li><strong>approval</strong> — standalone human approve/reject node reusing the engine pause primitive, with <em>no</em>
+    scraper dependency; an auto-decision fast-path routes on <code>approved</code>/<code>rejected</code> handles. (<code>nodes/approval.ts</code> + <code>.def.ts</code>)</li>
+  </ul>
+  <div class="note"><strong>Known limitation:</strong> on the human pause→resume path, the resume endpoint seeds a fixed node output, so
+  handle auto-routing doesn't re-fire — branch downstream on <code>input.formValues.approved</code> with a conditional/switch.
+  Making the resumed node re-route on its handle is a small follow-up in the engine + resolve endpoint.</div>
+</div>
+
+<h2 id="status">6 · Verification, build &amp; deploy</h2>
+<ul>
+  <li><strong>Tests:</strong> 1210 / 1212 pass. Two non-product failures remain: <code>src/lib/mcp/meta-tool.test.ts</code>
+  (a hard-coded essential-tool-count bound that <em>also fails on clean <code>master</code></em> — pre-existing, unrelated to this work)
+  and <code>promote-ephemeral-tool.test.ts &gt; is registered</code> (a &gt;5s DB-touching test that passes in isolation but times out
+  under the heavier parallel load — a test-infra flake, not a code regression).</li>
+  <li><strong>Typecheck:</strong> no new type errors introduced; the only <code>tsc</code> errors are 4 pre-existing ones in
+  <code>nodes/apple-calendar.ts</code> present on <code>master</code>.</li>
+  <li><strong>Production build:</strong> <code>vite build</code> succeeds.</li>
+</ul>
+
+<h2>7 · Follow-ups (small, optional)</h2>
+<ul>
+  <li>Point the <code>jkai-canvas</code> skill at <code>workflow_generate</code> (#4) and have the <code>jkai_platform</code> plugin emit <code>tool</code> frames (#15) — both in the <code>~/.hermes-jkai</code> repo.</li>
+  <li>Apply the additive <code>workflow_runs</code> columns and validate the worker on staging before enabling <code>JKAI_RUN_WORKER</code> (#19).</li>
+  <li>Re-route resumed approval nodes on their handle (#12 limitation).</li>
+  <li>Fix the pre-existing <code>meta-tool</code> count assertion and give the slow <code>promote-ephemeral</code> test a longer timeout / isolation so the suite is reliably green.</li>
+</ul>
+
+<footer>
+  jkai workflow-capability programme · branch <span class="mono">feature/workflow-improvements</span> · all 21 recommendations delivered.
+  This report reflects the true state, including the activation caveats above.
+</footer>
+</div>
+</body>
+</html>

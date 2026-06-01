@@ -16,7 +16,7 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
-import { adaptFrameToCanvasSse } from '$lib/jkai/sse-adapter';
+import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 
@@ -301,6 +301,41 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           (frame.kind === 'send' || frame.kind === 'replace') &&
           frame.content.startsWith(HERMES_HOME_CHANNEL_NOTICE_PREFIX)
         ) {
+          continue;
+        }
+        // Surface Hermes tool-call frames onto the tool-step panel. These are
+        // a SECOND source of tool telemetry alongside the in-process
+        // tool-step bus (subscribed above): the bus only covers tools that
+        // route back through THIS SvelteKit MCP server, whereas a `tool` SSE
+        // frame lets Hermes report its own / non-MCP tool calls (built-ins,
+        // skills, other MCP servers). `adaptToolFrameToJobEvents` returns []
+        // for any non-tool or malformed frame, so this is a no-op for
+        // text/media frames and can never crash the stream.
+        if (frame.kind === 'tool') {
+          for (const ev of adaptToolFrameToJobEvents(frame)) {
+            // Mirror the bus subscriber: promote inline attachments returned
+            // by a tool (e.g. write_document → { attachments: [row] }) into
+            // turnAttachments so the chat UI renders download links.
+            if (ev.type === 'tool_result' && ev.status === 'done' && ev.result && typeof ev.result === 'object') {
+              const atts = (ev.result as Record<string, unknown>).attachments;
+              if (Array.isArray(atts)) {
+                for (const a of atts) {
+                  if (a && typeof a === 'object' && typeof (a as Record<string, unknown>).id === 'string') {
+                    const row = a as Record<string, unknown>;
+                    turnAttachments.push({
+                      id: String(row.id),
+                      kind: String(row.kind ?? 'text') as AssistantAttachment['kind'],
+                      mimeType: String(row.mimeType ?? 'application/octet-stream'),
+                      originalName: row.originalName != null ? String(row.originalName) : null,
+                      sizeBytes: typeof row.sizeBytes === 'number' ? row.sizeBytes : 0,
+                      source: String(row.source ?? 'generated') as AssistantAttachment['source'],
+                    });
+                  }
+                }
+              }
+            }
+            publishJobEvent(jobId, ev);
+          }
           continue;
         }
         // Try every frame — `extractAttachmentFromFrame` returns null when

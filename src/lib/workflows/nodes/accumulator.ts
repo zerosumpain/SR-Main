@@ -36,8 +36,8 @@ export const accumulatorExecutor: NodeExecutor = {
     return {
       type: 'object',
       properties: {
-        items: { type: 'array', description: 'Accumulated items across runs' },
-        count: { type: 'number', description: 'Number of accumulated items' },
+        items: { type: 'array', description: "Items collected from this run's input into an array" },
+        count: { type: 'number', description: 'Number of items collected in this run' },
       },
     };
   },
@@ -47,7 +47,7 @@ export const accumulatorDef: NodeDefinition = {
   type: 'accumulator',
   label: 'Accumulator',
   category: 'control',
-  description: 'Collect results from upstream into an array. Use after parallel branches or loops.',
+  description: 'Wrap the current input (or a chosen field) into an array within this run. Does NOT persist or accumulate across separate runs.',
   configSchema: {
     type: 'object',
     properties: {
@@ -71,5 +71,5 @@ export const accumulatorDef: NodeDefinition = {
     },
   ],
   llmDescription:
-    'Use after fan-out/parallel branches or loops to gather all results into a single array.',
+    "Normalises the current run's input into an array shape { items, count } within a SINGLE run. If collectField names an array on the input, its elements become items; otherwise the value (or whole input) is wrapped as a one-element array. IMPORTANT: this does NOT persist or accumulate state across separate workflow runs — it only reshapes data inside the run it executes in. For cross-run persistence use the data-store node.",
 };

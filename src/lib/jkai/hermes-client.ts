@@ -45,6 +45,44 @@ export interface SseFrameAttachment {
   source: 'web' | 'whatsapp' | 'generated';
 }
 
+/** Per-tool-call telemetry carried on a `tool` SSE frame. Surfaced as
+ * `tool_start` / `tool_result` / `status` JobEvents so the canvas tool-step
+ * panel renders Hermes tool invocations exactly like the in-repo
+ * orchestrator's steps.
+ *
+ * ASSUMPTION (#15): the Hermes jkai_platform plugin does not yet emit a
+ * dedicated `tool` OutboundFrame — today its tool calls only surface via the
+ * in-process MCP `tool-step-bus` (tools that route back through this
+ * SvelteKit MCP server). This shape is the forward-looking contract for when
+ * the plugin starts streaming tool telemetry for ITS OWN / non-MCP tools
+ * (Hermes built-ins, skills, other MCP servers) that never touch our bus.
+ * It mirrors Hermes' internal `tool_calls` vocabulary (`name` + `arguments`)
+ * and the existing `OutboundFrame` convention of stashing structured data in
+ * `metadata`. The mapper in `sse-adapter.ts` guards every field so an unknown
+ * shape is skipped rather than throwing. */
+export interface SseFrameToolCall {
+  /** Lifecycle phase. `started` → tool_start; `completed`/`failed` →
+   * tool_result; `progress` → a status bubble. */
+  phase: 'started' | 'progress' | 'completed' | 'failed';
+  /** Tool name, e.g. `workflow_add_node`. Hermes may also send it as
+   * `name`; the mapper accepts either. */
+  tool?: string;
+  name?: string;
+  /** Stable id correlating started ↔ completed for the same call. */
+  tool_call_id?: string;
+  id?: string;
+  /** Call arguments (start phase). */
+  args?: Record<string, unknown>;
+  arguments?: Record<string, unknown>;
+  /** Tool output (completed phase). */
+  result?: unknown;
+  /** Error string (failed phase). */
+  error?: string;
+  /** Short human-readable summary for the UI (parity with the legacy
+   * emitter's `summary` field). */
+  summary?: string;
+}
+
 export interface SseFrame {
   /** `send`/`replace`/`finalize` are text-bubble frames; `thinking` carries
    *  a reasoning-delta for the collapsible Reasoning panel (rendered
@@ -53,14 +91,19 @@ export interface SseFrame {
    *  `/api/jkai/attachments` so the chat UI can render the bytes inline
    *  instead of the legacy `🖼️ Image: …` / `🔊 Audio: …` / `🎬 Video: …` /
    *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
-   *  back to. */
-  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document';
+   *  back to; `tool` carries per-tool-call telemetry (see `SseFrameToolCall`)
+   *  surfaced onto the tool-step panel. */
+  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool';
   chat_id: string;
   message_id: string;
   content: string;
   metadata: Record<string, unknown>;
   ts: number;
   attachment?: SseFrameAttachment;
+  /** Populated only on `kind: 'tool'` frames. The plugin may also nest the
+   * same payload under `metadata.tool` / `metadata.tool_call`; the mapper
+   * checks both locations. */
+  tool?: SseFrameToolCall;
 }
 
 export class HermesClient {
