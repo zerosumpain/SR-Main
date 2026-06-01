@@ -29,6 +29,11 @@ export interface ClaimedRun {
   id: string;
   workflowId: string;
   trigger: string;
+  /** The run's persisted initial input (gmail/webhook event payload, manual
+   *  `input`), or null for runs enqueued without one (e.g. scheduled). The
+   *  worker replays this into engine.execute so enqueued event/manual runs
+   *  receive the same input the in-process path would have passed. */
+  input: Record<string, unknown> | null;
 }
 
 /**
@@ -120,7 +125,7 @@ export async function claimNext(
         heartbeat_at = now()
     FROM next
     WHERE r.id = next.id
-    RETURNING r.id AS id, r.workflow_id AS "workflowId", r.trigger AS trigger
+    RETURNING r.id AS id, r.workflow_id AS "workflowId", r.trigger AS trigger, r.input_data AS input
   `);
   const rows = (res as unknown as { rows?: ClaimedRun[] }).rows ?? [];
   return rows[0] ?? null;

@@ -141,13 +141,28 @@ async function dispatchWorkflow(
 
   const runId = crypto.randomUUID();
 
+  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): in worker mode the run is
+  // created 'pending' with its event payload persisted to input_data, then
+  // enqueued for the out-of-process worker to claim + execute (the worker
+  // replays input_data into engine.execute, so the gmail-trigger downstream
+  // sees the same payload). When the flag is OFF this is the original
+  // in-process 'running' insert + engine.execute below, byte-for-byte.
+  const workerMode = process.env.JKAI_RUN_WORKER === '1';
+
   await db.insert(workflowRuns).values({
     id: runId,
     workflowId,
-    status: 'running',
+    status: workerMode ? 'pending' : 'running',
     trigger: 'event',
     startedAt: new Date(),
+    inputData: initialInput,
   });
+
+  if (workerMode) {
+    const { enqueue } = await import('$lib/workflows/run-queue');
+    await enqueue(runId);
+    return;
+  }
 
   engine
     .execute(definition, runId, initialInput, undefined, workflowId)

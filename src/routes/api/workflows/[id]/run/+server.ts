@@ -28,6 +28,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
     status: 'running',
     trigger: 'manual',
     startedAt: new Date(),
+    // Persist initial input so the enqueue path (worker mode) can replay it;
+    // the in-process path below passes initialInput directly and ignores this.
+    inputData: initialInput,
   }).returning();
 
   const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));

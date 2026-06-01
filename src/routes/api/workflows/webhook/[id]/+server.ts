@@ -28,6 +28,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
     status: 'running',
     trigger: 'webhook',
     startedAt: new Date(),
+    // Persist the webhook payload so the enqueue path (worker mode) can replay
+    // it; the in-process path below passes `body` directly and ignores this.
+    inputData: body,
   }).returning();
 
   const definition: WorkflowDefinition = {
@@ -48,6 +51,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
       targetHandle: e.targetHandle,
     })),
   };
+
+  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): in worker mode, enqueue the
+  // run (payload already persisted to input_data above) for the out-of-process
+  // worker and return. When the flag is OFF this is skipped and execution runs
+  // in-process below, byte-for-byte as before.
+  if (process.env.JKAI_RUN_WORKER === '1') {
+    const { enqueue } = await import('$lib/workflows/run-queue');
+    await enqueue(run.id);
+    return json({ runId: run.id, status: 'accepted' }, { status: 202 });
+  }
 
   // Execute in background
   engine.execute(definition, run.id, body, undefined, params.id).then(async (result) => {

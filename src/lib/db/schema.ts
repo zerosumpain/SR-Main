@@ -782,6 +782,14 @@ export const workflowRuns = pgTable('workflow_runs', {
   claimedBy: text('claimed_by'),
   claimedAt: timestamp('claimed_at', { withTimezone: true }),
   leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  /**
+   * #19 RUN-WORKER — the run's initial input payload, persisted so an enqueued
+   * run can be replayed by the out-of-process worker with the same input the
+   * in-process path would have passed to engine.execute (gmail/webhook event
+   * payloads, manual-run `input`). NULLABLE/additive; only set on the enqueue
+   * paths and only read by the worker. Scheduled runs leave it null ({}).
+   */
+  inputData: jsonb('input_data'),
 });
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;

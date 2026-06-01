@@ -199,7 +199,7 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
       startedAt: new Date(runStartedAt).toISOString(),
     });
 
-    const result = await engine.execute(def, runId, {}, undefined, workflowId, { selfHealing: true });
+    const result = await engine.execute(def, runId, claimed.input ?? {}, undefined, workflowId, { selfHealing: true });
     await persistResult(claimed, result, runStartedAt);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
