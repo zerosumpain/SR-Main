@@ -35,6 +35,7 @@
     useIntelContext = true,
     activeBuild = null,
     approvalUi,
+    hermesEnabled = false,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -54,6 +55,7 @@
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
+    hermesEnabled?: boolean;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -1076,6 +1078,125 @@
     void send();
   }
 
+  // ── Command palette (item 1) + model switcher (item 2) ──────────────────
+  // Both surfaces only function when Hermes handles the chat (`hermesEnabled`):
+  // the gateway interprets slash commands (/usage, /model …) before the agent
+  // runs, whereas the legacy in-process loop would forward them to the LLM as
+  // prose.
+
+  // Gateway slash commands that are safe to fire through the jkai bridge
+  // (verified at the platform-dispatch level in hermes gateway/run.py). `send`
+  // fires the command silently; `insert` drops it into the composer so the user
+  // can add an argument before sending.
+  const PALETTE_COMMANDS: { command: string; hint: string; mode: 'send' | 'insert' }[] = [
+    { command: '/usage', hint: 'Token usage & cost for this session', mode: 'send' },
+    { command: '/status', hint: 'Session status', mode: 'send' },
+    { command: '/compress', hint: 'Summarise & compress the context', mode: 'send' },
+    { command: '/goal', hint: 'Set a goal for the agent to pursue', mode: 'insert' },
+  ];
+  let paletteIndex = $state(0);
+  let paletteDismissed = $state(false);
+  const paletteMatches = $derived.by(() => {
+    if (!hermesEnabled || !conversationId) return [];
+    const v = input;
+    // Only while typing the command token itself — a space means we've moved on
+    // to arguments, so the palette gets out of the way.
+    if (!v.startsWith('/') || /\s/.test(v)) return [];
+    const q = v.slice(1).toLowerCase();
+    return PALETTE_COMMANDS.filter((c) => c.command.slice(1).toLowerCase().startsWith(q));
+  });
+  const paletteOpen = $derived(paletteMatches.length > 0 && !paletteDismissed);
+
+  function onComposerInput() {
+    // Typing re-opens a dismissed palette and resets the highlight so a stale
+    // index can never point past the freshly-filtered list.
+    paletteDismissed = false;
+    paletteIndex = 0;
+  }
+
+  function selectPaletteCommand(cmd: { command: string; mode: 'send' | 'insert' }) {
+    paletteDismissed = true;
+    if (cmd.mode === 'send') {
+      input = '';
+      void silentSend(cmd.command);
+    } else {
+      input = cmd.command + ' ';
+      tick().then(() => textareaEl?.focus());
+    }
+  }
+
+  // Model switcher — switchable only on a fresh conversation (no messages yet).
+  // The conversation's model locks after the first message (the PATCH returns
+  // 409, and a mid-chat switch churns the prefix cache), so after that we just
+  // show a static label.
+  let modelMenuOpen = $state(false);
+  const modelOptions = $derived.by(() => {
+    const opts: ModelContext[] = [{ provider: 'zai', modelId: defaultGlmModelId }];
+    if (altOpenRouterModel?.modelId) {
+      opts.push({ provider: 'openrouter', modelId: altOpenRouterModel.modelId });
+    }
+    return opts;
+  });
+  const currentModel = $derived({
+    provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'zai',
+    modelId: conversation?.modelId ?? defaultGlmModelId,
+  });
+  function shortModelLabel(id: string): string {
+    return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
+  }
+
+  async function switchModel(provider: ModelContext['provider'], modelId: string) {
+    modelMenuOpen = false;
+    if (!conversationId || loading) return;
+    if (currentModel.provider === provider && currentModel.modelId === modelId) return;
+
+    // 1) Persist for cost accuracy + lock the conversation's model. The PATCH
+    //    409s if a message already exists — the source of truth for "can we
+    //    still switch".
+    try {
+      const res = await fetch(`/api/jkai/conversations/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelProvider: provider, modelId }),
+      });
+      if (!res.ok) {
+        showToast(res.status === 409 ? 'Model locks after the first message.' : 'Could not switch model.');
+        return;
+      }
+    } catch {
+      showToast('Could not switch model.');
+      return;
+    }
+    onmodelchange?.({ provider, modelId });
+
+    // 2) Tell Hermes for this chat session via the gateway /model command. Sent
+    //    silently (no user bubble) and its confirmation reply is drained without
+    //    rendering. `loading` keeps the composer disabled until the switch turn
+    //    settles so the user's first real message can't race ahead of it.
+    loading = true;
+    try {
+      const res = await fetch('/api/workflows/orchestrator/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `/model ${modelId} --provider ${provider}`, conversationId, silent: true }),
+      });
+      const data = await res.json().catch(() => null);
+      const jobId = data?.jobId;
+      if (jobId) {
+        const stream = streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} });
+        await Promise.race([
+          stream.done.catch(() => {}),
+          new Promise((r) => setTimeout(r, 15000)),
+        ]);
+      }
+    } catch {
+      // The switch is already persisted; if the /model turn failed Hermes keeps
+      // its session default and pricing may be off until the next turn.
+    } finally {
+      loading = false;
+    }
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading || !conversationId) return;
@@ -1232,6 +1353,29 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (paletteOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        paletteIndex = (paletteIndex + 1) % paletteMatches.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        paletteIndex = (paletteIndex - 1 + paletteMatches.length) % paletteMatches.length;
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const cmd = paletteMatches[paletteIndex];
+        if (cmd) selectPaletteCommand(cmd);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        paletteDismissed = true;
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -1279,6 +1423,48 @@
         {/if}
       </p>
     </div>
+    {#if hermesEnabled && conversationId}
+      <div class="model-switcher">
+        {#if messages.length === 0 && modelOptions.length > 1}
+          <button
+            type="button"
+            class="model-btn"
+            onclick={() => (modelMenuOpen = !modelMenuOpen)}
+            disabled={loading}
+            title="Model for this conversation — locks after the first message"
+          >
+            <span class="model-dot"></span>
+            <span class="model-name">{shortModelLabel(currentModel.modelId)}</span>
+            <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {#if modelMenuOpen}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div class="model-backdrop" onclick={() => (modelMenuOpen = false)}></div>
+            <div class="model-menu" role="listbox" aria-label="Choose model">
+              {#each modelOptions as opt (opt.provider + opt.modelId)}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={opt.provider === currentModel.provider && opt.modelId === currentModel.modelId}
+                  class="model-opt"
+                  class:active={opt.provider === currentModel.provider && opt.modelId === currentModel.modelId}
+                  onclick={() => switchModel(opt.provider, opt.modelId)}
+                >
+                  <span class="model-opt-name">{shortModelLabel(opt.modelId)}</span>
+                  <span class="model-opt-provider">{opt.provider}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <span class="model-label" title="Model — locked after the first message">
+            <span class="model-dot"></span>
+            <span class="model-name">{shortModelLabel(currentModel.modelId)}</span>
+          </span>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <!-- Messages -->
@@ -1636,7 +1822,26 @@
           Drop files to attach
         </div>
       {/if}
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-3xl mx-auto relative">
+        {#if paletteOpen}
+          <div class="cmd-palette" role="listbox" aria-label="Slash commands">
+            {#each paletteMatches as cmd, i (cmd.command)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === paletteIndex}
+                class="cmd-row"
+                class:active={i === paletteIndex}
+                onmousedown={(e) => { e.preventDefault(); selectPaletteCommand(cmd); }}
+                onmouseenter={() => (paletteIndex = i)}
+              >
+                <span class="cmd-name">{cmd.command}</span>
+                <span class="cmd-hint">{cmd.hint}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
         {#if activeBuild?.id}
           <div class="mb-2">
             <BuildPill buildId={activeBuild.id} variant="sticky" />
@@ -1660,6 +1865,7 @@
             bind:this={textareaEl}
             bind:value={input}
             onkeydown={handleKeydown}
+            oninput={onComposerInput}
             onpaste={onPaste}
             placeholder="Ask anything..."
             disabled={loading}
@@ -1692,6 +1898,87 @@
    * for potential future spacing/positioning tweaks; the line itself
    * styles its own margins. */
   .hb-wrap { margin-bottom: 0.75rem; }
+
+  /* ── Command palette — slash-command typeahead floating above the composer ── */
+  .cmd-palette {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 0.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    z-index: 20;
+  }
+  .cmd-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.7rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .cmd-row.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
+  .cmd-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); flex-shrink: 0; }
+  .cmd-hint { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Model switcher (chat header) ── */
+  .model-switcher { position: relative; flex-shrink: 0; }
+  .model-btn,
+  .model-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.4rem;
+    border: 1px solid transparent;
+    background: transparent;
+  }
+  .model-btn { cursor: pointer; border-color: var(--card-border); }
+  .model-btn:hover:not(:disabled) { color: var(--text-primary); }
+  .model-btn:disabled { opacity: 0.5; cursor: default; }
+  .model-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .model-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-caret { opacity: 0.6; flex-shrink: 0; }
+  .model-backdrop { position: fixed; inset: 0; z-index: 25; }
+  .model-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.35rem;
+    min-width: 12rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    z-index: 26;
+  }
+  .model-opt {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.7rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .model-opt:hover { background: var(--bg-section); }
+  .model-opt.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
+  .model-opt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+  .model-opt-provider { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
   /* Empty-state hero — a centred greeting + tappable starter prompts shown on
    * a fresh conversation. The composer stays docked at the bottom; clicking a

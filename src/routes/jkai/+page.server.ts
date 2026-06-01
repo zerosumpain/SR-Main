@@ -5,6 +5,7 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
+import { env } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async () => {
   // Load conversations with preview
@@ -98,5 +99,8 @@ export const load: PageServerLoad = async () => {
     chatAltOpenRouterModel,
     spendByPeriod,
     approvalUi,
+    // Gates the in-composer command palette + model switcher (they only work
+    // when Hermes handles the chat; the legacy loop would pass slashes as prose).
+    hermesEnabled: env.JKAI_HERMES_CANVAS_CHAT === '1',
   };
 };

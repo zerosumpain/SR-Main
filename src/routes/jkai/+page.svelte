@@ -275,15 +275,14 @@
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
         approvalUi={data.approvalUi}
+        hermesEnabled={data.hermesEnabled}
         {activeBuild}
         onmodelchange={(ctx: ModelContext) => {
-          if (activeConversation) {
-            activeConversation = {
-              ...activeConversation,
-              modelProvider: ctx.provider,
-              modelId: ctx.modelId,
-            };
-          }
+          activeConversation = {
+            ...(activeConversation ?? {}),
+            modelProvider: ctx.provider,
+            modelId: ctx.modelId,
+          };
         }}
       />
     </div>
