@@ -28,5 +28,15 @@ await build({
     '$env/dynamic/private': envShim,
     '$env/static/private': envShim,
   },
+  // CRITICAL: set the process-role flag at the very top of the bundle, BEFORE
+  // any imported module evaluates. The entry's `process.env... = '1'` statement
+  // is textually before the import, but ESM hoists imports above it, so the
+  // platform-service boot guards in $lib/workflows/index.ts (WhatsApp socket,
+  // scheduler, reaper, memory review — all gated on JKAI_BUILDER_PROCESS) would
+  // otherwise run before the flag is set. The banner runs first, so the worker
+  // process boots ONLY the engine + queue, never the web platform services.
+  banner: {
+    js: "process.env.JKAI_BUILDER_PROCESS = process.env.JKAI_BUILDER_PROCESS || '1';",
+  },
   logLevel: 'info',
 });
