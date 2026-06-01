@@ -73,6 +73,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
     startedAt: new Date(runStartedAt).toISOString(),
   });
 
+  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): when the durable run-worker
+  // is enabled, ENQUEUE the run for the out-of-process worker instead of
+  // executing it in-process here. The row is already inserted as 'running'
+  // above; enqueue() flips it back to 'pending' + clears any lease so the
+  // worker can claim it. When the flag is OFF this branch is skipped entirely
+  // and the in-process execute() path below runs byte-for-byte as before.
+  if (process.env.JKAI_RUN_WORKER === '1') {
+    const { enqueue } = await import('$lib/workflows/run-queue');
+    await enqueue(run.id);
+    return json({ runId: run.id, status: 'pending' }, { status: 201 });
+  }
+
   // Execute in background — don't await
   engine.execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing }).then(async (result) => {
     const healingHistory = result.healingHistory || [];

@@ -767,6 +767,21 @@ export const workflowRuns = pgTable('workflow_runs', {
    *  failed/abandoned so a crash or deploy mid-run doesn't leave orphaned
    *  `running` rows that block subsequent dispatch. */
   heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
+  /**
+   * #19 DURABLE RUN-WORKER (ADDITIVE, FEATURE-FLAGGED) — claim/lease columns
+   * for the optional out-of-process run-worker. ALL NULLABLE so existing rows
+   * and the in-process (flag-OFF) path are completely unaffected; they are only
+   * read/written when `JKAI_RUN_WORKER === '1'`. Not yet applied to the DB —
+   * `npx drizzle-kit push` is a separate manual step.
+   *
+   *  - claimedBy: worker id (hostname:pid:uuid) that currently owns the run.
+   *  - claimedAt: when the lease was last (re)acquired.
+   *  - leaseExpiresAt: when the lease lapses; another worker may reclaim a
+   *    pending/running row past this without waiting for the heartbeat reaper.
+   */
+  claimedBy: text('claimed_by'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
 });
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;

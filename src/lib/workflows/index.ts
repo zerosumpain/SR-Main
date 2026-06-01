@@ -341,6 +341,22 @@ if (RUN_PLATFORM_SERVICES) {
   // /api/health/workflow-engine probe can report blockage.
   startReaper();
   initEventLoopMonitor();
+
+  // #19 DURABLE RUN-WORKER (ADDITIVE, FEATURE-FLAGGED): only when
+  // JKAI_RUN_WORKER === '1' AND the operator opted the web process into hosting
+  // the worker in-process (JKAI_RUN_WORKER_IN_WEB === '1'). The normal topology
+  // runs the worker as a SEPARATE process (packages/jkai-run-worker), so by
+  // default the web process does NOT start a worker even when the flag is on —
+  // that avoids two pollers in one host racing the queue. The cron-leader gate
+  // in startScheduler() already handles double-firing for the flag-on case.
+  // When the flag is OFF this block is inert and behaviour is unchanged.
+  if (process.env.JKAI_RUN_WORKER === '1' && process.env.JKAI_RUN_WORKER_IN_WEB === '1') {
+    import('./run-worker')
+      .then(({ startRunWorker }) => startRunWorker())
+      .catch((err: unknown) =>
+        console.error('[run-worker] in-web boot failed:', err instanceof Error ? err.message : err),
+      );
+  }
 }
 
 export const engine = new WorkflowEngine(registry);
