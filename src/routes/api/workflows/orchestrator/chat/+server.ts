@@ -19,8 +19,19 @@ import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
+import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
+import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 
 const MAX_MESSAGE_LEN = 20_000;
+
+// Tools the SvelteKit MCP server dispatches itself (the site-tools registry
+// plus the `jkai_extended` meta-dispatcher). Every one of these also publishes
+// to the in-process tool-step bus when Hermes calls it, so we suppress the
+// duplicate Hermes `tool` SSE frame for them (see the frame handler in
+// handleWithHermes). Hermes built-ins / skills / other MCP servers aren't in
+// here, so their frames still render.
+const isBusServedTool = (toolName: string): boolean =>
+  toolName === JKAI_EXTENDED_TOOL.name || isRegisteredTool(toolName);
 
 // Feature flag (Hermes Phase 1). When `JKAI_HERMES_CANVAS_CHAT=1`, canvas
 // orchestrator chat is proxied through the Hermes gateway via HermesClient +
@@ -303,16 +314,20 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         ) {
           continue;
         }
-        // Surface Hermes tool-call frames onto the tool-step panel. These are
-        // a SECOND source of tool telemetry alongside the in-process
-        // tool-step bus (subscribed above): the bus only covers tools that
-        // route back through THIS SvelteKit MCP server, whereas a `tool` SSE
-        // frame lets Hermes report its own / non-MCP tool calls (built-ins,
-        // skills, other MCP servers). `adaptToolFrameToJobEvents` returns []
-        // for any non-tool or malformed frame, so this is a no-op for
-        // text/media frames and can never crash the stream.
+        // Surface Hermes tool-call frames onto the tool-step panel. Hermes
+        // core fires send_tool for EVERY agent tool call (gateway/run.py wires
+        // the tool_start/complete callbacks with no MCP gating), so this is a
+        // SECOND source of telemetry that OVERLAPS the in-process tool-step bus
+        // (subscribed above) for any tool routing back through THIS SvelteKit
+        // MCP server. The bus is the richer source (full untruncated result →
+        // inline artifacts + attachment promotion, plus mid-call progress), so
+        // `adaptToolFrameToJobEvents(frame, isBusServedTool)` drops the
+        // duplicate frame for bus-served tools and keeps it only for Hermes
+        // built-ins / skills / other MCP servers. It also returns [] for any
+        // non-tool or malformed frame, so this is a no-op for text/media frames
+        // and can never crash the stream.
         if (frame.kind === 'tool') {
-          for (const ev of adaptToolFrameToJobEvents(frame)) {
+          for (const ev of adaptToolFrameToJobEvents(frame, isBusServedTool)) {
             // Mirror the bus subscriber: promote inline attachments returned
             // by a tool (e.g. write_document → { attachments: [row] }) into
             // turnAttachments so the chat UI renders download links.

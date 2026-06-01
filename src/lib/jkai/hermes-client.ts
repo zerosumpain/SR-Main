@@ -50,16 +50,19 @@ export interface SseFrameAttachment {
  * panel renders Hermes tool invocations exactly like the in-repo
  * orchestrator's steps.
  *
- * ASSUMPTION (#15): the Hermes jkai_platform plugin does not yet emit a
- * dedicated `tool` OutboundFrame — today its tool calls only surface via the
- * in-process MCP `tool-step-bus` (tools that route back through this
- * SvelteKit MCP server). This shape is the forward-looking contract for when
- * the plugin starts streaming tool telemetry for ITS OWN / non-MCP tools
- * (Hermes built-ins, skills, other MCP servers) that never touch our bus.
- * It mirrors Hermes' internal `tool_calls` vocabulary (`name` + `arguments`)
- * and the existing `OutboundFrame` convention of stashing structured data in
- * `metadata`. The mapper in `sse-adapter.ts` guards every field so an unknown
- * shape is skipped rather than throwing. */
+ * The Hermes jkai_platform plugin's `send_tool` (adapter.py) emits these
+ * `tool` OutboundFrames, driven by gateway/run.py's tool_start/complete
+ * callbacks — which fire for EVERY agent tool call with no MCP gating. So a
+ * tool that also routes back through this SvelteKit MCP server surfaces twice:
+ * once on the in-process `tool-step-bus` (richer — full untruncated result +
+ * mid-call progress) and once as this frame (result preview-capped to 600
+ * chars). The mapper in `sse-adapter.ts` de-dupes by dropping the frame for
+ * bus-served tools (`isBusServedTool`), so this frame is the SOLE source only
+ * for Hermes built-ins / skills / other MCP servers that never touch the bus.
+ * The shape mirrors Hermes' internal `tool_calls` vocabulary (`name` +
+ * `arguments`) and the `OutboundFrame` convention of stashing structured data
+ * in `metadata`; the mapper guards every field so an unknown shape is skipped
+ * rather than throwing. */
 export interface SseFrameToolCall {
   /** Lifecycle phase. `started` → tool_start; `completed`/`failed` →
    * tool_result; `progress` → a status bubble. */

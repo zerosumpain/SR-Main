@@ -59,16 +59,36 @@ function readToolCall(frame: SseFrame): SseFrameToolCall | null {
  * legacy emitter exactly (`tool`, `args`, `toolCallId`, `summary`, `result`,
  * `status`).
  *
+ * De-dupe against the in-process tool-step bus. Hermes core fires `send_tool`
+ * for EVERY agent tool call (gateway/run.py wires `tool_start_callback` /
+ * `tool_complete_callback` with no MCP gating), so a tool that routes back
+ * through THIS SvelteKit MCP server surfaces on BOTH the bus AND this `tool`
+ * frame — under two different id-spaces (bus `stepId` vs Hermes
+ * `tool_call_id`), which ChatArea's `tool_start` handler would render as two
+ * separate steps. The bus is the richer source (full untruncated result →
+ * inline artifacts + attachment promotion, plus mid-call `progress`), whereas
+ * `send_tool` preview-caps results to 600 chars. So the caller passes
+ * `isBusServedTool` identifying tools the bus already covers; we drop the
+ * frame for those and keep it only for Hermes built-ins / skills / other MCP
+ * servers that never touch the bus.
+ *
  * Defensive by contract: any frame that isn't a recognizable tool frame
  * (wrong kind, missing payload, unknown phase, or a missing tool name on the
  * start phase) yields `[]` so a malformed frame never crashes the stream.
  */
-export function adaptToolFrameToJobEvents(frame: SseFrame): JobEvent[] {
+export function adaptToolFrameToJobEvents(
+  frame: SseFrame,
+  isBusServedTool?: (toolName: string) => boolean,
+): JobEvent[] {
   if (frame.kind !== 'tool') return [];
   const tc = readToolCall(frame);
   if (!tc || typeof tc !== 'object') return [];
 
   const toolName = (typeof tc.tool === 'string' && tc.tool) || (typeof tc.name === 'string' && tc.name) || '';
+
+  // The in-process bus is authoritative for tools it serves — skip the
+  // duplicate Hermes frame to avoid a double-rendered tool step.
+  if (toolName && isBusServedTool?.(toolName)) return [];
   const toolCallId =
     (typeof tc.tool_call_id === 'string' && tc.tool_call_id) ||
     (typeof tc.id === 'string' && tc.id) ||

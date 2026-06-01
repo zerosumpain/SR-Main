@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HermesClient, type SseFrame } from './hermes-client';
-import { adaptFrameToCanvasSse } from './sse-adapter';
+import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents } from './sse-adapter';
 
 describe('HermesClient', () => {
   let originalFetch: typeof fetch;
@@ -147,5 +147,39 @@ describe('adaptFrameToCanvasSse — thinking frame', () => {
       ts: 2,
     };
     expect(adaptFrameToCanvasSse(frame)).toEqual([]);
+  });
+});
+
+describe('adaptToolFrameToJobEvents — bus de-dupe', () => {
+  const toolFrame = (toolName: string): SseFrame => ({
+    kind: 'tool',
+    chat_id: 'c1',
+    message_id: `tool:c1:tc_1`,
+    content: '',
+    metadata: { tool: { phase: 'started', tool: toolName, tool_call_id: 'tc_1', args: { x: 1 } } },
+    ts: 1,
+  });
+
+  it('renders a frame for a tool the bus does NOT serve (Hermes built-in)', () => {
+    const events = adaptToolFrameToJobEvents(toolFrame('browser_vision'), () => false);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'tool_start', tool: 'browser_vision', toolCallId: 'tc_1' });
+  });
+
+  it('drops a frame for a bus-served tool (avoids double-render)', () => {
+    const events = adaptToolFrameToJobEvents(toolFrame('blog_create'), () => true);
+    expect(events).toEqual([]);
+  });
+
+  it('suppresses only bus-served tools when the predicate is selective', () => {
+    const isBusServed = (n: string) => n === 'blog_create';
+    expect(adaptToolFrameToJobEvents(toolFrame('blog_create'), isBusServed)).toEqual([]);
+    expect(adaptToolFrameToJobEvents(toolFrame('browser_vision'), isBusServed)).toHaveLength(1);
+  });
+
+  it('renders the frame when no predicate is passed (back-compat)', () => {
+    const events = adaptToolFrameToJobEvents(toolFrame('blog_create'));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'tool_start', tool: 'blog_create' });
   });
 });
