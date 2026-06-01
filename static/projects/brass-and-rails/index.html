@@ -595,9 +595,9 @@ const ECON_WIN = 68;                // (display alias of BAL.econWin)
 const BAL = {
   // --- A1 universal resource caps (food already capped separately) ---
   // cap = base + perCity*#cities + perInfra*total-improvements. Surplus above the cap spoils.
-  woodCap:   { base: 30, perCity: 18, perInfra: 6 },
-  stoneCap:  { base: 24, perCity: 14, perInfra: 5 },
-  prodCap:   { base: 40, perCity: 22, perInfra: 7 },   // production hoard was the worst offender
+  woodCap:   { base: 24, perCity: 12, perInfra: 2 },
+  stoneCap:  { base: 22, perCity: 12, perInfra: 4 },
+  prodCap:   { base: 32, perCity: 16, perInfra: 3 },   // production hoard was the worst offender — tighter so it spoils sooner
   // --- A1 challenger / rubber-band: trailing houses get cheaper science & production ---
   rubberMaxGap: 110,    // score gap (vs current leader) at which the discount saturates (kicks in earlier)
   rubberSciMax: 0.50,   // up to -50% science cost when far behind
@@ -647,6 +647,17 @@ const BAL = {
   fortifyBonus:  0.22,  // defense bonus for a dug-in unit that did NOT move/act last turn (trimmed so an early leader can't simply turtle to a snowball)
   flankPerUnit:  0.10,  // +attack per ADDITIONAL friendly unit adjacent to the defender
   flankCap:      0.30,  // max flanking bonus (3 flankers)
+  // --- B-pass faction rebalance (measured imbalances from the analysis screen) ---
+  stephensonMoveTurns: 10,  // Stephenson +1 move only applies on turns 1..this (early-game tempo, not a perpetual edge)
+  ironAtkMult:    1.025,    // Cleveland Ironmasters attack multiplier (trimmed from ~1.05 → +2.5%)
+  scholarTechLimit: 10,     // Bishopgate Scholars' −25% science discount applies only for their first N techs
+  scholarTechCost: 0.75,    // Scholars' science multiplier while under the tech limit (−25%)
+  highlandDefMult: 1.40,    // Teesdale Highlanders hill/mtn defence multiplier (×1.40, was ×1.25)
+  highlandHillProd: 2,      // bonus ⚒ a Highlander gets from each worked hill/mountain tile
+  highlandHillStone: 1,     // bonus 🪨 a Highlander gets from each worked hill/mountain tile
+  // --- B-pass resource sinks (wood & production were non-binding warchests) ---
+  improvWoodCost: 5,        // wood charged to build any tile improvement (makes wood binding)
+  cityLevelProd: 6,         // base ⚒ to level a city up; total = round(cityLevelProd * level) (taller = costlier)
 };
 // frozen pristine defaults so the Lab's "reset" always restores the shipped balance (deep copy)
 const BAL_DEFAULTS = JSON.parse(JSON.stringify(BAL));
@@ -679,16 +690,16 @@ function challengerFactor(p){
 const UNIT_TYPES = {
   founder:  {name:'Founder',       cost:3, food:5, hp:10, atk:0, def:1, move:1, range:1, tech:null, domain:'land', role:'settle', glyph:'⌂', desc:'A colony of settlers — costs food. Founds new villages on open land.'},
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
-  guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
-  armed:    {name:'Armed Guard',   cost:3, wood:2, hp:14, atk:4, def:3, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', needs:['iron'], desc:'A Guard with steel weapons forged from iron & felled timber. Needs wood + an iron deposit.'},
-  pike:     {name:'Skerne Pike',   cost:3, stone:2, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry', domain:'land', role:'def', glyph:'▮', desc:'Stalwart defender behind stone works — hard to dislodge. Needs stone.'},
-  pony:     {name:'Pit Pony',      cost:2, hp:10, atk:3, def:1, move:3, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Cheap, swift raider bred in the colliery — out-paces and out-numbers.'},
-  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:11, atk:6, def:1, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', needs:['coal','iron'], desc:'Long-range siege piece — wrecks walls & garrisons. Strikes without retaliation. Needs coal + iron.'},
-  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:20, atk:6, def:5, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', needs:['coal','iron'], desc:'Steam-armoured juggernaut off the locomotive works — a real powerhouse. Needs coal + iron.'},
-  skylark:  {name:'Skylark',       cost:8, wood:3, hp:12, atk:5, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', needs:['whinstone'], desc:'Flying striker forged on the Great Whin Sill — ignores all terrain. Needs whinstone.'},
-  nightmail:{name:'Night Mail',    cost:6, wood:1, hp:11, atk:6, def:1, move:3, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', needs:['lead'], desc:'Hidden until it strikes — a fast, hard-hitting assassin train that runs by dark. Needs lead for its shot.'},
-  monitor:  {name:'Skerne Monitor',cost:6, wood:3, hp:14, atk:4, def:3, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, needs:['iron','coal'], desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port + iron & coal.'},
-  lighter:  {name:'Tees Lighter',  cost:5, wood:2, hp:12, atk:0, def:1, move:3, range:0, tech:'harbours', domain:'sea', role:'transport', cargo:2, port:true, glyph:'⛵', desc:'A flat-bottomed barge — ferries up to 2 land units across the water. Needs a Port.'},
+  guard:    {name:'Quaker Guard',  cost:3, wood:2, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry — needs timber for its kit.'},
+  armed:    {name:'Armed Guard',   cost:3, wood:1, hp:14, atk:4, def:3, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', needs:['iron'], desc:'A Guard with steel weapons forged from iron & felled timber. Needs an iron deposit.'},
+  pike:     {name:'Skerne Pike',   cost:3, wood:1, stone:2, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry', domain:'land', role:'def', glyph:'▮', desc:'Stalwart defender behind stone works — hard to dislodge. Needs stone & timber.'},
+  pony:     {name:'Pit Pony',      cost:2, wood:1, hp:10, atk:3, def:1, move:3, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Cheap, swift raider bred in the colliery — out-paces and out-numbers. Needs a little timber.'},
+  gun:      {name:'Stephenson Gun',cost:4, wood:1, hp:12, atk:7, def:1, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', needs:['coal','iron'], desc:'Long-range siege piece — wrecks walls & garrisons. Strikes without retaliation. Needs coal + iron.'},
+  ironclad: {name:'Ironclad',      cost:5, wood:2, stone:1, hp:22, atk:7, def:6, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', needs:['coal','iron'], desc:'Steam-armoured juggernaut off the locomotive works — a real powerhouse. Needs coal + iron.'},
+  skylark:  {name:'Skylark',       cost:6, wood:2, hp:13, atk:6, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', needs:['whinstone'], desc:'Flying striker forged on the Great Whin Sill — ignores all terrain. Needs whinstone.'},
+  nightmail:{name:'Night Mail',    cost:4, wood:1, hp:12, atk:7, def:1, move:3, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', needs:['lead'], desc:'Hidden until it strikes — a fast, hard-hitting assassin train that runs by dark. Needs lead for its shot.'},
+  monitor:  {name:'Skerne Monitor',cost:5, wood:2, hp:16, atk:5, def:4, move:3, range:2, tech:'harbours', domain:'sea', role:'mil', port:true, glyph:'⚓', needs:['iron','coal'], desc:'An iron gunboat — rules the water and bombards the coast. Needs a Port + iron & coal.'},
+  lighter:  {name:'Tees Lighter',  cost:4, wood:1, hp:12, atk:0, def:1, move:3, range:0, tech:'harbours', domain:'sea', role:'transport', cargo:2, port:true, glyph:'⛵', desc:'A flat-bottomed barge — ferries up to 2 land units across the water. Needs a Port.'},
   colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
 };
 // food eaten per turn by a unit (scarcity sink — scales with the unit's heft)
@@ -738,22 +749,26 @@ const TECHS = {
 };
 // terrain-specific infrastructure improvements that grow cities (feature 1)
 const IMPROVEMENTS = {
+  // every improvement now also costs WOOD (timber for the works) so wood becomes a binding sink (B-pass).
+  // The wood cost is read live from BAL.improvWoodCost via improvWood() so the Lab can tune it.
   farm:     {label:'Farm',       glyph:'🌾', tech:'husbandry', on:['field'],                   cost:{prod:5},          yield:{food:1},          note:'+1 food on a field.'},
   lumber:   {label:'Lumber Mill',glyph:'🪚', tech:'forestry',  on:['lightforest','denseforest'],cost:{prod:5},         yield:{wood:2,prod:1},   note:'+wood from a forest.'},
   port:     {label:'Port',       glyph:'⚓', tech:'harbours',  on:['water','ocean'],           cost:{prod:6},          yield:{food:2,prod:1},   note:'+food & trade on water — a Port also lets this city build ships.'},
   watermill:{label:'Water Mill', glyph:'🜄', tech:'milling',   on:['river'],                   cost:{prod:5},          yield:{prod:2,food:1},   note:'+production & food on a river.'},
   mine:     {label:'Mine',       glyph:'⛏', tech:'ironworking',on:['hill','mountain'],         cost:{prod:7},          yield:{stone:2,prod:1},  note:'+stone & production on rock.'},
 };
+// wood charged on top of an improvement's ⚒ cost (live-tunable resource sink)
+function improvWood(){ return BAL.improvWoodCost; }
 function improvementFor(terrain){ for(const [id,im] of Object.entries(IMPROVEMENTS)) if(im.on.includes(terrain)) return id; return null; }
 
 const FACTIONS = [
   {id:'kelly',     name:'House Kelly',            color:0xe8a13a, motto:'Founders of the line',        bonus:'econ',    bonusTxt:'+1 ⚒ & +1 🔬 per city'},
   {id:'pease',     name:'Pease Quakers',          color:0x4caf6e, motto:'Faith & finance',             bonus:'tech',    bonusTxt:'science −25%'},
-  {id:'stephenson',name:'Stephenson Enginewrights',color:0xd64b3f, motto:'Steam & steel',               bonus:'move',    bonusTxt:'+1 move'},
-  {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+2 food/city, +1 vision'},
-  {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+25% hill/mtn def'},
-  {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+5% attack'},
-  {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −20%'},
+  {id:'stephenson',name:'Stephenson Enginewrights',color:0xd64b3f, motto:'Steam & steel',               bonus:'move',    bonusTxt:'+1 move (first 10 turns)'},
+  {id:'watermen',  name:'Skerne Watermen',        color:0x37a6cc, motto:'The river provides',          bonus:'vision',  bonusTxt:'+2 food/city, +1 vision, extra Founder'},
+  {id:'highland',  name:'Teesdale Highlanders',   color:0x9b6fc4, motto:'High ground, hard hearts',    bonus:'def',     bonusTxt:'+40% hill/mtn def, +⚒/🪨 from worked rock'},
+  {id:'iron',      name:'Cleveland Ironmasters',  color:0xcf7a3a, motto:"Where there's muck, there's brass", bonus:'atk', bonusTxt:'+2.5% attack'},
+  {id:'scholars',  name:'Bishopgate Scholars',    color:0x5b6ee1, motto:'Knowledge is dominion',       bonus:'tech',    bonusTxt:'science −25% (first 10 techs)'},
   {id:'rovers',    name:'Quaker Rovers',          color:0xe4e4e4, motto:'Forward, ever forward',       bonus:'cheap',   bonusTxt:'all units −1 ⚒'},
 ];
 
@@ -1048,6 +1063,8 @@ function setupGame(cfg){
     // starting units: a founder + a guard near capital
     spawnUnit(p,'rambler',sx,sz,true) || placeNear(p,'rambler',sx,sz);
     placeNear(p,'guard',sx,sz);
+    // Skerne Watermen start with an EXTRA Founder so the river-house can plant a 2nd city fast (B-pass settler buff)
+    if(f.bonus==='vision') placeNear(p,'founder',sx,sz);
     reveal(p, sx, sz, 2);
   });
 
@@ -1148,6 +1165,8 @@ const CITY_MAX = 10;                                            // hard ceiling 
 function borderRadius(c){ return Math.min(c.level, 4); }       // visual/owned territory (capped at 4)
 function workRadius(c){ return Math.min(c.level, 4); }   // worked tiles grow with level up to 4
 function growCost(c){ return (c.level+1)*(c.level+1)*3; }     // food to tick a level up once unlocked (quadratic → a real food sink)
+// ⚒ to tick a level up — scales with current level so TALL cities cost more (B-pass production sink)
+function growProdCost(c){ return Math.round(BAL.cityLevelProd*(c.level)); }
 // total food a player's standing army + cities eat each turn (the binding scarcity sink)
 function foodUpkeep(p){
   let up=0;
@@ -1216,6 +1235,12 @@ function tileYield(t){
   // infrastructure improvements (feature 1) permanently boost the tile
   const im=t.improved && IMPROVEMENTS[t.improved];
   if(im){ const y=im.yield; food+=y.food||0; wood+=y.wood||0; stone+=y.stone||0; prod+=y.prod||0; sci+=y.sci||0; }
+  // Teesdale Highlanders: their defensive high ground also funds an economy — each worked
+  // hill/mountain in their territory yields bonus ⚒ & 🪨 (B-pass turtle buff).
+  if((t.terrain==='hill'||t.terrain==='mountain') && t.owner){
+    const op=playerById(t.owner);
+    if(op && op.faction.bonus==='def'){ prod+=BAL.highlandHillProd; stone+=BAL.highlandHillStone; }
+  }
   return {food,wood,stone,prod,sci};
 }
 // per-city yield breakdown (display) — tiles this city controls + the town's own base. PERF: city neighbourhood only.
@@ -1246,7 +1271,9 @@ function recomputeIncome(){
 // spend the player's food pool to tick up cities whose improvement-unlocked max exceeds their level
 function growCities(p){
   for(const c of G.cities){ if(c.owner!==p.id) continue; if(c.unrest>0) continue;   // a city in unrest can't grow
-    if(c.level<maxCityLevel(c) && p.food>=growCost(c)){ p.food-=growCost(c); c.level++; onCityLevel(c); recomputeTerritory(); }
+    // levelling now also consumes ⚒ (production sink) on top of the food cost + improvement-count requirement
+    if(c.level<maxCityLevel(c) && p.food>=growCost(c) && p.prod>=growProdCost(c)){
+      p.food-=growCost(c); p.prod-=growProdCost(c); c.level++; onCityLevel(c); recomputeTerritory(); }
   }
 }
 function onCityLevel(c){
@@ -1282,8 +1309,13 @@ function techCost(p,id){
   // the tree ramps hard via techCountPow, so completion stays partial without starving unit techs.
   const depth=Math.max(0, p.techs.size - BAL.techFreeDepth);
   cost *= (1 + 0.12*Math.min(p.techs.size,BAL.techFreeDepth)) * Math.pow(1 + depth, BAL.techCountPow);
-  // scholar/pease science discount — now a REAL edge (bites harder than the generic tech bonus)
-  if(p.faction.bonus==='tech') cost*=BAL.scholarSciCost;
+  // science discounts. Pease keep their flat REAL edge; Bishopgate Scholars get a sharper −25%
+  // but only while they're still climbing the early tree (first scholarTechLimit techs) — an
+  // early tempo boost, not a perpetual runaway (B-pass scholars buff, isolated from Pease).
+  if(p.faction.bonus==='tech'){
+    if(p.faction.id==='scholars') cost *= (p.techs.size < BAL.scholarTechLimit ? BAL.scholarTechCost : 1);
+    else cost *= BAL.scholarSciCost;
+  }
   // challenger rubber-band: houses trailing the leader research cheaper (contested race, not handouts)
   cost *= (1 - BAL.rubberSciMax*challengerFactor(p));
   return Math.max(2,Math.round(cost));
@@ -1309,7 +1341,7 @@ function research(p,id){
 function unitMove(u){
   const p=playerById(u.owner); const base=UNIT_TYPES[u.type].move;
   let m=base;
-  if(p && p.faction.bonus==='move') m+=1;
+  if(p && p.faction.bonus==='move' && G.turn<=BAL.stephensonMoveTurns) m+=1;   // early-tempo edge only (turns 1..N)
   if(p && p.techs.has('steam')) m+=1;
   return m;
 }
@@ -1384,7 +1416,7 @@ function defenseBonus(u){
     else if(myCities<=2) b += BAL.fewCitiesBonus;
   }
   const p=playerById(u.owner);
-  if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=1.25;
+  if(p && p.faction.bonus==='def' && (t.terrain==='hill'||t.terrain==='mountain')) b*=BAL.highlandDefMult;
   // FORTIFY: a unit dug in (held position without moving/acting last turn) defends harder.
   if(u.fortified) b += BAL.fortifyBonus;
   return b;
@@ -1409,7 +1441,7 @@ function flankCount(att,def){
 function flankMult(att,def){ return 1 + Math.min(BAL.flankCap, flankCount(att,def)*BAL.flankPerUnit); }
 // full attack multiplier from the layered factors (returns the breakdown too, for the human predictor)
 function attackFactors(att,def){
-  const facBon = playerById(att.owner)?.faction.bonus==='atk'?1.05:1;
+  const facBon = playerById(att.owner)?.faction.bonus==='atk'?BAL.ironAtkMult:1;
   const counter = counterMult(att,def);               // 0 or BAL.counterBonus
   const counterM = 1+counter;
   const elev = elevationMult(att,def);
@@ -2250,14 +2282,14 @@ function renderCityPanel(){
   const c=G.selCity; const p=currentPlayer(); const owner=playerById(c.owner);
   const mine = c.owner===p.id && !p.isAI && G.mode==='campaign';
   selTitle.textContent='City'; selSub.textContent=c.isCapital?'capital':'';
-  const y=cityYields(c); const maxL=maxCityLevel(c); const gc=growCost(c); const atMax=c.level>=maxL;
+  const y=cityYields(c); const maxL=maxCityLevel(c); const gc=growCost(c); const gpc=growProdCost(c); const atMax=c.level>=maxL;
   const imps=cityImprovements(c); const lcap=cityLandCap(c);
-  const prog = atMax ? 1 : clamp((p.food||0)/gc,0,1);
+  const prog = atMax ? 1 : Math.min(clamp((p.food||0)/gc,0,1), clamp((p.prod||0)/Math.max(1,gpc),0,1));
   let h=`<div class="unit-head"><div class="unit-emoji" style="color:#${owner.color.toString(16).padStart(6,'0')}">${c.isCapital?'★':'⌂'}</div>
     <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}/${CITY_MAX} · border ${borderRadius(c)}${c.unrest>0?` · <span style="color:#e87a5a">⚑ unrest ${c.unrest}t</span>`:''}</div></div></div>
     ${c.unrest>0?`<div class="legend" style="margin-top:4px;color:#e87a5a">Newly captured — in unrest for <b>${c.unrest}</b> more turn(s): yields nothing & cannot grow until order is restored.</div>`:''}
     <div class="hpbar" style="background:#2a2412"><i style="width:${Math.round(prog*100)}%;background:linear-gradient(90deg,var(--amber),var(--amber2))"></i></div>
-    <div class="legend" style="margin-top:4px">${c.level<maxL?`Ready to grow — next level costs <b>${gc}</b> 🌾 (you have ${p.food||0})`:(c.level>=Math.min(CITY_MAX,lcap)?'At the limit of its land':`Build <b>infrastructure</b> nearby to unlock level ${c.level+1}`)} ${c.walls?'· walled':''}</div>
+    <div class="legend" style="margin-top:4px">${c.level<maxL?`Ready to grow — next level costs <b>${gc}</b> 🌾 + <b>${gpc}</b> ⚒ (you have ${p.food||0} 🌾, ${p.prod||0} ⚒)`:(c.level>=Math.min(CITY_MAX,lcap)?'At the limit of its land':`Build <b>infrastructure</b> nearby to unlock level ${c.level+1}`)} ${c.walls?'· walled':''}</div>
     <div class="legend" style="margin-top:2px">Improvements: <b>${imps}</b> built → caps growth at Lv <b>${maxL}</b></div>
     <div class="stat-grid" style="margin-top:8px;grid-template-columns:repeat(5,1fr)">
       <div class="mini"><div class="k">🌾</div><div class="vv">+${y.food}</div></div>
@@ -2295,7 +2327,7 @@ function renderCityPanel(){
     let any=false;
     for(const opt of improvementOptions(c,p)){ any=true; const dis=opt.disabled;
       h+=`<button class="btn" data-imp="${opt.x},${opt.z},${opt.id}" ${dis?'disabled':''} title="${opt.note}${opt.reason?' — '+opt.reason:''}">
-        <span>${opt.glyph} ${opt.label} <span style="color:var(--faint)">· ${dirLabel(opt.x-c.x,opt.z-c.z)} ${opt.terrain}</span></span><span class="cost">${opt.reason?'🔒':opt.cost+'⚒'}</span></button>`;
+        <span>${opt.glyph} ${opt.label} <span style="color:var(--faint)">· ${dirLabel(opt.x-c.x,opt.z-c.z)} ${opt.terrain}</span></span><span class="cost">${opt.reason?'🔒 '+opt.reason:opt.cost+'⚒ '+opt.wood+'🪵'}</span></button>`;
     }
     if(!any) h+=`<div class="legend">No improvable land in reach — research more techs (Husbandry, Forestry, Harbours, Milling, Ironworking) or grow to claim tiles.</div>`;
     h+=`</div>`;
@@ -2328,6 +2360,7 @@ function canImprove(p,c,t){
   const im=IMPROVEMENTS[id];
   if(!p.techs.has(im.tech)) return {ok:false, id, reason:'needs '+TECHS[im.tech].name};
   if(p.prod < im.cost.prod) return {ok:false, id, reason:'needs '+im.cost.prod+'⚒'};
+  if((p.wood||0) < improvWood()) return {ok:false, id, reason:'needs '+improvWood()+'🪵'};
   return {ok:true, id};
 }
 // list every improvable tile in this city's worked area, with build-ability
@@ -2336,9 +2369,11 @@ function improvementOptions(c,p){
   for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){ const x=c.x+dx,z=c.z+dz; if(!inB(x,z))continue; const t=tileAt(x,z);
     if(t.city||t.cityId!==c.id||!t.worked||t.improved) continue;
     const id=improvementFor(t.terrain); if(!id) continue; const im=IMPROVEMENTS[id];
-    const hasTech=p.techs.has(im.tech); const canPay=p.prod>=im.cost.prod;
-    out.push({x,z,id,terrain:t.terrain,label:im.label,glyph:im.glyph,note:im.note,cost:im.cost.prod,
-      disabled:!hasTech||!canPay, reason: !hasTech?('needs '+TECHS[im.tech].name): (!canPay?('needs '+im.cost.prod+'⚒'):null)});
+    const wc=improvWood();
+    const hasTech=p.techs.has(im.tech); const canPayProd=p.prod>=im.cost.prod; const canPayWood=(p.wood||0)>=wc;
+    out.push({x,z,id,terrain:t.terrain,label:im.label,glyph:im.glyph,note:im.note,cost:im.cost.prod,wood:wc,
+      disabled:!hasTech||!canPayProd||!canPayWood,
+      reason: !hasTech?('needs '+TECHS[im.tech].name): (!canPayProd?('needs '+im.cost.prod+'⚒'): (!canPayWood?('needs '+wc+'🪵'):null))});
   }
   return out;
 }
@@ -2346,7 +2381,7 @@ function doImprove(c,x,z,id){
   const p=playerById(c.owner); const t=tileAt(x,z); const chk=canImprove(p,c,t);
   if(!chk.ok || chk.id!==id) return;
   const im=IMPROVEMENTS[id];
-  p.prod-=im.cost.prod; t.improved=id;
+  p.prod-=im.cost.prod; p.wood=(p.wood||0)-improvWood(); t.improved=id;
   logMsg('city',`${c.name} built a ${im.label} (${dirLabel(x-c.x,z-c.z)}).`);
   recomputeIncome(); refreshTile(x,z); refreshAll();
   if(G.sel===null && G.selCity) renderCityPanel();
@@ -2518,13 +2553,15 @@ function aiBuildImprovements(p,thoughts,pr){
   const needPort = p.techs.has('harbours') && !myCities.some(c=>cityHasPort(c)) && !hasLandExpansion(p);
   opts.sort((a,b)=> (needPort?((b.id==='port')-(a.id==='port')):0) || (a.cost-b.cost));
   if(needPort) maxBuild=Math.max(maxBuild,1);
+  const wc=improvWood();
   for(const o of opts){
     if(built>=maxBuild) break;
     // bank some production for defence/units unless this house is very economy-minded
     const reserve = (pr.aggDrive>pr.econDrive)? 5 : 2;
     if(p.prod < o.cost + reserve) continue;
+    if((p.wood||0) < wc) continue;               // improvements now cost wood too (B-pass sink)
     const t=tileAt(o.x,o.z); if(t.improved) continue;
-    p.prod-=o.cost; t.improved=o.id; built++;
+    p.prod-=o.cost; p.wood=(p.wood||0)-wc; t.improved=o.id; built++;
     if(typeof refreshTile==='function' && G.mode!=='auto') refreshTile(o.x,o.z);
   }
   if(built){ recomputeIncome(); thoughts.push(`built ${built} improvement(s) to grow cities`); }
