@@ -225,9 +225,11 @@
       <div class="sub label">An Empire of the Skerne</div>
     </div>
     <div class="hud-stats">
+      <div class="stat"><span class="label">Food</span><span class="v" id="hudFood">0<small> 🌾</small></span></div>
+      <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
+      <div class="stat"><span class="label">Stone</span><span class="v" id="hudStone">0<small> 🪨</small></span></div>
       <div class="stat"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
       <div class="stat"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
-      <div class="stat"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
       <div class="stat"><span class="label">Cities</span><span class="v" id="hudCities">0</span></div>
       <div class="stat"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
       <div class="stat"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
@@ -286,6 +288,7 @@
     <button class="ctl-ico" id="btnAuto" title="Toggle autoplay">▶</button>
     <button id="endturn">End Turn</button>
     <button class="ctl-ico" id="btnDossier" title="AI dossier — capabilities &amp; what it has learned">🧠</button>
+    <button class="ctl-ico" id="btnAnalysis" title="Analysis — multi-game stats">📊</button>
     <button class="ctl-ico" id="btnRoster" title="Unit roster — costs &amp; stats">📋</button>
     <button class="ctl-ico" id="btnHelp" title="How to play (?)">?</button>
     <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
@@ -341,6 +344,19 @@
     </div>
   </div>
 
+  <!-- ANALYSIS (multi-game) -->
+  <div class="scrim hidden" id="analysis">
+    <div class="modal panel" style="width:min(1000px,96vw)">
+      <div class="panel-h"><h3>Analysis — multi-game intelligence</h3><span class="label" id="analysisGames"></span></div>
+      <div class="panel-b" id="analysisBody" style="max-height:80vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="analysisClose" class="btn primary" style="width:auto;">Close</button>
+          <button id="analysisWipe" class="btn danger" style="width:auto;">Wipe AI memory</button>
+          <div class="legend">Everything here is accumulated across every game played in this browser.</div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- SETUP MODAL -->
   <div class="scrim" id="setup">
     <div class="modal panel">
@@ -388,6 +404,9 @@
               <input type="checkbox" id="marathonChk" /> Auto-rematch (marathon self-play so the AI keeps learning)
             </label>
           </div>
+          <label class="legend" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:8px;">
+            <input type="checkbox" id="endlessChk" /> Play to a single victor — no turn limit; the game runs until one house stands (or wins outright)
+          </label>
         </div>
 
         <div class="start-row">
@@ -458,24 +477,24 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 let N = 32;                         // grid size (set per map-size mode)
 let FR = 20;                        // camera ortho half-frustum (scaled to board)
 const MAP_SIZES = { small:20, medium:28, large:38, huge:46 };   // selectable board sizes
-const MIN_CITY_DIST = 10;          // target spacing between cities (clamped to board)
-function cityMinDist(){ return clamp(Math.round(N/3.5), 5, MIN_CITY_DIST); }
+const MIN_CITY_DIST = 5;           // cities may not be founded within 5 tiles of one another
+function cityMinDist(){ return MIN_CITY_DIST; }
 const TURN_CAP = 70;                // score victory after this many full turns (conquest needs room to finish)
 const ALT_WIN_TURN = 48;            // alternative victories only open up late, after conquest's window
 const SCIENCE_WIN = 430;            // science banked AFTER all tech → host the Great Exhibition
 const ECON_WIN = 58;                // combined level of your cities → a railway empire (rewards going wide)
 
 const UNIT_TYPES = {
-  founder:  {name:'Founder',       cost:5, hp:10, atk:0, def:1, move:1, range:1, tech:null,        domain:'land', role:'settle', glyph:'⌂', desc:'Settles new villages on open land.'},
+  founder:  {name:'Founder',       cost:3, food:5, hp:10, atk:0, def:1, move:1, range:1, tech:null, domain:'land', role:'settle', glyph:'⌂', desc:'A colony of settlers — costs food. Founds new villages on open land.'},
   rambler:  {name:'Rambler',       cost:3, hp:10, atk:1, def:1, move:3, range:1, tech:null,        domain:'land', role:'scout',  glyph:'✦', desc:'Fast explorer with wide vision. A wanderer of the dales.'},
   guard:    {name:'Quaker Guard',  cost:3, hp:10, atk:2, def:2, move:1, range:1, tech:null,        domain:'land', role:'mil',    glyph:'♟', desc:'Dependable line infantry.'},
-  armed:    {name:'Armed Guard',   cost:4, wood:4, hp:12, atk:3, def:2, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard forged steel weapons from felled timber — harder-hitting.'},
-  pike:     {name:'Skerne Pike',   cost:4, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry',   domain:'land', role:'def',    glyph:'▮', desc:'Stalwart defender — hard to dislodge.'},
+  armed:    {name:'Armed Guard',   cost:3, wood:3, hp:12, atk:3, def:2, move:1, range:1, tech:null, domain:'land', role:'mil',   glyph:'⚔', desc:'A Guard with steel weapons forged from felled timber — harder-hitting. Needs wood.'},
+  pike:     {name:'Skerne Pike',   cost:3, stone:2, hp:15, atk:1, def:3, move:1, range:1, tech:'masonry', domain:'land', role:'def', glyph:'▮', desc:'Stalwart defender behind stone works — hard to dislodge. Needs stone.'},
   pony:     {name:'Pit Pony',      cost:3, hp:10, atk:2, def:1, move:2, range:1, tech:'riding',    domain:'land', role:'mil',    glyph:'⌐', desc:'Swift raider bred in the colliery.'},
-  gun:      {name:'Stephenson Gun',cost:8, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege',  glyph:'☷', desc:'Long-range siege piece. Strikes without retaliation.'},
-  ironclad: {name:'Ironclad',      cost:10,hp:15, atk:4, def:3, move:2, range:1, tech:'steam',     domain:'land', role:'mil',    glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
-  skylark:  {name:'Skylark',       cost:12,hp:10, atk:3, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil',    glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
-  nightmail:{name:'Night Mail',    cost:10,hp:10, atk:4, def:1, move:2, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — the mail train that runs by dark.'},
+  gun:      {name:'Stephenson Gun',cost:5, wood:2, hp:10, atk:4, def:0, move:1, range:3, tech:'ironworking',domain:'land',role:'siege', glyph:'☷', desc:'Long-range siege piece on a timber carriage. Strikes without retaliation.'},
+  ironclad: {name:'Ironclad',      cost:7, wood:2, stone:2, hp:15, atk:4, def:3, move:2, range:1, tech:'steam', domain:'land', role:'mil', glyph:'⬢', desc:'Steam-armoured juggernaut off the locomotive works.'},
+  skylark:  {name:'Skylark',       cost:8, wood:3, hp:10, atk:3, def:2, move:4, range:2, tech:'aeronautics',domain:'air', role:'mil', glyph:'✈', desc:'Flying striker. Ignores all terrain.'},
+  nightmail:{name:'Night Mail',    cost:7, wood:2, hp:10, atk:4, def:1, move:2, range:1, tech:'espionage', domain:'land', role:'stealth',glyph:'◆', desc:'Hidden until it strikes — the mail train that runs by dark.'},
   colossus: {name:'Brick Colossus',cost:0, hp:40, atk:5, def:4, move:1, range:1, tech:null,        domain:'land', role:'super',  glyph:'⬛', desc:'A living brick locomotive. Earned from a great city.'},
 };
 
@@ -604,6 +623,7 @@ function defaultGenome(){
 function setupGame(cfg){
   G.seed=cfg.seed; G.mode=cfg.mode; G.marathon=cfg.marathon;
   G.mapSize = cfg.mapSize || 'medium';
+  G.endless = !!cfg.endless;
   N = MAP_SIZES[G.mapSize] || 28;
   G.tiles=generateMap(cfg.seed);
   G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
@@ -629,7 +649,8 @@ function setupGame(cfg){
     const fk = knowledge.factions[f.id] || (knowledge.factions[f.id]={genome:defaultGenome(),wins:0,losses:0});
     const p = {
       id:f.id, idx:i, faction:f, name:f.name, color:f.color, isAI:!human, alive:true,
-      prod: 5, science: 3, wood: 0, prodIncome:0, sciIncome:0, techs:new Set(), explored:new Set(),
+      prod: 5, science: 3, wood: 2, stone: 2, food: 4,
+      prodIncome:0, sciIncome:0, foodIncome:0, woodIncome:0, stoneIncome:0, techs:new Set(), explored:new Set(),
       genome: human? defaultGenome() : {...fk.genome},
       stats:{founded:0,attacks:0,badAttacks:0,kills:0,lossesU:0,peakArmy:1,capDefSum:0,capDefTurns:0,techPeak:0,survived:0,built:{}},
       capitalId:null, lastThought:'',
@@ -645,7 +666,7 @@ function setupGame(cfg){
     reveal(p, sx, sz, 2);
   });
 
-  // apply faction passive: rovers cheaper rambler handled at build; vision handled in reveal radius
+  recomputeTerritory();
   recomputeIncome();
   G.started=true;
   // mode-specific panels: scoreboard for AI-vs-AI, selection for campaign
@@ -701,14 +722,13 @@ function spawnUnit(p,type,x,z,free){
 function foundCity(p,x,z,isCapital,name){
   const t=tileAt(x,z);
   if(t.terrain==='mountain'){ t.terrain='hill'; }   // level the very tallest ground for the town, keep the rest
-  const c={id:G.cid++,owner:p.id,x,z,name:name||drawName(),level:1,food:0,foodCap:6,bonusProd:isCapital?1:0,
+  const c={id:G.cid++,owner:p.id,x,z,name:name||drawName(),level:1,bonusProd:isCapital?1:0,
            walls:false,isCapital:!!isCapital,gaveSuper:false};
   G.cities.push(c); t.city=c; t.owner=p.id;
   if(isCapital) p.capitalId=c.id;
-  // claim a ring of borders
-  for(const [nx,nz] of neigh8(x,z)){ const nt=tileAt(nx,nz); if(!nt.owner) nt.owner=p.id; }
   p.stats.founded++;
   reveal(p,x,z,1);
+  recomputeTerritory();
   return c;
 }
 
@@ -727,57 +747,85 @@ function inSightOf(p,x,z){
 // p remembers terrain & cities it has ever explored
 function seenByPlayer(p,x,z){ return p.explored.has(key(x,z)); }
 
-/* ----- economy: a city's yields come from the 9 tiles within one diagonal step -----
-   forest=wood→production · water/ocean=rivers→food · field→food · hill/mountain→science.
-   Food grows the city; Production builds units; Science is banked and spent on tech. */
-function cityYields(c){
-  let food=0, prod=0, sci=0;
-  for(const [x,z] of [[c.x,c.z],...neigh8(c.x,c.z)]){
-    const t=tileAt(x,z);
-    switch(t.terrain){
-      case 'forest':   prod+=2; break;            // timber & charcoal
-      case 'water':    food+=2; break;            // the Skerne — fish & water-meadow
-      case 'ocean':    food+=1; break;
-      case 'field':    food+=1; break;            // pasture & crops
-      case 'hill':     prod+=1; sci+=1; break;    // quarry & survey
-      case 'mountain': sci+=2; break;             // ore-bearing knowledge
-    }
-    if(t.resource==='orchard'||t.resource==='cattle') food+=1;
-    else if(t.resource==='fish') food+=2;
-    else if(t.resource==='coal'||t.resource==='iron') prod+=1;
-    if(t.improved==='farm') food+=2;          // cultivated land
-    else if(t.improved==='mine') prod+=2;     // worked seam
+/* ----- territory, catchment & a real resource economy -----
+   Five resources flow into the player's stores each turn from the tiles their cities control:
+     Food 🌾 (fields/rivers) grows cities · Wood 🪵 (forest) & Stone 🪨 (hills/peaks) build
+     advanced units · Production ⚒ (town + mines) is the base build resource · Science 🔬 funds tech.
+   A city's border fill reaches `level` tiles out (max 6); each tile is held by its nearest city. */
+function borderRadius(c){ return Math.min(c.level, 6); }       // visual/owned territory
+function workRadius(c){ return Math.min(c.level, 2); }   // tiles that actually yield (small so the economy doesn't run away)
+function growCost(c){ return (c.level+1)*5; }                 // food to reach the next level
+function maxCityLevel(c){
+  // a city can only grow as far as the land within reach can sustain it
+  let rich=0;
+  for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){ const x=c.x+dx,z=c.z+dz; if(!inB(x,z))continue; const t=tileAt(x,z);
+    if(t.resource) rich+=2.2;
+    const tr=t.terrain; if(tr==='field'||tr==='forest') rich+=0.5; else if(tr==='hill') rich+=0.65; else if(tr==='mountain') rich+=0.75; else if(tr==='water') rich+=0.4;
   }
-  food+=1; prod+=1; sci+=1;                        // the town itself
-  if(c.isCapital){ food+=1; prod+=1; sci+=1; }
-  prod += c.bonusProd||0;                          // workshops from levelling up
-  const p=playerById(c.owner);
-  if(p && p.faction.bonus==='vision') food+=2;     // Skerne Watermen — the river provides (strong growth)
-  return {food,prod,sci};
+  return clamp(Math.round(3 + rich/5), 3, 12);
+}
+// assign every tile to the nearest city whose border covers it (sets owner + controlling cityId)
+function recomputeTerritory(){
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tileAt(x,z); t.cityId=null; t.worked=false; if(t.city){ t.owner=t.city.owner; t.cityId=t.city.id; } else { t.owner=null; t._d=1e9; } }
+  for(const c of G.cities){ const r=borderRadius(c);
+    for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){ const x=c.x+dx,z=c.z+dz; if(!inB(x,z))continue; const t=tileAt(x,z); if(t.city) continue;
+      const d=Math.max(Math.abs(dx),Math.abs(dz));
+      if(t.cityId==null || d < t._d){ t.owner=c.owner; t.cityId=c.id; t._d=d; t.worked = d<=workRadius(c); } } }
+}
+function tileYield(t){
+  let food=0,wood=0,stone=0,prod=0,sci=0;
+  switch(t.terrain){
+    case 'field': food+=1; break;
+    case 'water': food+=1; break;
+    case 'ocean': food+=1; break;
+    case 'forest': wood+=1; prod+=1; break;      // timber yard
+    case 'hill': stone+=1; prod+=1; break;        // quarry
+    case 'mountain': stone+=1; sci+=1; break;
+  }
+  if(t.resource==='orchard'||t.resource==='cattle') food+=1;
+  else if(t.resource==='fish') food+=2;
+  else if(t.resource==='coal'||t.resource==='iron') prod+=1;
+  if(t.improved==='farm') food+=2; else if(t.improved==='mine') stone+=2;
+  return {food,wood,stone,prod,sci};
+}
+// per-city yield breakdown (display) — tiles this city controls + the town's own base
+function cityYields(c){
+  const y={food:0,wood:0,stone:0,prod:0,sci:0};
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tileAt(x,z); if(t.cityId!==c.id||t.city||!t.worked) continue; const ty=tileYield(t); y.food+=ty.food;y.wood+=ty.wood;y.stone+=ty.stone;y.prod+=ty.prod;y.sci+=ty.sci; }
+  y.prod+=1+(c.bonusProd||0); y.sci+=1; y.food+=1;
+  if(c.isCapital){ y.prod+=1; y.sci+=1; y.food+=1; }
+  const p=playerById(c.owner); if(p && p.faction.bonus==='vision') y.food+=2;
+  return y;
 }
 function recomputeIncome(){
-  for(const p of G.players){
-    let prod=0,sci=0;
-    const nCities=G.cities.filter(c=>c.owner===p.id).length;
-    for(const c of G.cities){ if(c.owner!==p.id) continue; const y=cityYields(c); prod+=y.prod; sci+=y.sci; }
-    if(p.techs.has('trade')){ prod+=nCities; sci+=nCities; }   // Quaker Banking
-    if(p.faction.bonus==='econ'){ prod+=nCities; sci+=nCities; }   // House Kelly — economy scales with the empire
-    p.prodIncome=prod; p.sciIncome=sci;
-  }
+  for(const p of G.players){ p.foodIncome=0;p.woodIncome=0;p.stoneIncome=0;p.prodIncome=0;p.sciIncome=0; }
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){ const t=tileAt(x,z); if(!t.owner||t.city||!t.worked) continue; const p=playerById(t.owner); if(!p) continue;
+    const y=tileYield(t); p.foodIncome+=y.food;p.woodIncome+=y.wood;p.stoneIncome+=y.stone;p.prodIncome+=y.prod;p.sciIncome+=y.sci; }
+  for(const p of G.players){ const cs=G.cities.filter(c=>c.owner===p.id);
+    for(const c of cs){ p.prodIncome+=1+(c.bonusProd||0)+(c.isCapital?1:0); p.sciIncome+=1+(c.isCapital?1:0); p.foodIncome+=1+(c.isCapital?1:0); if(p.faction.bonus==='vision') p.foodIncome+=2; }
+    const n=cs.length; if(p.techs.has('trade')){ p.prodIncome+=n; p.sciIncome+=n; } if(p.faction.bonus==='econ'){ p.prodIncome+=n; p.sciIncome+=n; } }
 }
-function growCity(c){
-  while(c.food>=c.foodCap){ c.food-=c.foodCap; c.level++; c.foodCap=(c.level+1)*4; onCityLevel(c); }
+// spend the player's food pool to grow their cities (one level per city per turn, capped by the land)
+function growCities(p){
+  for(const c of G.cities){ if(c.owner!==p.id) continue;
+    if(c.level<maxCityLevel(c) && p.food>=growCost(c)){ p.food-=growCost(c); c.level++; onCityLevel(c); recomputeTerritory(); }
+  }
 }
 function onCityLevel(c){
   const p=playerById(c.owner);
-  // alternating rewards, Polytopia-style
   if(c.level%2===0){ c.bonusProd=(c.bonusProd||0)+1; }  // workshop → +1 production
   else { c.walls=true; }                                // walls
-  if(c.level>=3){ for(const [nx,nz] of neigh8(c.x,c.z)){const nt=tileAt(nx,nz);if(!nt.owner)nt.owner=c.owner;} }
   if(c.level>=5 && !c.gaveSuper){ c.gaveSuper=true; if(!unitAt(c.x,c.z)) spawnUnit(p,'colossus',c.x,c.z,true); logMsg('city',`${c.name} forged a BRICK COLOSSUS!`); }
   logMsg('city',`${c.name} grew to level ${c.level}.`);
   recomputeIncome();
 }
+// total units a player may field: a level-L city supports (L+1); level 1 = 2 units
+function playerUnitCap(p){ let cap=0; for(const c of G.cities){ if(c.owner===p.id) cap+=c.level+1; } return cap; }
+function playerUnitCount(p){ let n=0; for(const u of G.units){ if(u.owner===p.id&&u.hp>0) n++; } return n; }
+// resource cost of a unit type
+function unitCost(tid,p){ const d=UNIT_TYPES[tid]; let prod=d.cost; if(p&&p.faction.bonus==='cheap') prod=Math.max(1,prod-1); return {prod, wood:d.wood||0, stone:d.stone||0, food:d.food||0}; }
+function canAfford(p,tid){ const c=unitCost(tid,p); return p.prod>=c.prod && (p.wood||0)>=c.wood && (p.stone||0)>=c.stone && (p.food||0)>=c.food; }
+function payFor(p,tid){ const c=unitCost(tid,p); p.prod-=c.prod; p.wood=(p.wood||0)-c.wood; p.stone=(p.stone||0)-c.stone; p.food=(p.food||0)-c.food; }
 
 /* ----- tech ----- */
 function techCost(p,id){
@@ -902,7 +950,7 @@ function captureCity(p,c){
   if(prev){ logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`); recRel(G._cap, p.id, prev.id); }   // who takes whose cities
   c.owner=p.id; tileAt(c.x,c.z).owner=p.id; c.walls=false;
   if(c.isCapital){ c.isCapital=false; if(prev) prev.capitalId=null; }
-  for(const [nx,nz] of neigh8(c.x,c.z)){const nt=tileAt(nx,nz); if(!nt.city) nt.owner=p.id;}
+  recomputeTerritory();
   recomputeIncome();
   checkElimination();
 }
@@ -933,7 +981,10 @@ function moveUnit(u,x,z){
 
 /* --------------------------- 4. RENDERING -------------------------------- */
 let renderer,scene,camera,controls,composer,passH,passV,sun;
-let staticGroup,dynGroup,fxGroup,highlightGroup,waterMeshes=[],decoMeshes=[];
+let staticGroup,dynGroup,fxGroup,highlightGroup,terrGroup,waterMeshes=[],decoMeshes=[];
+let _fillGeo=null; const _fillMat={}, _edgeMat={};
+function fillMat(col){ return _fillMat[col]||(_fillMat[col]=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.25,depthWrite:false})); }
+function edgeMat(col){ return _edgeMat[col]||(_edgeMat[col]=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.85,depthWrite:false})); }
 const TILE=1, HSCALE=0.9, UNIT_GAP=0.015;   // tiny consistent gap so tokens read flat on the tile
 const raycaster=new THREE.Raycaster(); const pointer=new THREE.Vector2();
 let tilePickMeshes=[]; let hovered=null;
@@ -978,6 +1029,7 @@ function initThree(){
   staticGroup=new THREE.Group(); scene.add(staticGroup);
   dynGroup=new THREE.Group(); scene.add(dynGroup);
   fxGroup=new THREE.Group(); scene.add(fxGroup);
+  terrGroup=new THREE.Group(); scene.add(terrGroup);
   highlightGroup=new THREE.Group(); scene.add(highlightGroup);
 
   // post-processing: tilt-shift (separable gaussian, strength from focus band) + saturation pop
@@ -1241,6 +1293,25 @@ function buildCityTemplate(c,col){
 }
 
 let bobUnits=[];
+let _edgeGeoX=null,_edgeGeoZ=null;
+function buildTerritory(viewer,fog){
+  if(!terrGroup) return;
+  terrGroup.clear();
+  if(!_fillGeo){ _fillGeo=new THREE.PlaneGeometry(TILE*0.98,TILE*0.98); _edgeGeoX=new THREE.BoxGeometry(0.07,0.08,TILE*0.96); _edgeGeoZ=new THREE.BoxGeometry(TILE*0.96,0.08,0.07); }
+  const seen=(x,z)=> !fog || viewer.explored.has(key(x,z));
+  for(let z=0;z<N;z++)for(let x=0;x<N;x++){
+    const t=tileAt(x,z); if(!t.owner || !seen(x,z)) continue;
+    const op=playerById(t.owner); if(!op) continue; const col=op.color;
+    const h=TERRAIN[t.terrain].h*HSCALE;
+    // border bars only at the edge of the territory (fill itself is the tile tint) — keeps mesh count low
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,nz=z+dz; const nt=inB(nx,nz)?tileAt(nx,nz):null;
+      if(!nt || nt.owner!==t.owner){
+        const bar=new THREE.Mesh(dx? _edgeGeoX:_edgeGeoZ, edgeMat(col));
+        bar.position.set(wx(x)+dx*0.49*TILE, h+0.07, wz(z)+dz*0.49*TILE); terrGroup.add(bar);
+      }
+    }
+  }
+}
 function rebuildDynamic(){
   dynGroup.clear(); bobUnits=[];
   // Fog of war: in a campaign we render from the human's explored set; an AI-vs-AI
@@ -1253,11 +1324,12 @@ function rebuildDynamic(){
     const t=tileAt(tx,tz);
     const c=new THREE.Color(base);
     if(!seen){ c.multiplyScalar(0.16); c.offsetHSL(0,-0.45,-0.02); }
-    else if(t.owner){ const op=playerById(t.owner); if(op){ const oc=new THREE.Color(op.color); c.lerp(oc,0.16);} }
+    else if(t.owner){ const op=playerById(t.owner); if(op) c.lerp(new THREE.Color(op.color),0.25); }   // ~25% territory fill
     mesh.material.color.copy(c);
     mesh.userData.visible=seen;
   }
   for(const d of decoMeshes){ d.o.visible = !fog || viewer.explored.has(key(d.tx,d.tz)); }
+  buildTerritory(viewer,fog);
   // cities
   for(const c of G.cities){
     if(fog && !viewer.explored.has(key(c.x,c.z))) continue;
@@ -1506,31 +1578,34 @@ function renderCityPanel(){
   const c=G.selCity; const p=currentPlayer(); const owner=playerById(c.owner);
   const mine = c.owner===p.id && !p.isAI && G.mode==='campaign';
   selTitle.textContent='City'; selSub.textContent=c.isCapital?'capital':'';
-  const y=cityYields(c);
+  const y=cityYields(c); const maxL=maxCityLevel(c); const gc=growCost(c); const atMax=c.level>=maxL;
+  const prog = atMax ? 1 : clamp((p.food||0)/gc,0,1);
   let h=`<div class="unit-head"><div class="unit-emoji" style="color:#${owner.color.toString(16).padStart(6,'0')}">${c.isCapital?'★':'⌂'}</div>
-    <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}</div></div></div>
-    <div class="hpbar" style="background:#2a2412"><i style="width:${Math.round(c.food/c.foodCap*100)}%;background:linear-gradient(90deg,var(--amber),var(--amber2))"></i></div>
-    <div class="legend" style="margin-top:4px">Growth ${c.food}/${c.foodCap} 🌾 → next level ${c.walls?'· walled':''}</div>
-    <div class="stat-grid" style="margin-top:8px">
-      <div class="mini"><div class="k">Food</div><div class="vv">+${y.food}</div></div>
-      <div class="mini"><div class="k">Prod ⚒</div><div class="vv">+${y.prod}</div></div>
-      <div class="mini"><div class="k">Sci 🔬</div><div class="vv">+${y.sci}</div></div>
+    <div><div class="unit-name">${c.name}</div><div class="unit-faction">${owner.name} · Lv ${c.level}/${maxL} · border ${borderRadius(c)}</div></div></div>
+    <div class="hpbar" style="background:#2a2412"><i style="width:${Math.round(prog*100)}%;background:linear-gradient(90deg,var(--amber),var(--amber2))"></i></div>
+    <div class="legend" style="margin-top:4px">${atMax?'At the limit of its land':`Next level costs <b>${gc}</b> 🌾 (you have ${p.food||0})`} ${c.walls?'· walled':''}</div>
+    <div class="stat-grid" style="margin-top:8px;grid-template-columns:repeat(5,1fr)">
+      <div class="mini"><div class="k">🌾</div><div class="vv">+${y.food}</div></div>
+      <div class="mini"><div class="k">🪵</div><div class="vv">+${y.wood}</div></div>
+      <div class="mini"><div class="k">🪨</div><div class="vv">+${y.stone}</div></div>
+      <div class="mini"><div class="k">⚒</div><div class="vv">+${y.prod}</div></div>
+      <div class="mini"><div class="k">🔬</div><div class="vv">+${y.sci}</div></div>
     </div>
-    <div class="desc">Yields come from the eight tiles around the city: forest→production, river→food, hills &amp; peaks→science.</div>`;
+    <div class="desc">Yields come from the tiles this city controls: fields/rivers→food, forest→wood, hills/peaks→stone &amp; science, mines/metal→production.</div>`;
   if(mine){
-    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood})</span></div><div class="buildlist">`;
-    const occupied = !!unitAt(c.x,c.z);
+    const cap=playerUnitCap(p), have=playerUnitCount(p);
+    h+=`<div style="margin-top:10px"><div class="label" style="margin-bottom:6px">Build <span style="color:var(--faint)">(⚒ ${p.prod} · 🪵 ${p.wood} · 🪨 ${p.stone}) · units ${have}/${cap}</span></div><div class="buildlist">`;
+    const occupied = !!unitAt(c.x,c.z); const full = have>=cap;
     for(const [tid,d] of Object.entries(UNIT_TYPES)){
       if(d.role==='super') continue;
-      const techok = !d.tech || p.techs.has(d.tech);
-      if(!techok) continue;
-      let cost=d.cost; if(p.faction.bonus==='cheap') cost=Math.max(1,cost-1);
-      const woodCost=d.wood||0;
-      const dis = occupied || p.prod<cost || p.wood<woodCost;
-      h+=`<button class="btn" data-build="${tid}" data-cost="${cost}" ${dis?'disabled':''}>
-        <span>${d.glyph} ${d.name}</span><span class="cost">${cost}⚒${woodCost?` ${woodCost}🪵`:''}</span></button>`;
+      if(d.tech && !p.techs.has(d.tech)) continue;
+      const ct=unitCost(tid,p);
+      const dis = occupied || full || !canAfford(p,tid);
+      h+=`<button class="btn" data-build="${tid}" ${dis?'disabled':''}>
+        <span>${d.glyph} ${d.name}</span><span class="cost">${ct.prod}⚒${ct.wood?` ${ct.wood}🪵`:''}${ct.stone?` ${ct.stone}🪨`:''}${ct.food?` ${ct.food}🌾`:''}</span></button>`;
     }
     h+=`</div>`;
+    if(full) h+=`<div class="legend" style="margin-top:6px">Unit cap reached (${have}/${cap}) — grow cities to support more.</div>`;
     if(occupied) h+=`<div class="legend" style="margin-top:6px">A unit blocks the city — move it to build.</div>`;
     // ---- develop the land ----
     h+=`<div class="label" style="margin:12px 0 6px">Develop the land</div><div class="buildlist">`;
@@ -1548,13 +1623,16 @@ function renderCityPanel(){
   }
   selBody.innerHTML=h;
   if(mine){
-    selBody.querySelectorAll('[data-build]').forEach(b=>b.onclick=()=>{ doBuild(c,b.dataset.build,+b.dataset.cost); });
+    selBody.querySelectorAll('[data-build]').forEach(b=>b.onclick=()=>{ doBuild(c,b.dataset.build); });
     selBody.querySelectorAll('[data-land]').forEach(b=>b.onclick=()=>{ const a=b.dataset.land.split(','); doLand(c,+a[0],+a[1],a[2]); });
   }
 }
 function humanScout(u){ const p=playerById(u.owner); aiExplore(p,u); selectUnit(u); refreshAll(); rebuildDynamic(); }
 function doFound(u){ const p=playerById(u.owner); foundCity(p,u.x,u.z,false); killUnit(u); G.sel=null; logMsg('city',`${p.name} founded a village at the Skerne.`); recomputeIncome(); refreshAll(); rebuildDynamic(); }
-function doBuild(c,tid,cost){ const p=playerById(c.owner); const wd=UNIT_TYPES[tid].wood||0; if(p.prod<cost||p.wood<wd||unitAt(c.x,c.z)) return; p.prod-=cost; p.wood-=wd; spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
+function doBuild(c,tid){ const p=playerById(c.owner);
+  if(unitAt(c.x,c.z) || !canAfford(p,tid)) return;
+  if(playerUnitCount(p)>=playerUnitCap(p)){ toast('Unit cap reached — grow your cities to support more.'); return; }
+  payFor(p,tid); spawnUnit(p,tid,c.x,c.z,false); logMsg('city',`${c.name} built a ${UNIT_TYPES[tid].name}.`); refreshAll(); rebuildDynamic(); renderCityPanel(); }
 
 /* ----- land development: city actions that reshape the surrounding tiles ----- */
 function landOptionsFor(t){
@@ -1581,7 +1659,7 @@ function doLand(c,x,z,id){
   else if(id==='fell'){ t.terrain='field'; t.improved=null; p.wood+=6; }
   else if(id==='farm'){ t.improved='farm'; }
   else if(id==='mine'){ t.improved='mine'; }
-  else if(id==='fish'){ c.food+=3; growCity(c); t.fishedUntil=G.turn+5; changed=false; }   // fishing doesn't reshape the tile
+  else if(id==='fish'){ p.food=(p.food||0)+5; t.fishedUntil=G.turn+5; changed=false; }   // a burst of food into the pool
   p.prod-=opt.cost;
   logMsg('city',`${c.name}: ${opt.label.toLowerCase()}.`);
   recomputeIncome(); if(changed) refreshTile(x,z); else rebuildDynamic(); refreshAll(); renderCityPanel();
@@ -1614,7 +1692,7 @@ const LESSONS = {
   boldOffense:   {type:'pattern', label:'Strike decisively', desc:'Winners pressed the attack and took capitals fast.',
     mitigation:'Commits to offensives earlier and accepts keener odds.'},
 };
-function freshKnowledge(){ const k={version:2,games:0,factions:{},lessons:{},unitStats:{},profiles:{},rels:{}}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
+function freshKnowledge(){ const k={version:2,games:0,factions:{},lessons:{},unitStats:{},profiles:{},rels:{},history:[]}; for(const id in LESSONS) k.lessons[id]={weight:0}; return k; }
 function loadKnowledge(){
   try{ const raw=localStorage.getItem('brassrails.ai.v1'); knowledge = raw? JSON.parse(raw): freshKnowledge(); }
   catch(e){ knowledge=freshKnowledge(); }
@@ -1624,6 +1702,7 @@ function loadKnowledge(){
   if(!knowledge.unitStats) knowledge.unitStats={};   // per-unit usage/outcome tally
   if(!knowledge.profiles) knowledge.profiles={};      // observed per-rival behaviour profiles
   if(!knowledge.rels) knowledge.rels={};              // directed per-pair history A->B {clashes,caps,games}
+  if(!knowledge.history) knowledge.history=[];        // per-game results for multi-game analysis
 }
 function relOf(a,b){ return (knowledge.rels[a]&&knowledge.rels[a][b])||{clashes:0,caps:0,games:0}; }
 // A's directed read of B: B's dominant observed trait + A's stance toward B from their shared history
@@ -1671,12 +1750,13 @@ function aiTurn(p){
   // --- 2. cities grow automatically from their surroundings; spend Production on units ---
   const myCities=G.cities.filter(c=>c.owner===p.id);
   const myUnits=()=>G.units.filter(u=>u.owner===p.id&&u.hp>0);
-  // decide builds with available production (loop bounded)
-  let guard=0; for(let i=0;i<14;i++){
+  // decide builds — bounded by the player's unit cap (sum of city level+1) and resources
+  let guard=0; for(let i=0;i<16;i++){
+    if(playerUnitCount(p)>=playerUnitCap(p)) break;          // hard unit cap
     const cand=aiChooseBuild(p,homeNeed,massGate,thoughts,pr); if(!cand) break;
-    if(p.prod<cand.cost) break;
-    if(unitAt(cand.city.x,cand.city.z)){ /* blocked */ if(++guard>myCities.length+2) break; continue; }
-    p.prod-=cand.cost; spawnUnit(p,cand.type,cand.city.x,cand.city.z,false);
+    if(!canAfford(p,cand.type)) break;
+    if(unitAt(cand.city.x,cand.city.z)){ if(++guard>myCities.length+2) break; continue; }
+    payFor(p,cand.type); spawnUnit(p,cand.type,cand.city.x,cand.city.z,false);
   }
 
   // --- 3. units act ---
@@ -1724,31 +1804,29 @@ function aiChooseBuild(p,homeNeed,massGate,thoughts,pr){
   // capital defence first (defendCapital lesson)
   const cap=G.cities.find(c=>c.id===p.capitalId)||myCities[0];
   const capDef = cap? myUnits.filter(u=>cheb(u.x,u.z,cap.x,cap.z)<=1&&UNIT_TYPES[u.type].def>=2).length : 99;
-  if(cap && capDef<homeNeed && p.prod>=cost('guard')){
-    // alternate Pike/Guard for defence rather than always reaching for the cheapest wall
-    const t = (avail('pike') && p.prod>=cost('pike') && rnd()<0.4) ? 'pike':'guard';
-    thoughts.push(`reinforce ${cap.name} (lesson: defend the capital, need ${homeNeed})`);
-    return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t, cost:cost(t)};
+  if(cap && capDef<homeNeed && canAfford(p,'guard')){
+    // prefer a stone Pike for defence when stone allows, else a Guard
+    const t = (avail('pike') && canAfford(p,'pike') && rnd()<0.55) ? 'pike':'guard';
+    thoughts.push(`reinforce ${cap.name} (defend the capital, need ${homeNeed})`);
+    return {city: (!unitAt(cap.x,cap.z)?cap:buildCity), type:t};
   }
   // expansion (rapidExpansion + economicEngine patterns push this up; noOverExtend caution reins it in)
   const expandUtil = pr.expandDrive*(1 - 0.6*L('noOverExtend')*(army.length < founders.length+1?1:0));
   const cityCap = 5 + Math.round(L('rapidExpansion')*3 + L('economicEngine')*2);
   const wantFounder = founders.length<1 && myCities.length<cityCap && rnd()<0.55*expandUtil+0.18;
-  if(wantFounder && p.prod>=cost('founder') && army.length>=Math.max(1,massGate-1)){
+  if(wantFounder && canAfford(p,'founder') && army.length>=Math.max(1,massGate-1)){
     thoughts.push('train a Founder to expand (pattern: settle wide)');
-    return {city:buildCity,type:'founder',cost:cost('founder')};
+    return {city:buildCity,type:'founder'};
   }
-  if(atCap) return null;   // army full — bank production for tech / future expansion
-  // otherwise build the best military unit we can afford. The economicEngine pattern restrains
-  // military spend (let the economy compound); aggression/boldOffense pushes it back up.
+  if(atCap) return null;   // soft army cap — bank resources for tech / future expansion
+  // build the best AFFORDABLE military unit; economicEngine restrains spend, aggression pushes it up
   const milChance = clamp(0.42 + 0.5*pr.aggDrive - 0.28*pr.econDrive, 0.12, 0.95);
-  const milPriority=['ironclad','skylark','nightmail','gun','pony','guard'];
+  const milPriority=['ironclad','skylark','nightmail','gun','armed','pony','guard'];
   for(const tid of milPriority){
-    if(!avail(tid)) continue; const cc=cost(tid);
-    if(p.prod>=cc && rnd()<milChance){ return {city:buildCity,type:tid,cost:cc}; }
+    if(!avail(tid)||!canAfford(p,tid)) continue;
+    if(rnd()<milChance){ return {city:buildCity,type:tid}; }
   }
-  // fallback cheap guard if we have spare brass and want mass
-  if(p.prod>=cost('guard') && army.length<massGate+2) return {city:buildCity,type:'guard',cost:cost('guard')};
+  if(canAfford(p,'guard') && army.length<massGate+2) return {city:buildCity,type:'guard'};
   return null;
 }
 
@@ -1966,6 +2044,10 @@ function recordGameResult(winner, kind){
   }
   // gentle decay so stale lessons fade
   for(const id in knowledge.lessons){ knowledge.lessons[id].weight=clamp(knowledge.lessons[id].weight*0.985,0,1); }
+  // record this game for multi-game analysis
+  knowledge.history.push({ g:knowledge.games, t:G.turn, kind, size:G.mapSize, winner:winner.id,
+    players:G.players.map(p=>({id:p.id,alive:p.alive,cities:G.cities.filter(c=>c.owner===p.id).length,score:score(p)})) });
+  if(knowledge.history.length>250) knowledge.history.shift();
   saveKnowledge();
 }
 function bump(id){ knowledge.lessons[id].weight=clamp((knowledge.lessons[id].weight||0)+0.12,0,1); }
@@ -1973,7 +2055,7 @@ function bump(id){ knowledge.lessons[id].weight=clamp((knowledge.lessons[id].wei
 /* --------------------------- scoring & win ------------------------------- */
 function score(p){
   let s=0;
-  for(const c of G.cities){ if(c.owner!==p.id) continue; s+=c.level*5 + Math.round(c.food/Math.max(1,c.foodCap)*3); if(c.isCapital)s+=8; }
+  for(const c of G.cities){ if(c.owner!==p.id) continue; s+=c.level*5; if(c.isCapital)s+=8; }
   s+=p.techs.size*4;
   for(const u of G.units){ if(u.owner===p.id&&u.hp>0) s+=2; }
   let terr=0; for(let z=0;z<N;z++)for(let x=0;x<N;x++) if(G.tiles[z][x].owner===p.id) terr++;
@@ -1985,14 +2067,14 @@ function checkWin(){
   if(G.gameOver) return;
   const alive=G.players.filter(p=>p.alive);
   if(alive.length<=1){ endGame(alive[0]||null,'domination'); return; }
-  // Alternative paths — only once the mid-game has passed, so conquest stays primary but a
+  // Endless mode: keep playing until ONE house remains (no score clock, no early econ/science exits).
+  if(G.endless){ if(G.turn>500){ const w=[...alive].sort((a,b)=>score(b)-score(a))[0]; endGame(w,'score'); } return; }
+  // Alternative paths — once the mid-game has passed, so conquest stays primary but a
   // defensive stalemate still resolves before the clock:
   if(G.turn>ALT_WIN_TURN){
     const nTech=Object.keys(TECHS).length;
     for(const p of alive){
-      // Great Exhibition — total mastery of the Age of Steam
       if(p.techs.size>=nTech && p.science>=SCIENCE_WIN){ endGame(p,'science'); return; }
-      // Railway Empire — overwhelming industrial might
       let sumLvl=0; for(const c of G.cities){ if(c.owner===p.id) sumLvl+=c.level; }
       if(sumLvl>=ECON_WIN){ endGame(p,'economy'); return; }
     }
@@ -2006,9 +2088,11 @@ const SPEEDS={slow:1100,normal:450,fast:120};
 
 function startTurnFor(p){
   recomputeIncome();
-  // each city grows from its own food, then production & science flow to the treasury
-  for(const c of G.cities){ if(c.owner!==p.id) continue; const y=cityYields(c); c.food+=y.food; growCity(c); }
-  p.prod += p.prodIncome; p.science += p.sciIncome;
+  // all five resources flow into the treasury from the land the empire holds
+  p.prod += p.prodIncome; p.science += p.sciIncome; p.food += p.foodIncome;
+  p.wood = (p.wood||0) + p.woodIncome; p.stone = (p.stone||0) + p.stoneIncome;
+  // then food is spent to grow cities (capped by the land's richness)
+  growCities(p);
   // refresh units
   for(const u of G.units){ if(u.owner===p.id){ u.movesLeft=unitMove(u); u.hasAttacked=false; } }
   p.stats.survived=G.turn;
@@ -2063,11 +2147,13 @@ function refreshHUD(){
   const p=currentPlayer();
   $('hudWho').textContent=p.name + (p.isAI?' (AI)':'');
   $('hudDot').style.background='#'+p.color.toString(16).padStart(6,'0');
-  $('hudTurn').innerHTML=`${G.turn}<small>/${TURN_CAP}</small>`;
+  $('hudTurn').innerHTML=`${G.turn}${G.endless?'':'<small>/'+TURN_CAP+'</small>'}`;
   const show=v||p;
+  $('hudFood').innerHTML=`${show.food||0}<small> 🌾 +${show.foodIncome||0}</small>`;
+  $('hudWood').innerHTML=`${show.wood||0}<small> 🪵 +${show.woodIncome||0}</small>`;
+  $('hudStone').innerHTML=`${show.stone||0}<small> 🪨 +${show.stoneIncome||0}</small>`;
   $('hudProd').innerHTML=`${show.prod}<small> ⚒ +${show.prodIncome||0}</small>`;
   $('hudSci').innerHTML=`${show.science}<small> 🔬 +${show.sciIncome||0}</small>`;
-  $('hudWood').innerHTML=`${show.wood||0}<small> 🪵</small>`;
   $('hudCities').textContent=G.cities.filter(c=>c.owner===show.id).length;
   $('hudScore').textContent=score(show);
 }
@@ -2219,14 +2305,14 @@ function endGame(winner,kind){
   logMsg('sys', winner? `${winner.name} wins by ${kind}.`:'The game ends in stalemate.');
   if(G.mode==='auto' && G.marathon){
     $('endModal').classList.add('hidden');
-    setTimeout(()=>{ setupGame({seed:(G.seed+1)>>>0, mode:'auto', count:G.players.length, marathon:true, mapSize:G.mapSize}); refreshAll(); advance(); }, 1400);
+    setTimeout(()=>{ setupGame({seed:(G.seed+1)>>>0, mode:'auto', count:G.players.length, marathon:true, mapSize:G.mapSize, endless:G.endless}); refreshAll(); advance(); }, 1400);
   } else {
     $('endModal').classList.remove('hidden');
   }
 }
 
 /* ---- setup modal wiring ---- */
-let cfg={count:4, mode:'campaign', faction:'kelly', seed:1825, marathon:false, mapSize:'medium'};
+let cfg={count:4, mode:'campaign', faction:'kelly', seed:1825, marathon:false, mapSize:'medium', endless:false};
 function buildSetupUI(){
   const cr=$('countRow'); cr.innerHTML='';
   for(let n=2;n<=8;n++){ const c=document.createElement('div'); c.className='chip'+(n===cfg.count?' on':''); c.textContent=n; c.onclick=()=>{cfg.count=n;syncSetup();}; cr.appendChild(c); }
@@ -2251,6 +2337,7 @@ function syncSetup(){
 $('mapRow').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cfg.mapSize=c.dataset.map;syncSetup();});
 $('modeRow').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cfg.mode=c.dataset.mode;syncSetup();});
 $('marathonChk').onchange=e=>{cfg.marathon=e.target.checked;};
+$('endlessChk').onchange=e=>{cfg.endless=e.target.checked;};
 $('seedInput').oninput=e=>{cfg.seed=parseInt(e.target.value)||1825;};
 $('wipeBtn').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); buildSetupUI(); refreshBrain(); toast('AI memory wiped.'); };
 
@@ -2258,7 +2345,7 @@ function beginGame(){
   $('setup').classList.add('hidden');
   ['hud','leftcol','rightcol','log','controls'].forEach(id=>$(id).classList.remove('hidden'));
   if(!renderer) initThree();
-  setupGame({seed:cfg.seed,mode:cfg.mode,count:cfg.count,faction:cfg.faction,marathon:cfg.marathon,mapSize:cfg.mapSize});
+  setupGame({seed:cfg.seed,mode:cfg.mode,count:cfg.count,faction:cfg.faction,marathon:cfg.marathon,mapSize:cfg.mapSize,endless:cfg.endless});
   // set speed UI
   $('speedSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.sp===speed));
   $('endturn').style.display = (cfg.mode==='auto')?'none':'';
@@ -2272,7 +2359,7 @@ function beginGame(){
   }
 }
 $('startBtn').onclick=beginGame;
-$('rematchBtn').onclick=()=>{ $('endModal').classList.add('hidden'); setupGame({seed:(G.seed+1)>>>0,mode:G.mode,count:G.players.length,faction:cfg.faction,marathon:G.marathon,mapSize:G.mapSize}); refreshAll(); if(G.mode==='auto') advance(); else { startTurnFor(currentPlayer()); refreshHUD(); $('endturn').disabled=false; renderSelPanelEmpty(); } };
+$('rematchBtn').onclick=()=>{ $('endModal').classList.add('hidden'); setupGame({seed:(G.seed+1)>>>0,mode:G.mode,count:G.players.length,faction:cfg.faction,marathon:G.marathon,mapSize:G.mapSize,endless:G.endless}); refreshAll(); if(G.mode==='auto') advance(); else { startTurnFor(currentPlayer()); refreshHUD(); $('endturn').disabled=false; renderSelPanelEmpty(); } };
 $('menuBtn2').onclick=()=>{ $('endModal').classList.add('hidden'); $('setup').classList.remove('hidden'); buildSetupUI(); };
 $('btnMenu').onclick=()=>{ if(autoTimer)clearTimeout(autoTimer); $('setup').classList.remove('hidden'); buildSetupUI(); };
 $('endturn').onclick=()=>{ if(G.sel){G.sel=null;updateHighlights();} endTurn(); };
@@ -2340,7 +2427,7 @@ function unitValue(d){
     + (d.role==='settle'?3:0) + (d.role==='scout'?1.6:0) + (d.role==='siege'?1.2:0)
     + (d.role==='stealth'?1.5:0) + (d.domain==='air'?1.5:0) + (d.role==='super'?7:0);
 }
-function unitCostVal(d){ return (d.cost||0) + (d.wood||0)*0.9; }
+function unitCostVal(d){ return (d.cost||0) + (d.wood||0)*0.9 + (d.stone||0)*0.9; }
 function renderRoster(){
   const mono="font-family:'JetBrains Mono',monospace";
   loadKnowledge();
@@ -2351,7 +2438,7 @@ function renderRoster(){
       <th>V/⚒</th><th title="total ever built">Built</th><th title="built per game">/game</th><th title="of builders, how often they won">Win%</th></tr></thead><tbody>`;
   for(const [tid,d] of Object.entries(UNIT_TYPES)){
     const v=unitValue(d), cv=unitCostVal(d); const vpc=d.role==='super'?'—':(v/Math.max(0.5,cv)).toFixed(2);
-    const cost = d.role==='super' ? 'rwd' : `${d.cost}⚒${d.wood?` ${d.wood}🪵`:''}`;
+    const cost = d.role==='super' ? 'rwd' : `${d.cost}⚒${d.wood?` ${d.wood}🪵`:''}${d.stone?` ${d.stone}🪨`:''}${d.food?` ${d.food}🌾`:''}`;
     const us=knowledge.unitStats[tid]||{built:0,winBuilt:0,lossBuilt:0};
     const perGame = games? (us.built/games).toFixed(1):'—';
     const denom=(us.winBuilt+us.lossBuilt); const winPct = denom? Math.round(100*us.winBuilt/denom)+'%':'—';
@@ -2364,6 +2451,59 @@ function renderRoster(){
     <div class="desc" style="margin-top:10px"><b>Built / /game / Win%</b> are recorded across the ${games} game(s) played (Win% = of the players who built that unit, how many won). Found timber by felling forests (🪵) then forge <b>Armed Guards</b>; fish a shoreline for a food burst; the <b>Brick Colossus</b> is earned at city level 5.</div>`;
   $('rosterBody').innerHTML=h;
 }
+/* in-depth multi-game analysis */
+function renderAnalysis(){
+  loadKnowledge(); const K=knowledge; const games=K.games||0; const mono="font-family:'JetBrains Mono',monospace";
+  $('analysisGames').textContent=`${games} games`;
+  const hist=K.history||[]; let h='';
+  const kinds={}; let tsum=0; for(const g of hist){ kinds[g.kind]=(kinds[g.kind]||0)+1; tsum+=g.t||0; }
+  const avgT=hist.length?Math.round(tsum/hist.length):0; const kcol={domination:'#d14b3f',economy:'#e8a13a',science:'#5b6ee1',score:'#8a8a8a'};
+  h+=`<div class="label" style="margin-bottom:6px">Overview</div><div style="display:flex;gap:20px;flex-wrap:wrap;${mono};margin-bottom:10px">
+    <div><b style="font-size:22px;color:var(--amber2)">${games}</b><div class="legend">games</div></div>
+    <div><b style="font-size:22px;color:var(--amber2)">${avgT}</b><div class="legend">avg turns</div></div>`;
+  for(const [k,c] of Object.entries(kinds)) h+=`<div><b style="font-size:22px">${c}</b><div class="legend">${k}</div></div>`;
+  h+=`</div>`;
+  const totK=Object.values(kinds).reduce((a,b)=>a+b,0)||1;
+  h+=`<div style="display:flex;height:14px;border-radius:4px;overflow:hidden;border:1px solid var(--line)">`;
+  for(const [k,c] of Object.entries(kinds)) h+=`<div title="${k} ${c}" style="width:${100*c/totK}%;background:${kcol[k]||'#666'}"></div>`;
+  h+=`</div><div class="legend" style="margin:4px 0 12px">Win conditions across all games.</div>`;
+  h+=`<div class="label" style="margin-bottom:6px">Recent results (oldest → newest, winner's colour)</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:12px">`;
+  for(const g of hist.slice(-72)){ const f=FACTIONS.find(x=>x.id===g.winner); const col=f?'#'+f.color.toString(16).padStart(6,'0'):'#666';
+    h+=`<span title="${f?f.name:'?'} · ${g.kind} · turn ${g.t} · ${g.size}" style="width:11px;height:11px;border-radius:2px;background:${col};border:1px solid rgba(0,0,0,.35)"></span>`; }
+  if(!hist.length) h+=`<span class="legend">no games recorded yet — play or run autonomous games</span>`;
+  h+=`</div>`;
+  // faction leaderboard
+  const app={},ssum={}; for(const g of hist) for(const pl of g.players){ app[pl.id]=(app[pl.id]||0)+1; ssum[pl.id]=(ssum[pl.id]||0)+(pl.score||0); }
+  const rows=FACTIONS.map(f=>{ const rec=K.factions[f.id]||{wins:0,losses:0,genome:defaultGenome()}; const a=app[f.id]||((rec.wins||0)+(rec.losses||0)); return {f,rec,a,w:rec.wins||0,wr:a?(rec.wins||0)/a:0,avg:app[f.id]?Math.round(ssum[f.id]/app[f.id]):0}; }).sort((x,y)=>y.wr-x.wr);
+  h+=`<div class="label" style="margin:6px 0">House leaderboard</div>`;
+  for(const r of rows){ const col='#'+r.f.color.toString(16).padStart(6,'0'); const g=r.rec.genome||defaultGenome();
+    h+=`<div style="border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px;background:var(--panel2)">
+      <div style="display:flex;align-items:center;gap:8px;${mono};font-size:11.5px">
+        <span style="width:11px;height:11px;border-radius:2px;background:${col};transform:rotate(45deg)"></span>
+        <b style="flex:1">${r.f.name}</b><span style="color:var(--muted)">${r.w}W/${r.rec.losses||0}L</span>
+        <span style="width:78px;text-align:right"><b style="color:var(--amber2)">${Math.round(r.wr*100)}%</b> win</span>
+        <span style="width:64px;text-align:right;color:var(--muted)">avg ${r.avg}</span></div>
+      <div style="display:flex;gap:2px;margin-top:5px">`;
+    for(const k of ['aggression','expansion','economy','defense','tech','risk']){ const vv=Math.round((g[k]||0)*100); h+=`<div title="${k} ${vv}%" style="flex:1;height:6px;background:#241c14;border-radius:1px;overflow:hidden"><i style="display:block;height:100%;width:${vv}%;background:${col}"></i></div>`; }
+    h+=`</div></div>`; }
+  // lessons
+  h+=`<div class="label" style="margin:10px 0 6px">Institutional memory</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px">`;
+  for(const [id,l] of Object.entries(K.lessons).filter(([id])=>LESSONS[id]).sort((a,b)=>(b[1].weight||0)-(a[1].weight||0))){ const w=Math.round((l.weight||0)*100); const pat=LESSONS[id].type==='pattern';
+    h+=`<div style="${mono};font-size:10.5px"><div style="display:flex;justify-content:space-between"><span>${pat?'★':'⚠'} ${LESSONS[id].label}</span><span>${w}%</span></div><div class="meter"><i style="width:${w}%;background:${pat?'#6abf5a':'var(--rust)'}"></i></div></div>`; }
+  h+=`</div>`;
+  // unit usage
+  h+=`<div class="label" style="margin:10px 0 6px">Unit usage</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;margin-bottom:10px;${mono};font-size:10.5px">`;
+  for(const [tid,d] of Object.entries(UNIT_TYPES)){ const us=K.unitStats[tid]||{built:0,winBuilt:0,lossBuilt:0}; const den=us.winBuilt+us.lossBuilt;
+    h+=`<div style="display:flex;justify-content:space-between"><span>${d.glyph} ${d.name}</span><span style="color:var(--muted)">${us.built} built · ${den?Math.round(100*us.winBuilt/den)+'% win':'—'}</span></div>`; }
+  h+=`</div>`;
+  // rivalry matrix
+  h+=`<div class="label" style="margin:10px 0 6px">Rivalry matrix <span style="color:var(--faint)">(row's attacks / captures vs column)</span></div><div style="overflow:auto"><table style="${mono};font-size:9.5px;border-collapse:collapse">`;
+  h+=`<tr><td></td>`; for(const b of FACTIONS) h+=`<th style="padding:2px 5px;color:#${b.color.toString(16).padStart(6,'0')}">${b.id.slice(0,3)}</th>`; h+=`</tr>`;
+  for(const a of FACTIONS){ h+=`<tr><td style="color:#${a.color.toString(16).padStart(6,'0')};padding:2px 6px;white-space:nowrap">${a.name}</td>`;
+    for(const b of FACTIONS){ if(a.id===b.id){ h+=`<td style="text-align:center;color:var(--faint)">·</td>`; continue; } const r=relOf(a.id,b.id); h+=`<td style="text-align:center;padding:2px 5px;color:${r.caps?'#f0998e':'var(--muted)'}">${(r.clashes||r.caps)?(r.clashes+(r.caps?'/'+r.caps:'')):''}</td>`; } h+=`</tr>`; }
+  h+=`</table></div>`;
+  $('analysisBody').innerHTML=h;
+}
 function openHelp(){ $('help').classList.remove('hidden'); }
 function closeHelp(){ $('help').classList.add('hidden'); try{localStorage.setItem('brassrails.seenHelp','1');}catch(e){} }
 $('btnHelp').onclick=openHelp;
@@ -2371,6 +2511,9 @@ $('helpClose').onclick=closeHelp;
 $('helpBtn2').onclick=openHelp;
 $('btnRoster').onclick=()=>{ renderRoster(); $('roster').classList.remove('hidden'); };
 $('rosterClose').onclick=()=>$('roster').classList.add('hidden');
+$('btnAnalysis').onclick=()=>{ renderAnalysis(); $('analysis').classList.remove('hidden'); };
+$('analysisClose').onclick=()=>$('analysis').classList.add('hidden');
+$('analysisWipe').onclick=()=>{ knowledge=freshKnowledge(); saveKnowledge(); renderAnalysis(); toast('AI memory wiped.'); };
 $('techHead').onclick=()=>{ const hidden=$('techBody').classList.toggle('hidden'); $('techChevron').textContent=hidden?'▸':'▾'; };
 
 // keyboard: space = end turn / step · WASD + arrows pan the camera
