@@ -149,6 +149,40 @@
   .tag.tech{background:#1c2236;color:#9db0f0;}
   .tag.sys{background:#2a2118;color:var(--muted);}
 
+  /* ---- Observability overlays (auto / AI-vs-AI mode) ---- */
+  /* B2 leaderboard ticker (lives in leftcol, above the race chart) */
+  #ticker .panel-b{padding:8px 10px;max-height:40vh;overflow-y:auto;}
+  .lbrow{display:flex;align-items:center;gap:8px;padding:6px 7px;border:1px solid var(--line);border-radius:8px;
+    margin-bottom:6px;background:var(--panel2);transition:.18s;}
+  .lbrow.lead{border-color:var(--amber);background:linear-gradient(180deg,#352a18,var(--panel2));}
+  .lbrow.dead{opacity:.42;}
+  .lbrow.dead .lbname{text-decoration:line-through;}
+  .lb-rank{font-family:'JetBrains Mono';font-weight:700;font-size:14px;width:18px;text-align:center;color:var(--amber2);flex:none;}
+  .lb-dot{width:11px;height:11px;border-radius:2px;transform:rotate(45deg);flex:none;border:1px solid rgba(0,0,0,.4);}
+  .lb-main{flex:1;min-width:0;}
+  .lbname{font-family:'JetBrains Mono';font-weight:700;font-size:11.5px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lb-arch{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-family:'JetBrains Mono';}
+  .lb-trend{font-size:11px;font-weight:700;width:14px;text-align:center;flex:none;}
+  .lb-trend.up{color:var(--good);} .lb-trend.dn{color:var(--rust);} .lb-trend.flat{color:var(--faint);}
+  .lb-score{font-family:'JetBrains Mono';font-weight:700;font-size:13px;color:var(--ink);width:38px;text-align:right;flex:none;}
+  .lb-stats{display:flex;gap:9px;font-family:'JetBrains Mono';font-size:9px;color:var(--muted);margin-top:2px;}
+  .lb-gen{display:flex;gap:2px;margin-top:4px;}
+  .lb-gen > div{flex:1;height:5px;background:#241c14;border-radius:1px;overflow:hidden;}
+  .lb-gen > div > i{display:block;height:100%;}
+  /* B3 pivotal chronicle */
+  #pivots{position:fixed;right:14px;bottom:14px;width:min(420px,34vw);max-height:230px;z-index:25;}
+  #pivots .panel-b{padding:7px 10px;max-height:172px;overflow-y:auto;}
+  .pivot{display:flex;gap:8px;align-items:flex-start;padding:5px 7px;margin-bottom:5px;border-radius:7px;
+    background:var(--panel2);border:1px solid var(--line);border-left-width:3px;animation:pivIn .35s ease;}
+  .pivot .pv-ico{font-size:14px;line-height:1.2;flex:none;}
+  .pivot .pv-txt{font-family:'DM Sans';font-size:11.5px;line-height:1.35;color:var(--ink);}
+  .pivot .pv-turn{font-family:'JetBrains Mono';font-size:8.5px;color:var(--faint);letter-spacing:.08em;}
+  .pivot.war{border-left-color:#f0998e;} .pivot.tech{border-left-color:#9db0f0;}
+  .pivot.sea{border-left-color:var(--teal);} .pivot.elim{border-left-color:var(--rust);}
+  .pivot.famine{border-left-color:var(--amber2);} .pivot.lead{border-left-color:var(--amber);}
+  .pivot.win{border-left-color:var(--good);}
+  @keyframes pivIn{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:none;}}
+
   /* bottom controls */
   #controls{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:26;display:flex;gap:8px;align-items:center;
     background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:7px 9px;box-shadow:var(--shadow);}
@@ -248,8 +282,13 @@
         <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>city</b> to build units. Cities grow on their own from the land around them.</div>
       </div>
     </div>
+    <!-- B2: live leaderboard ticker (auto mode) -->
+    <div class="panel hidden" id="ticker">
+      <div class="panel-h"><h3>Standings</h3><span class="label" id="tickerTurn"></span></div>
+      <div class="panel-b" id="tickerBody"></div>
+    </div>
     <div class="panel hidden" id="scorePanel">
-      <div class="panel-h"><h3>AI Scoreboard</h3><span class="label" id="scoreTurn"></span></div>
+      <div class="panel-h"><h3>Live Dynamics</h3><span class="label" id="scoreTurn"></span></div>
       <div class="panel-b">
         <div class="chip-row" id="domainRow" style="margin-bottom:9px;gap:5px;"></div>
         <div id="scoreChart"></div>
@@ -274,6 +313,12 @@
   <div id="log" class="panel hidden">
     <div class="panel-h"><h3>Chronicle</h3><span class="label">live</span></div>
     <div id="logbody"></div>
+  </div>
+
+  <!-- B3: pivotal-moments chronicle (auto mode) -->
+  <div id="pivots" class="panel hidden">
+    <div class="panel-h"><h3>The Story So Far</h3><span class="label" id="pivotTurn"></span></div>
+    <div class="panel-b" id="pivotBody"></div>
   </div>
 
   <!-- CONTROLS -->
@@ -795,6 +840,8 @@ function setupGame(cfg){
   G.players=[]; G.units=[]; G.cities=[]; G.turn=1; G.cur=0;
   G.gameOver=false; G.winner=null; G.sel=null; G.selCity=null; G.uid=1; G.cid=1;
   G.scoreHist=[]; G._histTurn=0; G._clash={}; G._cap={}; G._ownedTiles=null;
+  G.pivots=[]; G.leadHist=[]; G._leader=null; G._prevRank={}; G._winWarned={};   // observability: pivotal beats + lead-change marks + rank trend
+  G._obsTurn=-1; G._pivN=-1; G._rankTurn=-1;   // overlay redraw throttles
   G.observer = cfg.mode==='auto';
   G.nameBag = shuffle(PLACE_NAMES.slice());
 
@@ -840,7 +887,10 @@ function setupGame(cfg){
   // mode-specific panels: scoreboard for AI-vs-AI, selection for campaign
   const auto = G.mode==='auto';
   if(typeof document!=='undefined'){ const sp=document.getElementById('scorePanel'), sel=document.getElementById('selPanel');
-    if(sp) sp.classList.toggle('hidden', !auto); if(sel) sel.classList.toggle('hidden', auto); }
+    if(sp) sp.classList.toggle('hidden', !auto); if(sel) sel.classList.toggle('hidden', auto);
+    // observability overlays: standings ticker + pivotal chronicle — auto (AI-vs-AI) mode only
+    for(const id of ['ticker','pivots']){ const el=document.getElementById(id); if(el) el.classList.toggle('hidden', !auto); }
+  }
   buildStaticScene();
   reframeCamera();
   rebuildDynamic();
@@ -1065,6 +1115,8 @@ function research(p,id){
   recomputeIncome();
   if(p.techs.size>p.stats.techPeak) p.stats.techPeak=p.techs.size;
   logMsg('tech', `${p.name} researched ${TECHS[id].name}.`);
+  if(p.techs.size>=Object.keys(TECHS).length) pivotal('tech','🔬', `<b>${p.name}</b> complete the tech tree — mastery of the Age of Steam.`);
+  else if(id==='steam'||id==='steel'||id==='telegraphy'||id==='harbours') pivotal('tech','🔬', `<b>${p.name}</b> complete <b>${TECHS[id].name}</b>.`);
   return true;
 }
 
@@ -1185,7 +1237,10 @@ function killUnit(u){ u.hp=0; const i=G.units.indexOf(u); if(i>=0) G.units.splic
 /* ----- capture city ----- */
 function captureCity(p,c){
   const prev=playerById(c.owner);
-  if(prev){ logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`); recRel(G._cap, p.id, prev.id); }   // who takes whose cities
+  if(prev){ logMsg('war', `${p.name} captured ${c.name} from ${prev.name}!`); recRel(G._cap, p.id, prev.id);   // who takes whose cities
+    pivotal('war','⚔', c.isCapital
+      ? `<b>${p.name}</b> storms <b>${c.name}</b> — ${prev.name} loses its capital!`
+      : `<b>${p.name}</b> takes ${c.name} from ${prev.name}.`); }
   // A1 CONQUEST FRICTION: pay a production cost (RISING with empire size, so a wide conqueror faces
   // diminishing returns), and the new city is in UNREST for a few turns — it yields nothing and can't
   // grow until order is restored. Momentum is no longer free, and the swarm can't roll the map.
@@ -1202,7 +1257,7 @@ function checkElimination(){
   for(const p of G.players){
     if(!p.alive) continue;
     const owns=G.cities.some(c=>c.owner===p.id);
-    if(!owns){ p.alive=false; logMsg('sys', `${p.name} has been wiped from the map.`); }
+    if(!owns){ p.alive=false; logMsg('sys', `${p.name} has been wiped from the map.`); pivotal('elim','🏴', `<b>${p.name}</b> are eliminated.`); }
   }
 }
 
@@ -1247,6 +1302,7 @@ function disembarkUnit(t,idx,x,z){
   u.hp=Math.min(u.maxHp, slot.hp||u.maxHp); u.movesLeft=0; u.hasAttacked=true;
   cargo.splice(idx,1);
   const c=cityAt(x,z); if(c && c.owner!==p.id) captureCity(p,c);
+  if(UNIT_TYPES[slot.type].role==='settle') pivotal('sea','⚓', `<b>${p.name}</b>'s founder lands on a far shore.`);
   t.movesLeft=0;
   return true;
 }
@@ -2241,7 +2297,8 @@ function aiNavalBreakout(p,thoughts,pr){
   // build a ferry if we have none and room to expand
   if(transports.length<1 && canAfford(p,'lighter')){
     const t=shipLaunchTile(portCity); if(t && !unitAt(t[0],t[1])){ payFor(p,'lighter'); spawnUnit(p,'lighter',t[0],t[1],false);
-      thoughts.push('island-locked — launched a Tees Lighter to break out by sea'); } }
+      thoughts.push('island-locked — launched a Tees Lighter to break out by sea');
+      pivotal('sea','⚓', `<b>${p.name}</b> break out by sea — a lighter launches from ${portCity.name}.`); } }
   // build a founder to ferry (only if a ferry exists with room and no founder yet waiting/aboard)
   const cargoFounders=transports.reduce((s,t)=>s+((t.cargo||[]).filter(c=>UNIT_TYPES[c.type].role==='settle').length),0);
   const ferryRoom=transports.some(t=>(t.cargo||[]).length<transportCap(t));
@@ -2784,7 +2841,7 @@ function cullForStarvation(p){
       const dist = cap? cheb(u.x,u.z,cap.x,cap.z) : 0;
       const s = val - dist*0.05;     // low value + far away = first to go
       if(s<ws){ ws=s; worst=u; } }
-    if(worst){ const relief=unitUpkeep(worst); logMsg('sys',`${p.name} disbanded a ${UNIT_TYPES[worst.type].name} — not enough food (famine).`); killUnit(worst); return relief; }
+    if(worst){ const relief=unitUpkeep(worst); logMsg('sys',`${p.name} disbanded a ${UNIT_TYPES[worst.type].name} — not enough food (famine).`); pivotal('famine','🌾', `Famine in <b>${p.name}</b> — a ${UNIT_TYPES[worst.type].name} disbands.`); killUnit(worst); return relief; }
   }
   // no units to cut: shrink the largest non-capital city by a level
   let big=null,bl=0; for(const c of G.cities){ if(c.owner===p.id && !c.isCapital && c.level>1 && c.level>bl){ bl=c.level; big=c; } }
@@ -2863,6 +2920,12 @@ function logMsg(tag,msg){
   d.innerHTML=`<span class="tag ${tag}">${tag}</span>${msg}`;
   lb.prepend(d); while(lb.children.length>60) lb.removeChild(lb.lastChild);
 }
+// B3 — record a pivotal moment (data only; rendered by renderPivots). Safe in headless (no DOM here).
+function pivotal(kind,ico,text){
+  if(!G.pivots) return;
+  G.pivots.push({turn:G.turn, kind, ico, text});
+  if(G.pivots.length>40) G.pivots.shift();
+}
 function refreshHUD(){
   const v = (G.mode==='campaign')? viewerPlayer() : currentPlayer();
   const p=currentPlayer();
@@ -2931,7 +2994,13 @@ function refreshBrain(){
   if(p&&p.isAI&&p.lastThought){ h+=`<div class="label" style="margin:12px 0 6px">Now thinking — ${p.name}</div><div class="desc">${p.lastThought}</div>`; }
   $('brainBody').innerHTML=h;
 }
-function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); if(!$('dossier').classList.contains('hidden')) renderDossier(); if(G.mode==='auto') renderScoreChart(); }
+function refreshAll(){ refreshHUD(); refreshTech(); refreshBrain(); if(G.sel) renderSelPanel(); else if(G.selCity) renderCityPanel(); if(!$('dossier').classList.contains('hidden')) renderDossier(); if(G.mode==='auto') renderObservability(); }
+// Throttle the spectator overlays: heavy SVG/ticker once per turn; pivots only when a new beat lands.
+function renderObservability(){
+  if(G.mode!=='auto') return;
+  if(G._obsTurn!==G.turn){ G._obsTurn=G.turn; renderScoreChart(); renderTicker(); }
+  const n=(G.pivots||[]).length; if(n!==G._pivN){ G._pivN=n; renderPivots(); }
+}
 
 /* full AI dossier — capabilities (genomes) + what it learned (lessons) + how it counters */
 function renderDossier(){
@@ -3010,7 +3079,9 @@ function renderDossier(){
 
 function endGame(winner,kind){
   G.gameOver=true; G.winner=winner;
+  if(winner) pivotal('win','👑', `<b>${winner.name}</b> win by ${kind} on turn ${G.turn}.`);
   if(autoTimer) clearTimeout(autoTimer);
+  if(G.mode==='auto'){ G._obsTurn=-1; G._pivN=-1; renderScoreChart(); renderTicker(); renderPivots(); }   // final spectator snapshot
   recordGameResult(winner, kind);
   refreshBrain();
   // show end modal
@@ -3103,8 +3174,8 @@ const DOMAINS = {
   score:    {label:'Score',    fn:p=>score(p)},
   economy:  {label:'Economy',  fn:p=>{ let s=0; for(const c of G.cities) if(c.owner===p.id) s+=c.level; return Math.round(s + (p.prodIncome||0)); }},
   military: {label:'Military', fn:p=>{ let s=0; for(const u of G.units) if(u.owner===p.id&&u.hp>0) s+=unitValue(UNIT_TYPES[u.type]); return Math.round(s); }},
-  science:  {label:'Science',  fn:p=>Math.round(p.techs.size*8 + (p.sciIncome||0))},
-  cities:   {label:'Cities',   fn:p=>G.cities.filter(c=>c.owner===p.id).length},
+  science:  {label:'Tech',     fn:p=>Math.round(p.techs.size*8 + (p.sciIncome||0))},
+  territory:{label:'Territory', fn:p=>Math.round((p.terrCount||0) + G.cities.filter(c=>c.owner===p.id).length*3)},
 };
 let scoreDomain='score';
 function recordScoreSnapshot(){
@@ -3112,6 +3183,26 @@ function recordScoreSnapshot(){
   for(const p of G.players){ const o={}; for(const k in DOMAINS) o[k]=DOMAINS[k].fn(p); snap.v[p.id]=o; }
   G.scoreHist.push(snap);
   if(G.scoreHist.length>140) G.scoreHist.shift();
+  // B1/B3 — lead-change tracking + pivotal beat when the #1 house changes
+  const alive=G.players.filter(p=>p.alive);
+  if(alive.length){
+    const top=[...alive].sort((a,b)=>(snap.v[b.id].score||0)-(snap.v[a.id].score||0))[0];
+    if(top && top.id!==G._leader){
+      const lead={turn:G.turn, id:top.id};
+      if(G._leader!==null) pivotal('lead','👑', `<b>${top.name}</b> take the lead on turn ${G.turn}.`);
+      G._leader=top.id; G.leadHist.push(lead);
+      if(G.leadHist.length>60) G.leadHist.shift();
+    }
+  }
+  // B3 — win-condition closing in (science / economy paths), warned once per house
+  if(!G.endless && G.turn>ALT_WIN_TURN){
+    const nTech=Object.keys(TECHS).length;
+    for(const p of alive){
+      let sumLvl=0; for(const c of G.cities){ if(c.owner===p.id) sumLvl+=c.level; }
+      if(p.techs.size>=nTech && p.science>=SCIENCE_WIN*0.8 && p.science<SCIENCE_WIN && !G._winWarned['sci'+p.id]){ G._winWarned['sci'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near a <b>science</b> victory.`); }
+      if(sumLvl>=ECON_WIN*0.85 && sumLvl<ECON_WIN && !G._winWarned['eco'+p.id]){ G._winWarned['eco'+p.id]=1; pivotal('win','⚡', `<b>${p.name}</b> near an <b>economic</b> victory.`); }
+    }
+  }
 }
 function renderScoreChart(){
   if(G.mode!=='auto'){ return; }
@@ -3129,11 +3220,18 @@ function renderScoreChart(){
     let svg=`<svg viewBox="0 0 ${W} ${HT}" width="100%" style="display:block;background:var(--bg-base,#16110b);border:1px solid var(--line);border-radius:7px">`;
     // gridlines
     for(let i=0;i<=2;i++){ const gy=pad+i*(HT-2*pad)/2; svg+=`<line x1="${pad}" y1="${gy}" x2="${W-pad}" y2="${gy}" stroke="#3a3025" stroke-width="0.5"/>`; }
+    // B1: lead-change marks — a faint vertical tick at each turn the #1 house changed
+    for(const lc of (G.leadHist||[])){ if(lc.turn<t0||lc.turn>t1) continue; const lx=xx(lc.turn);
+      svg+=`<line x1="${lx.toFixed(1)}" y1="${pad}" x2="${lx.toFixed(1)}" y2="${HT-pad}" stroke="var(--amber)" stroke-width="0.6" stroke-dasharray="2 3" stroke-opacity="0.5"/>`; }
     for(const p of G.players){
-      const col='#'+p.color.toString(16).padStart(6,'0');
+      const col='#'+p.color.toString(16).padStart(6,'0'); const isLead=p.id===G._leader;
       const pts=H.map(s=>`${xx(s.turn).toFixed(1)},${yy(s.v[p.id]?.[scoreDomain]||0).toFixed(1)}`).join(' ');
-      svg+=`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="${p.alive?2:1}" stroke-opacity="${p.alive?1:0.35}" stroke-linejoin="round"/>`;
+      svg+=`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="${!p.alive?1:isLead?2.6:1.7}" stroke-opacity="${p.alive?1:0.3}" stroke-linejoin="round"/>`;
     }
+    // current-leader endpoint marker
+    if(G._leader){ const lp=G.players.find(p=>p.id===G._leader);
+      if(lp&&lp.alive){ const lx=xx(t1), ly=yy(H[H.length-1].v[lp.id]?.[scoreDomain]||0); const col='#'+lp.color.toString(16).padStart(6,'0');
+        svg+=`<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3.4" fill="${col}" stroke="#16110b" stroke-width="1"/><text x="${(lx-3).toFixed(1)}" y="${(ly-5).toFixed(1)}" font-size="9" text-anchor="end">👑</text>`; } }
     svg+=`<text x="${pad}" y="11" fill="var(--muted)" font-size="9" font-family="monospace">${max}</text></svg>`;
     $('scoreChart').innerHTML=svg;
   }
@@ -3147,6 +3245,46 @@ function renderScoreChart(){
       <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${p.alive?'':' ✝'}</span>
       <b style="color:var(--ink)">${val}</b></div>`;
   }).join('');
+}
+const GEN6=['aggression','expansion','economy','defense','tech','risk'];
+// B2 — live standings ticker: rank + trend arrow + archetype + mini genome bars + key stats
+function renderTicker(){
+  if(G.mode!=='auto') return; const tb=$('tickerBody'); if(!tb) return;
+  $('tickerTurn').textContent=`turn ${G.turn}`;
+  const ranked=G.players.map(p=>({p,sc:score(p)})).sort((a,b)=>(b.p.alive-a.p.alive)||(b.sc-a.sc));
+  const rankNow={}; ranked.forEach((r,i)=>{ if(r.p.alive) rankNow[r.p.id]=i+1; });
+  let h='';
+  ranked.forEach((r,i)=>{ const p=r.p; const col='#'+p.color.toString(16).padStart(6,'0');
+    const arch=(knowledge.factions[p.id]&&knowledge.factions[p.id].archetype)||factionArchetype(p.id);
+    const g=p.genome||{}; const cities=G.cities.filter(c=>c.owner===p.id).length;
+    const units=G.units.filter(u=>u.owner===p.id&&u.hp>0).length;
+    const prev=G._prevRank[p.id]; const now=rankNow[p.id];
+    let tr='<span class="lb-trend flat">·</span>';
+    if(p.alive&&prev){ if(now<prev) tr='<span class="lb-trend up">▲</span>'; else if(now>prev) tr='<span class="lb-trend dn">▼</span>'; }
+    const lead=p.alive&&i===0;
+    h+=`<div class="lbrow ${lead?'lead':''} ${p.alive?'':'dead'}">
+      <div class="lb-rank">${p.alive?(i+1):'✝'}</div>
+      <div class="lb-dot" style="background:${col}"></div>
+      <div class="lb-main">
+        <div style="display:flex;align-items:center;gap:5px"><span class="lbname">${lead?'👑 ':''}${p.name}</span></div>
+        <div class="lb-arch">${arch}</div>
+        <div class="lb-gen">${GEN6.map(k=>`<div title="${k} ${Math.round((g[k]||0)*100)}%"><i style="width:${Math.round((g[k]||0)*100)}%;background:${col}"></i></div>`).join('')}</div>
+        <div class="lb-stats"><span>🏙 ${cities}</span><span>⚔ ${units}</span></div>
+      </div>
+      ${tr}
+      <div class="lb-score">${r.sc}</div>
+    </div>`; });
+  tb.innerHTML=h;
+  // remember ranks for next-turn trend arrows (only update once we've actually rendered a turn)
+  if(G.turn!==G._rankTurn){ G._rankTurn=G.turn; G._prevRank=rankNow; }
+}
+// B3 — pivotal-moments chronicle: the spectator's running story, newest on top
+function renderPivots(){
+  if(G.mode!=='auto') return; const pb=$('pivotBody'); if(!pb) return;
+  $('pivotTurn').textContent=`${(G.pivots||[]).length} beats`;
+  const items=(G.pivots||[]).slice(-24).reverse();
+  if(!items.length){ pb.innerHTML=`<div class="legend" style="padding:6px">The chronicle awaits its first turning point…</div>`; return; }
+  pb.innerHTML=items.map(e=>`<div class="pivot ${e.kind}"><span class="pv-ico">${e.ico}</span><div><div class="pv-txt">${e.text}</div><div class="pv-turn">turn ${e.turn}</div></div></div>`).join('');
 }
 // rough "power" rating of a unit, used by the roster table and the balance check
 function unitValue(d){
