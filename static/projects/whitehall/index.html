@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WHITEHALL — The Machinery of Government</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="./assets/index-CYcKAwiy.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/styles-D3IVXi5h.js">
+  <link rel="modulepreload" crossorigin href="./assets/projects-CcVX51zy.js">
+  <link rel="stylesheet" crossorigin href="./assets/styles-C9BccS-1.css">
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="monogram">sr.</div>
+    <div class="title-wrap">
+      <h1>WHITEHALL</h1>
+      <div class="sub label">The Machinery of Government</div>
+    </div>
+    <div class="hud-stats">
+      <div class="stat wide"><span class="label">Food</span><span class="v" id="hudFood">0<small> 🌾</small></span></div>
+      <div class="stat med"><span class="label">Wood</span><span class="v" id="hudWood">0<small> 🪵</small></span></div>
+      <div class="stat med"><span class="label">Stone</span><span class="v" id="hudStone">0<small> 🪨</small></span></div>
+      <div class="stat med"><span class="label">Production</span><span class="v" id="hudProd">0<small> ⚒</small></span></div>
+      <div class="stat med"><span class="label">Science</span><span class="v" id="hudSci">0<small> 🔬</small></span></div>
+      <div class="stat num"><span class="label">Departments</span><span class="v" id="hudCities">0</span></div>
+      <div class="stat num"><span class="label">Score</span><span class="v" id="hudScore">0</span></div>
+      <div class="stat num"><span class="label">Turn</span><span class="v" id="hudTurn">1</span></div>
+    </div>
+    <div class="turn-pill">
+      <span class="dot" id="hudDot"></span>
+      <span class="who" id="hudWho">—</span>
+    </div>
+  </div>
+
+  <!-- LEFT: selection / city -->
+  <div id="leftcol" class="hidden">
+    <div class="panel" id="selPanel">
+      <div class="panel-h"><h3 id="selTitle">Selection</h3><span class="label" id="selSub"></span></div>
+      <div class="panel-b" id="selBody">
+        <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>department</b> to build units. Departments grow on their own from the land around them.</div>
+      </div>
+    </div>
+    <!-- B2: live leaderboard ticker (auto mode) -->
+    <div class="panel hidden" id="ticker">
+      <div class="panel-h"><h3>Standings</h3><span class="label" id="tickerTurn"></span></div>
+      <div class="panel-b" id="tickerBody"></div>
+    </div>
+    <div class="panel hidden" id="scorePanel">
+      <div class="panel-h"><h3>Live Dynamics</h3><span class="label" id="scoreTurn"></span></div>
+      <div class="panel-b">
+        <div class="chip-row" id="domainRow" style="margin-bottom:9px;gap:5px;"></div>
+        <div id="scoreChart"></div>
+        <div id="scoreLegend" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: tech + brain -->
+  <div id="rightcol" class="hidden">
+    <div class="panel" id="techPanel">
+      <div class="panel-h" id="techHead" style="cursor:pointer"><h3>Reforms — The Reform Programme</h3><span class="label"><span id="techHint"></span> <span id="techChevron">▸</span></span></div>
+      <div class="panel-b hidden" id="techBody"></div>
+    </div>
+    <div class="panel" id="braincol">
+      <div class="panel-h"><h3>AI Brain</h3><span class="label" id="brainGames">0 games</span></div>
+      <div class="panel-b" id="brainBody" style="overflow:auto;"></div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div id="log" class="panel hidden">
+    <div class="panel-h"><h3>Chronicle</h3><span class="label">live</span></div>
+    <div id="logbody"></div>
+  </div>
+
+  <!-- B3: pivotal-moments chronicle (auto mode) -->
+  <div id="pivots" class="panel hidden">
+    <div class="panel-h"><h3>The Story So Far</h3><span class="label" id="pivotTurn"></span></div>
+    <div class="panel-b" id="pivotBody"></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls" class="hidden">
+    <button class="ctl-ico" id="btnHome" title="Recentre camera">⌖</button>
+    <div class="seg" id="speedSeg" title="Autoplay speed">
+      <button data-sp="step">Step</button>
+      <button data-sp="slow">Slow</button>
+      <button data-sp="normal" class="on">Normal</button>
+      <button data-sp="fast">Fast</button>
+      <button data-sp="ultra">Ultra</button>
+    </div>
+    <button class="ctl-ico" id="btnAuto" title="Toggle autoplay">▶</button>
+    <button id="endturn">End Turn</button>
+    <button class="ctl-ico" id="btnLab" title="AI Performance Lab — dossier, analysis, roster &amp; balance batches">🧪</button>
+    <button class="ctl-ico" id="btnHelp" title="How to play (?)">?</button>
+    <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- HOW TO PLAY (z above setup so first-run onboarding sits on top) -->
+  <div class="scrim hidden" id="help" style="z-index:110">
+    <div class="modal panel" style="width:min(720px,94vw)">
+      <div class="panel-h"><h3>How to play — Whitehall</h3><span class="label">a quick guide</span></div>
+      <div class="panel-b" style="max-height:74vh;overflow:auto;">
+        <div class="help-grid">
+          <div class="help-card"><div class="help-ic">🎯</div><div><b>Goal</b><p>Out-build and out-manoeuvre rival departments. Win by <b>Takeover</b> (control every rival's lead department), a <b>Royal Commission</b> (all reforms + deep research), the <b>Machinery of Government</b> (huge combined departmental levels), or top <b>score</b> at turn 70.</p></div></div>
+          <div class="help-card"><div class="help-ic">⌖</div><div><b>Get around</b><p>Drag to rotate, scroll to zoom, and pan with <b>W A S D</b> or the <b>arrow keys</b>. The ⌖ button recentres on your lead department.</p></div></div>
+          <div class="help-card"><div class="help-ic">♟</div><div><b>Roles</b><p>Click your role to select it. <span style="color:#49b6ff">Blue</span> tiles = where it can march; <span style="color:#ff5544">red</span> = rivals it can challenge. The panel shows exactly what that role can do — <b>establish</b>, <b>survey</b>, contest or move.</p></div></div>
+          <div class="help-card"><div class="help-ic">⌂</div><div><b>Departments</b><p>Click a department to <b>recruit roles</b> with Production ⚒ and <b>build infrastructure</b> nearby — Recruitment Drives, Estates Offices, Overseas Posts, Shared Service Centres, Procurement Hubs. <b>Each improvement unlocks one departmental level</b> (sub-office → flagship department at Lv 10).</p></div></div>
+          <div class="help-card"><div class="help-ic">⚒</div><div><b>Economy</b><p>Tiles yield: <b>fields/rivers → food</b>, <b>forest → wood</b>, <b>hills/peaks → stone &amp; research</b>. Enact the matching reform, then build improvements to grow your departments and bank Research 🔬 for the Reform Programme.</p></div></div>
+          <div class="help-card"><div class="help-ic">🌫</div><div><b>Fog &amp; the AI</b><p>You only see what your roles &amp; departments can — survey to reveal the map. The AI plays under the same fog, and it <b>learns from every defeat</b> and adapts to beat you.</p></div></div>
+        </div>
+      </div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;">
+        <div class="start-row"><button id="helpClose" class="btn primary" style="width:auto;">Got it — play</button>
+          <div class="legend">Reopen any time with the ? button or by pressing <b>?</b>.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP MODAL -->
+  <div class="scrim" id="setup">
+    <div class="modal panel">
+      <div class="panel-b">
+        <div class="monogram" style="display:inline-block;margin-bottom:14px;">sr.</div>
+        <div class="hero-title">WHITE<em>HALL</em></div>
+        <div class="hero-sub">A turn-based contest for the machinery of government on the tilt-shift dioramas of Westminster.
+          Stand up departments across the country, marshal budgets &amp; mandarins, enact the Reform Programme, and out-think
+          rival services. The opposing AI keeps a <b>memory of every defeat</b> and rewrites its strategy to beat you next time.</div>
+
+        <div class="field">
+          <span class="label">Players <span id="playersHint" style="color:var(--faint)"></span></span>
+          <div class="chip-row" id="countRow"></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Map size</span>
+          <div class="chip-row" id="mapRow">
+            <div class="chip" data-map="small">Small · 20×20</div>
+            <div class="chip on" data-map="medium">Medium · 28×28</div>
+            <div class="chip" data-map="large">Large · 38×38</div>
+            <div class="chip" data-map="huge">Huge · 46×46</div>
+            <div class="chip" data-map="epic">Epic · 100×100</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">Mode</span>
+          <div class="chip-row" id="modeRow">
+            <div class="chip on" data-mode="campaign">You vs AI</div>
+            <div class="chip" data-mode="auto">Autonomous — AI vs AI (observe)</div>
+          </div>
+        </div>
+
+        <div class="field" id="facField">
+          <span class="label">Choose your Service <span id="facHintTxt" style="color:var(--faint)"></span></span>
+          <div class="fac-grid" id="facGrid"></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Map seed</span>
+          <div class="start-row">
+            <input id="seedInput" class="mono" style="background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+              border-radius:7px;padding:9px 12px;font-size:13px;width:140px;" value="1825" />
+            <label class="legend" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="marathonChk" /> Auto-rematch (marathon self-play so the AI keeps learning)
+            </label>
+          </div>
+          <label class="legend" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:8px;">
+            <input type="checkbox" id="endlessChk" /> Play to a single victor — no turn limit; the game runs until one service stands (or wins outright)
+          </label>
+        </div>
+
+        <div class="start-row">
+          <button id="startBtn">TAKE OFFICE →</button>
+          <button class="btn" id="helpBtn2" style="width:auto;">How to play</button>
+          <a class="btn" id="labBtnStart" href="./lab.html" style="width:auto;text-decoration:none;display:inline-flex;align-items:center;">🧪 Balance Lab</a>
+          <button class="btn danger" id="wipeBtn" style="width:auto;">Wipe AI memory</button>
+          <div class="legend" id="memNote"></div>
+        </div>
+
+        <div class="legend" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;">
+          <b style="color:var(--amber2)">Roles</b> ⌂ Establishment Team · ✦ Policy Analyst (survey) · ♟ Executive Officer · ▮ Compliance Officer · ⌐ Fast Streamer ·
+          ☷ Spending Review · ⬢ Permanent Secretary · ✈ Special Adviser · ◆ Spin Doctor · ⬛ Cabinet Secretary (super).
+          <br><b style="color:var(--amber2)">Win by</b> <b>Takeover</b> (control every rival lead department) ·
+          <b>Royal Commission</b> (all reforms + a deep research treasury) ·
+          <b>Machinery of Government</b> (combined departmental levels) · or top <b>score</b> at turn 74.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- END MODAL -->
+  <div class="scrim hidden" id="endModal">
+    <div class="modal panel" style="width:min(520px,92vw)">
+      <div class="panel-b">
+        <div class="label">The chronicle closes</div>
+        <div class="hero-title" id="endTitle" style="font-size:30px;">—</div>
+        <div class="hero-sub" id="endSub" style="margin-bottom:8px;"></div>
+        <div class="endrank" id="endRank"></div>
+        <div class="start-row">
+          <button id="rematchBtn" class="btn primary" style="width:auto;">Play again</button>
+          <button id="menuBtn2" class="btn" style="width:auto;">Change setup</button>
+          <div class="legend" id="endLearn"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
