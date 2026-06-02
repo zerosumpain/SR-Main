@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>WHITEHALL — The Machinery of Government</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/index-B1I8ZwSu.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/styles-DYNvkmEC.js">
+  <script type="module" crossorigin src="./assets/index-B1yUIh7f.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/styles-D220ANrF.js">
   <link rel="modulepreload" crossorigin href="./assets/projects-CnbZQSr1.js">
-  <link rel="stylesheet" crossorigin href="./assets/styles-Npj8PAp9.css">
+  <link rel="stylesheet" crossorigin href="./assets/styles-BCl8bPGl.css">
 </head>
 <body>
   <div id="stage"></div>
@@ -41,6 +41,7 @@
   <!-- LEFT: selection / city -->
   <div id="leftcol" class="hidden">
     <div class="panel" id="selPanel">
+      <button id="sheetX" class="sheet-x" title="Close">✕</button>
       <div class="panel-h collapsible"><h3 id="selTitle">Selection</h3><span class="hd-end"><span class="label" id="selSub"></span><span class="chev">▾</span></span></div>
       <div class="panel-b" id="selBody">
         <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>department</b> to build units. Departments grow on their own from the land around them.</div>
@@ -100,6 +101,21 @@
     <button class="ctl-ico" id="btnLab" title="AI Performance Lab — dossier, analysis, roster &amp; balance batches">🧪</button>
     <button class="ctl-ico" id="btnHelp" title="How to play (?)">?</button>
     <button class="ctl-ico" id="btnMenu" title="New game / menu">≡</button>
+  </div>
+
+  <!-- MOBILE bottom bar (shown only on mobile via body.mobile) -->
+  <div id="mbar">
+    <div class="mbar-stats">
+      <span class="mdot" id="mWhoDot"></span>
+      <span class="ms"><b id="mTax">0</b>💷</span>
+      <span class="ms"><b id="mStaff">0</b>👥</span>
+      <span class="ms"><b id="mPol">0</b>📜</span>
+      <span class="ms turn">T<b id="mTurn">1</b></span>
+    </div>
+    <button class="mbtn" id="mFit" title="Fit to your map">⌖</button>
+    <button class="mbtn" id="mReforms" title="Reforms">📜</button>
+    <button class="mbtn primary" id="mEnd">End&nbsp;Turn</button>
+    <button class="mbtn" id="mMenu" title="Menu">≡</button>
   </div>
 
   <div class="toast" id="toast"></div>
