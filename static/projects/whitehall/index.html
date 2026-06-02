@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/index-C77FODom.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/styles-D3IVXi5h.js">
-  <link rel="modulepreload" crossorigin href="./assets/projects-0n2MpbuX.js">
-  <link rel="stylesheet" crossorigin href="./assets/styles-C9BccS-1.css">
+  <script type="module" crossorigin src="./assets/index-Bm2Xf6qk.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/styles-DYNvkmEC.js">
+  <link rel="modulepreload" crossorigin href="./assets/projects-DI3KSpwD.js">
+  <link rel="stylesheet" crossorigin href="./assets/styles-Npj8PAp9.css">
 </head>
 <body>
   <div id="stage"></div>
@@ -41,18 +41,18 @@
   <!-- LEFT: selection / city -->
   <div id="leftcol" class="hidden">
     <div class="panel" id="selPanel">
-      <div class="panel-h"><h3 id="selTitle">Selection</h3><span class="label" id="selSub"></span></div>
+      <div class="panel-h collapsible"><h3 id="selTitle">Selection</h3><span class="hd-end"><span class="label" id="selSub"></span><span class="chev">▾</span></span></div>
       <div class="panel-b" id="selBody">
         <div class="sel-empty">Click a tile to inspect. Select your own <b>unit</b> to move &amp; fight, or your <b>department</b> to build units. Departments grow on their own from the land around them.</div>
       </div>
     </div>
     <!-- B2: live leaderboard ticker (auto mode) -->
     <div class="panel hidden" id="ticker">
-      <div class="panel-h"><h3>Standings</h3><span class="label" id="tickerTurn"></span></div>
+      <div class="panel-h collapsible"><h3>Standings</h3><span class="hd-end"><span class="label" id="tickerTurn"></span><span class="chev">▾</span></span></div>
       <div class="panel-b" id="tickerBody"></div>
     </div>
     <div class="panel hidden" id="scorePanel">
-      <div class="panel-h"><h3>Live Dynamics</h3><span class="label" id="scoreTurn"></span></div>
+      <div class="panel-h collapsible"><h3>Live Dynamics</h3><span class="hd-end"><span class="label" id="scoreTurn"></span><span class="chev">▾</span></span></div>
       <div class="panel-b">
         <div class="chip-row" id="domainRow" style="margin-bottom:9px;gap:5px;"></div>
         <div id="scoreChart"></div>
@@ -68,21 +68,21 @@
       <div class="panel-b hidden" id="techBody"></div>
     </div>
     <div class="panel" id="braincol">
-      <div class="panel-h"><h3>AI Brain</h3><span class="label" id="brainGames">0 games</span></div>
-      <div class="panel-b" id="brainBody" style="overflow:auto;"></div>
+      <div class="panel-h collapsible"><h3>AI Brain</h3><span class="hd-end"><span class="label" id="brainGames">0 games</span><span class="chev">▸</span></span></div>
+      <div class="panel-b hidden" id="brainBody" style="overflow:auto;"></div>
     </div>
   </div>
 
   <!-- LOG -->
   <div id="log" class="panel hidden">
-    <div class="panel-h"><h3>Chronicle</h3><span class="label">live</span></div>
-    <div id="logbody"></div>
+    <div class="panel-h collapsible"><h3>Chronicle</h3><span class="hd-end"><span class="label">live</span><span class="chev">▸</span></span></div>
+    <div id="logbody" class="hidden"></div>
   </div>
 
   <!-- B3: pivotal-moments chronicle (auto mode) -->
   <div id="pivots" class="panel hidden">
-    <div class="panel-h"><h3>The Story So Far</h3><span class="label" id="pivotTurn"></span></div>
-    <div class="panel-b" id="pivotBody"></div>
+    <div class="panel-h collapsible"><h3>The Story So Far</h3><span class="hd-end"><span class="label" id="pivotTurn"></span><span class="chev">▸</span></span></div>
+    <div class="panel-b hidden" id="pivotBody"></div>
   </div>
 
   <!-- CONTROLS -->
