@@ -10,6 +10,19 @@ SERVICE="strange-rambling-svelte"
 echo "==> Building..."
 npm run build
 
+# Stamp deploy provenance so prod can be mapped back to git without guesswork.
+# Lands at $VPS_DIR/build/.deploy-sha (build/ is rsync'd below). Read live with:
+#   ssh ... cat /opt/strange-rambling-svelte/build/.deploy-sha
+echo "==> Stamping deploy provenance into build/.deploy-sha..."
+{
+  echo "sha=$(git rev-parse HEAD)"
+  echo "short=$(git rev-parse --short HEAD)"
+  echo "branch=$(git rev-parse --abbrev-ref HEAD)"
+  echo "dirty=$([ -n "$(git status --porcelain)" ] && echo yes || echo no)"
+  echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > build/.deploy-sha
+cat build/.deploy-sha
+
 echo "==> Syncing build to VPS..."
 rsync -avz --delete \
   -e "ssh -i $VPS_KEY" \
