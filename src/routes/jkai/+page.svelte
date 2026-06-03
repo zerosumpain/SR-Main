@@ -75,9 +75,34 @@
         // ignore — next tick will retry
       }
     };
-    void refreshLive();
-    const liveTimer = setInterval(refreshLive, 10_000);
-    return () => clearInterval(liveTimer);
+
+    // Presence heartbeat: while this tab is visible and viewing a conversation,
+    // tell the server we're actively watching. wa-escalation uses this to
+    // suppress WhatsApp pings while we're here — and, because we stop beating
+    // when the tab is hidden/closed, to detect when we've navigated away.
+    const sendPresence = () => {
+      if (document.visibilityState !== 'visible') return;
+      const convId = activeConversationId;
+      if (!convId) return;
+      void fetch('/api/workflows/orchestrator/chat/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: convId }),
+        keepalive: true,
+      }).catch(() => { /* ignore — next beat retries */ });
+    };
+
+    const tick = () => { void refreshLive(); sendPresence(); };
+    tick();
+    const liveTimer = setInterval(tick, 10_000);
+    // Beat immediately on return-to-tab so presence is fresh the moment the
+    // user comes back, rather than up to 10s stale.
+    const onVisibility = () => { if (document.visibilityState === 'visible') sendPresence(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(liveTimer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   });
 
   function rememberConversation(id: string) {
