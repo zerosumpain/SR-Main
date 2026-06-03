@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/index-CZltkpnt.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/styles-B780_5H4.js">
-  <link rel="modulepreload" crossorigin href="./assets/projects-L8lZb-1P.js">
-  <link rel="stylesheet" crossorigin href="./assets/styles-ChTY6Pef.css">
+  <script type="module" crossorigin src="./assets/index-DXtk2IPY.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/styles-D0AA-Vmc.js">
+  <link rel="modulepreload" crossorigin href="./assets/projects-DW0YneKT.js">
+  <link rel="stylesheet" crossorigin href="./assets/styles-BRdpMBHK.css">
 </head>
 <body>
   <div id="stage"></div>
@@ -65,8 +65,8 @@
   <!-- RIGHT: tech + brain -->
   <div id="rightcol" class="hidden">
     <div class="panel" id="techPanel">
-      <div class="panel-h" id="techHead" style="cursor:pointer"><h3>Reforms — The Reform Programme</h3><span class="label"><span id="techHint"></span> <span id="techChevron">▸</span></span></div>
-      <div class="panel-b hidden" id="techBody"></div>
+      <div class="panel-h" id="techHead" style="cursor:pointer"><h3>Reforms — The Reform Programme</h3><span class="label"><span id="techHint"></span> <span id="techChevron">▾</span></span></div>
+      <div class="panel-b" id="techBody"></div>
     </div>
     <div class="panel" id="braincol">
       <div class="panel-h collapsible"><h3>AI Brain</h3><span class="hd-end"><span class="label" id="brainGames">0 games</span><span class="chev">▸</span></span></div>
@@ -226,6 +226,18 @@
           <button id="menuBtn2" class="btn" style="width:auto;">Change setup</button>
           <div class="legend" id="endLearn"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REFORM TREE (responsive modal) -->
+  <div class="scrim hidden" id="reforms" style="z-index:108">
+    <div class="modal panel" style="width:min(900px,96vw)">
+      <div class="panel-h"><h3>The Reform Programme</h3><span class="label" id="reformHint"></span></div>
+      <div class="panel-b" id="reformBody" style="max-height:74vh;overflow:auto;"></div>
+      <div class="panel-b" style="border-top:1px solid var(--line);padding-top:12px;display:flex;align-items:center;gap:12px;">
+        <button id="reformClose" class="btn primary" style="width:auto;">Close</button>
+        <div class="legend">Pick a reform to enact it (costs 📜 Policy). Each pathway runs top → bottom; later reforms need the one above.</div>
       </div>
     </div>
   </div>
