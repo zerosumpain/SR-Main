@@ -3017,6 +3017,32 @@
 
   const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
   const menuHealing = $derived(menuForNodeId ? liveHealing[menuForNodeId] : undefined);
+  // Required-but-empty config fields for the open node, derived from its
+  // configSchema.required vs the live configDraft. Surfaced as a non-blocking
+  // warning in the inspector header so the user learns a node is incomplete
+  // BEFORE running it (and spending an LLM call) instead of via a run failure.
+  // Non-blocking on purpose: configSchemas can be looser/stricter than reality
+  // and templated values are legitimately "empty", so we advise, never block.
+  const menuRequiredMissing = $derived.by(() => {
+    if (!menuNode) return [] as string[];
+    const def = getDefinition(menuNode.type);
+    const required = (def?.configSchema?.required as string[] | undefined) ?? [];
+    if (required.length === 0) return [] as string[];
+    const out: string[] = [];
+    for (const key of required) {
+      const v = configDraft[key];
+      const empty =
+        v === undefined ||
+        v === null ||
+        (typeof v === 'string' && v.trim() === '') ||
+        (Array.isArray(v) && v.length === 0);
+      if (empty) {
+        const fld = def?.basicConfig?.find((f) => f.key === key);
+        out.push(fld?.label ?? key);
+      }
+    }
+    return out;
+  });
   const menuUpstream = $derived(
     menuNode
       ? canvas.edges.filter((e) => e.to === menuNode.id).map((e) => byId[e.from]).filter(Boolean)
@@ -4438,6 +4464,13 @@
             {/if}
             {#if saveError}
               <span class="nm-save-err" title={saveError}>⚠</span>
+            {/if}
+            {#if menuRequiredMissing.length}
+              <span
+                class="nm-req-warn"
+                title={`Required field${menuRequiredMissing.length === 1 ? '' : 's'} still empty: ${menuRequiredMissing.join(', ')}`}
+                style="font-family:var(--font-mono); font-size:10px; color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
+              >⚠ {menuRequiredMissing.length} required</span>
             {/if}
             <button
               class="p-icon-btn"

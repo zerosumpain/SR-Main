@@ -30,6 +30,11 @@
   let showAdvanced = $state(false);
   let showRawJson = $state(false);
   const fields = $derived(definition.basicConfig ?? []);
+  // Keys the node's JSON-Schema marks as required — rendered with a red * so
+  // the user can see what must be filled before the node will work.
+  const requiredKeys = $derived(
+    new Set((definition.configSchema?.required as string[] | undefined) ?? []),
+  );
 
   // Dynamic dropdown options (e.g. live OpenRouter model catalog). Populated
   // on first paint per key, cached in memory for the panel's lifetime — the
@@ -110,7 +115,7 @@
     {#each sec.fields as f (f.key)}
       {#if isVisible(f)}
         <label class="bcf-field" class:bcf-field-wide={f.type === 'textarea' || f.type === 'template-textarea' || f.type === 'code' || f.type === 'schema-builder' || f.type === 'key-value-table'}>
-          <span class="bcf-label">{f.label}</span>
+          <span class="bcf-label">{f.label}{#if requiredKeys.has(f.key)} <span class="bcf-req" title="Required">*</span>{/if}</span>
           {#if f.description}<span class="bcf-desc">{f.description}</span>{/if}
 
           {#if f.type === 'dropdown'}
@@ -260,6 +265,7 @@
   }
   .bcf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
   .bcf-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .bcf-req { color: var(--status-error, #c0392b); font-weight: 700; }
   .bcf-desc { font-size: 11px; color: var(--text-ghost); }
   .bcf-slider { display: flex; gap: 8px; align-items: center; color: var(--text-primary); }
   .bcf-code { font-family: var(--font-mono); font-size: 11px; }
