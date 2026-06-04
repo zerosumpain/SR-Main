@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PanelProps } from './registry';
+  import OnErrorBlock from './shared/OnErrorBlock.svelte';
 
   let { config, onChange }: PanelProps = $props();
 
@@ -115,6 +116,11 @@
       dispatches through the saved playbook on every run. No edge needed between site-mapper and stealth-scrape.
     </div>
   </section>
+
+  <OnErrorBlock
+    value={config._onError as Record<string, unknown> | undefined}
+    onChange={(v) => onChange({ ...config, _onError: v })}
+  />
 </div>
 
 <style>

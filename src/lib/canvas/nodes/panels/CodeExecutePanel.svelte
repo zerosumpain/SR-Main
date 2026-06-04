@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PanelProps } from './registry';
+  import OnErrorBlock from './shared/OnErrorBlock.svelte';
 
   let { config, onChange }: PanelProps = $props();
 
@@ -65,6 +66,11 @@
     Python / Bash: print JSON to stdout to pass data downstream.
   </p>
 </section>
+
+<OnErrorBlock
+  value={config._onError as Record<string, unknown> | undefined}
+  onChange={(v) => onChange({ ...config, _onError: v })}
+/>
 
 <style>
   .panel-sec {

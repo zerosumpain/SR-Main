@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PanelProps } from './registry';
+  import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import { onMount } from 'svelte';
   import ResourcePicker from './shared/ResourcePicker.svelte';
 
@@ -557,6 +558,11 @@
     </div>
   </section>
 {/if}
+
+  <OnErrorBlock
+    value={config._onError as Record<string, unknown> | undefined}
+    onChange={(v) => onChange({ ...config, _onError: v })}
+  />
 </div>
 
 <style>
