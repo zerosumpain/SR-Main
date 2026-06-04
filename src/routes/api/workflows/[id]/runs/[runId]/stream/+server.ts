@@ -21,7 +21,11 @@ export const GET: RequestHandler = async ({ params }) => {
 
       const unsubscribe = onWorkflowEvent(runId, (event: WorkflowEvent) => {
         send(event as unknown as Record<string, unknown>);
-        if (event.type === 'run_completed' || event.type === 'run_failed') {
+        if (
+          event.type === 'run_completed' ||
+          event.type === 'run_completed_with_errors' ||
+          event.type === 'run_failed'
+        ) {
           try {
             controller.close();
           } catch {
