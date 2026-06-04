@@ -4,15 +4,27 @@
   import KeyValueTableField from './widgets/KeyValueTableField.svelte';
   import ChipInputField from './widgets/ChipInputField.svelte';
   import PhoneField from './widgets/PhoneField.svelte';
+  import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
 
   let {
     config,
     onChange,
     definition,
+    upstreamFields = [],
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition: NodeDefinition;
+    /**
+     * Upstream output field paths, plumbed by the canvas via getPanel().
+     * Drives the `{{` autocomplete in TemplatedTextarea for `template-textarea`
+     * fields. The canvas already passes this prop to every panel, but this form
+     * previously dropped it from the destructure — silently downgrading every
+     * schema-driven node's template fields to a dead plain textarea with no
+     * field discovery. (nodeId/workflowId are also passed by the canvas; thread
+     * them through here when a node-scoped picker — credential/store-key — lands.)
+     */
+    upstreamFields?: string[];
   } = $props();
 
   let showAdvanced = $state(false);
@@ -121,7 +133,15 @@
             <input type="number" min={f.min} max={f.max} step={f.step ?? 1} value={Number(config[f.key] ?? 0)} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, Number((e.currentTarget as HTMLInputElement).value))} />
           {:else if f.type === 'text'}
             <input type="text" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLInputElement).value)} />
-          {:else if f.type === 'textarea' || f.type === 'template-textarea'}
+          {:else if f.type === 'template-textarea'}
+            <TemplatedTextarea
+              value={String(config[f.key] ?? '')}
+              upstreamFields={upstreamFields}
+              placeholder={f.placeholder ?? ''}
+              rows={4}
+              onChange={(v) => update(f.key, v)}
+            />
+          {:else if f.type === 'textarea'}
             <textarea rows="4" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
           {:else if f.type === 'code'}
             <textarea class="bcf-code" rows="8" spellcheck="false" value={String(config[f.key] ?? '')} placeholder={f.placeholder ?? ''} oninput={(e) => update(f.key, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
@@ -298,4 +318,16 @@
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus {
     border-color: var(--text-muted);
   }
+  /* TemplatedTextarea renders its own <textarea class="tt-textarea"> in a child
+     component, so this form's scoped `textarea` rule above can't reach it.
+     Re-apply the same chrome via :global so template-textarea fields match. */
+  :global(.bcf .tt-textarea) {
+    padding: 6px 8px;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    box-sizing: border-box;
+    outline: none;
+  }
+  :global(.bcf .tt-textarea:focus) { border-color: var(--text-muted); }
 </style>
