@@ -295,6 +295,23 @@
   // running-pill ticker. nowTick advances every 250ms while at least one
   // node is running so the "Running 1.2s" label increments live.
   let nodeStartedAt = $state.raw<Record<string, number>>({});
+  // Per-node self-healing state, populated from the engine's healing_* SSE
+  // events (which handleEvent previously dropped on the floor, so the engine's
+  // marquee auto-fix feature was 100% invisible). Surfaced in the node
+  // inspector's OUTPUT DATA panel so the user can watch an auto-fix happen and
+  // see its outcome instead of a silent success or a raw stack trace.
+  type HealingInfo = {
+    phase: 'healing' | 'recovered' | 'failed' | 'blocked';
+    attempt?: number;
+    maxAttempts?: number;
+    fixDescription?: string;
+    progress: string[];
+    diagnosis?: string;
+    environmentAction?: string;
+    alternative?: string;
+    attempts?: Array<{ diagnosis: string; fixApplied: string; resultError: string }>;
+  };
+  let liveHealing = $state.raw<Record<string, HealingInfo>>({});
   let nowTick = $state(Date.now());
   let activeRunId = $state<string | null>(null);
   let runMeta = $state<{ state: 'idle' | 'running' | 'completed' | 'failed'; error?: string }>({
@@ -1392,6 +1409,7 @@
     liveStatus = idleSeed;
     liveData = {};
     nodeStartedAt = {};
+    liveHealing = {};
     runMeta = { state: 'running' };
     runStartedAt = Date.now();
     runSummary = null;
@@ -1546,6 +1564,66 @@
         error: evt.error ?? (evt.data?.error as string) ?? null,
       });
       scheduleLiveFlush();
+    } else if (evt.type === 'healing_started' && evt.nodeId) {
+      const id = evt.nodeId;
+      const d = evt.data ?? {};
+      const prev = liveHealing[id];
+      liveHealing = {
+        ...liveHealing,
+        [id]: {
+          phase: 'healing',
+          attempt: typeof d.attempt === 'number' ? d.attempt : undefined,
+          maxAttempts: typeof d.maxAttempts === 'number' ? d.maxAttempts : undefined,
+          fixDescription: prev?.fixDescription,
+          progress: prev?.progress ?? [],
+        },
+      };
+      // The node is actively retrying — keep it shown as running, not failed.
+      pendingLiveStatus.set(id, 'running');
+      scheduleLiveFlush();
+    } else if (evt.type === 'healing_progress' && evt.nodeId) {
+      const id = evt.nodeId;
+      const text = (evt.data?.text as string | undefined) ?? '';
+      if (text) {
+        const prev = liveHealing[id] ?? { phase: 'healing' as const, progress: [] };
+        // Cap the streamed diagnosis log so a chatty heal can't grow unbounded.
+        const progress = [...prev.progress, text].slice(-20);
+        liveHealing = { ...liveHealing, [id]: { ...prev, progress } };
+      }
+    } else if (evt.type === 'healing_fix_applied' && evt.nodeId) {
+      const id = evt.nodeId;
+      const desc = evt.data?.description as string | undefined;
+      const prev = liveHealing[id] ?? { phase: 'healing' as const, progress: [] };
+      liveHealing = { ...liveHealing, [id]: { ...prev, phase: 'healing', fixDescription: desc } };
+    } else if (evt.type === 'healing_succeeded' && evt.nodeId) {
+      const id = evt.nodeId;
+      const prev = liveHealing[id] ?? { phase: 'recovered' as const, progress: [] };
+      liveHealing = { ...liveHealing, [id]: { ...prev, phase: 'recovered' } };
+      // The node recovered this run — clear the stale failure error so the
+      // OUTPUT panel doesn't show both "recovered" and the old stack trace.
+      pendingLiveData.set(id, { ...(pendingLiveData.get(id) ?? {}), error: null });
+      scheduleLiveFlush();
+    } else if (evt.type === 'healing_failed' && evt.nodeId) {
+      const id = evt.nodeId;
+      const attempts = Array.isArray(evt.data?.attempts)
+        ? (evt.data!.attempts as HealingInfo['attempts'])
+        : undefined;
+      const prev = liveHealing[id] ?? { phase: 'failed' as const, progress: [] };
+      liveHealing = { ...liveHealing, [id]: { ...prev, phase: 'failed', attempts } };
+    } else if (evt.type === 'healing_blocked' && evt.nodeId) {
+      const id = evt.nodeId;
+      const d = evt.data ?? {};
+      const prev = liveHealing[id] ?? { phase: 'blocked' as const, progress: [] };
+      liveHealing = {
+        ...liveHealing,
+        [id]: {
+          ...prev,
+          phase: 'blocked',
+          diagnosis: d.diagnosis as string | undefined,
+          environmentAction: d.environmentAction as string | undefined,
+          alternative: d.alternative as string | undefined,
+        },
+      };
     } else if (evt.type === 'interaction_pending' || evt.type === 'interaction_resolved') {
       // Engine emits these when createInteraction inserts a row or the
       // resolve endpoint marks one done. Refresh the full enriched list
@@ -2419,6 +2497,7 @@
     liveStatus = idleSeed;
     liveData = {};
     nodeStartedAt = {};
+    liveHealing = {};
     runMeta = { state: 'running' };
     runStartedAt = Date.now();
     runSummary = null;
@@ -2937,6 +3016,7 @@
   }
 
   const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
+  const menuHealing = $derived(menuForNodeId ? liveHealing[menuForNodeId] : undefined);
   const menuUpstream = $derived(
     menuNode
       ? canvas.edges.filter((e) => e.to === menuNode.id).map((e) => byId[e.from]).filter(Boolean)
@@ -4760,12 +4840,42 @@
                     <span class="nm-sec-meta">pipes to ↓ downstream</span>
                   </div>
                   <div class="nm-field nm-field-read">
-                    {#if menuNode.status === 'running'}
+                    {#if menuNode.status === 'running' && menuHealing?.phase === 'healing'}
+                      <div class="nm-heal nm-heal-active">
+                        <span class="nm-heal-hd">🔧 Auto-fixing…{menuHealing.attempt ? ` (attempt ${menuHealing.attempt}${menuHealing.maxAttempts ? ` of ${menuHealing.maxAttempts}` : ''})` : ''}</span>
+                        {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
+                        {#if menuHealing.progress.length}<pre class="nm-heal-log">{menuHealing.progress.join('\n')}</pre>{/if}
+                      </div>
+                    {:else if menuNode.status === 'running'}
                       <pre class="ghost">// running…</pre>
                     {:else if menuNode.outputData !== undefined}
+                      {#if menuHealing?.phase === 'recovered'}
+                        <div class="nm-heal nm-heal-ok">
+                          <span class="nm-heal-hd">✓ Auto-fixed and recovered</span>
+                          {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
+                          <span class="nm-heal-note">Saved config unchanged — the fix applied to this run only.</span>
+                        </div>
+                      {/if}
                       <InspectorBody data={menuNode.outputData} />
+                    {:else if menuHealing?.phase === 'blocked'}
+                      <div class="nm-heal nm-heal-blocked">
+                        <span class="nm-heal-hd">⚙ Needs setup — not a config error</span>
+                        {#if menuHealing.diagnosis}<span class="nm-heal-fix">{menuHealing.diagnosis}</span>{/if}
+                        {#if menuHealing.environmentAction}<span class="nm-heal-action">→ {menuHealing.environmentAction}</span>{/if}
+                        {#if menuHealing.alternative}<span class="nm-heal-note">Alternative: {menuHealing.alternative}</span>{/if}
+                      </div>
                     {:else if menuNode.error}
-                      <pre class="error-text">{menuNode.error}</pre>
+                      <div class="nm-err">
+                        <span class="nm-err-hd">⚠ This step failed</span>
+                        {#if menuHealing?.phase === 'failed' && menuHealing.attempts?.length}
+                          <span class="nm-err-sub">Auto-fix tried {menuHealing.attempts.length} time{menuHealing.attempts.length === 1 ? '' : 's'} but couldn't recover.</span>
+                          <span class="nm-err-diag">{menuHealing.attempts[menuHealing.attempts.length - 1].diagnosis}</span>
+                        {/if}
+                        <details class="nm-err-tech">
+                          <summary>Technical details</summary>
+                          <pre class="error-text">{menuNode.error}</pre>
+                        </details>
+                      </div>
                     {:else}
                       <pre class="ghost">// pending</pre>
                     {/if}
@@ -6838,6 +6948,31 @@
     font-size: 11px;
     line-height: 1.45;
   }
+  /* Self-healing + friendly-error cards in the OUTPUT panel (#2). */
+  .nm-heal, .nm-err {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.45;
+    border: 1px solid var(--card-border);
+  }
+  .nm-heal-active { background: color-mix(in srgb, #e0a93a 10%, transparent); border-color: color-mix(in srgb, #e0a93a 40%, var(--card-border)); }
+  .nm-heal-ok { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .nm-heal-blocked { background: color-mix(in srgb, #3a86e0 9%, transparent); border-color: color-mix(in srgb, #3a86e0 40%, var(--card-border)); }
+  .nm-heal-hd { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-primary); font-weight: 600; }
+  .nm-heal-fix { color: var(--text-primary); }
+  .nm-heal-action { color: var(--accent); font-weight: 600; }
+  .nm-heal-note { color: var(--text-muted); font-size: 10px; }
+  .nm-heal-log { margin: 4px 0 0; padding: 6px; background: var(--bg); color: var(--text-muted); font-size: 10px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+  .nm-err { background: color-mix(in srgb, #c44 7%, transparent); border-color: color-mix(in srgb, #c44 35%, var(--card-border)); }
+  .nm-err-hd { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #c44; font-weight: 700; }
+  .nm-err-sub { color: var(--text-primary); }
+  .nm-err-diag { color: var(--text-muted); }
+  .nm-err-tech summary { cursor: pointer; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .nm-err-tech summary:hover { color: var(--text-primary); }
+  .nm-err-tech pre.error-text { margin-top: 6px; }
   /* Run-info strip at the bottom of a wf-node */
   .wf-node-runinfo {
     position: absolute;
