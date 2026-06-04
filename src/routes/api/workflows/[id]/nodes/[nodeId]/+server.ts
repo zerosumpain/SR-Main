@@ -5,6 +5,50 @@ import { workflowNodes, workflowEdges } from '$lib/db/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { recordAudit, recordAuditBatch } from '$lib/canvas/audit';
 import { diffNodePatch } from '$lib/canvas/audit-diff';
+import { registry } from '$lib/workflows';
+import { resolveUpstreamSchema, schemaToVariablePaths } from '$lib/workflows/schema-propagation';
+
+/**
+ * Declared upstream field paths for this node — derived from each upstream
+ * node's executor.getOutputSchema(config), NOT from run data. Lets the config
+ * panel's `{{` field picker show available fields BEFORE the node has ever run
+ * (the canvas merges these with computeUpstreamFields' run-data paths). Closes
+ * the chicken-and-egg gap where pickers were empty on a fresh canvas.
+ */
+export const GET: RequestHandler = async ({ params }) => {
+  const [nodes, edges] = await Promise.all([
+    db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id)),
+    db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id)),
+  ]);
+
+  const getOutputSchema = (type: string, config: Record<string, unknown>) => {
+    try {
+      const exec = registry.getExecutor(type);
+      return exec ? exec.getOutputSchema(config ?? {}) : { type: 'object' as const };
+    } catch {
+      return { type: 'object' as const };
+    }
+  };
+
+  try {
+    const schema = resolveUpstreamSchema(
+      params.nodeId,
+      nodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        config: (n.config as Record<string, unknown>) ?? {},
+        position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
+        label: n.label,
+      })),
+      edges.map((e) => ({ id: e.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId })),
+      getOutputSchema,
+    );
+    const paths = schemaToVariablePaths(schema).map((v) => v.path);
+    return json({ paths });
+  } catch {
+    return json({ paths: [] });
+  }
+};
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));

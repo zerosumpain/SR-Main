@@ -3018,6 +3018,25 @@
 
   const menuNode = $derived(menuForNodeId ? byId[menuForNodeId] : null);
   const menuHealing = $derived(menuForNodeId ? liveHealing[menuForNodeId] : undefined);
+  // Declared upstream field paths (from each upstream node's getOutputSchema),
+  // fetched per node-open and merged with run-data paths in the panel mount so
+  // the `{{` field picker shows fields BEFORE the node has ever run — closing
+  // the chicken-and-egg gap where pickers were empty on a fresh canvas. Cached
+  // by node id (additive hint; run-data paths stay live via computeUpstreamFields).
+  let declaredUpstreamFields = $state.raw<Record<string, string[]>>({});
+  $effect(() => {
+    const id = menuForNodeId;
+    const wf = canvas.workflowId;
+    if (!id || !wf || declaredUpstreamFields[id]) return;
+    fetch(`/api/workflows/${wf}/nodes/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (b && Array.isArray(b.paths)) {
+          declaredUpstreamFields = { ...declaredUpstreamFields, [id]: b.paths as string[] };
+        }
+      })
+      .catch(() => {});
+  });
   // Required-but-empty config fields for the open node, derived from its
   // configSchema.required vs the live configDraft. Surfaced as a non-blocking
   // warning in the inspector header so the user learns a node is incomplete
@@ -5388,11 +5407,14 @@
               {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
                 {@const menuDefinition = getDefinition(menuNode.type)}
                 {@const Panel = getPanel(menuNode.type, menuDefinition)}
-                {@const _upstreamFields = computeUpstreamFields(
-                  menuNode.id,
-                  (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
-                  (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
-                )}
+                {@const _upstreamFields = Array.from(new Set([
+                  ...computeUpstreamFields(
+                    menuNode.id,
+                    (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
+                    (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
+                  ),
+                  ...(declaredUpstreamFields[menuNode.id] ?? []),
+                ]))}
                 <div class="menu-config-section">
                   <Panel
                     config={configDraft}
