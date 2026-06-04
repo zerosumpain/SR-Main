@@ -14,6 +14,7 @@ import GmailReplyPanel from './GmailReplyPanel.svelte';
 import GmailSearchPanel from './GmailSearchPanel.svelte';
 import GmailTriggerPanel from './GmailTriggerPanel.svelte';
 import ConditionalPanel from './ConditionalPanel.svelte';
+import SwitchPanel from './SwitchPanel.svelte';
 import TransformPanel from './TransformPanel.svelte';
 import DataStorePanel from './DataStorePanel.svelte';
 import DelayPanel from './DelayPanel.svelte';
@@ -101,6 +102,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'gmail-search': GmailSearchPanel as unknown as Component<PanelProps>,
   'gmail-trigger': GmailTriggerPanel as unknown as Component<PanelProps>,
   'conditional': ConditionalPanel as unknown as Component<PanelProps>,
+  'switch': SwitchPanel as unknown as Component<PanelProps>,
   'transform': TransformPanel as unknown as Component<PanelProps>,
   'data-store': DataStorePanel as unknown as Component<PanelProps>,
   'delay': DelayPanel as unknown as Component<PanelProps>,
