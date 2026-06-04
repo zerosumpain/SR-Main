@@ -3185,13 +3185,11 @@
           >{zoomPct}%</span
         ><button onclick={() => zoomCentered(1.2)} title="Zoom in">+</button>
       </div>
-      {#if !NEW_PALETTE}
-        <button
-          class="composer-pill"
-          title="Add node (palette disabled via env)"
-          onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
-        >+ node</button>
-      {/if}
+      <button
+        class="composer-pill"
+        title="Add a node — or press / , right-click the canvas, or drag from a node edge"
+        onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
+      >+ Add node</button>
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
       <span class="sep-v"></span>
@@ -3275,6 +3273,31 @@
     ontouchend={onViewportTouchEnd}
     ontouchcancel={onViewportTouchEnd}
   >
+
+    <!-- Empty-state on-ramp: a brand-new canvas has no nodes and no visible
+         way to begin. Rendered OUTSIDE the pan/zoom stage so it stays centered.
+         pointer-events:none on the wrapper keeps background panning alive; the
+         card itself re-enables them. -->
+    {#if viewNodes.length === 0}
+      <div
+        class="canvas-emptystate"
+        style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:5;"
+      >
+        <div
+          style="pointer-events:auto; max-width:380px; text-align:center; padding:28px 32px; background:var(--surface-elevated, var(--bg)); border:1px solid var(--card-border); box-shadow:0 8px 30px rgba(0,0,0,0.18); display:flex; flex-direction:column; gap:10px; align-items:center;"
+        >
+          <span style="font-family:var(--font-mono); font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted);">Empty canvas</span>
+          <strong style="font-size:18px; color:var(--text-primary); font-weight:700; line-height:1.2;">Build your first automation</strong>
+          <span style="font-size:13px; color:var(--text-muted); line-height:1.45;">Add a node to begin — a trigger such as when an email arrives, or any action.</span>
+          <button
+            class="composer-pill"
+            style="margin-top:6px;"
+            onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
+          >+ Add a node</button>
+          <span style="font-size:11px; color:var(--text-ghost, var(--text-muted)); line-height:1.4;">Tip: press <kbd>/</kbd> or right-click the canvas to add a node.</span>
+        </div>
+      </div>
+    {/if}
 
     <!-- Graph area (pan/zoom stage) -->
     <div
