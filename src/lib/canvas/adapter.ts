@@ -124,11 +124,12 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
   },
   {
     type: 'loop',
-    label: 'Loop',
+    label: 'Map array',
     kind: 'output',
     group: 'Trigger & Flow',
-    description: 'Iterate over an array; downstream runs once per item.',
-    defaultConfig: { items: '{{input.items}}', maxIterations: 100 },
+    description:
+      'Transform each item of an array and collect the results ({ results, count }). Runs as ONE step — this is not a control-flow loop, so downstream nodes run once with the results, not per item.',
+    defaultConfig: { arrayPath: 'items', expression: 'return item', concurrency: 1 },
     handles: {
       inputs: [{ id: 'in', kinds: ['any'] }],
       outputs: [{ id: 'out', kinds: ['any'] }],
