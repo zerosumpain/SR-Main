@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ScheduleBuilder from '$lib/canvas/trigger/ScheduleBuilder.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
   import { portal } from '$lib/canvas/portal';
@@ -4579,33 +4580,37 @@
                   <section class="nm-sec">
                     <div class="nm-sec-hd">
                       <span class="sr-label-tight">SCHEDULE</span>
-                      <span class="nm-sec-meta">picks the cron expression</span>
+                      <span class="nm-sec-meta">when this runs</span>
                     </div>
-                    <select
-                      class="nm-text-input"
+                    <ScheduleBuilder
                       value={(configDraft.cron as string) ?? ''}
-                      onchange={(e) =>
-                        setConfigField('cron', (e.target as HTMLSelectElement).value)}
-                    >
-                      <option value="">— pick a preset —</option>
-                      {#each CRON_PRESETS as p (p.value)}
-                        <option value={p.value}>{p.label}</option>
-                      {/each}
-                    </select>
-                  </section>
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">CUSTOM CRON</span>
-                      <span class="nm-sec-meta">min hour dom mon dow</span>
-                    </div>
-                    <input
-                      class="nm-text-input"
-                      type="text"
-                      value={(configDraft.cron as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('cron', (e.target as HTMLInputElement).value)}
-                      placeholder="*/15 * * * *"
+                      onChange={(c) => setConfigField('cron', c)}
                     />
+                    <details class="nm-cron-adv" style="margin-top:8px;">
+                      <summary style="cursor:pointer; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Advanced — presets &amp; raw cron</summary>
+                      <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                        <select
+                          class="nm-text-input"
+                          value={(configDraft.cron as string) ?? ''}
+                          onchange={(e) =>
+                            setConfigField('cron', (e.target as HTMLSelectElement).value)}
+                        >
+                          <option value="">— pick a preset —</option>
+                          {#each CRON_PRESETS as p (p.value)}
+                            <option value={p.value}>{p.label}</option>
+                          {/each}
+                        </select>
+                        <input
+                          class="nm-text-input"
+                          type="text"
+                          value={(configDraft.cron as string) ?? ''}
+                          oninput={(e) =>
+                            setConfigField('cron', (e.target as HTMLInputElement).value)}
+                          placeholder="*/15 * * * *"
+                        />
+                        <span class="nm-sec-meta">min hour dom mon dow</span>
+                      </div>
+                    </details>
                   </section>
                 {:else if kind === 'webhook'}
                   <section class="nm-sec">
