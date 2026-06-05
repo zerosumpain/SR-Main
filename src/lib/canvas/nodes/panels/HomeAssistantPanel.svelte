@@ -1,31 +1,7 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
-  import ResourcePicker from './shared/ResourcePicker.svelte';
-
-  // ---------- Resource fetchers (entity / area registries) ----------------
-  // Both endpoints already exist server-side and return cached registries
-  // synced from Home Assistant. We map them to ResourcePicker's
-  // {value, label, meta?} shape.
-
-  interface HAEntityRow {
-    entity_id: string;
-    friendly_name?: string;
-    domain?: string;
-    state?: string;
-  }
-
-  async function fetchEntities(): Promise<{ value: string; label: string; meta?: string }[]> {
-    const res = await fetch('/api/workflows/homeassistant/entities');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json();
-    const list = Array.isArray(body?.entities) ? (body.entities as HAEntityRow[]) : [];
-    return list.map((e) => ({
-      value: e.entity_id,
-      label: e.friendly_name || e.entity_id,
-      meta: e.domain || e.state,
-    }));
-  }
+  import HAEntityTree from './widgets/HAEntityTree.svelte';
 
   let {
     config,
@@ -120,16 +96,7 @@
         {/if}
       </header>
       <div class="ha-field">
-        <ResourcePicker
-          label="Entity ID"
-          value={entityId}
-          fetcher={fetchEntities}
-          onChange={(v) => set('entityId', v)}
-          placeholder="pick an entity"
-          allowCustom={true}
-          emptyHint="No entities synced — sync the HA registry from /admin/home-assistant or type one manually."
-        />
-        <span class="ha-hint">Templates supported: <code>{`{{input.field}}`}</code></span>
+        <HAEntityTree value={entityId} onChange={(v) => set('entityId', v)} />
       </div>
     </section>
   {/if}
