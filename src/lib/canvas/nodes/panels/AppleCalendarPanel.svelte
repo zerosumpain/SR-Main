@@ -43,7 +43,23 @@
   </div>
   <div class="field">
     <label>Calendar <span class="req">*</span></label>
-    <ResourcePicker integrationType="apple-calendar" fieldName="calendar" credentialId={config.credentialId as string | undefined} value={config.calendar as string | undefined} onChange={(v) => set('calendar', v)} />
+    {#if config.credentialId}
+      <ResourcePicker
+        placeholder="pick a calendar"
+        emptyHint="No calendars found — check your iCloud credential."
+        value={config.calendar as string | undefined}
+        onChange={(v) => set('calendar', v)}
+        fetcher={async () => {
+          const res = await fetch(`/api/integrations/options/apple-calendar/calendar?credentialId=${encodeURIComponent(config.credentialId as string)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          return (data.options ?? []).map((o: any) => ({ value: o.value, label: o.label, meta: o.meta }));
+        }}
+      />
+    {:else}
+      <input class="nm-text-input" type="text" disabled placeholder="Select an iCloud account first" />
+      <span class="hint">Pick a credential above to load calendars.</span>
+    {/if}
   </div>
 </section>
 
