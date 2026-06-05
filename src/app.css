@@ -382,3 +382,14 @@ a {
   border-left: 3px solid var(--accent);
   padding-left: 1rem;
 }
+
+/* Page navigation — subtle cross-fade via the View Transitions API.
+   Wired up in src/routes/+layout.svelte (onNavigate). Kept short and quiet so
+   it reads as polish, not flourish. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}

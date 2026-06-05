@@ -2,6 +2,7 @@
   import '../app.css';
   import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
+  import { onNavigate } from '$app/navigation';
   import { createBiomeStore } from '$lib/biome/store.svelte';
 
   const store = createBiomeStore();
@@ -22,6 +23,24 @@
       cancelAnimationFrame(raf);
       store.stopPolling();
     };
+  });
+
+  // Subtle cross-fade between pages via the View Transitions API. Falls back to
+  // an instant swap where unsupported or when the visitor prefers reduced
+  // motion. Crossfade timing lives in app.css (::view-transition-old/new).
+  onNavigate((navigation) => {
+    const start = (document as any).startViewTransition?.bind(document) as
+      | ((cb: () => Promise<void> | void) => unknown)
+      | undefined;
+    if (!start) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    return new Promise<void>((resolve) => {
+      start(async () => {
+        resolve();
+        await navigation.complete;
+      });
+    });
   });
 
   let { children } = $props();

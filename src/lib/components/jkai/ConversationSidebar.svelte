@@ -2,6 +2,9 @@
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import DraftsPanel from './DraftsPanel.svelte';
   import MetricsStrip from './MetricsStrip.svelte';
+  import { fade } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
+  import { dur } from '$lib/motion';
 
   interface SpendByPeriod {
     day: number;
@@ -201,6 +204,8 @@
                   onkeydown={(e) => { if (e.key === 'Enter') onSelect(conv.id); }}
                   role="button"
                   tabindex="0"
+                  animate:flip={{ duration: dur(180) }}
+                  out:fade={{ duration: dur(120) }}
                   class="w-full text-left px-3 py-2.5 border-b transition-colors group cursor-pointer"
                   style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
                 >

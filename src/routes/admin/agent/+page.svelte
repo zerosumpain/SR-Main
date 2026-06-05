@@ -4,6 +4,9 @@
   import { getContext } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import { fly } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
+  import { dur } from '$lib/motion';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -18,15 +21,19 @@
     createdAt: e.createdAt?.toISOString?.() ?? new Date().toISOString(),
   })));
   let connected = $state(false);
+  // Gate enter-animations so only events that stream in *after* the initial
+  // render fly in — otherwise the seeded backlog all animates at once on load.
+  let mounted = $state(false);
 
   onMount(() => {
+    mounted = true;
     const evtSource = new EventSource('/api/agent/activity/stream');
     evtSource.onopen = () => { connected = true; };
     evtSource.onerror = () => { connected = false; };
     evtSource.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
-        if (event.type === 'activity') {
+        if (event.type === 'activity' && !liveEvents.some((x) => x.id === event.id)) {
           liveEvents = [event, ...liveEvents].slice(0, 100);
         }
       } catch {}
@@ -143,8 +150,12 @@
       </div>
 
       <div class="feed">
-        {#each liveEvents as event}
-          <div class="feed-row">
+        {#each liveEvents as event (event.id)}
+          <div
+            class="feed-row"
+            in:fly={{ y: -6, duration: mounted ? dur(160) : 0 }}
+            animate:flip={{ duration: dur(180) }}
+          >
             <span class="feed-icon">{eventIcon(event.eventType)}</span>
             <span class="feed-summary">{event.summary}</span>
             <span class="feed-time">{timeAgo(event.createdAt)}</span>

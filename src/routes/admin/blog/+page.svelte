@@ -4,6 +4,9 @@
   import { goto } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import { fade } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
+  import { dur } from '$lib/motion';
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -138,7 +141,12 @@
     {:else}
       <div class="post-list">
         {#each filteredPosts as post (post.id)}
-          <a class="post-row" href={`/admin/blog/${post.id}?token=${adminToken}`}>
+          <a
+            class="post-row"
+            href={`/admin/blog/${post.id}?token=${adminToken}`}
+            animate:flip={{ duration: dur(200) }}
+            out:fade={{ duration: dur(120) }}
+          >
             {#if post.coverImageUrl}
               <img class="cover" src={post.coverImageUrl} alt="" />
             {:else}
