@@ -2933,9 +2933,14 @@
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ config: configDraft, label: labelDraft }),
+          body: JSON.stringify({ config: configDraft, label: labelDraft, expectedVersion: menuNode.version ?? 0 }),
         },
       );
+      if (res.status === 409) {
+        saveError = 'Changed elsewhere (e.g. by the AI) since you opened it — reloading the latest, then re-apply your edit.';
+        await invalidateAll();
+        return;
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);

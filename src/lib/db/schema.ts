@@ -748,6 +748,10 @@ export const workflowNodes = pgTable('workflow_nodes', {
   position: jsonb('position').notNull().default(sql`'{"x":0,"y":0}'::jsonb`),
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   label: text('label').notNull(),
+  // Optimistic-concurrency counter, bumped on every PATCH. A client sends the
+  // version it loaded as `expectedVersion`; a mismatch (e.g. the AI orchestrator
+  // edited the node meanwhile) returns 409 so the human edit isn't silently lost.
+  version: integer('version').notNull().default(0),
 });
 
 export type WorkflowNode = typeof workflowNodes.$inferSelect;

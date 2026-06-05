@@ -33,6 +33,8 @@ export type CanvasNode = {
   outputData?: unknown;
   error?: string | null;
   durationMs?: number | null;
+  /** Optimistic-concurrency version (from workflow_nodes.version). */
+  version?: number;
 };
 
 export type CanvasEdge = {

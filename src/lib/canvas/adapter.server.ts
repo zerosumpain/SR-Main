@@ -521,6 +521,7 @@ export async function loadCanvas(slug: string): Promise<Canvas | null> {
       outputData: ex?.outputData ?? undefined,
       error: ex?.error ?? null,
       durationMs: dur,
+      version: n.version,
     };
   });
 

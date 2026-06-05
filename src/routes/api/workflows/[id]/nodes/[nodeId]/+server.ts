@@ -68,6 +68,14 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     .where(and(eq(workflowNodes.id, params.nodeId), eq(workflowNodes.workflowId, params.id)));
   if (!before) return json({ error: 'Node not found' }, { status: 404 });
 
+  // Optimistic concurrency: if the client told us which version it edited and
+  // the node has since moved on (e.g. the AI orchestrator changed it), reject
+  // rather than silently overwrite the concurrent change.
+  if (typeof body.expectedVersion === 'number' && before.version !== body.expectedVersion) {
+    return json({ error: 'conflict', currentVersion: before.version }, { status: 409 });
+  }
+  updates.version = (before.version ?? 0) + 1;
+
   const [updated] = await db
     .update(workflowNodes)
     .set(updates)
