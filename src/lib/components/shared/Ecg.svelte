@@ -20,10 +20,13 @@
   // them rather than being evenly spaced — that irregular spacing is half of
   // what makes a trace read as a live signal instead of a looping graphic.
   const SWEEP_SEC = 7;
-  // Phosphor decay time-constant (seconds). The trail behind the cursor decays
-  // as exp(-age/TAU), fading to invisibility over roughly 3·TAU — so a larger
-  // TAU is a longer comet tail.
-  const TAU = 0.92;
+  // Phosphor lifetime (seconds): how long a drawn point lingers before it is
+  // completely gone. The trail is redrawn each frame from a time-stamped point
+  // buffer, so the fade hits exactly zero at this age (no never-quite-gone
+  // exponential ghost). Brightness follows a quadratic ease — it stays bright
+  // for most of the lifetime, giving a long tail, then cleanly to nothing.
+  const LIFETIME = 1.5;
+  const FADE_EXP = 2;
   // Respiration frequency (Hz) ≈ 13 breaths/min. Drives both the baseline
   // wander and the sinus-arrhythmia modulation of heart rate.
   const RESP_HZ = 0.22;
@@ -155,8 +158,11 @@
     let beatRR = 60 / clampBpm(bpm); // its R–R interval
     let beatAmp = 1; // its per-beat amplitude scale
     let cursorX = 0;
-    let prevX = 0;
-    let prevY = baseline;
+    let clock = 0; // monotonic wall clock (seconds) — drives point ageing
+    // Time-stamped trail. Redrawn from scratch each frame and pruned to
+    // LIFETIME, so the fade reaches exactly zero — nothing lingers. `gap`
+    // marks the first point of a new sweep (pen-up across the wrap).
+    const trail: Array<{ x: number; y: number; t: number; gap: boolean }> = [];
     let last = performance.now();
     let raf = 0;
 
@@ -171,32 +177,27 @@
     }
     const nextAmp = () => 1 + (Math.random() - 0.5) * 0.12;
 
+    const BANDS = 28; // opacity quantisation for the fade gradient
+    // Age → opacity. Quadratic ease holds the trail bright for most of its
+    // life (a long tail) then falls to exactly 0 at LIFETIME (clean cut-off).
+    function bandOf(t: number): number {
+      const age = (clock - t) / LIFETIME;
+      if (age >= 1) return 0;
+      return Math.round((1 - Math.pow(age, FADE_EXP)) * BANDS);
+    }
+
     function tick(now: number) {
       let dt = (now - last) / 1000;
       last = now;
       if (dt > 0.1) dt = 0.1; // guard against huge jumps after a tab refocus
-
-      // Phosphor decay: peel a time-proportional slice of alpha off every
-      // pixel so the trail fades smoothly and the sweep wrap is seamless.
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / TAU)})`;
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalCompositeOperation = 'source-over';
+      clock += dt;
 
       const a = ampPx();
       const pxPerSec = W / SWEEP_SEC;
 
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = traceW;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.shadowColor = glow;
-      ctx.shadowBlur = 7;
-
+      // Advance the signal and append time-stamped points to the trail.
       const steps = Math.max(1, Math.ceil(dt / 0.004)); // ~4ms sub-samples
       const sub = dt / steps;
-      ctx.beginPath();
-      let penDown = false;
       for (let s = 0; s < steps; s++) {
         cardiac += sub;
         while (cardiac - beatOnset >= beatRR) {
@@ -206,39 +207,68 @@
         }
         const tau = cardiac - beatOnset;
         const y = baseline - (complex(tau) * beatAmp + baselineDrift(cardiac)) * a;
-
         cursorX += pxPerSec * sub;
+        let gap = false;
         if (cursorX >= W) {
-          // Wrap: lift the pen so no line is drawn back across the screen.
-          if (penDown) {
-            ctx.stroke();
-            penDown = false;
-          }
           cursorX -= W;
-          prevX = cursorX;
-          prevY = y;
-          ctx.beginPath();
+          gap = true; // pen-up across the sweep wrap
+        }
+        trail.push({ x: cursorX, y, t: clock - (steps - 1 - s) * sub, gap });
+      }
+
+      // Drop points that have aged past their lifetime — these are simply gone.
+      const cutoff = clock - LIFETIME;
+      let drop = 0;
+      while (drop < trail.length && trail[drop].t < cutoff) drop++;
+      if (drop > 0) trail.splice(0, drop);
+
+      // Redraw the whole trail, fading each point by its age. Consecutive
+      // same-opacity segments are batched into one stroke so the gradient
+      // (and its glow) stays cheap.
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = traceW;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = fullbleed ? 6 : 5;
+
+      let k = 1;
+      while (k < trail.length) {
+        if (trail[k].gap) {
+          k++; // don't connect across a wrap
           continue;
         }
-        if (!penDown) {
-          ctx.moveTo(prevX, prevY);
-          penDown = true;
+        const band = bandOf(trail[k].t);
+        if (band <= 0) {
+          k++;
+          continue;
         }
-        ctx.lineTo(cursorX, y);
-        prevX = cursorX;
-        prevY = y;
+        ctx.globalAlpha = band / BANDS;
+        ctx.beginPath();
+        ctx.moveTo(trail[k - 1].x, trail[k - 1].y);
+        ctx.lineTo(trail[k].x, trail[k].y);
+        let j = k + 1;
+        while (j < trail.length && !trail[j].gap && bandOf(trail[j].t) === band) {
+          ctx.lineTo(trail[j].x, trail[j].y);
+          j++;
+        }
+        ctx.stroke();
+        k = j;
       }
-      if (penDown) ctx.stroke();
+      ctx.globalAlpha = 1;
 
       // Hot leading point — the live pen tip.
-      ctx.shadowBlur = 14;
-      ctx.fillStyle = hot;
-      ctx.beginPath();
-      ctx.arc(prevX, prevY, dotR, 0, Math.PI * 2);
-      ctx.fill();
+      const head = trail[trail.length - 1];
+      if (head) {
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = hot;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, dotR, 0, Math.PI * 2);
+        ctx.fill();
+        if (cursorEl) cursorEl.style.left = (head.x / W) * 100 + '%';
+      }
       ctx.shadowBlur = 0;
-
-      if (cursorEl) cursorEl.style.left = (prevX / W) * 100 + '%';
 
       raf = requestAnimationFrame(tick);
     }
