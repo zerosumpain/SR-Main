@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
-import { and, or, sql, ilike, gte, lte, inArray, asc, desc, isNotNull, type SQL } from 'drizzle-orm';
+import { and, or, sql, ilike, gte, lte, inArray, isNotNull, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { getSetting } from '$lib/server/models/settings';
 
@@ -14,6 +14,7 @@ const SORT_COLUMNS: Record<string, PgColumn> = {
   contextLength: openrouterModels.contextLength,
   promptPrice: openrouterModels.promptPrice,
   completionPrice: openrouterModels.completionPrice,
+  throughput: openrouterModels.throughput,
 };
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -26,6 +27,11 @@ export const GET: RequestHandler = async ({ url }) => {
   const pageSize = Math.min(100, Math.max(1, num(url.searchParams.get('pageSize')) ?? 50));
   const sortBy = url.searchParams.get('sortBy') ?? 'id';
   const sortDir = url.searchParams.get('sortDir') === 'desc' ? 'desc' : 'asc';
+  // toolsOnly: restrict to models whose supported_parameters include "tools".
+  // The jkai orchestrator is an agent and requires tool use — models without it
+  // (e.g. morph/relace "apply" models) 404 with "No endpoints found that
+  // support tool use". The chat model picker sets this.
+  const toolsOnly = url.searchParams.get('toolsOnly') === '1';
 
   const sortCol = SORT_COLUMNS[sortBy];
   if (!sortCol) throw error(400, `invalid sortBy: ${sortBy}`);
@@ -38,6 +44,9 @@ export const GET: RequestHandler = async ({ url }) => {
   if (maxCostPerM != null) {
     // maxCostPerM is USD per 1M completion tokens; completion_price is USD per token
     conditions.push(lte(openrouterModels.completionPrice, String(maxCostPerM / 1_000_000)));
+  }
+  if (toolsOnly) {
+    conditions.push(sql`(${openrouterModels.raw} -> 'supported_parameters') @> '["tools"]'::jsonb`);
   }
 
   const where = conditions.length ? and(...conditions) : undefined;
@@ -60,7 +69,9 @@ export const GET: RequestHandler = async ({ url }) => {
       .select()
       .from(openrouterModels)
       .where(where)
-      .orderBy(sortDir === 'desc' ? desc(sortCol) : asc(sortCol))
+      // NULLS LAST so unpriced / no-throughput models never sort above real
+      // values (Postgres defaults to NULLS FIRST for DESC).
+      .orderBy(sql`${sortCol} ${sql.raw(sortDir === 'desc' ? 'desc' : 'asc')} nulls last`)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
   ]);

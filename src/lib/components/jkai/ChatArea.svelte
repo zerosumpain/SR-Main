@@ -20,6 +20,7 @@
   import BuildPill from './BuildPill.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
+  import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
@@ -1184,14 +1185,7 @@
   // The conversation's model locks after the first message (the PATCH returns
   // 409, and a mid-chat switch churns the prefix cache), so after that we just
   // show a static label.
-  let modelMenuOpen = $state(false);
-  const modelOptions = $derived.by(() => {
-    const opts: ModelContext[] = [{ provider: 'zai', modelId: defaultGlmModelId }];
-    if (altOpenRouterModel?.modelId) {
-      opts.push({ provider: 'openrouter', modelId: altOpenRouterModel.modelId });
-    }
-    return opts;
-  });
+  let modelPickerOpen = $state(false);
   const currentModel = $derived({
     provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'zai',
     modelId: conversation?.modelId ?? defaultGlmModelId,
@@ -1199,9 +1193,18 @@
   function shortModelLabel(id: string): string {
     return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
   }
+  // Show the chosen model once the user has picked one; otherwise prompt them to.
+  // The conversation defaults to the GLM default until an explicit choice is made.
+  const modelChosen = $derived(
+    !!conversation?.modelId &&
+      !(currentModel.provider === 'zai' && currentModel.modelId === defaultGlmModelId),
+  );
+  const modelTriggerLabel = $derived(
+    modelChosen ? shortModelLabel(currentModel.modelId) : 'Click to select',
+  );
 
   async function switchModel(provider: ModelContext['provider'], modelId: string) {
-    modelMenuOpen = false;
+    modelPickerOpen = false;
     if (!conversationId || loading) return;
     if (currentModel.provider === provider && currentModel.modelId === modelId) return;
 
@@ -1516,37 +1519,24 @@
         {/if}
       </div>
       <div class="model-switcher">
-        {#if messages.length === 0 && modelOptions.length > 1}
+        {#if messages.length === 0}
           <button
             type="button"
             class="model-btn"
-            onclick={() => (modelMenuOpen = !modelMenuOpen)}
+            onclick={() => (modelPickerOpen = true)}
             disabled={loading}
             title="Model for this conversation — locks after the first message"
           >
             <span class="model-dot"></span>
-            <span class="model-name">{shortModelLabel(currentModel.modelId)}</span>
+            <span class="model-name">{modelTriggerLabel}</span>
             <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
           </button>
-          {#if modelMenuOpen}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div class="model-backdrop" onclick={() => (modelMenuOpen = false)}></div>
-            <div class="model-menu" role="listbox" aria-label="Choose model">
-              {#each modelOptions as opt (opt.provider + opt.modelId)}
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={opt.provider === currentModel.provider && opt.modelId === currentModel.modelId}
-                  class="model-opt"
-                  class:active={opt.provider === currentModel.provider && opt.modelId === currentModel.modelId}
-                  onclick={() => switchModel(opt.provider, opt.modelId)}
-                >
-                  <span class="model-opt-name">{shortModelLabel(opt.modelId)}</span>
-                  <span class="model-opt-provider">{opt.provider}</span>
-                </button>
-              {/each}
-            </div>
+          {#if modelPickerOpen}
+            <OpenRouterModelPicker
+              current={currentModel}
+              onselect={(ctx) => switchModel(ctx.provider, ctx.modelId)}
+              onclose={() => (modelPickerOpen = false)}
+            />
           {/if}
         {:else}
           <span class="model-label" title="Model — locked after the first message">
