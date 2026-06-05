@@ -1,4 +1,6 @@
 import type { NodeHandles } from './handles';
+import { nodeDefinitions } from '$lib/workflows/registry-client';
+import { isDisplayOnlyType, type NodeDefinition } from '$lib/workflows/types';
 
 export type NodeKind =
   | 'input'
@@ -892,12 +894,75 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
   },
 ]);
 
+// ————————————————————————— Registry-derived palette entries
+// The canvas reads a node's render/wiring handles from this list (byType), so a
+// registered-but-unlisted node was both unreachable from the "+ node" picker
+// AND rendered with no ports. Rather than hand-maintain a mirror that drifts
+// (~19 executable nodes — apple-calendar, approval, the per-operation
+// file/blog/deep-dive primitives — were missing), auto-derive an entry for any
+// registered node the curated list above doesn't already cover. Excluded:
+// hidden defs (superseded legacy nodes), display-only types (stats/notes), and
+// dynamic-handle nodes whose per-instance ports need bespoke canvas rendering.
+const CURATED_TYPES = new Set(CANVAS_NODE_TYPES.map((t) => t.type));
+// `switch` derives its output handles per-config (switchHandles); the canvas
+// doesn't render those yet, so adding it with static ports would mislead.
+const DYNAMIC_HANDLE_SKIP = new Set(['switch']);
+
+function categoryToGroup(category: string): string {
+  switch (category) {
+    case 'trigger':
+    case 'control':
+      return 'Trigger & Flow';
+    case 'agentic':
+      return 'LLM & AI';
+    case 'integration':
+      return 'Integrations';
+    case 'core':
+      return 'Parse & Transform';
+    default:
+      return 'Integrations';
+  }
+}
+
+function defToOption(def: NodeDefinition): NodeTypeOption {
+  return {
+    type: def.type,
+    label: def.label,
+    kind: mapTypeToKind(def.type),
+    group: categoryToGroup(def.category),
+    description: def.description,
+    defaultConfig: { ...def.defaultConfig },
+    handles: {
+      inputs: def.inputs.map((p) => ({ id: p.name, kinds: ['any'] })),
+      outputs: def.outputs.map((p) => ({ id: p.name, kinds: ['any'] })),
+    },
+  };
+}
+
+const GENERATED_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze(
+  nodeDefinitions
+    .filter(
+      (def) =>
+        !def.hidden &&
+        !CURATED_TYPES.has(def.type) &&
+        !DYNAMIC_HANDLE_SKIP.has(def.type) &&
+        !isDisplayOnlyType(def.type),
+    )
+    .map(defToOption),
+);
+
+/** Curated entries first (they win on duplicate type), then registry-derived. */
+const ALL_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
+  ...CANVAS_NODE_TYPES,
+  ...GENERATED_NODE_TYPES,
+]);
+
 export function allTypes(): readonly NodeTypeOption[] {
-  return CANVAS_NODE_TYPES;
+  return ALL_NODE_TYPES;
 }
 
 export function byType(type: string): NodeTypeOption | undefined {
-  return CANVAS_NODE_TYPES.find((t) => t.type === type);
+  return ALL_NODE_TYPES.find((t) => t.type === type);
 }
 
 export type ModelOption = { value: string; label: string };
