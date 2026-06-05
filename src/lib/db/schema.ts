@@ -1158,6 +1158,9 @@ export const openrouterModels = pgTable('openrouter_models', {
   imagePrice: numeric('image_price', { precision: 20, scale: 12 }),
   modality: text('modality'),
   provider: text('provider'),
+  // Tokens/sec — max p50_throughput across the model's OpenRouter provider
+  // endpoints (from the frontend stats API). Null when none report throughput.
+  throughput: numeric('throughput', { precision: 12, scale: 3 }),
   raw: jsonb('raw').notNull(),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
 });
