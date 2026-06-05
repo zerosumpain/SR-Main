@@ -31,7 +31,7 @@
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
   import { getDefinition } from '$lib/workflows/registry-client';
   import { summarizeNode } from '$lib/workflows/node-summary';
-  import { computeUpstreamFields } from '$lib/canvas/upstream-fields';
+  import { computeUpstreamFields, computeUpstreamCollisions } from '$lib/canvas/upstream-fields';
 
   // Node types that always render a config panel (specialised panels), in addition
   // to anything whose NodeDefinition.basicConfig is populated.
@@ -3043,6 +3043,18 @@
   // BEFORE running it (and spending an LLM call) instead of via a run failure.
   // Non-blocking on purpose: configSchemas can be looser/stricter than reality
   // and templated values are legitimately "empty", so we advise, never block.
+  // Fan-in key collisions for the open node: keys emitted by 2+ immediate
+  // upstream nodes that silently overwrite each other in the merged input.
+  // Surfaced as a non-blocking warning so a beginner isn't bitten by the
+  // last-writer-wins merge. Best-effort (needs upstream run output).
+  const menuUpstreamCollisions = $derived.by(() => {
+    if (!menuNode) return [] as Array<{ key: string; labels: string[] }>;
+    return computeUpstreamCollisions(
+      menuNode.id,
+      (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
+      (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
+    ).map((c) => ({ key: c.key, labels: c.sources.map((id) => byId[id]?.name ?? id) }));
+  });
   const menuRequiredMissing = $derived.by(() => {
     if (!menuNode) return [] as string[];
     const def = getDefinition(menuNode.type);
@@ -4491,6 +4503,13 @@
                 title={`Required field${menuRequiredMissing.length === 1 ? '' : 's'} still empty: ${menuRequiredMissing.join(', ')}`}
                 style="font-family:var(--font-mono); font-size:10px; color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
               >⚠ {menuRequiredMissing.length} required</span>
+            {/if}
+            {#if menuUpstreamCollisions.length}
+              <span
+                class="nm-req-warn"
+                title={`Field name clash — ${menuUpstreamCollisions.map((c) => `"${c.key}" arrives from ${c.labels.join(' & ')}`).join('; ')}. They silently overwrite each other in {{input}} (last upstream wins).`}
+                style="font-family:var(--font-mono); font-size:10px; color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
+              >⚠ {menuUpstreamCollisions.length} clash</span>
             {/if}
             <button
               class="p-icon-btn"

@@ -109,3 +109,40 @@ export function computeUpstreamFields(
 
   return Array.from(out).sort();
 }
+
+/**
+ * Detect fan-in key collisions: top-level output keys emitted by TWO OR MORE
+ * immediate upstream nodes. At runtime the engine merges upstream outputs with
+ * a flat last-writer-wins Object.assign, so a colliding key silently overwrites
+ * — `{{input.text}}` then resolves to whichever upstream ran last, with no way
+ * to disambiguate. Surfacing this at edit time turns a silent footgun into a
+ * visible warning. Best-effort: only sees keys from nodes that have run output.
+ */
+export function computeUpstreamCollisions(
+  targetNodeId: string,
+  nodes: CanvasNodeLike[],
+  edges: CanvasEdgeLike[],
+): Array<{ key: string; sources: string[] }> {
+  const byId = new Map<string, CanvasNodeLike>();
+  for (const n of nodes) byId.set(n.id, n);
+
+  const immediateUpstreamIds = edges
+    .filter((e) => e.targetNodeId === targetNodeId)
+    .map((e) => e.sourceNodeId);
+
+  const keyToSources = new Map<string, Set<string>>();
+  for (const id of immediateUpstreamIds) {
+    const out = byId.get(id)?.outputData;
+    if (!out || typeof out !== 'object' || Array.isArray(out)) continue;
+    for (const key of Object.keys(out as Record<string, unknown>)) {
+      if (!keyToSources.has(key)) keyToSources.set(key, new Set());
+      keyToSources.get(key)!.add(id);
+    }
+  }
+
+  const collisions: Array<{ key: string; sources: string[] }> = [];
+  for (const [key, sources] of keyToSources) {
+    if (sources.size >= 2) collisions.push({ key, sources: Array.from(sources) });
+  }
+  return collisions.sort((a, b) => a.key.localeCompare(b.key));
+}
