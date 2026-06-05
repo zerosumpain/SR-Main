@@ -283,13 +283,14 @@ async function bootHomeAssistant() {
     const oneHourAgo = new Date(Date.now() - 3600000);
     if (!config.lastSynced || new Date(config.lastSynced) < oneHourAgo) {
       try {
-        const { entities, entityCount } = await service.syncRegistries();
+        const { entities, areas, entityCount } = await service.syncRegistries();
         await db.update(homeAssistantConfig).set({
           entityRegistry: entities,
+          areaRegistry: areas,
           lastSynced: new Date(),
           updatedAt: new Date(),
         }).where(eq(homeAssistantConfig.id, 'default'));
-        console.log(`[ha] Synced ${entityCount} entities`);
+        console.log(`[ha] Synced ${entityCount} entities, ${areas.length} areas`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         console.error('[ha] Registry sync failed:', msg);

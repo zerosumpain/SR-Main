@@ -9,15 +9,7 @@ export const POST: RequestHandler = async () => {
   const service = getHomeAssistantService();
 
   try {
-    const { entities, entityCount } = await service.syncRegistries();
-
-    const areaMap = new Map<string, string>();
-    for (const e of entities) {
-      if (e.area_id && e.area_name) {
-        areaMap.set(e.area_id, e.area_name);
-      }
-    }
-    const areas = Array.from(areaMap.entries()).map(([id, name]) => ({ id, name }));
+    const { entities, areas, entityCount } = await service.syncRegistries();
 
     await db.update(homeAssistantConfig).set({
       entityRegistry: entities,
