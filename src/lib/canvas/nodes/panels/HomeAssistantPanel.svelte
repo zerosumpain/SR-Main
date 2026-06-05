@@ -52,6 +52,10 @@
   const eventDataValid = $derived(isJsonString(config.eventData));
 
   const entityId = $derived(String(config.entityId ?? ''));
+  const entityIds = $derived(Array.isArray(config.entityIds) ? (config.entityIds as string[]) : []);
+  // query_state/get_history read MANY entities (entityIds[]); call_service
+  // targets a single one (scalar entityId).
+  const isMulti = $derived(operation === 'query_state' || operation === 'get_history');
   const derivedDomain = $derived(entityId.includes('.') ? entityId.split('.')[0] : '');
 
   // ---------- Raw JSON ---------------------------------------------------
@@ -96,7 +100,13 @@
         {/if}
       </header>
       <div class="ha-field">
-        <HAEntityTree value={entityId} onChange={(v) => set('entityId', v)} />
+        <HAEntityTree
+          multiple={isMulti}
+          selected={isMulti ? entityIds : (entityId ? [entityId] : [])}
+          onChange={(ids) => (isMulti ? set('entityIds', ids) : set('entityId', ids[0] ?? ''))}
+          manualValue={entityId}
+          onManualChange={(v) => set('entityId', v)}
+        />
       </div>
     </section>
   {/if}

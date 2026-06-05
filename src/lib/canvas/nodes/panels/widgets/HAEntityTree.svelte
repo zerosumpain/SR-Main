@@ -1,11 +1,11 @@
 <script lang="ts">
   // Tree-hierarchy entity selector for the Home Assistant node: Area → Domain →
-  // Entity, replacing the old flat dropdown. Single-select v1 (writes the
-  // node's scalar entityId). Reads the area-aware registry from
-  // /api/workflows/homeassistant/entities (populated by the registry sync), with
-  // a ↻ that triggers a real re-sync, a substring search that auto-expands
-  // matches, and a template/custom escape hatch so {{input.x}} ids still work.
-  // Degrades to Domain → Entity when no entity carries an area.
+  // Entity. Single-select (call_service: writes scalar entityId) OR multi-select
+  // (query_state/get_history: writes entityIds[]). Reads the area-aware registry
+  // from /api/workflows/homeassistant/entities, with a ↻ real re-sync, substring
+  // search that auto-expands matches, per-leaf last-sync state pills, and a
+  // separate template/custom escape hatch (manualValue) so {{input.x}} ids still
+  // work. Degrades to Domain → Entity when no entity carries an area.
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
 
@@ -18,7 +18,19 @@
     state?: string;
   };
 
-  let { value, onChange }: { value: string; onChange: (v: string) => void } = $props();
+  let {
+    multiple = false,
+    selected = [],
+    onChange,
+    manualValue = '',
+    onManualChange,
+  }: {
+    multiple?: boolean;
+    selected?: string[];
+    onChange: (ids: string[]) => void;
+    manualValue?: string;
+    onManualChange?: (v: string) => void;
+  } = $props();
 
   let entities = $state<HAEntity[]>([]);
   let loading = $state(true);
@@ -29,6 +41,21 @@
 
   const TEMPLATE_HINT = '{{input.field}}';
   const MANUAL_PLACEHOLDER = 'light.kitchen or {{input.entity_id}}';
+
+  const selectedSet = $derived(new Set(selected));
+  function isSelected(id: string): boolean {
+    return selectedSet.has(id);
+  }
+  function pick(id: string) {
+    if (multiple) {
+      const next = new Set(selected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      onChange([...next]);
+    } else {
+      onChange(isSelected(id) ? [] : [id]);
+    }
+  }
 
   async function load() {
     loading = true;
@@ -111,7 +138,6 @@
     });
   });
 
-  // When searching, everything is open so matches are visible.
   function open(key: string): boolean {
     return query.trim() ? true : expanded.has(key);
   }
@@ -134,6 +160,13 @@
       {syncing ? '…' : '↻'}
     </button>
   </div>
+
+  {#if multiple && selected.length > 0}
+    <div class="hat-selcount">
+      {selected.length} selected
+      <button type="button" class="hat-clear" onclick={() => onChange([])}>clear</button>
+    </div>
+  {/if}
 
   {#if loading}
     <p class="hat-msg">Loading entities…</p>
@@ -162,11 +195,15 @@
                 <button
                   type="button"
                   class="hat-row hat-leaf"
-                  class:hat-selected={value === e.entity_id}
-                  onclick={() => onChange(e.entity_id)}
+                  class:hat-selected={isSelected(e.entity_id)}
+                  onclick={() => pick(e.entity_id)}
                   title={e.entity_id}
                 >
-                  <span class="hat-dot" class:on={value === e.entity_id}></span>
+                  {#if multiple}
+                    <span class="hat-check" class:on={isSelected(e.entity_id)}>{isSelected(e.entity_id) ? '✓' : ''}</span>
+                  {:else}
+                    <span class="hat-dot" class:on={isSelected(e.entity_id)}></span>
+                  {/if}
                   <span class="hat-leaf-name">{e.friendly_name || e.entity_id}</span>
                   <span class="hat-eid">{e.entity_id}</span>
                   {#if e.state}<span class="hat-state" title="value at last sync">{e.state}</span>{/if}
@@ -179,17 +216,20 @@
     </div>
   {/if}
 
-  <details class="hat-adv" open={Boolean(value) && (value.includes('{{') || !entities.some((e) => e.entity_id === value))}>
-    <summary>Template / type an entity id</summary>
+  <details class="hat-adv" open={Boolean(manualValue) && (manualValue.includes('{{') || !entities.some((e) => e.entity_id === manualValue))}>
+    <summary>{multiple ? 'Templated fallback id' : 'Template / type an entity id'}</summary>
     <input
       class="hat-manual"
       type="text"
       placeholder={MANUAL_PLACEHOLDER}
-      value={value}
-      oninput={(e) => onChange((e.currentTarget as HTMLInputElement).value)}
+      value={manualValue}
+      oninput={(e) => onManualChange?.((e.currentTarget as HTMLInputElement).value)}
       spellcheck="false"
     />
-    <span class="hat-hint">Overrides the tree selection. Supports <code>{TEMPLATE_HINT}</code> templates (resolved at run time).</span>
+    <span class="hat-hint">
+      {multiple ? 'Used only when no tree entities are selected.' : 'Overrides the tree selection.'}
+      Supports <code>{TEMPLATE_HINT}</code> templates (resolved at run time).
+    </span>
   </details>
 </div>
 
@@ -217,6 +257,19 @@
   }
   .hat-refresh:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-muted); }
   .hat-refresh:disabled { opacity: 0.5; cursor: default; }
+
+  .hat-selcount {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex; gap: 8px; align-items: center;
+  }
+  .hat-clear {
+    background: none; border: none; padding: 0;
+    color: var(--accent); cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px;
+    text-decoration: underline;
+  }
 
   .hat-msg { margin: 0; padding: 8px; font-size: 12px; color: var(--text-ghost); }
   .hat-err { color: var(--status-error, #c0392b); }
@@ -276,6 +329,15 @@
     border: 1px solid var(--text-muted);
   }
   .hat-dot.on { background: var(--accent); border-color: var(--accent); }
+  .hat-check {
+    flex: 0 0 auto;
+    width: 13px; height: 13px;
+    border: 1px solid var(--text-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; line-height: 1;
+    color: var(--bg);
+  }
+  .hat-check.on { background: var(--accent); border-color: var(--accent); }
   .hat-selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .hat-selected:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 
