@@ -9,19 +9,30 @@
 
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import { fade } from 'svelte/transition';
+  import { dur } from '$lib/motion';
   let { data } = $props();
 
-  const allTags = (() => {
-    const seen = new Set<string>();
-    for (const p of data.posts) for (const t of p.tags ?? []) seen.add(t);
-    return [...seen].sort();
-  })();
+  // data.posts is streamed (a promise), so the hero meta derives from the
+  // resolved value inside {#await} rather than at the top level.
+  type Post = Awaited<typeof data.posts>[number];
 
-  const latestDate = data.posts[0]?.publishedAt
-    ? new Date(data.posts[0].publishedAt)
-        .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-        .toUpperCase()
-    : null;
+  function collectTags(posts: Post[]): string[] {
+    const seen = new Set<string>();
+    for (const p of posts) for (const t of p.tags ?? []) seen.add(t);
+    return [...seen].sort();
+  }
+
+  function fmtLatest(posts: Post[]): string | null {
+    const d = posts[0]?.publishedAt;
+    return d
+      ? new Date(d)
+          .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          .toUpperCase()
+      : null;
+  }
+
+  const SKELETON_WIDTHS = [60, 45, 70, 38, 55];
 </script>
 
 <PageHeader title="WRITING" />
@@ -29,7 +40,7 @@
 <section class="b-hero">
   <div class="b-hero-inner">
     <div class="b-hero-left">
-      <p class="b-hero-num">01 / JOURNAL · {data.posts.length} {data.posts.length === 1 ? 'POST' : 'POSTS'}</p>
+      <p class="b-hero-num">01 / JOURNAL{#await data.posts then posts} · {posts.length} {posts.length === 1 ? 'POST' : 'POSTS'}{/await}</p>
       <h1 class="b-hero-headline">
         Words.<br /><span class="ghost">Read some here.</span>
       </h1>
@@ -42,8 +53,12 @@
   <div class="b-hero-foot">
     <span class="b-foot-meta">
       WRITING
-      {#if latestDate}<span class="b-foot-sep">·</span>LATEST {latestDate}{/if}
-      {#if allTags.length}<span class="b-foot-sep">·</span>{allTags.length} {allTags.length === 1 ? 'TAG' : 'TAGS'}{/if}
+      {#await data.posts then posts}
+        {@const latestDate = fmtLatest(posts)}
+        {@const allTags = collectTags(posts)}
+        {#if latestDate}<span class="b-foot-sep">·</span>LATEST {latestDate}{/if}
+        {#if allTags.length}<span class="b-foot-sep">·</span>{allTags.length} {allTags.length === 1 ? 'TAG' : 'TAGS'}{/if}
+      {/await}
     </span>
     <a href="#posts" class="b-foot-jump">Browse →</a>
   </div>
@@ -51,16 +66,30 @@
 
 <section id="posts" class="px-6 sm:px-10 md:px-16 py-10 sm:py-12">
   <div class="max-w-4xl mx-auto">
-    {#if data.posts.length === 0}
-      <p class="text-sm py-8" style="color: var(--text-muted);">Nothing published yet.</p>
-    {:else}
-      {#each data.posts as post, i}
-        <a
-          href="/blog/{post.slug}"
-          class="post-row group"
-          style="border-bottom: 1px solid var(--divider);"
-        >
-          <span class="post-num">{String(i + 1).padStart(2, '0')}</span>
+    {#await data.posts}
+      <div class="post-skeleton" aria-hidden="true">
+        {#each SKELETON_WIDTHS as w, i (i)}
+          <div class="sk-row">
+            <span class="sk-num"></span>
+            <div class="sk-body">
+              <span class="sk-title" style="width: {w}%"></span>
+              <span class="sk-excerpt" style="width: {Math.min(w + 18, 85)}%"></span>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:then posts}
+      {#if posts.length === 0}
+        <p class="text-sm py-8" style="color: var(--text-muted);">Nothing published yet.</p>
+      {:else}
+        <div in:fade={{ duration: dur(200) }}>
+        {#each posts as post, i}
+          <a
+            href="/blog/{post.slug}"
+            class="post-row group"
+            style="border-bottom: 1px solid var(--divider);"
+          >
+            <span class="post-num">{String(i + 1).padStart(2, '0')}</span>
 
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-baseline gap-4">
@@ -85,8 +114,10 @@
 
           <span class="post-arrow" aria-hidden="true">→</span>
         </a>
-      {/each}
-    {/if}
+        {/each}
+        </div>
+      {/if}
+    {/await}
   </div>
 </section>
 
@@ -314,6 +345,60 @@
     }
     .b-tag-strip-wrap {
       padding: 12px 16px;
+    }
+  }
+
+  /* --- Streaming skeleton — shown while the post list loads in --- */
+  .post-skeleton {
+    display: flex;
+    flex-direction: column;
+  }
+  .sk-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  .sk-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding-top: 0.4rem;
+  }
+  .sk-num,
+  .sk-title,
+  .sk-excerpt {
+    background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+    border-radius: 4px;
+  }
+  .sk-num {
+    width: 2.25rem;
+    height: 0.7rem;
+    flex-shrink: 0;
+    margin-top: 0.4rem;
+  }
+  .sk-title {
+    height: 1rem;
+  }
+  .sk-excerpt {
+    height: 0.7rem;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sk-num,
+    .sk-title,
+    .sk-excerpt {
+      animation: sk-pulse 1.4s ease-in-out infinite;
+    }
+  }
+  @keyframes sk-pulse {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.85;
     }
   }
 </style>

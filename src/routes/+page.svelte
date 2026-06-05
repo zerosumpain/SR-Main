@@ -29,29 +29,27 @@
   let mounted = $state(false);
   let bgMode = $state<'ecg' | 'biome'>('ecg');
 
-  // Before mount: use server-fetched biome data. After mount: use live store.
-  let pulse = $derived(mounted ? store.state.pulse : (data.initialBiome?.pulse ?? 60));
-  let temp = $derived(
-    mounted ? store.state.weather.temp : (data.initialBiome?.weather?.temp ?? 15),
-  );
-  let condition = $derived(
-    mounted
-      ? store.state.weather.condition
-      : (data.initialBiome?.weather?.condition ?? 'clear'),
-  );
-  let town = $derived(mounted ? store.state.town : data.initialBiome?.town);
-  let lastSyncedAt = $derived(
-    mounted ? store.state.lastSyncedAt : data.initialBiome?.lastSyncedAt,
-  );
+  // initialBiome is streamed, so it isn't in the SSR HTML — pre-mount uses
+  // sensible defaults and the live store takes over once mounted (onMount seeds
+  // it from the resolved stream, then its own polling keeps it current).
+  let pulse = $derived(mounted ? store.state.pulse : 60);
+  let temp = $derived(mounted ? store.state.weather.temp : 15);
+  let condition = $derived(mounted ? store.state.weather.condition : 'clear');
+  let town = $derived(mounted ? store.state.town : undefined);
+  let lastSyncedAt = $derived(mounted ? store.state.lastSyncedAt : undefined);
 
-  let strap = $derived(
-    fillStrap(data.heroTitle.strapTemplate, {
-      bpm: pulse,
-      steps: data.steps,
-      temp,
-      sky: condition,
-    }),
-  );
+  // Deterministic copy shown until the snapped heroTitle streams in. Mirrors the
+  // resting-state fallback the title service uses, so it rarely visibly swaps.
+  const FALLBACK_HERO = {
+    primary: 'STILL.',
+    ghost: 'FOR NOW.',
+    strapTemplate:
+      '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
+  };
+
+  function makeStrap(template: string): string {
+    return fillStrap(template, { bpm: pulse, steps: data.steps, temp, sky: condition });
+  }
 
   let heroTag = $derived(
     `RIGHT NOW · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : ''),
@@ -73,9 +71,11 @@
   let syncedText = $derived(formatSynced(lastSyncedAt, now));
 
   onMount(() => {
-    if (data.initialBiome) {
-      store.setState(data.initialBiome);
-    }
+    // initialBiome is streamed from the server load, so seed the store once it
+    // resolves; the store's own polling takes over from there.
+    Promise.resolve(data.initialBiome).then((b) => {
+      if (b) store.setState(b);
+    });
     mounted = true;
 
     const stored = localStorage.getItem('landing-bg');
@@ -110,18 +110,32 @@
     </div>
   {/if}
 
-  <!-- Center — hero copy -->
+  <!-- Center — hero copy. heroTitle is streamed; render fallback copy until it
+       lands so the hero paints without waiting on the external weather fetch. -->
   <div class="relative z-10 flex-1 flex items-center">
-    <LandingHero
-      tag={heroTag}
-      primary={data.heroTitle.primary}
-      ghost={data.heroTitle.ghost}
-      strap={strap}
-      {pulse}
-      steps={data.steps}
-      {temp}
-      {condition}
-    />
+    {#await data.heroTitle}
+      <LandingHero
+        tag={heroTag}
+        primary={FALLBACK_HERO.primary}
+        ghost={FALLBACK_HERO.ghost}
+        strap={makeStrap(FALLBACK_HERO.strapTemplate)}
+        {pulse}
+        steps={data.steps}
+        {temp}
+        {condition}
+      />
+    {:then heroTitle}
+      <LandingHero
+        tag={heroTag}
+        primary={heroTitle.primary}
+        ghost={heroTitle.ghost}
+        strap={makeStrap(heroTitle.strapTemplate)}
+        {pulse}
+        steps={data.steps}
+        {temp}
+        {condition}
+      />
+    {/await}
   </div>
 
   <!-- Live walk banner -->
