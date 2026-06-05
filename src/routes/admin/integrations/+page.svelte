@@ -134,6 +134,55 @@
       alert('OAuth start returned no authorization URL');
     }
   }
+
+  // ——— Manual (apikey / basic) credential creation ———
+  type ManualField = { key: string; label: string; type: 'text' | 'password'; placeholder?: string };
+  type ManualSpec = { kind: string; fields: ManualField[]; helpText?: string; helpUrl?: string };
+
+  let connectingType = $state<string | null>(null);
+  let connectLabel = $state('');
+  let connectFields = $state<Record<string, string>>({});
+  let connectBusy = $state(false);
+  let connectError = $state<string | null>(null);
+
+  function startConnect(integrationType: string, spec: ManualSpec) {
+    connectingType = integrationType;
+    connectLabel = '';
+    connectError = null;
+    const init: Record<string, string> = {};
+    for (const f of spec.fields) init[f.key] = '';
+    connectFields = init;
+  }
+
+  function cancelConnect() {
+    connectingType = null;
+    connectError = null;
+  }
+
+  async function submitConnect(integrationType: string) {
+    connectBusy = true;
+    connectError = null;
+    try {
+      const res = await fetch('/api/integrations/credentials', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          integrationType,
+          label: connectLabel.trim() || integrationType,
+          payload: { ...connectFields },
+        }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        connectError = b.message || b.error || `HTTP ${res.status}`;
+        return;
+      }
+      connectingType = null;
+      location.reload();
+    } finally {
+      connectBusy = false;
+    }
+  }
 </script>
 
 <div class="wrap">
@@ -252,13 +301,59 @@
           </div>
         {/if}
 
-        {#if adapter.hasOauth}
+        {#if adapter.hasOauth || adapter.manualCredential}
           <div class="add-row">
-            <button
-              type="button"
-              class="row-link add-link"
-              onclick={() => startOAuth(adapter.integrationType)}
-            >+ New via OAuth</button>
+            {#if adapter.hasOauth}
+              <button
+                type="button"
+                class="row-link add-link"
+                onclick={() => startOAuth(adapter.integrationType)}
+              >+ New via OAuth</button>
+            {/if}
+            {#if adapter.manualCredential && connectingType !== adapter.integrationType}
+              <button
+                type="button"
+                class="row-link add-link"
+                onclick={() => startConnect(adapter.integrationType, adapter.manualCredential)}
+              >+ Connect</button>
+            {/if}
+          </div>
+        {/if}
+
+        {#if adapter.manualCredential && connectingType === adapter.integrationType}
+          <div class="connect-form">
+            {#if adapter.manualCredential.helpText}
+              <p class="connect-help">
+                {adapter.manualCredential.helpText}
+                {#if adapter.manualCredential.helpUrl}
+                  <a href={adapter.manualCredential.helpUrl} target="_blank" rel="noreferrer">Learn how →</a>
+                {/if}
+              </p>
+            {/if}
+            <label class="connect-field">
+              <span class="connect-label">Label</span>
+              <input class="nm-text-input" type="text" bind:value={connectLabel} placeholder={`My ${adapter.integrationType}`} />
+            </label>
+            {#each adapter.manualCredential.fields as f (f.key)}
+              <label class="connect-field">
+                <span class="connect-label">{f.label}</span>
+                <input
+                  class="nm-text-input"
+                  type={f.type}
+                  placeholder={f.placeholder ?? ''}
+                  autocomplete="off"
+                  value={connectFields[f.key] ?? ''}
+                  oninput={(e) => (connectFields = { ...connectFields, [f.key]: (e.currentTarget as HTMLInputElement).value })}
+                />
+              </label>
+            {/each}
+            {#if connectError}<p class="connect-err">⚠ {connectError}</p>{/if}
+            <div class="connect-actions">
+              <button type="button" class="nm-save-btn" disabled={connectBusy} onclick={() => submitConnect(adapter.integrationType)}>
+                {connectBusy ? 'Connecting…' : 'Connect'}
+              </button>
+              <button type="button" class="btn-ghost" onclick={cancelConnect}>Cancel</button>
+            </div>
           </div>
         {/if}
       </section>
@@ -514,6 +609,40 @@
     font-size: 11px;
     letter-spacing: 0.08em;
   }
+
+  /* ——— Manual connect form ——— */
+  .connect-form {
+    margin-top: 0.75rem;
+    padding: 1rem 1.1rem;
+    background: var(--bg-section);
+    border: 1px solid var(--accent);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .connect-help {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+  .connect-help a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .connect-help a:hover { text-decoration: underline; }
+  .connect-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .connect-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+  .connect-err {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #c44;
+  }
+  .connect-actions { display: flex; gap: 0.6rem; align-items: center; }
 
   @media (max-width: 640px) {
     .cred-card { grid-template-columns: 1fr; align-items: flex-start; }
