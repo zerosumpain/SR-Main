@@ -16,6 +16,16 @@ export const gmailSendDef: NodeDefinition = {
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Send result' }],
+  summarize: (config) => {
+    const to = String(config.to ?? '').trim();
+    const subject = String(config.subject ?? '').trim();
+    return {
+      line: to
+        ? `Send an email to ${to}${subject ? ` — "${subject}"` : ''}`
+        : 'Send an email (set a recipient first)',
+      preview: { kind: 'message', details: { To: to || '—', Subject: subject || '—' } },
+    };
+  },
   configSchema: {
     type: 'object',
     required: ['accountId', 'to', 'subject'],

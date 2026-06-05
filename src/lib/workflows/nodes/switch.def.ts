@@ -72,6 +72,15 @@ export const switchDef: NodeDefinition = {
     defaultHandle: 'default',
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
+  summarize: (config) => {
+    const expr = String(config.expression ?? '').trim();
+    const cases = Array.isArray(config.cases) ? config.cases : [];
+    const fallback = String(config.defaultHandle ?? 'default');
+    return {
+      line: `Route on ${expr || 'a value'} into ${cases.length} case${cases.length === 1 ? '' : 's'} (+ ${fallback})`,
+      preview: { kind: 'control', details: { 'Switch on': expr || '—', Cases: String(cases.length), Default: fallback } },
+    };
+  },
   // Output handles are config-driven. The canvas reads `outputs` for the
   // static fallback; switchHandles(config) is the authoritative per-instance
   // set (generalises conditional.def's fixed true/false to N handles).

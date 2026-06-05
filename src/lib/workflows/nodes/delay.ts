@@ -37,6 +37,16 @@ export const delayDef: NodeDefinition = {
   defaultConfig: { milliseconds: 1000 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
+  summarize: (config) => {
+    const ms = Number(config.milliseconds ?? 0);
+    const human =
+      ms >= 60000
+        ? `${+(ms / 60000).toFixed(ms % 60000 ? 1 : 0)} min`
+        : ms >= 1000
+          ? `${+(ms / 1000).toFixed(ms % 1000 ? 1 : 0)} s`
+          : `${ms} ms`;
+    return { line: `Wait ${human}, then continue`, preview: { kind: 'compute', details: { Delay: human } } };
+  },
   basicConfig: [
     {
       key: 'milliseconds',

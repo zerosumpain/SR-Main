@@ -16,6 +16,15 @@ export const whatsappDef: NodeDefinition = {
   defaultConfig: { to: '', message: '' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
+  summarize: (config) => {
+    const to = String(config.to ?? '').trim();
+    const message = String(config.message ?? '').trim();
+    const short = message.length > 60 ? `${message.slice(0, 57)}…` : message;
+    return {
+      line: to ? `Send a WhatsApp message to ${to}` : 'Send a WhatsApp message (set a recipient first)',
+      preview: { kind: 'message', details: { To: to || '—', Message: short || '—' } },
+    };
+  },
   basicConfig: [
     {
       key: 'to',

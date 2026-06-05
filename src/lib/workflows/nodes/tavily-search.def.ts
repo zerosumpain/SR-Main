@@ -20,6 +20,15 @@ export const tavilySearchDef: NodeDefinition = {
   defaultConfig: { query: '', searchDepth: 'basic', maxResults: 5, includeAnswer: false, topic: 'general', days: 0 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Search results' }],
+  summarize: (config) => {
+    const query = String(config.query ?? '').trim();
+    const short = query.length > 50 ? `${query.slice(0, 47)}…` : query;
+    const max = Number(config.maxResults ?? 5);
+    return {
+      line: query ? `Search the web for "${short}"` : 'Search the web (set a query first)',
+      preview: { kind: 'other', details: { Query: short || '—', 'Max results': String(max) } },
+    };
+  },
   basicConfig: [
     {
       key: 'query', label: 'Search Query', type: 'template-textarea',

@@ -5434,6 +5434,20 @@
                   ),
                   ...(declaredUpstreamFields[menuNode.id] ?? []),
                 ]))}
+                {@const _summary = menuDefinition?.summarize?.(configDraft)}
+                {#if _summary}
+                  <div class="nm-summary">
+                    <span class="nm-summary-eyebrow">What this does</span>
+                    <p class="nm-summary-line">{_summary.line}</p>
+                    {#if _summary.preview && Object.keys(_summary.preview.details).length}
+                      <dl class="nm-summary-grid">
+                        {#each Object.entries(_summary.preview.details) as [k, v] (k)}
+                          <dt>{k}</dt><dd>{v}</dd>
+                        {/each}
+                      </dl>
+                    {/if}
+                  </div>
+                {/if}
                 <div class="menu-config-section">
                   <Panel
                     config={configDraft}
@@ -6909,6 +6923,38 @@
     flex-direction: column;
     gap: 12px;
   }
+  .nm-summary {
+    border: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .nm-summary-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+  .nm-summary-line { margin: 0; font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+  .nm-summary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) 1fr;
+    gap: 2px 10px;
+    margin: 4px 0 0 0;
+    font-size: 11px;
+  }
+  .nm-summary-grid dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .nm-summary-grid dd { margin: 0; color: var(--text-primary); word-break: break-word; }
   .menu-config-section {
     border-top: 1px solid var(--divider);
     padding-top: 10px;
