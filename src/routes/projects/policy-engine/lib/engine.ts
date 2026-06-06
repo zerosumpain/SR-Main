@@ -15,9 +15,9 @@
 //  • Uncertainty is propagated by resolving every effect-size Band through a sampler.
 
 import type { LeverState, SimResult, YearResult } from './types';
-import { LEVERS_BY_ID } from './levers';
+import { LEVERS_BY_ID, ageIdTotals, earlyIdShift } from './levers';
 import {
-  BASE_YEAR, END_YEAR, POP, BASELINE, GAP_TO_LEVEL, CH, SEND, SYS, POST16, WORK, EY_KS4_LAG, EY_FADEOUT, COST,
+  BASE_YEAR, END_YEAR, POP, BASELINE, GAP_TO_LEVEL, CH, SEND, SYS, POST16, WORK, AGEID, EY_KS4_LAG, EY_FADEOUT, COST,
   type Band,
 } from './params';
 
@@ -90,6 +90,10 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
   let shortfall = BASELINE.teacherShortfall;
   let teachersFTE = POP.teachersFTE0;
   let cumulativeCost = 0;
+
+  // SEND/EHCP identification-by-age profile: constant across the horizon (levers are sustained).
+  const idShift = earlyIdShift(levers);                                  // [0,1] front-loading vs baseline
+  const ageIdDelta = ageIdTotals(levers, AGEID.sendPrevalence).additional; // £bn/yr additional vs baseline
 
   const years: YearResult[] = [];
 
@@ -231,11 +235,15 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       const mitig = R(SEND.inclusionMitigation) * inclAdequacy * ramp(ys, 3);
       // identification-vs-prevention: early SEND raises demand short-run, reduces long-run
       const shortRunBump = depPos('send_early') * 0.12 * Math.exp(-ys / 3);
+      // age-ID profile: front-loading flags more children early (short-run) but prevents
+      // later escalation (long-run) — the same tension, resolved by the chosen age profile.
+      const idShortRun = R(AGEID.earlyShiftShortRunBump) * idShift * Math.exp(-ys / 3);
+      const idPrevention = R(AGEID.earlyShiftPrevention) * idShift * ramp(ys, 3);
       // EHCP reform diverts to ISPs only from Sept 2029/2030 (no plan changes before then)
       const divert = year >= SEND.reformDivertStart
         ? R(SEND.reformDivertMax) * concave(depPos('ehcp_reform')) * ramp(year - SEND.reformDivertStart, 2)
         : 0;
-      ehcpPct = clamp(ehcpPct + increment * (1 - mitig) + shortRunBump - divert, 3, 9);
+      ehcpPct = clamp(ehcpPct + increment * (1 - mitig) + shortRunBump + idShortRun - idPrevention - divert, 3, 9);
     }
     const ehcpCount = (ehcpPct / 100) * POP.ehcpRefPop * 1e6;
     const subSaving = R(SEND.substitutionSaving) * concave(depPos('inclusion_fund') + depPos('ehcp_reform')) * ramp(ys, 3);
@@ -245,7 +253,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const highNeedsSpend = dsgSpend + (ys > 0 ? val('inclusion_fund') : 0);
     const highNeedsFunding = BASELINE.highNeedsFunding * Math.pow(1 + val('high_needs') / 100, ys);
     if (ys > 0) deficitStock = Math.max(0, deficitStock + (dsgSpend - highNeedsFunding));
-    const ehcpAttnGain = R(SEND.ehcpAttnInclusionGain) * inclAdequacy * ramp(ys, 3);
+    const ehcpAttnGain = R(SEND.ehcpAttnInclusionGain) * inclAdequacy * ramp(ys, 3)
+      + R(AGEID.earlyShiftEhcpAttn) * idShift * ramp(ys, 3); // early identification → better SEND outcomes
     const ehcpAttnHarm = R(SEND.ehcpAttnReformHarm) * concave(depPos('ehcp_reform')) * (1 - inclAdequacy) * ramp(ys, 2);
     const ehcpAttainment8 = clamp(BASELINE.ehcpAttainment8 + ehcpAttnGain - ehcpAttnHarm, 5, 40);
     const tribunalAppeals = clamp(
@@ -308,6 +317,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + Math.max(0, val('attendance') - 10) / 90 * COST.attendanceFullBn
       + Math.max(0, val('post16_skills') - 20) / 80 * COST.post16FullBn
       + Math.max(0, val('mental_health') - 25) / 75 * COST.mentalHealthFullBn
+      + ageIdDelta // SEND/EHCP identification-by-age: additional ("stretch") cost vs baseline
       + Math.max(0, val('school_funding') - 0.4) * COST.fundingPerPctBn * ys
     );
     cumulativeCost += annualCost;

@@ -19,6 +19,7 @@
     years: number[];
     series: ChartSeries[];
     baseYear: number;         // vertical "today" divider
+    horizonYear?: number | null; // moving marker at the selected horizon
     target?: { value: number; label: string } | null;
     dp?: number;
     zeroBased?: boolean;
@@ -27,7 +28,7 @@
   }
 
   let {
-    title, unit, years, series, baseYear,
+    title, unit, years, series, baseYear, horizonYear = null,
     target = null, dp = 1, zeroBased = false, height = 230, goodIfUp = true,
   }: Props = $props();
 
@@ -166,6 +167,12 @@
     <line x1={baseX} x2={baseX} y1={padT} y2={padT + innerH} class="today" />
     <text x={baseX} y={padT - 3} class="todaylab" text-anchor="middle">{baseYear}</text>
 
+    <!-- moving horizon marker (driven by the year selector) -->
+    {#if horizonYear && horizonYear > baseYear && horizonYear <= xMax}
+      <line x1={xScale(horizonYear)} x2={xScale(horizonYear)} y1={padT} y2={padT + innerH} class="horizon" />
+      <text x={xScale(horizonYear)} y={padT - 3} class="horizonlab" text-anchor="middle">{horizonYear} ▸</text>
+    {/if}
+
     <!-- target -->
     {#if target}
       <line x1={padL} x2={w - padR} y1={yScale(target.value)} y2={yScale(target.value)} class="target" />
@@ -242,6 +249,8 @@
   .grid { stroke: rgba(28,22,17,0.08); stroke-width: 1; }
   .hist-shade { fill: rgba(28,22,17,0.035); }
   .today { stroke: rgba(28,22,17,0.34); stroke-width: 1; stroke-dasharray: 3 2; }
+  .horizon { stroke: #2f6f97; stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.7; }
+  .horizonlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: #2f6f97; font-weight: 600; }
   .todaylab, .targetlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.5); }
   .target { stroke: #2f7d4f; stroke-width: 1; stroke-dasharray: 5 3; opacity: 0.7; }
   .targetlab { fill: #2f7d4f; }

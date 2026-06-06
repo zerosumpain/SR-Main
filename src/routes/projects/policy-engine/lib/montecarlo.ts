@@ -89,7 +89,7 @@ export function runSensitivity(levers: LeverState, kpi: McKey, atYear: number): 
   const baseSim = runSim(levers);
   const baseVal = baseSim.years[yearIdx(baseSim)][kpi] as number;
 
-  const bars: SensitivityBar[] = LEVERS.map((L) => {
+  const bars: SensitivityBar[] = LEVERS.filter((L) => L.group !== 'identification').map((L) => {
     const lo = runSim({ ...levers, [L.id]: L.min });
     const hi = runSim({ ...levers, [L.id]: L.max });
     const low = lo.years[yearIdx(lo)][kpi] as number;

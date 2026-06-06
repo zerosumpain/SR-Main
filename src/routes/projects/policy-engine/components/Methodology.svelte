@@ -1,7 +1,52 @@
 <script lang="ts">
   import { LEVERS, GROUP_META } from '../lib/levers';
+  import { SOURCES } from '../lib/sources';
 
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
+
+  // Key equations, shown verbatim so the calculations are fully transparent.
+  const equations: { title: string; eq: string; note: string }[] = [
+    {
+      title: 'Lever response function',
+      eq: 'dep = (value − baseline) / (max − baseline)\nf(dep) = (1 − e^(−1.8·dep)) / (1 − e^(−1.8))   [concave, diminishing returns]\nramp(t, τ) = 1 − e^(−Δyears / τ)               [geometric distributed lag]',
+      note: 'Every lever contributes effect = maxEffect · f(dep) · ramp. Diminishing returns mean doubling a lever never doubles its effect; the lag τ ranges from ~1y (breakfast) to ~11y (early years → GCSE).',
+    },
+    {
+      title: 'KS4 disadvantage gap (months)',
+      eq: 'gap₍KS4₎(t) = 19.1 + 0.077·(PA_dis(t) − 29.9) + 0.10·(poverty(t) − 31) − Σ structural reductions',
+      note: 'Decomposed into an absence component and a structural component. 0.077 months per pp of disadvantaged persistent absence comes from EPI’s finding that the +1-month post-2019 widening ≈ a +13pp rise in disadvantaged PA.',
+    },
+    {
+      title: 'Disadvantaged persistent absence',
+      eq: 'PA_dis(t) = 29.9 + 3.25·(absence(t) − 6.63) − 8·f(dep_attendance)·ramp\nabsence(t) = 6.63 − absCut(t) + 0.04·(poverty(t) − 31)',
+      note: '3.25 = paLeverage (2.5) × paDisLeverage (1.3): disadvantaged absence is more sensitive to system absence. Mentors cut up to 8pp at full coverage.',
+    },
+    {
+      title: 'Attainment level → disadvantaged sub-level',
+      eq: 'A8_all(t) = 46.0 + teacherCapacityNorm·maxₜ·ramp + Σ other channels\nA8_dis(t) = A8_all(t) − 0.487·gap₍KS4₎(t)',
+      note: 'Attainment runs through teacher capacity, not £/pupil. The conversion 0.487 A8-points/month is derived exactly so the 2025 baseline reproduces (46.0 − 0.487·19.1 = 36.7). Analogous conversions map KS2/GLD gaps to their sub-levels.',
+    },
+    {
+      title: 'SEND stock-flow & the 2028 cliff',
+      eq: 'ehcp%(t) = ehcp%(t−1) + increment·(1 − mitig) + bumps − divert\nincrement = noReform · (ceiling − ehcp%)/(ceiling − 5.3) · mhDamp\ndeficit(t) = deficit(t−1) + (DSG_spend(t) − funding(t))\nif year ≥ 2028:  funding/pupil −= 8·max(0, deficit − 3)',
+      note: 'EHCP prevalence grows logistically; inclusion & early-SEND slow it; reform diverts to ISPs from 2030. When the statutory override ends (2028) the accumulated deficit drains mainstream funding — the modelled cliff.',
+    },
+    {
+      title: 'Identification-by-age cost',
+      eq: 'cost_band = pop(m) · SENprev(0.20) · (intensity/100) · unit£ / 1000   [£bn]\ntotal = Σ cost_band ;   stretch = total − baseline_total',
+      note: 'A high-level estimate of identification + early-support cost. A front-loaded profile (more early-years/primary share) modestly lifts EHCP-pupil attainment and slows late escalation.',
+    },
+    {
+      title: 'NEET (the exit boundary)',
+      eq: 'NEET(t) = 13.3 + drift·(1 − mhDriftMitig)·t − 0.35·(A8_all − 46.0) − post16/MH terms',
+      note: 'An exogenous youth-ill-health drift (Milburn) pushes NEET up; attainment, post-16/skills and mental-health support pull it down. Unqualified young people have ~2× the NEET rate.',
+    },
+    {
+      title: 'Monte-Carlo & sensitivity',
+      eq: 'each draw d:  sampleᵈ(band) = Triangular(low, central, high) · structMultᵈ\nP10/P50/P90 = percentiles over 180 draws ;  tornado swing = |KPI(min) − KPI(max)|',
+      note: 'Effect-size bands are sampled independently per draw, plus a shared structural multiplier (~0.8–1.3) representing correlated model uncertainty so the fan does not collapse. The tornado swings each lever min→max with others held.',
+    },
+  ];
 
   const baselines = [
     ['Disadvantage gap at 16', '19.1 months', 'EPI Annual Report 2025'],
@@ -48,18 +93,6 @@
     'Higher education, tuition fees and the Lifelong Learning Entitlement (post-18) are out of scope — the model stops at the 16–24 NEET / destinations boundary.',
   ];
 
-  const sources = [
-    ['Education Policy Institute (EPI)', 'Annual Report 2025 — disadvantage, SEND, regional gaps, NEET', 'https://epi.org.uk/annual-report-2025-disadvantage/'],
-    ['Institute for Fiscal Studies (IFS)', 'Education spending 2025-26; Green Budget 2025 ch.5 (SEND); early-years update', 'https://ifs.org.uk/publications/annual-report-education-spending-england-2025-26'],
-    ['DfE — Explore Education Statistics', 'KS4/KS2 attainment, EHC plans, absence, school workforce, NEET', 'https://explore-education-statistics.service.gov.uk/'],
-    ['DfE Schools White Paper', '"Every Child Achieving and Thriving" (CP 1508-I, Feb 2026)', 'https://www.gov.uk/government/publications'],
-    ['Curriculum & Assessment (Francis) Review', 'Final report, Nov 2025', 'https://www.gov.uk/government/publications/curriculum-and-assessment-review-final-report'],
-    ['NFER', 'Teacher Labour Market in England, Annual Report 2025', 'https://www.nfer.ac.uk/publications/teacher-labour-market-in-england-annual-report-2025/'],
-    ['Education Endowment Foundation (EEF)', 'Teaching & Learning + Early Years Toolkits; Magic Breakfast', 'https://educationendowmentfoundation.org.uk/education-evidence'],
-    ['Children’s Wellbeing and Schools Act 2026', 'Breakfast clubs, FSM expansion, QTS, academy reform', 'https://www.legislation.gov.uk/ukpga/2026/21/contents/enacted'],
-    ['Milburn review (DWP)', 'Young People and Work, interim report, May 2026 (NEET)', 'https://www.fenews.co.uk/fe-voices/'],
-    ['NAO / County Councils Network', 'SEND support; high-needs deficit & council insolvency risk', 'https://www.nao.org.uk/reports/support-for-children-and-young-people-with-special-educational-needs/'],
-  ];
 </script>
 
 <div class="method">
@@ -91,6 +124,19 @@ attainment ─▶ NEET                                                       (+ 
         <li><b>{name}.</b> {desc}</li>
       {/each}
     </ul>
+  </section>
+
+  <section>
+    <h3>Key equations &amp; calculations</h3>
+    <p>The full model is in <code>lib/engine.ts</code>; the calibrated parameters and their sources in
+      <code>lib/params.ts</code>. The core relationships:</p>
+    {#each equations as e}
+      <div class="eqn">
+        <span class="eq-title">{e.title}</span>
+        <pre>{e.eq}</pre>
+        <p class="eq-note">{e.note}</p>
+      </div>
+    {/each}
   </section>
 
   <section>
@@ -132,8 +178,8 @@ attainment ─▶ NEET                                                       (+ 
   <section>
     <h3>Sources</h3>
     <ul class="srclist">
-      {#each sources as [org, what, url]}
-        <li><a href={url} target="_blank" rel="noopener">{org} ↗</a> — {what}</li>
+      {#each SOURCES as s}
+        <li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>
       {/each}
     </ul>
     <p class="caveat">
@@ -154,6 +200,10 @@ attainment ─▶ NEET                                                       (+ 
     background: rgba(28,22,17,0.045); padding: 10px 12px; border-radius: 6px; color: rgba(28,22,17,0.82);
     border-left: 3px solid var(--ink, #1c1611); overflow-x: auto;
   }
+  .eqn { margin-bottom: 10px; }
+  .eq-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink, #1c1611); font-weight: 600; }
+  .eqn pre { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre-wrap; background: rgba(28,22,17,0.05); padding: 7px 10px; border-radius: 5px; margin: 3px 0 3px; color: rgba(28,22,17,0.85); border-left: 2px solid #7a5aa6; overflow-x: auto; }
+  .eq-note { margin: 0; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.62); }
   ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
   li { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.78); }
   .tech li b { color: var(--ink, #1c1611); }

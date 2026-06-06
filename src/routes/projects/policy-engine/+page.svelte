@@ -8,11 +8,14 @@
   import Sensitivity from './components/Sensitivity.svelte';
   import ScenarioBar from './components/ScenarioBar.svelte';
   import Methodology from './components/Methodology.svelte';
+  import AgeIdentification from './components/AgeIdentification.svelte';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
-  import { baselineLevers, policyLevers, LEVERS } from './lib/levers';
+  import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
   import { PRESETS, type Preset, downloadJSON, encodeLevers, decodeLevers, tokenFromHash } from './lib/scenarios';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from './lib/params';
+  import { chartSummary } from './lib/summaries';
+  import { SOURCES } from './lib/sources';
   import type { LeverState } from './lib/types';
 
   const STORAGE = 'whitehall-model-levers-v1';
@@ -111,6 +114,22 @@
   const C_ALT = '#3f7d6e';   // secondary metric
 
   interface ChartDef { title: string; unit: string; dp: number; zeroBased?: boolean; target?: { value: number; label: string } | null; series: ChartSeries[]; }
+
+  // maps each chart to the primary YearResult key used for its dynamic summary
+  const CHART_PRIMARY: Record<string, string> = {
+    'Disadvantage attainment gap': 'gapKS4',
+    'Attainment 8': 'attainment8',
+    'Grade 5+ in English & Maths': 'grade5EM',
+    'KS2 reading + writing + maths': 'ks2RWM',
+    'Good Level of Development (age 5)': 'gld',
+    'EHCP prevalence': 'ehcpPct',
+    'High-needs (SEND) deficit': 'highNeedsDeficitStock',
+    'SEND (EHCP) Attainment 8': 'ehcpAttainment8',
+    'Persistent absence': 'persistentAbsence',
+    'Child poverty': 'childPoverty',
+    'NEET (16–24)': 'neet',
+    'Teacher shortfall (6,500 pledge)': 'teacherShortfall',
+  };
 
   const charts = $derived.by<ChartDef[]>(() => [
     {
@@ -214,6 +233,12 @@
   }
   function applyPreset(p: Preset) { levers = { ...p.levers }; }
   function resetAll() { levers = policyLevers(); }
+  function resetAgeId() {
+    const next = { ...levers };
+    for (const b of AGE_BANDS) next[b.leverId] = LEVERS_BY_ID[b.leverId].baseline;
+    levers = next;
+  }
+  const railLeverCount = LEVERS.filter((l) => l.group !== 'identification').length;
   function exportJson() {
     downloadJSON(`whitehall-model-${(activePreset ?? 'custom').replace(/\s+/g, '-').toLowerCase()}.json`, JSON.stringify({ levers }, null, 2));
   }
@@ -239,7 +264,7 @@
     { id: 'scorecard', label: 'Scorecard' },
     { id: 'cost', label: 'Cost' },
     { id: 'sensitivity', label: 'Sensitivity' },
-    { id: 'method', label: 'Method & sources' },
+    { id: 'method', label: 'Method & calculations' },
   ] as const;
 </script>
 
@@ -266,6 +291,12 @@
         SEND &amp; EHCP reform, pupil premium, attendance, early years, the 6,500-teacher pledge, curriculum
         reform, school funding — and watch the disadvantage gap, attainment, the SEND deficit and NEET
         respond. Every effect size is sourced or flagged as an assumption.
+      </p>
+      <p class="disclaimer">
+        ⓘ <b>Evidence-backed but a model, not an official forecast.</b> Every figure is sourced or labelled an
+        explicit assumption — see <button class="inline-link" type="button" onclick={() => (tab = 'method')}>method,
+        calculations &amp; sources</button> for full transparency. Built autonomously with Claude Code in combination
+        with other AI models.
       </p>
     </div>
     <div class="head-r">
@@ -307,9 +338,10 @@
     <aside class="rail-col">
       <div class="rail-head">
         <span>Policy levers</span>
-        <span class="rail-sub">{LEVERS.length} levers · ⓘ for evidence · | = announced policy</span>
+        <span class="rail-sub">{railLeverCount} levers · ⓘ for evidence · | = announced policy</span>
       </div>
       <LeverRail {levers} onChange={setLever} onResetLever={resetLever} />
+      <AgeIdentification {levers} onChange={setLever} onReset={resetAgeId} />
     </aside>
 
     <main class="out-col">
@@ -322,13 +354,18 @@
       {#if tab === 'outcomes'}
         <p class="tab-intro">
           Solid line = your policy package; dashed grey = the status-quo (do-nothing) trajectory; dashed colour =
-          disadvantaged pupils; green dashes = a government target. The shaded band before {BASE_YEAR} is observed history.
+          disadvantaged pupils; green dashes = a government target. The shaded band before {BASE_YEAR} is observed history;
+          the blue <b>{horizon} ▸</b> marker tracks the year selector (top-right) and drives each summary below.
           {#if showBands}Shaded fans are Monte-Carlo P10–P90 uncertainty.{/if}
         </p>
         <div class="chart-grid">
           {#each charts as c (c.title)}
-            <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series}
-                          baseYear={BASE_YEAR} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
+            {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, baseSim.years, horizon)}
+            <div class="chart-cell">
+              <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series}
+                            baseYear={BASE_YEAR} horizonYear={horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
+              <p class="chart-summary tone-{sm.tone}">{sm.text}</p>
+            </div>
           {/each}
         </div>
       {:else if tab === 'scorecard'}
@@ -344,8 +381,20 @@
   </div>
 
   <footer class="foot">
-    <span>The Whitehall Model · <code>/projects/policy-engine</code> · built autonomously from a single prompt ·
-      a decision-support tool, not a forecast — see Method &amp; sources for assumptions and limitations.</span>
+    <details class="sources-foot">
+      <summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
+      <ul>
+        {#each SOURCES as s}
+          <li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>
+        {/each}
+      </ul>
+    </details>
+    <p class="foot-disc">
+      The Whitehall Model · <code>/projects/policy-engine</code> · a decision-support tool, <b>not an official
+      forecast</b>. Evidence-backed (see the {SOURCES.length} sources above and the Method &amp; calculations tab for
+      every assumption and limitation), but figures are estimates. Built autonomously with Claude Code in combination
+      with other AI models.
+    </p>
   </footer>
 </div>
 
@@ -368,6 +417,10 @@
   .tagline { display: block; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; color: var(--ink-soft); text-transform: uppercase; }
   h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(26px, 4vw, 40px); line-height: 0.98; letter-spacing: -0.02em; margin: 5px 0 7px; }
   .sub { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft); max-width: 76ch; }
+  .disclaimer { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 80ch; }
+  .disclaimer b { color: var(--ink); }
+  .inline-link { background: transparent; border: none; padding: 0; color: #2f6f97; cursor: pointer; font: inherit; border-bottom: 1px dashed currentColor; }
+  .inline-link:hover { color: #1c4a66; }
   .head-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
   .io { display: flex; gap: 5px; align-items: center; }
   .seg { display: inline-flex; background: rgba(28,22,17,0.06); padding: 2px; border-radius: 6px; }
@@ -401,10 +454,22 @@
   .tabs button:hover { color: var(--ink); }
   .tabs button.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
   .tab-intro { margin: 0 0 12px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 90ch; }
-  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+  .chart-cell { display: flex; flex-direction: column; }
+  .chart-summary { margin: 5px 2px 0; font-size: 10.5px; line-height: 1.45; color: rgba(28,22,17,0.62); border-left: 2px solid rgba(28,22,17,0.18); padding-left: 7px; }
+  .chart-summary.tone-good { border-left-color: #2f7d4f; }
+  .chart-summary.tone-bad { border-left-color: #b1455e; }
 
-  .foot { position: relative; z-index: 1; padding: 12px 28px 18px; border-top: 1px solid rgba(28,22,17,0.08); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; color: rgba(28,22,17,0.5); }
-  .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); }
+  .foot { position: relative; z-index: 1; padding: 14px 28px 22px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); }
+  .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); font-family: 'JetBrains Mono', monospace; }
+  .foot-disc { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 96ch; }
+  .foot-disc b { color: var(--ink-soft); }
+  .sources-foot { font-size: 11.5px; }
+  .sources-foot summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); padding: 4px 0; }
+  .sources-foot summary:hover { color: var(--ink); }
+  .sources-foot ul { margin: 8px 0 4px; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 4px 18px; list-style: square; }
+  .sources-foot li { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.7); }
+  .sources-foot a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
 
   @media (max-width: 880px) {
     .body { grid-template-columns: 1fr; }

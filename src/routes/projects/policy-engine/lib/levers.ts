@@ -173,6 +173,39 @@ export const LEVERS: LeverDef[] = [
     source: 'Milburn interim review 2026; DfE Mental Health Support Teams', url: 'https://www.fenews.co.uk/fe-voices/milburn-interim-review-warns-of-generational-fault-line-as-neet-numbers-could-hit-1-25-million-without-reform/',
     confidence: 'assumption', policyRef: 'Mental Health Support Teams / Milburn review',
   },
+  // ------------------ SEND / EHCP IDENTIFICATION BY AGE (costing scale) ------------------
+  {
+    id: 'aid_ey', group: 'identification', label: 'Early years (0–4)', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 25, policy: 40,
+    blurb: 'Share of emerging SEND identified & supported in the early years — screening, Best Start Family Hubs, speech & language.',
+    evidence: 'Earliest identification is cheapest per child and, with support, prevents later escalation — but the funded-childcare offer reaches few disadvantaged under-5s, so early identification is currently under-resourced.',
+    source: 'Best Start Family Hubs; NAO SEND; EEF early years', url: 'https://www.gov.uk/government/news/access-to-early-send-support-through-best-start-family-hubs',
+    confidence: 'assumption', policyRef: 'Best Start Family Hubs / early SEND identification',
+  },
+  {
+    id: 'aid_primary', group: 'identification', label: 'Primary (5–10)', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 55, policy: 60,
+    blurb: 'SEND identification & support intensity across primary school — SEN support and the bulk of EHCP assessment demand.',
+    evidence: 'EHCP demand concentrates in primary/early-secondary; ~65% of assessment requests are agreed and the 20-week timescale is met for under half (capacity-constrained).',
+    source: 'DfE EES (EHC plans); IFS Green Budget ch.5', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/education-health-and-care-plans/2025',
+    confidence: 'assumption', policyRef: 'SEN support / EHCP assessment',
+  },
+  {
+    id: 'aid_secondary', group: 'identification', label: 'Secondary (11–15)', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 60, policy: 60,
+    blurb: 'Identification & support across secondary — higher share of complex needs and EHCP placements, costlier per child.',
+    evidence: 'Secondary carries the highest share of complex/SEMH needs and special-school/independent placements (≈£24k–£61.5k/place); late identification is the most expensive route.',
+    source: 'IFS — Spending on SEN; EES suspensions/exclusions', url: 'https://ifs.org.uk/sites/default/files/2024-12/Spending-on-special-educational-needs-in-England.pdf',
+    confidence: 'assumption', policyRef: 'Secondary SEND / EHCP placements',
+  },
+  {
+    id: 'aid_post16', group: 'identification', label: 'Post-16 (16–25)', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 35, policy: 40,
+    blurb: 'Continued EHCP support to age 25, FE/supported-internship transitions and re-assessment.',
+    evidence: 'EHCPs run to 25; ~14% of plan-holders are in FE and transitions are a weak point — only 78.6% of SEN pupils sustain an education destination vs 87.1% of peers.',
+    source: 'DfE EES (EHC plans, KS4 destinations)', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/education-health-and-care-plans/2025',
+    confidence: 'assumption', policyRef: 'Post-16 EHCP continuation & transitions',
+  },
   // ----------------------------- MACRO -----------------------------
   {
     id: 'school_funding', group: 'macro', label: 'Core schools funding (real/yr)', unit: '%/yr',
@@ -194,10 +227,48 @@ export const GROUP_META: Record<string, { label: string; tag: string; colour: st
   standards:    { label: 'Curriculum & standards', tag: 'STD', colour: '#9a7b1f' },
   attendance:   { label: 'Attendance',            tag: 'ATT', colour: '#b1455e' },
   post16:       { label: 'Post-16, skills & wellbeing', tag: 'P16', colour: '#566a8c' },
+  identification: { label: 'SEND identification by age', tag: 'ID', colour: '#7a5aa6' },
   macro:        { label: 'School funding',         tag: 'FND', colour: '#5a6b3a' },
 };
 
+// 'identification' is deliberately excluded — it is rendered by its own AgeIdentification panel.
 export const GROUP_ORDER = ['early', 'disadvantage', 'send', 'workforce', 'standards', 'attendance', 'post16', 'macro'];
+
+/** Age-band metadata for the SEND/EHCP identification costing scale (high-level estimates). */
+export interface AgeBand { leverId: string; age: string; pop: number; unit: number; note: string; }
+export const AGE_BANDS: AgeBand[] = [
+  { leverId: 'aid_ey',        age: 'Early years (0–4)', pop: 3.3, unit: 1500, note: 'screening, Family Hubs, early speech & language support' },
+  { leverId: 'aid_primary',   age: 'Primary (5–10)',    pop: 4.7, unit: 2600, note: 'SEN support + the bulk of EHCP assessments' },
+  { leverId: 'aid_secondary', age: 'Secondary (11–15)', pop: 3.3, unit: 3600, note: 'higher complex-need / placement share — costliest to identify late' },
+  { leverId: 'aid_post16',    age: 'Post-16 (16–25)',   pop: 2.6, unit: 3100, note: 'continued EHCP to 25, FE & supported-internship transitions' },
+];
+
+/** High-level annual identification + early-support cost for one age band, £bn.
+ *  cost = age-band population (m) × SEND prevalence × intensity × unit-cost-per-child. */
+export function ageBandCostBn(band: AgeBand, intensityPct: number, prevalence: number): number {
+  return (band.pop * prevalence * (intensityPct / 100) * band.unit) / 1000;
+}
+
+/** Total / baseline / additional ("stretch") identification cost across all age bands, £bn. */
+export function ageIdTotals(levers: LeverState, prevalence: number): { total: number; baseline: number; additional: number } {
+  let total = 0, baseline = 0;
+  for (const band of AGE_BANDS) {
+    const L = LEVERS_BY_ID[band.leverId];
+    total += ageBandCostBn(band, levers[band.leverId] ?? L.baseline, prevalence);
+    baseline += ageBandCostBn(band, L.baseline, prevalence);
+  }
+  return { total, baseline, additional: total - baseline };
+}
+
+/** A [0,1] index of how FRONT-LOADED the identification profile is vs baseline (early-years +
+ *  primary share of total identification effort). Drives the light early-intervention effect. */
+export function earlyIdShift(levers: LeverState): number {
+  const v = (id: string) => levers[id] ?? LEVERS_BY_ID[id].baseline;
+  const share = (s: Record<string, number>) => (s.aid_ey + s.aid_primary) / Math.max(1e-6, s.aid_ey + s.aid_primary + s.aid_secondary + s.aid_post16);
+  const now = share({ aid_ey: v('aid_ey'), aid_primary: v('aid_primary'), aid_secondary: v('aid_secondary'), aid_post16: v('aid_post16') });
+  const base = share({ aid_ey: 25, aid_primary: 55, aid_secondary: 60, aid_post16: 35 });
+  return Math.max(0, Math.min(1, (now - base) / 0.25));
+}
 
 /** A lever state with every lever at its status-quo baseline. */
 export function baselineLevers(): LeverState {

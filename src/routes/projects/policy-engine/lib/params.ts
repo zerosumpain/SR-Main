@@ -241,6 +241,16 @@ export const POST16 = {
 };
 
 // ---------------------------------------------------------------------------
+// SEND/EHCP identification-by-age (a costing scale with a light outcome effect)
+// ---------------------------------------------------------------------------
+export const AGEID = {
+  sendPrevalence: 0.20,                       // ~19.6% of pupils have identified SEN [DfE EES]
+  earlyShiftEhcpAttn: band(0.0, 1.2, 2.6),    // A8 boost to EHCP pupils when identification is front-loaded
+  earlyShiftPrevention: band(0.0, 0.06, 0.14),// pp/yr long-run EHCP-increment reduction at full front-loading (prevention)
+  earlyShiftShortRunBump: band(0.0, 0.08, 0.18), // pp short-run EHCP-increment rise (more children flagged early)
+};
+
+// ---------------------------------------------------------------------------
 // Workforce dynamics
 // ---------------------------------------------------------------------------
 export const WORK = {
