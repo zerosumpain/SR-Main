@@ -18,8 +18,10 @@ function withOverrides(over: Record<string, number>): LeverState {
   return { ...baselineLevers(), ...over };
 }
 
-/** Preset packages — each is a defensible "stance" a government could take. */
-export interface Preset { name: string; description: string; levers: LeverState; }
+/** Preset packages — each is a defensible "stance" a government could take.
+ *  `optimize` presets are computed live (against the engine) when applied: a greedy
+ *  allocator maximises gap closure within the fixed annual `budget` (see lib/optimize.ts). */
+export interface Preset { name: string; description: string; levers: LeverState; optimize?: boolean; budget?: number; }
 
 export const PRESETS: Preset[] = [
   {
@@ -31,6 +33,13 @@ export const PRESETS: Preset[] = [
     name: 'Announced policy',
     description: 'Every lever set to what the government has actually announced or funded (the 2025/26 White Paper, Children’s Wellbeing Act, Best Start, 6,500 teachers).',
     levers: policyLevers(),
+  },
+  {
+    name: 'Best value (£5bn/yr)',
+    description: 'Maximises closure of the disadvantage gap within a fixed £5bn/yr extra budget. A greedy optimiser allocates to the most gap-efficient levers — attendance, early years, RISE, poverty action, FSM — and skips poor value (e.g. Pupil Premium, whose £→gap link is weak). Re-optimised live to the selected horizon. Closes roughly as much of the gap as the full announced package, for a fraction of the cost.',
+    levers: baselineLevers(),
+    optimize: true,
+    budget: 5,
   },
   {
     name: 'Early-years first',

@@ -16,6 +16,7 @@
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from './lib/params';
   import { chartSummary } from './lib/summaries';
   import { SOURCES } from './lib/sources';
+  import { optimizeGapWithinBudget } from './lib/optimize';
   import type { LeverState } from './lib/types';
 
   const STORAGE = 'whitehall-model-levers-v1';
@@ -231,7 +232,18 @@
     const L = LEVERS.find((l) => l.id === id)!;
     levers = { ...levers, [id]: L.baseline };
   }
-  function applyPreset(p: Preset) { levers = { ...p.levers }; }
+  let optimizeNote = $state<string | null>(null);
+  function applyPreset(p: Preset) {
+    if (p.optimize && p.budget) {
+      const r = optimizeGapWithinBudget(p.budget, horizon);
+      levers = r.levers;
+      optimizeNote = `Optimised £${p.budget}bn/yr to ${horizon}: KS4 gap ${r.baselineGap.toFixed(1)} → ${r.gap.toFixed(1)} months (${(r.baselineGap - r.gap).toFixed(1)} closed) for £${r.cost.toFixed(1)}bn/yr`;
+      setTimeout(() => { optimizeNote = null; }, 7000);
+    } else {
+      optimizeNote = null;
+      levers = { ...p.levers };
+    }
+  }
   function resetAll() { levers = policyLevers(); }
   function resetAgeId() {
     const next = { ...levers };
@@ -323,6 +335,7 @@
 
   <div class="scen">
     <ScenarioBar activeName={activePreset} onApply={applyPreset} />
+    {#if optimizeNote}<span class="opt-note">✓ {optimizeNote}</span>{/if}
     {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
   </div>
 
@@ -436,6 +449,7 @@
 
   .scen { position: relative; z-index: 1; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .imp-err { color: #8a2d22; font-size: 11px; }
+  .opt-note { color: #2f7d4f; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
   .cliff {
     position: relative; z-index: 1; margin: 0; padding: 8px 28px; font-size: 12px; line-height: 1.45;
     background: rgba(177, 69, 94, 0.1); color: #8a2d3a; border-bottom: 1px solid rgba(177,69,94,0.25);

@@ -71,6 +71,7 @@
     ['Monte-Carlo simulation', 'Effect-size uncertainty is propagated by sampling every parameter band (plus a shared structural multiplier) to produce P10–P90 fan charts.'],
     ['Sensitivity (tornado) analysis', 'Each lever is swung min→max individually to rank policies by leverage on a chosen KPI.'],
     ['Cost-effectiveness accounting', '£ per month of gap closed, per Attainment-8 point, per extra grade-5 pupil, and SEND deficit avoided.'],
+    ['Budget-constrained optimisation', 'The "Best value" preset runs a greedy allocator against the engine: it repeatedly spends on the lever with the best marginal gap-reduction-per-£ until a fixed annual budget is exhausted — near-optimal on this diminishing-returns surface, and re-solved to the selected horizon.'],
   ];
 
   const assumptions = [
