@@ -54,6 +54,45 @@
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
+      <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open The Whitehall Model"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №4
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Policy sim
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Whitehall Model — England Education Policy Simulator
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        A research-backed, system-dynamics simulation of England's schools, 2025–2040. Pull the policy
+        levers — SEND &amp; EHCP reform, pupil premium, attendance, early years, the 6,500-teacher pledge,
+        curriculum reform — and watch the disadvantage gap, attainment, the SEND funding deficit and NEET
+        respond in real calculations. Every effect size is sourced or flagged as an assumption, with
+        Monte-Carlo uncertainty and sensitivity analysis.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          system dynamics · Monte-Carlo · cited
+        </span>
+      </div>
+    </div>
+
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
       <a href="/projects/whitehall/" class="absolute inset-0 z-0" aria-label="Play Whitehall"></a>
       <div class="flex items-start justify-between mb-3">
         <p

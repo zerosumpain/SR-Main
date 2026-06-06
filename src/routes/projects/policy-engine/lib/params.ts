@@ -1,0 +1,279 @@
+// params.ts — calibrated parameters for The Whitehall Model. Every value is either
+// SOURCED (with a citation) or an explicit ASSUMPTION/tuning prior. Effect sizes carry
+// {low, central, high} so Monte-Carlo can propagate uncertainty. Self-contained.
+//
+// PROVENANCE: full calibration logs in docs/policy-engine-research/. Key sources:
+//   EPI Annual Report 2025 (disadvantage gap, months) · DfE EES (KS4/KS2/EHCP/absence/
+//   workforce/NEET) · IFS (education spending 2025-26, Green Budget ch.5, early years) ·
+//   NFER Teacher Labour Market 2025 · EEF Toolkit · DfE Schools White Paper
+//   "Every Child Achieving and Thriving" (CP 1508-I, Feb 2026) · Curriculum & Assessment
+//   (Francis) Review 2025 · Children's Wellbeing & Schools Act 2026.
+
+export const HISTORY_START = 2015;
+export const BASE_YEAR = 2025;   // calibration / "today" — projection begins here
+export const END_YEAR = 2040;
+
+/** A central estimate with a plausible low/high band for Monte-Carlo. */
+export interface Band { low: number; central: number; high: number; }
+export const band = (low: number, central: number, high: number): Band => ({ low, central, high });
+
+// ---------------------------------------------------------------------------
+// Population constants (England, state-funded; approximate, mid-2020s)
+// ---------------------------------------------------------------------------
+export const POP = {
+  pupils: 8.4,            // millions, state-funded school pupils (5-16)   [DfE SWC]
+  disadvShare: 0.27,      // FSM-Ever6 share of pupils                     [DfE]
+  ppPupils: 2.3,          // millions receiving Pupil Premium             [Commons Lib SN06700]
+  under5Disadv: 0.40,     // millions disadvantaged under-5s (EYPP-relevant) [assumption from EYPP coverage]
+  ehcpRefPop: 12.05,      // millions, 0-25 reference pop for EHCP prevalence (638.7k / 5.3%) [EES]
+  teachersFTE0: 468.0,    // '000 FTE teachers Nov 2024                    [DfE SWC 2024]
+  paybillBn: 35.0,        // £bn approx teacher paybill                    [assumption / IFS]
+  coreSchoolsBn: 65.0,    // £bn core schools budget 2025-26              [IFS SR 2025]
+};
+
+// ---------------------------------------------------------------------------
+// Baseline state at BASE_YEAR (2025) — all SOURCED unless noted
+// ---------------------------------------------------------------------------
+export const BASELINE = {
+  // equity (EPI months) — EPI Annual Report 2025
+  gapKS4: 19.1, gapKS2: 10.0, gapReception: 4.7,
+  // attainment levels (all / disadvantaged) — DfE EES KS4/KS2 2024-25, White Paper Annex
+  attainment8: 46.0, attainment8Dis: 36.7,        // gap 15.5pts → dis 36.7
+  grade5EM: 45.5, grade5EMDis: 25.8,              // gap 27.3pp (≈ ÷2)
+  ks2RWM: 62.0, ks2RWMDis: 47.0,                  // 2024/25
+  gld: 68.3, gldDis: 51.3,                        // EYFSP 2024/25, FSM gap 21.3pp→ all-vs-FSM 17.0pp
+  // SEND — EES EHC plans 2025, IFS Green Budget ch.5
+  ehcpPct: 5.3, senSupportPct: 14.2,
+  highNeedsSpend: 12.0, highNeedsFunding: 11.1, highNeedsDeficitStock: 3.2,
+  ehcpAttainment8: 14.2, tribunalAppeals: 25.0,   // '000 appeals/yr
+  // system — DfE EES absence 2024/25, NFER 2025, IFS, EES NEET 2025
+  absenceOverall: 6.63, persistentAbsence: 17.63, persistentAbsenceDis: 29.9, severeAbsence: 2.26,
+  teacherShortfall: 6.5,    // '000 vs the 6,500 pledge gap (interpretation) [Full Fact / NFER]
+  fundingPerPupil: 7100,    // £ real, blended primary/secondary 2024/25    [IFS]
+  childPoverty: 31.0,       // % relative AHC                               [CPAG/DWP HBAI]
+  neet: 13.3,               // % 16-24                                      [DfE/ONS 2025]
+};
+
+// Conversion constants tying disadvantaged sub-levels to the stage gap (months).
+// Computed exactly from BASELINE so the 2025 disadvantaged sub-levels reproduce to machine precision.
+export const GAP_TO_LEVEL = {
+  ks4A8: (BASELINE.attainment8 - BASELINE.attainment8Dis) / BASELINE.gapKS4,  // A8 pts per KS4 month
+  ks4G5: (BASELINE.grade5EM - BASELINE.grade5EMDis) / BASELINE.gapKS4,         // grade5 pp per KS4 month
+  ks2: (BASELINE.ks2RWM - BASELINE.ks2RWMDis) / BASELINE.gapKS2,               // KS2 RWM pp per KS2 month
+  recep: (BASELINE.gld - BASELINE.gldDis) / BASELINE.gapReception,             // GLD pp per reception month
+};
+
+// ---------------------------------------------------------------------------
+// Government target trajectories (SOURCED targets, shown as reference lines)
+// White Paper "Every Child Achieving and Thriving" (CP 1508-I)
+// ---------------------------------------------------------------------------
+export const TARGETS = {
+  attainment8: 50.0,        // national average A8
+  gapKS4A8: 7.7,            // halve the 15.5pt A8 gap
+  ks2RWM: 65.0,             // above 2019 peak
+  gld: 75.0,                // by 2028
+  absenceOverall: 5.85,     // by 2028/29
+  ehcpPctGov: 4.7,          // government's optimistic 2034-35 path (IFS-disputed)
+};
+
+// ---------------------------------------------------------------------------
+// Historical context series (HISTORY_START..BASE_YEAR-1). Approximate, for visual
+// backdrop only (shaded "observed" region). NaN where assessments were cancelled
+// (KS2 SATs 2020 & 2021). Calibrated to published endpoints. [EPI/DfE EES/IFS]
+// ---------------------------------------------------------------------------
+const N = Number.NaN;
+export const HISTORY: Record<string, number[]> = {
+  // 2015 .. 2024
+  year:            [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+  gapKS4:          [18.3, 18.2, 18.1, 18.1, 18.1, 18.2, 18.5, 18.9, 19.2, 19.1],
+  gapKS2:          [9.3,  9.3,  9.2,  9.2,  9.2,  9.4,  9.7,  10.1, 10.3, 10.0],
+  gapReception:    [4.5,  4.5,  4.6,  4.6,  4.6,  4.6,  4.6,  4.8,  4.6,  4.7],
+  attainment8:     [46.4, 46.5, 46.6, 46.7, 46.7, 50.2, 50.9, 48.9, 45.9, 46.0],
+  grade5EM:        [42.6, 42.9, 43.3, 43.4, 43.2, 49.9, 50.2, 46.2, 45.9, 45.5],
+  ks2RWM:          [60,   61,   62,   64.6, 64.9, N,    N,    59.2, 60.7, 62.0],
+  gld:             [66.3, 69.3, 70.7, 71.5, 71.8, N,    N,    65.2, 67.2, 68.3],
+  absenceOverall:  [4.6,  4.6,  4.7,  4.7,  4.7,  4.7,  7.6,  7.4,  7.15, 6.63],
+  persistentAbsence:[10.5,10.6, 10.8, 10.9, 10.9, 12.1, 22.5, 22.3, 19.2, 17.63],
+  ehcpPct:         [2.8,  2.9,  3.1,  3.3,  3.6,  3.9,  4.3,  4.7,  4.8,  5.3],
+  highNeedsDeficitStock:[0.0,0.2, 0.4,  0.7,  1.0,  1.3,  1.7,  2.2,  2.7,  3.2],
+  neet:            [11.6, 11.1, 10.5, 10.8, 11.0, 11.6, 11.0, 11.7, 12.5, 13.0],
+  childPoverty:    [29.0, 29.6, 30.3, 30.0, 31.0, 31.0, 27.0, 29.0, 30.5, 31.0],
+};
+
+// ---------------------------------------------------------------------------
+// EFFECT-SIZE COEFFICIENTS. Channels grouped. Each Band is the *maximum* effect at
+// full lever deployment; the engine applies diminishing returns + a lag. Confidence
+// and the dominant citation are in the comment. Levers referenced by id (see levers.ts).
+// ---------------------------------------------------------------------------
+export interface ChannelParams {
+  // KS4 disadvantage-gap reductions (months) at full lever, by lever id
+  gapKS4: Record<string, Band>;
+  // Reception-gap reductions (months) at full lever
+  gapRecep: Record<string, Band>;
+  // KS2-gap reductions (months) at full lever
+  gapKS2: Record<string, Band>;
+  // System attainment LEVEL lift (Attainment-8 points, all pupils) at full lever
+  levelA8: Record<string, Band>;
+  // KS2 RWM level lift (pp, all pupils)
+  levelKS2: Record<string, Band>;
+  // GLD level lift (pp, all pupils)
+  levelGLD: Record<string, Band>;
+  lag: Record<string, number>; // years to ~63% of effect (geometric kernel)
+}
+
+export const CH: ChannelParams = {
+  // ---- KS4 disadvantage gap (months) — ATTENDANCE is the dominant lever (EPI 2025:
+  // the entire post-2019 widening is absence-driven). All disadvantage-targeted. ----
+  gapKS4: {
+    attendance:    band(0.8, 1.8, 3.0),   // (acts via PA_dis in engine, not this map) [EPI]
+    breakfast:     band(0.2, 0.5, 0.9),   // attendance + KS1 attainment, FSM-targeted [EEF Magic Breakfast]
+    pupil_premium: band(0.0, 0.25, 0.7),  // ASSUMPTION: no robust £→gap elasticity; quality-moderated, weak [EEF/Gorard]
+    fsm:           band(0.0, 0.3, 0.8),   // nutrition + PP trigger; newly-eligible only [IFS FSM pilot — optimistic ceiling]
+    eypp:          band(0.1, 0.5, 1.1),   // disadvantage premium, lagged 11y [EEF EY; IFS]
+    ey_quality:    band(0.2, 0.7, 1.4),   // quality effects (+5..+7mo) reach KS4 with 11y lag & fade-out [EEF EY]
+    ey_access:     band(0.1, 0.4, 0.9),   // disadvantaged access; quantity effect (+3mo) only [EEF; Sutton Trust targeting]
+    poverty_action:band(0.2, 0.6, 1.2),   // income → home env/attendance → gap [EPI mediation]
+    teachers:      band(0.0, 0.2, 0.5),   // supply hardest in deprived schools [NFER/EPI workforce gap]
+    rise:          band(0.0, 0.2, 0.5),   // targets stuck schools (disadv-skewed) [WP; London Challenge analogue]
+  },
+  gapRecep: {
+    ey_quality:    band(0.4, 1.1, 2.0),   // largest, soonest effect at age 5 [EEF; Best Start target GLD 75%]
+    ey_access:     band(0.2, 0.6, 1.2),   // [Sutton Trust]
+    eypp:          band(0.1, 0.4, 0.9),   // [IFS EYPP uplift]
+    poverty_action:band(0.1, 0.4, 0.9),   // [EPI: 40% of KS4 gap set by age 5]
+  },
+  gapKS2: {
+    // attendance & breakfast act on the KS2 gap ONLY via the absence term in engine.ts
+    // (ABSENCE_TO_GAP_K2 · disadvantaged PA), to avoid double-counting — mirrors the KS4 design.
+    pupil_premium: band(0.0, 0.20, 0.55),  // PP stronger at primary but weak evidence [Gorard 2022]
+    ey_quality:    band(0.2, 0.6, 1.2),   // EY carryover, ~6y lag
+    eypp:          band(0.1, 0.3, 0.7),
+    poverty_action:band(0.1, 0.4, 0.8),
+    rise:          band(0.0, 0.2, 0.4),
+    reading:       band(0.1, 0.4, 0.9),   // reading/oracy/phonics CPD narrows the gap at primary [EEF]
+  },
+  // ---- System attainment LEVEL (all pupils). Teacher quality is the strong channel;
+  // funding routed through teachers, NOT a direct £→outcome elasticity (NFER/IFS). ----
+  levelA8: {
+    teachers:      band(0.4, 1.2, 2.2),   // teacher quality/supply → 0.1-0.2 SD [Chetty/Hanushek; NFER]
+    teacher_pay:   band(0.0, 0.4, 0.9),   // via retention/quality [NFER pay competitiveness]
+    bursaries:     band(0.0, 0.3, 0.7),   // shortage-subject specialism [NFER +£5k→+15% trainees]
+    attendance:    band(0.1, 0.6, 1.2),   // general absence reduction → attainment [DfE dose-response]
+    curriculum:    band(-0.3, 0.4, 1.2),  // ASSUMPTION: un-evaluated, can be ±; effect from 2028 [Francis Review]
+    rise:          band(0.0, 0.3, 0.7),   // ASSUMPTION [WP; analogue ~0.1-0.3 SD worst schools]
+    breakfast:     band(0.0, 0.2, 0.5),   // KS1 attainment (low security, KS2 null) [EEF revised]
+    reading:       band(0.0, 0.3, 0.8),   // reading/oracy CPD — acts now, not gated to 2028 [EEF +2-5mo]
+    school_funding:band(0.0, 0.15, 0.5),  // weak; via TAs/resources only [Jackson et al.; near-zero at current spend]
+  },
+  levelKS2: {
+    teachers:      band(0.5, 1.5, 3.0),   // pp at expected standard
+    attendance:    band(0.2, 1.0, 2.2),
+    curriculum:    band(-0.5, 0.6, 2.0),  // 2028 Francis refresh only (reading split out below)
+    reading:       band(0.3, 1.2, 2.5),   // Reading Ambition / phonics 90% / Year-8 reading test [EEF +2-5mo]
+    rise:          band(0.0, 0.5, 1.2),
+    school_funding:band(0.0, 0.3, 0.9),
+  },
+  levelGLD: {
+    ey_quality:    band(1.0, 3.5, 6.5),   // GLD 68→75 target needs ~7pp [Best Start; EEF]
+    ey_access:     band(0.3, 1.5, 3.0),
+    eypp:          band(0.2, 1.0, 2.2),
+    poverty_action:band(0.0, 0.6, 1.5),
+  },
+  // Lag (years to ~63% of full effect, geometric). Early years to KS4 is the long one.
+  lag: {
+    attendance: 2, breakfast: 1, pupil_premium: 2, fsm: 3, poverty_action: 3,
+    teachers: 4, teacher_pay: 3, bursaries: 3, curriculum: 4, rise: 2, school_funding: 3,
+    inclusion_fund: 3, send_early: 3, ehcp_reform: 2, high_needs: 1, reading: 2,
+    eypp: 6, ey_quality: 7, ey_access: 6,   // early-years channels are slow
+  },
+};
+
+// Early-years → KS4 extra lag: EY levers act on reception fast (~2y) but on KS4 only
+// after the cohort ages ~11 years. Modelled by a longer lag for the gapKS4 EY terms.
+export const EY_KS4_LAG = 11;
+export const EY_FADEOUT = band(0.4, 0.6, 0.8); // fraction of EY cognitive gain RETAINED to KS4 [IFS fade-out]
+
+// ---------------------------------------------------------------------------
+// SEND sub-model parameters
+// ---------------------------------------------------------------------------
+export const SEND = {
+  noReformIncrementPP: band(0.26, 0.38, 0.52), // annual EHCP prevalence rise (pp) without reform near 2025 [EES ~+0.5pp/yr; IFS +8-11%/yr]
+  prevCeiling: 7.9,                              // logistic ceiling on prevalence [IFS/gov 7.7% peak]
+  inclusionMitigation: band(0.0, 0.35, 0.6),     // max fraction of increment removed by full inclusion+early SEND [ASSUMPTION; no published elasticity]
+  reformDivertStart: 2030,                        // no EHCP support changes before Sept 2030 [WP]
+  reformDivertMax: band(0.10, 0.22, 0.35),       // max annual prevalence reduction (pp) at full EHCP reform from 2029 [gov path 7.7→4.7]
+  spendPerPrevalence: 12.0 / 5.3,                 // £bn per pp prevalence (linear) [IFS ~£12bn at 5.3%]
+  substitutionSaving: band(0.0, 0.10, 0.20),     // independent→state placement saving as frac of spend [IFS £61.5k vs £24k]
+  ehcpAttnInclusionGain: band(0.5, 1.5, 2.8),    // A8 gain for EHCP pupils from full inclusion+early [WP ~½ grade]
+  ehcpAttnReformHarm: band(0.5, 2.0, 4.0),       // A8 loss for EHCP pupils if plans narrowed w/o inclusion [sector warning]
+  tribunalReformRise: band(3, 9, 16),            // '000 extra appeals at full reform w/ low inclusion [Browne Jacobson trend]
+  overrideEndYear: 2028,                          // DSG statutory override ends Mar 2028 [IFS Green Budget]
+  insolvencyDeficit: 6.0,                         // £bn deficit stock at which mass council insolvency flagged [CCN]
+};
+
+// ---------------------------------------------------------------------------
+// Attendance / NEET / poverty dynamics
+// ---------------------------------------------------------------------------
+export const SYS = {
+  absenceReductionMax: band(0.6, 1.2, 1.9),  // pp overall-absence cut at full attendance+breakfast [DfE; WP -1.3pp target]
+  paLeverage: 2.5,                            // persistent-absence moves ~2.5x overall absence [DfE EES ratios]
+  paDisLeverage: 1.3,                         // disadvantaged PA more sensitive
+  severeDrift: 0.05,                          // pp/yr severe absence keeps rising w/o intensive support [DfE — diverging tail]
+  severeMentorCut: band(0.3, 0.8, 1.5),       // pp cut at full mentor coverage [DfE mentor pilot, haircut]
+  neetPerA8: band(0.15, 0.35, 0.6),           // pp NEET fall per +1 A8 point [EPI: unqualified ~2x NEET]
+  youthIllHealthDrift: band(0.05, 0.20, 0.40),// pp/yr exogenous NEET rise (mental health) [Milburn 2026: →1.25m]
+  povertyActionMax: band(1.5, 3.5, 5.0),      // pp child-poverty cut at full anti-poverty effort [Child Poverty Strategy 550k≈3.7pp]
+  fsmPovertyCut: band(0.3, 0.7, 1.2),         // pp from FSM expansion [DfE ~100k, take-up-discounted]
+  povertyDrift: 0.20,                          // pp/yr baseline rise (two-child limit etc.) [CPAG trend]
+  povertyToGapDrift: 0.10,                     // months/yr KS4 gap drift per +1pp poverty above baseline [ASSUMPTION, mediated]
+};
+
+// ---------------------------------------------------------------------------
+// Post-16 / skills / youth mental health (the NEET exit boundary — the Milburn review)
+// ---------------------------------------------------------------------------
+export const POST16 = {
+  // pp NEET reduction at full post-16/skills effort (Youth Guarantee, T/V-levels, foundation apprenticeships)
+  neetMax: band(0.5, 1.2, 2.2),          // [DfE Post-16 White Paper 2025; Youth Guarantee £1.5bn]
+  // youth mental-health support: Milburn 2026 finds inactivity is now health/mental-health-driven
+  mhNeetMax: band(0.4, 1.0, 1.8),        // pp NEET reduction at full mental-health support
+  mhDriftMitig: band(0.3, 0.55, 0.8),    // fraction of the exogenous youth-ill-health NEET drift removed
+  mhSevereMax: band(0.2, 0.6, 1.2),      // pp severe-absence cut at full MH support [mental ill-health drives severe absence]
+};
+
+// ---------------------------------------------------------------------------
+// Workforce dynamics
+// ---------------------------------------------------------------------------
+export const WORK = {
+  baseAttritionK: 1.0,                      // '000/yr net loss absent new recruitment effort [NFER 9.6% leaving]
+  recruitPayMult: band(0.0, 0.2, 0.5),      // extra k/yr recruitment per +1%/yr real pay [NFER directional]
+  recruitBursaryMult: band(0.0, 0.4, 0.9),  // bursary contribution to recruitment [NFER +£5k→+15%]
+  shortfallToCapacity: 13.0,                // shortfall ('000) mapping to a full unit of teacher-capacity index
+};
+
+// ---------------------------------------------------------------------------
+// COSTS — £bn additional annual cost vs baseline, per unit of lever. Used by the
+// cost-accounting block. Sourced unit costs where available.
+// ---------------------------------------------------------------------------
+export const COST = {
+  ppPerPound: POP.ppPupils * 1e6 / 1e9,      // £bn per £1/pupil over 2.3m pupils
+  eyppPerPound: POP.under5Disadv * 1e6 / 1e9,// £bn per £1/child over 0.4m
+  fsmFullBn: 1.0,                             // £bn at "all UC" (index 60) [IFS ~£1bn long-run]
+  fsmUniversalBn: 1.8,                        // £bn at universal (index 100)
+  breakfastFullBn: 0.40,                      // £bn universal primary breakfast [gov £80m start → ~£0.4bn full]
+  povertyActionFullBn: 4.0,                   // £bn full anti-poverty (two-child limit ~£3.5bn + UC) [CPAG/IFS]
+  teacherPerK: 0.060,                         // £bn per 1,000 teachers (≈£60k loaded) [EEF £45,352 + on-costs]
+  payPerPctBn: 0.35,                          // £bn per +1% paybill
+  bursaryFullBn: 0.30,                        // £bn full shortage-subject bursaries
+  inclusionDirect: 1.0,                       // inclusion_fund lever is already £bn/yr (×1)
+  sendEarlyFullBn: 0.50,                      // £bn full early-SEND intervention
+  highNeedsPerPctBn: POP.coreSchoolsBn * 0 + 0.11, // £bn per +1%/yr on ~£11bn high-needs
+  eyQualityFullBn: 2.0,                       // £bn full EY quality uplift [IFS EY funding gap]
+  eyAccessFullBn: 1.2,                        // £bn full disadvantaged EY access
+  curriculumImplBn: 0.15,                     // £bn implementation
+  riseFullBn: 0.10,                           // £bn full RISE coverage [gov £20m+ scaled]
+  attendanceFullBn: 0.10,                     // £bn full mentor coverage [gov £15m/3yr scaled]
+  fundingPerPctBn: 0.65,                      // £bn per +1%/yr core schools funding
+  post16FullBn: 1.5,                          // £bn full post-16/skills effort [Youth Guarantee £1.5bn]
+  mentalHealthFullBn: 0.6,                    // £bn full youth mental-health support
+  readingFullBn: 0.15,                        // £bn full reading/oracy CPD programme [Reading Ambition]
+};
