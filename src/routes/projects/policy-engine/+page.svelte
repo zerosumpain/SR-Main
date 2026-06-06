@@ -12,10 +12,12 @@
   import ScenarioReadout from './components/ScenarioReadout.svelte';
   import CompareReadout from './components/CompareReadout.svelte';
   import ChartModal from './components/ChartModal.svelte';
+  import SavedScenarios from './components/SavedScenarios.svelte';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
-  import { PRESETS, type Preset, downloadJSON, encodeLevers, decodeLevers, tokenFromHash } from './lib/scenarios';
+  import { PRESETS, type Preset, downloadJSON, encodeLevers, decodeLevers, tokenFromHash,
+           loadSaved, persistSaved, makeSaved, type SavedScenario } from './lib/scenarios';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from './lib/params';
   import { chartSummary } from './lib/summaries';
   import { SOURCES } from './lib/sources';
@@ -49,6 +51,7 @@
         }
       } catch { /* ignore */ }
     }
+    saved = loadSaved();
     mounted = true;
   });
 
@@ -93,6 +96,14 @@
   }
   const activePreset = $derived(PRESETS.find((p) => equalLevers(levers, p.levers))?.name ?? null);
   let expanded = $state<number | null>(null); // index of the expanded chart, or null
+
+  // ---- saved (named) scenarios ----
+  let saved = $state<SavedScenario[]>([]);
+  const matchedSaved = $derived(saved.find((s) => equalLevers(levers, s.levers))?.name ?? null);
+  function saveCurrentAs(name: string) { saved = [makeSaved(name, levers), ...saved]; persistSaved(saved); }
+  function deleteSaved(id: string) { saved = saved.filter((s) => s.id !== id); persistSaved(saved); }
+  function loadSavedScenario(s: SavedScenario) { optimizeResult = null; levers = { ...s.levers }; }
+  function pinSavedAsB(s: SavedScenario) { compareB = { levers: { ...s.levers }, name: s.name }; }
 
   // ---- side-by-side comparison ----
   let compareB = $state<{ levers: LeverState; name: string } | null>(null);
@@ -275,7 +286,7 @@
   >(null);
   let optimizeApplied = $state(false);
   let tipOpen = $state(false);
-  const scenarioName = $derived(activePreset ?? (optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
+  const scenarioName = $derived(activePreset ?? matchedSaved ?? (optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
 
   // Compute (preview) the budget-optimal allocation WITHOUT changing the sliders.
   function previewOptimize() {
@@ -399,6 +410,7 @@
     <div class="tb-spacer"></div>
     <div class="tb-grp">
       <span class="tb-lab">Scenario</span>
+      <SavedScenarios {saved} suggestedName={scenarioName} onSave={saveCurrentAs} onLoad={loadSavedScenario} onPin={pinSavedAsB} onDelete={deleteSaved} />
       <button class="tb-btn share" class:ok={copied} onclick={copyLink} title="Copy a shareable link that restores this exact scenario">
         {copied ? '✓ Copied' : '↗ Copy link'}
       </button>

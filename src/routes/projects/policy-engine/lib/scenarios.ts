@@ -127,6 +127,33 @@ export function serialiseStore(store: ScenarioStore): string {
   return JSON.stringify(store, null, 2);
 }
 
+// ----------------------------- saved (named) scenarios -----------------------------
+// A user-managed library of named scenarios, persisted to localStorage.
+
+export interface SavedScenario { id: string; name: string; levers: LeverState; createdAt: string; }
+const SAVED_KEY = 'epm-saved-scenarios-v1';
+
+export function makeSaved(name: string, levers: LeverState): SavedScenario {
+  return { id: 'sv_' + Math.random().toString(36).slice(2, 9), name: name.trim().slice(0, 60), levers: { ...levers }, createdAt: new Date().toISOString() };
+}
+
+export function loadSaved(): SavedScenario[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((s): s is SavedScenario =>
+      s && typeof s === 'object' && typeof s.id === 'string' && typeof s.name === 'string' && !!s.levers && typeof s.levers === 'object');
+  } catch { return []; }
+}
+
+export function persistSaved(list: SavedScenario[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(list)); } catch { /* quota */ }
+}
+
 export function downloadJSON(filename: string, text: string): void {
   if (typeof document === 'undefined') return;
   const blob = new Blob([text], { type: 'application/json' });
