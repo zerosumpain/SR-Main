@@ -2,7 +2,7 @@
 // Mirrors the data-convergence store pattern. Self-contained.
 
 import type { LeverState, Scenario, ScenarioStore } from './types';
-import { baselineLevers, policyLevers } from './levers';
+import { baselineLevers, policyLevers, LEVERS } from './levers';
 
 const STORAGE_KEY = 'whitehall-model-v1';
 
@@ -126,4 +126,56 @@ export function downloadJSON(filename: string, text: string): void {
   a.href = url; a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ----------------------------- shareable permalink -----------------------------
+// The lever state is encoded into the URL hash (`#s=<token>`) as a versioned,
+// base64url-encoded payload containing only the levers that differ from baseline,
+// so a typical scenario produces a short link. Decoding applies the payload onto
+// the baseline (missing levers = baseline) and clamps every value to its range,
+// so links stay robust if levers are added, removed or re-bounded later.
+
+const PERMALINK_VERSION = 1;
+
+function b64urlEncode(s: string): string {
+  const b64 = typeof btoa !== 'undefined' ? btoa(s) : Buffer.from(s, 'binary').toString('base64');
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(s: string): string {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4);
+  return typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+}
+
+/** Encode a lever state to a compact URL-hash token (only the deltas from baseline). */
+export function encodeLevers(levers: LeverState): string {
+  const l: Record<string, number> = {};
+  for (const lev of LEVERS) {
+    const v = levers[lev.id];
+    if (v !== undefined && v !== lev.baseline) l[lev.id] = v;
+  }
+  return b64urlEncode(JSON.stringify({ v: PERMALINK_VERSION, l }));
+}
+
+/** Decode a URL-hash token back to a full lever state (baseline + decoded deltas), or null. */
+export function decodeLevers(token: string): LeverState | null {
+  try {
+    const obj = JSON.parse(b64urlDecode(token));
+    if (!obj || typeof obj !== 'object' || !obj.l || typeof obj.l !== 'object') return null;
+    const out = baselineLevers();
+    for (const lev of LEVERS) {
+      const raw = (obj.l as Record<string, unknown>)[lev.id];
+      if (typeof raw === 'number' && isFinite(raw)) {
+        out[lev.id] = Math.min(lev.max, Math.max(lev.min, raw));
+      }
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the `s=` token out of a location hash (`#s=…` or `#…&s=…`). */
+export function tokenFromHash(hash: string): string | null {
+  const m = hash.match(/(?:^#|[#&])s=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }

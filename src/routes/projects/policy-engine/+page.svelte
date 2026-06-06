@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { replaceState } from '$app/navigation';
   import LeverRail from './components/LeverRail.svelte';
   import OutcomeChart, { type ChartSeries } from './components/OutcomeChart.svelte';
   import Scorecard from './components/Scorecard.svelte';
@@ -10,7 +11,7 @@
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS } from './lib/levers';
-  import { PRESETS, type Preset, downloadJSON } from './lib/scenarios';
+  import { PRESETS, type Preset, downloadJSON, encodeLevers, decodeLevers, tokenFromHash } from './lib/scenarios';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from './lib/params';
   import type { LeverState } from './lib/types';
 
@@ -23,22 +24,56 @@
   let tab = $state<'outcomes' | 'scorecard' | 'cost' | 'sensitivity' | 'method'>('outcomes');
   let mounted = $state(false);
   let importErr = $state<string | null>(null);
+  let copied = $state(false);
+  let lastHash = '';
 
   onMount(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') levers = { ...policyLevers(), ...parsed };
-      }
-    } catch { /* ignore */ }
+    // A shared permalink (#s=…) is authoritative; otherwise fall back to localStorage.
+    const token = tokenFromHash(location.hash);
+    const fromLink = token ? decodeLevers(token) : null;
+    if (fromLink) {
+      levers = fromLink;
+    } else {
+      try {
+        const raw = localStorage.getItem(STORAGE);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') levers = { ...policyLevers(), ...parsed };
+        }
+      } catch { /* ignore */ }
+    }
     mounted = true;
   });
+
+  function setUrl(url: string) {
+    try { replaceState(url, {}); }
+    catch { try { history.replaceState(history.state, '', url); } catch { /* ignore */ } }
+  }
 
   $effect(() => {
     if (!mounted) return;
     try { localStorage.setItem(STORAGE, JSON.stringify(levers)); } catch { /* quota */ }
+    // Keep the address bar shareable: sync the scenario into the URL hash once it differs
+    // from the default (announced policy). Default state keeps a clean, hash-free URL.
+    const enc = equalLevers(levers, policyLevers()) ? '' : encodeLevers(levers);
+    if (enc !== lastHash) {
+      lastHash = enc;
+      setUrl(enc ? `#s=${enc}` : location.pathname + location.search);
+    }
   });
+
+  function shareUrl(): string {
+    return `${location.origin}${location.pathname}#s=${encodeLevers(levers)}`;
+  }
+  function copyLink() {
+    const url = shareUrl();
+    const done = () => { copied = true; setTimeout(() => (copied = false), 1700); };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(done).catch(() => { prompt('Copy this scenario link:', url); });
+    } else {
+      prompt('Copy this scenario link:', url);
+    }
+  }
 
   // ---- engine runs ----
   const sim = $derived(runSim(levers));
@@ -245,6 +280,9 @@
         </button>
       </div>
       <div class="io">
+        <button class="link share" class:ok={copied} onclick={copyLink} title="Copy a shareable link that restores this exact scenario">
+          {copied ? '✓ Link copied' : '↗ Copy link'}
+        </button>
         <button class="link" onclick={exportJson}>Export</button>
         <button class="link" onclick={importJson}>Import</button>
         <button class="link" onclick={resetAll}>Reset</button>
@@ -339,6 +377,9 @@
   .tgl.on { background: #2f6f97; color: #fff; border-color: #2f6f97; }
   .link { background: transparent; border: none; border-bottom: 1px dashed rgba(28,22,17,0.4); padding: 2px 5px; color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
   .link:hover { background: rgba(28,22,17,0.05); }
+  .link.share { border-bottom-style: solid; border-bottom-color: #2f6f97; color: #2f6f97; }
+  .link.share:hover { background: rgba(47,111,151,0.08); }
+  .link.share.ok { color: #2f7d4f; border-bottom-color: #2f7d4f; }
 
   .scen { position: relative; z-index: 1; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .imp-err { color: #8a2d22; font-size: 11px; }
