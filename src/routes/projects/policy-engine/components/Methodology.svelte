@@ -100,7 +100,7 @@
   <section>
     <h3>What this is</h3>
     <p>
-      The Whitehall Model is an annual-step, system-dynamics + cohort simulation of the England schools
+      Education Policy Modelling is an annual-step, system-dynamics + cohort simulation of the England schools
       system from 2025 to 2040. You move policy levers that mirror real, active and upcoming Department for
       Education policies; the engine recomputes outcomes through research-calibrated response functions. It
       is a <b>decision-support and sense-making tool</b> — its value is in showing direction, relative

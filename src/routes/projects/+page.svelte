@@ -54,7 +54,7 @@
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
-      <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open The Whitehall Model"></a>
+      <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open Education Policy Modelling"></a>
       <div class="flex items-start justify-between mb-3">
         <p
           class="text-[10px] uppercase tracking-[0.25em]"
@@ -70,7 +70,7 @@
         class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
-        The Whitehall Model — England Education Policy Simulator
+        Education Policy Modelling — England Schools Simulator
       </h2>
       <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
         A research-backed, system-dynamics simulation of England's schools, 2025–2040. Pull the policy

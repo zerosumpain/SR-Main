@@ -9,6 +9,8 @@
   import ScenarioBar from './components/ScenarioBar.svelte';
   import Methodology from './components/Methodology.svelte';
   import AgeIdentification from './components/AgeIdentification.svelte';
+  import ScenarioReadout from './components/ScenarioReadout.svelte';
+  import ChartModal from './components/ChartModal.svelte';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
@@ -89,6 +91,7 @@
     return LEVERS.every((l) => (a[l.id] ?? l.baseline) === (b[l.id] ?? l.baseline));
   }
   const activePreset = $derived(PRESETS.find((p) => equalLevers(levers, p.levers))?.name ?? null);
+  let expanded = $state<number | null>(null); // index of the expanded chart, or null
 
   // DSG statutory override ends March 2028 — flag if the deficit breaches the insolvency threshold
   const insolvencyYear = $derived(sim.years.find((y) => y.insolvencyRisk)?.year ?? null);
@@ -236,26 +239,35 @@
   // ---- budget-constrained optimiser ("Best value") ----
   let optimizeBudget = $state(PRESETS.find((p) => p.optimize)?.budget ?? 5); // £bn/yr, adjustable
   let optimizeResult = $state<
-    { baselineGap: number; gap: number; cost: number; closed: number; horizon: number; budget: number; breakdown: AllocRow[] } | null
+    { baselineGap: number; gap: number; cost: number; closed: number; horizon: number; budget: number; breakdown: AllocRow[]; alloc: LeverState } | null
   >(null);
+  let optimizeApplied = $state(false);
   let tipOpen = $state(false);
+  const scenarioName = $derived(activePreset ?? (optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
 
-  function runOptimize() {
+  // Compute (preview) the budget-optimal allocation WITHOUT changing the sliders.
+  function previewOptimize() {
     const r = optimizeGapWithinBudget(optimizeBudget, horizon);
-    levers = r.levers;
     optimizeResult = {
       baselineGap: r.baselineGap, gap: r.gap, cost: r.cost, closed: r.baselineGap - r.gap,
-      horizon, budget: optimizeBudget, breakdown: allocationBreakdown(r.levers, horizon),
+      horizon, budget: optimizeBudget, breakdown: allocationBreakdown(r.levers, horizon), alloc: r.levers,
     };
+    optimizeApplied = false;
   }
-  // change the horizon; re-solve the optimum if the optimiser is currently active
+  // Commit the previewed allocation to the sliders (the charts then reflect the optimum).
+  function applyOptimized() {
+    if (!optimizeResult) return;
+    levers = { ...optimizeResult.alloc };
+    optimizeApplied = true;
+  }
+  // change the horizon; re-preview the optimum if the optimiser is currently active
   function setHorizon(h: number) {
     horizon = h;
-    if (optimizeResult) runOptimize();
+    if (optimizeResult) previewOptimize();
   }
 
   function applyPreset(p: Preset) {
-    if (p.optimize) { runOptimize(); }
+    if (p.optimize) { previewOptimize(); }
     else { optimizeResult = null; levers = { ...p.levers }; }
   }
   function resetAll() { optimizeResult = null; levers = policyLevers(); }
@@ -297,9 +309,9 @@
 </script>
 
 <svelte:head>
-  <title>The Whitehall Model — England Education Policy Simulator</title>
+  <title>Education Policy Modelling — England Schools Simulator</title>
   <meta name="description" content="An interactive, research-backed simulation of England education policy 2025–2040: move policy sliders (SEND/EHCP reform, pupil premium, attendance, early years, the 6,500 teachers pledge, curriculum reform) and watch the disadvantage gap, attainment, SEND deficit and NEET respond — with cited sources, assumptions and uncertainty bands." />
-  <meta property="og:title" content="The Whitehall Model — England Education Policy Simulator" />
+  <meta property="og:title" content="Education Policy Modelling — England Schools Simulator" />
   <meta property="og:description" content="Move the policy levers, watch the outcomes. A research-backed system-dynamics model of England's schools, 2025–2040." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
@@ -310,59 +322,65 @@
   <div class="paper-grain" aria-hidden="true"></div>
 
   <header class="head">
-    <div class="head-l">
-      <a class="back" href="/projects">← Field studies</a>
-      <span class="tagline">FIELD STUDY №4 · POLICY SIMULATION ENGINE</span>
-      <h1>The Whitehall Model</h1>
-      <p class="sub">
-        A research-backed simulation of England's schools system, 2025–2040. Move the policy levers —
-        SEND &amp; EHCP reform, pupil premium, attendance, early years, the 6,500-teacher pledge, curriculum
-        reform, school funding — and watch the disadvantage gap, attainment, the SEND deficit and NEET
-        respond. Every effect size is sourced or flagged as an assumption.
-      </p>
-      <p class="disclaimer">
-        ⓘ <b>Evidence-backed but a model, not an official forecast.</b> Every figure is sourced or labelled an
-        explicit assumption — see <button class="inline-link" type="button" onclick={() => (tab = 'method')}>method,
-        calculations &amp; sources</button> for full transparency. Built autonomously with Claude Code in combination
-        with other AI models.
-      </p>
-    </div>
-    <div class="head-r">
-      <div class="io">
-        <div class="seg" role="group" aria-label="Horizon">
-          {#each [2030, 2035, 2040] as h}
-            <button class:active={horizon === h} onclick={() => setHorizon(h)}>{h}</button>
-          {/each}
-        </div>
-        <button class="tgl" class:on={showBands} onclick={() => (showBands = !showBands)} title="Monte-Carlo P10–P90 uncertainty bands">
-          Uncertainty {showBands ? 'on' : 'off'}
-        </button>
-      </div>
-      <div class="io">
-        <button class="link share" class:ok={copied} onclick={copyLink} title="Copy a shareable link that restores this exact scenario">
-          {copied ? '✓ Link copied' : '↗ Copy link'}
-        </button>
-        <button class="link" onclick={exportJson}>Export</button>
-        <button class="link" onclick={importJson}>Import</button>
-        <button class="link" onclick={resetAll}>Reset</button>
-      </div>
-    </div>
+    <a class="back" href="/projects">← Field studies</a>
+    <span class="tagline">FIELD STUDY №4 · ENGLAND SCHOOLS · 2025–2040</span>
+    <h1>Education Policy Modelling</h1>
+    <p class="sub">
+      A research-backed simulation of England's schools system. Move the policy levers — SEND &amp; EHCP
+      reform, pupil premium, attendance, early years, the 6,500-teacher pledge, curriculum reform, school
+      funding — and watch the disadvantage gap, attainment, the SEND deficit and NEET respond. Every effect
+      size is sourced or flagged as an assumption.
+    </p>
+    <p class="disclaimer">
+      ⓘ <b>Evidence-backed but a model, not an official forecast.</b> Every figure is sourced or labelled an
+      explicit assumption — see <button class="inline-link" type="button" onclick={() => (tab = 'method')}>method,
+      calculations &amp; sources</button> for full transparency. Built autonomously with Claude Code in combination
+      with other AI models.
+    </p>
   </header>
+
+  <div class="toolbar">
+    <div class="tb-grp" role="group" aria-label="Horizon">
+      <span class="tb-lab">Horizon</span>
+      <div class="seg">
+        {#each [2030, 2035, 2040] as h}
+          <button class:active={horizon === h} onclick={() => setHorizon(h)}>{h}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="tb-grp">
+      <span class="tb-lab">View</span>
+      <button class="tgl" class:on={showBands} onclick={() => (showBands = !showBands)} title="Monte-Carlo P10–P90 uncertainty bands">
+        Uncertainty {showBands ? 'on' : 'off'}
+      </button>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-grp">
+      <span class="tb-lab">Scenario</span>
+      <button class="tb-btn share" class:ok={copied} onclick={copyLink} title="Copy a shareable link that restores this exact scenario">
+        {copied ? '✓ Copied' : '↗ Copy link'}
+      </button>
+      <button class="tb-btn" onclick={exportJson}>Export</button>
+      <button class="tb-btn" onclick={importJson}>Import</button>
+      <button class="tb-btn danger" onclick={resetAll}>Reset</button>
+    </div>
+  </div>
 
   <div class="scen">
     <ScenarioBar activeName={activePreset} onApply={applyPreset} />
-    <div class="opt-ctl" title="Set the annual budget, then click the 'Best value' preset (or drag this slider) to maximise gap closure within it">
+    <div class="opt-ctl" title="Set the annual budget, then click the 'Best value' preset (or drag this slider) to preview the gap-optimal allocation — then 'Apply to sliders'">
       <span class="oc-lab">Best-value budget</span>
       <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={optimizeBudget}
              oninput={(e) => (optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
-             onchange={() => runOptimize()} aria-label="Best-value optimiser budget" />
+             onchange={() => previewOptimize()} aria-label="Best-value optimiser budget" />
       <span class="oc-val">£{optimizeBudget.toFixed(1)}bn/yr</span>
     </div>
     {#if optimizeResult}
       <span class="opt-note-wrap" class:open={tipOpen}>
         <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)}
                 aria-expanded={tipOpen} title="Show the optimised allocation breakdown">
-          ✓ closes {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)})
+          {optimizeApplied ? '✓ applied:' : '◷ best £' + optimizeResult.budget.toFixed(1) + 'bn would'}
+          close {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)})
           by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr <span class="tip-caret">▾</span>
         </button>
         <span class="opt-tip" role="tooltip">
@@ -380,8 +398,16 @@
           {/if}
         </span>
       </span>
+      <button class="opt-apply" onclick={applyOptimized} disabled={optimizeApplied}
+              title="Set every slider to this optimised allocation">
+        {optimizeApplied ? '✓ Applied' : 'Apply to sliders →'}
+      </button>
     {/if}
     {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
+  </div>
+
+  <div class="readout-shell">
+    <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
   </div>
 
   {#if insolvencyYear}
@@ -413,13 +439,15 @@
         <p class="tab-intro">
           Solid line = your policy package; dashed grey = the status-quo (do-nothing) trajectory; dashed colour =
           disadvantaged pupils; green dashes = a government target. The shaded band before {BASE_YEAR} is observed history;
-          the blue <b>{horizon} ▸</b> marker tracks the year selector (top-right) and drives each summary below.
+          the blue <b>{horizon} ▸</b> marker tracks the horizon selector (in the toolbar) and drives each summary below.
+          Hover a chart and click <b>⤢</b> to expand it with its narrative for export.
           {#if showBands}Shaded fans are Monte-Carlo P10–P90 uncertainty.{/if}
         </p>
         <div class="chart-grid">
-          {#each charts as c (c.title)}
+          {#each charts as c, i (c.title)}
             {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, baseSim.years, horizon)}
             <div class="chart-cell">
+              <button class="expand-btn" onclick={() => (expanded = i)} title="Expand chart with its narrative" aria-label="Expand {c.title}">⤢</button>
               <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series}
                             baseYear={BASE_YEAR} horizonYear={horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
               <p class="chart-summary tone-{sm.tone}">{sm.text}</p>
@@ -438,6 +466,14 @@
     </main>
   </div>
 
+  {#if expanded !== null}
+    {@const c = charts[expanded]}
+    {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, baseSim.years, horizon)}
+    <ChartModal title={c.title} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
+                horizonYear={horizon} target={c.target} dp={c.dp} zeroBased={c.zeroBased ?? false}
+                narrative={sm.text} onClose={() => (expanded = null)} />
+  {/if}
+
   <footer class="foot">
     <details class="sources-foot">
       <summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
@@ -448,7 +484,7 @@
       </ul>
     </details>
     <p class="foot-disc">
-      The Whitehall Model · <code>/projects/policy-engine</code> · a decision-support tool, <b>not an official
+      Education Policy Modelling · <code>/projects/policy-engine</code> · a decision-support tool, <b>not an official
       forecast</b>. Evidence-backed (see the {SOURCES.length} sources above and the Method &amp; calculations tab for
       every assumption and limitation), but figures are estimates. Built autonomously with Claude Code in combination
       with other AI models.
@@ -468,31 +504,38 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5; mix-blend-mode: multiply;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.14  0 0 0 0 0.10  0 0 0 0.07 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   }
-  .head { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding: 22px 28px 14px; border-bottom: 1px solid rgba(28,22,17,0.1); }
-  .head-l { max-width: 78ch; min-width: 0; }
+  .head { position: relative; z-index: 1; max-width: 82ch; padding: 20px 28px 12px; }
   .back { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); text-decoration: none; }
   .back:hover { color: var(--ink); }
   .tagline { display: block; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; color: var(--ink-soft); text-transform: uppercase; }
   h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(26px, 4vw, 40px); line-height: 0.98; letter-spacing: -0.02em; margin: 5px 0 7px; }
-  .sub { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft); max-width: 76ch; }
-  .disclaimer { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 80ch; }
+  .sub { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft); max-width: 78ch; }
+  .disclaimer { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 82ch; }
   .disclaimer b { color: var(--ink); }
   .inline-link { background: transparent; border: none; padding: 0; color: #2f6f97; cursor: pointer; font: inherit; border-bottom: 1px dashed currentColor; }
   .inline-link:hover { color: #1c4a66; }
-  .head-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
-  .io { display: flex; gap: 5px; align-items: center; }
-  .seg { display: inline-flex; background: rgba(28,22,17,0.06); padding: 2px; border-radius: 6px; }
-  .seg button { background: transparent; border: none; color: var(--ink); padding: 5px 9px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; }
-  .seg button.active { background: var(--ink); color: var(--paper); }
-  .tgl { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.2); color: var(--ink); padding: 5px 9px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
-  .tgl.on { background: #2f6f97; color: #fff; border-color: #2f6f97; }
-  .link { background: transparent; border: none; border-bottom: 1px dashed rgba(28,22,17,0.4); padding: 2px 5px; color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
-  .link:hover { background: rgba(28,22,17,0.05); }
-  .link.share { border-bottom-style: solid; border-bottom-color: #2f6f97; color: #2f6f97; }
-  .link.share:hover { background: rgba(47,111,151,0.08); }
-  .link.share.ok { color: #2f7d4f; border-bottom-color: #2f7d4f; }
 
-  .scen { position: relative; z-index: 1; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  /* --- rethought control toolbar --- */
+  .toolbar { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 9px 28px; background: rgba(28,22,17,0.04); border-top: 1px solid rgba(28,22,17,0.08); border-bottom: 1px solid rgba(28,22,17,0.08); }
+  .tb-grp { display: inline-flex; align-items: center; gap: 6px; }
+  .tb-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
+  .tb-spacer { flex: 1; }
+  .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 6px; }
+  .seg button { background: transparent; border: none; color: var(--ink); padding: 5px 11px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; }
+  .seg button.active { background: var(--ink); color: var(--paper); }
+  .tgl { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); color: var(--ink); padding: 5px 10px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
+  .tgl.on { background: #2f6f97; color: #fff; border-color: #2f6f97; }
+  .tb-btn { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; padding: 5px 10px; color: var(--ink);
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; cursor: pointer; }
+  .tb-btn:hover { background: rgba(28,22,17,0.06); }
+  .tb-btn.share { border-color: #2f6f97; color: #2f6f97; }
+  .tb-btn.share.ok { border-color: #2f7d4f; color: #2f7d4f; }
+  .tb-btn.danger { border-color: rgba(177,69,94,0.4); color: #b1455e; }
+  .tb-btn.danger:hover { background: rgba(177,69,94,0.08); }
+
+  .scen { position: relative; z-index: 2; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .readout-shell { position: relative; z-index: 1; padding: 10px 28px 4px; }
   .imp-err { color: #8a2d22; font-size: 11px; }
   .opt-note-wrap { position: relative; display: inline-block; }
   .opt-note {
@@ -515,6 +558,12 @@
   .tip-row b { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink); white-space: nowrap; }
   .tip-row em { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-style: normal; color: #2f7d4f; white-space: nowrap; min-width: 52px; text-align: right; }
   .tip-foot { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(28,22,17,0.14); font-size: 10px; line-height: 1.4; color: rgba(28,22,17,0.6); }
+  .opt-apply {
+    font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; padding: 4px 11px; border-radius: 14px;
+    border: 1px solid #2f7d4f; background: #2f7d4f; color: #fff; cursor: pointer; white-space: nowrap;
+  }
+  .opt-apply:hover:not(:disabled) { background: #276b43; }
+  .opt-apply:disabled { background: rgba(47,125,79,0.14); color: #2f7d4f; border-color: rgba(47,125,79,0.3); cursor: default; }
   .opt-ctl { display: inline-flex; align-items: center; gap: 7px; padding: 3px 9px; border: 1px solid rgba(47,125,79,0.35); border-radius: 14px; background: rgba(47,125,79,0.06); }
   .oc-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #2f7d4f; white-space: nowrap; }
   .oc-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 3px; background: rgba(47,125,79,0.25); outline: none; cursor: pointer; }
@@ -527,20 +576,27 @@
   }
   .cliff b { color: #6f2230; }
 
+  /* Rail flows with the page — no independent scrollbar (per request). */
   .body { position: relative; z-index: 1; display: grid; grid-template-columns: 340px 1fr; gap: 0; align-items: start; }
-  .rail-col { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding: 14px 14px 40px; border-right: 1px solid rgba(28,22,17,0.1); }
+  .rail-col { align-self: start; padding: 14px 14px 40px; border-right: 1px solid rgba(28,22,17,0.1); }
   .rail-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
   .rail-head span:first-child { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; }
   .rail-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); letter-spacing: 0.02em; }
 
   .out-col { padding: 14px 22px 50px; min-width: 0; }
-  .tabs { display: flex; gap: 3px; border-bottom: 1px solid rgba(28,22,17,0.14); margin-bottom: 12px; flex-wrap: wrap; }
-  .tabs button { background: transparent; border: none; padding: 8px 13px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink-soft); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  .tabs button:hover { color: var(--ink); }
-  .tabs button.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
-  .tab-intro { margin: 0 0 12px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 90ch; }
+  /* More obvious tabs — boxed/segmented pills. */
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; background: rgba(28,22,17,0.06); padding: 4px; border-radius: 9px; }
+  .tabs button { background: transparent; border: 1px solid transparent; padding: 7px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; border-radius: 6px; transition: background 0.12s, color 0.12s; }
+  .tabs button:hover { background: rgba(255,255,255,0.5); color: var(--ink); }
+  .tabs button.active { background: var(--ink); color: var(--paper); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+  .tab-intro { margin: 0 0 12px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 100ch; }
   .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
-  .chart-cell { display: flex; flex-direction: column; }
+  .chart-cell { display: flex; flex-direction: column; position: relative; }
+  .expand-btn { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
+    border: 1px solid rgba(28,22,17,0.18); background: rgba(255,255,255,0.7); color: rgba(28,22,17,0.6); cursor: pointer;
+    font-size: 12px; line-height: 1; opacity: 0; transition: opacity 0.14s; padding: 0; }
+  .chart-cell:hover .expand-btn, .expand-btn:focus-visible { opacity: 1; }
+  .expand-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .chart-summary { margin: 5px 2px 0; font-size: 10.5px; line-height: 1.45; color: rgba(28,22,17,0.62); border-left: 2px solid rgba(28,22,17,0.18); padding-left: 7px; }
   .chart-summary.tone-good { border-left-color: #2f7d4f; }
   .chart-summary.tone-bad { border-left-color: #b1455e; }
@@ -558,8 +614,9 @@
 
   @media (max-width: 880px) {
     .body { grid-template-columns: 1fr; }
-    .rail-col { position: relative; max-height: none; border-right: none; border-bottom: 1px solid rgba(28,22,17,0.1); }
-    .head { flex-direction: column; align-items: flex-start; }
-    .head-r { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+    .rail-col { border-right: none; border-bottom: 1px solid rgba(28,22,17,0.1); }
+    .toolbar { gap: 10px; }
+    .tb-spacer { flex-basis: 100%; height: 0; }
+    .expand-btn { opacity: 1; }
   }
 </style>
