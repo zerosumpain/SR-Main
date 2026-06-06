@@ -54,6 +54,44 @@
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
+      <a href="/projects/dfe-data-estate" class="absolute inset-0 z-0" aria-label="Open The Data Estate"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Reference
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Live · DfE APIs
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Data Estate — DfE's Public Data Services
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        A fact-checked map of every public-facing service the Department for Education uses to share and
+        aggregate data — GIAS, Explore Education Statistics, performance tables, Teaching Vacancies, the
+        teacher-training APIs and the restricted pupil-data tier. Where each one's data comes from, how
+        often it refreshes, who owns it, and what's open — with six widgets calling the real DfE APIs live.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          live APIs · 16 services · OGL
+        </span>
+      </div>
+    </div>
+
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
       <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open Education Policy Modelling"></a>
       <div class="flex items-start justify-between mb-3">
         <p

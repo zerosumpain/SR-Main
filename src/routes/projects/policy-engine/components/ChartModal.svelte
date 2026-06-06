@@ -81,7 +81,7 @@
     </div>
 
     <div class="m-chart">
-      <OutcomeChart {title} {unit} {years} {series} {baseYear} {horizonYear} {target} {dp} {zeroBased} height={380} />
+      <OutcomeChart {title} {unit} {years} {series} {baseYear} {horizonYear} {target} {dp} {zeroBased} height={520} />
     </div>
 
     <div class="m-narrative">
@@ -100,7 +100,7 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(28,22,17,0.4); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .card { background: var(--paper, #f1ead6); border: 1px solid rgba(28,22,17,0.2); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: min(880px, 96vw); max-height: 92vh; overflow-y: auto; padding: 16px 18px; font-family: 'DM Sans', system-ui, sans-serif; }
+  .card { background: var(--paper, #f1ead6); border: 1px solid rgba(28,22,17,0.2); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: min(1180px, 95vw); max-height: 94vh; overflow-y: auto; padding: 18px 22px; font-family: 'DM Sans', system-ui, sans-serif; }
   .m-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
   h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; margin: 0; color: var(--ink, #1c1611); }
   .m-unit { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
