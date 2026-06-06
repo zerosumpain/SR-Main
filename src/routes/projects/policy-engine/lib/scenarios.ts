@@ -35,8 +35,8 @@ export const PRESETS: Preset[] = [
     levers: policyLevers(),
   },
   {
-    name: 'Best value (£5bn/yr)',
-    description: 'Maximises closure of the disadvantage gap within a fixed £5bn/yr extra budget. A greedy optimiser allocates to the most gap-efficient levers — attendance, early years, RISE, poverty action, FSM — and skips poor value (e.g. Pupil Premium, whose £→gap link is weak). Re-optimised live to the selected horizon. Closes roughly as much of the gap as the full announced package, for a fraction of the cost.',
+    name: 'Best value',
+    description: 'Maximises closure of the disadvantage gap within the adjustable budget set by the slider beside the presets. A greedy optimiser allocates to the most gap-efficient levers — attendance, early years, RISE, poverty action, FSM — and skips poor value (e.g. Pupil Premium, whose £→gap link is weak). Re-solved live to the selected budget and horizon.',
     levers: baselineLevers(),
     optimize: true,
     budget: 5,

@@ -227,25 +227,34 @@
   ]);
 
   // ---- actions ----
-  function setLever(id: string, v: number) { levers = { ...levers, [id]: v }; }
+  function setLever(id: string, v: number) { optimizeResult = null; levers = { ...levers, [id]: v }; }
   function resetLever(id: string) {
+    optimizeResult = null;
     const L = LEVERS.find((l) => l.id === id)!;
     levers = { ...levers, [id]: L.baseline };
   }
-  let optimizeNote = $state<string | null>(null);
-  function applyPreset(p: Preset) {
-    if (p.optimize && p.budget) {
-      const r = optimizeGapWithinBudget(p.budget, horizon);
-      levers = r.levers;
-      optimizeNote = `Optimised £${p.budget}bn/yr to ${horizon}: KS4 gap ${r.baselineGap.toFixed(1)} → ${r.gap.toFixed(1)} months (${(r.baselineGap - r.gap).toFixed(1)} closed) for £${r.cost.toFixed(1)}bn/yr`;
-      setTimeout(() => { optimizeNote = null; }, 7000);
-    } else {
-      optimizeNote = null;
-      levers = { ...p.levers };
-    }
+  // ---- budget-constrained optimiser ("Best value") ----
+  let optimizeBudget = $state(PRESETS.find((p) => p.optimize)?.budget ?? 5); // £bn/yr, adjustable
+  let optimizeResult = $state<{ baselineGap: number; gap: number; cost: number; closed: number; horizon: number } | null>(null);
+
+  function runOptimize() {
+    const r = optimizeGapWithinBudget(optimizeBudget, horizon);
+    levers = r.levers;
+    optimizeResult = { baselineGap: r.baselineGap, gap: r.gap, cost: r.cost, closed: r.baselineGap - r.gap, horizon };
   }
-  function resetAll() { levers = policyLevers(); }
+  // change the horizon; re-solve the optimum if the optimiser is currently active
+  function setHorizon(h: number) {
+    horizon = h;
+    if (optimizeResult) runOptimize();
+  }
+
+  function applyPreset(p: Preset) {
+    if (p.optimize) { runOptimize(); }
+    else { optimizeResult = null; levers = { ...p.levers }; }
+  }
+  function resetAll() { optimizeResult = null; levers = policyLevers(); }
   function resetAgeId() {
+    optimizeResult = null;
     const next = { ...levers };
     for (const b of AGE_BANDS) next[b.leverId] = LEVERS_BY_ID[b.leverId].baseline;
     levers = next;
@@ -264,6 +273,7 @@
         const obj = JSON.parse(await f.text());
         const incoming = (obj && obj.levers) ? obj.levers : obj;
         if (!incoming || typeof incoming !== 'object') throw new Error('No levers found.');
+        optimizeResult = null;
         levers = { ...policyLevers(), ...incoming };
         importErr = null;
       } catch (e) { importErr = e instanceof Error ? e.message : 'Bad file'; }
@@ -315,7 +325,7 @@
       <div class="io">
         <div class="seg" role="group" aria-label="Horizon">
           {#each [2030, 2035, 2040] as h}
-            <button class:active={horizon === h} onclick={() => (horizon = h)}>{h}</button>
+            <button class:active={horizon === h} onclick={() => setHorizon(h)}>{h}</button>
           {/each}
         </div>
         <button class="tgl" class:on={showBands} onclick={() => (showBands = !showBands)} title="Monte-Carlo P10–P90 uncertainty bands">
@@ -335,7 +345,16 @@
 
   <div class="scen">
     <ScenarioBar activeName={activePreset} onApply={applyPreset} />
-    {#if optimizeNote}<span class="opt-note">✓ {optimizeNote}</span>{/if}
+    <div class="opt-ctl" title="Set the annual budget, then click the 'Best value' preset (or drag this slider) to maximise gap closure within it">
+      <span class="oc-lab">Best-value budget</span>
+      <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={optimizeBudget}
+             oninput={(e) => (optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
+             onchange={() => runOptimize()} aria-label="Best-value optimiser budget" />
+      <span class="oc-val">£{optimizeBudget.toFixed(1)}bn/yr</span>
+    </div>
+    {#if optimizeResult}
+      <span class="opt-note">✓ closes {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)}) by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr</span>
+    {/if}
     {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
   </div>
 
@@ -450,6 +469,12 @@
   .scen { position: relative; z-index: 1; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .imp-err { color: #8a2d22; font-size: 11px; }
   .opt-note { color: #2f7d4f; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .opt-ctl { display: inline-flex; align-items: center; gap: 7px; padding: 3px 9px; border: 1px solid rgba(47,125,79,0.35); border-radius: 14px; background: rgba(47,125,79,0.06); }
+  .oc-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #2f7d4f; white-space: nowrap; }
+  .oc-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 3px; background: rgba(47,125,79,0.25); outline: none; cursor: pointer; }
+  .oc-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #2f7d4f; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .oc-slider::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #2f7d4f; border: none; cursor: pointer; }
+  .oc-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #2f7d4f; white-space: nowrap; min-width: 64px; }
   .cliff {
     position: relative; z-index: 1; margin: 0; padding: 8px 28px; font-size: 12px; line-height: 1.45;
     background: rgba(177, 69, 94, 0.1); color: #8a2d3a; border-bottom: 1px solid rgba(177,69,94,0.25);
