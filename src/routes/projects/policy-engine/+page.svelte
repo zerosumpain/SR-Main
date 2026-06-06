@@ -10,6 +10,7 @@
   import Methodology from './components/Methodology.svelte';
   import AgeIdentification from './components/AgeIdentification.svelte';
   import ScenarioReadout from './components/ScenarioReadout.svelte';
+  import CompareReadout from './components/CompareReadout.svelte';
   import ChartModal from './components/ChartModal.svelte';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
@@ -93,6 +94,21 @@
   const activePreset = $derived(PRESETS.find((p) => equalLevers(levers, p.levers))?.name ?? null);
   let expanded = $state<number | null>(null); // index of the expanded chart, or null
 
+  // ---- side-by-side comparison ----
+  let compareB = $state<{ levers: LeverState; name: string } | null>(null);
+  const simB = $derived(compareB ? runSim(compareB.levers) : null);
+  const C_B = '#3a5fa8'; // Scenario B line colour
+
+  function pinAsB() { compareB = { levers: { ...levers }, name: scenarioName }; }
+  function clearCompare() { compareB = null; }
+  function swapAB() {
+    if (!compareB) return;
+    const prevB = compareB;
+    compareB = { levers: { ...levers }, name: scenarioName };
+    optimizeResult = null;
+    levers = { ...prevB.levers };
+  }
+
   // DSG statutory override ends March 2028 — flag if the deficit breaches the insolvency threshold
   const insolvencyYear = $derived(sim.years.find((y) => y.insolvencyRisk)?.year ?? null);
   const horizonDeficit = $derived(sim.years.find((y) => y.year === horizon)?.highNeedsDeficitStock ?? 0);
@@ -135,7 +151,8 @@
     'Teacher shortfall (6,500 pledge)': 'teacherShortfall',
   };
 
-  const charts = $derived.by<ChartDef[]>(() => [
+  const charts = $derived.by<ChartDef[]>(() => {
+    const base: ChartDef[] = [
     {
       title: 'Disadvantage attainment gap', unit: 'months behind', dp: 1,
       target: { value: BASELINE.gapKS4 / 2, label: 'halve (WP)' },
@@ -227,7 +244,22 @@
         { label: 'Status quo', color: C_BASE, values: proj('teacherShortfall', baseSim), dashed: true },
       ],
     },
-  ]);
+    ];
+    // Compare mode: overlay Scenario A (current) vs Scenario B (pinned) on each chart's primary metric.
+    if (!simB) return base;
+    const b = simB;
+    return base.map((c) => {
+      const primary = c.series.find((s) => s.emphasis) ?? c.series[0];
+      const key = CHART_PRIMARY[c.title];
+      return {
+        ...c,
+        series: [
+          { ...primary, label: 'Scenario A' },
+          { label: 'Scenario B', color: C_B, values: proj(key, b), emphasis: true },
+        ],
+      };
+    });
+  });
 
   // ---- actions ----
   function setLever(id: string, v: number) { optimizeResult = null; levers = { ...levers, [id]: v }; }
@@ -354,6 +386,16 @@
         Uncertainty {showBands ? 'on' : 'off'}
       </button>
     </div>
+    <div class="tb-grp">
+      <span class="tb-lab">Compare</span>
+      {#if !compareB}
+        <button class="tb-btn" onclick={pinAsB} title="Pin the current scenario as B, then change A to compare them">Pin current as B</button>
+      {:else}
+        <span class="cmp-badge"><i></i>B: {compareB.name}</span>
+        <button class="tb-btn" onclick={swapAB} title="Swap A and B">⇄ Swap</button>
+        <button class="tb-btn danger" onclick={clearCompare} title="Stop comparing">✕</button>
+      {/if}
+    </div>
     <div class="tb-spacer"></div>
     <div class="tb-grp">
       <span class="tb-lab">Scenario</span>
@@ -407,7 +449,11 @@
   </div>
 
   <div class="readout-shell">
-    <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
+    {#if compareB && simB}
+      <CompareReadout simA={sim.years} simB={simB.years} nameA={scenarioName} nameB={compareB.name} {horizon} />
+    {:else}
+      <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
+    {/if}
   </div>
 
   {#if insolvencyYear}
@@ -437,15 +483,21 @@
 
       {#if tab === 'outcomes'}
         <p class="tab-intro">
-          Solid line = your policy package; dashed grey = the status-quo (do-nothing) trajectory; dashed colour =
-          disadvantaged pupils; green dashes = a government target. The shaded band before {BASE_YEAR} is observed history;
-          the blue <b>{horizon} ▸</b> marker tracks the horizon selector (in the toolbar) and drives each summary below.
-          Hover a chart and click <b>⤢</b> to expand it with its narrative for export.
+          {#if compareB}
+            <b style="color:#9a3b2e">Scenario A</b> (your current levers) vs <b style="color:#3a5fa8">Scenario B</b>
+            (pinned: {compareB.name}) — overlaid on each chart's headline metric. Use <b>⇄ Swap</b> or <b>✕</b> in the
+            toolbar to swap or stop. The side-by-side table above gives every outcome for A, B and the difference.
+          {:else}
+            Solid line = your policy package; dashed grey = the status-quo (do-nothing) trajectory; dashed colour =
+            disadvantaged pupils; green dashes = a government target. Pin a scenario as <b>B</b> in the toolbar to compare two side by side.
+          {/if}
+          The shaded band before {BASE_YEAR} is observed history; the blue <b>{horizon} ▸</b> marker tracks the horizon
+          selector and drives each summary. Hover a chart and click <b>⤢</b> to expand it with its narrative for export.
           {#if showBands}Shaded fans are Monte-Carlo P10–P90 uncertainty.{/if}
         </p>
         <div class="chart-grid">
           {#each charts as c, i (c.title)}
-            {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, baseSim.years, horizon)}
+            {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, compareB && simB ? simB.years : baseSim.years, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
             <div class="chart-cell">
               <button class="expand-btn" onclick={() => (expanded = i)} title="Expand chart with its narrative" aria-label="Expand {c.title}">⤢</button>
               <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series}
@@ -468,7 +520,7 @@
 
   {#if expanded !== null}
     {@const c = charts[expanded]}
-    {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, baseSim.years, horizon)}
+    {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, compareB && simB ? simB.years : baseSim.years, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
     <ChartModal title={c.title} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
                 horizonYear={horizon} target={c.target} dp={c.dp} zeroBased={c.zeroBased ?? false}
                 narrative={sm.text} onClose={() => (expanded = null)} />
@@ -533,6 +585,8 @@
   .tb-btn.share.ok { border-color: #2f7d4f; color: #2f7d4f; }
   .tb-btn.danger { border-color: rgba(177,69,94,0.4); color: #b1455e; }
   .tb-btn.danger:hover { background: rgba(177,69,94,0.08); }
+  .cmp-badge { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #3a5fa8; background: rgba(58,95,168,0.1); border: 1px solid rgba(58,95,168,0.3); border-radius: 5px; padding: 4px 8px; }
+  .cmp-badge i { width: 9px; height: 3px; border-radius: 2px; background: #3a5fa8; }
 
   .scen { position: relative; z-index: 2; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .readout-shell { position: relative; z-index: 1; padding: 10px 28px 4px; }

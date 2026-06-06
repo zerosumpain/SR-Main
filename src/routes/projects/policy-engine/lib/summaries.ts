@@ -31,6 +31,7 @@ export function chartSummary(
   sim: YearResult[],
   baseSim: YearResult[],
   horizon: number,
+  cmpLabel = 'status-quo path',
 ): ChartSummary {
   const m = OUTCOMES_BY_ID[primary];
   if (!m) return { text: '', tone: 'neutral' };
@@ -56,9 +57,9 @@ export function chartSummary(
 
   let vs = '';
   if (meaningful && !m.neutral) {
-    vs = ` — ${improved ? 'better' : 'worse'} than the status-quo path by ${fmt(Math.abs(delta))}${deltaUnit}`;
+    vs = ` — ${improved ? 'better' : 'worse'} than the ${cmpLabel} by ${fmt(Math.abs(delta))}${deltaUnit}`;
   } else if (meaningful && m.neutral) {
-    vs = ` (${delta > 0 ? '+' : ''}${fmt(delta)}${deltaUnit} vs status quo)`;
+    vs = ` (${delta > 0 ? '+' : ''}${fmt(delta)}${deltaUnit} vs ${cmpLabel})`;
   }
 
   const text = `In your scenario it ${moveWord} from ${u(start)} (2025) to ${u(v)} by ${horizon}${vs}. ${CAUSE[primary] ?? ''}`;
