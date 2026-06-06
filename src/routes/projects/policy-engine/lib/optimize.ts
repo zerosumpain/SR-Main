@@ -8,7 +8,7 @@
 
 import type { LeverState } from './types';
 import { runSim } from './engine';
-import { LEVERS_BY_ID, baselineLevers } from './levers';
+import { LEVERS_BY_ID, GROUP_META, baselineLevers } from './levers';
 
 // Gap-relevant, costable levers the optimiser may spend on (excludes the age-ID bands,
 // handled separately, and levers with no material gap channel).
@@ -31,6 +31,31 @@ export interface OptimizeResult {
   baselineGap: number;
   horizon: number;
   budget: number;
+}
+
+/** One line of the optimiser's spend breakdown. */
+export interface AllocRow { id: string; label: string; display: string; costBn: number; colour: string; }
+
+/** Per-lever breakdown of an allocation: each lever moved above baseline, with its value and
+ *  standalone annual cost at the horizon (the cost terms are additive, so these sum to the total). */
+export function allocationBreakdown(levers: LeverState, horizon: number): AllocRow[] {
+  const base = baselineLevers();
+  const rows: AllocRow[] = [];
+  for (const id of GAP_CANDIDATES) {
+    const L = LEVERS_BY_ID[id];
+    if (!L) continue;
+    const v = levers[id] ?? L.baseline;
+    if (v === L.baseline) continue;
+    const y = runSim({ ...base, [id]: v }).years.find((r) => r.year === horizon);
+    rows.push({
+      id,
+      label: L.label,
+      display: L.format ? L.format(v) : `${v}${L.unit === '%' ? '%' : ''}`,
+      costBn: y ? y.annualCost : 0,
+      colour: GROUP_META[L.group]?.colour ?? '#555',
+    });
+  }
+  return rows.sort((a, b) => b.costBn - a.costBn);
 }
 
 /** Greedily allocate up to `budgetBn` (additional £bn/yr at `horizon`) to minimise the KS4 gap. */

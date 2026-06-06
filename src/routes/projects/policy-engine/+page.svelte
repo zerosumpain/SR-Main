@@ -16,7 +16,7 @@
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from './lib/params';
   import { chartSummary } from './lib/summaries';
   import { SOURCES } from './lib/sources';
-  import { optimizeGapWithinBudget } from './lib/optimize';
+  import { optimizeGapWithinBudget, allocationBreakdown, type AllocRow } from './lib/optimize';
   import type { LeverState } from './lib/types';
 
   const STORAGE = 'whitehall-model-levers-v1';
@@ -235,12 +235,18 @@
   }
   // ---- budget-constrained optimiser ("Best value") ----
   let optimizeBudget = $state(PRESETS.find((p) => p.optimize)?.budget ?? 5); // £bn/yr, adjustable
-  let optimizeResult = $state<{ baselineGap: number; gap: number; cost: number; closed: number; horizon: number } | null>(null);
+  let optimizeResult = $state<
+    { baselineGap: number; gap: number; cost: number; closed: number; horizon: number; budget: number; breakdown: AllocRow[] } | null
+  >(null);
+  let tipOpen = $state(false);
 
   function runOptimize() {
     const r = optimizeGapWithinBudget(optimizeBudget, horizon);
     levers = r.levers;
-    optimizeResult = { baselineGap: r.baselineGap, gap: r.gap, cost: r.cost, closed: r.baselineGap - r.gap, horizon };
+    optimizeResult = {
+      baselineGap: r.baselineGap, gap: r.gap, cost: r.cost, closed: r.baselineGap - r.gap,
+      horizon, budget: optimizeBudget, breakdown: allocationBreakdown(r.levers, horizon),
+    };
   }
   // change the horizon; re-solve the optimum if the optimiser is currently active
   function setHorizon(h: number) {
@@ -353,7 +359,27 @@
       <span class="oc-val">£{optimizeBudget.toFixed(1)}bn/yr</span>
     </div>
     {#if optimizeResult}
-      <span class="opt-note">✓ closes {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)}) by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr</span>
+      <span class="opt-note-wrap" class:open={tipOpen}>
+        <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)}
+                aria-expanded={tipOpen} title="Show the optimised allocation breakdown">
+          ✓ closes {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)})
+          by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr <span class="tip-caret">▾</span>
+        </button>
+        <span class="opt-tip" role="tooltip">
+          <span class="tip-head">Optimised allocation · £{optimizeResult.cost.toFixed(2)}bn/yr across {optimizeResult.breakdown.length} levers</span>
+          {#each optimizeResult.breakdown as row (row.id)}
+            <span class="tip-row">
+              <i style="background:{row.colour}"></i>
+              <span class="tip-label">{row.label}</span>
+              <b>{row.display}</b>
+              <em>£{row.costBn.toFixed(2)}bn</em>
+            </span>
+          {/each}
+          {#if optimizeResult.budget - optimizeResult.cost > 0.05}
+            <span class="tip-foot">£{(optimizeResult.budget - optimizeResult.cost).toFixed(1)}bn of the £{optimizeResult.budget.toFixed(1)}bn budget left unspent — no remaining lever closes the gap at acceptable value.</span>
+          {/if}
+        </span>
+      </span>
     {/if}
     {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
   </div>
@@ -468,7 +494,27 @@
 
   .scen { position: relative; z-index: 1; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .imp-err { color: #8a2d22; font-size: 11px; }
-  .opt-note { color: #2f7d4f; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .opt-note-wrap { position: relative; display: inline-block; }
+  .opt-note {
+    color: #2f7d4f; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: none;
+    border: none; padding: 0; cursor: pointer; text-align: left; line-height: 1.4;
+  }
+  .opt-note:hover { text-decoration: underline; text-decoration-style: dotted; }
+  .tip-caret { font-size: 8px; opacity: 0.7; }
+  .opt-tip {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    min-width: 290px; max-width: 360px; background: var(--paper-deep, #e7decc);
+    border: 1px solid rgba(28,22,17,0.25); border-radius: 7px; padding: 9px 11px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); flex-direction: column; gap: 3px;
+  }
+  .opt-note-wrap:hover .opt-tip, .opt-note-wrap.open .opt-tip { display: flex; }
+  .tip-head { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12px; color: var(--ink); margin-bottom: 4px; }
+  .tip-row { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: baseline; gap: 7px; font-size: 11px; color: rgba(28,22,17,0.8); }
+  .tip-row i { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+  .tip-label { min-width: 0; }
+  .tip-row b { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink); white-space: nowrap; }
+  .tip-row em { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-style: normal; color: #2f7d4f; white-space: nowrap; min-width: 52px; text-align: right; }
+  .tip-foot { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(28,22,17,0.14); font-size: 10px; line-height: 1.4; color: rgba(28,22,17,0.6); }
   .opt-ctl { display: inline-flex; align-items: center; gap: 7px; padding: 3px 9px; border: 1px solid rgba(47,125,79,0.35); border-radius: 14px; background: rgba(47,125,79,0.06); }
   .oc-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #2f7d4f; white-space: nowrap; }
   .oc-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 3px; background: rgba(47,125,79,0.25); outline: none; cursor: pointer; }
