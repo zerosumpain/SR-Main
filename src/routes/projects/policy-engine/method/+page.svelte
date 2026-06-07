@@ -15,40 +15,67 @@
 <div class="pe-route">
   <span class="pe-eyebrow">Method &amp; calculations</span>
   <h1 class="pe-h1">How it works, and why it’s honest</h1>
-  <div class="pe-prose">
-    <p>
-      This is a <b>system-dynamics and cohort model</b>, not an official forecast. It steps from 2025 to 2040, applying
-      research-calibrated response functions — elasticities with diminishing returns and distributed lags — to a small set of state
-      variables, mediated through a causal spine in which <b>attendance is the central hub</b>. Every parameter carries a low/central/high
-      band and a source or an explicit assumption flag; the Monte-Carlo bands propagate that uncertainty.
-    </p>
-    <p>
-      A deliberate design choice runs through the whole thing and answers the most common question — “why does pouring money in barely
-      move the outcomes?”. <b>Money does not buy attainment directly.</b> The funding→attainment elasticity is close to zero at current
-      spending (IFS, NFER, Jackson et al.), so the model routes core funding, teacher pay and bursaries <i>through teacher capacity</i> —
-      they fund the staff, retention and specialists that actually raise results. Spend a fortune and leave the workforce untouched and
-      you will, correctly, see little. The same discipline keeps high-needs funding acting on the SEND deficit (not the gap), and the
-      area missions acting regionally (not nationally). The “what moves the needle” chart and the per-lever notes below make every one
-      of these channels explicit.
-    </p>
+  <div class="pe-prose cols">
+    {#if app.narrative === 'eli5'}
+      <p>
+        How does it work? It’s like a flight simulator for schools. You change the policies, and a set of rules — based on the research —
+        works out what probably happens, year by year. Every rule comes with a “best guess” plus a range, which is why the charts show a
+        fuzzy band of uncertainty rather than one confident line.
+      </p>
+      <p>
+        The most important rule answers the big question: “why does spending loads of money barely change anything?” Because <b>money
+        doesn’t buy good results directly</b> — it only helps if it pays for <b>more and better teachers</b>. So in the model, funding
+        and pay work by hiring and keeping staff. Pour money in but leave the staffing the same and, rightly, not much happens. The same
+        goes for the special-needs budget (it fixes the <i>debt</i>, not the gap) and the local “missions” (they help their own regions).
+        The chart and per-lever notes below spell out exactly what each slider changes.
+      </p>
+    {:else}
+      <p>
+        This is a <b>system-dynamics and cohort model</b>, not an official forecast. It steps from 2025 to 2040, applying
+        research-calibrated response functions — elasticities with diminishing returns and distributed lags — to a small set of state
+        variables, mediated through a causal spine in which <b>attendance is the central hub</b>. Every parameter carries a low/central/high
+        band and a source or an explicit assumption flag; the Monte-Carlo bands propagate that uncertainty.
+      </p>
+      <p>
+        A deliberate design choice runs through the whole thing and answers the most common question — “why does pouring money in barely
+        move the outcomes?”. <b>Money does not buy attainment directly.</b> The funding→attainment elasticity is close to zero at current
+        spending (IFS, NFER, Jackson et al.), so the model routes core funding, teacher pay and bursaries <i>through teacher capacity</i> —
+        they fund the staff, retention and specialists that actually raise results. Spend a fortune and leave the workforce untouched and
+        you will, correctly, see little. The same discipline keeps high-needs funding acting on the SEND deficit (not the gap), and the
+        area missions acting regionally (not nationally). The “what moves the needle” chart and the per-lever notes below make every one
+        of these channels explicit.
+      </p>
+    {/if}
   </div>
 
   <h2 class="pe-h2">Outcomes at a glance</h2>
   {#if app.mounted}<Scorecard sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} />{/if}
 
   <h2 class="pe-h2">What moves the needle</h2>
-  <p class="sec-blurb">Each bar is how far a single lever, swung across its full range, moves the chosen KPI — the model’s sensitivity laid bare. Short bars are not bugs: many levers act on a <i>different</i> outcome (the deficit, NEET, absence) than the one selected.</p>
+  {#if app.narrative === 'eli5'}
+    <p class="sec-blurb">Each bar shows how much one slider, pushed all the way, changes the number you pick. Short bars aren’t broken — that slider probably changes a <i>different</i> thing (like the special-needs debt or youth unemployment).</p>
+  {:else}
+    <p class="sec-blurb">Each bar is how far a single lever, swung across its full range, moves the chosen KPI — the model’s sensitivity laid bare. Short bars are not bugs: many levers act on a <i>different</i> outcome (the deficit, NEET, absence) than the one selected.</p>
+  {/if}
   {#if app.mounted}<Sensitivity levers={app.levers} horizon={app.horizon} />{/if}
 
   <h2 class="pe-h2">Cost &amp; value</h2>
-  <p class="sec-blurb">The cost side, and the value (gap closed or attainment gained per £bn) of what you’ve switched on. Note that the three growth-rate levers — funding, pay, high-needs — compound year on year, so their cost is larger and later than the flat programme costs.</p>
+  {#if app.narrative === 'eli5'}
+    <p class="sec-blurb">What it costs, and what you get for the money. Heads up: funding, pay and special-needs money get more expensive <i>every year</i> they run, so they cost far more than one-off programmes.</p>
+  {:else}
+    <p class="sec-blurb">The cost side, and the value (gap closed or attainment gained per £bn) of what you’ve switched on. Note that the three growth-rate levers — funding, pay, high-needs — compound year on year, so their cost is larger and later than the flat programme costs.</p>
+  {/if}
   {#if app.mounted}<CostPanel sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} />{/if}
 
   <h2 class="pe-h2">The equations</h2>
   <Methodology />
 
   <h2 class="pe-h2">Every lever — what it does &amp; why</h2>
-  <p class="sec-blurb">All 35 levers, grouped. Each shows what it represents, what the evidence says, how the <b>model</b> treats it, and which outcomes it drives. Click a group to expand.</p>
+  {#if app.narrative === 'eli5'}
+    <p class="sec-blurb">All 35 sliders, grouped. Each one says what it is, what the research shows, how the model uses it, and what it changes. Tap a group to open it.</p>
+  {:else}
+    <p class="sec-blurb">All 35 levers, grouped. Each shows what it represents, what the evidence says, how the <b>model</b> treats it, and which outcomes it drives. Click a group to expand.</p>
+  {/if}
   <div class="lever-docs">
     {#each GROUP_ORDER as g}
       {@const meta = GROUP_META[g]}
@@ -80,7 +107,7 @@
 </div>
 
 <style>
-  .sec-blurb { margin: 0 0 12px; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.66); max-width: 84ch; }
+  .sec-blurb { margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: rgba(28,22,17,0.66); }
   .sec-blurb b { color: #1c1611; }
   .lever-docs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
   .ldoc-group { border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.28); }

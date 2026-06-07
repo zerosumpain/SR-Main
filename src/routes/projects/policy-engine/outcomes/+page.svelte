@@ -173,7 +173,7 @@
     background: rgba(74,124,124,0.1); border: 1px solid rgba(74,124,124,0.3); }
   .rgn-note b { color: #1c1611; }
   .theme { margin: 26px 0; }
-  .theme-prose { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.68); }
+  .theme-prose { margin: 0 0 14px; font-size: 15px; line-height: 1.58; color: rgba(28,22,17,0.68); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 14px; align-items: start; }
   .cell { display: flex; flex-direction: column; position: relative; }
   .expand { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
@@ -181,7 +181,7 @@
     font-size: 12px; line-height: 1; opacity: 0; transition: opacity 0.14s; padding: 0; }
   .cell:hover .expand, .expand:focus-visible { opacity: 1; }
   .expand:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .summary { margin: 6px 2px 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.66); border-left: 2px solid rgba(28,22,17,0.18); padding-left: 8px; }
+  .summary { margin: 6px 2px 0; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.66); border-left: 2px solid rgba(28,22,17,0.18); padding-left: 8px; }
   .summary.tone-good { border-left-color: #2f7d4f; }
   .summary.tone-bad { border-left-color: #b1455e; }
   @media (max-width: 760px) { .expand { opacity: 1; } }

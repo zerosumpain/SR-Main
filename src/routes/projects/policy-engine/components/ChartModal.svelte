@@ -109,7 +109,7 @@
   .m-chart { margin-bottom: 10px; }
   .m-narrative { background: rgba(28,22,17,0.045); border-left: 3px solid var(--ink, #1c1611); border-radius: 5px; padding: 9px 12px; margin-bottom: 12px; }
   .m-nlabel { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
-  .m-narrative p { margin: 3px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink, #1c1611); }
+  .m-narrative p { margin: 3px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink, #1c1611); }
   .m-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .m-act { font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 6px 12px; border-radius: 7px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.5); color: var(--ink, #1c1611); cursor: pointer; }
   .m-act:hover { background: rgba(28,22,17,0.06); }

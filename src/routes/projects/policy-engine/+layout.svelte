@@ -207,8 +207,8 @@
   :global(.pe-h1) { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 3.6vw, 36px); line-height: 1.0; letter-spacing: -0.02em; margin: 0 0 12px; color: var(--ink); }
   :global(.pe-h2) { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em; margin: 30px 0 8px; color: var(--ink); }
   /* narrative spans the full content / chart-render width (per design direction) */
-  :global(.pe-lede) { font-size: 15px; line-height: 1.6; color: rgba(28,22,17,0.74); }
-  :global(.pe-prose) { font-size: 13.5px; line-height: 1.66; color: rgba(28,22,17,0.74); }
+  :global(.pe-lede) { font-size: 17px; line-height: 1.6; color: rgba(28,22,17,0.74); }
+  :global(.pe-prose) { font-size: 15.5px; line-height: 1.62; color: rgba(28,22,17,0.74); }
   :global(.pe-prose.cols) { columns: 23em; column-gap: 44px; }
   :global(.pe-prose p) { margin: 0 0 12px; break-inside: avoid; }
   :global(.pe-prose b) { color: var(--ink); }

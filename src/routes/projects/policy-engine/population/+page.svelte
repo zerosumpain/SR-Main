@@ -93,6 +93,6 @@
   .ec-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; line-height: 1; color: var(--ink, #1c1611); }
   .ec.good .ec-num { color: #2f7d4f; } .ec.bad .ec-num { color: #b1455e; }
   .ec-lab { font-size: 11px; line-height: 1.35; color: rgba(28,22,17,0.6); }
-  .econ-caveat { margin: 6px 0 0; font-size: 11px; line-height: 1.55; color: rgba(28,22,17,0.62); max-width: 96ch; }
+  .econ-caveat { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.62); }
   .econ-caveat b { color: var(--ink, #1c1611); } .econ-caveat a { color: #2f6f97; }
 </style>

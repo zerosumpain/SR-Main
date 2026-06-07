@@ -100,7 +100,7 @@ export function chartSummary(
   const text = `In your scenario it ${moveWord} from ${u(start)} (2025) to ${u(v)} by ${horizon}${vs}. ${CAUSE[primary] ?? ''}`;
 
   // plain-English version, same figures
-  const moveEli = v > start + 1e-6 ? 'goes up' : v < start - 1e-6 ? 'comes down' : 'stays at about';
+  const moveEli = v > start + 1e-6 ? 'climbs to' : v < start - 1e-6 ? 'falls to' : 'stays at around';
   let vsEli = '';
   if (meaningful && !m.neutral) vsEli = ` — ${improved ? 'better' : 'worse'} than doing nothing by ${fmt(Math.abs(delta))}${deltaUnit}`;
   else if (meaningful && m.neutral) vsEli = ` (${delta > 0 ? '+' : ''}${fmt(delta)}${deltaUnit} vs doing nothing)`;

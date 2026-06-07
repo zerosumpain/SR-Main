@@ -69,7 +69,7 @@
 <style>
   .hero { padding: 18px 0 6px; }
   .hero-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(34px, 6.2vw, 66px); line-height: 0.96; letter-spacing: -0.03em; margin: 6px 0 16px; color: var(--ink); }
-  .hero-lede { font-size: clamp(15px, 1.5vw, 18px); line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0 0 18px; max-width: 52ch; }
+  .hero-lede { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0 0 18px; max-width: 52ch; }
   .cta-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .cta-ghost { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #2f6f97; text-decoration: none; border: none; background: none; cursor: pointer; padding: 0; border-bottom: 1px dashed currentColor; }
   .cta-ghost:hover { color: #1c4a66; }
