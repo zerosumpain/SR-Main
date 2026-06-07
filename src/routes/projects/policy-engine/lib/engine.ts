@@ -102,11 +102,16 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
 
     // ---------------- WORKFORCE ----------------
     // recruitment multiplier from pay & bursaries; net adds vs the baseline replacement
-    // (pay & bursaries act on attainment indirectly, via teacher capacity below — not a
-    //  direct attainment term — to avoid double-counting; see params.ts notes).
+    // (pay, bursaries AND school funding act on attainment INDIRECTLY, via teacher capacity below —
+    //  never a direct attainment term — to avoid double-counting; see params.ts notes).
     const payAbove = val('teacher_pay') - LEVERS_BY_ID['teacher_pay'].baseline; // %/yr
     const recMult = 1 + R(WORK.recruitPayMult) * Math.max(0, payAbove) + R(WORK.recruitBursaryMult) * depPos('bursaries');
-    const effectiveAdds = val('teachers') * recMult; // k/yr gross net-of-attrition recruitment effort
+    // Real-terms core-funding growth funds posts, TAs and retention — so money buys teacher CAPACITY
+    // (the strong evidenced channel) rather than buying attainment directly (the £→attainment elasticity
+    //  is ~0 at current spend: IFS/NFER/Jackson). This is what stops funding being pure dead-weight.
+    const fundingAbove = Math.max(0, val('school_funding') - LEVERS_BY_ID['school_funding'].baseline); // %/yr above baseline
+    const fundingRecruit = R(WORK.fundingRecruitK) * fundingAbove; // extra '000 net teachers/yr funded by real-terms growth
+    const effectiveAdds = val('teachers') * recMult + fundingRecruit; // k/yr gross net-of-attrition recruitment effort
     if (ys > 0) {
       shortfall = clamp(shortfall - (effectiveAdds - WORK.baseAttritionK), -3, 12);
     }
@@ -207,8 +212,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + R(CH.levelA8.rise) * concave(depPos('rise')) * ramp(ys, 2)
       + R(CH.levelA8.breakfast) * concave(depPos('breakfast')) * ramp(ys, 1)
       + R(CH.levelA8.reading) * concave(depPos('reading')) * ramp(ys, 2)
-      + R(CH.levelA8.eal_support) * concave(depPos('eal_support')) * ramp(ys, 2)
-      + R(CH.levelA8.school_funding) * concave(depPos('school_funding')) * ramp(ys, 3);
+      + R(CH.levelA8.eal_support) * concave(depPos('eal_support')) * ramp(ys, 2);
+    // (school_funding has NO direct A8 term — it acts via teacher capacity in the WORKFORCE block above)
     const attainment8 = clamp(BASELINE.attainment8 + teacherAttnA8 + a8Other, 30, 70);
     const grade5EM = clamp(BASELINE.grade5EM + 2.2 * (attainment8 - BASELINE.attainment8), 10, 95);
 
@@ -216,8 +221,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       R(CH.levelKS2.attendance) * concave(depPos('attendance')) * ramp(ys, 2)
       + R(CH.levelKS2.curriculum) * concave(depPos('curriculum')) * ramp(year - 2028, 4)
       + R(CH.levelKS2.reading) * concave(depPos('reading')) * ramp(ys, 2)
-      + R(CH.levelKS2.rise) * concave(depPos('rise')) * ramp(ys, 2)
-      + R(CH.levelKS2.school_funding) * concave(depPos('school_funding')) * ramp(ys, 3);
+      + R(CH.levelKS2.rise) * concave(depPos('rise')) * ramp(ys, 2);
+    // (school_funding acts via teacher capacity, not a direct KS2 term)
     const ks2RWM = clamp(BASELINE.ks2RWM + teacherAttnK2 + k2Other, 35, 95);
 
     const gldDelta =

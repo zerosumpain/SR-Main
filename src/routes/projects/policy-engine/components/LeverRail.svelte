@@ -1,13 +1,14 @@
 <script lang="ts">
   import type { LeverState } from '../lib/types';
-  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID } from '../lib/levers';
+  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID, LEVER_META, DRIVE_LABEL } from '../lib/levers';
 
   interface Props {
     levers: LeverState;
     onChange: (id: string, value: number) => void;
     onResetLever: (id: string) => void;
+    multicol?: boolean;
   }
-  let { levers, onChange, onResetLever }: Props = $props();
+  let { levers, onChange, onResetLever, multicol = false }: Props = $props();
 
   let openInfo = $state<string | null>(null);
   let collapsed = $state<Record<string, boolean>>({});
@@ -29,7 +30,7 @@
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
 </script>
 
-<div class="rail">
+<div class="rail" class:multicol>
   {#each GROUP_ORDER as g}
     {@const meta = GROUP_META[g]}
     {@const items = LEVERS.filter((l) => l.group === g)}
@@ -66,6 +67,13 @@
                 <div class="info">
                   <p class="i-blurb">{L.blurb}</p>
                   <p class="i-evidence">{L.evidence}</p>
+                  {#if LEVER_META[L.id]}
+                    <p class="i-model"><b>In the model:</b> {LEVER_META[L.id].modelNote}</p>
+                    <div class="i-drives">
+                      <span class="dl">moves:</span>
+                      {#each LEVER_META[L.id].drives as d}<span class="drv">{DRIVE_LABEL[d]}</span>{/each}
+                    </div>
+                  {/if}
                   <div class="i-meta">
                     <span class="conf conf-{L.confidence}">{confLabel[L.confidence]}</span>
                     <span class="i-ref">{L.policyRef}</span>
@@ -86,6 +94,7 @@
 
 <style>
   .rail { display: flex; flex-direction: column; gap: 8px; }
+  .rail.multicol { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
   .group { border: 1px solid rgba(28,22,17,0.1); border-radius: 7px; overflow: hidden; background: rgba(255,255,255,0.28); }
   .group-head {
     width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
@@ -143,6 +152,11 @@
   }
   .i-blurb { margin: 0 0 5px; font-size: 11.5px; line-height: 1.4; color: var(--ink, #1c1611); }
   .i-evidence { margin: 0 0 6px; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.7); }
+  .i-model { margin: 0 0 6px; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.78); }
+  .i-model b { color: var(--ink, #1c1611); }
+  .i-drives { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .dl { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.45); }
+  .drv { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #3f7d6e; background: rgba(63,125,110,0.12); border-radius: 3px; padding: 1px 5px; }
   .i-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; }
   .conf {
     font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase;

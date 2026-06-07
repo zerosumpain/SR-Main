@@ -91,7 +91,7 @@ export const LEVERS: LeverDef[] = [
   },
   {
     id: 'high_needs', group: 'send', label: 'High-needs funding uplift', unit: '%/yr',
-    min: -2, max: 10, step: 0.5, baseline: 2, policy: 4, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
+    min: -2, max: 6, step: 0.5, baseline: 2, policy: 4, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
     blurb: 'Annual real-terms growth in the high-needs block that funds SEND provision.',
     evidence: 'High-needs spend ~£12bn (2025-26); the accumulated DSG deficit (>£3bn) is forecast to exceed £8bn by 2028 without reform — when the statutory override ends (March 2028), risking mass council insolvency.',
     source: 'IFS Green Budget 2025 ch.5; County Councils Network', url: 'https://ifs.org.uk/publications/annual-report-education-spending-england-2025-26',
@@ -108,7 +108,7 @@ export const LEVERS: LeverDef[] = [
   },
   {
     id: 'teacher_pay', group: 'workforce', label: 'Teacher pay (real growth/yr)', unit: '%/yr',
-    min: -2, max: 5, step: 0.25, baseline: 0.5, policy: 1.0, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
+    min: -2, max: 3, step: 0.25, baseline: 0.5, policy: 1.0, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
     blurb: 'Real-terms pay growth above the baseline settlement — the lever on recruitment and retention.',
     evidence: 'Experienced-teacher real pay is ~9% below 2010 and 15pp behind average earnings growth; relative pay vs the graduate labour market drives entry and exit (Dolton–van der Klaauw).',
     source: 'NFER 2025; STRB', url: 'https://www.nfer.ac.uk/publications/teacher-labour-market-in-england-annual-report-2025/',
@@ -290,7 +290,7 @@ export const LEVERS: LeverDef[] = [
   // ----------------------------- MACRO -----------------------------
   {
     id: 'school_funding', group: 'macro', label: 'Core schools funding (real/yr)', unit: '%/yr',
-    min: -3, max: 4, step: 0.25, baseline: 0.4, policy: 0.4, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
+    min: -3, max: 2.5, step: 0.25, baseline: 0.4, policy: 0.4, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
     blurb: 'Real-terms growth in core per-pupil schools funding.',
     evidence: 'Per-pupil funding is ≈ its 2010 real-terms level, but mainstream funding has been squeezed by SEND cost growth. The funding→attainment elasticity is weak/near-zero at current spending — money is modelled as acting through teacher inputs, not directly.',
     source: 'IFS Spending Review 2025; Jackson et al.', url: 'https://ifs.org.uk/publications/annual-report-education-spending-england-2025-26',
@@ -299,6 +299,56 @@ export const LEVERS: LeverDef[] = [
 ];
 
 export const LEVERS_BY_ID: Record<string, LeverDef> = Object.fromEntries(LEVERS.map((l) => [l.id, l]));
+
+// ---------------------------------------------------------------------------
+// Per-lever model metadata: which outcomes a lever DRIVES (so the UI can show it isn't inert
+// just because it doesn't move the headline gap), and a one-line "why it behaves this way in the
+// model" note. Complements each lever's blurb (what it is) and evidence (what the research says).
+// ---------------------------------------------------------------------------
+export type DriveTag = 'gap' | 'attainment' | 'absence' | 'neet' | 'poverty' | 'send' | 'capacity' | 'cost';
+export const DRIVE_LABEL: Record<DriveTag, string> = {
+  gap: 'Disadvantage gap', attainment: 'Attainment', absence: 'Absence', neet: 'NEET',
+  poverty: 'Child poverty', send: 'SEND system', capacity: 'Teacher capacity', cost: 'Cost only',
+};
+export interface LeverMeta { drives: DriveTag[]; modelNote: string; }
+const AGEID_NOTE = 'Part of the SEND identification-by-age costing scale — front-loading to earlier ages is cheaper per child and mildly improves SEND outcomes.';
+export const LEVER_META: Record<string, LeverMeta> = {
+  ey_quality:     { drives: ['gap', 'attainment'], modelNote: 'Acts fast on the age-5 gap but reaches GCSE only after the cohort ages (~11-year lag) with partial fade-out — a large but late KS4 effect.' },
+  ey_access:      { drives: ['gap', 'attainment'], modelNote: 'A quantity lever: funds the +3-month access effect, gated by how many disadvantaged under-5s actually take up the offer; slow KS4 payoff via the cohort lag.' },
+  eypp:           { drives: ['gap', 'attainment'], modelNote: 'Per-child early disadvantage funding; small near-term, compounding into the age-5 and (lagged) KS4 gap.' },
+  pupil_premium:  { drives: ['gap'], modelNote: 'Modelled as a weak, quality-moderated offset — there is NO robust £→gap elasticity, so large spend moves the gap only a little (wide uncertainty).' },
+  fsm:            { drives: ['poverty', 'gap'], modelNote: 'Lifts children out of poverty and widens the Pupil-Premium net; the gap effect is small and indirect (via poverty and attendance).' },
+  breakfast:      { drives: ['absence', 'attainment', 'gap'], modelNote: 'Acts on attendance and KS1 attainment; the KS2 effect is null after re-analysis, so the model keeps it modest.' },
+  poverty_action: { drives: ['poverty', 'gap'], modelNote: 'Exogenous to schools but a powerful upstream driver — income acts on the gap mainly through the home-learning environment and attendance, so it is lagged.' },
+  inclusion_fund: { drives: ['send'], modelNote: 'Bends EHCP demand and lifts SEND attainment / cuts tribunals. Ring-fenced, so it is NOT charged to the high-needs deficit; little direct effect on the headline gap.' },
+  send_early:     { drives: ['send'], modelNote: 'Identification-vs-prevention tension: raises plan demand short-run before reducing it long-run.' },
+  ehcp_reform:    { drives: ['send'], modelNote: 'Double-edged — cuts the deficit by diverting plans from 2030, but WITHOUT matching inclusion it lowers SEND attainment and raises tribunals.' },
+  high_needs:     { drives: ['send'], modelNote: 'Acts on the SEND high-needs DEFICIT, not the headline gap/attainment — it decides whether the March-2028 funding cliff is averted.' },
+  teachers:       { drives: ['capacity', 'attainment', 'gap'], modelNote: 'The strongest, best-evidenced attainment channel; the effect caps once the system is fully staffed.' },
+  teacher_pay:    { drives: ['capacity', 'attainment'], modelNote: 'Acts INDIRECTLY via recruitment & retention → teacher capacity → attainment; a blunt, expensive route that caps at full staffing.' },
+  bursaries:      { drives: ['capacity', 'attainment'], modelNote: 'Shortage-subject recruitment → capacity; the most cost-effective workforce lever per £.' },
+  curriculum:     { drives: ['attainment'], modelNote: 'Un-evaluated and gated to first teaching in 2028, so its (uncertain, possibly ±) effect arrives late in the window.' },
+  reading:        { drives: ['attainment', 'gap'], modelNote: 'A reliable, fast literacy-CPD effect — acts now, unlike the 2028 curriculum refresh.' },
+  rise:           { drives: ['attainment', 'gap'], modelNote: 'Targets stuck (disadvantage-skewed) schools; uncertain at scale.' },
+  attendance:     { drives: ['absence', 'gap', 'attainment'], modelNote: 'The single highest-leverage gap lever — EPI attributes the entire post-2019 widening to disadvantaged absence, which this cuts directly.' },
+  post16_skills:  { drives: ['neet'], modelNote: 'Acts on the post-16 destination boundary (NEET), not school-age attainment.' },
+  mental_health:  { drives: ['neet', 'absence'], modelNote: 'Cuts NEET and the rising tail of severe absence — the Milburn "generational fault line".' },
+  aid_ey:         { drives: ['send', 'cost'], modelNote: AGEID_NOTE },
+  aid_primary:    { drives: ['send', 'cost'], modelNote: AGEID_NOTE },
+  aid_secondary:  { drives: ['send', 'cost'], modelNote: AGEID_NOTE },
+  aid_post16:     { drives: ['send', 'cost'], modelNote: AGEID_NOTE },
+  send_pipeline:  { drives: ['send', 'absence'], modelNote: 'Specialist capacity (EP/SALT/OT) — the clinical throttle that decides whether identified SEND is met (better attendance, fewer tribunals) or escalates.' },
+  camhs:          { drives: ['neet', 'absence', 'send'], modelNote: 'NHS mental-health access gates how much unmet need turns into chronic absence and SEMH-driven EHCP demand; routed via absence, not as a new outcome.' },
+  eal_support:    { drives: ['attainment'], modelNote: 'A direct attainment channel that bypasses absence (language & curriculum access).' },
+  care_support:   { drives: ['neet', 'send'], modelNote: 'Targets a high-risk stratum (looked-after / kinship) largely invisible to FSM flags — mainly cuts NEET and lifts vulnerable-pupil attainment.' },
+  behaviour_support: { drives: ['neet', 'absence'], modelNote: 'Cuts the exclusion → alternative-provision → NEET pipeline.' },
+  place_investment: { drives: ['gap', 'neet'], modelNote: 'Closes the cold-spot residual two equally-poor areas don’t share; the Regions page concentrates it in the worst regions (small, slow — weak evidence).' },
+  tutoring:       { drives: ['gap'], modelNote: 'Disadvantage-targeted catch-up — narrows the gap rather than just lifting the level.' },
+  housing_instability: { drives: ['absence', 'gap'], modelNote: 'An EXOGENOUS context slider (higher = worse), acting mainly through disadvantaged absence — not an education-budget lever.' },
+  mission_ne:     { drives: ['gap'], modelNote: 'Acts mostly REGIONALLY (see the Regions page) — closes the North East’s penalty; the national effect is small because it touches ~4.6% of pupils.' },
+  mission_coastal:{ drives: ['gap'], modelNote: 'Acts mostly REGIONALLY — closes the coastal cross-cut penalty; small national effect.' },
+  school_funding: { drives: ['capacity', 'attainment'], modelNote: 'Money acts THROUGH teacher capacity, never directly (the £→attainment elasticity is ~0), so funding buys staff & retention which buys attainment — a blunt, expensive route that caps at full staffing.' },
+};
 
 export const GROUP_META: Record<string, { label: string; tag: string; colour: string }> = {
   early:        { label: 'Early years',          tag: 'EY',  colour: '#3f7d6e' },

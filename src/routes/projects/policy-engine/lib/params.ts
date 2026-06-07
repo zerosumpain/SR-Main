@@ -174,7 +174,7 @@ export const CH: ChannelParams = {
     breakfast:     band(0.0, 0.2, 0.5),   // KS1 attainment (low security, KS2 null) [EEF revised]
     reading:       band(0.0, 0.3, 0.8),   // reading/oracy CPD — acts now, not gated to 2028 [EEF +2-5mo]
     eal_support:   band(0.0, 0.4, 0.9),   // EAL/new-arrival catch-up — direct attainment, bypasses absence [EPI 2025 EAL]
-    school_funding:band(0.0, 0.15, 0.5),  // weak; via TAs/resources only [Jackson et al.; near-zero at current spend]
+    // school_funding has NO direct term — it acts via teacher capacity (WORK.fundingRecruitK) [IFS/NFER/Jackson: £→attainment ≈ 0]
   },
   levelKS2: {
     teachers:      band(0.5, 1.5, 3.0),   // pp at expected standard
@@ -182,7 +182,7 @@ export const CH: ChannelParams = {
     curriculum:    band(-0.5, 0.6, 2.0),  // 2028 Francis refresh only (reading split out below)
     reading:       band(0.3, 1.2, 2.5),   // Reading Ambition / phonics 90% / Year-8 reading test [EEF +2-5mo]
     rise:          band(0.0, 0.5, 1.2),
-    school_funding:band(0.0, 0.3, 0.9),
+    // school_funding acts via teacher capacity, not directly
   },
   levelGLD: {
     ey_quality:    band(1.0, 3.5, 6.5),   // GLD 68→75 target needs ~7pp [Best Start; EEF]
@@ -303,6 +303,7 @@ export const WORK = {
   baseAttritionK: 1.0,                      // '000/yr net loss absent new recruitment effort [NFER 9.6% leaving]
   recruitPayMult: band(0.0, 0.2, 0.5),      // extra k/yr recruitment per +1%/yr real pay [NFER directional]
   recruitBursaryMult: band(0.0, 0.4, 0.9),  // bursary contribution to recruitment [NFER +£5k→+15%]
+  fundingRecruitK: band(0.0, 0.25, 0.5),    // extra '000 net teachers/yr per +1%/yr real core funding (posts/TAs/retention) [ASSUMPTION — the funding→capacity channel]
   shortfallToCapacity: 13.0,                // shortfall ('000) mapping to a full unit of teacher-capacity index
 };
 
