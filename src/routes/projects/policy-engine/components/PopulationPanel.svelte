@@ -14,16 +14,28 @@
   import { BASE_YEAR, POP } from '../lib/params';
   import { fmtCompact, fmtNum } from '../lib/format';
 
-  interface Props { sim: YearResult[]; baseSim: YearResult[]; horizon: number; scenarioName: string; }
-  let { sim, baseSim, horizon, scenarioName }: Props = $props();
+  interface Props {
+    sim: YearResult[];
+    baseSim: YearResult[];
+    horizon: number;
+    scenarioName: string;
+    /** When comparing, the funnel & ledger respond to Scenario B instead of the status-quo baseline. */
+    compare?: { sim: YearResult[]; name: string } | null;
+  }
+  let { sim, baseSim, horizon, scenarioName, compare = null }: Props = $props();
+
+  // The comparator: Scenario B when a comparison is pinned, otherwise the do-nothing baseline.
+  const cmpSim = $derived(compare ? compare.sim : baseSim);
+  const cmpName = $derived(compare ? compare.name : 'status quo');
+  const isCompare = $derived(!!compare);
 
   const row = (s: YearResult[], yr: number) => s.find((y) => y.year === yr) ?? s[s.length - 1];
 
-  const pipeline = $derived(cohortPipeline(row(sim, horizon), row(baseSim, horizon)));
-  const headline = $derived(cohortHeadline(row(sim, horizon), row(baseSim, horizon)));
-  const ledger = $derived(peopleLedger(sim, baseSim, horizon));
-  const py = $derived(personYears(sim, baseSim, horizon));
-  const stocks = $derived(populationStocks(sim, baseSim));
+  const pipeline = $derived(cohortPipeline(row(sim, horizon), row(cmpSim, horizon)));
+  const headline = $derived(cohortHeadline(row(sim, horizon), row(cmpSim, horizon)));
+  const ledger = $derived(peopleLedger(sim, cmpSim, horizon));
+  const py = $derived(personYears(sim, cmpSim, horizon));
+  const stocks = $derived(populationStocks(sim, cmpSim));
 
   let ledgerMode = $state<'now' | 'cumulative'>('now');
 
@@ -53,11 +65,11 @@
 
   // --- stocks-over-time charts (reused OutcomeChart) ---
   const years = $derived(sim.map((y) => y.year));
-  const C_YOU = '#9a3b2e', C_BASE = 'rgba(28,22,17,0.34)';
+  const C_YOU = '#9a3b2e', C_BASE = 'rgba(28,22,17,0.34)', C_B = '#3a5fa8';
   function stockSeries(scn: number[], base: number[]): ChartSeries[] {
     return [
-      { label: 'Your scenario', color: C_YOU, values: scn, emphasis: true },
-      { label: 'Status quo', color: C_BASE, values: base, dashed: true },
+      { label: isCompare ? 'Scenario A' : 'Your scenario', color: C_YOU, values: scn, emphasis: true },
+      { label: isCompare ? 'Scenario B' : 'Status quo', color: isCompare ? C_B : C_BASE, values: base, dashed: true },
     ];
   }
 
@@ -65,11 +77,17 @@
 </script>
 
 <div class="pop">
-  <div class="banner">
-    <span class="b-tag">POPULATION SIMULATION</span>
+  <div class="banner" class:cmp={isCompare}>
+    <span class="b-tag">{isCompare ? 'POPULATION · A vs B' : 'POPULATION SIMULATION'}</span>
     <span class="b-text">
-      The human scale of <b>{scenarioName}</b> vs the status-quo (do-nothing) path, at the <b>{horizon}</b> horizon.
-      Every rate is multiplied by its own England population base; numbers are <b>headcounts of real children &amp; young people</b>.
+      {#if isCompare}
+        The human scale of <b>{scenarioName}</b> (A) vs <b>{cmpName}</b> (B), at the <b>{horizon}</b> horizon — every
+        number here compares the two pinned scenarios. Rates are multiplied by their own England population base;
+        numbers are <b>headcounts of real children &amp; young people</b>.
+      {:else}
+        The human scale of <b>{scenarioName}</b> vs the status-quo (do-nothing) path, at the <b>{horizon}</b> horizon.
+        Every rate is multiplied by its own England population base; numbers are <b>headcounts of real children &amp; young people</b>.
+      {/if}
     </span>
   </div>
 
@@ -85,7 +103,7 @@
   </div>
 
   <!-- the centerpiece funnel -->
-  <CohortFunnel {pipeline} {horizon} />
+  <CohortFunnel {pipeline} {horizon} comparatorName={cmpName} />
 
   <!-- impact ledger -->
   <section class="block">
@@ -111,11 +129,11 @@
           <div class="l-delta">
             {#if ledgerMode === 'now'}
               {#if r.neutral}
-                <span class="d neutral">{signed(r.rawDelta)} plans <small>vs status quo · neutral</small></span>
+                <span class="d neutral">{signed(r.rawDelta)} plans <small>vs {cmpName} · neutral</small></span>
               {:else if Math.abs(r.rawDelta) < 1}
-                <span class="d flat">= status quo</span>
+                <span class="d flat">= {cmpName}</span>
               {:else}
-                <span class="d {r.goodDelta > 0 ? 'good' : 'bad'}">{human(Math.abs(r.rawDelta))} {rowVerb(r)} <small>vs status quo</small></span>
+                <span class="d {r.goodDelta > 0 ? 'good' : 'bad'}">{human(Math.abs(r.rawDelta))} {rowVerb(r)} <small>vs {cmpName}</small></span>
               {/if}
             {:else if r.isStock}
               <span class="d barred" title="A stock is a point-in-time count — the same children recur each year, so summing across years would double-count them. See child-years averted below.">— stock · can’t sum</span>
@@ -136,7 +154,7 @@
         <div class="py {p.childYears >= 0 ? 'good' : 'bad'}">
           <span class="py-num">{signed(p.childYears)}</span>
           <span class="py-unit">{p.unitNoun}</span>
-          <span class="py-lab">of {p.label} {p.childYears >= 0 ? 'averted' : 'added'} vs status quo</span>
+          <span class="py-lab">of {p.label} {p.childYears >= 0 ? 'averted' : 'added'} vs {cmpName}</span>
         </div>
       {/each}
     </div>
@@ -185,6 +203,8 @@
   .pop { display: flex; flex-direction: column; gap: 14px; }
   .banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 8px 12px; border-radius: 8px;
     background: rgba(63,125,110,0.08); border: 1px solid rgba(63,125,110,0.25); }
+  .banner.cmp { background: rgba(58,95,168,0.08); border-color: rgba(58,95,168,0.3); }
+  .banner.cmp .b-tag { color: #3a5fa8; }
   .b-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.12em; color: #3f7d6e; }
   .b-text { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.72); flex: 1; min-width: 240px; }
   .b-text b { color: #1c1611; }

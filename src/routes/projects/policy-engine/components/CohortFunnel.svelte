@@ -11,8 +11,10 @@
   import { COHORT_N, DIS_COHORT_N } from '../lib/population';
   import { fmtCompact } from '../lib/format';
 
-  interface Props { pipeline: GateState[]; horizon: number; }
-  let { pipeline, horizon }: Props = $props();
+  interface Props { pipeline: GateState[]; horizon: number; comparatorName?: string; }
+  let { pipeline, horizon, comparatorName = 'status quo' }: Props = $props();
+
+  const comparing = $derived(comparatorName !== 'status quo');
 
   const H = 392;
   const padT = 30, padB = 58, padL = 14, padR = 14;
@@ -88,8 +90,8 @@
       <!-- disadvantaged cleared -->
       <rect class="seg" x={ge.x - bw / 2} y={ge.dT} width={bw} height={Math.max(0, baselineY - ge.dT)} fill={C_DIS} opacity="0.92" />
 
-      <!-- status-quo high-water line -->
-      <line x1={ge.x - bw / 2 - 5} x2={ge.x + bw / 2 + 5} y1={ge.ghostY} y2={ge.ghostY} class="ghost" />
+      <!-- comparator high-water line (status quo, or Scenario B when comparing) -->
+      <line x1={ge.x - bw / 2 - 5} x2={ge.x + bw / 2 + 5} y1={ge.ghostY} y2={ge.ghostY} class="ghost" class:cmp={comparing} />
 
       <!-- scenario vs status-quo delta -->
       {#if sig(g.delta)}
@@ -124,7 +126,7 @@
       <span class="lg"><i style="background:{C_DIS}"></i>Disadvantaged, cleared</span>
       <span class="lg"><i style="background:{C_ADV}"></i>Other pupils, cleared</span>
       <span class="lg"><i style="background:rgba(28,22,17,0.18)"></i>Below the standard</span>
-      <span class="lg"><i class="dash"></i>Status quo (do-nothing) high-water</span>
+      <span class="lg"><i class="dash" class:cmp={comparing}></i>{comparing ? comparatorName : 'Status quo (do-nothing)'} high-water</span>
     </div>
     <p class="note">
       One <b>synthetic cohort</b> of {COHORT_N.toLocaleString()} children ({DIS_COHORT_N.toLocaleString()} disadvantaged) run through
@@ -141,6 +143,7 @@
   .seg { transition: y 0.28s ease, height 0.28s ease; }
   @media (prefers-reduced-motion: reduce) { .seg { transition: none; } }
   .ghost { stroke: rgba(28,22,17,0.55); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  .ghost.cmp { stroke: #3a5fa8; stroke-width: 1.4; }
   .divider { stroke: rgba(28,22,17,0.22); stroke-width: 1; stroke-dasharray: 2 3; }
   .dest-top { stroke: #566a8c; stroke-width: 1.4; stroke-dasharray: 4 3; }
   .g-label { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12px; fill: #1c1611; }
@@ -157,6 +160,7 @@
   .lg { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.7); }
   .lg i { width: 11px; height: 8px; border-radius: 2px; display: inline-block; }
   .lg i.dash { width: 14px; height: 0; border-top: 1.4px dashed rgba(28,22,17,0.6); border-radius: 0; }
+  .lg i.dash.cmp { border-top-color: #3a5fa8; }
   .note { margin: 6px 0 0; font-size: 10.5px; line-height: 1.5; color: rgba(28,22,17,0.62); }
   .note b { color: #1c1611; }
   .fn { color: rgba(28,22,17,0.5); font-size: 10px; }

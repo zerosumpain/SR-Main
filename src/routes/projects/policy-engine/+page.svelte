@@ -534,7 +534,8 @@
           {/each}
         </div>
       {:else if tab === 'population'}
-        <PopulationPanel sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
+        <PopulationPanel sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName}
+                         compare={compareB && simB ? { sim: simB.years, name: compareB.name } : null} />
       {:else if tab === 'scorecard'}
         <Scorecard sim={sim.years} baseSim={baseSim.years} {horizon} />
       {:else if tab === 'cost'}
