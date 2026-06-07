@@ -4,9 +4,11 @@
   import Scorecard from '../components/Scorecard.svelte';
   import CostPanel from '../components/CostPanel.svelte';
   import Sensitivity from '../components/Sensitivity.svelte';
-  import { LEVERS, GROUP_META, GROUP_ORDER, LEVER_META, DRIVE_LABEL } from '../lib/levers';
+  import { LEVERS, GROUP_META, GROUP_ORDER, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '../lib/levers';
 
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
+  const lname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);
+  const gname = (g: string) => (app.narrative === 'eli5' ? GROUP_META[g].eli5 : GROUP_META[g].label);
   let openGroup = $state<string | null>('macro'); // start with the funding group open (the one people ask about)
 </script>
 
@@ -82,14 +84,14 @@
       {@const items = LEVERS.filter((l) => l.group === g)}
       <section class="ldoc-group">
         <button class="ldoc-head" onclick={() => (openGroup = openGroup === g ? null : g)} style="--gc:{meta.colour}">
-          <span class="g-tag">{meta.tag}</span><span class="g-label">{meta.label}</span><span class="g-count">{items.length}</span>
+          <span class="g-tag">{meta.tag}</span><span class="g-label">{gname(g)}</span><span class="g-count">{items.length}</span>
           <span class="g-chev" class:open={openGroup === g}>▾</span>
         </button>
         {#if openGroup === g}
           <div class="ldoc-cards">
             {#each items as L (L.id)}
               <div class="ldoc">
-                <div class="ld-top"><span class="ld-name">{L.label}</span><span class="conf conf-{L.confidence}">{confLabel[L.confidence]}</span></div>
+                <div class="ld-top"><span class="ld-name">{lname(L.id, L.label)}</span><span class="conf conf-{L.confidence}">{confLabel[L.confidence]}</span></div>
                 <p class="ld-blurb">{L.blurb}</p>
                 <p class="ld-ev">{L.evidence}</p>
                 {#if LEVER_META[L.id]}<p class="ld-model"><b>In the model:</b> {LEVER_META[L.id].modelNote}</p>

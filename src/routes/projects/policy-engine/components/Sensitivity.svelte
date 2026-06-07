@@ -1,9 +1,12 @@
 <script lang="ts">
   import type { LeverState } from '../lib/types';
   import { runSensitivity, type McKey, MC_KEYS } from '../lib/montecarlo';
-  import { OUTCOMES_BY_ID } from '../lib/outcomes';
-  import { LEVERS_BY_ID, GROUP_META } from '../lib/levers';
+  import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
+  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '../lib/levers';
   import { fmtNum } from '../lib/format';
+  import { app } from '../lib/appState.svelte';
+  const lname = (id: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? LEVERS_BY_ID[id].label : LEVERS_BY_ID[id].label);
+  const oname = (id: string, label: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? label : label);
 
   interface Props { levers: LeverState; horizon: number; }
   let { levers, horizon }: Props = $props();
@@ -32,7 +35,7 @@
 <div class="sens">
   <div class="sens-head">
     <p class="sens-note">
-      Tornado: how far each lever can move <b>{meta.label}</b> in {horizon}, swung individually from
+      Tornado: how far each lever can move <b>{oname(kpi, meta.label)}</b> in {horizon}, swung individually from
       its minimum to its maximum (all other levers held at your current settings). The widest bars are
       your highest-leverage policies.
     </p>
@@ -50,7 +53,7 @@
       {@const a = x(Math.min(b.low, b.high))}
       {@const w = Math.abs(x(b.high) - x(b.low))}
       <div class="bar-row">
-        <span class="bl">{LEVERS_BY_ID[b.leverId].label}</span>
+        <span class="bl">{lname(b.leverId)}</span>
         <div class="track">
           <span class="baseline-tick" style="left:{x(b.baseline)}%"></span>
           <span class="bar" style="left:{a}%; width:{Math.max(0.8, w)}%; background:{gc}"></span>

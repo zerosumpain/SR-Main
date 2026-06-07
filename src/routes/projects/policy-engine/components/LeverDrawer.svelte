@@ -4,8 +4,9 @@
   import AgeIdentification from './AgeIdentification.svelte';
   import ScenarioBar from './ScenarioBar.svelte';
   import SavedScenarios from './SavedScenarios.svelte';
-  import { LEVERS, policyLevers } from '../lib/levers';
+  import { LEVERS, policyLevers, LEVER_ELI5_NAME } from '../lib/levers';
   import { downloadJSON } from '../lib/scenarios';
+  const rname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);
 
   let tipOpen = $state(false);
   let importErr = $state<string | null>(null);
@@ -59,7 +60,7 @@
           {#if tipOpen}
             <div class="opt-tip">
               {#each app.optimizeResult.breakdown as r (r.id)}
-                <span class="tip-row"><i style="background:{r.colour}"></i><span class="tl">{r.label}</span><b>{r.display}</b><em>£{r.costBn.toFixed(2)}bn</em></span>
+                <span class="tip-row"><i style="background:{r.colour}"></i><span class="tl">{rname(r.id, r.label)}</span><b>{r.display}</b><em>£{r.costBn.toFixed(2)}bn</em></span>
               {/each}
             </div>
           {/if}

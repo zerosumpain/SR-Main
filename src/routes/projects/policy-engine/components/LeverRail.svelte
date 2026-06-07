@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { LeverState } from '../lib/types';
-  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID, LEVER_META, DRIVE_LABEL } from '../lib/levers';
+  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '../lib/levers';
+  import { app } from '../lib/appState.svelte';
+  const lname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);
+  const gname = (g: string) => (app.narrative === 'eli5' ? GROUP_META[g].eli5 : GROUP_META[g].label);
 
   interface Props {
     levers: LeverState;
@@ -37,7 +40,7 @@
     <section class="group">
       <button class="group-head" onclick={() => (collapsed[g] = !collapsed[g])} style="--gc:{meta.colour}">
         <span class="g-tag">{meta.tag}</span>
-        <span class="g-label">{meta.label}</span>
+        <span class="g-label">{gname(g)}</span>
         <span class="g-count">{items.length}</span>
         <span class="g-chev" class:open={!collapsed[g]}>▾</span>
       </button>
@@ -48,7 +51,7 @@
             {@const changed = (levers[L.id] ?? L.baseline) !== L.baseline}
             <div class="lever">
               <div class="lever-top">
-                <span class="l-label">{L.label}</span>
+                <span class="l-label">{lname(L.id, L.label)}</span>
                 <span class="l-val" class:changed>{fmtVal(L.id)}</span>
                 <button class="l-info" class:active={openInfo === L.id}
                         onclick={() => (openInfo = openInfo === L.id ? null : L.id)}

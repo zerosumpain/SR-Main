@@ -350,17 +350,32 @@ export const LEVER_META: Record<string, LeverMeta> = {
   school_funding: { drives: ['capacity', 'attainment'], modelNote: 'Money acts THROUGH teacher capacity, never directly (the £→attainment elasticity is ~0), so funding buys staff & retention which buys attainment — a blunt, expensive route that caps at full staffing.' },
 };
 
-export const GROUP_META: Record<string, { label: string; tag: string; colour: string }> = {
-  early:        { label: 'Early years',          tag: 'EY',  colour: '#3f7d6e' },
-  disadvantage: { label: 'Disadvantage & poverty', tag: 'DIS', colour: '#b4632e' },
-  send:         { label: 'SEND & EHCPs',          tag: 'SEN', colour: '#7a5aa6' },
-  workforce:    { label: 'Teacher workforce',     tag: 'WKF', colour: '#2f6f97' },
-  standards:    { label: 'Curriculum & standards', tag: 'STD', colour: '#9a7b1f' },
-  attendance:   { label: 'Attendance',            tag: 'ATT', colour: '#b1455e' },
-  post16:       { label: 'Post-16, skills & wellbeing', tag: 'P16', colour: '#566a8c' },
-  identification: { label: 'SEND identification by age', tag: 'ID', colour: '#7a5aa6' },
-  indirect:     { label: 'Wider determinants & services', tag: 'WDR', colour: '#4a7c7c' },
-  macro:        { label: 'School funding',         tag: 'FND', colour: '#5a6b3a' },
+export const GROUP_META: Record<string, { label: string; eli5: string; tag: string; colour: string }> = {
+  early:        { label: 'Early years',          eli5: 'Under-5s',                 tag: 'EY',  colour: '#3f7d6e' },
+  disadvantage: { label: 'Disadvantage & poverty', eli5: 'Poverty & poorer pupils', tag: 'DIS', colour: '#b4632e' },
+  send:         { label: 'SEND & EHCPs',          eli5: 'Special needs',            tag: 'SEN', colour: '#7a5aa6' },
+  workforce:    { label: 'Teacher workforce',     eli5: 'Teachers',                 tag: 'WKF', colour: '#2f6f97' },
+  standards:    { label: 'Curriculum & standards', eli5: 'Lessons & standards',     tag: 'STD', colour: '#9a7b1f' },
+  attendance:   { label: 'Attendance',            eli5: 'Going to school',          tag: 'ATT', colour: '#b1455e' },
+  post16:       { label: 'Post-16, skills & wellbeing', eli5: 'After-16 & wellbeing', tag: 'P16', colour: '#566a8c' },
+  identification: { label: 'SEND identification by age', eli5: 'Spotting special needs by age', tag: 'ID', colour: '#7a5aa6' },
+  indirect:     { label: 'Wider determinants & services', eli5: 'Other services that help', tag: 'WDR', colour: '#4a7c7c' },
+  macro:        { label: 'School funding',         eli5: 'School money',             tag: 'FND', colour: '#5a6b3a' },
+};
+
+/** Plain-English ("ELI5") lever names. */
+export const LEVER_ELI5_NAME: Record<string, string> = {
+  ey_quality: 'Better nurseries & early education', ey_access: 'Getting poorer toddlers into nursery', eypp: 'Extra money for poorer under-5s',
+  pupil_premium: 'Extra money per poorer pupil', fsm: 'Free school meals', breakfast: 'Free breakfast clubs', poverty_action: 'Tackling child poverty',
+  inclusion_fund: 'Special-needs help in normal schools', send_early: 'Spotting special needs early', ehcp_reform: 'Changing special-needs plans', high_needs: 'Special-needs budget growth',
+  teachers: 'More teachers', teacher_pay: 'Teacher pay rises', bursaries: 'Cash to train scarce-subject teachers',
+  curriculum: 'New curriculum & exams', reading: 'Reading & speaking push', rise: 'Help for struggling schools',
+  attendance: 'Attendance mentors', post16_skills: 'Skills & jobs for school-leavers', mental_health: 'Youth mental-health support',
+  aid_ey: 'Under-5s (0–4)', aid_primary: 'Primary (5–10)', aid_secondary: 'Secondary (11–15)', aid_post16: 'After 16 (16–25)',
+  send_pipeline: 'Special-needs specialists (psychologists, therapists)', camhs: 'NHS mental-health for children', eal_support: 'Help for children learning English',
+  care_support: 'Help for children in care', behaviour_support: 'Behaviour support & fewer exclusions', place_investment: 'Investment in left-behind areas',
+  tutoring: 'Catch-up tutoring', housing_instability: 'Bad / unstable housing', mission_ne: 'Mission North East', mission_coastal: 'Mission Coastal',
+  school_funding: 'Overall school funding',
 };
 
 // 'identification' is deliberately excluded — it is rendered by its own AgeIdentification panel.

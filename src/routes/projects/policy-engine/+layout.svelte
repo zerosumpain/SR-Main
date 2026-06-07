@@ -192,10 +192,16 @@
   .side { position: sticky; top: var(--topH, 0px); align-self: start; height: calc(100vh - var(--topH, 0px));
     border-right: 1px solid rgba(28,22,17,0.12); background: rgba(241,234,214,0.5); overflow: hidden; }
   .side-scrim { display: none; }
-  .spine { width: 46px; height: 100%; background: rgba(28,22,17,0.03); border: none; border-right: 1px solid rgba(28,22,17,0.08); cursor: pointer; padding: 0; }
-  .spine:hover { background: rgba(28,22,17,0.07); }
+  .spine { width: 46px; height: 100%; background: rgba(63,125,110,0.06); border: none; border-right: 1px solid rgba(63,125,110,0.2); cursor: pointer; padding: 0;
+    animation: spineGlow 2.6s ease-in-out infinite; }
+  .spine:hover { background: rgba(63,125,110,0.14); animation: none; box-shadow: inset -2px 0 0 #3f7d6e; }
+  @keyframes spineGlow {
+    0%, 100% { box-shadow: inset -2px 0 0 rgba(63,125,110,0.15), 3px 0 10px -5px rgba(63,125,110,0); }
+    50% { box-shadow: inset -2px 0 0 rgba(63,125,110,0.65), 3px 0 16px -3px rgba(63,125,110,0.4); }
+  }
+  @media (prefers-reduced-motion: reduce) { .spine { animation: none; box-shadow: inset -2px 0 0 rgba(63,125,110,0.5); } }
   .spine-txt { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 14px; font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.6); white-space: nowrap; }
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5f5f; font-weight: 600; white-space: nowrap; }
   .content { min-width: 0; }
   @media (max-width: 900px) {
     /* on narrow screens the sidebar overlays (there's no room to dock) */

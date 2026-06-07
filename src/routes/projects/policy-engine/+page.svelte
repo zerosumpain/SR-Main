@@ -12,10 +12,11 @@
     <span class="pe-eyebrow">England schools · 2025–2040</span>
     <h1 class="hero-h1">Could England close its disadvantage gap?</h1>
     <p class="hero-lede">
-      A disadvantaged sixteen-year-old in England leaves school roughly <b>nineteen months of learning</b> behind their peers — a gap
-      that has stopped closing and, since the pandemic, begun to widen. This is a working model of the whole system: move the policy
-      levers a government actually controls, and watch the gap, attainment, the SEND funding cliff and youth unemployment respond,
-      year by year, to 2040.
+      The disadvantage gap is the headline — a poorer sixteen-year-old leaves school about <b>nineteen months of learning</b> behind
+      their classmates, and that gap has stopped closing. But it’s only one thread. This is a working model of the <b>whole school
+      system</b>: move the 35 policies a government actually controls and watch the gap, GCSE results, the <b>SEND funding cliff</b>,
+      school absence, child poverty and <b>youth unemployment</b> respond together — year by year to 2040, nationally <b>and broken down
+      by region</b>, and translated into real numbers of children.
     </p>
     <div class="cta-row">
       <button class="pe-next" onclick={() => app.toggleDrawer()}>Open the levers &amp; start →</button>
@@ -28,8 +29,10 @@
     {#if app.narrative === 'eli5'}
       <p>
         <b>What is this?</b> It’s a playable, pretend version of England’s school system. You move the sliders a government actually
-        controls, and it shows what might happen — to things like the gap between richer and poorer pupils — every year up to 2040.
-        It’s built on real research, and honest about what nobody knows for sure.
+        controls, and it shows what might happen every year up to 2040. It’s built on real research, and honest about what nobody
+        knows for sure. It doesn’t only track the gap between richer and poorer pupils: it follows <b>GCSE results</b>, <b>special-needs
+        support and its growing debt</b>, kids <b>missing school</b>, child poverty, and <b>young people with no job or training</b> —
+        for the whole country and broken down by area.
       </p>
       <p>
         Three things surprise people. <b>Getting kids to attend school is the single biggest lever.</b> <b>Helping under-fives matters
@@ -48,6 +51,9 @@
         DfE statistics, IFS spending analysis and NFER workforce data, and wired to the policies actually on the table in 2026 — the
         Schools White Paper, the SEND reforms, the 6,500-teacher pledge, Best Start, the curriculum review, and the new area missions.
         Every effect size carries an uncertainty band and a citation, and the weak or contested links are flagged rather than hidden.
+        It tracks more than a dozen outcomes at once — not just the gap, but GCSE attainment, the <b>EHCP/SEND system and its 2028
+        funding cliff</b>, absence, child poverty, <b>NEET</b> and the teacher shortfall — nationally, across the <b>nine English
+        regions</b>, and as headcounts of real children.
       </p>
       <p>
         It is built around a few hard truths from the evidence. <b>Attendance is the engine of the gap</b> — EPI attributes the entire
@@ -69,7 +75,7 @@
 <style>
   .hero { padding: 18px 0 6px; }
   .hero-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(34px, 6.2vw, 66px); line-height: 0.96; letter-spacing: -0.03em; margin: 6px 0 16px; color: var(--ink); }
-  .hero-lede { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0 0 18px; max-width: 52ch; }
+  .hero-lede { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.5; color: rgba(28,22,17,0.74); margin: 0 0 18px; }
   .cta-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .cta-ghost { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #2f6f97; text-decoration: none; border: none; background: none; cursor: pointer; padding: 0; border-bottom: 1px dashed currentColor; }
   .cta-ghost:hover { color: #1c4a66; }
