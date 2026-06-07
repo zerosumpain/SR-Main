@@ -1,6 +1,7 @@
 <script lang="ts">
   import { LEVERS, GROUP_META } from '../lib/levers';
   import { SOURCES } from '../lib/sources';
+  import CausalFlow from './CausalFlow.svelte';
 
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
 
@@ -109,7 +110,10 @@
   </section>
 
   <section>
-    <h3>The causal spine</h3>
+    <h3>The causal flow</h3>
+    <p>How the model works, end to end: policy levers act on a small set of mediators, which drive the
+      headline outcomes. The relationships and their relative strength are calibrated from the evidence base.</p>
+    <CausalFlow />
     <pre class="spine">child poverty ─▶ home environment ─▶ age-5 gap ─▶ KS2 gap ─▶ KS4 gap   (≈40% of the age-16 gap is set by age 5)
 funding ─▶ teacher capacity ─▶ attainment level                         (weak direct £→outcome link)
 breakfast + attendance mentors ─▶ attendance ─▶ attainment & the gap     (the strongest single lever)
