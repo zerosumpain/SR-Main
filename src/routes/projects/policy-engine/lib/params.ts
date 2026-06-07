@@ -135,6 +135,8 @@ export const CH: ChannelParams = {
     poverty_action:band(0.2, 0.6, 1.2),   // income → home env/attendance → gap [EPI mediation]
     teachers:      band(0.0, 0.2, 0.5),   // supply hardest in deprived schools [NFER/EPI workforce gap]
     rise:          band(0.0, 0.2, 0.5),   // targets stuck schools (disadv-skewed) [WP; London Challenge analogue]
+    place_investment: band(0.1, 0.5, 1.1),// place-based investment closes the cold-spot residual [Local Trust ~7.5pp]
+    tutoring:      band(0.1, 0.4, 0.9),   // disadvantage-targeted catch-up tutoring [EEF small-group +4mo; NTP]
   },
   gapRecep: {
     ey_quality:    band(0.4, 1.1, 2.0),   // largest, soonest effect at age 5 [EEF; Best Start target GLD 75%]
@@ -163,6 +165,7 @@ export const CH: ChannelParams = {
     rise:          band(0.0, 0.3, 0.7),   // ASSUMPTION [WP; analogue ~0.1-0.3 SD worst schools]
     breakfast:     band(0.0, 0.2, 0.5),   // KS1 attainment (low security, KS2 null) [EEF revised]
     reading:       band(0.0, 0.3, 0.8),   // reading/oracy CPD — acts now, not gated to 2028 [EEF +2-5mo]
+    eal_support:   band(0.0, 0.4, 0.9),   // EAL/new-arrival catch-up — direct attainment, bypasses absence [EPI 2025 EAL]
     school_funding:band(0.0, 0.15, 0.5),  // weak; via TAs/resources only [Jackson et al.; near-zero at current spend]
   },
   levelKS2: {
@@ -184,6 +187,8 @@ export const CH: ChannelParams = {
     attendance: 2, breakfast: 1, pupil_premium: 2, fsm: 3, poverty_action: 3,
     teachers: 4, teacher_pay: 3, bursaries: 3, curriculum: 4, rise: 2, school_funding: 3,
     inclusion_fund: 3, send_early: 3, ehcp_reform: 2, high_needs: 1, reading: 2,
+    place_investment: 3, tutoring: 1, eal_support: 2, care_support: 2, behaviour_support: 2,
+    send_pipeline: 3, camhs: 2, housing_instability: 2,
     eypp: 6, ey_quality: 7, ey_access: 6,   // early-years channels are slow
   },
 };
@@ -241,6 +246,38 @@ export const POST16 = {
 };
 
 // ---------------------------------------------------------------------------
+// WIDER DETERMINANTS & SERVICES — indirect drivers that act THROUGH the model's
+// mediators (per the indirect-impacts research). Effects are deviations from each
+// lever's baseline, so the 2025 anchor is unchanged. Most are flagged ASSUMPTION:
+// the evidence gives direction/UK magnitudes but rarely a clean policy elasticity.
+// ---------------------------------------------------------------------------
+export const IND = {
+  // SEND specialist-capacity throttle (EP/SALT/OT) — the provision side of the SEND mediator
+  pipelineEhcpAttn: band(0.5, 1.4, 2.6),     // A8 boost for EHCP pupils from adequate specialist provision [NAO/BPS/RCSLT]
+  pipelineTribunal: band(2.0, 6.0, 11.0),    // '000 tribunal appeals cut at full capacity (needs met → fewer appeals)
+  pipelinePA: band(0.2, 0.6, 1.2),           // pp disadvantaged-PA cut (supported SEND pupils attend more)
+  pipelineSubSaving: band(0.0, 0.06, 0.14),  // extra high-needs deficit saving via better-targeted provision
+  // CAMHS / NHS mental-health access — gate on absence + SEMH demand (complements school mental_health)
+  camhsSevere: band(0.1, 0.4, 0.9),          // pp severe-absence cut [BMA 385k waiting; EBSA]
+  camhsNeet: band(0.1, 0.3, 0.7),            // pp NEET cut
+  camhsDemandDamp: band(0.0, 0.08, 0.18),    // fraction of the SEMH EHCP-demand increment damped
+  // EAL / recent-arrival catch-up support — direct to attainment, NOT via absence
+  // (effect lives in CH.levelA8.eal_support); flagged here for provenance only [EPI 2025 EAL]
+  // Care-experienced support (virtual schools / Pupil Premium Plus) — vulnerable stratum
+  careNeet: band(0.3, 0.9, 1.8),             // pp NEET cut (LAC ~38-40% NEET vs ~13-15%) [EPI/DfE EES]
+  careA8: band(0.0, 0.4, 0.9),               // A8 boost for vulnerable pupils
+  careSubSaving: band(0.0, 0.0, 0.02),       // tiny coordination saving only — care support is NOT a placement-substitution story
+  // Inclusion & behaviour support — cut the exclusion/off-rolling → AP → NEET pipeline
+  behaviourNeet: band(0.2, 0.6, 1.2),        // pp NEET cut [DfE: 15% of excluded pupils NEET 2+ yrs vs 3%]
+  behaviourSevere: band(0.1, 0.3, 0.7),      // pp severe-absence cut
+  // Housing instability — an exogenous inflow to disadvantaged persistent absence
+  housingPA: band(2.0, 5.0, 9.0),            // pp disadvantaged-PA swing across the full instability range [UCL/MCS +15.5 days]
+  housingGap: band(0.0, 0.15, 0.4),          // small extra months KS4 gap (home environment) per full swing
+  // Place-based investment teacher-supply boost (cold-spot residual; gap effect is in CH.gapKS4)
+  placeNeet: band(0.1, 0.4, 0.9),            // pp NEET cut from place-based regeneration/cold-spot investment
+};
+
+// ---------------------------------------------------------------------------
 // SEND/EHCP identification-by-age (a costing scale with a light outcome effect)
 // ---------------------------------------------------------------------------
 export const AGEID = {
@@ -286,4 +323,13 @@ export const COST = {
   post16FullBn: 1.5,                          // £bn full post-16/skills effort [Youth Guarantee £1.5bn]
   mentalHealthFullBn: 0.6,                    // £bn full youth mental-health support
   readingFullBn: 0.15,                        // £bn full reading/oracy CPD programme [Reading Ambition]
+  // wider determinants & services
+  sendPipelineFullBn: 0.6,                    // £bn full EP/SALT/OT specialist-capacity expansion
+  camhsFullBn: 0.7,                           // £bn full CAMHS access expansion
+  ealSupportFullBn: 0.3,                      // £bn full EAL/new-arrival catch-up support
+  careSupportFullBn: 0.4,                     // £bn full care-experienced support (virtual schools / PP+)
+  placeInvestFullBn: 0.8,                     // £bn full place-based investment (Mission NE/Coastal)
+  behaviourFullBn: 0.3,                       // £bn full inclusion & behaviour support
+  tutoringFullBn: 0.5,                        // £bn full catch-up tutoring programme [NTP-scale]
+  // housing_instability has no education-budget cost (an exogenous context slider)
 };

@@ -20,6 +20,7 @@ export type LeverGroup =
   | 'attendance'   // attendance support
   | 'post16'       // post-16 / skills / youth mental health (the NEET exit boundary)
   | 'identification' // SEND/EHCP identification intensity by child age (costing scale)
+  | 'indirect'     // wider determinants & services that act through the mediators
   | 'macro';       // school funding trajectory
 
 /** A policy lever the user can move. Its value feeds the engine's response functions. */

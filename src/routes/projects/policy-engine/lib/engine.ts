@@ -17,7 +17,7 @@
 import type { LeverState, SimResult, YearResult } from './types';
 import { LEVERS_BY_ID, ageIdTotals, earlyIdShift } from './levers';
 import {
-  BASE_YEAR, END_YEAR, POP, BASELINE, GAP_TO_LEVEL, CH, SEND, SYS, POST16, WORK, AGEID, EY_KS4_LAG, EY_FADEOUT, COST,
+  BASE_YEAR, END_YEAR, POP, BASELINE, GAP_TO_LEVEL, CH, SEND, SYS, POST16, WORK, AGEID, IND, EY_KS4_LAG, EY_FADEOUT, COST,
   type Band,
 } from './params';
 
@@ -133,14 +133,21 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     );
     const persistentAbsence = clamp(BASELINE.persistentAbsence + SYS.paLeverage * (absenceOverall - BASELINE.absenceOverall), 6, 40);
     const extraMentorDisCut = EXTRA_MENTOR_DIS_CUT * concave(depPos('attendance')) * ramp(ys, 2);
+    // wider determinants on disadvantaged absence: housing instability is an inflow (signed —
+    // worse above baseline, better below); SEND specialist capacity lets supported pupils attend.
+    const housingPA = R(IND.housingPA) * dep('housing_instability') * ramp(ys, 2);
+    const pipelinePAcut = R(IND.pipelinePA) * concave(depPos('send_pipeline')) * ramp(ys, 3);
     const persistentAbsenceDis = clamp(
-      PA_DIS_BASE + SYS.paLeverage * SYS.paDisLeverage * (absenceOverall - BASELINE.absenceOverall) - extraMentorDisCut,
+      PA_DIS_BASE + SYS.paLeverage * SYS.paDisLeverage * (absenceOverall - BASELINE.absenceOverall)
+        - extraMentorDisCut + housingPA - pipelinePAcut,
       8, 45,
     );
     const severeAbsence = clamp(
       BASELINE.severeAbsence + SYS.severeDrift * ys
         - R(SYS.severeMentorCut) * concave(depPos('attendance')) * ramp(ys, 2)
-        - R(POST16.mhSevereMax) * concave(depPos('mental_health')) * ramp(ys, 3),
+        - R(POST16.mhSevereMax) * concave(depPos('mental_health')) * ramp(ys, 3)
+        - R(IND.camhsSevere) * concave(depPos('camhs')) * ramp(ys, 2)
+        - R(IND.behaviourSevere) * concave(depPos('behaviour_support')) * ramp(ys, 2),
       0.3, 8,
     );
 
@@ -149,6 +156,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const k4Struct: Record<string, Band> = {
       pupil_premium: CH.gapKS4.pupil_premium, fsm: CH.gapKS4.fsm, poverty_action: CH.gapKS4.poverty_action,
       teachers: CH.gapKS4.teachers, rise: CH.gapKS4.rise,
+      place_investment: CH.gapKS4.place_investment, tutoring: CH.gapKS4.tutoring,
     };
     let structReductionsK4 = channelSum(k4Struct, ys, lagOf);
     // early-years channels reach KS4 only with the ~11y cohort lag + fade-out
@@ -158,7 +166,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     }
     const gapKS4 = clamp(
       BASELINE.gapKS4 + ABSENCE_TO_GAP_K4 * (persistentAbsenceDis - PA_DIS_BASE)
-        + SYS.povertyToGapDrift * (childPoverty - BASELINE.childPoverty) - structReductionsK4,
+        + SYS.povertyToGapDrift * (childPoverty - BASELINE.childPoverty)
+        + R(IND.housingGap) * dep('housing_instability') * ramp(ys, 2) - structReductionsK4,
       0.5, 30,
     );
 
@@ -197,6 +206,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + R(CH.levelA8.rise) * concave(depPos('rise')) * ramp(ys, 2)
       + R(CH.levelA8.breakfast) * concave(depPos('breakfast')) * ramp(ys, 1)
       + R(CH.levelA8.reading) * concave(depPos('reading')) * ramp(ys, 2)
+      + R(CH.levelA8.eal_support) * concave(depPos('eal_support')) * ramp(ys, 2)
       + R(CH.levelA8.school_funding) * concave(depPos('school_funding')) * ramp(ys, 3);
     const attainment8 = clamp(BASELINE.attainment8 + teacherAttnA8 + a8Other, 30, 70);
     const grade5EM = clamp(BASELINE.grade5EM + 2.2 * (attainment8 - BASELINE.attainment8), 10, 95);
@@ -229,8 +239,9 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     if (ys > 0) {
       // logistic deceleration: full increment at the 2025 prevalence, → 0 at the ceiling
       const decel = Math.max(0, (SEND.prevCeiling - ehcpPct) / (SEND.prevCeiling - BASELINE.ehcpPct));
-      // mental-health support damps the SEMH-driven share of demand (SEMH ≈ a fifth of EHCPs)
-      const mhDemandDamp = 1 - 0.15 * concave(depPos('mental_health')) * ramp(ys, 3);
+      // mental-health support + CAMHS access damp the SEMH-driven share of demand (SEMH ≈ a fifth of EHCPs)
+      const mhDemandDamp = Math.max(0.4, 1 - 0.15 * concave(depPos('mental_health')) * ramp(ys, 3)
+        - R(IND.camhsDemandDamp) * concave(depPos('camhs')) * ramp(ys, 3));
       const increment = R(SEND.noReformIncrementPP) * decel * mhDemandDamp;
       const mitig = R(SEND.inclusionMitigation) * inclAdequacy * ramp(ys, 3);
       // identification-vs-prevention: early SEND raises demand short-run, reduces long-run
@@ -246,7 +257,10 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       ehcpPct = clamp(ehcpPct + increment * (1 - mitig) + shortRunBump + idShortRun - idPrevention - divert, 3, 9);
     }
     const ehcpCount = (ehcpPct / 100) * POP.ehcpRefPop * 1e6;
-    const subSaving = R(SEND.substitutionSaving) * concave(depPos('inclusion_fund') + depPos('ehcp_reform')) * ramp(ys, 3);
+    const subSaving = Math.min(0.4,
+      R(SEND.substitutionSaving) * concave(depPos('inclusion_fund') + depPos('ehcp_reform')) * ramp(ys, 3)
+      + R(IND.pipelineSubSaving) * concave(depPos('send_pipeline')) * ramp(ys, 3)
+      + R(IND.careSubSaving) * concave(depPos('care_support')) * ramp(ys, 3));
     // inclusion_fund is a ring-fenced, separately-funded grant — it is NOT charged to the DSG
     // high-needs deficit (it would otherwise net to zero: new spend matched by new funding).
     const dsgSpend = SEND.spendPerPrevalence * ehcpPct * (1 - subSaving); // deficit basis (excludes ring-fenced grant)
@@ -254,13 +268,16 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const highNeedsFunding = BASELINE.highNeedsFunding * Math.pow(1 + val('high_needs') / 100, ys);
     if (ys > 0) deficitStock = Math.max(0, deficitStock + (dsgSpend - highNeedsFunding));
     const ehcpAttnGain = R(SEND.ehcpAttnInclusionGain) * inclAdequacy * ramp(ys, 3)
-      + R(AGEID.earlyShiftEhcpAttn) * idShift * ramp(ys, 3); // early identification → better SEND outcomes
+      + R(AGEID.earlyShiftEhcpAttn) * idShift * ramp(ys, 3) // early identification → better SEND outcomes
+      + R(IND.pipelineEhcpAttn) * concave(depPos('send_pipeline')) * ramp(ys, 3) // specialist capacity → adequate provision
+      + R(IND.careA8) * concave(depPos('care_support')) * ramp(ys, 3); // virtual schools / PP+ for vulnerable pupils
     const ehcpAttnHarm = R(SEND.ehcpAttnReformHarm) * concave(depPos('ehcp_reform')) * (1 - inclAdequacy) * ramp(ys, 2);
     const ehcpAttainment8 = clamp(BASELINE.ehcpAttainment8 + ehcpAttnGain - ehcpAttnHarm, 5, 40);
     const tribunalAppeals = clamp(
       BASELINE.tribunalAppeals
         + R(SEND.tribunalReformRise) * concave(depPos('ehcp_reform')) * (1 - inclAdequacy) * ramp(ys, 2)
-        - 3 * inclAdequacy * ramp(ys, 2),
+        - 3 * inclAdequacy * ramp(ys, 2)
+        - R(IND.pipelineTribunal) * concave(depPos('send_pipeline')) * ramp(ys, 2), // capacity → needs met → fewer appeals
       4, 60,
     );
     const senSupportPct = BASELINE.senSupportPct + 0.1 * depPos('send_early') * ramp(ys, 2); // mild rise w/ early ID
@@ -272,7 +289,11 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
         - R(SYS.neetPerA8) * (attainment8 - BASELINE.attainment8)
         - 0.08 * structReductionsK4
         - R(POST16.neetMax) * concave(depPos('post16_skills')) * ramp(ys, 2)
-        - R(POST16.mhNeetMax) * concave(depPos('mental_health')) * ramp(ys, 2),
+        - R(POST16.mhNeetMax) * concave(depPos('mental_health')) * ramp(ys, 2)
+        - R(IND.careNeet) * concave(depPos('care_support')) * ramp(ys, 2)         // care-experienced support
+        - R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2) // cut exclusion→AP→NEET pipeline
+        - R(IND.placeNeet) * concave(depPos('place_investment')) * ramp(ys, 2)     // place-based investment
+        - R(IND.camhsNeet) * concave(depPos('camhs')) * ramp(ys, 2),               // CAMHS access
       5, 25,
     );
 
@@ -318,6 +339,13 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + Math.max(0, val('post16_skills') - 20) / 80 * COST.post16FullBn
       + Math.max(0, val('mental_health') - 25) / 75 * COST.mentalHealthFullBn
       + ageIdDelta // SEND/EHCP identification-by-age: additional ("stretch") cost vs baseline
+      + Math.max(0, val('send_pipeline') - 30) / 70 * COST.sendPipelineFullBn
+      + Math.max(0, val('camhs') - 30) / 70 * COST.camhsFullBn
+      + Math.max(0, val('eal_support') - 30) / 70 * COST.ealSupportFullBn
+      + Math.max(0, val('care_support') - 40) / 60 * COST.careSupportFullBn
+      + Math.max(0, val('behaviour_support') - 30) / 70 * COST.behaviourFullBn
+      + Math.max(0, val('place_investment') - 20) / 80 * COST.placeInvestFullBn
+      + Math.max(0, val('tutoring') - 30) / 70 * COST.tutoringFullBn
       + Math.max(0, val('school_funding') - 0.4) * COST.fundingPerPctBn * ys
     );
     cumulativeCost += annualCost;

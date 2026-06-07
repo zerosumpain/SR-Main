@@ -206,6 +206,71 @@ export const LEVERS: LeverDef[] = [
     source: 'DfE EES (EHC plans, KS4 destinations)', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/education-health-and-care-plans/2025',
     confidence: 'assumption', policyRef: 'Post-16 EHCP continuation & transitions',
   },
+  // ------------------- WIDER DETERMINANTS & SERVICES -------------------
+  {
+    id: 'send_pipeline', group: 'indirect', label: 'SEND specialist capacity (EP/SALT/OT)', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 30, policy: 70,
+    blurb: 'Educational-psychologist, speech-&-language and OT capacity — the clinical throttle that decides whether identified SEND is met or escalates.',
+    evidence: 'EP provision ranges from 1-per-480 to 1-per-9,400 pupils; 79% of NHS children’s speech-&-language services report insufficient staff. A supply-side capacity constraint analogous to the teacher workforce, but for specialists.',
+    source: 'NAO; BPS; RCSLT', url: 'https://www.nao.org.uk/press-releases/special-educational-needs-system-is-financially-unsustainable/',
+    confidence: 'assumption', policyRef: 'EP / SALT / OT specialist capacity',
+  },
+  {
+    id: 'camhs', group: 'indirect', label: 'CAMHS / mental-health access', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 30, policy: 60,
+    blurb: 'NHS child & adolescent mental-health service capacity — gates how much unmet mental-health need turns into chronic absence and SEMH-EHCP demand.',
+    evidence: '385,540 children were waiting for a first CAMHS contact (Mar 2025, +14% YoY); ~26% of referrals are rejected. Unmet need drives emotionally-based school avoidance. The mental-health→attainment link is SES-confounded, so the model routes it via absence, not as a new outcome.',
+    source: 'BMA; NHS Digital', url: 'https://www.bma.org.uk/advice-and-support/nhs-delivery-and-workforce/pressures/children-and-young-people-s-mental-health-services-in-england',
+    confidence: 'assumption', policyRef: 'NHS CAMHS access & waiting times',
+  },
+  {
+    id: 'eal_support', group: 'indirect', label: 'EAL / new-arrival catch-up', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 30, policy: 60,
+    blurb: 'Language and curriculum-access support for English-as-an-additional-language and recent arrivals — a direct attainment channel that bypasses absence.',
+    evidence: 'Late-arriving EAL pupils are ~10 months behind at GCSE and unaccompanied asylum-seekers ~37 months — yet fluent, on-time EAL pupils overtake English-first peers by KS4. Catch-up depends on arrival age and time-in-system; EAL is not a monolithic deficit.',
+    source: 'EPI Annual Report 2025 (EAL)', url: 'https://epi.org.uk/annual-report-2025-eal/',
+    confidence: 'medium', policyRef: 'EAL / new-arrivals support',
+  },
+  {
+    id: 'care_support', group: 'indirect', label: 'Care-experienced support (virtual schools / PP+)', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 40, policy: 70,
+    blurb: 'Support for looked-after, child-in-need and kinship-care pupils — a high-risk stratum largely invisible to FSM flags that hits every mediator at once.',
+    evidence: 'Looked-after children are ~29 months behind at GCSE (Attainment 8 ~26 vs ~46) and ~38–40% are NEET vs ~13–15% (≈3.5×). Virtual schools and Pupil Premium Plus target this tail.',
+    source: 'EPI; DfE EES (children in need / looked-after)', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/outcomes-for-children-in-need-including-children-looked-after-by-local-authorities-in-england/2024',
+    confidence: 'medium', policyRef: 'Virtual schools / Pupil Premium Plus',
+  },
+  {
+    id: 'behaviour_support', group: 'indirect', label: 'Inclusion & behaviour support', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 30, policy: 60,
+    blurb: 'Reduces exclusions and off-rolling that funnel pupils into alternative provision and toward NEET.',
+    evidence: '~15% of excluded pupils are NEET for 2+ years vs 3% of never-excluded; SEND pupils are ~half of all suspensions. Off-rolling also flatters headline attainment via survivorship. (DfE NEET-persistence figures used; the IPPR lifetime-cost numbers are contested.)',
+    source: 'DfE EES (suspensions & exclusions; destinations)', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/suspensions-and-permanent-exclusions-in-england/2023-24',
+    confidence: 'assumption', policyRef: 'Exclusions / alternative provision / inclusion',
+  },
+  {
+    id: 'place_investment', group: 'indirect', label: 'Place-based investment (cold spots)', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 20, policy: 60,
+    blurb: 'Regeneration and improvement in “left-behind”, coastal and cold-spot areas (Mission North East / Coastal) — a residual two equally-poor areas do not share.',
+    evidence: 'Equally-deprived “left-behind” areas score 20.1% vs 27.6% (a ~7.5pp penalty independent of the poverty rate); disadvantaged coastal pupils score ~3 GCSE grades lower. The North-East’s gap ranking decays between age 5 and 16.',
+    source: 'Local Trust; EPI', url: 'https://localtrust.org.uk/evidence-insights/left-behind-neighbourhoods/',
+    confidence: 'assumption', policyRef: 'Mission North East / Coastal; place-based investment',
+  },
+  {
+    id: 'tutoring', group: 'indirect', label: 'Catch-up tutoring', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 30, policy: 50,
+    blurb: 'Targeted small-group / one-to-one tutoring for disadvantaged pupils (National Tutoring Programme-style) — also the lever for residual COVID learning-loss recovery.',
+    evidence: 'EEF: small-group tuition ≈ +4 months’ progress; one-to-one ≈ +5 months. Targeted at disadvantaged pupils, so it narrows the gap rather than just lifting the level.',
+    source: 'EEF Toolkit; National Tutoring Programme', url: 'https://educationendowmentfoundation.org.uk/education-evidence/teaching-learning-toolkit/small-group-tuition',
+    confidence: 'medium', policyRef: 'National Tutoring Programme / catch-up',
+  },
+  {
+    id: 'housing_instability', group: 'indirect', label: 'Housing instability', unit: 'index',
+    min: 0, max: 100, step: 5, baseline: 40, policy: 40,
+    blurb: 'Temporary accommodation, overcrowding, damp/cold homes and frequent moves — an exogenous context (not an education-budget lever). Higher = worse; lower to explore improvement.',
+    evidence: 'Children in poor-quality housing at age 7 missed 15.5 more school days across Years 1–11 and scored 2–5% lower in English & maths (UCL / Millennium Cohort 2025); 2+ school moves roughly double the odds of poorer early outcomes. Acts mainly through disadvantaged absence.',
+    source: 'UCL / Millennium Cohort Study (Baranyi et al. 2025)', url: 'https://www.ucl.ac.uk/news/2025/dec/children-poor-quality-housing-miss-more-school',
+    confidence: 'medium', policyRef: 'Housing instability (exogenous context)',
+  },
   // ----------------------------- MACRO -----------------------------
   {
     id: 'school_funding', group: 'macro', label: 'Core schools funding (real/yr)', unit: '%/yr',
@@ -228,11 +293,12 @@ export const GROUP_META: Record<string, { label: string; tag: string; colour: st
   attendance:   { label: 'Attendance',            tag: 'ATT', colour: '#b1455e' },
   post16:       { label: 'Post-16, skills & wellbeing', tag: 'P16', colour: '#566a8c' },
   identification: { label: 'SEND identification by age', tag: 'ID', colour: '#7a5aa6' },
+  indirect:     { label: 'Wider determinants & services', tag: 'WDR', colour: '#4a7c7c' },
   macro:        { label: 'School funding',         tag: 'FND', colour: '#5a6b3a' },
 };
 
 // 'identification' is deliberately excluded — it is rendered by its own AgeIdentification panel.
-export const GROUP_ORDER = ['early', 'disadvantage', 'send', 'workforce', 'standards', 'attendance', 'post16', 'macro'];
+export const GROUP_ORDER = ['early', 'disadvantage', 'send', 'workforce', 'standards', 'attendance', 'post16', 'indirect', 'macro'];
 
 /** Age-band metadata for the SEND/EHCP identification costing scale (high-level estimates). */
 export interface AgeBand { leverId: string; age: string; pop: number; unit: number; note: string; }

@@ -17,6 +17,7 @@ export const GAP_CANDIDATES = [
   'eypp', 'ey_quality', 'ey_access', 'reading', 'rise', 'teachers',
   'send_early', 'inclusion_fund', 'high_needs', 'post16_skills', 'mental_health',
   'curriculum', 'school_funding',
+  'place_investment', 'tutoring', 'send_pipeline', // wider-determinant policy levers that close the gap
 ];
 
 function metric(levers: LeverState, horizon: number): { gap: number; cost: number } {

@@ -23,6 +23,15 @@
     { id: 'd_reform', label: 'EHCP reform', col: 0, colour: g('send') },
     { id: 'd_p16',    label: 'Post-16 · mental health', col: 0, colour: g('post16') },
     { id: 'd_fund',   label: 'School & high-needs funding', col: 0, colour: g('macro') },
+    // wider determinants & services (col 0)
+    { id: 'd_pipeline', label: 'SEND specialist capacity', col: 0, colour: g('indirect') },
+    { id: 'd_camhs',    label: 'CAMHS access', col: 0, colour: g('indirect') },
+    { id: 'd_eal',      label: 'EAL / new-arrival support', col: 0, colour: g('indirect') },
+    { id: 'd_care',     label: 'Care-experienced support', col: 0, colour: g('indirect') },
+    { id: 'd_behave',   label: 'Inclusion & behaviour', col: 0, colour: g('indirect') },
+    { id: 'd_place',    label: 'Place-based investment', col: 0, colour: g('indirect') },
+    { id: 'd_tutor',    label: 'Catch-up tutoring', col: 0, colour: g('indirect') },
+    { id: 'd_housing',  label: 'Housing instability', col: 0, colour: g('indirect') },
     // mediators (col 1)
     { id: 'm_pov',  label: 'Child poverty', col: 1, colour: INK },
     { id: 'm_abs',  label: 'Disadvantaged absence', col: 1, colour: INK },
@@ -62,16 +71,32 @@
     { from: 'o_att', to: 'o_neet' },
     { from: 'd_p16', to: 'o_neet' },
     { from: 'd_p16', to: 'm_ehcp', kind: 'weak' },
+    // wider determinants & services
+    { from: 'd_pipeline', to: 'm_abs' },   // supported SEND pupils attend more (pipelinePAcut)
+    { from: 'd_pipeline', to: 'o_send' },  // provision adequacy → ehcp attainment, tribunals, deficit
+    { from: 'd_camhs', to: 'm_abs' },      // severe-absence cut
+    { from: 'd_camhs', to: 'm_ehcp', kind: 'weak' }, // damps SEMH EHCP demand
+    { from: 'd_camhs', to: 'o_neet' },
+    { from: 'd_eal', to: 'o_att' },
+    { from: 'd_care', to: 'o_send' },
+    { from: 'd_care', to: 'o_neet' },
+    { from: 'd_behave', to: 'm_abs' },     // severe-absence cut
+    { from: 'd_behave', to: 'o_neet' },    // exclusion→AP→NEET pipeline
+    { from: 'd_place', to: 'o_gap', kind: 'weak' },
+    { from: 'd_place', to: 'o_neet' },
+    { from: 'd_tutor', to: 'o_gap' },
+    { from: 'd_housing', to: 'm_abs', kind: 'risk' },
+    { from: 'd_housing', to: 'o_gap', kind: 'risk' },
   ];
 
   // ---- layout ----
-  const W = 960, H = 560;
+  const W = 960, H = 860;
   const COLX = [188, 500, 812];   // node centres per column
   const COLW = [248, 168, 224];   // node widths per column
-  const NH = 30;                   // node height
+  const NH = 28;                   // node height
   const counts = [0, 1, 2].map((c) => nodes.filter((n) => n.col === c).length);
   function nodeY(col: Col, idx: number): number {
-    const n = counts[col]; const top = 34, bot = 34;
+    const n = counts[col]; const top = 28, bot = 28; // full-height rows in every column
     return n === 1 ? H / 2 : top + (idx * (H - top - bot)) / (n - 1);
   }
   const idxInCol: Record<string, number> = {};
@@ -79,13 +104,33 @@
   const pos: Record<string, { x: number; y: number; w: number; col: Col }> = {};
   for (const n of nodes) pos[n.id] = { x: COLX[n.col], y: nodeY(n.col, idxInCol[n.id]), w: COLW[n.col], col: n.col };
 
-  // fan incoming edges across each target node's left edge so arrowheads don't stack
+  // fan incoming edges across each target node's left edge so arrowheads don't stack;
+  // the step is adaptive so the total spread always stays inside the box height (NH)
   const arrival: Record<string, number> = {};
   for (const target of nodes) {
     const inc = edges.filter((e) => e.to === target.id).sort((p, q) => pos[p.from].y - pos[q.from].y);
-    inc.forEach((e, i) => (arrival[e.from + '>' + e.to] = (i - (inc.length - 1) / 2) * 7));
+    const step = Math.min(7, (NH - 6) / Math.max(1, inc.length - 1));
+    inc.forEach((e, i) => (arrival[e.from + '>' + e.to] = (i - (inc.length - 1) / 2) * step));
   }
   const isSkip = (e: Edge) => pos[e.to].col - pos[e.from].col >= 2;
+  const wdrDivY = (pos.d_fund.y + pos.d_pipeline.y) / 2; // divider between core levers and wider determinants
+
+  // Skip-edge labels would all pile up at the shared geometric midpoint; instead place each one at a
+  // staggered parameter along its OWN arc so they spread horizontally and sit on their own line.
+  const LABELED_SKIP = edges.filter((e) => e.label && isSkip(e));
+  const skipLabelT: Record<string, number> = {};
+  LABELED_SKIP.forEach((e, i) => {
+    skipLabelT[e.from + '>' + e.to] = LABELED_SKIP.length < 2 ? 0.5 : 0.28 + (0.52 * i) / (LABELED_SKIP.length - 1);
+  });
+  function bez(e: Edge, t: number): { x: number; y: number } {
+    const { x1, y1, x2, y2 } = endpoints(e);
+    const dx = Math.max(40, (x2 - x1) * 0.45), lift = isSkip(e) ? 48 : 0;
+    const mt = 1 - t, c1x = x1 + dx, c1y = y1 - lift, c2x = x2 - dx, c2y = y2 - lift;
+    return {
+      x: mt * mt * mt * x1 + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * x2,
+      y: mt * mt * mt * y1 + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * y2,
+    };
+  }
 
   function endpoints(e: Edge) {
     const a = pos[e.from], b = pos[e.to];
@@ -98,8 +143,9 @@
     return `M${x1},${y1} C${x1 + dx},${y1 - lift} ${x2 - dx},${y2 - lift} ${x2},${y2}`;
   }
   function edgeMid(e: Edge): { x: number; y: number } {
+    if (e.label && isSkip(e)) { const p = bez(e, skipLabelT[e.from + '>' + e.to] ?? 0.5); return { x: p.x, y: p.y - 7 }; }
     const { x1, y1, x2, y2 } = endpoints(e);
-    return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - (isSkip(e) ? 42 : 6) };
+    return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6 };
   }
   const strokeOf = (k?: string) => (k === 'risk' ? '#b1455e' : k === 'strong' ? '#2f7d4f' : k === 'weak' ? 'rgba(28,22,17,0.4)' : 'rgba(28,22,17,0.32)');
   const widthOf = (k?: string) => (k === 'strong' ? 2.4 : k === 'weak' ? 1.2 : 1.6);
@@ -126,6 +172,9 @@
     <text x={COLX[0]} y="16" class="coltitle" text-anchor="middle">POLICY LEVERS</text>
     <text x={COLX[1]} y="16" class="coltitle" text-anchor="middle">MEDIATORS</text>
     <text x={COLX[2]} y="16" class="coltitle" text-anchor="middle">OUTCOMES</text>
+
+    <line x1={COLX[0] - COLW[0] / 2} x2={COLX[0] + COLW[0] / 2} y1={wdrDivY} y2={wdrDivY} class="cf-div" />
+    <text x={COLX[0] - COLW[0] / 2} y={wdrDivY - 4} class="cf-divlab">WIDER DETERMINANTS & SERVICES ↓</text>
 
     {#each edges as e (e.from + e.to)}
       <path d={edgePath(e)} fill="none" stroke={strokeOf(e.kind)}
@@ -178,6 +227,8 @@
   .cf-scroll { overflow-x: auto; }
   svg { display: block; min-width: 760px; background: rgba(28,22,17,0.02); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; }
   .coltitle { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; fill: rgba(28,22,17,0.45); }
+  .cf-div { stroke: rgba(74,124,124,0.5); stroke-width: 1; stroke-dasharray: 3 3; }
+  .cf-divlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; fill: #4a7c7c; }
   .nlabel { font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; fill: var(--ink, #1c1611); }
   .elabel { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.55); }
   .elabel.risk { fill: #b1455e; }
