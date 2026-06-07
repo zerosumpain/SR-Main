@@ -13,6 +13,7 @@
   import CompareReadout from './components/CompareReadout.svelte';
   import ChartModal from './components/ChartModal.svelte';
   import SavedScenarios from './components/SavedScenarios.svelte';
+  import PopulationPanel from './components/PopulationPanel.svelte';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
@@ -30,7 +31,7 @@
   let levers = $state<LeverState>(policyLevers());
   let horizon = $state(2040);
   let showBands = $state(false);
-  let tab = $state<'outcomes' | 'scorecard' | 'cost' | 'sensitivity' | 'method'>('outcomes');
+  let tab = $state<'outcomes' | 'population' | 'scorecard' | 'cost' | 'sensitivity' | 'method'>('outcomes');
   let mounted = $state(false);
   let importErr = $state<string | null>(null);
   let copied = $state(false);
@@ -352,6 +353,7 @@
 
   const TABS = [
     { id: 'outcomes', label: 'Outcomes' },
+    { id: 'population', label: 'Population' },
     { id: 'scorecard', label: 'Scorecard' },
     { id: 'cost', label: 'Cost' },
     { id: 'sensitivity', label: 'Sensitivity' },
@@ -428,54 +430,6 @@
     </div>
   </div>
 
-  <div class="scen">
-    <ScenarioBar activeName={activePreset} onApply={applyPreset} />
-    <div class="opt-ctl" title="Set the annual budget, then click the 'Best value' preset (or drag this slider) to preview the gap-optimal allocation — then 'Apply to sliders'">
-      <span class="oc-lab">Best-value budget</span>
-      <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={optimizeBudget}
-             oninput={(e) => (optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
-             onchange={() => previewOptimize()} aria-label="Best-value optimiser budget" />
-      <span class="oc-val">£{optimizeBudget.toFixed(1)}bn/yr</span>
-    </div>
-    {#if optimizeResult}
-      <span class="opt-note-wrap" class:open={tipOpen}>
-        <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)}
-                aria-expanded={tipOpen} title="Show the optimised allocation breakdown">
-          {optimizeApplied ? '✓ applied:' : '◷ best £' + optimizeResult.budget.toFixed(1) + 'bn would'}
-          close {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)})
-          by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr <span class="tip-caret">▾</span>
-        </button>
-        <span class="opt-tip" role="tooltip">
-          <span class="tip-head">Optimised allocation · £{optimizeResult.cost.toFixed(2)}bn/yr across {optimizeResult.breakdown.length} levers</span>
-          {#each optimizeResult.breakdown as row (row.id)}
-            <span class="tip-row">
-              <i style="background:{row.colour}"></i>
-              <span class="tip-label">{row.label}</span>
-              <b>{row.display}</b>
-              <em>£{row.costBn.toFixed(2)}bn</em>
-            </span>
-          {/each}
-          {#if optimizeResult.budget - optimizeResult.cost > 0.05}
-            <span class="tip-foot">£{(optimizeResult.budget - optimizeResult.cost).toFixed(1)}bn of the £{optimizeResult.budget.toFixed(1)}bn budget left unspent — no remaining lever closes the gap at acceptable value.</span>
-          {/if}
-        </span>
-      </span>
-      <button class="opt-apply" onclick={applyOptimized} disabled={optimizeApplied}
-              title="Set every slider to this optimised allocation">
-        {optimizeApplied ? '✓ Applied' : 'Apply to sliders →'}
-      </button>
-    {/if}
-    {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
-  </div>
-
-  <div class="readout-shell">
-    {#if compareB && simB}
-      <CompareReadout simA={sim.years} simB={simB.years} nameA={scenarioName} nameB={compareB.name} {horizon} />
-    {:else}
-      <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
-    {/if}
-  </div>
-
   {#if insolvencyYear}
     <div class="cliff" role="alert">
       ⚠ <b>SEND funding cliff:</b> the DSG statutory override ends March 2028. On this trajectory the
@@ -494,13 +448,66 @@
       <AgeIdentification {levers} onChange={setLever} onReset={resetAgeId} />
     </aside>
 
-    <main class="out-col">
-      <nav class="tabs">
-        {#each TABS as t}
-          <button class:active={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
-        {/each}
-      </nav>
+    <!-- The right column is pinned to the viewport and follows the long lever rail down the page;
+         its head (scenario switcher + readout + tabs) stays visible while the charts scroll beneath. -->
+    <main class="work-col">
+      <div class="work-head">
+        <div class="scen">
+          <ScenarioBar activeName={activePreset} onApply={applyPreset} />
+          <div class="opt-ctl" title="Set the annual budget, then click the 'Best value' preset (or drag this slider) to preview the gap-optimal allocation — then 'Apply to sliders'">
+            <span class="oc-lab">Best-value budget</span>
+            <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={optimizeBudget}
+                   oninput={(e) => (optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
+                   onchange={() => previewOptimize()} aria-label="Best-value optimiser budget" />
+            <span class="oc-val">£{optimizeBudget.toFixed(1)}bn/yr</span>
+          </div>
+          {#if optimizeResult}
+            <span class="opt-note-wrap" class:open={tipOpen}>
+              <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)}
+                      aria-expanded={tipOpen} title="Show the optimised allocation breakdown">
+                {optimizeApplied ? '✓ applied:' : '◷ best £' + optimizeResult.budget.toFixed(1) + 'bn would'}
+                close {optimizeResult.closed.toFixed(1)} mo of the gap ({optimizeResult.baselineGap.toFixed(1)}→{optimizeResult.gap.toFixed(1)})
+                by {optimizeResult.horizon} for £{optimizeResult.cost.toFixed(1)}bn/yr <span class="tip-caret">▾</span>
+              </button>
+              <span class="opt-tip" role="tooltip">
+                <span class="tip-head">Optimised allocation · £{optimizeResult.cost.toFixed(2)}bn/yr across {optimizeResult.breakdown.length} levers</span>
+                {#each optimizeResult.breakdown as row (row.id)}
+                  <span class="tip-row">
+                    <i style="background:{row.colour}"></i>
+                    <span class="tip-label">{row.label}</span>
+                    <b>{row.display}</b>
+                    <em>£{row.costBn.toFixed(2)}bn</em>
+                  </span>
+                {/each}
+                {#if optimizeResult.budget - optimizeResult.cost > 0.05}
+                  <span class="tip-foot">£{(optimizeResult.budget - optimizeResult.cost).toFixed(1)}bn of the £{optimizeResult.budget.toFixed(1)}bn budget left unspent — no remaining lever closes the gap at acceptable value.</span>
+                {/if}
+              </span>
+            </span>
+            <button class="opt-apply" onclick={applyOptimized} disabled={optimizeApplied}
+                    title="Set every slider to this optimised allocation">
+              {optimizeApplied ? '✓ Applied' : 'Apply to sliders →'}
+            </button>
+          {/if}
+          {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
+        </div>
 
+        <div class="readout-shell">
+          {#if compareB && simB}
+            <CompareReadout simA={sim.years} simB={simB.years} nameA={scenarioName} nameB={compareB.name} {horizon} />
+          {:else}
+            <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
+          {/if}
+        </div>
+
+        <nav class="tabs">
+          {#each TABS as t}
+            <button class:active={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
+          {/each}
+        </nav>
+      </div>
+
+      <div class="work-scroll">
       {#if tab === 'outcomes'}
         <p class="tab-intro">
           {#if compareB}
@@ -526,6 +533,8 @@
             </div>
           {/each}
         </div>
+      {:else if tab === 'population'}
+        <PopulationPanel sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
       {:else if tab === 'scorecard'}
         <Scorecard sim={sim.years} baseSim={baseSim.years} {horizon} />
       {:else if tab === 'cost'}
@@ -535,6 +544,7 @@
       {:else if tab === 'method'}
         <Methodology />
       {/if}
+      </div>
     </main>
   </div>
 
@@ -570,7 +580,10 @@
     --paper: #f1ead6; --paper-deep: #e7decc; --ink: #1c1611; --ink-soft: rgba(28,22,17,0.62);
     position: relative; min-height: 100vh; background:
       radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.4), transparent 60%), var(--paper);
-    color: var(--ink); font-family: 'DM Sans', system-ui, sans-serif; overflow-x: hidden;
+    color: var(--ink); font-family: 'DM Sans', system-ui, sans-serif;
+    /* clip (not hidden) so the sticky work column isn't trapped in a scroll container,
+       while still preventing horizontal overflow. Falls back to hidden where clip is unsupported. */
+    overflow-x: hidden; overflow-x: clip;
   }
   .paper-grain {
     position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5; mix-blend-mode: multiply;
@@ -608,8 +621,8 @@
   .cmp-badge { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #3a5fa8; background: rgba(58,95,168,0.1); border: 1px solid rgba(58,95,168,0.3); border-radius: 5px; padding: 4px 8px; }
   .cmp-badge i { width: 9px; height: 3px; border-radius: 2px; background: #3a5fa8; }
 
-  .scen { position: relative; z-index: 2; padding: 10px 28px; border-bottom: 1px solid rgba(28,22,17,0.08); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .readout-shell { position: relative; z-index: 1; padding: 10px 28px 4px; }
+  .scen { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+  .readout-shell { margin-top: 8px; }
   .imp-err { color: #8a2d22; font-size: 11px; }
   .opt-note-wrap { position: relative; display: inline-block; }
   .opt-note {
@@ -657,9 +670,22 @@
   .rail-head span:first-child { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; }
   .rail-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); letter-spacing: 0.02em; }
 
-  .out-col { padding: 14px 22px 50px; min-width: 0; }
+  /* Right column: pinned to the viewport, follows the long rail down the page. The head
+     (scenario switcher + readout + tabs) stays visible; the charts scroll beneath it and
+     dynamically fill the remaining viewport height, so there is no dead space beside the rail. */
+  .work-col { min-width: 0; display: flex; flex-direction: column; }
+  .work-head {
+    position: sticky; top: 0; z-index: 6; background: var(--paper);
+    border-bottom: 1px solid rgba(28,22,17,0.12); padding: 10px 22px 8px;
+    box-shadow: 0 7px 16px -12px rgba(0,0,0,0.3);
+  }
+  .work-scroll { padding: 14px 22px 50px; min-width: 0; }
+  @media (min-width: 981px) {
+    .work-col { position: sticky; top: 0; height: 100vh; }
+    .work-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  }
   /* More obvious tabs — boxed/segmented pills. */
-  .tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; background: rgba(28,22,17,0.06); padding: 4px; border-radius: 9px; }
+  .tabs { display: flex; gap: 4px; margin: 8px 0 0; flex-wrap: wrap; background: rgba(28,22,17,0.06); padding: 4px; border-radius: 9px; }
   .tabs button { background: transparent; border: 1px solid transparent; padding: 7px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; border-radius: 6px; transition: background 0.12s, color 0.12s; }
   .tabs button:hover { background: rgba(255,255,255,0.5); color: var(--ink); }
   .tabs button.active { background: var(--ink); color: var(--paper); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
@@ -686,7 +712,9 @@
   .sources-foot li { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.7); }
   .sources-foot a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
 
-  @media (max-width: 880px) {
+  /* Below the split-view breakpoint the rail stacks above the work column (single page scroll);
+     the work-head still sticks to the viewport top, so the scenarios stay visible while scrolling. */
+  @media (max-width: 980px) {
     .body { grid-template-columns: 1fr; }
     .rail-col { border-right: none; border-bottom: 1px solid rgba(28,22,17,0.1); }
     .toolbar { gap: 10px 14px; }
@@ -696,9 +724,8 @@
   @media (max-width: 600px) {
     .head { padding: 16px 14px 10px; }
     .toolbar { padding: 9px 14px; }
-    .scen { padding: 10px 14px; gap: 10px; }
-    .readout-shell { padding: 10px 14px 4px; }
-    .out-col { padding: 14px 14px 40px; }
+    .work-head { padding: 9px 14px 7px; }
+    .work-scroll { padding: 14px 14px 40px; }
     .rail-col { padding: 14px 14px 30px; }
     .foot { padding: 14px 14px 22px; }
     .cliff { padding: 8px 14px; }

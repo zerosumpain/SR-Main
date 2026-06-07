@@ -26,6 +26,10 @@ export const POP = {
   ppPupils: 2.3,          // millions receiving Pupil Premium             [Commons Lib SN06700]
   under5Disadv: 0.40,     // millions disadvantaged under-5s (EYPP-relevant) [assumption from EYPP coverage]
   ehcpRefPop: 12.05,      // millions, 0-25 reference pop for EHCP prevalence (638.7k / 5.3%) [EES]
+  // --- population-simulation denominators (each rate has its OWN correct base — see population.ts) ---
+  cohortYearGroup: 0.60,  // millions, one school year-group (synthetic cohort) [ONS births ~0.59m 2023; DfE SWC 8.4m/~14 groups]
+  childPop0to17: 13.6,    // millions, England 0-17 — denominator for the child-poverty rate [ONS MYE 2023; DWP HBAI cross-check ~4.2m at 31% AHC]
+  youth16to24: 6.55,      // millions, England 16-24 — denominator for the NEET rate [ONS MYE 2023; DfE/ONS NEET ~0.87m at 13.3%]
   teachersFTE0: 468.0,    // '000 FTE teachers Nov 2024                    [DfE SWC 2024]
   paybillBn: 35.0,        // £bn approx teacher paybill                    [assumption / IFS]
   coreSchoolsBn: 65.0,    // £bn core schools budget 2025-26              [IFS SR 2025]
