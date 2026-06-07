@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { YearResult } from '../lib/types';
-  import { OUTCOMES_BY_ID } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, OUTCOME_ELI5 } from '../lib/outcomes';
   import { fmtNum } from '../lib/format';
+  import { app } from '../lib/appState.svelte';
+  const meaning = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5[id] ?? '' : OUTCOMES_BY_ID[id]?.blurb ?? '');
 
   interface Props { sim: YearResult[]; baseSim: YearResult[]; horizon: number; scenarioName: string; }
   let { sim, baseSim, horizon, scenarioName }: Props = $props();
@@ -28,7 +30,7 @@
   </div>
   <div class="ro-cells">
     {#each cells as c (c.m.id)}
-      <div class="ro-cell">
+      <div class="ro-cell" title={meaning(c.m.id)}>
         <span class="ro-label">{c.m.short}</span>
         <span class="ro-val">{fmtNum(c.v, c.m.dp)}<small>{c.m.unit === '£bn' ? 'bn' : c.m.unit === '%' || c.m.unit === '% of pupils' ? '%' : c.m.unit === 'months' ? 'mo' : ''}</small></span>
         {#if c.m.id === 'cumulativeCost'}
@@ -49,7 +51,7 @@
   .ro-scn { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink, #1c1611); }
   .ro-yr { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
   .ro-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-  .ro-cell { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px; border-left: 2px solid rgba(28,22,17,0.12); }
+  .ro-cell { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px; border-left: 2px solid rgba(28,22,17,0.12); cursor: help; }
   .ro-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
   .ro-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; line-height: 1.05; color: var(--ink, #1c1611); }
   .ro-val small { font-size: 10px; font-weight: 500; color: rgba(28,22,17,0.5); margin-left: 1px; }

@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { YearResult } from '../lib/types';
-  import { OUTCOMES_BY_ID, SCORECARD_IDS } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, SCORECARD_IDS, OUTCOME_ELI5 } from '../lib/outcomes';
   import { fmtNum } from '../lib/format';
+  import { app } from '../lib/appState.svelte';
+  const meaning = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5[id] ?? '' : OUTCOMES_BY_ID[id]?.blurb ?? '');
 
   interface Props {
     sim: YearResult[];
@@ -40,8 +42,8 @@
   </p>
   <div class="grid">
     {#each cards as c (c.m.id)}
-      <div class="card tone-{tone(c.good)}">
-        <div class="c-label" title={c.m.blurb}>{c.m.label}</div>
+      <div class="card tone-{tone(c.good)}" title={meaning(c.m.id)}>
+        <div class="c-label">{c.m.label}<span class="c-q">?</span></div>
         <div class="c-main">
           <span class="c-val">{fmtNum(c.val, c.m.dp)}</span>
           <span class="c-unit">{c.m.unit}</span>
@@ -72,7 +74,10 @@
   .card.tone-good { border-left-color: #2f7d4f; }
   .card.tone-bad { border-left-color: #b1455e; }
   .card.tone-neutral { border-left-color: rgba(28,22,17,0.35); }
-  .c-label { font-size: 11px; line-height: 1.3; color: rgba(28,22,17,0.72); min-height: 28px; }
+  .card { cursor: help; }
+  .c-label { font-size: 11px; line-height: 1.3; color: rgba(28,22,17,0.72); min-height: 28px; display: flex; align-items: flex-start; gap: 4px; }
+  .c-q { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid rgba(28,22,17,0.3); font-size: 8px; color: rgba(28,22,17,0.5); margin-top: 1px; }
   .c-main { display: flex; align-items: baseline; gap: 4px; margin: 3px 0 4px; }
   .c-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 23px; color: var(--ink, #1c1611); line-height: 1; }
   .c-unit { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.5); }

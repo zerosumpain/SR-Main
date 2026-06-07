@@ -59,6 +59,30 @@ export const OUTCOMES: OutcomeMeta[] = [
 
 export const OUTCOMES_BY_ID: Record<string, OutcomeMeta> = Object.fromEntries(OUTCOMES.map((o) => [o.id, o]));
 
+/** Plain-English ("ELI5") one-liners for the hover tooltips on the scorecard / readout. */
+export const OUTCOME_ELI5: Record<string, string> = {
+  gapKS4: 'How far behind poorer 16-year-olds are, in months of learning. Lower is better.',
+  gapKS2: 'How far behind poorer pupils are at the end of primary, in months. Lower is better.',
+  gapReception: 'The gap that is already there at age 5, in months. Lower is better.',
+  attainment8: 'The average GCSE results score. Higher is better.',
+  attainment8Dis: 'The average GCSE score for poorer pupils. Higher is better.',
+  grade5EM: 'The share who get a strong pass in both English and maths GCSE. Higher is better.',
+  ks2RWM: 'The share hitting the expected standard at the end of primary. Higher is better.',
+  gld: 'The share of five-year-olds who are “ready” for school. Higher is better.',
+  ehcpPct: 'The share of pupils with a legal special-needs plan (EHCP). More isn’t simply good or bad — more support, but more cost.',
+  highNeedsDeficitStock: 'The debt councils run up paying for special-needs support. Lower is better.',
+  ehcpAttainment8: 'GCSE results for pupils with a special-needs plan. Higher is better.',
+  tribunalAppeals: 'How many families have to appeal special-needs decisions each year. Lower is better.',
+  persistentAbsence: 'The share of all pupils missing a lot of school. Lower is better.',
+  persistentAbsenceDis: 'The share of poorer pupils missing a lot of school — the gap’s main engine. Lower is better.',
+  severeAbsence: 'The share missing half or more of school. Lower is better.',
+  teacherShortfall: 'How many teachers short of the pledge the country is. Lower (or a surplus) is better.',
+  childPoverty: 'The share of children growing up in poverty. Lower is better.',
+  neet: 'The share of young adults with no job, education or training. Lower is better.',
+  fundingPerPupil: 'The real-terms money spent per pupil. Higher is generally better.',
+  cumulativeCost: 'The total extra money this plan spends compared with doing nothing.',
+};
+
 /** Headline KPIs shown on the scorecard. */
 export const SCORECARD_IDS = [
   'gapKS4', 'attainment8', 'grade5EM', 'gld',

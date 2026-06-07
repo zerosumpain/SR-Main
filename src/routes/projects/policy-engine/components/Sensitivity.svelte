@@ -68,7 +68,7 @@
 </div>
 
 <style>
-  .sens { display: flex; flex-direction: column; gap: 8px; }
+  .sens { display: flex; flex-direction: column; gap: 8px; max-width: 880px; }
   .sens-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
   .sens-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.65); max-width: 60ch; }
   .kpi-pick { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.6); display: flex; align-items: center; gap: 5px; }

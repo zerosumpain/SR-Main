@@ -7,7 +7,7 @@
   const gapClosed = $derived(bH ? bH.gapKS4 - sH.gapKS4 : 0);
 
   const SECTIONS = [
-    { href: '/projects/policy-engine/build', n: '01', t: 'Build', d: 'Move 35 research-backed levers — or let the optimiser spend a budget for you. Each lever explains what it does and how the model treats it.' },
+    { drawer: true, n: '01', t: 'Levers', d: 'Open the drawer of 35 research-backed levers — or let the optimiser spend a budget for you. It pins open so you can tune while you watch the data.' },
     { href: '/projects/policy-engine/outcomes', n: '02', t: 'Outcomes', d: 'The disadvantage gap, attainment, the SEND funding cliff, absence and NEET — each chart with the narrative behind it.' },
     { href: '/projects/policy-engine/population', n: '03', t: 'Population', d: 'The same results as headcounts of real children: who clears each gate, who is lifted from poverty, child-years averted.' },
     { href: '/projects/policy-engine/regions', n: '04', t: 'Regions', d: 'The national model decomposed onto the nine English regions and the coastal cross-cut — with the 2026 area missions.' },
@@ -39,13 +39,30 @@
           <span class="sn"><b>{sH.attainment8.toFixed(1)}</b><small>Attainment 8</small></span>
           <span class="sn"><b>£{sH.cumulativeCost.toFixed(0)}bn</b><small>cumulative cost</small></span>
         </div>
-        <a class="pe-next" href="/projects/policy-engine/build">Build your own scenario →</a>
+        <button class="pe-next" onclick={() => app.toggleDrawer()}>Open the levers &amp; build your scenario →</button>
       </div>
     {/if}
   </section>
 
   <section class="story pe-prose">
     <h2 class="pe-h2">What this is</h2>
+    {#if app.narrative === 'eli5'}
+      <p>
+        It’s a <b>playable, pretend version of England’s school system</b>. You move the sliders a government actually controls, and it
+        shows what might happen — to things like the gap between richer and poorer pupils — every year up to 2040. It’s built on real
+        research, and it’s honest about what nobody knows for sure.
+      </p>
+      <p>
+        Three things surprise people. <b>Getting kids to attend school is the single biggest lever.</b> <b>Helping under-fives matters
+        most of all</b>, but takes about eleven years to show up in GCSE results. And <b>money on its own doesn’t fix results</b> — it
+        only helps if it pays for more and better teachers. That’s why a giant funding slider can cost a fortune and barely move a chart
+        unless you also staff the schools.
+      </p>
+      <p>
+        It is <b>not</b> a crystal ball. It’s a place to ask “what would it actually take?”, see the hard trade-offs, and test an idea
+        against the evidence.
+      </p>
+    {:else}
     <p>
       It is a <b>system-dynamics and cohort simulation</b>, calibrated to the Education Policy Institute’s gap estimates, DfE statistics,
       IFS spending analysis and the NFER workforce data, and wired to the policies actually on the table in 2026 — the Schools White
@@ -65,17 +82,22 @@
       to see the trade-offs (the SEND deficit cliff, the cost of pay competitiveness, the regional concentration of the gap), and to
       pressure-test a stance against the research.
     </p>
+    {/if}
   </section>
 
   <section class="sections">
     <h2 class="pe-h2">The study, in five parts</h2>
     <div class="sec-grid">
       {#each SECTIONS as s}
-        <a class="sec-card" href={s.href}>
-          <span class="sc-n">{s.n}</span>
-          <span class="sc-t">{s.t} →</span>
-          <span class="sc-d">{s.d}</span>
-        </a>
+        {#if s.drawer}
+          <button class="sec-card" onclick={() => app.toggleDrawer()}>
+            <span class="sc-n">{s.n}</span><span class="sc-t">{s.t} →</span><span class="sc-d">{s.d}</span>
+          </button>
+        {:else}
+          <a class="sec-card" href={s.href}>
+            <span class="sc-n">{s.n}</span><span class="sc-t">{s.t} →</span><span class="sc-d">{s.d}</span>
+          </a>
+        {/if}
       {/each}
     </div>
   </section>
@@ -96,7 +118,7 @@
   .sections { margin: 26px 0 12px; }
   .sec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
   .sec-card { display: flex; flex-direction: column; gap: 4px; padding: 14px 15px; border: 1px solid rgba(28,22,17,0.14); border-radius: 10px;
-    background: rgba(255,255,255,0.4); text-decoration: none; transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s; }
+    background: rgba(255,255,255,0.4); text-decoration: none; text-align: left; font: inherit; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s; }
   .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px -14px rgba(0,0,0,0.4); border-color: rgba(28,22,17,0.3); }
   .sc-n { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.4); }
   .sc-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--ink); }

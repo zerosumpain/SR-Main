@@ -26,6 +26,13 @@ class AppState {
   saved = $state<SavedScenario[]>([]);
   mounted = $state(false);
 
+  // ---- UI state ----
+  narrative = $state<'research' | 'eli5'>('research');   // narrative register, site-wide
+  drawerOpen = $state(false);                            // levers drawer visible
+  drawerPinned = $state(false);                          // docked (content shifts) vs overlay
+  toggleDrawer() { this.drawerOpen = !this.drawerOpen; }
+  closeDrawer() { this.drawerOpen = false; }
+
   // ---- optimiser ("Best value") ----
   optimizeBudget = $state(PRESETS.find((p) => p.optimize)?.budget ?? 5);
   optimizeResult = $state<OptimizeResult | null>(null);
@@ -48,6 +55,13 @@ class AppState {
   activePreset = $derived(PRESETS.find((p) => this.eq(this.levers, p.levers))?.name ?? null);
   matchedSaved = $derived(this.saved.find((s) => this.eq(this.levers, s.levers))?.name ?? null);
   scenarioName = $derived(this.activePreset ?? this.matchedSaved ?? (this.optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
+  scenarioDescription = $derived.by(() => {
+    const p = PRESETS.find((x) => this.eq(this.levers, x.levers));
+    if (p) return p.description;
+    if (this.matchedSaved) return `One of your saved scenarios. Open the Levers drawer to see or change its settings.`;
+    if (this.optimizeApplied && this.optimizeResult) return `The budget-optimal allocation: the most disadvantage-gap closed for £${this.optimizeResult.budget.toFixed(1)}bn/yr, solved live against the engine.`;
+    return 'A custom package — your own combination of levers. Pick a named stance, or open the Levers drawer to tune it.';
+  });
 
   insolvencyYear = $derived(this.sim.years.find((y) => y.insolvencyRisk)?.year ?? null);
   horizonDeficit = $derived(this.sim.years.find((y) => y.year === this.horizon)?.highNeedsDeficitStock ?? 0);

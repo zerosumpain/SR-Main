@@ -196,8 +196,8 @@
     font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; white-space: nowrap; }
   .msel button.active { background: #1c1611; color: #f1ead6; }
 
-  .grid2 { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
-  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid2 { display: grid; grid-template-columns: minmax(300px, 440px) minmax(280px, 1fr); gap: 22px; align-items: start; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
   .mapwrap { display: flex; flex-direction: column; gap: 6px; }
   svg { display: block; width: 100%; height: auto; }

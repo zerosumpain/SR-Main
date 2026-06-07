@@ -23,9 +23,43 @@ const CAUSE: Record<string, string> = {
   cumulativeCost: 'The running total of additional programme spend vs status quo — the sum of every active lever’s annual cost. Steeper lines mean a more expensive package; compare it against the gap and attainment charts for value.',
 };
 
+// ELI5 register: what each metric IS, and why it moves, in plain jargon-free English.
+const ELI5_LEAD: Record<string, string> = {
+  gapKS4: 'This is how far behind poorer pupils are by the time they sit their GCSEs, in months of learning.',
+  gapKS2: 'How far behind poorer pupils are by the end of primary school.',
+  attainment8: 'The average GCSE result score across the country.',
+  grade5EM: 'The share of pupils who get a strong pass in both English and maths GCSE.',
+  ks2RWM: 'The share of primary children hitting the expected standard in reading, writing and maths.',
+  gld: 'The share of five-year-olds who are “ready” for school.',
+  ehcpPct: 'The share of pupils with a legal special-needs plan (an EHCP).',
+  highNeedsDeficitStock: 'The pile of debt councils run up paying for special-needs support.',
+  ehcpAttainment8: 'How well pupils with a special-needs plan do at GCSE.',
+  persistentAbsence: 'The share of pupils missing a lot of school.',
+  childPoverty: 'The share of children growing up in poverty.',
+  neet: 'The share of young adults not in any education, job or training.',
+  teacherShortfall: 'How many teachers short of the pledge the country is.',
+  cumulativeCost: 'The total extra money this plan spends compared with doing nothing.',
+};
+const ELI5_CAUSE: Record<string, string> = {
+  gapKS4: 'It mostly comes down to poorer kids missing more school — so getting them to attend is the biggest lever. Early-years help matters even more but takes about eleven years to show up.',
+  gapKS2: 'Driven by missed school, the reading push, and early-years help carrying over.',
+  attainment8: 'Results rise when there are enough good teachers and kids show up — just spending money does little unless it pays for those teachers.',
+  grade5EM: 'It follows the overall results, so it rises with teachers and attendance.',
+  ks2RWM: 'Reading and phonics work and good teaching move it; the 2028 curriculum change adds later.',
+  gld: 'It is almost entirely about early-years support before children even start school.',
+  ehcpPct: 'It keeps climbing on its own; early help slows it, and the 2030 reforms divert some plans — though experts doubt the official target.',
+  highNeedsDeficitStock: 'It explodes when special-needs costs outrun the budget; in 2028 a protection rule ends and the debt starts draining school budgets.',
+  ehcpAttainment8: 'It improves with proper support, but falls if plans are cut without putting that support into mainstream schools.',
+  persistentAbsence: 'Attendance mentors and breakfast clubs bring it down; poverty pushes it up.',
+  childPoverty: 'It falls with anti-poverty action (like scrapping the two-child limit) and free school meals.',
+  neet: 'It falls when more young people leave school qualified and get skills and mental-health support — but it is creeping up as youth mental health worsens.',
+  teacherShortfall: 'It closes with recruitment, better pay, and funding for posts; below zero means a surplus.',
+  cumulativeCost: 'Bigger packages cost more — and a few “growth-rate” levers (funding, pay) get more expensive every year they run.',
+};
+
 const row = (s: YearResult[], yr: number) => s.find((y) => y.year === yr) ?? s[s.length - 1];
 
-export interface ChartSummary { text: string; tone: 'good' | 'bad' | 'neutral'; }
+export interface ChartSummary { text: string; eli5: string; tone: 'good' | 'bad' | 'neutral'; }
 
 export function chartSummary(
   primary: string,
@@ -64,5 +98,14 @@ export function chartSummary(
   }
 
   const text = `In your scenario it ${moveWord} from ${u(start)} (2025) to ${u(v)} by ${horizon}${vs}. ${CAUSE[primary] ?? ''}`;
-  return { text, tone };
+
+  // plain-English version, same figures
+  const moveEli = v > start + 1e-6 ? 'goes up' : v < start - 1e-6 ? 'comes down' : 'stays at about';
+  let vsEli = '';
+  if (meaningful && !m.neutral) vsEli = ` — ${improved ? 'better' : 'worse'} than doing nothing by ${fmt(Math.abs(delta))}${deltaUnit}`;
+  else if (meaningful && m.neutral) vsEli = ` (${delta > 0 ? '+' : ''}${fmt(delta)}${deltaUnit} vs doing nothing)`;
+  else if (!meaningful) vsEli = ' — about the same as doing nothing';
+  const eli5 = `${ELI5_LEAD[primary] ?? ''} It ${moveEli} ${u(v)} by ${horizon} (from ${u(start)} today)${vsEli}. ${ELI5_CAUSE[primary] ?? ''}`.trim();
+
+  return { text, eli5, tone };
 }

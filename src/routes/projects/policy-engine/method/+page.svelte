@@ -76,7 +76,7 @@
     {/each}
   </div>
 
-  <a class="pe-next" href="/projects/policy-engine/build">Back to the levers → Build</a>
+  <button class="pe-next" onclick={() => app.toggleDrawer()}>Open the levers drawer →</button>
 </div>
 
 <style>
