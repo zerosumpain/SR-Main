@@ -59,9 +59,9 @@
 
 <svelte:head>
   <title>Projects — Strange Ramblings</title>
-  <meta name="description" content="Things I'm building — autonomously by AI from a single prompt." />
+  <meta name="description" content="Things I've built — interactive field studies, games, and data tools. Some by hand, some developed autonomously by AI." />
   <meta property="og:title" content="Projects — Strange Ramblings" />
-  <meta property="og:description" content="Things I'm building — autonomously by AI from a single prompt." />
+  <meta property="og:description" content="Things I've built — interactive field studies, games, and data tools. Some by hand, some developed autonomously by AI." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://strangeramblings.com/projects" />
 </svelte:head>
@@ -97,8 +97,8 @@
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <div class="max-w-4xl mb-12">
     <p class="text-base leading-relaxed max-w-lg" style="color: var(--text-secondary);">
-      Projects built autonomously by AI. Each one started as a prompt and was developed iteratively
-      by an LLM working in a sandboxed environment.
+      A mix of things I've built — interactive field studies, games, and data tools. Some made by
+      hand, some developed autonomously by AI from a single prompt (those carry an "AI Built" mark).
     </p>
   </div>
 

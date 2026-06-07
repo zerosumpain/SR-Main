@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { projectVisibility } from '$lib/db/schema';
 import { getAllowedProjectKeys } from '$lib/projects/registry';
+import { purgeProjectCdn } from '$lib/projects/cdn-purge';
 
 // Auth is enforced by the hook (401 for /api/* when unauthed; bypassed on the
 // homeserv LAN), so this handler mirrors the existing unpublish endpoint and
@@ -30,5 +31,12 @@ export const POST: RequestHandler = async ({ request }) => {
       set: { isPublic, updatedAt: new Date() },
     });
 
-  return json({ ok: true, key, isPublic });
+  // Going private: clear the stale-public copies from Cloudflare's edge so the
+  // origin's 404 takes effect immediately (no-op when CF creds are unset).
+  let purged = 0;
+  if (!isPublic) {
+    ({ purged } = await purgeProjectCdn(key));
+  }
+
+  return json({ ok: true, key, isPublic, purged });
 };
