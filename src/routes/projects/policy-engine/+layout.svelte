@@ -116,6 +116,8 @@
   </div>
 
   <footer class="foot">
+    <p class="foot-personal"><b>A personal project.</b> Built by John Kelly in a personal capacity and in his own time. It does not
+      represent the Department for Education, any government or political party, or any official position, and takes no political stance.</p>
     <details class="sources-foot"><summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
       <ul>{#each SOURCES as s}<li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>{/each}</ul>
     </details>
@@ -219,6 +221,9 @@
 
   .foot { position: relative; z-index: 1; padding: 18px 28px 26px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); margin-top: 24px; }
   .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); font-family: 'JetBrains Mono', monospace; }
+  .foot-personal { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); max-width: 96ch;
+    padding: 8px 12px; border-left: 3px solid rgba(28,22,17,0.3); background: rgba(28,22,17,0.035); border-radius: 0 6px 6px 0; }
+  .foot-personal b { color: var(--ink); }
   .foot-disc { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 96ch; }
   .foot-disc b { color: var(--ink-soft); } .foot-disc a { color: #2f6f97; }
   .sources-foot { font-size: 11.5px; }

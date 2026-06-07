@@ -33,8 +33,9 @@
         <span class="risk-icon" aria-hidden="true">⚠</span>
         <p>
           I’ve used some personal knowledge, research methodology and coding to build this policy engine —
-          <b>but a lot of AI has been used to support me, and I’m not a statistician.</b> I built this to help me better
-          understand the policy challenges, <b>so use it at your own risk.</b>
+          <b>but a lot of AI has been used to support me, and I’m not a statistician.</b> This is a personal project, built in my own
+          time: <b>it doesn’t represent the Department for Education, any government or party, or any official position</b>, and it takes
+          no political stance. I built it to help me better understand the policy challenges, <b>so use it at your own risk.</b>
           <span class="sig">~ JK</span>
         </p>
       </div>
