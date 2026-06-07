@@ -11,7 +11,7 @@
   import CompareReadout from './components/CompareReadout.svelte';
   import LeverDrawer from './components/LeverDrawer.svelte';
   import ScenarioSelector from './components/ScenarioSelector.svelte';
-  import NarrativeToggle from './components/NarrativeToggle.svelte';
+  import SectionNav from './components/SectionNav.svelte';
   import Onboarding from './components/Onboarding.svelte';
 
   let { children } = $props();
@@ -20,13 +20,6 @@
   let topH = $state(0); // measured sticky-header height, so the levers sidebar docks right beneath it
   const isDataRoute = $derived(/\/(outcomes|population|regions)$/.test(pathname));
 
-  const NAV = [
-    { href: '/projects/policy-engine', label: 'Overview' },
-    { href: '/projects/policy-engine/outcomes', label: 'Outcomes' },
-    { href: '/projects/policy-engine/population', label: 'Population' },
-    { href: '/projects/policy-engine/regions', label: 'Regions' },
-    { href: '/projects/policy-engine/method', label: 'Method' },
-  ];
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
 
   onMount(() => {
@@ -74,11 +67,8 @@
       <a class="back" href="/projects">← Field studies</a>
       <a class="brand" href="/projects/policy-engine">Education Policy Modelling</a>
       <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰ Levers</button>
-      <nav class="subnav" aria-label="Sections">
-        {#each NAV as n}<a class:active={pathname === n.href.replace(/\/$/, '')} href={n.href}>{n.label}</a>{/each}
-      </nav>
+      <span class="tagline">FIELD STUDY №4 · ENGLAND SCHOOLS · 2025–2040</span>
       <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">? How to use</button>
-      <NarrativeToggle />
     </header>
 
     <div class="scenebar">
@@ -124,7 +114,10 @@
         <button class="spine" onclick={() => app.openDrawer()} title="Show the policy levers"><span class="spine-txt">☰ &nbsp; Policy levers</span></button>
       {/if}
     </aside>
-    <main class="content">{@render children()}</main>
+    <main class="content">
+      <SectionNav />
+      {@render children()}
+    </main>
   </div>
 
   <footer class="foot">
@@ -159,7 +152,8 @@
   .subnav a { font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--ink-soft); text-decoration: none; padding: 5px 11px; border-radius: 7px; transition: background 0.12s, color 0.12s; }
   .subnav a:hover { background: rgba(28,22,17,0.06); color: var(--ink); }
   .subnav a.active { background: var(--ink); color: var(--paper); font-weight: 500; }
-  .help-btn { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 5px 10px; border-radius: 7px; border: 1px solid rgba(47,125,79,0.4);
+  .tagline { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(28,22,17,0.42); white-space: nowrap; }
+  .help-btn { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 5px 10px; border-radius: 7px; border: 1px solid rgba(47,125,79,0.4);
     background: rgba(47,125,79,0.08); color: #2f7d4f; cursor: pointer; }
   .help-btn:hover { background: rgba(47,125,79,0.16); }
 
@@ -212,10 +206,11 @@
   :global(.pe-eyebrow) { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 7px; }
   :global(.pe-h1) { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 3.6vw, 36px); line-height: 1.0; letter-spacing: -0.02em; margin: 0 0 12px; color: var(--ink); }
   :global(.pe-h2) { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em; margin: 30px 0 8px; color: var(--ink); }
-  :global(.pe-lede) { font-size: 14px; line-height: 1.62; color: rgba(28,22,17,0.74); max-width: 66ch; }
-  :global(.pe-prose) { font-size: 13px; line-height: 1.62; color: rgba(28,22,17,0.74); max-width: 68ch; }
-  :global(.pe-prose.wide) { max-width: 88ch; }
-  :global(.pe-prose p) { margin: 0 0 12px; }
+  /* narrative spans the full content / chart-render width (per design direction) */
+  :global(.pe-lede) { font-size: 15px; line-height: 1.6; color: rgba(28,22,17,0.74); }
+  :global(.pe-prose) { font-size: 13.5px; line-height: 1.66; color: rgba(28,22,17,0.74); }
+  :global(.pe-prose.cols) { columns: 23em; column-gap: 44px; }
+  :global(.pe-prose p) { margin: 0 0 12px; break-inside: avoid; }
   :global(.pe-prose b) { color: var(--ink); }
   :global(.pe-prose a) { color: #2f6f97; }
   :global(.pe-next) { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--paper); background: var(--ink); padding: 8px 15px; border-radius: 8px; text-decoration: none; border: none; cursor: pointer; }

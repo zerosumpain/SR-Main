@@ -196,8 +196,8 @@
     font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; white-space: nowrap; }
   .msel button.active { background: #1c1611; color: #f1ead6; }
 
-  .grid2 { display: grid; grid-template-columns: minmax(300px, 440px) minmax(280px, 1fr); gap: 22px; align-items: start; }
-  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid2 { display: grid; grid-template-columns: minmax(300px, 440px) minmax(280px, 1fr); gap: 22px; align-items: stretch; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; align-items: start; } }
 
   .mapwrap { display: flex; flex-direction: column; gap: 6px; }
   svg { display: block; width: 100%; height: auto; }
@@ -212,7 +212,9 @@
   .legend i { display: inline-block; width: 11px; height: 9px; border-radius: 2px; vertical-align: middle; margin-right: 4px; border: 1px solid rgba(28,22,17,0.15); }
   .lg-coast { color: rgba(28,22,17,0.5); }
 
-  .bars { display: flex; flex-direction: column; gap: 4px; }
+  /* the ranked bars fill the same height as the map beside them */
+  .bars { display: grid; grid-template-rows: repeat(9, 1fr) auto; gap: 2px 0; height: 100%; }
+  @media (max-width: 760px) { .bars { display: flex; flex-direction: column; gap: 4px; height: auto; } }
   .bar-row { display: grid; grid-template-columns: 96px 1fr 52px; align-items: center; gap: 8px; background: none; border: none;
     padding: 3px 4px; border-radius: 5px; cursor: pointer; text-align: left; }
   .bar-row:hover { background: rgba(28,22,17,0.05); }

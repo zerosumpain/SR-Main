@@ -20,7 +20,7 @@ class AppState {
   // ---- core scenario state ----
   levers = $state<LeverState>(policyLevers());
   horizon = $state(2040);
-  showBands = $state(false);
+  showBands = $state(true);   // uncertainty bands on by default
   region = $state('all');
   compareB = $state<{ levers: LeverState; name: string } | null>(null);
   saved = $state<SavedScenario[]>([]);
@@ -44,7 +44,7 @@ class AppState {
   sim = $derived(runSim(this.levers));
   baseSim = $derived(runSim(baselineLevers()));
   simB = $derived(this.compareB ? runSim(this.compareB.levers) : null);
-  mc = $derived(this.showBands ? runMonteCarlo(this.levers, 180) : null);
+  mc = $derived(this.showBands ? runMonteCarlo(this.levers, 110) : null); // lazy: only computes on pages that read it (Outcomes)
 
   // ---- geographic re-basing ----
   viewSim = $derived(this.region === 'all' ? this.sim.years : regionalise(this.sim.years, this.region, this.levers));

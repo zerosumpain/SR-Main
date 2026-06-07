@@ -173,7 +173,7 @@
     background: rgba(74,124,124,0.1); border: 1px solid rgba(74,124,124,0.3); }
   .rgn-note b { color: #1c1611; }
   .theme { margin: 26px 0; }
-  .theme-prose { margin: 0 0 14px; font-size: 12.5px; line-height: 1.6; color: rgba(28,22,17,0.68); max-width: 78ch; }
+  .theme-prose { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.68); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 14px; align-items: start; }
   .cell { display: flex; flex-direction: column; position: relative; }
   .expand { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
