@@ -98,3 +98,19 @@ enforced by the hook. Returns `{ ok: true }` or `400` for an unknown key.
 - Unit (vitest): visibility resolver — default-public, row override, viewer filtering.
 - Manual / post-deploy curl on prod: private project absent from listing HTML; direct URL +
   an asset path both 404 for the public across all three serving paths; toggle round-trips.
+
+## Known caveat — CDN edge cache (eventual consistency)
+
+The origin gate is exact: a private project's page **and** assets return 404 (verified with a
+cache-busting query). But Cloudflare edge-caches static-extension assets (`.js`/`.css`) with a
+~4h TTL. An asset fetched while a project was **public** stays in the edge cache after the
+project is toggled private, so a hashed asset URL someone already holds can still be served by
+the CDN until it ages out. The HTML entry point is **not** CDN-cached, so the project 404s and
+cannot load/be discovered for the public — only individual already-cached asset files leak,
+briefly.
+
+Pages are unaffected; this only matters for assets of a project that was public then hidden.
+To make it instant, either: (a) provision a Cloudflare API token (zone + `cache_purge`) and
+purge `'/projects/<key>/*'` in the toggle handler when `isPublic→false`; or (b) add a
+Cloudflare cache rule to bypass cache on `/projects/*`. Neither is wired (no CF token exists;
+the site fronts via a cloudflared tunnel).
