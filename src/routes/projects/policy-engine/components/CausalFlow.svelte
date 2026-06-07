@@ -102,6 +102,14 @@
     return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - (isSkip(e) ? 42 : 6) };
   }
   const strokeOf = (k?: string) => (k === 'risk' ? '#b1455e' : k === 'strong' ? '#2f7d4f' : k === 'weak' ? 'rgba(28,22,17,0.4)' : 'rgba(28,22,17,0.32)');
+  const widthOf = (k?: string) => (k === 'strong' ? 2.4 : k === 'weak' ? 1.2 : 1.6);
+  const dashOf = (k?: string) => (k === 'weak' || k === 'risk' ? '4 3' : 'none');
+  const LEGEND: { kind: string; label: string; eg: string }[] = [
+    { kind: 'strong', label: 'Strong, well-evidenced channel', eg: 'attendance → gap, teachers → attainment' },
+    { kind: 'normal', label: 'Causal link', eg: 'standard modelled effect' },
+    { kind: 'weak', label: 'Weak or lagged link', eg: '£→outcome, early-years 11-yr lag' },
+    { kind: 'risk', label: 'Risk / cost edge', eg: 'double-edged EHCP reform, 2028 cliff' },
+  ];
 
   let hover = $state<string | null>(null);
   function dim(nodeId: string): boolean {
@@ -150,9 +158,18 @@
   </svg>
   </div>
   <figcaption>
-    Solid green = the strongest, best-evidenced channels (attendance, teacher capacity). Dashed = weak or
-    lagged links (the £→outcome elasticity, early-years cohort lag). Red dashed = a risk/cost edge (EHCP
-    reform is double-edged; the SEND deficit hits the 2028 override cliff). Hover a box to isolate its links.
+    <div class="cf-legend">
+      {#each LEGEND as l (l.kind)}
+        <span class="lg">
+          <svg class="sw" viewBox="0 0 32 10" width="32" height="10" aria-hidden="true">
+            <line x1="1" y1="5" x2="25" y2="5" stroke={strokeOf(l.kind)} stroke-width={widthOf(l.kind)} stroke-dasharray={dashOf(l.kind)} />
+            <path d="M24,1.5 L31,5 L24,8.5 z" fill={strokeOf(l.kind)} />
+          </svg>
+          <span class="lg-txt"><b>{l.label}</b><i>{l.eg}</i></span>
+        </span>
+      {/each}
+    </div>
+    <p class="cf-note">Driver boxes are tinted by policy-lever group. Arrows point from cause to effect. Hover any box to isolate its links.</p>
   </figcaption>
 </figure>
 
@@ -165,5 +182,12 @@
   .elabel { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.55); }
   .elabel.risk { fill: #b1455e; }
   .elabel.strong { fill: #2f7d4f; }
-  figcaption { margin-top: 7px; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
+  figcaption { margin-top: 8px; }
+  .cf-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 6px 16px; }
+  .lg { display: flex; align-items: center; gap: 8px; }
+  .sw { flex-shrink: 0; }
+  .lg-txt { display: flex; flex-direction: column; line-height: 1.25; }
+  .lg-txt b { font-size: 11.5px; font-weight: 600; color: var(--ink, #1c1611); }
+  .lg-txt i { font-style: normal; font-size: 9.5px; color: rgba(28,22,17,0.5); }
+  .cf-note { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
 </style>
