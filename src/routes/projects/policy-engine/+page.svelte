@@ -104,9 +104,9 @@
 </div>
 
 <style>
-  .hero-route { max-width: 1100px; }
-  .hero { padding: 14px 0 8px; max-width: 80ch; }
-  .hero-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(30px, 5vw, 50px); line-height: 1.0; letter-spacing: -0.025em; margin: 4px 0 14px; color: var(--ink); }
+  .hero-route { max-width: 1000px; }
+  .hero { padding: 10px 0 8px; max-width: 64ch; }
+  .hero-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(30px, 4.6vw, 46px); line-height: 0.98; letter-spacing: -0.025em; margin: 4px 0 14px; color: var(--ink); max-width: 16ch; }
   .snapshot { margin: 22px 0 8px; padding: 14px 16px; border: 1px solid rgba(28,22,17,0.14); border-radius: 10px; background: rgba(255,255,255,0.4); }
   .snap-lab { font-size: 12px; color: rgba(28,22,17,0.6); } .snap-lab b { color: var(--ink); }
   .snap-nums { display: flex; flex-wrap: wrap; gap: 22px; margin: 10px 0 12px; }
@@ -114,7 +114,7 @@
   .sn b { font-family: 'Fraunces', serif; font-weight: 600; font-size: 28px; line-height: 1; color: var(--ink); }
   .sn b.good { color: #2f7d4f; } .sn b.bad { color: #b1455e; }
   .sn small { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(28,22,17,0.5); margin-top: 3px; max-width: 18ch; }
-  .story { margin: 18px 0; max-width: 74ch; }
+  .story { margin: 22px 0; }
   .sections { margin: 26px 0 12px; }
   .sec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
   .sec-card { display: flex; flex-direction: column; gap: 4px; padding: 14px 15px; border: 1px solid rgba(28,22,17,0.14); border-radius: 10px;

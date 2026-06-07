@@ -6,7 +6,7 @@
   import { app } from '../lib/appState.svelte';
   onMount(async () => {
     await goto('/projects/policy-engine/outcomes', { replaceState: true });
-    app.drawerOpen = true; app.drawerPinned = true;
+    app.openDrawer();
   });
 </script>
 

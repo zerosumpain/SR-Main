@@ -30,18 +30,13 @@
   }
 </script>
 
-{#if app.drawerOpen && !app.drawerPinned}
-  <button class="backdrop" aria-label="Close levers" onclick={() => app.closeDrawer()}></button>
-{/if}
-
-<aside class="drawer" class:open={app.drawerOpen} class:pinned={app.drawerPinned} aria-hidden={!app.drawerOpen}>
+<div class="panel">
   <div class="d-head">
-    <span class="d-title">Policy levers</span>
-    <span class="d-sub">{railLeverCount} levers</span>
-    <div class="d-actions">
-      <button class="d-pin" class:on={app.drawerPinned} onclick={() => (app.drawerPinned = !app.drawerPinned)} title={app.drawerPinned ? 'Unpin (overlay)' : 'Pin open (dock)'}>{app.drawerPinned ? '📌' : '📍'}</button>
-      <button class="d-close" onclick={() => app.closeDrawer()} aria-label="Close levers">✕</button>
+    <div class="d-title-wrap">
+      <span class="d-title">Policy levers</span>
+      <span class="d-sub">{railLeverCount} levers · move one and watch the data →</span>
     </div>
+    <button class="d-close" onclick={() => app.closeDrawer()} title="Collapse the levers" aria-label="Collapse levers">‹</button>
   </div>
 
   <div class="d-body">
@@ -86,25 +81,17 @@
       <div class="ageid"><AgeIdentification levers={app.levers} onChange={(id, v) => app.setLever(id, v)} onReset={() => app.resetAgeId()} /></div>
     </section>
   </div>
-</aside>
+</div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(28,22,17,0.28); border: none; cursor: pointer; padding: 0; }
-  .drawer {
-    position: fixed; left: 0; top: 0; bottom: 0; width: 372px; max-width: 88vw; z-index: 100;
-    background: var(--paper, #f1ead6); border-right: 1px solid rgba(28,22,17,0.18);
-    box-shadow: 8px 0 30px -16px rgba(0,0,0,0.4); display: flex; flex-direction: column;
-    transform: translateX(-100%); transition: transform 0.24s ease; will-change: transform;
-  }
-  .drawer.open { transform: translateX(0); }
-  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
-  .d-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid rgba(28,22,17,0.12); flex-shrink: 0; }
-  .d-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; color: var(--ink, #1c1611); }
-  .d-sub { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.45); }
-  .d-actions { margin-left: auto; display: inline-flex; gap: 4px; }
-  .d-pin, .d-close { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 6px; width: 28px; height: 26px; cursor: pointer; font-size: 12px; color: var(--ink, #1c1611); }
-  .d-pin.on { background: #2f6f97; border-color: #2f6f97; }
-  .d-body { overflow-y: auto; padding: 12px 14px 40px; flex: 1; min-height: 0; }
+  .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .d-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px 10px; border-bottom: 1px solid rgba(28,22,17,0.12); flex-shrink: 0; }
+  .d-title-wrap { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .d-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink, #1c1611); }
+  .d-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
+  .d-close { margin-left: auto; background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 16px; line-height: 1; color: var(--ink, #1c1611); flex-shrink: 0; }
+  .d-close:hover { background: rgba(28,22,17,0.06); }
+  .d-body { overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 40px; flex: 1; min-height: 0; }
   .blk { margin-bottom: 18px; }
   h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13.5px; margin: 0 0 8px; color: var(--ink, #1c1611); }
   .rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }

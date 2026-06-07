@@ -28,10 +28,12 @@ class AppState {
 
   // ---- UI state ----
   narrative = $state<'research' | 'eli5'>('research');   // narrative register, site-wide
-  drawerOpen = $state(false);                            // levers drawer visible
-  drawerPinned = $state(false);                          // docked (content shifts) vs overlay
-  toggleDrawer() { this.drawerOpen = !this.drawerOpen; }
-  closeDrawer() { this.drawerOpen = false; }
+  drawerOpen = $state(false);                            // levers sidebar docked open
+  drawerUserSet = $state(false);                         // user has manually opened/closed it (suppresses route default)
+  toggleDrawer() { this.drawerOpen = !this.drawerOpen; this.drawerUserSet = true; }
+  closeDrawer() { this.drawerOpen = false; this.drawerUserSet = true; }
+  openDrawer() { this.drawerOpen = true; this.drawerUserSet = true; }
+  showHelp = $state(false);                              // onboarding / how-to-use overlay
 
   // ---- optimiser ("Best value") ----
   optimizeBudget = $state(PRESETS.find((p) => p.optimize)?.budget ?? 5);

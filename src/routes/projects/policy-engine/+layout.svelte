@@ -12,10 +12,13 @@
   import LeverDrawer from './components/LeverDrawer.svelte';
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import NarrativeToggle from './components/NarrativeToggle.svelte';
+  import Onboarding from './components/Onboarding.svelte';
 
   let { children } = $props();
   const STORAGE = 'whitehall-model-levers-v1';
   let copied = $state(false);
+  let topH = $state(0); // measured sticky-header height, so the levers sidebar docks right beneath it
+  const isDataRoute = $derived(/\/(outcomes|population|regions)$/.test(pathname));
 
   const NAV = [
     { href: '/projects/policy-engine', label: 'Overview' },
@@ -33,7 +36,10 @@
     else { try { const raw = localStorage.getItem(STORAGE); if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') app.levers = { ...policyLevers(), ...p }; } } catch { /* ignore */ } }
     app.saved = loadSaved();
     app.mounted = true;
+    try { if (!localStorage.getItem('epm-onboarded')) app.showHelp = true; } catch { /* ignore */ }
   });
+  // default the levers open alongside the data on the data pages (until the user decides otherwise)
+  $effect(() => { if (app.mounted && !app.drawerUserSet) app.drawerOpen = isDataRoute; });
   function setUrl(url: string) { try { replaceState(url, {}); } catch { try { history.replaceState(history.state, '', url); } catch { /* ignore */ } } }
   $effect(() => {
     if (!app.mounted) return;
@@ -59,18 +65,19 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" />
 </svelte:head>
 
-<div class="page" class:shift={app.drawerOpen && app.drawerPinned}>
+<div class="page">
   <div class="paper-grain" aria-hidden="true"></div>
-  <LeverDrawer />
+  <Onboarding />
 
-  <div class="topstack">
+  <div class="topstack" bind:clientHeight={topH}>
     <header class="masthead">
       <a class="back" href="/projects">← Field studies</a>
       <a class="brand" href="/projects/policy-engine">Education Policy Modelling</a>
-      <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Open the policy-levers drawer">☰ Levers</button>
+      <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰ Levers</button>
       <nav class="subnav" aria-label="Sections">
         {#each NAV as n}<a class:active={pathname === n.href.replace(/\/$/, '')} href={n.href}>{n.label}</a>{/each}
       </nav>
+      <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">? How to use</button>
       <NarrativeToggle />
     </header>
 
@@ -106,7 +113,19 @@
     {/if}
   </div>
 
-  <main class="page-body">{@render children()}</main>
+  <div class="shell" class:open={app.drawerOpen} style="--topH:{topH}px">
+    {#if app.drawerOpen}
+      <button class="side-scrim" aria-label="Close levers" onclick={() => app.closeDrawer()}></button>
+    {/if}
+    <aside class="side" class:open={app.drawerOpen}>
+      {#if app.drawerOpen}
+        <LeverDrawer />
+      {:else}
+        <button class="spine" onclick={() => app.openDrawer()} title="Show the policy levers"><span class="spine-txt">☰ &nbsp; Policy levers</span></button>
+      {/if}
+    </aside>
+    <main class="content">{@render children()}</main>
+  </div>
 
   <footer class="foot">
     <details class="sources-foot"><summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
@@ -122,10 +141,7 @@
     --paper: #f1ead6; --paper-deep: #e7decc; --ink: #1c1611; --ink-soft: rgba(28,22,17,0.62);
     position: relative; min-height: 100vh; background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.4), transparent 60%), var(--paper);
     color: var(--ink); font-family: 'DM Sans', system-ui, sans-serif; overflow-x: hidden; overflow-x: clip;
-    transition: padding-left 0.24s ease;
   }
-  .page.shift { padding-left: 372px; }
-  @media (max-width: 900px) { .page.shift { padding-left: 0; } }
   .paper-grain { position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5; mix-blend-mode: multiply;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.14  0 0 0 0 0.10  0 0 0 0.07 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
 
@@ -143,6 +159,9 @@
   .subnav a { font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--ink-soft); text-decoration: none; padding: 5px 11px; border-radius: 7px; transition: background 0.12s, color 0.12s; }
   .subnav a:hover { background: rgba(28,22,17,0.06); color: var(--ink); }
   .subnav a.active { background: var(--ink); color: var(--paper); font-weight: 500; }
+  .help-btn { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 5px 10px; border-radius: 7px; border: 1px solid rgba(47,125,79,0.4);
+    background: rgba(47,125,79,0.08); color: #2f7d4f; cursor: pointer; }
+  .help-btn:hover { background: rgba(47,125,79,0.16); }
 
   .scenebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 6px 28px; border-top: 1px solid rgba(28,22,17,0.07); }
   .scene-desc { flex: 1 1 320px; min-width: 240px; margin: 0; font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.66);
@@ -165,18 +184,38 @@
   .cliff { margin: 4px 28px 8px; padding: 7px 12px; font-size: 12px; line-height: 1.45; border-radius: 7px; background: rgba(177,69,94,0.1); color: #8a2d3a; border: 1px solid rgba(177,69,94,0.25); }
   .cliff b { color: #6f2230; } .cliff a { color: #8a2d3a; }
 
-  .page-body { position: relative; z-index: 1; }
+  /* two-column app shell: the levers dock IN FLOW beside the data, so moving a slider visibly
+     updates the adjacent charts. The sidebar is sticky (stays as the content scrolls); never overlays on desktop. */
+  .shell { position: relative; z-index: 1; display: grid; grid-template-columns: 46px minmax(0, 1fr); transition: grid-template-columns 0.22s ease; }
+  .shell.open { grid-template-columns: 348px minmax(0, 1fr); }
+  .side { position: sticky; top: var(--topH, 0px); align-self: start; height: calc(100vh - var(--topH, 0px));
+    border-right: 1px solid rgba(28,22,17,0.12); background: rgba(241,234,214,0.5); overflow: hidden; }
+  .side-scrim { display: none; }
+  .spine { width: 46px; height: 100%; background: rgba(28,22,17,0.03); border: none; border-right: 1px solid rgba(28,22,17,0.08); cursor: pointer; padding: 0; }
+  .spine:hover { background: rgba(28,22,17,0.07); }
+  .spine-txt { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 14px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.6); white-space: nowrap; }
+  .content { min-width: 0; }
+  @media (max-width: 900px) {
+    /* on narrow screens the sidebar overlays (there's no room to dock) */
+    .shell, .shell.open { grid-template-columns: 1fr; }
+    .side { position: fixed; left: 0; top: 0; height: 100vh; width: 0; z-index: 100; transition: width 0.22s ease; box-shadow: 8px 0 30px -16px rgba(0,0,0,0.4); }
+    .side.open { width: min(340px, 86vw); }
+    .shell.open .side-scrim { display: block; position: fixed; inset: 0; z-index: 95; background: rgba(28,22,17,0.3); border: none; }
+    .spine { display: none; }
+  }
 
   /* shared route helpers */
-  :global(.pe-route) { padding: 24px 28px 8px; max-width: 1240px; margin: 0 auto; }
-  :global(.pe-route.wide) { max-width: 1480px; }
-  :global(.pe-eyebrow) { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 6px; }
-  :global(.pe-h1) { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(25px, 3.4vw, 36px); line-height: 1.04; letter-spacing: -0.02em; margin: 0 0 12px; color: var(--ink); }
-  :global(.pe-h2) { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; letter-spacing: -0.01em; margin: 30px 0 8px; color: var(--ink); }
-  :global(.pe-lede) { font-size: 15px; line-height: 1.62; color: rgba(28,22,17,0.75); max-width: 68ch; }
-  :global(.pe-prose) { font-size: 13.5px; line-height: 1.65; color: rgba(28,22,17,0.76); }
-  :global(.pe-prose.narrow) { max-width: 72ch; }
-  :global(.pe-prose p) { margin: 0 0 13px; }
+  /* type scale + measures aligned to the data-convergence "Field Study" standard */
+  :global(.pe-route) { padding: 26px 32px 8px; max-width: 1180px; margin: 0 auto; }
+  :global(.pe-route.wide) { max-width: 1440px; }
+  :global(.pe-eyebrow) { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 7px; }
+  :global(.pe-h1) { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(24px, 3.6vw, 36px); line-height: 1.0; letter-spacing: -0.02em; margin: 0 0 12px; color: var(--ink); }
+  :global(.pe-h2) { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em; margin: 30px 0 8px; color: var(--ink); }
+  :global(.pe-lede) { font-size: 14px; line-height: 1.62; color: rgba(28,22,17,0.74); max-width: 66ch; }
+  :global(.pe-prose) { font-size: 13px; line-height: 1.62; color: rgba(28,22,17,0.74); max-width: 68ch; }
+  :global(.pe-prose.wide) { max-width: 88ch; }
+  :global(.pe-prose p) { margin: 0 0 12px; }
   :global(.pe-prose b) { color: var(--ink); }
   :global(.pe-prose a) { color: #2f6f97; }
   :global(.pe-next) { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--paper); background: var(--ink); padding: 8px 15px; border-radius: 8px; text-decoration: none; border: none; cursor: pointer; }
