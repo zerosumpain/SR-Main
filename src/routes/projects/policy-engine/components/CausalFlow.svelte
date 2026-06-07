@@ -168,7 +168,7 @@
 
 <figure class="cf">
   <div class="cf-scroll">
-  <svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Causal flow diagram of the model">
+  <svg class="cf-diagram" viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Causal flow diagram of the model">
     <text x={COLX[0]} y="16" class="coltitle" text-anchor="middle">POLICY LEVERS</text>
     <text x={COLX[1]} y="16" class="coltitle" text-anchor="middle">MEDIATORS</text>
     <text x={COLX[2]} y="16" class="coltitle" text-anchor="middle">OUTCOMES</text>
@@ -207,12 +207,13 @@
   </svg>
   </div>
   <figcaption>
+    <span class="cf-legtitle">How to read the arrows</span>
     <div class="cf-legend">
       {#each LEGEND as l (l.kind)}
         <span class="lg">
-          <svg class="sw" viewBox="0 0 32 10" width="32" height="10" aria-hidden="true">
-            <line x1="1" y1="5" x2="25" y2="5" stroke={strokeOf(l.kind)} stroke-width={widthOf(l.kind)} stroke-dasharray={dashOf(l.kind)} />
-            <path d="M24,1.5 L31,5 L24,8.5 z" fill={strokeOf(l.kind)} />
+          <svg class="sw" viewBox="0 0 34 12" width="34" height="12" aria-hidden="true">
+            <line x1="1" y1="6" x2="26" y2="6" stroke={strokeOf(l.kind)} stroke-width={widthOf(l.kind)} stroke-dasharray={dashOf(l.kind)} />
+            <path d="M25,2 L33,6 L25,10 z" fill={strokeOf(l.kind)} />
           </svg>
           <span class="lg-txt"><b>{l.label}</b><i>{l.eg}</i></span>
         </span>
@@ -225,7 +226,8 @@
 <style>
   .cf { margin: 0; }
   .cf-scroll { overflow-x: auto; }
-  svg { display: block; min-width: 760px; background: rgba(28,22,17,0.02); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; }
+  /* scoped to the diagram ONLY — must not hit the small legend swatch <svg>s below */
+  .cf-diagram { display: block; min-width: 760px; background: rgba(28,22,17,0.02); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; }
   .coltitle { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; fill: rgba(28,22,17,0.45); }
   .cf-div { stroke: rgba(74,124,124,0.5); stroke-width: 1; stroke-dasharray: 3 3; }
   .cf-divlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; fill: #4a7c7c; }
@@ -233,12 +235,14 @@
   .elabel { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.55); }
   .elabel.risk { fill: #b1455e; }
   .elabel.strong { fill: #2f7d4f; }
-  figcaption { margin-top: 8px; }
-  .cf-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 6px 16px; }
-  .lg { display: flex; align-items: center; gap: 8px; }
-  .sw { flex-shrink: 0; }
-  .lg-txt { display: flex; flex-direction: column; line-height: 1.25; }
+  figcaption { margin-top: 10px; }
+  .cf-legtitle { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(28,22,17,0.5); margin-bottom: 7px; }
+  .cf-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 10px 18px;
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; padding: 11px 14px; }
+  .lg { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+  .sw { flex: 0 0 34px; width: 34px; height: 12px; display: block; margin-top: 2px; }
+  .lg-txt { display: flex; flex-direction: column; gap: 1px; line-height: 1.3; min-width: 0; }
   .lg-txt b { font-size: 11.5px; font-weight: 600; color: var(--ink, #1c1611); }
-  .lg-txt i { font-style: normal; font-size: 9.5px; color: rgba(28,22,17,0.5); }
-  .cf-note { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
+  .lg-txt i { font-style: normal; font-size: 9.5px; color: rgba(28,22,17,0.55); }
+  .cf-note { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
 </style>
