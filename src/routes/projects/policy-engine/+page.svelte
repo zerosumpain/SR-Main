@@ -29,16 +29,17 @@
     {#if app.narrative === 'eli5'}
       <p>
         <b>What is this?</b> It’s a playable, pretend version of England’s school system. You move the sliders a government actually
-        controls, and it shows what might happen every year up to 2040. It’s built on real research, and honest about what nobody
+        controls, and it shows what might happen every year up to 2040. It’s built on real research, and open about what nobody
         knows for sure. It doesn’t only track the gap between richer and poorer pupils: it follows <b>GCSE results</b>, <b>special-needs
         support and its growing debt</b>, kids <b>missing school</b>, child poverty, and <b>young people with no job or training</b> —
         for the whole country and broken down by area.
       </p>
       <p>
-        Three things surprise people. <b>Getting kids to attend school is the single biggest lever.</b> <b>Helping under-fives matters
-        most of all</b>, but takes about eleven years to show up in GCSE results. And <b>money on its own doesn’t fix results</b> — it
-        only helps if it pays for more and better teachers. That’s why a giant funding slider can cost a fortune and barely move a chart
-        unless you also staff the schools.
+        Three findings stand out. <b>In the model, getting kids to attend school is the strongest single lever.</b> <b>Helping under-fives
+        has the biggest long-run effect</b>, but takes about eleven years to show up in GCSE results. And <b>whether money on its own lifts
+        results is genuinely debated</b> — some studies find little effect at the amounts England already spends, others find clear gains
+        when the money reaches teaching. This model takes the cautious view and assumes funding helps mainly by paying for more and better
+        teachers, so a giant funding slider barely moves a chart unless you also staff the schools. Treat that as an assumption to test, not a fact.
       </p>
       <p>
         It is <b>not</b> a crystal ball. It’s a place to ask “what would it actually take?”, see the hard trade-offs, and test an idea
@@ -56,11 +57,14 @@
         regions</b>, and as headcounts of real children.
       </p>
       <p>
-        It is built around a few hard truths from the evidence. <b>Attendance is the engine of the gap</b> — EPI attributes the entire
-        post-2019 widening to disadvantaged pupils missing more school. <b>Early years matter most but pay off slowest</b>, reaching GCSE
-        only after an eleven-year lag. And <b>money is not a lever on its own</b>: the link from per-pupil spending to attainment is close
-        to zero, so funding only helps to the extent it buys teachers, specialists and retention — which is why a big funding slider can
-        cost tens of billions and barely move a chart unless you also staff the system.
+        It is built around a few findings from the evidence — each of them debated, and treated here as an assumption you can test rather
+        than a settled fact. <b>EPI attributes most of the post-2019 widening of the gap to disadvantaged pupils missing more school</b>,
+        which is why attendance is the model’s strongest single lever. <b>Early-years investment carries the largest long-run effect but the
+        slowest</b>, reaching GCSE only after an eleven-year lag. And <b>the link from per-pupil spending to attainment is contested</b>:
+        some studies find it weak at England’s current spending levels, while quasi-experimental school-finance-reform studies (Jackson,
+        Johnson &amp; Persico; Lafortune et al.) find clear gains, especially for disadvantaged pupils, where the money reaches teaching.
+        This model takes the cautious reading and routes funding <i>through</i> teacher capacity, so a funding slider moves the charts only
+        to the extent it buys staff and retention — a modelling choice, not a verdict on whether money matters.
       </p>
       <p>
         It is <b>not</b> a forecast, and not a substitute for judgement. It is a transparent place to ask “what would it actually take?”,

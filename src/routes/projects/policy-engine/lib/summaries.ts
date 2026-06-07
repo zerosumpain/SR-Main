@@ -9,7 +9,7 @@ import { OUTCOMES_BY_ID } from './outcomes';
 const CAUSE: Record<string, string> = {
   gapKS4: 'Most of the variability comes from disadvantaged absence (the single strongest lever), then child poverty, pupil premium and early-years investment — the last of which only reaches GCSE with an ~11-year lag.',
   gapKS2: 'Driven by disadvantaged absence, the reading & oracy push and early-years carry-over.',
-  attainment8: 'Moves with teacher capacity (the strongest evidenced channel) and attendance, with curriculum reform adding from 2028; £/pupil has little direct effect.',
+  attainment8: 'Moves with teacher capacity (the strongest evidenced channel) and attendance, with curriculum reform adding from 2028; £/pupil has little direct effect in the model — a deliberate, contested assumption (see Method).',
   grade5EM: 'Tracks Attainment 8 — it rises with teacher quality and attendance, and the disadvantaged line is held down by the gap.',
   ks2RWM: 'Sensitive to the reading & oracy push, teacher capacity and attendance; the 2028 curriculum refresh adds later.',
   gld: 'Almost entirely an early-years story: quality investment, disadvantaged access and the Early Years Pupil Premium move it within ~2 years.',
@@ -43,7 +43,7 @@ const ELI5_LEAD: Record<string, string> = {
 const ELI5_CAUSE: Record<string, string> = {
   gapKS4: 'It mostly comes down to poorer kids missing more school — so getting them to attend is the biggest lever. Early-years help matters even more but takes about eleven years to show up.',
   gapKS2: 'Driven by missed school, the reading push, and early-years help carrying over.',
-  attainment8: 'Results rise when there are enough good teachers and kids show up — just spending money does little unless it pays for those teachers.',
+  attainment8: 'Results rise when there are enough good teachers and kids show up — in the model, spending mainly helps when it pays for those teachers (a debated assumption you can change).',
   grade5EM: 'It follows the overall results, so it rises with teachers and attendance.',
   ks2RWM: 'Reading and phonics work and good teaching move it; the 2028 curriculum change adds later.',
   gld: 'It is almost entirely about early-years support before children even start school.',

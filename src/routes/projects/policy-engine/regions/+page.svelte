@@ -18,8 +18,9 @@
       <p>
         This page splits the country into its nine regions (the numbers still add back up to the national figure). It’s also where the
         government’s two new 2026 schemes — <b>Mission North East</b> and <b>Mission Coastal</b> (starting in Hastings and Scarborough) —
-        try to help the worst-off areas. They’re real, but there’s no published budget and little proof that this kind of local spending
-        closes gaps, so the model only gives them a small, slow effect. Click a region to view the whole site through its lens.
+        aim to help the worst-off areas. They’re real, but new and not yet evaluated, and no budget has been published — so the model gives
+        them a deliberately small, slow effect. That caution reflects how little is yet known about schemes like these, not a prediction that
+        they won’t work. Click a region to view the whole site through its lens.
       </p>
     {:else}
       <p>
@@ -30,11 +31,11 @@
       </p>
       <p>
         This page decomposes the national model onto the nine English regions, calibrated to DfE Key-Stage-4 data and EPI’s regional
-        gaps, and re-centred so the regions always weight back to the England figure. It is also where the two 2026 area missions earn
-        their keep: <b>Mission North East</b> and <b>Mission Coastal</b> (Hastings and Scarborough) are real, London-Challenge-style
-        programmes — though no budget has been published and the evidence that place-based money closes attainment gaps is weak, so their
-        modelled effect is deliberately small, slow and concentrated on the regions that need it most. Click a region to filter the whole
-        site to it.
+        gaps, and re-centred so the regions always weight back to the England figure. It is also where the two 2026 area missions appear:
+        <b>Mission North East</b> and <b>Mission Coastal</b> (Hastings and Scarborough) are real, London-Challenge-style programmes. They are
+        new and not yet evaluated, and no budget has been published, so the model treats their effect cautiously — modest, gradual and
+        concentrated on the regions they target. That caution reflects how thin the evidence on place-based attainment programmes still is,
+        not a prediction about whether they will succeed. Click a region to filter the whole site to it.
       </p>
     {/if}
   </div>

@@ -78,7 +78,7 @@
     <div>
       <h3>Outcomes by region · {horizon}</h3>
       <p class="sub">The national model decomposed onto the 9 English regions. Place-based levers — <b>place-based investment</b> and the
-        2026 <b>Mission North East</b> &amp; <b>Mission Coastal</b> — close the worst regions’ penalties. Click a region to filter the whole page to it.</p>
+        2026 <b>Mission North East</b> &amp; <b>Mission Coastal</b> — are modelled to act on the worst regions’ penalties. Click a region to filter the whole page to it.</p>
     </div>
     <div class="msel" role="group" aria-label="Metric">
       {#each METRICS as m}
@@ -179,9 +179,9 @@
   <p class="foot">
     Regional baselines: DfE EES Key-Stage-4 2023/24 (per-region Attainment 8, validated to the national 46.1 on DfE pupil weights) +
     EPI Annual Report 2025 regional gaps; persistent absence DfE 2023/24 (London 17.9% vs North East 22.1%). Mission North East &amp;
-    Mission Coastal are real programmes (Schools White Paper, Feb 2026; launch Sept 2026) but <b>no budget is published</b> and
-    place-based attainment evidence is weak — the modelled penalty-closure is deliberately small, slow and capped, and the 9 regions
-    always weight back to the national figure.
+    Mission Coastal are real programmes (Schools White Paper, Feb 2026; launch Sept 2026); <b>no budget has been published</b> and they are
+    new and not yet evaluated, so the modelled penalty-closure is kept deliberately small, slow and capped — a cautious assumption given the
+    thin evidence, not a prediction. The 9 regions always weight back to the national figure.
   </p>
 </div>
 

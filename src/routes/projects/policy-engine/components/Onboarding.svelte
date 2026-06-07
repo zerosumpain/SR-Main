@@ -26,7 +26,7 @@
       <h2 class="ob-h">A flight simulator for England’s schools</h2>
       <p class="ob-lede">
         Move the policies a government actually controls and watch what happens to the disadvantage gap — and to real children —
-        every year to 2040. It’s built on the research, and honest about what nobody knows for sure.
+        every year to 2040. It’s built on the research, and open about what nobody knows for sure.
       </p>
 
       <div class="ob-risk" role="note">

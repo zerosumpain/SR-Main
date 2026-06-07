@@ -71,8 +71,8 @@
           { label: 'At 16 — status quo', color: C_BASE, values: proj('gapKS4', vb), dashed: true },
           { label: 'At 11 (KS2) — your scenario', color: C_ALT, values: withHist('gapKS2') }] }] },
       { key: 'attainment', title: 'Attainment', prose:
-        'Levels, not gaps. Attainment is driven by teacher capacity (the strong evidenced channel), attendance, and the literacy/curriculum levers — never by a direct £-per-pupil effect. Core funding shows up here only indirectly, by funding the staff that raise capacity. Good Level of Development at age 5 is almost entirely an early-years story.',
-        eli5: 'How good results are, rather than the gap. Results go up mainly when there are enough good teachers and kids show up — plus better reading and curriculum. Spending money on its own barely helps unless it pays for those teachers. The age-5 “school-ready” number is almost all about early-years help.',
+        'Levels, not gaps. Attainment is driven by teacher capacity (the strongest evidenced channel), attendance, and the literacy/curriculum levers — and, in this model, not by a direct £-per-pupil effect (a deliberate, contested assumption — see Method). Core funding shows up here only indirectly, by funding the staff that raise capacity. Good Level of Development at age 5 is almost entirely an early-years story.',
+        eli5: 'How good results are, rather than the gap. Results go up mainly when there are enough good teachers and kids show up — plus better reading and curriculum. In this model, spending on its own helps mainly when it pays for those teachers (a debated assumption you can change). The age-5 “school-ready” number is almost all about early-years help.',
         charts: [
           { title: 'Attainment 8', unit: 'score (0–90)', dp: 1, target: { value: TARGETS.attainment8, label: 'WP target 50' }, series: [
             { label: 'All pupils — your', color: C_YOU, values: withHist('attainment8'), emphasis: true, band: bandFor('attainment8') },

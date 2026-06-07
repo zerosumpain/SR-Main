@@ -83,7 +83,7 @@
   const assumptions = [
     'Pupil Premium is modelled as a quality-moderated offset with wide uncertainty, NOT a clean £→attainment elasticity — there is no robust published estimate (EEF; Gorard 2022).',
     'The funded-childcare expansion is treated as largely gap-neutral: it is a working-parent subsidy buying the +3-month "quantity" effect, not the larger quality effects, and reaches few disadvantaged children.',
-    'Attainment level is driven by teacher capacity, attendance and curriculum — not directly by £/pupil, whose elasticity is weak/near-zero at current spending (Jackson et al.; IFS).',
+    'Attainment level is modelled as driven by teacher capacity, attendance and curriculum rather than directly by £/pupil. The direct funding→attainment link is genuinely contested — weak/near-zero at current spending in some studies (Hanushek; IFS), clearly positive in quasi-experimental school-finance-reform studies (Jackson, Johnson & Persico; Lafortune et al.). The model takes the cautious reading; this is an assumption, not a settled finding.',
     'EHCP reform is double-edged: narrowing plans cuts the deficit but lowers SEND attainment and raises tribunals unless matched by mainstream investment.',
     'The DSG statutory override ends March 2028: from then, any accumulated high-needs deficit is serviced from general funds, cutting mainstream per-pupil funding and (above a threshold) flagging council insolvency — the modelled "cliff".',
     'A representative-cohort model: it shows direction, relative magnitude and interplay — not point forecasts.',
@@ -120,7 +120,7 @@
       headline outcomes. The relationships and their relative strength are calibrated from the evidence base.</p>
     <CausalFlow />
     <pre class="spine">child poverty ─▶ home environment ─▶ age-5 gap ─▶ KS2 gap ─▶ KS4 gap   (≈40% of the age-16 gap is set by age 5)
-funding ─▶ teacher capacity ─▶ attainment level                         (weak direct £→outcome link)
+funding ─▶ teacher capacity ─▶ attainment level                         (direct £→outcome link contested; modelled as weak)
 breakfast + attendance mentors ─▶ attendance ─▶ attainment & the gap     (the strongest single lever)
 early SEND + inclusive mainstream ─▶ slows EHCP demand ─▶ shrinks deficit
 EHCP reform ─▶ cuts deficit BUT harms SEND attainment & raises tribunals (unless matched by inclusion)
@@ -181,7 +181,7 @@ attainment ─▶ NEET                                                       (+ 
   </section>
 
   <section>
-    <h3>Limitations &amp; honesty</h3>
+    <h3>Limitations</h3>
     <ul>{#each limitations as l}<li>{l}</li>{/each}</ul>
   </section>
 
@@ -189,8 +189,8 @@ attainment ─▶ NEET                                                       (+ 
     <h3>International comparators (the Global tab)</h3>
     <p>
       The <a href="/projects/policy-engine/global">Global</a> tab is a separate, non-modelled exhibit: it does <b>not</b> run the engine,
-      it stress-tests the engine’s three core assumptions (money is a weak/conditional lever; equity is the real differentiator; gains are
-      reversible) against real cross-country data. Ten systems are compared — the <b>UK</b> anchor plus three deliberately chosen tiers:
+      it stress-tests the engine’s three core assumptions (that money is a weak/conditional lever; that equity matters more than spending; that
+      gains are reversible) against real cross-country data. Ten systems are compared — the <b>UK</b> anchor plus three deliberately chosen tiers:
       <b>education leaders</b> (Singapore, Japan, Estonia), <b>economic peers</b> (France, Germany, Italy) and <b>wildcards</b>
       (Ireland, Poland, Vietnam). Every figure was independently re-verified against the OECD/World-Bank primary sources before publishing;
       the audit found all 33 PISA scores and all equity metrics correct, and corrected two presentation issues (below).
@@ -224,7 +224,7 @@ attainment ─▶ NEET                                                       (+ 
     <p><b>The headline findings:</b> spending barely predicts maths once past the $75k threshold (Germany and the UK spend most and trail
       cheaper Estonia and Japan; Vietnam nears England on a ninth of the spend); equity varies enormously at the same price (England’s gap
       of 86 is fairer than the OECD’s 93 and far fairer than France’s 113 / Germany’s 111 at equal-or-higher spend, while Ireland’s 74 is
-      fairest of all); and gains are reversible (Germany −25, Poland −27 in a single cycle). All three corroborate the engine’s design.</p>
+      fairest of all); and gains are reversible (Germany −25, Poland −27 in a single cycle). All three are consistent with the engine’s design — though cross-country correlations are suggestive, not causal.</p>
     <table>
       <thead><tr><th>Country</th><th>Tier</th><th>Maths</th><th>Read</th><th>Sci</th><th>Gap</th><th>Cumul. 6–15</th><th>Trend</th></tr></thead>
       <tbody>

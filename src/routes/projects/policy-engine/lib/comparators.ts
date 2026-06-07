@@ -110,7 +110,7 @@ export const COUNTRIES: Country[] = [
     code: 'JP', name: 'Japan', flag: '🇯🇵', tier: 'leader',
     maths: 536, reading: 516, science: 547, spendGdp: 4.0, spendStudent: 13323, spendComparable: true,
     spendCumulative: 101400, escsVariance: 12, escsGap: 81, resilient: 12, gdpCap: 51685, mathsTrend: 9, trendSig: false,
-    lesson: 'High and equitable on roughly average cumulative spend — and it held its maths steady through the pandemic (rising in reading and science) while most of the West fell. The cleanest counter-example to “you get what you pay for”.',
+    lesson: 'High and equitable on roughly average cumulative spend — and it held its maths steady through the pandemic (rising in reading and science) while most of the West fell. A clear case that strong, fair results need not track spending.',
     eli5: 'Top marks and fair, on ordinary money — and it didn’t lose ground in maths when most countries slipped backwards.',
   },
   {
@@ -159,7 +159,7 @@ export const COUNTRIES: Country[] = [
     code: 'VN', name: 'Vietnam', flag: '🇻🇳', tier: 'other',
     maths: 469, reading: 462, science: 472, spendGdp: 2.9, spendStudent: null, spendComparable: false,
     spendCumulative: 13800, escsVariance: 14, escsGap: 78, resilient: 13, gdpCap: 16386, mathsTrend: null, trendSig: null,
-    lesson: 'Near-OECD outcomes and the most resilient disadvantaged pupils (13% reach the top) — on the lowest income and spend by far (a cumulative ~$14k, a ninth of Singapore’s). The value-for-money outlier that embarrasses every richer country.',
+    lesson: 'Near-OECD outcomes and the most resilient disadvantaged pupils (13% reach the top) — on the lowest income and spend by far (a cumulative ~$14k, a ninth of Singapore’s). The value-for-money outlier — near-OECD outcomes on a fraction of richer countries’ spend.',
     eli5: 'Does almost as well as us, and its poorer kids do best of all — on a tiny fraction of the money. The bargain of the group.',
   },
 ];

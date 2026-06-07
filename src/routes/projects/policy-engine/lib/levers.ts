@@ -259,7 +259,7 @@ export const LEVERS: LeverDef[] = [
     id: 'mission_ne', group: 'indirect', label: 'Mission North East', unit: '%',
     min: 0, max: 100, step: 5, baseline: 0, policy: 50,
     blurb: 'The 2026 place-based programme for the North East: expert-practitioner support to raise teaching quality plus out-of-school mentoring, careers and enrichment — modelled on the London Challenge.',
-    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Targets the lowest Attainment 8 of any region (43.7) and the "North East puzzle" — a small KS2 gap (9.5mo) that widens to 21.6mo by KS4. No budget has been published, and place-based attainment evidence is weak (Opportunity Areas were process-only; one OA gap even widened), so the modelled regional closure is deliberately small, slow and capped.',
+    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Targets the lowest Attainment 8 of any region (43.7) and the "North East puzzle" — a small KS2 gap (9.5mo) that widens to 21.6mo by KS4. No budget has been published, and the evidence on place-based attainment programmes is thin and mixed (earlier Opportunity Areas were largely process-focused, with varied outcomes), so the modelled regional closure is kept deliberately small, slow and capped — a cautious assumption under uncertainty, not a prediction about the programme’s success.',
     source: 'DfE Schools White Paper 2026; EPI/Durham/NECA North East report (2025)', url: 'https://www.gov.uk/government/news/new-missions-to-transform-childhoods-of-most-disadvantaged',
     confidence: 'assumption', policyRef: 'Mission North East (DfE, Sept 2026)',
   },
@@ -267,7 +267,7 @@ export const LEVERS: LeverDef[] = [
     id: 'mission_coastal', group: 'indirect', label: 'Mission Coastal', unit: '%',
     min: 0, max: 100, step: 5, baseline: 0, policy: 50,
     blurb: 'The 2026 place-based programme for coastal/seaside communities (initially Hastings & Scarborough, widening over time) — a London-Challenge-style school-improvement partnership.',
-    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Disadvantaged coastal pupils are ~3 GCSE grades behind non-coastal peers (DfE 2019); disadvantaged pupils in Hastings average ~26 Attainment 8. Coastal underperformance is hidden when merged with wealthier inland averages (CMO 2021). No budget published; the modelled closure of the coastal penalty is small, slow and capped.',
+    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Disadvantaged coastal pupils are ~3 GCSE grades behind non-coastal peers (DfE 2019); disadvantaged pupils in Hastings average ~26 Attainment 8. Coastal underperformance is hidden when merged with wealthier inland averages (CMO 2021). No budget has been published, and the programme is new and not yet evaluated, so the modelled closure of the coastal penalty is kept small, slow and capped — a cautious assumption, not a prediction.',
     source: 'DfE Schools White Paper 2026; CMO "Health in Coastal Communities" (2021); DfE 2019', url: 'https://www.gov.uk/government/news/new-missions-to-transform-childhoods-of-most-disadvantaged',
     confidence: 'assumption', policyRef: 'Mission Coastal (DfE, Sept 2026)',
   },
@@ -292,8 +292,8 @@ export const LEVERS: LeverDef[] = [
     id: 'school_funding', group: 'macro', label: 'Core schools funding (real/yr)', unit: '%/yr',
     min: -3, max: 2.5, step: 0.25, baseline: 0.4, policy: 0.4, format: (v) => `${v > 0 ? '+' : ''}${v}%`,
     blurb: 'Real-terms growth in core per-pupil schools funding.',
-    evidence: 'Per-pupil funding is ≈ its 2010 real-terms level, but mainstream funding has been squeezed by SEND cost growth. The funding→attainment elasticity is weak/near-zero at current spending — money is modelled as acting through teacher inputs, not directly.',
-    source: 'IFS Spending Review 2025; Jackson et al.', url: 'https://ifs.org.uk/publications/annual-report-education-spending-england-2025-26',
+    evidence: 'Per-pupil funding is ≈ its 2010 real-terms level, but mainstream funding has been squeezed by SEND cost growth. The strength of the funding→attainment link is contested — weak/near-zero at current spending in some studies (Hanushek; IFS), clearly positive in quasi-experimental finance-reform studies (Jackson, Johnson & Persico). The model takes the cautious reading and treats money as acting through teacher inputs rather than directly — an assumption, not a settled fact.',
+    source: 'IFS Spending Review 2025; Hanushek; Jackson, Johnson & Persico', url: 'https://ifs.org.uk/publications/annual-report-education-spending-england-2025-26',
     confidence: 'high', policyRef: 'Spending Review 2025 / National Funding Formula',
   },
 ];
@@ -342,12 +342,12 @@ export const LEVER_META: Record<string, LeverMeta> = {
   eal_support:    { drives: ['attainment'], modelNote: 'A direct attainment channel that bypasses absence (language & curriculum access).' },
   care_support:   { drives: ['neet', 'send'], modelNote: 'Targets a high-risk stratum (looked-after / kinship) largely invisible to FSM flags — mainly cuts NEET and lifts vulnerable-pupil attainment.' },
   behaviour_support: { drives: ['neet', 'absence'], modelNote: 'Cuts the exclusion → alternative-provision → NEET pipeline.' },
-  place_investment: { drives: ['gap', 'neet'], modelNote: 'Closes the cold-spot residual two equally-poor areas don’t share; the Regions page concentrates it in the worst regions (small, slow — weak evidence).' },
+  place_investment: { drives: ['gap', 'neet'], modelNote: 'Closes the cold-spot residual two equally-poor areas don’t share; the Regions page concentrates it in the worst regions (small, slow — reflecting thin, mixed evidence on place-based programmes).' },
   tutoring:       { drives: ['gap'], modelNote: 'Disadvantage-targeted catch-up — narrows the gap rather than just lifting the level.' },
   housing_instability: { drives: ['absence', 'gap'], modelNote: 'An EXOGENOUS context slider (higher = worse), acting mainly through disadvantaged absence — not an education-budget lever.' },
   mission_ne:     { drives: ['gap'], modelNote: 'Acts mostly REGIONALLY (see the Regions page) — closes the North East’s penalty; the national effect is small because it touches ~4.6% of pupils.' },
   mission_coastal:{ drives: ['gap'], modelNote: 'Acts mostly REGIONALLY — closes the coastal cross-cut penalty; small national effect.' },
-  school_funding: { drives: ['capacity', 'attainment'], modelNote: 'Money acts THROUGH teacher capacity, never directly (the £→attainment elasticity is ~0), so funding buys staff & retention which buys attainment — a blunt, expensive route that caps at full staffing.' },
+  school_funding: { drives: ['capacity', 'attainment'], modelNote: 'In the model, money acts THROUGH teacher capacity rather than directly (a deliberate, contested assumption — the direct £→attainment link is near-zero in some studies, positive in others), so funding buys staff & retention which buys attainment — a blunt, expensive route that caps at full staffing.' },
 };
 
 export const GROUP_META: Record<string, { label: string; eli5: string; tag: string; colour: string }> = {

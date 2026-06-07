@@ -185,7 +185,7 @@
 
   <!-- calibration & honesty footer -->
   <details class="calib">
-    <summary>How we count — denominators, sources &amp; the honesty rules</summary>
+    <summary>How we count — denominators, sources &amp; the counting rules</summary>
     <div class="calib-body">
       <table>
         <thead><tr><th>Quantity</th><th class="num">2025 base</th><th>Denominator &amp; source</th></tr></thead>

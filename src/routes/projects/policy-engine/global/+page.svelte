@@ -47,21 +47,21 @@
   <div class="pe-prose lede-prose">
     {#if eli}
       <p>
-        The engine keeps making three claims: <b>money on its own barely moves results</b>, <b>how fairly a system treats poorer
-        children matters more than how much it spends</b>, and <b>the levers that work are about teaching and attendance, not cash</b>.
-        Are those just England’s quirks? This page checks them against the real world — ten countries, measured the same way by the
-        OECD’s 2022 PISA tests, with the figures fact-checked against the original OECD reports.
+        The engine rests on three debated claims: <b>that money on its own barely moves results</b>, <b>that how fairly a system treats
+        poorer children matters more than how much it spends</b>, and <b>that the levers that work are about teaching and attendance, not
+        cash</b>. Are those right — or just England’s quirks? This page checks them against the real world — ten countries, measured the same
+        way by the OECD’s 2022 PISA tests, with the figures fact-checked against the original OECD reports.
       </p>
       <p>
         The countries split three ways: <b>three of the best systems on earth</b> (to see how excellence is built), <b>three big rich
         countries like Britain</b> (the fairest comparison), and <b>three surprising ones</b> that each break a lazy assumption — plus
-        England itself. The punchline holds up: the most expensive systems are <i>not</i> the best, and countries spending the same money
-        get wildly different fairness.
+        England itself. The pattern in the data points the same way: the most expensive systems are <i>not</i> the best, and countries
+        spending the same money get very different fairness. (A snapshot like this can show patterns, but can’t on its own prove what causes what.)
       </p>
     {:else}
       <p>
         England’s model rests on three contested claims: that <b>per-pupil spending is close to a non-lever</b>, that <b>equity — how
-        little a child’s background predicts their results — is the real differentiator</b>, and that the working levers are <b>teacher
+        little a child’s background predicts their results — matters more than spending</b>, and that the working levers are <b>teacher
         capacity and attendance, not money</b>. This page pressure-tests all three against the international evidence: ten systems on a
         single comparable yardstick, <b>OECD PISA 2022</b> (maths, reading, science), with the spending measure OECD itself uses and
         equity from each country’s official PISA country note. Every figure here was independently re-verified against the OECD primary
@@ -70,8 +70,9 @@
       <p>
         The cast is deliberately constructed: <b>three education leaders</b> (Singapore, Japan, Estonia) to show how the top is reached;
         <b>three economic peers</b> (France, Germany, Italy) as like-for-like G7-type comparators; and <b>three wildcards</b> (Ireland,
-        Poland, Vietnam) each chosen to puncture an assumption — with the <b>UK</b> as the anchor. The single clearest finding:
-        <b>spending barely predicts maths once a basic threshold is met, and equity varies enormously at the same price.</b>
+        Poland, Vietnam) each chosen to puncture an assumption — with the <b>UK</b> as the anchor. The clearest pattern across these ten:
+        <b>spending barely predicts maths once a basic threshold is met, and equity varies enormously at the same price</b> — though
+        cross-country correlations are suggestive, not proof of cause.
       </p>
     {/if}
   </div>
@@ -289,26 +290,26 @@
 
   <!-- ============ tie back to the engine ============ -->
   <section class="block takeaway">
-    <h2 class="pe-h2">{eli ? 'So what does this mean for the sliders?' : 'What the world says about the levers'}</h2>
+    <h2 class="pe-h2">{eli ? 'So what does this mean for the sliders?' : 'How this compares with the model’s assumptions'}</h2>
     <div class="pe-prose">
       {#if eli}
-        <p>The rest of the world backs up what the engine keeps telling you:</p>
+        <p>The rest of the world lines up with what the engine assumes — though a snapshot like this can’t prove cause:</p>
       {:else}
-        <p>The international evidence corroborates the three assumptions the engine is built on:</p>
+        <p>This cross-country snapshot is consistent with the three assumptions the engine is built on (cross-country correlations are suggestive, not causal):</p>
       {/if}
       <ul class="take-list">
         <li>
-          <b>{eli ? 'Money alone is weak.' : 'Spending is a weak, conditional lever.'}</b>
+          <b>{eli ? 'Money alone looks weak — but it’s debated.' : 'Spending looks like a conditional lever — but the evidence is contested.'}</b>
           {eli
-            ? 'Eight of these ten spend past the point where money stops predicting results — and there Germany and the UK trail cheaper Estonia and Japan. So don’t expect the funding sliders to move the charts on their own; they only help if they buy teachers.'
-            : 'Eight of ten sit above the OECD’s $75k cumulative threshold, where the spend→maths link is flat-to-negative — exactly as the engine assumes. Funding helps only insofar as it buys teacher capacity; treat the funding levers as enablers, not drivers.'}
+            ? 'Eight of these ten spend past the point where, across countries, more money stops predicting results — and there Germany and the UK trail cheaper Estonia and Japan. In the model the funding sliders mostly help when they buy teachers — but this is a debated point, and studies of funding reforms within a single country do find positive effects.'
+            : 'Eight of ten sit above the OECD’s $75k cumulative threshold, where this cross-country spend→maths link is flat-to-negative — consistent with how the engine treats funding (as enabling teacher capacity rather than acting directly). But a cross-country snapshot can’t prove causation, and quasi-experimental studies of funding reforms do find positive effects, so this stays an assumption to test, not a settled rule.'}
           <a href="/projects/policy-engine/outcomes">See it in Attainment ↗</a>
         </li>
         <li>
-          <b>{eli ? 'Fairness is the real prize.' : 'Equity is the true differentiator.'}</b>
+          <b>{eli ? 'Fairness matters as much as money.' : 'Equity is a stronger differentiator than spend.'}</b>
           {eli
-            ? 'Countries on the same budget get wildly different gaps. England is already fairly fair — the job is to protect and extend that, which is exactly what the disadvantage-targeted sliders do.'
-            : 'At equal spend, the rich–poor gap ranges from Ireland’s 74 to France’s 113. England’s relative fairness is its strongest asset; the gap-closing levers (attendance, early years, pupil-premium targeting) are where the leverage lives.'}
+            ? 'Countries on the same budget get very different gaps. England is already comparatively fair; in the model, the disadvantage-targeted sliders act on that.'
+            : 'At equal spend, the rich–poor gap ranges from Ireland’s 74 to France’s 113. England’s relative fairness is comparatively strong; in the model, the gap-closing levers (attendance, early years, pupil-premium targeting) carry most of the leverage.'}
           <a href="/projects/policy-engine">Open the levers ↗</a>
         </li>
         <li>

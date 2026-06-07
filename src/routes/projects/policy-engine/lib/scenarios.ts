@@ -42,7 +42,7 @@ export const PRESETS: Preset[] = [
     name: 'Best value',
     eli5Name: 'Best bang for the buck',
     eli5Desc: 'Spends a set budget on whatever closes the gap the most — the computer works out the best mix for the money, and skips poor-value spending.',
-    description: 'Maximises closure of the disadvantage gap within the adjustable budget set by the slider beside the presets. A greedy optimiser allocates to the most gap-efficient levers — attendance, early years, RISE, poverty action, FSM — and skips poor value (e.g. Pupil Premium, whose £→gap link is weak). Re-solved live to the selected budget and horizon.',
+    description: 'Maximises closure of the disadvantage gap within the adjustable budget set by the slider beside the presets. A greedy optimiser allocates to the levers the model rates most gap-efficient — attendance, early years, RISE, poverty action, FSM — and skips ones it can’t bank on (e.g. Pupil Premium, whose £→gap link is unproven in the evidence). Re-solved live to the selected budget and horizon, and only as good as those assumptions.',
     levers: baselineLevers(),
     optimize: true,
     budget: 5,
@@ -79,7 +79,7 @@ export const PRESETS: Preset[] = [
     name: 'EHCP squeeze (cautionary)',
     eli5Name: 'Cut special-needs plans (risky)',
     eli5Desc: 'Slash special-needs plans to save money WITHOUT adding support. Watch the debt ease while special-needs results fall and complaints climb — a warning.',
-    description: 'Reform EHCPs hard to cut the deficit, WITHOUT matching inclusion investment. Watch the deficit ease while SEND attainment falls and tribunals climb — the failure mode the sector warns of.',
+    description: 'Reform EHCPs hard to cut the deficit, WITHOUT matching inclusion investment. Watch the deficit ease while SEND attainment falls and tribunals climb — the trade-off the sector warns about.',
     levers: withOverrides({ ehcp_reform: 100, inclusion_fund: 0.1, send_early: 20, high_needs: 0 }),
   },
   {

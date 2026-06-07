@@ -16,7 +16,7 @@
 
 <div class="pe-route">
   <span class="pe-eyebrow">Method &amp; calculations</span>
-  <h1 class="pe-h1">How it works, and why it’s honest</h1>
+  <h1 class="pe-h1">How it works, and what it assumes</h1>
   <div class="pe-prose cols">
     {#if app.narrative === 'eli5'}
       <p>
@@ -25,11 +25,12 @@
         fuzzy band of uncertainty rather than one confident line.
       </p>
       <p>
-        The most important rule answers the big question: “why does spending loads of money barely change anything?” Because <b>money
-        doesn’t buy good results directly</b> — it only helps if it pays for <b>more and better teachers</b>. So in the model, funding
-        and pay work by hiring and keeping staff. Pour money in but leave the staffing the same and, rightly, not much happens. The same
-        goes for the special-needs budget (it fixes the <i>debt</i>, not the gap) and the local “missions” (they help their own regions).
-        The chart and per-lever notes below spell out exactly what each slider changes.
+        One modelling choice shapes a lot of the results, and it’s worth being upfront about. <b>Whether money on its own lifts results is
+        genuinely debated</b>: some studies find little effect at the amounts England already spends, others find clear gains when it reaches
+        teaching. This model takes the cautious view — funding and pay work by hiring and keeping staff, so pour money in but leave the
+        staffing the same and, in the model, not much happens. That’s an assumption you can test, not a fact. The same design choices keep
+        the special-needs budget acting on the <i>debt</i> (not the gap) and the local “missions” acting on their own regions. The chart and
+        per-lever notes below spell out exactly what each slider changes.
       </p>
     {:else}
       <p>
@@ -39,13 +40,15 @@
         band and a source or an explicit assumption flag; the Monte-Carlo bands propagate that uncertainty.
       </p>
       <p>
-        A deliberate design choice runs through the whole thing and answers the most common question — “why does pouring money in barely
-        move the outcomes?”. <b>Money does not buy attainment directly.</b> The funding→attainment elasticity is close to zero at current
-        spending (IFS, NFER, Jackson et al.), so the model routes core funding, teacher pay and bursaries <i>through teacher capacity</i> —
-        they fund the staff, retention and specialists that actually raise results. Spend a fortune and leave the workforce untouched and
-        you will, correctly, see little. The same discipline keeps high-needs funding acting on the SEND deficit (not the gap), and the
-        area missions acting regionally (not nationally). The “what moves the needle” chart and the per-lever notes below make every one
-        of these channels explicit.
+        One design choice runs through the whole model and is worth stating plainly, because it is contested. <b>The strength of the
+        funding→attainment link is debated</b>: some analyses find it weak at England’s current per-pupil spending (Hanushek; cross-sectional
+        spend-vs-PISA), while quasi-experimental studies of school-finance reforms (Jackson, Johnson &amp; Persico; Lafortune et al.) find
+        clear positive effects, particularly for disadvantaged pupils, where the extra money reaches the classroom. This model adopts the
+        cautious reading and routes core funding, teacher pay and bursaries <i>through teacher capacity</i> — they fund the staff, retention
+        and specialists that raise results — so money left un-spent on the workforce moves the modelled outcomes little. That is an
+        assumption the user can change, not a verdict on the debate. The same design keeps high-needs funding acting on the SEND deficit
+        (not the gap), and the area missions acting regionally (not nationally). The “what moves the needle” chart and the per-lever notes
+        below make every one of these channels explicit.
       </p>
     {/if}
   </div>
@@ -57,7 +60,7 @@
   {#if app.narrative === 'eli5'}
     <p class="sec-blurb">Each bar shows how much one slider, pushed all the way, changes the number you pick. Short bars aren’t broken — that slider probably changes a <i>different</i> thing (like the special-needs debt or youth unemployment).</p>
   {:else}
-    <p class="sec-blurb">Each bar is how far a single lever, swung across its full range, moves the chosen KPI — the model’s sensitivity laid bare. Short bars are not bugs: many levers act on a <i>different</i> outcome (the deficit, NEET, absence) than the one selected.</p>
+    <p class="sec-blurb">Each bar is how far a single lever, swung across its full range, moves the chosen KPI — the model’s sensitivity shown directly. Short bars are not bugs: many levers act on a <i>different</i> outcome (the deficit, NEET, absence) than the one selected.</p>
   {/if}
   {#if app.mounted}<Sensitivity levers={app.levers} horizon={app.horizon} />{/if}
 
