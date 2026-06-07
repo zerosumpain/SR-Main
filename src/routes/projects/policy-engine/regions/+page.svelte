@@ -46,7 +46,7 @@
     {/if}
   </div>
 
-  <a class="pe-next" href="/projects/policy-engine/method">How it all works → Method</a>
+  <a class="pe-next" href="/projects/policy-engine/global">Now against the world → Global</a>
 </div>
 
 <style>.panel { margin: 18px 0 22px; }</style>

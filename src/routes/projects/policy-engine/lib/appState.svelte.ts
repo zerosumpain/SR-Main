@@ -33,6 +33,8 @@ class AppState {
   toggleDrawer() { this.drawerOpen = !this.drawerOpen; this.drawerUserSet = true; }
   closeDrawer() { this.drawerOpen = false; this.drawerUserSet = true; }
   openDrawer() { this.drawerOpen = true; this.drawerUserSet = true; }
+  highlightLever = $state<string | null>(null);          // a lever to scroll-to + flash in the rail
+  focusLever(id: string) { this.openDrawer(); this.highlightLever = id; }
   showHelp = $state(false);                              // onboarding / how-to-use overlay
 
   // ---- optimiser ("Best value") ----

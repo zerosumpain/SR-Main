@@ -15,6 +15,19 @@
 
   let openInfo = $state<string | null>(null);
   let collapsed = $state<Record<string, boolean>>({});
+  let railEl: HTMLDivElement | undefined = $state();
+  let flashId = $state<string | null>(null);
+  // when a chart hint asks to "adjust this slider", expand its group, scroll to it and flash it
+  $effect(() => {
+    const id = app.highlightLever;
+    if (!id) return;
+    const L = LEVERS_BY_ID[id];
+    if (L && collapsed[L.group]) collapsed[L.group] = false;
+    app.highlightLever = null;
+    flashId = id;
+    setTimeout(() => (railEl?.querySelector(`[data-lever="${id}"]`) as HTMLElement | null)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 70);
+    setTimeout(() => { if (flashId === id) flashId = null; }, 1700);
+  });
 
   function fmtVal(id: string): string {
     const L = LEVERS_BY_ID[id];
@@ -33,7 +46,7 @@
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
 </script>
 
-<div class="rail" class:multicol>
+<div class="rail" class:multicol bind:this={railEl}>
   {#each GROUP_ORDER as g}
     {@const meta = GROUP_META[g]}
     {@const items = LEVERS.filter((l) => l.group === g)}
@@ -49,7 +62,7 @@
         <div class="levers">
           {#each items as L (L.id)}
             {@const changed = (levers[L.id] ?? L.baseline) !== L.baseline}
-            <div class="lever">
+            <div class="lever" class:flash={flashId === L.id} data-lever={L.id}>
               <div class="lever-top">
                 <span class="l-label">{lname(L.id, L.label)}</span>
                 <span class="l-val" class:changed>{fmtVal(L.id)}</span>
@@ -98,6 +111,10 @@
 <style>
   .rail { display: flex; flex-direction: column; gap: 8px; }
   .rail.multicol { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+  .lever { border-radius: 6px; }
+  .lever.flash { animation: leverFlash 1.6s ease; }
+  @keyframes leverFlash { 0%, 100% { background: transparent; box-shadow: none; } 18%, 60% { background: rgba(63,125,110,0.16); box-shadow: 0 0 0 2px rgba(63,125,110,0.55); } }
+  @media (prefers-reduced-motion: reduce) { .lever.flash { animation: none; box-shadow: 0 0 0 2px rgba(63,125,110,0.55); } }
   .group { border: 1px solid rgba(28,22,17,0.1); border-radius: 7px; overflow: hidden; background: rgba(255,255,255,0.28); }
   .group-head {
     width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px;

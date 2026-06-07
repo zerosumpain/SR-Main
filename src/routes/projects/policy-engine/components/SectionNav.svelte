@@ -8,6 +8,7 @@
     { href: '/projects/policy-engine/outcomes', label: 'Outcomes' },
     { href: '/projects/policy-engine/population', label: 'Population' },
     { href: '/projects/policy-engine/regions', label: 'Regions' },
+    { href: '/projects/policy-engine/global', label: 'Global' },
   ];
   const METHOD = { href: '/projects/policy-engine/method', label: 'How it works' };
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));

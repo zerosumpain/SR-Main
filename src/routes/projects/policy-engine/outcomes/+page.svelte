@@ -4,6 +4,25 @@
   import ChartModal from '../components/ChartModal.svelte';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from '../lib/params';
   import { chartSummary } from '../lib/summaries';
+  import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '../lib/levers';
+
+  // the handful of sliders that most move each chart — a hint pointing the user at the drawer
+  const KEY_LEVERS: Record<string, string[]> = {
+    gapKS4: ['attendance', 'poverty_action', 'ey_quality', 'tutoring', 'place_investment'],
+    attainment8: ['teachers', 'teacher_pay', 'attendance', 'reading', 'curriculum'],
+    grade5EM: ['teachers', 'attendance', 'reading', 'curriculum'],
+    ks2RWM: ['reading', 'teachers', 'attendance', 'curriculum'],
+    gld: ['ey_quality', 'ey_access', 'eypp', 'poverty_action'],
+    ehcpPct: ['inclusion_fund', 'send_early', 'ehcp_reform', 'mental_health'],
+    highNeedsDeficitStock: ['high_needs', 'inclusion_fund', 'ehcp_reform', 'send_early'],
+    ehcpAttainment8: ['inclusion_fund', 'send_early', 'ehcp_reform', 'send_pipeline', 'care_support'],
+    persistentAbsence: ['attendance', 'breakfast', 'mental_health', 'behaviour_support', 'housing_instability'],
+    childPoverty: ['poverty_action', 'fsm'],
+    neet: ['post16_skills', 'mental_health', 'care_support', 'behaviour_support', 'camhs'],
+    teacherShortfall: ['teachers', 'teacher_pay', 'bursaries', 'school_funding'],
+    cumulativeCost: [],
+  };
+  const lname = (id: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? LEVERS_BY_ID[id].label : LEVERS_BY_ID[id].label);
 
   interface ChartDef { title: string; unit: string; dp: number; zeroBased?: boolean; target?: { value: number; label: string } | null; series: ChartSeries[]; }
 
@@ -158,11 +177,18 @@
       <div class="grid">
         {#each th.charts as c (c.title)}
           {@const sm = sumFor(c)}
+          {@const movers = KEY_LEVERS[CHART_PRIMARY[c.title]] ?? []}
           <div class="cell">
             <button class="expand" onclick={() => (expanded = c)} aria-label="Expand {c.title}">⤢</button>
             <OutcomeChart title={dispTitle(c.title)} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
               horizonYear={app.horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
             <p class="summary tone-{sm.tone}">{app.narrative === 'eli5' ? sm.eli5 : sm.text}</p>
+            {#if movers.length}
+              <div class="hint">
+                <span class="hint-lab">▸ sliders that move this:</span>
+                {#each movers as id (id)}<button class="hint-chip" onclick={() => app.focusLever(id)} title="Jump to this slider in the levers drawer">{lname(id)}</button>{/each}
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -195,5 +221,10 @@
   .summary { margin: 6px 2px 0; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.66); border-left: 2px solid rgba(28,22,17,0.18); padding-left: 8px; }
   .summary.tone-good { border-left-color: #2f7d4f; }
   .summary.tone-bad { border-left-color: #b1455e; }
+  .hint { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 7px 2px 0; }
+  .hint-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.5); }
+  .hint-chip { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #2f6f97; background: rgba(47,111,151,0.08); border: 1px solid rgba(47,111,151,0.3);
+    border-radius: 12px; padding: 2px 9px; cursor: pointer; line-height: 1.3; }
+  .hint-chip:hover { background: rgba(47,111,151,0.16); border-color: #2f6f97; }
   @media (max-width: 760px) { .expand { opacity: 1; } }
 </style>

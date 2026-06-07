@@ -1,0 +1,351 @@
+<script lang="ts">
+  import { app } from '../lib/appState.svelte';
+  import {
+    COUNTRIES, OECD_AVG, TIER_META, ANCHOR, SPEND_PLOT, SPEND_OFFAXIS,
+    BY_EQUITY, BY_TREND, type Country, type Tier,
+  } from '../lib/comparators';
+
+  const eli = $derived(app.narrative === 'eli5');
+  const tc = (t: Tier) => TIER_META[t].colour;
+  const TIER_FLOW: Tier[] = ['anchor', 'leader', 'peer', 'other'];
+  const inTier = (t: Tier) => COUNTRIES.filter((c) => c.tier === t);
+  const fmtTrend = (v: number | null) => (v == null ? 'n/a' : v > 0 ? `+${v}` : `${v}`);
+
+  // ---- chart A: money vs maths (scatter) ----
+  const SX0 = 64, SX1 = 736, SY0 = 30, SY1 = 404;
+  const sxMin = 11000, sxMax = 17600, syMin = 460, syMax = 545;
+  const sx = (v: number) => SX0 + ((v - sxMin) / (sxMax - sxMin)) * (SX1 - SX0);
+  const sy = (v: number) => SY1 - ((v - syMin) / (syMax - syMin)) * (SY1 - SY0);
+  const xGrid = [12000, 14000, 16000];
+  const yGrid = [470, 490, 510, 530];
+
+  // ---- chart B / C: ranked bars ----
+  const BX0 = 172, BX1 = 712, rowH = 33, rowTop = 50;
+  const rowY = (i: number) => rowTop + i * rowH + rowH / 2;
+  const chartH = (n: number) => rowTop + n * rowH + 28;
+  // equity
+  const egMax = 122;
+  const ebw = (v: number) => (v / egMax) * (BX1 - BX0);
+  // trend (diverging)
+  const tMin = -30, tMax = 12;
+  const tx = (v: number) => BX0 + ((v - tMin) / (tMax - tMin)) * (BX1 - BX0);
+  const zeroX = tx(0);
+</script>
+
+<svelte:head><title>Global comparators — Education Policy Modelling</title></svelte:head>
+
+<div class="pe-route wide">
+  <span class="pe-eyebrow">Global comparators</span>
+  <h1 class="pe-h1">England, against the world</h1>
+
+  <div class="pe-prose lede-prose">
+    {#if eli}
+      <p>
+        The engine keeps making three claims: <b>money on its own barely moves results</b>, <b>how fairly a system treats poorer
+        children matters more than how much it spends</b>, and <b>the levers that work are about teaching and attendance, not cash</b>.
+        Are those just England’s quirks? This page checks them against the real world — ten countries, measured the same way by the
+        OECD’s 2022 PISA tests.
+      </p>
+      <p>
+        The countries split three ways: <b>three of the best systems on earth</b> (to see how excellence is built), <b>three big rich
+        countries like Britain</b> (the fairest comparison), and <b>three surprising ones</b> that each break a lazy assumption — plus
+        England itself. The punchline holds up: the most expensive systems are <i>not</i> the best, and countries spending the same money
+        get wildly different fairness.
+      </p>
+    {:else}
+      <p>
+        England’s model rests on three contested claims: that <b>per-pupil spending is close to a non-lever</b>, that <b>equity — how
+        little a child’s background predicts their results — is the real differentiator</b>, and that the working levers are <b>teacher
+        capacity and attendance, not money</b>. This page pressure-tests all three against the international evidence: ten systems on a
+        single comparable yardstick, <b>OECD PISA 2022</b> (maths, reading, science), with spending from <b>Education at a Glance 2024</b>
+        and equity from each country’s official PISA country note.
+      </p>
+      <p>
+        The cast is deliberately constructed: <b>three education leaders</b> (Singapore, Japan, Estonia) to show how the top is reached;
+        <b>three economic peers</b> (France, Germany, Italy) as like-for-like G7-type comparators; and <b>three wildcards</b> (Ireland,
+        Poland, Vietnam) each chosen to puncture an assumption — with the <b>UK</b> as the anchor. The single clearest finding:
+        <b>spending barely predicts maths, and equity varies enormously at the same price.</b>
+      </p>
+    {/if}
+  </div>
+
+  <!-- the cast -->
+  <section class="cast">
+    {#each TIER_FLOW as t}
+      <div class="cast-tier">
+        <span class="cast-dot" style="background:{tc(t)}"></span>
+        <div class="cast-body">
+          <span class="cast-lab">{eli ? TIER_META[t].eli5 : TIER_META[t].label}</span>
+          <span class="cast-names">{inTier(t).map((c) => `${c.flag} ${c.name}`).join('  ·  ')}</span>
+          <span class="cast-blurb">{eli ? TIER_META[t].eli5Blurb : TIER_META[t].blurb}</span>
+        </div>
+      </div>
+    {/each}
+  </section>
+
+  <!-- ============ CHART A: money vs maths ============ -->
+  <section class="block">
+    <h2 class="pe-h2">1 · Does money buy results?</h2>
+    <p class="cap">
+      {#if eli}
+        Each dot is a country. Left-to-right is <b>how much it spends per pupil</b>; up-and-down is its <b>maths score</b>. If money
+        bought results, the dots would climb to the right. They don’t. <b>Germany spends the most</b> and scores below average;
+        <b>Estonia and Japan spend less than England</b> and score far higher. The price tag tells you almost nothing.
+      {:else}
+        Spend per student (USD PPP, all levels) against PISA 2022 maths. A spending→attainment story would slope up to the right; instead
+        the cloud is flat-to-negative. <b>Germany</b> ($17.2k) sits below the OECD mean; <b>Estonia</b> ($11.7k) and <b>Japan</b> ($13.3k)
+        — both cheaper than England — sit well above it. This is the international face of the engine’s “money is not a lever” assumption.
+      {/if}
+    </p>
+    <div class="chart">
+      <svg viewBox="0 0 760 460" role="img" aria-label="Scatter plot of spend per student against PISA maths score">
+        <!-- gridlines -->
+        {#each yGrid as g}
+          <line x1={SX0} x2={SX1} y1={sy(g)} y2={sy(g)} class="grid" />
+          <text x={SX0 - 8} y={sy(g) + 3} class="ax-y">{g}</text>
+        {/each}
+        {#each xGrid as g}
+          <line x1={sx(g)} x2={sx(g)} y1={SY0} y2={SY1} class="grid" />
+          <text x={sx(g)} y={SY1 + 18} class="ax-x">${(g / 1000).toFixed(0)}k</text>
+        {/each}
+        <!-- OECD average crosshair -->
+        <line x1={sx(OECD_AVG.spendStudent)} x2={sx(OECD_AVG.spendStudent)} y1={SY0} y2={SY1} class="oecd" />
+        <line x1={SX0} x2={SX1} y1={sy(OECD_AVG.maths)} y2={sy(OECD_AVG.maths)} class="oecd" />
+        <text x={SX0 + 6} y={sy(OECD_AVG.maths) - 6} class="oecd-lab" text-anchor="start">OECD average →</text>
+        <!-- axis titles -->
+        <text x={(SX0 + SX1) / 2} y={SY1 + 40} class="ax-title">→ more spending per pupil</text>
+        <text x={16} y={(SY0 + SY1) / 2} class="ax-title" transform="rotate(-90 16 {(SY0 + SY1) / 2})">→ higher maths score</text>
+        <!-- points -->
+        {#each SPEND_PLOT as c (c.code)}
+          {@const px = sx(c.spendStudent ?? 0)}
+          {@const py = sy(c.maths)}
+          {@const left = c.code === 'DE'}
+          {@const isUK = c.tier === 'anchor'}
+          <circle cx={px} cy={py} r={isUK ? 8 : 6} fill={tc(c.tier)} stroke={isUK ? '#1c1611' : 'rgba(255,255,255,0.7)'} stroke-width={isUK ? 2 : 1} />
+          <text x={px + (left ? -12 : 12)} y={py + 4} class="pt-lab" class:uk={isUK} text-anchor={left ? 'end' : 'start'}>{c.flag} {c.name}{isUK ? ' (us)' : ''}</text>
+        {/each}
+      </svg>
+    </div>
+    <p class="offaxis">
+      <b>Off this chart:</b> {#each SPEND_OFFAXIS as c, i}{i > 0 ? ' and ' : ''}<b>{c.flag} {c.name}</b> (maths {c.maths}){/each} —
+      {eli
+        ? 'two of the strongest systems anywhere, but they don’t belong to the rich-country club, so their spending is counted differently and can’t be put on the same line. Vietnam in particular scores near England on a fraction of the money.'
+        : 'both non-OECD, so they have no comparable per-student figure (their spend is a narrower World-Bank public-spend proxy). Singapore tops the world at 575; Vietnam reaches 469 — near England — on one of the lowest incomes on the planet.'}
+    </p>
+  </section>
+
+  <!-- ============ CHART B: equity ============ -->
+  <section class="block">
+    <h2 class="pe-h2">2 · The same money, very different fairness</h2>
+    <p class="cap">
+      {#if eli}
+        This is England’s quiet strength. The bar is the <b>gap in maths between the richest and poorest quarter of pupils</b> — shorter
+        is fairer. <b>England (86) is fairer than the average</b>, and far fairer than France or Germany, who spend as much or more.
+        Ireland, next door, is the fairest of all. Being rich doesn’t make a system fair — Singapore is brilliant but has one of the
+        biggest gaps.
+      {:else}
+        The advantaged−disadvantaged maths gap (top vs bottom socio-economic quartile) — the cleanest cross-country equity measure.
+        Shorter is fairer. <b>England (86) sits below the OECD average (93)</b> and is dramatically fairer than its economic peers
+        <b>France (113)</b> and <b>Germany (111)</b> at equal-or-higher spend. Note the dissociation from excellence: <b>Singapore</b>,
+        top of the world, carries one of the widest gaps — a high floor with a very high ceiling.
+      {/if}
+    </p>
+    <div class="chart">
+      <svg viewBox="0 0 760 {chartH(BY_EQUITY.length)}" role="img" aria-label="Ranked bar chart of the rich–poor maths gap by country">
+        <text x={12} y={26} class="hint-l">← fairer</text>
+        <text x={BX1} y={26} class="hint-r" text-anchor="end">less fair →</text>
+        <!-- OECD avg line -->
+        <line x1={BX0 + ebw(OECD_AVG.escsGap)} x2={BX0 + ebw(OECD_AVG.escsGap)} y1={36} y2={chartH(BY_EQUITY.length) - 18} class="oecd" />
+        <text x={BX0 + ebw(OECD_AVG.escsGap)} y={chartH(BY_EQUITY.length) - 4} class="oecd-lab" text-anchor="middle">OECD avg {OECD_AVG.escsGap}</text>
+        {#each BY_EQUITY as c, i (c.code)}
+          {@const y = rowY(i)}
+          {@const isUK = c.tier === 'anchor'}
+          <text x={BX0 - 10} y={y + 4} class="row-name" class:uk={isUK} text-anchor="end">{c.flag} {c.name}</text>
+          <rect x={BX0} y={y - 11} width={ebw(c.escsGap)} height={22} rx="3" fill={tc(c.tier)} opacity={isUK ? 1 : 0.82} stroke={isUK ? '#1c1611' : 'none'} stroke-width="1.5" />
+          <text x={BX0 + ebw(c.escsGap) + 8} y={y + 4} class="row-val" class:uk={isUK}>{c.escsGap}{isUK ? ' ← us' : ''}</text>
+        {/each}
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============ CHART C: trend ============ -->
+  <section class="block">
+    <h2 class="pe-h2">3 · Direction of travel since 2018</h2>
+    <p class="cap">
+      {#if eli}
+        How each country’s maths score moved between the last two PISA rounds (2018 → 2022), across the pandemic. Almost everyone fell.
+        <b>England’s drop (−13) is smaller than the average</b>. Two of our “leaders”, Japan and Singapore, actually <b>rose</b> — while
+        Germany and Poland fell off a cliff. Good results aren’t permanent; they have to be defended.
+      {:else}
+        Change in PISA maths, 2018→2022 — the pandemic shock. The OECD average fell 15 points. <b>England (−13) outperformed that
+        average</b>; <b>Japan (+9)</b> and <b>Singapore (+6)</b> rose against the tide; and former poster-children <b>Germany (−25)</b>
+        and <b>Poland (−27)</b> fell hardest, a caution that structural gains are reversible. (Vietnam’s trend is not comparable across
+        cycles and is omitted.)
+      {/if}
+    </p>
+    <div class="chart">
+      <svg viewBox="0 0 760 {chartH(BY_TREND.length)}" role="img" aria-label="Diverging bar chart of the change in PISA maths 2018 to 2022">
+        <text x={12} y={26} class="hint-l">← fell</text>
+        <text x={BX1} y={26} class="hint-r" text-anchor="end">rose →</text>
+        <!-- zero + OECD avg -->
+        <line x1={zeroX} x2={zeroX} y1={36} y2={chartH(BY_TREND.length) - 18} class="zero" />
+        <line x1={tx(OECD_AVG.mathsTrend)} x2={tx(OECD_AVG.mathsTrend)} y1={36} y2={chartH(BY_TREND.length) - 18} class="oecd" />
+        <text x={tx(OECD_AVG.mathsTrend)} y={chartH(BY_TREND.length) - 4} class="oecd-lab" text-anchor="middle">OECD avg {OECD_AVG.mathsTrend}</text>
+        {#each BY_TREND as c, i (c.code)}
+          {@const y = rowY(i)}
+          {@const isUK = c.tier === 'anchor'}
+          {@const v = c.mathsTrend}
+          <text x={BX0 - 10} y={y + 4} class="row-name" class:uk={isUK} text-anchor="end">{c.flag} {c.name}</text>
+          {#if v == null}
+            <text x={zeroX + 8} y={y + 4} class="row-na">not comparable</text>
+          {:else}
+            {@const x0 = v >= 0 ? zeroX : tx(v)}
+            <rect x={x0} y={y - 11} width={Math.abs(tx(v) - zeroX)} height={22} rx="3" fill={tc(c.tier)} opacity={isUK ? 1 : 0.82} stroke={isUK ? '#1c1611' : 'none'} stroke-width="1.5" />
+            <text x={v >= 0 ? tx(v) + 8 : tx(v) - 8} y={y + 4} class="row-val" class:uk={isUK} text-anchor={v >= 0 ? 'start' : 'end'}>{fmtTrend(v)}{isUK ? ' ← us' : ''}</text>
+          {/if}
+        {/each}
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============ the ten, in their own words ============ -->
+  <section class="block">
+    <h2 class="pe-h2">The ten, in their own words</h2>
+    <p class="cap">{eli ? 'What each country is here to teach us.' : 'Each country earns its place by making a specific point. The badges are PISA 2022 (M / R / S), spend per student, the rich–poor gap, and the 2018→2022 maths trend.'}</p>
+    {#each TIER_FLOW as t}
+      <div class="tier-group">
+        <h3 class="tier-h" style="--tcol:{tc(t)}">{eli ? TIER_META[t].eli5 : TIER_META[t].label}</h3>
+        <div class="cards">
+          {#each inTier(t) as c (c.code)}
+            <article class="ccard" class:anchor={c.tier === 'anchor'} style="--tcol:{tc(c.tier)}">
+              <header class="cc-head">
+                <span class="cc-flag">{c.flag}</span>
+                <span class="cc-name">{c.name}</span>
+                <span class="cc-maths">{c.maths}<small>maths</small></span>
+              </header>
+              <div class="cc-badges">
+                <span class="bdg" title="PISA 2022: maths / reading / science">M {c.maths} · R {c.reading} · S {c.science}</span>
+                <span class="bdg" title="Spend per student, USD PPP (OECD)">{c.spendStudent ? `$${(c.spendStudent / 1000).toFixed(1)}k/pupil` : 'spend n/a'}</span>
+                <span class="bdg" title="Rich–poor maths gap (lower = fairer)">gap {c.escsGap}</span>
+                <span class="bdg trend-{c.mathsTrend == null ? 'na' : c.mathsTrend >= 0 ? 'up' : 'down'}" title="Maths change 2018→2022">{fmtTrend(c.mathsTrend)}{c.mathsTrend != null ? ' since ’18' : ''}</span>
+              </div>
+              <p class="cc-lesson">{eli ? c.eli5 : c.lesson}</p>
+            </article>
+          {/each}
+        </div>
+      </div>
+    {/each}
+    <p class="src-note">
+      Sources: OECD <a href="https://www.oecd.org/en/publications/pisa-2022-results-volume-i_53f23881-en.html" target="_blank" rel="noopener">PISA 2022</a>
+      (scores, equity &amp; 2018→22 trend) and <a href="https://www.oecd.org/en/about/programmes/education-at-a-glance.html" target="_blank" rel="noopener">Education at a Glance 2024</a>
+      (spending); GDP/capita World Bank. Singapore &amp; Vietnam spend is a non-comparable World-Bank proxy; Ireland’s GDP is inflated by multinational accounting, so per-student $ is the honest comparator.
+    </p>
+  </section>
+
+  <!-- ============ tie back to the engine ============ -->
+  <section class="block takeaway">
+    <h2 class="pe-h2">{eli ? 'So what does this mean for the sliders?' : 'What the world says about the levers'}</h2>
+    <div class="pe-prose">
+      {#if eli}
+        <p>The rest of the world backs up what the engine keeps telling you:</p>
+      {:else}
+        <p>The international evidence corroborates the three assumptions the engine is built on:</p>
+      {/if}
+      <ul class="take-list">
+        <li>
+          <b>{eli ? 'Money alone is weak.' : 'Spending is a weak, conditional lever.'}</b>
+          {eli
+            ? 'Germany outspends everyone and still trails Estonia and Japan. So don’t expect the funding sliders to move the charts on their own — they only help if they buy teachers.'
+            : 'The spend→maths cloud is flat-to-negative across these systems, exactly as the engine assumes — funding helps only insofar as it buys teacher capacity. Treat the funding levers as enablers, not drivers.'}
+          <a href="/projects/policy-engine/outcomes">See it in Attainment ↗</a>
+        </li>
+        <li>
+          <b>{eli ? 'Fairness is the real prize.' : 'Equity is the true differentiator.'}</b>
+          {eli
+            ? 'Countries on the same budget get wildly different gaps. England is already fairly fair — the job is to protect and extend that, which is exactly what the disadvantage-targeted sliders do.'
+            : 'At equal spend, the rich–poor gap ranges from Ireland’s 74 to France’s 113. England’s relative fairness is its strongest asset; the gap-closing levers (attendance, early years, pupil-premium targeting) are where the leverage lives.'}
+          <a href="/projects/policy-engine">Open the levers ↗</a>
+        </li>
+        <li>
+          <b>{eli ? 'Good results can slip.' : 'Gains are reversible.'}</b>
+          {eli
+            ? 'Poland and Germany fell off a cliff. Progress isn’t permanent — which is why the model runs all the way to 2040, not just to the next election.'
+            : 'Poland and Germany shed 25–27 points in one cycle. The engine’s long horizon (to 2040) and uncertainty bands exist precisely because trajectories are fragile, not guaranteed.'}
+          <a href="/projects/policy-engine/method">How the model handles this ↗</a>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <a class="pe-next" href="/projects/policy-engine/method">How it all works → Method</a>
+</div>
+
+<style>
+  .lede-prose { max-width: 78ch; }
+
+  /* the cast */
+  .cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 10px; margin: 18px 0 8px; }
+  .cast-tier { display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px; border-radius: 10px; background: rgba(255,255,255,0.34); border: 1px solid rgba(28,22,17,0.1); }
+  .cast-dot { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
+  .cast-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .cast-lab { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; color: var(--ink); }
+  .cast-names { font-size: 12.5px; color: rgba(28,22,17,0.82); }
+  .cast-blurb { font-size: 11.5px; line-height: 1.4; color: rgba(28,22,17,0.58); margin-top: 2px; }
+
+  .block { margin: 30px 0; }
+  .cap { margin: 0 0 14px; font-size: 14px; line-height: 1.58; color: rgba(28,22,17,0.7); max-width: 88ch; }
+  .cap b { color: var(--ink); }
+  .offaxis { margin: 10px 0 0; padding: 9px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.72);
+    background: rgba(28,22,17,0.04); border: 1px solid rgba(28,22,17,0.1); }
+  .offaxis b { color: var(--ink); }
+
+  .chart { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; }
+  .chart svg { display: block; width: 100%; height: auto; }
+
+  /* svg primitives */
+  .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
+  .oecd { stroke: rgba(28,22,17,0.45); stroke-width: 1.3; stroke-dasharray: 4 3; }
+  .zero { stroke: rgba(28,22,17,0.5); stroke-width: 1.4; }
+  .oecd-lab { font-family: 'JetBrains Mono', monospace; font-size: 10px; fill: rgba(28,22,17,0.55); }
+  .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
+  .ax-x { text-anchor: middle; }
+  .ax-y { text-anchor: end; }
+  .ax-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); text-anchor: middle; text-transform: uppercase; }
+  .pt-lab { font-family: 'DM Sans', sans-serif; font-size: 12px; fill: rgba(28,22,17,0.82); }
+  .pt-lab.uk { font-weight: 600; fill: #9a3b2e; }
+  .hint-l, .hint-r { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; fill: rgba(28,22,17,0.45); }
+  .row-name { font-family: 'DM Sans', sans-serif; font-size: 12.5px; fill: rgba(28,22,17,0.82); }
+  .row-name.uk { font-weight: 700; fill: #9a3b2e; }
+  .row-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; fill: rgba(28,22,17,0.7); }
+  .row-val.uk { font-weight: 700; fill: #9a3b2e; }
+  .row-na { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.4); font-style: italic; }
+
+  /* country cards */
+  .tier-group { margin: 16px 0; }
+  .tier-h { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink);
+    margin: 0 0 9px; padding-left: 10px; border-left: 3px solid var(--tcol); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 11px; }
+  .ccard { border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid var(--tcol); border-radius: 10px; padding: 12px 13px; background: rgba(255,255,255,0.4); }
+  .ccard.anchor { background: rgba(154,59,46,0.06); border-color: rgba(154,59,46,0.3); }
+  .cc-head { display: flex; align-items: baseline; gap: 8px; }
+  .cc-flag { font-size: 18px; }
+  .cc-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; color: var(--ink); flex: 1; }
+  .cc-maths { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 17px; color: var(--tcol); }
+  .cc-maths small { display: block; font-weight: 400; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.45); text-align: right; }
+  .cc-badges { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 9px; }
+  .bdg { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.68); background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.1); border-radius: 4px; padding: 2px 6px; }
+  .bdg.trend-up { color: #2f7d4f; background: rgba(47,125,79,0.1); border-color: rgba(47,125,79,0.25); }
+  .bdg.trend-down { color: #b1455e; background: rgba(177,69,94,0.1); border-color: rgba(177,69,94,0.22); }
+  .cc-lesson { margin: 0; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+
+  .src-note { margin: 14px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.5); }
+  .src-note a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  .takeaway { border-top: 1px solid rgba(28,22,17,0.12); padding-top: 14px; }
+  .take-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .take-list li { font-size: 14.5px; line-height: 1.55; color: rgba(28,22,17,0.74); padding-left: 14px; border-left: 2px solid rgba(28,22,17,0.18); }
+  .take-list b { color: var(--ink); }
+  .take-list a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; margin-left: 4px; white-space: nowrap; }
+
+  @media (max-width: 760px) { .pt-lab, .row-name { font-size: 11px; } }
+</style>
