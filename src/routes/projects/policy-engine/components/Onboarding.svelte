@@ -7,15 +7,20 @@
     { n: '3', t: 'Go deeper', d: '<b>Population</b> turns the results into real children and lifetime-earnings; <b>Regions</b> breaks them down by area; <b>Method</b> shows every calculation and source.' },
   ];
 
+  // Record when the user last saw the modal so it re-shows on a later visit (but not on every
+  // refresh during an active session). See the 15-minute window check in +layout.svelte.
+  function markSeen() { try { localStorage.setItem('epm-onboarded-at', String(Date.now())); } catch { /* ignore */ } }
   function choose(mode: 'research' | 'eli5') {
     app.narrative = mode;
+    try { localStorage.setItem('epm-narrative', mode); } catch { /* ignore */ }
+    markSeen();
     app.showHelp = false;
-    try { localStorage.setItem('epm-onboarded', '1'); localStorage.setItem('epm-narrative', mode); } catch { /* ignore */ }
   }
+  function dismiss() { markSeen(); app.showHelp = false; }
 </script>
 
 {#if app.showHelp}
-  <div class="ob-backdrop" role="presentation" onclick={() => (app.showHelp = false)}>
+  <div class="ob-backdrop" role="presentation" onclick={dismiss}>
     <div class="ob" role="dialog" aria-modal="true" aria-label="How to use Education Policy Modelling" onclick={(e) => e.stopPropagation()}>
       <span class="ob-eyebrow">Field Study №4 · How to use it</span>
       <h2 class="ob-h">A flight simulator for England’s schools</h2>
@@ -93,4 +98,11 @@
   .choice.research:hover { border-color: #2f6f97; background: rgba(47,111,151,0.08); }
   .ob-note { display: block; margin-top: 11px; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.55); }
   .ob-note b { color: rgba(28,22,17,0.75); }
+  @media (max-width: 560px) {
+    .ob-backdrop { padding: 10px; align-items: flex-start; }
+    .ob { padding: 16px 15px; max-height: 96vh; border-radius: 12px; }
+    .ob-h { font-size: 21px; }
+    .ob-risk { padding: 11px 12px; gap: 9px; } .risk-icon { font-size: 18px; }
+    .ob-risk p, .ob-lede { font-size: 13px; }
+  }
 </style>

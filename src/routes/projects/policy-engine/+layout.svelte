@@ -31,7 +31,9 @@
     try {
       const n = localStorage.getItem('epm-narrative');
       if (n === 'research' || n === 'eli5') app.narrative = n;
-      if (!localStorage.getItem('epm-onboarded')) app.showHelp = true;
+      // show for new users, and again on a return visit if it's been > 15 minutes since last seen
+      const at = Number(localStorage.getItem('epm-onboarded-at') || 0);
+      if (!at || Date.now() - at > 15 * 60 * 1000) app.showHelp = true;
     } catch { /* ignore */ }
     app.mounted = true;
   });
