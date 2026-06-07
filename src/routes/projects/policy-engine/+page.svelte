@@ -160,6 +160,7 @@
     'Child poverty': 'childPoverty',
     'NEET (16–24)': 'neet',
     'Teacher shortfall (6,500 pledge)': 'teacherShortfall',
+    'Total programme cost': 'cumulativeCost',
   };
 
   const charts = $derived.by<ChartDef[]>(() => {
@@ -253,6 +254,13 @@
       series: [
         { label: 'Your scenario', color: C_YOU, values: proj('teacherShortfall'), emphasis: true, band: bandFor('teacherShortfall') },
         { label: 'Status quo', color: C_BASE, values: proj('teacherShortfall', baseSim), dashed: true },
+      ],
+    },
+    {
+      title: 'Total programme cost', unit: '£bn cumulative', dp: 1, zeroBased: true,
+      series: [
+        { label: 'Your scenario', color: C_YOU, values: proj('cumulativeCost'), emphasis: true },
+        { label: 'Status quo', color: C_BASE, values: proj('cumulativeCost', baseSim), dashed: true },
       ],
     },
     ];
@@ -612,7 +620,7 @@
   .tip-caret { font-size: 8px; opacity: 0.7; }
   .opt-tip {
     display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
-    min-width: 290px; max-width: 360px; background: var(--paper-deep, #e7decc);
+    min-width: min(290px, calc(100vw - 28px)); max-width: min(360px, calc(100vw - 28px)); background: var(--paper-deep, #e7decc);
     border: 1px solid rgba(28,22,17,0.25); border-radius: 7px; padding: 9px 11px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.18); flex-direction: column; gap: 3px;
   }
@@ -656,7 +664,7 @@
   .tabs button:hover { background: rgba(255,255,255,0.5); color: var(--ink); }
   .tabs button.active { background: var(--ink); color: var(--paper); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
   .tab-intro { margin: 0 0 12px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 100ch; }
-  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; align-items: start; }
   .chart-cell { display: flex; flex-direction: column; position: relative; }
   .expand-btn { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
     border: 1px solid rgba(28,22,17,0.18); background: rgba(255,255,255,0.7); color: rgba(28,22,17,0.6); cursor: pointer;
@@ -681,8 +689,22 @@
   @media (max-width: 880px) {
     .body { grid-template-columns: 1fr; }
     .rail-col { border-right: none; border-bottom: 1px solid rgba(28,22,17,0.1); }
-    .toolbar { gap: 10px; }
+    .toolbar { gap: 10px 14px; }
     .tb-spacer { flex-basis: 100%; height: 0; }
     .expand-btn { opacity: 1; }
+  }
+  @media (max-width: 600px) {
+    .head { padding: 16px 14px 10px; }
+    .toolbar { padding: 9px 14px; }
+    .scen { padding: 10px 14px; gap: 10px; }
+    .readout-shell { padding: 10px 14px 4px; }
+    .out-col { padding: 14px 14px 40px; }
+    .rail-col { padding: 14px 14px 30px; }
+    .foot { padding: 14px 14px 22px; }
+    .cliff { padding: 8px 14px; }
+    h1 { font-size: clamp(22px, 7vw, 30px); }
+    .tabs { gap: 3px; padding: 3px; }
+    .tabs button { padding: 6px 10px; font-size: 12px; }
+    .opt-ctl { flex-wrap: wrap; }
   }
 </style>

@@ -20,6 +20,7 @@ const CAUSE: Record<string, string> = {
   childPoverty: 'Driven by the child-poverty-action lever (two-child-limit removal, UC) and FSM expansion, against a rising baseline trend.',
   neet: 'Falls with attainment and the post-16/skills and youth-mental-health levers, but rises on an exogenous youth-ill-health trend — the Milburn "generational fault line".',
   teacherShortfall: 'Closes with recruitment, pay competitiveness and shortage-subject bursaries; negative means a surplus beyond the 6,500 pledge.',
+  cumulativeCost: 'The running total of additional programme spend vs status quo — the sum of every active lever’s annual cost. Steeper lines mean a more expensive package; compare it against the gap and attainment charts for value.',
 };
 
 const row = (s: YearResult[], yr: number) => s.find((y) => y.year === yr) ?? s[s.length - 1];

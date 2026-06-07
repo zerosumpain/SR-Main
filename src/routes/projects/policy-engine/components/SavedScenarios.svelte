@@ -66,9 +66,12 @@
   .tb-btn.star.on { background: #9a7b1f; color: #fff; border-color: #9a7b1f; }
   .backdrop { position: fixed; inset: 0; z-index: 70; }
   .pop {
-    position: absolute; top: calc(100% + 6px); right: 0; z-index: 71; width: 320px;
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 71; width: min(320px, calc(100vw - 24px));
     background: var(--paper-deep, #e7decc); border: 1px solid rgba(28,22,17,0.22); border-radius: 8px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.2); padding: 10px; font-family: 'DM Sans', system-ui, sans-serif;
+  }
+  @media (max-width: 600px) {
+    .pop { position: fixed; left: 12px; right: 12px; width: auto; top: auto; bottom: 12px; max-height: 70vh; overflow-y: auto; }
   }
   .pop-save { display: flex; gap: 6px; margin-bottom: 8px; }
   .pop-input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 5px; border: 1px solid rgba(28,22,17,0.22); background: rgba(255,255,255,0.7); font: inherit; font-size: 12px; color: var(--ink, #1c1611); }

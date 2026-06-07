@@ -26,23 +26,25 @@
     <span class="ch-title">Side-by-side comparison · {horizon}</span>
     <span class="ch-key"><i class="ka"></i>A: {nameA} &nbsp; <i class="kb"></i>B: {nameB}</span>
   </div>
-  <table>
-    <thead>
-      <tr><th>Outcome</th><th class="num">A</th><th class="num">B</th><th class="num">Δ (A − B)</th></tr>
-    </thead>
-    <tbody>
-      {#each rows as r (r.m.id)}
-        <tr>
-          <td>{r.m.label}</td>
-          <td class="num a">{fmtNum(r.a, r.m.dp)}<small>{r.unit}</small></td>
-          <td class="num b">{fmtNum(r.b, r.m.dp)}<small>{r.unit}</small></td>
-          <td class="num delta {r.m.neutral || !r.meaningful ? 'neutral' : r.aBetter ? 'good' : 'bad'}">
-            {#if r.meaningful}{r.delta > 0 ? '+' : ''}{fmtNum(r.delta, r.m.dp)}{r.unit}{#if !r.m.neutral} {r.aBetter ? '· A better' : '· B better'}{/if}{:else}—{/if}
-          </td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
+  <div class="cmp-scroll">
+    <table>
+      <thead>
+        <tr><th>Outcome</th><th class="num">A</th><th class="num">B</th><th class="num">Δ (A − B)</th></tr>
+      </thead>
+      <tbody>
+        {#each rows as r (r.m.id)}
+          <tr>
+            <td>{r.m.label}</td>
+            <td class="num a">{fmtNum(r.a, r.m.dp)}<small>{r.unit}</small></td>
+            <td class="num b">{fmtNum(r.b, r.m.dp)}<small>{r.unit}</small></td>
+            <td class="num delta {r.m.neutral || !r.meaningful ? 'neutral' : r.aBetter ? 'good' : 'bad'}">
+              {#if r.meaningful}{r.delta > 0 ? '+' : ''}{fmtNum(r.delta, r.m.dp)}{r.unit}{#if !r.m.neutral}<span class="verdict"> {r.aBetter ? '· A better' : '· B better'}</span>{/if}{:else}—{/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <style>
@@ -53,7 +55,9 @@
   .ch-key i { display: inline-block; width: 9px; height: 3px; border-radius: 2px; margin-right: 4px; }
   .ka { background: #9a3b2e; }
   .kb { background: #3a5fa8; }
-  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .cmp-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 340px; font-size: 12px; }
+  @media (max-width: 560px) { .verdict { display: none; } }
   th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 3px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
   th.num, td.num { text-align: right; white-space: nowrap; }
   td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.06); color: rgba(28,22,17,0.82); }
