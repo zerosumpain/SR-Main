@@ -18,9 +18,9 @@
   const STORAGE = 'whitehall-model-levers-v1';
   let copied = $state(false);
   let topH = $state(0); // measured sticky-header height, so the levers sidebar docks right beneath it
-  const isDataRoute = $derived(/\/(outcomes|population|regions)$/.test(pathname));
 
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
+  const isDataRoute = $derived(/\/(outcomes|population|regions)$/.test(pathname));
 
   onMount(() => {
     const token = tokenFromHash(location.hash);
@@ -28,9 +28,14 @@
     if (fromLink) app.levers = fromLink;
     else { try { const raw = localStorage.getItem(STORAGE); if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') app.levers = { ...policyLevers(), ...p }; } } catch { /* ignore */ } }
     app.saved = loadSaved();
+    try {
+      const n = localStorage.getItem('epm-narrative');
+      if (n === 'research' || n === 'eli5') app.narrative = n;
+      if (!localStorage.getItem('epm-onboarded')) app.showHelp = true;
+    } catch { /* ignore */ }
     app.mounted = true;
-    try { if (!localStorage.getItem('epm-onboarded')) app.showHelp = true; } catch { /* ignore */ }
   });
+  $effect(() => { if (app.mounted) { try { localStorage.setItem('epm-narrative', app.narrative); } catch { /* ignore */ } } });
   // default the levers open alongside the data on the data pages (until the user decides otherwise)
   $effect(() => { if (app.mounted && !app.drawerUserSet) app.drawerOpen = isDataRoute; });
   function setUrl(url: string) { try { replaceState(url, {}); } catch { try { history.replaceState(history.state, '', url); } catch { /* ignore */ } } }

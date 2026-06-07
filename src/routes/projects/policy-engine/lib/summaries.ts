@@ -69,7 +69,7 @@ export function chartSummary(
   cmpLabel = 'status-quo path',
 ): ChartSummary {
   const m = OUTCOMES_BY_ID[primary];
-  if (!m) return { text: '', tone: 'neutral' };
+  if (!m) return { text: '', eli5: '', tone: 'neutral' };
   const fmt = (x: number) => x.toLocaleString('en-GB', { minimumFractionDigits: m.dp, maximumFractionDigits: m.dp });
 
   const start = (sim[0] as any)[primary] as number;
