@@ -98,6 +98,16 @@ function centredOffsets(pick: (r: RegionDef) => number, badSign: 'pos' | 'neg', 
   return out;
 }
 
+// coastal pupils as a share of England (Σ pupilShare × coastal intensity) — the scale for the cross-cut
+export const COASTAL_SHARE = REGIONS.reduce((s, r) => s + r.pupilShare * r.coastal, 0); // ≈ 0.28
+
+/** The pupil-share that scales population headcount denominators for a geographic view (1 = England). */
+export function regionScale(code: string): number {
+  if (code === 'all') return 1;
+  if (code === 'COAST') return COASTAL_SHARE;
+  return REGIONS_BY_CODE[code]?.pupilShare ?? 1;
+}
+
 export interface RegionView { code: string; name: string; isCut: boolean; }
 export const REGION_OPTIONS: RegionView[] = [
   { code: 'all', name: 'England (all)', isCut: false },

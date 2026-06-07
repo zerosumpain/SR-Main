@@ -11,10 +11,12 @@
   import { COHORT_N, DIS_COHORT_N } from '../lib/population';
   import { fmtCompact } from '../lib/format';
 
-  interface Props { pipeline: GateState[]; horizon: number; comparatorName?: string; }
-  let { pipeline, horizon, comparatorName = 'status quo' }: Props = $props();
+  interface Props { pipeline: GateState[]; horizon: number; comparatorName?: string; scale?: number; regionName?: string; }
+  let { pipeline, horizon, comparatorName = 'status quo', scale = 1, regionName = '' }: Props = $props();
 
   const comparing = $derived(comparatorName !== 'status quo');
+  const cohortN = $derived(Math.round(COHORT_N * scale));
+  const disCohortN = $derived(Math.round(DIS_COHORT_N * scale));
 
   const H = 392;
   const padT = 30, padB = 58, padL = 14, padR = 14;
@@ -40,7 +42,7 @@
     const n = academic.length;
     return padL + bw / 2 + (i * (acW - bw)) / Math.max(1, n - 1);
   }
-  const yTop = (count: number) => padT + (1 - count / COHORT_N) * innerH; // count→y (top of a stack of `count`)
+  const yTop = (count: number) => padT + (1 - count / cohortN) * innerH; // count→y (top of a stack of `count`)
 
   interface Geo { g: GateState; x: number; rT: number; dT: number; ghostY: number; }
   const geo = $derived<Geo[]>(academic.map((g, i) => ({
@@ -75,7 +77,7 @@
 
 <div class="funnel" bind:this={host}>
   <svg viewBox="0 0 {w} {H}" width="100%" height={H} role="img"
-       aria-label="Synthetic cohort funnel: {COHORT_N.toLocaleString()} children through school-readiness, secondary-readiness and a strong GCSE pass, scenario versus status quo">
+       aria-label="Synthetic cohort funnel: {cohortN.toLocaleString()} children through school-readiness, secondary-readiness and a strong GCSE pass, scenario versus status quo">
     <!-- ribbons (drawn first, behind the bars) -->
     {#each advRibbons as d}<path {d} fill={C_ADV} opacity="0.30" />{/each}
     {#each disRibbons as d}<path {d} fill={C_DIS} opacity="0.26" />{/each}
@@ -129,7 +131,7 @@
       <span class="lg"><i class="dash" class:cmp={comparing}></i>{comparing ? comparatorName : 'Status quo (do-nothing)'} high-water</span>
     </div>
     <p class="note">
-      One <b>synthetic cohort</b> of {COHORT_N.toLocaleString()} children ({DIS_COHORT_N.toLocaleString()} disadvantaged) run through
+      One <b>synthetic cohort</b> of {cohortN.toLocaleString()} {regionName ? regionName + ' ' : ''}children ({disCohortN.toLocaleString()} disadvantaged) run through
       the <b>{horizon}</b> snapshot's age-5/11/16 rates — a period cohort, not a tracked birth cohort. The success stream visibly
       thins at each gate, and the disadvantaged sub-stream (terracotta) thins fastest — that wedge is the gap.
       <br /><span class="fn">* “In ed / work” is the 16–24 not-NEET rate on the whole 16–24 population (~6.55m) — shown for context beside the divider, <b>not</b> a flow from this 600k cohort.</span>

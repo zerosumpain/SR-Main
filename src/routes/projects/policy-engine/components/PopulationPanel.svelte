@@ -21,8 +21,13 @@
     scenarioName: string;
     /** When comparing, the funnel & ledger respond to Scenario B instead of the status-quo baseline. */
     compare?: { sim: YearResult[]; name: string } | null;
+    /** Region pupil-share that scales every population denominator (1 = England). */
+    scale?: number;
+    /** Region name when a geographic filter is active (''=England). */
+    regionName?: string;
   }
-  let { sim, baseSim, horizon, scenarioName, compare = null }: Props = $props();
+  let { sim, baseSim, horizon, scenarioName, compare = null, scale = 1, regionName = '' }: Props = $props();
+  const isRegional = $derived(regionName !== '' && scale !== 1);
 
   // The comparator: Scenario B when a comparison is pinned, otherwise the do-nothing baseline.
   const cmpSim = $derived(compare ? compare.sim : baseSim);
@@ -31,11 +36,11 @@
 
   const row = (s: YearResult[], yr: number) => s.find((y) => y.year === yr) ?? s[s.length - 1];
 
-  const pipeline = $derived(cohortPipeline(row(sim, horizon), row(cmpSim, horizon)));
-  const headline = $derived(cohortHeadline(row(sim, horizon), row(cmpSim, horizon)));
-  const ledger = $derived(peopleLedger(sim, cmpSim, horizon));
-  const py = $derived(personYears(sim, cmpSim, horizon));
-  const stocks = $derived(populationStocks(sim, cmpSim));
+  const pipeline = $derived(cohortPipeline(row(sim, horizon), row(cmpSim, horizon), scale));
+  const headline = $derived(cohortHeadline(row(sim, horizon), row(cmpSim, horizon), scale));
+  const ledger = $derived(peopleLedger(sim, cmpSim, horizon, scale));
+  const py = $derived(personYears(sim, cmpSim, horizon, scale));
+  const stocks = $derived(populationStocks(sim, cmpSim, scale));
 
   let ledgerMode = $state<'now' | 'cumulative'>('now');
 
@@ -56,10 +61,13 @@
     return { you: (r.count / mx) * sparkW, base: (r.base / mx) * sparkW };
   }
 
+  const cohortN = $derived(Math.round(COHORT_N * scale));
+  const disCohortN = $derived(Math.round(DIS_COHORT_N * scale));
+
   // big-number meaning chips
   const chips = $derived([
-    { v: headline.deltaGcseDis, label: 'more disadvantaged pupils leave with a strong GCSE pass', sub: `this ${horizon} cohort of ${fmtCompact(DIS_COHORT_N)} disadvantaged`, good: headline.deltaGcseDis >= 0 },
-    { v: headline.deltaReady, label: 'more children start school ready to learn at age 5', sub: `of a ${fmtCompact(COHORT_N)} cohort`, good: headline.deltaReady >= 0 },
+    { v: headline.deltaGcseDis, label: 'more disadvantaged pupils leave with a strong GCSE pass', sub: `this ${horizon} cohort of ${fmtCompact(disCohortN)} disadvantaged`, good: headline.deltaGcseDis >= 0 },
+    { v: headline.deltaReady, label: 'more children start school ready to learn at age 5', sub: `of a ${fmtCompact(cohortN)} cohort`, good: headline.deltaReady >= 0 },
     { v: headline.deltaGcse, label: 'more strong GCSE passes overall', sub: `≈ ${fmtNum(Math.abs(headline.classrooms))} classrooms of 30`, good: headline.deltaGcse >= 0 },
   ]);
 
@@ -77,17 +85,17 @@
 </script>
 
 <div class="pop">
-  <div class="banner" class:cmp={isCompare}>
-    <span class="b-tag">{isCompare ? 'POPULATION · A vs B' : 'POPULATION SIMULATION'}</span>
+  <div class="banner" class:cmp={isCompare} class:rgn={isRegional}>
+    <span class="b-tag">{isRegional ? 'POPULATION · ' + regionName.toUpperCase() : isCompare ? 'POPULATION · A vs B' : 'POPULATION SIMULATION'}</span>
     <span class="b-text">
       {#if isCompare}
-        The human scale of <b>{scenarioName}</b> (A) vs <b>{cmpName}</b> (B), at the <b>{horizon}</b> horizon — every
-        number here compares the two pinned scenarios. Rates are multiplied by their own England population base;
-        numbers are <b>headcounts of real children &amp; young people</b>.
+        The human scale of <b>{scenarioName}</b> (A) vs <b>{cmpName}</b> (B){#if isRegional} in <b>{regionName}</b>{/if}, at the <b>{horizon}</b> horizon — every
+        number here compares the two pinned scenarios. Numbers are <b>headcounts of real children &amp; young people</b>.
       {:else}
-        The human scale of <b>{scenarioName}</b> vs the status-quo (do-nothing) path, at the <b>{horizon}</b> horizon.
-        Every rate is multiplied by its own England population base; numbers are <b>headcounts of real children &amp; young people</b>.
+        The human scale of <b>{scenarioName}</b> vs the status-quo (do-nothing) path{#if isRegional} in <b>{regionName}</b>{/if}, at the <b>{horizon}</b> horizon.
+        Numbers are <b>headcounts of real children &amp; young people</b>.
       {/if}
+      {#if isRegional}<b>{regionName}</b>’s regional rates are multiplied by its share (~{(scale * 100).toFixed(0)}%) of each England population base — an approximation that aggregates back to the national figures.{:else}Every rate is multiplied by its own England population base.{/if}
     </span>
   </div>
 
@@ -103,7 +111,7 @@
   </div>
 
   <!-- the centerpiece funnel -->
-  <CohortFunnel {pipeline} {horizon} comparatorName={cmpName} />
+  <CohortFunnel {pipeline} {horizon} comparatorName={cmpName} {scale} {regionName} />
 
   <!-- impact ledger -->
   <section class="block">
@@ -205,6 +213,8 @@
     background: rgba(63,125,110,0.08); border: 1px solid rgba(63,125,110,0.25); }
   .banner.cmp { background: rgba(58,95,168,0.08); border-color: rgba(58,95,168,0.3); }
   .banner.cmp .b-tag { color: #3a5fa8; }
+  .banner.rgn { background: rgba(74,124,124,0.1); border-color: rgba(74,124,124,0.32); }
+  .banner.rgn .b-tag { color: #3a5f5f; }
   .b-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.12em; color: #3f7d6e; }
   .b-text { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.72); flex: 1; min-width: 240px; }
   .b-text b { color: #1c1611; }

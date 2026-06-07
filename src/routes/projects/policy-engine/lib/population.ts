@@ -65,20 +65,22 @@ export interface GateState extends Gate {
   deltaDis: number;   // reachDis − reachDisBase
 }
 
-/** Per-gate headcounts for one horizon year, scenario vs status-quo. */
-export function cohortPipeline(simRow: YearResult, baseRow: YearResult): GateState[] {
+/** Per-gate headcounts for one horizon year, scenario vs status-quo. `scale` (a region's pupil
+ *  share, default 1 = England) shrinks the cohort so the regional rates produce regional headcounts. */
+export function cohortPipeline(simRow: YearResult, baseRow: YearResult, scale = 1): GateState[] {
+  const cN = COHORT_N * scale, dN = DIS_COHORT_N * scale;
   return GATES.map((g) => {
     const pctAll = gateRate(simRow, g.rateAll);
     const pctDis = g.proxy ? pctAll : gateRate(simRow, g.rateDis);
-    const reach = Math.round((pctAll / 100) * COHORT_N);
-    const reachDis = g.proxy ? 0 : Math.round((pctDis / 100) * DIS_COHORT_N);
+    const reach = Math.round((pctAll / 100) * cN);
+    const reachDis = g.proxy ? 0 : Math.round((pctDis / 100) * dN);
     const reachAdv = Math.max(0, reach - reachDis);
     const pctAllB = gateRate(baseRow, g.rateAll);
     const pctDisB = g.proxy ? pctAllB : gateRate(baseRow, g.rateDis);
-    const reachBase = Math.round((pctAllB / 100) * COHORT_N);
-    const reachDisBase = g.proxy ? 0 : Math.round((pctDisB / 100) * DIS_COHORT_N);
+    const reachBase = Math.round((pctAllB / 100) * cN);
+    const reachDisBase = g.proxy ? 0 : Math.round((pctDisB / 100) * dN);
     return {
-      ...g, pctAll, pctDis, reach, reachDis, reachAdv, miss: COHORT_N - reach,
+      ...g, pctAll, pctDis, reach, reachDis, reachAdv, miss: Math.round(cN) - reach,
       reachBase, reachDisBase, delta: reach - reachBase, deltaDis: reachDis - reachDisBase,
     };
   });
@@ -94,13 +96,13 @@ export interface CohortHeadline {
   deltaReady: number;      // extra children school-ready at 5 (= fewer "not ready")
   classrooms: number;      // deltaGcse / 30  (whole classrooms-worth)
 }
-export function cohortHeadline(simRow: YearResult, baseRow: YearResult): CohortHeadline {
+export function cohortHeadline(simRow: YearResult, baseRow: YearResult, scale = 1): CohortHeadline {
   const d = (k: string, n: number) => Math.round(((field(simRow, k) - field(baseRow, k)) / 100) * n);
-  const deltaGcse = d('grade5EM', COHORT_N);
+  const deltaGcse = d('grade5EM', COHORT_N * scale);
   return {
     deltaGcse,
-    deltaGcseDis: d('grade5EMDis', DIS_COHORT_N),
-    deltaReady: d('gld', COHORT_N),
+    deltaGcseDis: d('grade5EMDis', DIS_COHORT_N * scale),
+    deltaReady: d('gld', COHORT_N * scale),
     classrooms: Math.round(Math.abs(deltaGcse) / 30) * Math.sign(deltaGcse),
   };
 }
@@ -138,11 +140,12 @@ function cumFlow(sim: YearResult[], base: YearResult[], key: string, n: number, 
   return s;
 }
 
-export function peopleLedger(sim: YearResult[], base: YearResult[], horizon: number): PeopleRow[] {
+export function peopleLedger(sim: YearResult[], base: YearResult[], horizon: number, scale = 1): PeopleRow[] {
   const sH = row(sim, horizon), bH = row(base, horizon);
-  const childPop = POP.childPop0to17 * M;
-  const youth = POP.youth16to24 * M;
-  const disPupils = POP.pupils * POP.disadvShare * M;
+  const childPop = POP.childPop0to17 * M * scale;
+  const youth = POP.youth16to24 * M * scale;
+  const disPupils = POP.pupils * POP.disadvShare * M * scale;
+  const cohN = COHORT_N * scale, disN = DIS_COHORT_N * scale;
 
   const good = (id: string) => OUTCOMES_BY_ID[id]?.goodIfUp ?? true;
   const headRate = (r: YearResult, key: string, n: number) => Math.round((field(r, key) / 100) * n);
@@ -152,20 +155,20 @@ export function peopleLedger(sim: YearResult[], base: YearResult[], horizon: num
   // 1 — disadvantaged strong-pass leavers (FLOW, cohort)
   rows.push({
     key: 'gcseDis', label: 'Disadvantaged pupils leaving with a strong GCSE pass', scope: 'this cohort', noun: 'pupils',
-    count: headRate(sH, 'grade5EMDis', DIS_COHORT_N), base: headRate(bH, 'grade5EMDis', DIS_COHORT_N),
-    rawDelta: headRate(sH, 'grade5EMDis', DIS_COHORT_N) - headRate(bH, 'grade5EMDis', DIS_COHORT_N),
-    goodDelta: headRate(sH, 'grade5EMDis', DIS_COHORT_N) - headRate(bH, 'grade5EMDis', DIS_COHORT_N),
+    count: headRate(sH, 'grade5EMDis', disN), base: headRate(bH, 'grade5EMDis', disN),
+    rawDelta: headRate(sH, 'grade5EMDis', disN) - headRate(bH, 'grade5EMDis', disN),
+    goodDelta: headRate(sH, 'grade5EMDis', disN) - headRate(bH, 'grade5EMDis', disN),
     isStock: false, neutral: false,
-    cumulative: cumFlow(sim, base, 'grade5EMDis', DIS_COHORT_N, true, horizon),
+    cumulative: cumFlow(sim, base, 'grade5EMDis', disN, true, horizon),
   });
   // 2 — children school-ready at 5 (FLOW, cohort)
   rows.push({
     key: 'gld', label: 'Children reaching a Good Level of Development at age 5', scope: 'this cohort', noun: 'children',
-    count: headRate(sH, 'gld', COHORT_N), base: headRate(bH, 'gld', COHORT_N),
-    rawDelta: headRate(sH, 'gld', COHORT_N) - headRate(bH, 'gld', COHORT_N),
-    goodDelta: headRate(sH, 'gld', COHORT_N) - headRate(bH, 'gld', COHORT_N),
+    count: headRate(sH, 'gld', cohN), base: headRate(bH, 'gld', cohN),
+    rawDelta: headRate(sH, 'gld', cohN) - headRate(bH, 'gld', cohN),
+    goodDelta: headRate(sH, 'gld', cohN) - headRate(bH, 'gld', cohN),
     isStock: false, neutral: false,
-    cumulative: cumFlow(sim, base, 'gld', COHORT_N, true, horizon),
+    cumulative: cumFlow(sim, base, 'gld', cohN, true, horizon),
   });
   // 3 — young people NEET right now (STOCK)
   {
@@ -185,9 +188,9 @@ export function peopleLedger(sim: YearResult[], base: YearResult[], horizon: num
     rows.push({ key: 'paDis', label: 'Disadvantaged pupils persistently absent from school', scope: 'right now', noun: 'pupils',
       count: c, base: b, rawDelta: c - b, goodDelta: good('persistentAbsenceDis') ? c - b : b - c, isStock: true, neutral: false, cumulative: null });
   }
-  // 6 — children holding an EHC plan (STOCK, NEUTRAL — ehcpCount is already a headcount)
+  // 6 — children holding an EHC plan (STOCK, NEUTRAL — ehcpCount is already a headcount; scaled to the region)
   rows.push({ key: 'ehcp', label: 'Children & young people holding an EHC plan', scope: 'right now', noun: 'children',
-    count: Math.round(sH.ehcpCount), base: Math.round(bH.ehcpCount), rawDelta: Math.round(sH.ehcpCount - bH.ehcpCount),
+    count: Math.round(sH.ehcpCount * scale), base: Math.round(bH.ehcpCount * scale), rawDelta: Math.round((sH.ehcpCount - bH.ehcpCount) * scale),
     goodDelta: 0, isStock: true, neutral: true, cumulative: null });
 
   return rows;
@@ -199,8 +202,8 @@ export function peopleLedger(sim: YearResult[], base: YearResult[], horizon: num
 // Reported PER STOCK and never summed across stocks. EHCP excluded (neutral metric).
 // --------------------------------------------------------------------------------------
 export interface PersonYears { key: string; label: string; unitNoun: string; childYears: number; good: boolean; }
-export function personYears(sim: YearResult[], base: YearResult[], horizon: number): PersonYears[] {
-  const childPop = POP.childPop0to17 * M, youth = POP.youth16to24 * M, disPupils = POP.pupils * POP.disadvShare * M;
+export function personYears(sim: YearResult[], base: YearResult[], horizon: number, scale = 1): PersonYears[] {
+  const childPop = POP.childPop0to17 * M * scale, youth = POP.youth16to24 * M * scale, disPupils = POP.pupils * POP.disadvShare * M * scale;
   const defs = [
     { key: 'poverty', label: 'poverty', unitNoun: 'child-years', field: 'childPoverty', n: childPop },
     { key: 'neet', label: 'NEET', unitNoun: 'person-years', field: 'neet', n: youth },
@@ -231,9 +234,9 @@ const STOCK_DEFS = [
   { key: 'ehcp',    title: 'Children with an EHC plan',    field: '__ehcp', denom: () => 1, note: 'headcount of plans (already absolute)', goodIfUp: false },
 ] as const;
 
-export function populationStocks(sim: YearResult[], base: YearResult[]): StockSeries[] {
+export function populationStocks(sim: YearResult[], base: YearResult[], scale = 1): StockSeries[] {
   const toM = (r: YearResult, d: typeof STOCK_DEFS[number]): number =>
-    d.field === '__ehcp' ? r.ehcpCount / M : (field(r, d.field) / 100) * d.denom();
+    (d.field === '__ehcp' ? r.ehcpCount / M : (field(r, d.field) / 100) * d.denom()) * scale;
   return STOCK_DEFS.map((d) => ({
     key: d.key, title: d.title, unit: 'millions', denomNote: d.note, goodIfUp: d.goodIfUp,
     scn: sim.map((r) => toM(r, d)), base: base.map((r) => toM(r, d)),

@@ -15,7 +15,7 @@
   import SavedScenarios from './components/SavedScenarios.svelte';
   import PopulationPanel from './components/PopulationPanel.svelte';
   import RegionsPanel from './components/RegionsPanel.svelte';
-  import { regionalise, REGION_OPTIONS } from './lib/regions';
+  import { regionalise, REGION_OPTIONS, regionScale } from './lib/regions';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
@@ -535,8 +535,8 @@
         <div class="region-banner" class:coast={region === 'COAST'}>
           <span class="rb-tag">◉ {regionName}</span>
           <span class="rb-text">
-            The view is re-based onto <b>{regionName}</b>: the gap, Attainment 8, grade-5 E&amp;M, absence, GLD &amp; NEET are regional;
-            SEND, cost, workforce &amp; the Population tab stay national. The 9 regions always weight back to the England figure.
+            The whole page is re-based onto <b>{regionName}</b>: the gap, attainment, absence, GLD, NEET and the Population
+            headcounts (scaled by the region’s pupil share) are regional; SEND, cost &amp; workforce stay national. The 9 regions always weight back to England.
           </span>
           <button class="rb-clear" onclick={() => (region = 'all')}>✕ England</button>
         </div>
@@ -567,8 +567,9 @@
           {/each}
         </div>
       {:else if tab === 'population'}
-        <PopulationPanel sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName}
-                         compare={compareB && simB ? { sim: simB.years, name: compareB.name } : null} />
+        <PopulationPanel sim={viewSim} baseSim={viewBase} {horizon} {scenarioName}
+                         compare={compareB && viewSimB ? { sim: viewSimB, name: compareB.name } : null}
+                         scale={regionScale(region)} regionName={region === 'all' ? '' : regionName} />
       {:else if tab === 'regions'}
         <RegionsPanel sim={sim.years} baseSim={baseSim.years} {levers} {horizon} selected={region} onSelect={(c) => (region = c)} />
       {:else if tab === 'scorecard'}
