@@ -59,6 +59,17 @@ export const OUTCOMES: OutcomeMeta[] = [
 
 export const OUTCOMES_BY_ID: Record<string, OutcomeMeta> = Object.fromEntries(OUTCOMES.map((o) => [o.id, o]));
 
+/** Plain-English ("ELI5") short LABELS for the scorecard / readout cards. */
+export const OUTCOME_ELI5_LABEL: Record<string, string> = {
+  gapKS4: 'Rich–poor gap at 16', gapKS2: 'Rich–poor gap at 11', gapReception: 'Rich–poor gap at 5',
+  attainment8: 'Average GCSE score', attainment8Dis: 'Poorer pupils’ GCSE score', grade5EM: 'Good pass, English & maths',
+  ks2RWM: 'On track at primary', gld: 'Ready for school at 5', ehcpPct: 'On a special-needs plan',
+  highNeedsDeficitStock: 'Special-needs debt', ehcpAttainment8: 'Special-needs GCSE score', tribunalAppeals: 'Special-needs appeals',
+  persistentAbsence: 'Missing school', persistentAbsenceDis: 'Poorer kids missing school', severeAbsence: 'Missing half of school',
+  teacherShortfall: 'Teachers short', childPoverty: 'Children in poverty', neet: 'Not working or studying',
+  fundingPerPupil: 'Spend per pupil', cumulativeCost: 'Extra spending',
+};
+
 /** Plain-English ("ELI5") one-liners for the hover tooltips on the scorecard / readout. */
 export const OUTCOME_ELI5: Record<string, string> = {
   gapKS4: 'How far behind poorer 16-year-olds are, in months of learning. Lower is better.',

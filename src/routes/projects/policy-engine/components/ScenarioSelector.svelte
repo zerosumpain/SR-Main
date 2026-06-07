@@ -9,18 +9,18 @@
 <div class="sel">
   <button class="trigger" class:open onclick={() => (open = !open)} aria-expanded={open} aria-haspopup="listbox">
     <span class="lab">Scenario</span>
-    <span class="name">{app.scenarioName}</span>
+    <span class="name">{app.scenarioDisplayName}</span>
     <span class="chev">▾</span>
   </button>
 
   {#if open}
     <button class="scrim" aria-label="Close" onclick={() => (open = false)}></button>
     <div class="menu" role="listbox">
-      <div class="m-lab">Choose a stance — each is a defensible position a government could take</div>
+      <div class="m-lab">{app.narrative === 'eli5' ? 'Pick a ready-made plan' : 'Choose a stance — each is a defensible position a government could take'}</div>
       {#each PRESETS as p (p.name)}
         <button class="opt" class:active={app.activePreset === p.name} role="option" aria-selected={app.activePreset === p.name} onclick={() => pick(p)}>
-          <span class="o-name">{p.name}{#if app.activePreset === p.name} ✓{/if}</span>
-          <span class="o-desc">{p.description}</span>
+          <span class="o-name">{app.narrative === 'eli5' && p.eli5Name ? p.eli5Name : p.name}{#if app.activePreset === p.name} ✓{/if}</span>
+          <span class="o-desc">{app.narrative === 'eli5' && p.eli5Desc ? p.eli5Desc : p.description}</span>
         </button>
       {/each}
       {#if app.saved.length}

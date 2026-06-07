@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { YearResult } from '../lib/types';
-  import { OUTCOMES_BY_ID, SCORECARD_IDS, OUTCOME_ELI5 } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, SCORECARD_IDS, OUTCOME_ELI5, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { fmtNum } from '../lib/format';
   import { app } from '../lib/appState.svelte';
   const meaning = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5[id] ?? '' : OUTCOMES_BY_ID[id]?.blurb ?? '');
+  const lbl = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? OUTCOMES_BY_ID[id]?.label : OUTCOMES_BY_ID[id]?.label);
 
   interface Props {
     sim: YearResult[];
@@ -43,7 +44,7 @@
   <div class="grid">
     {#each cards as c (c.m.id)}
       <div class="card tone-{tone(c.good)}" title={meaning(c.m.id)}>
-        <div class="c-label">{c.m.label}<span class="c-q">?</span></div>
+        <div class="c-label">{lbl(c.m.id)}<span class="c-q">?</span></div>
         <div class="c-main">
           <span class="c-val">{fmtNum(c.val, c.m.dp)}</span>
           <span class="c-unit">{c.m.unit}</span>

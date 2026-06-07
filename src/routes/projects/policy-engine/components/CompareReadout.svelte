@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { YearResult } from '../lib/types';
-  import { OUTCOMES_BY_ID } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { fmtNum } from '../lib/format';
+  import { app } from '../lib/appState.svelte';
+  const lbl = (id: string, label: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? label : label);
 
   interface Props { simA: YearResult[]; simB: YearResult[]; nameA: string; nameB: string; horizon: number; }
   let { simA, simB, nameA, nameB, horizon }: Props = $props();
@@ -34,7 +36,7 @@
       <tbody>
         {#each rows as r (r.m.id)}
           <tr>
-            <td>{r.m.label}</td>
+            <td>{lbl(r.m.id, r.m.label)}</td>
             <td class="num a">{fmtNum(r.a, r.m.dp)}<small>{r.unit}</small></td>
             <td class="num b">{fmtNum(r.b, r.m.dp)}<small>{r.unit}</small></td>
             <td class="num delta {r.m.neutral || !r.meaningful ? 'neutral' : r.aBetter ? 'good' : 'bad'}">

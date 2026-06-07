@@ -58,11 +58,23 @@ class AppState {
   matchedSaved = $derived(this.saved.find((s) => this.eq(this.levers, s.levers))?.name ?? null);
   scenarioName = $derived(this.activePreset ?? this.matchedSaved ?? (this.optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
   scenarioDescription = $derived.by(() => {
+    const eli = this.narrative === 'eli5';
     const p = PRESETS.find((x) => this.eq(this.levers, x.levers));
-    if (p) return p.description;
-    if (this.matchedSaved) return `One of your saved scenarios. Open the Levers drawer to see or change its settings.`;
-    if (this.optimizeApplied && this.optimizeResult) return `The budget-optimal allocation: the most disadvantage-gap closed for £${this.optimizeResult.budget.toFixed(1)}bn/yr, solved live against the engine.`;
-    return 'A custom package — your own combination of levers. Pick a named stance, or open the Levers drawer to tune it.';
+    if (p) return eli && p.eli5Desc ? p.eli5Desc : p.description;
+    if (this.matchedSaved) return eli ? 'One of your saved setups. Open the Levers to see or change it.' : 'One of your saved scenarios. Open the Levers drawer to see or change its settings.';
+    if (this.optimizeApplied && this.optimizeResult) return eli
+      ? `The best mix the computer could find for about £${this.optimizeResult.budget.toFixed(1)}bn a year.`
+      : `The budget-optimal allocation: the most disadvantage-gap closed for £${this.optimizeResult.budget.toFixed(1)}bn/yr, solved live against the engine.`;
+    return eli ? 'Your own mix of policies. Pick a ready-made one above, or open the Levers to build it.' : 'A custom package — your own combination of levers. Pick a named stance, or open the Levers drawer to tune it.';
+  });
+  // ELI5-aware display name (the canonical scenarioName stays for matching/identity)
+  scenarioDisplayName = $derived.by(() => {
+    if (this.narrative !== 'eli5') return this.scenarioName;
+    const p = PRESETS.find((x) => this.eq(this.levers, x.levers));
+    if (p?.eli5Name) return p.eli5Name;
+    if (this.matchedSaved) return this.matchedSaved;
+    if (this.optimizeApplied) return 'Best mix found';
+    return 'Your own mix';
   });
 
   insolvencyYear = $derived(this.sim.years.find((y) => y.insolvencyRisk)?.year ?? null);

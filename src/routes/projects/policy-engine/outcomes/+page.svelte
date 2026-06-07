@@ -28,6 +28,17 @@
     'Persistent absence': 'persistentAbsence', 'Child poverty': 'childPoverty', 'NEET (16–24)': 'neet',
     'Teacher shortfall (6,500 pledge)': 'teacherShortfall', 'Total programme cost': 'cumulativeCost',
   };
+  // plain-English chart titles (keyed on the canonical title, which stays for the summary lookup)
+  const CHART_ELI5_TITLE: Record<string, string> = {
+    'Disadvantage attainment gap': 'The rich–poor gap', 'Attainment 8': 'Average GCSE score',
+    'Grade 5+ in English & Maths': 'Good pass in English & maths', 'KS2 reading + writing + maths': 'On track at end of primary',
+    'Good Level of Development (age 5)': 'Ready for school at 5', 'EHCP prevalence': 'Pupils with a special-needs plan',
+    'High-needs (SEND) deficit': 'Special-needs debt', 'SEND (EHCP) Attainment 8': 'Special-needs pupils’ GCSE score',
+    'Persistent absence': 'Pupils missing lots of school', 'Child poverty': 'Children in poverty',
+    'NEET (16–24)': 'Young people not working or studying', 'Teacher shortfall (6,500 pledge)': 'Teachers we’re short of',
+    'Total programme cost': 'Total extra cost',
+  };
+  const dispTitle = (t: string) => (app.narrative === 'eli5' ? CHART_ELI5_TITLE[t] ?? t : t);
 
   interface Theme { key: string; title: string; prose: string; eli5: string; charts: ChartDef[]; }
   const themes = $derived.by<Theme[]>(() => {
@@ -149,7 +160,7 @@
           {@const sm = sumFor(c)}
           <div class="cell">
             <button class="expand" onclick={() => (expanded = c)} aria-label="Expand {c.title}">⤢</button>
-            <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
+            <OutcomeChart title={dispTitle(c.title)} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
               horizonYear={app.horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
             <p class="summary tone-{sm.tone}">{app.narrative === 'eli5' ? sm.eli5 : sm.text}</p>
           </div>
@@ -163,7 +174,7 @@
 
 {#if expanded}
   {@const sm = sumFor(expanded)}
-  <ChartModal title={expanded.title} unit={expanded.unit} years={allYears} series={expanded.series} baseYear={BASE_YEAR}
+  <ChartModal title={dispTitle(expanded.title)} unit={expanded.unit} years={allYears} series={expanded.series} baseYear={BASE_YEAR}
     horizonYear={app.horizon} target={expanded.target ?? null} dp={expanded.dp} zeroBased={expanded.zeroBased ?? false}
     narrative={app.narrative === 'eli5' ? sm.eli5 : sm.text} onClose={() => (expanded = null)} />
 {/if}

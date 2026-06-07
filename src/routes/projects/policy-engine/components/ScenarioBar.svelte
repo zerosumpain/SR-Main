@@ -1,19 +1,22 @@
 <script lang="ts">
   import { PRESETS, type Preset } from '../lib/scenarios';
+  import { app } from '../lib/appState.svelte';
 
   interface Props {
     activeName: string | null;
     onApply: (p: Preset) => void;
   }
   let { activeName, onApply }: Props = $props();
+  const nm = (p: Preset) => (app.narrative === 'eli5' && p.eli5Name ? p.eli5Name : p.name);
+  const desc = (p: Preset) => (app.narrative === 'eli5' && p.eli5Desc ? p.eli5Desc : p.description);
 </script>
 
 <div class="bar">
   <span class="lab">Scenario</span>
   <div class="chips">
     {#each PRESETS as p (p.name)}
-      <button class="chip" class:active={activeName === p.name} title={p.description} onclick={() => onApply(p)}>
-        {p.name}
+      <button class="chip" class:active={activeName === p.name} title={desc(p)} onclick={() => onApply(p)}>
+        {nm(p)}
       </button>
     {/each}
   </div>

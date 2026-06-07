@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { YearResult } from '../lib/types';
-  import { OUTCOMES_BY_ID, OUTCOME_ELI5 } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, OUTCOME_ELI5, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { fmtNum } from '../lib/format';
   import { app } from '../lib/appState.svelte';
   const meaning = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5[id] ?? '' : OUTCOMES_BY_ID[id]?.blurb ?? '');
+  const lbl = (id: string, short: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? short : short);
 
   interface Props { sim: YearResult[]; baseSim: YearResult[]; horizon: number; scenarioName: string; }
   let { sim, baseSim, horizon, scenarioName }: Props = $props();
@@ -31,7 +32,7 @@
   <div class="ro-cells">
     {#each cells as c (c.m.id)}
       <div class="ro-cell" title={meaning(c.m.id)}>
-        <span class="ro-label">{c.m.short}</span>
+        <span class="ro-label">{lbl(c.m.id, c.m.short)}</span>
         <span class="ro-val">{fmtNum(c.v, c.m.dp)}<small>{c.m.unit === '£bn' ? 'bn' : c.m.unit === '%' || c.m.unit === '% of pupils' ? '%' : c.m.unit === 'months' ? 'mo' : ''}</small></span>
         {#if c.m.id === 'cumulativeCost'}
           <span class="ro-delta neutral">cumulative spend</span>
