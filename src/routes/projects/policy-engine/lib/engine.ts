@@ -157,6 +157,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       pupil_premium: CH.gapKS4.pupil_premium, fsm: CH.gapKS4.fsm, poverty_action: CH.gapKS4.poverty_action,
       teachers: CH.gapKS4.teachers, rise: CH.gapKS4.rise,
       place_investment: CH.gapKS4.place_investment, tutoring: CH.gapKS4.tutoring,
+      mission_ne: CH.gapKS4.mission_ne, mission_coastal: CH.gapKS4.mission_coastal,
     };
     let structReductionsK4 = channelSum(k4Struct, ys, lagOf);
     // early-years channels reach KS4 only with the ~11y cohort lag + fade-out
@@ -345,6 +346,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + Math.max(0, val('care_support') - 40) / 60 * COST.careSupportFullBn
       + Math.max(0, val('behaviour_support') - 30) / 70 * COST.behaviourFullBn
       + Math.max(0, val('place_investment') - 20) / 80 * COST.placeInvestFullBn
+      + val('mission_ne') / 100 * COST.missionNeFullBn
+      + val('mission_coastal') / 100 * COST.missionCoastalFullBn
       + Math.max(0, val('tutoring') - 30) / 70 * COST.tutoringFullBn
       + Math.max(0, val('school_funding') - 0.4) * COST.fundingPerPctBn * ys
     );

@@ -140,6 +140,10 @@ export const CH: ChannelParams = {
     teachers:      band(0.0, 0.2, 0.5),   // supply hardest in deprived schools [NFER/EPI workforce gap]
     rise:          band(0.0, 0.2, 0.5),   // targets stuck schools (disadv-skewed) [WP; London Challenge analogue]
     place_investment: band(0.1, 0.5, 1.1),// place-based investment closes the cold-spot residual [Local Trust ~7.5pp]
+    // The 2026 area missions act mostly REGIONALLY (see regions.ts); their NATIONAL gap effect is small
+    // because each touches a minority of pupils (NE ~4.6%; coastal pockets) [White Paper 2026; weak evidence].
+    mission_ne:       band(0.0, 0.06, 0.15),
+    mission_coastal:  band(0.0, 0.10, 0.25),
     tutoring:      band(0.1, 0.4, 0.9),   // disadvantage-targeted catch-up tutoring [EEF small-group +4mo; NTP]
   },
   gapRecep: {
@@ -192,6 +196,7 @@ export const CH: ChannelParams = {
     teachers: 4, teacher_pay: 3, bursaries: 3, curriculum: 4, rise: 2, school_funding: 3,
     inclusion_fund: 3, send_early: 3, ehcp_reform: 2, high_needs: 1, reading: 2,
     place_investment: 3, tutoring: 1, eal_support: 2, care_support: 2, behaviour_support: 2,
+    mission_ne: 5, mission_coastal: 5,
     send_pipeline: 3, camhs: 2, housing_instability: 2,
     eypp: 6, ey_quality: 7, ey_access: 6,   // early-years channels are slow
   },
@@ -332,7 +337,10 @@ export const COST = {
   camhsFullBn: 0.7,                           // £bn full CAMHS access expansion
   ealSupportFullBn: 0.3,                      // £bn full EAL/new-arrival catch-up support
   careSupportFullBn: 0.4,                     // £bn full care-experienced support (virtual schools / PP+)
-  placeInvestFullBn: 0.8,                     // £bn full place-based investment (Mission NE/Coastal)
+  placeInvestFullBn: 0.8,                     // £bn full place-based investment (cold-spot residual)
+  // area missions — no budget published; illustrative London-Challenge-scale (~£40m/yr) place-based cost [ASSUMPTION]
+  missionNeFullBn: 0.15,
+  missionCoastalFullBn: 0.2,
   behaviourFullBn: 0.3,                       // £bn full inclusion & behaviour support
   tutoringFullBn: 0.5,                        // £bn full catch-up tutoring programme [NTP-scale]
   // housing_instability has no education-budget cost (an exogenous context slider)

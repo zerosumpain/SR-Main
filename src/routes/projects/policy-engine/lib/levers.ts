@@ -256,6 +256,22 @@ export const LEVERS: LeverDef[] = [
     confidence: 'assumption', policyRef: 'Mission North East / Coastal; place-based investment',
   },
   {
+    id: 'mission_ne', group: 'indirect', label: 'Mission North East', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 0, policy: 50,
+    blurb: 'The 2026 place-based programme for the North East: expert-practitioner support to raise teaching quality plus out-of-school mentoring, careers and enrichment — modelled on the London Challenge.',
+    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Targets the lowest Attainment 8 of any region (43.7) and the "North East puzzle" — a small KS2 gap (9.5mo) that widens to 21.6mo by KS4. No budget has been published, and place-based attainment evidence is weak (Opportunity Areas were process-only; one OA gap even widened), so the modelled regional closure is deliberately small, slow and capped.',
+    source: 'DfE Schools White Paper 2026; EPI/Durham/NECA North East report (2025)', url: 'https://www.gov.uk/government/news/new-missions-to-transform-childhoods-of-most-disadvantaged',
+    confidence: 'assumption', policyRef: 'Mission North East (DfE, Sept 2026)',
+  },
+  {
+    id: 'mission_coastal', group: 'indirect', label: 'Mission Coastal', unit: '%',
+    min: 0, max: 100, step: 5, baseline: 0, policy: 50,
+    blurb: 'The 2026 place-based programme for coastal/seaside communities (initially Hastings & Scarborough, widening over time) — a London-Challenge-style school-improvement partnership.',
+    evidence: 'Real programme (Schools White Paper, Feb 2026; launches Sept 2026). Disadvantaged coastal pupils are ~3 GCSE grades behind non-coastal peers (DfE 2019); disadvantaged pupils in Hastings average ~26 Attainment 8. Coastal underperformance is hidden when merged with wealthier inland averages (CMO 2021). No budget published; the modelled closure of the coastal penalty is small, slow and capped.',
+    source: 'DfE Schools White Paper 2026; CMO "Health in Coastal Communities" (2021); DfE 2019', url: 'https://www.gov.uk/government/news/new-missions-to-transform-childhoods-of-most-disadvantaged',
+    confidence: 'assumption', policyRef: 'Mission Coastal (DfE, Sept 2026)',
+  },
+  {
     id: 'tutoring', group: 'indirect', label: 'Catch-up tutoring', unit: 'index',
     min: 0, max: 100, step: 5, baseline: 30, policy: 50,
     blurb: 'Targeted small-group / one-to-one tutoring for disadvantaged pupils (National Tutoring Programme-style) — also the lever for residual COVID learning-loss recovery.',

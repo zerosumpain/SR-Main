@@ -14,6 +14,8 @@
   import ChartModal from './components/ChartModal.svelte';
   import SavedScenarios from './components/SavedScenarios.svelte';
   import PopulationPanel from './components/PopulationPanel.svelte';
+  import RegionsPanel from './components/RegionsPanel.svelte';
+  import { regionalise, REGION_OPTIONS } from './lib/regions';
   import { runSim } from './lib/engine';
   import { runMonteCarlo } from './lib/montecarlo';
   import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './lib/levers';
@@ -23,7 +25,7 @@
   import { chartSummary } from './lib/summaries';
   import { SOURCES } from './lib/sources';
   import { optimizeGapWithinBudget, allocationBreakdown, type AllocRow } from './lib/optimize';
-  import type { LeverState } from './lib/types';
+  import type { LeverState, YearResult } from './lib/types';
 
   const STORAGE = 'whitehall-model-levers-v1';
 
@@ -31,7 +33,8 @@
   let levers = $state<LeverState>(policyLevers());
   let horizon = $state(2040);
   let showBands = $state(false);
-  let tab = $state<'outcomes' | 'population' | 'scorecard' | 'cost' | 'sensitivity' | 'method'>('outcomes');
+  let tab = $state<'outcomes' | 'population' | 'regions' | 'scorecard' | 'cost' | 'sensitivity' | 'method'>('outcomes');
+  let region = $state('all'); // geographic filter: 'all' (England) | region code | 'COAST' cross-cut
   let mounted = $state(false);
   let importErr = $state<string | null>(null);
   let copied = $state(false);
@@ -122,21 +125,32 @@
   }
 
   // DSG statutory override ends March 2028 — flag if the deficit breaches the insolvency threshold
+  // (SEND / DSG is modelled nationally — uses the national sim, not the regional view).
   const insolvencyYear = $derived(sim.years.find((y) => y.insolvencyRisk)?.year ?? null);
   const horizonDeficit = $derived(sim.years.find((y) => y.year === horizon)?.highNeedsDeficitStock ?? 0);
+
+  // ---- geographic view: re-base the national projection onto the selected region (or coastal cross-cut).
+  // The regionalised series adjust attainment, the gap, absence, GLD & NEET; all other (national) fields
+  // pass through unchanged. SEND/cost/workforce stay national; the Population tab stays national too. ----
+  const viewSim = $derived(region === 'all' ? sim.years : regionalise(sim.years, region, levers));
+  const viewBase = $derived(region === 'all' ? baseSim.years : regionalise(baseSim.years, region, baselineLevers()));
+  const viewSimB = $derived(!simB ? null : region === 'all' ? simB.years : regionalise(simB.years, region, compareB!.levers));
+  const regionName = $derived(REGION_OPTIONS.find((o) => o.code === region)?.name ?? 'England (all)');
 
   // ---- chart helpers ----
   const HY = HISTORY.year;
   const padNaN = HY.map(() => Number.NaN);
-  const allYears = $derived([...HY, ...sim.years.map((y) => y.year)]);
+  const allYears = $derived([...HY, ...viewSim.map((y) => y.year)]);
   function withHist(key: string): number[] {
-    return [...(HISTORY[key] ?? padNaN), ...sim.years.map((y) => (y as any)[key] as number)];
+    // historical backdrop is national-only; suppress it in a regional view to avoid a mismatched join
+    const hist = region === 'all' ? (HISTORY[key] ?? padNaN) : padNaN;
+    return [...hist, ...viewSim.map((y) => (y as any)[key] as number)];
   }
-  function proj(key: string, source = sim): number[] {
-    return [...padNaN, ...source.years.map((y) => (y as any)[key] as number)];
+  function proj(key: string, source: YearResult[] = viewSim): number[] {
+    return [...padNaN, ...source.map((y) => (y as any)[key] as number)];
   }
   function bandFor(key: string): { p10: number[]; p90: number[] } | null {
-    if (!mc || !mc.bands[key]) return null;
+    if (!mc || !mc.bands[key] || region !== 'all') return null; // uncertainty bands are national-only
     return { p10: [...padNaN, ...mc.bands[key].p10], p90: [...padNaN, ...mc.bands[key].p90] };
   }
 
@@ -171,7 +185,7 @@
       target: { value: BASELINE.gapKS4 / 2, label: 'halve (WP)' },
       series: [
         { label: 'At 16 (KS4) — your scenario', color: C_YOU, values: withHist('gapKS4'), emphasis: true, band: bandFor('gapKS4') },
-        { label: 'At 16 — status quo', color: C_BASE, values: proj('gapKS4', baseSim), dashed: true },
+        { label: 'At 16 — status quo', color: C_BASE, values: proj('gapKS4', viewBase), dashed: true },
         { label: 'At 11 (KS2) — your scenario', color: C_ALT, values: withHist('gapKS2') },
       ],
     },
@@ -180,7 +194,7 @@
       series: [
         { label: 'All pupils — your', color: C_YOU, values: withHist('attainment8'), emphasis: true, band: bandFor('attainment8') },
         { label: 'Disadvantaged — your', color: C_DIS, values: proj('attainment8Dis'), dashed: true },
-        { label: 'All — status quo', color: C_BASE, values: proj('attainment8', baseSim), dashed: true },
+        { label: 'All — status quo', color: C_BASE, values: proj('attainment8', viewBase), dashed: true },
       ],
     },
     {
@@ -188,7 +202,7 @@
       series: [
         { label: 'All — your', color: C_YOU, values: withHist('grade5EM'), emphasis: true, band: bandFor('grade5EM') },
         { label: 'Disadvantaged — your', color: C_DIS, values: proj('grade5EMDis'), dashed: true },
-        { label: 'All — status quo', color: C_BASE, values: proj('grade5EM', baseSim), dashed: true },
+        { label: 'All — status quo', color: C_BASE, values: proj('grade5EM', viewBase), dashed: true },
       ],
     },
     {
@@ -196,7 +210,7 @@
       series: [
         { label: 'All — your', color: C_YOU, values: withHist('ks2RWM'), emphasis: true, band: bandFor('ks2RWM') },
         { label: 'Disadvantaged — your', color: C_DIS, values: proj('ks2RWMDis'), dashed: true },
-        { label: 'All — status quo', color: C_BASE, values: proj('ks2RWM', baseSim), dashed: true },
+        { label: 'All — status quo', color: C_BASE, values: proj('ks2RWM', viewBase), dashed: true },
       ],
     },
     {
@@ -204,28 +218,28 @@
       series: [
         { label: 'All — your', color: C_YOU, values: withHist('gld'), emphasis: true, band: bandFor('gld') },
         { label: 'Disadvantaged — your', color: C_DIS, values: proj('gldDis'), dashed: true },
-        { label: 'All — status quo', color: C_BASE, values: proj('gld', baseSim), dashed: true },
+        { label: 'All — status quo', color: C_BASE, values: proj('gld', viewBase), dashed: true },
       ],
     },
     {
       title: 'EHCP prevalence', unit: '% of pupils', dp: 2, target: { value: TARGETS.ehcpPctGov, label: 'gov aspiration 4.7%' },
       series: [
         { label: 'Your scenario', color: C_YOU, values: withHist('ehcpPct'), emphasis: true, band: bandFor('ehcpPct') },
-        { label: 'Status quo', color: C_BASE, values: proj('ehcpPct', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('ehcpPct', viewBase), dashed: true },
       ],
     },
     {
       title: 'High-needs (SEND) deficit', unit: '£bn — override ends 2028', dp: 1, zeroBased: true,
       series: [
         { label: 'Your scenario', color: C_YOU, values: withHist('highNeedsDeficitStock'), emphasis: true, band: bandFor('highNeedsDeficitStock') },
-        { label: 'Status quo', color: C_BASE, values: proj('highNeedsDeficitStock', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('highNeedsDeficitStock', viewBase), dashed: true },
       ],
     },
     {
       title: 'SEND (EHCP) Attainment 8', unit: 'score', dp: 1,
       series: [
         { label: 'Your scenario', color: C_YOU, values: proj('ehcpAttainment8'), emphasis: true },
-        { label: 'Status quo', color: C_BASE, values: proj('ehcpAttainment8', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('ehcpAttainment8', viewBase), dashed: true },
       ],
     },
     {
@@ -233,41 +247,41 @@
       series: [
         { label: 'All — your', color: C_YOU, values: withHist('persistentAbsence'), emphasis: true, band: bandFor('persistentAbsence') },
         { label: 'Disadvantaged — your', color: C_DIS, values: proj('persistentAbsenceDis'), dashed: true },
-        { label: 'All — status quo', color: C_BASE, values: proj('persistentAbsence', baseSim), dashed: true },
+        { label: 'All — status quo', color: C_BASE, values: proj('persistentAbsence', viewBase), dashed: true },
       ],
     },
     {
       title: 'Child poverty', unit: '% relative (AHC)', dp: 1,
       series: [
         { label: 'Your scenario', color: C_YOU, values: withHist('childPoverty'), emphasis: true, band: bandFor('childPoverty') },
-        { label: 'Status quo', color: C_BASE, values: proj('childPoverty', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('childPoverty', viewBase), dashed: true },
       ],
     },
     {
       title: 'NEET (16–24)', unit: '%', dp: 1,
       series: [
         { label: 'Your scenario', color: C_YOU, values: withHist('neet'), emphasis: true, band: bandFor('neet') },
-        { label: 'Status quo', color: C_BASE, values: proj('neet', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('neet', viewBase), dashed: true },
       ],
     },
     {
       title: 'Teacher shortfall (6,500 pledge)', unit: 'k FTE — neg = surplus', dp: 1, zeroBased: true,
       series: [
         { label: 'Your scenario', color: C_YOU, values: proj('teacherShortfall'), emphasis: true, band: bandFor('teacherShortfall') },
-        { label: 'Status quo', color: C_BASE, values: proj('teacherShortfall', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('teacherShortfall', viewBase), dashed: true },
       ],
     },
     {
       title: 'Total programme cost', unit: '£bn cumulative', dp: 1, zeroBased: true,
       series: [
         { label: 'Your scenario', color: C_YOU, values: proj('cumulativeCost'), emphasis: true },
-        { label: 'Status quo', color: C_BASE, values: proj('cumulativeCost', baseSim), dashed: true },
+        { label: 'Status quo', color: C_BASE, values: proj('cumulativeCost', viewBase), dashed: true },
       ],
     },
     ];
     // Compare mode: overlay Scenario A (current) vs Scenario B (pinned) on each chart's primary metric.
-    if (!simB) return base;
-    const b = simB;
+    if (!viewSimB) return base;
+    const b = viewSimB;
     return base.map((c) => {
       const primary = c.series.find((s) => s.emphasis) ?? c.series[0];
       const key = CHART_PRIMARY[c.title];
@@ -354,6 +368,7 @@
   const TABS = [
     { id: 'outcomes', label: 'Outcomes' },
     { id: 'population', label: 'Population' },
+    { id: 'regions', label: 'Regions' },
     { id: 'scorecard', label: 'Scorecard' },
     { id: 'cost', label: 'Cost' },
     { id: 'sensitivity', label: 'Sensitivity' },
@@ -406,6 +421,14 @@
       <button class="tgl" class:on={showBands} onclick={() => (showBands = !showBands)} title="Monte-Carlo P10–P90 uncertainty bands">
         Uncertainty {showBands ? 'on' : 'off'}
       </button>
+    </div>
+    <div class="tb-grp">
+      <span class="tb-lab">Region</span>
+      <select class="tb-select" class:on={region !== 'all'} bind:value={region}
+              title="Re-base the charts onto an English region or the coastal cross-cut (open the Regions tab for the full geographic breakdown)">
+        {#each REGION_OPTIONS as o}<option value={o.code}>{o.name}</option>{/each}
+      </select>
+      {#if region !== 'all'}<button class="tb-btn" onclick={() => (tab = 'regions')} title="Open the geographic breakdown">map ↗</button>{/if}
     </div>
     <div class="tb-grp">
       <span class="tb-lab">Compare</span>
@@ -493,10 +516,10 @@
         </div>
 
         <div class="readout-shell">
-          {#if compareB && simB}
-            <CompareReadout simA={sim.years} simB={simB.years} nameA={scenarioName} nameB={compareB.name} {horizon} />
+          {#if compareB && viewSimB}
+            <CompareReadout simA={viewSim} simB={viewSimB} nameA={scenarioName} nameB={compareB.name} {horizon} />
           {:else}
-            <ScenarioReadout sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName} />
+            <ScenarioReadout sim={viewSim} baseSim={viewBase} {horizon} {scenarioName} />
           {/if}
         </div>
 
@@ -508,6 +531,16 @@
       </div>
 
       <div class="work-scroll">
+      {#if region !== 'all' && tab !== 'regions'}
+        <div class="region-banner" class:coast={region === 'COAST'}>
+          <span class="rb-tag">◉ {regionName}</span>
+          <span class="rb-text">
+            The view is re-based onto <b>{regionName}</b>: the gap, Attainment 8, grade-5 E&amp;M, absence, GLD &amp; NEET are regional;
+            SEND, cost, workforce &amp; the Population tab stay national. The 9 regions always weight back to the England figure.
+          </span>
+          <button class="rb-clear" onclick={() => (region = 'all')}>✕ England</button>
+        </div>
+      {/if}
       {#if tab === 'outcomes'}
         <p class="tab-intro">
           {#if compareB}
@@ -524,7 +557,7 @@
         </p>
         <div class="chart-grid">
           {#each charts as c, i (c.title)}
-            {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, compareB && simB ? simB.years : baseSim.years, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
+            {@const sm = chartSummary(CHART_PRIMARY[c.title], viewSim, compareB && simB ? viewSimB! : viewBase, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
             <div class="chart-cell">
               <button class="expand-btn" onclick={() => (expanded = i)} title="Expand chart with its narrative" aria-label="Expand {c.title}">⤢</button>
               <OutcomeChart title={c.title} unit={c.unit} years={allYears} series={c.series}
@@ -536,10 +569,12 @@
       {:else if tab === 'population'}
         <PopulationPanel sim={sim.years} baseSim={baseSim.years} {horizon} {scenarioName}
                          compare={compareB && simB ? { sim: simB.years, name: compareB.name } : null} />
+      {:else if tab === 'regions'}
+        <RegionsPanel sim={sim.years} baseSim={baseSim.years} {levers} {horizon} selected={region} onSelect={(c) => (region = c)} />
       {:else if tab === 'scorecard'}
-        <Scorecard sim={sim.years} baseSim={baseSim.years} {horizon} />
+        <Scorecard sim={viewSim} baseSim={viewBase} {horizon} />
       {:else if tab === 'cost'}
-        <CostPanel sim={sim.years} baseSim={baseSim.years} {horizon} />
+        <CostPanel sim={viewSim} baseSim={viewBase} {horizon} />
       {:else if tab === 'sensitivity'}
         <Sensitivity {levers} {horizon} />
       {:else if tab === 'method'}
@@ -551,7 +586,7 @@
 
   {#if expanded !== null}
     {@const c = charts[expanded]}
-    {@const sm = chartSummary(CHART_PRIMARY[c.title], sim.years, compareB && simB ? simB.years : baseSim.years, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
+    {@const sm = chartSummary(CHART_PRIMARY[c.title], viewSim, compareB && simB ? viewSimB! : viewBase, horizon, compareB && simB ? 'Scenario B' : 'status-quo path')}
     <ChartModal title={c.title} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
                 horizonYear={horizon} target={c.target} dp={c.dp} zeroBased={c.zeroBased ?? false}
                 narrative={sm.text} onClose={() => (expanded = null)} />
@@ -612,6 +647,9 @@
   .seg button.active { background: var(--ink); color: var(--paper); }
   .tgl { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); color: var(--ink); padding: 5px 10px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
   .tgl.on { background: #2f6f97; color: #fff; border-color: #2f6f97; }
+  .tb-select { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; padding: 4px 8px;
+    color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; max-width: 180px; }
+  .tb-select.on { background: #4a7c7c; color: #fff; border-color: #4a7c7c; }
   .tb-btn { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; padding: 5px 10px; color: var(--ink);
     font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; cursor: pointer; }
   .tb-btn:hover { background: rgba(28,22,17,0.06); }
@@ -691,6 +729,15 @@
   .tabs button:hover { background: rgba(255,255,255,0.5); color: var(--ink); }
   .tabs button.active { background: var(--ink); color: var(--paper); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
   .tab-intro { margin: 0 0 12px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 100ch; }
+  .region-banner { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 7px 11px;
+    border-radius: 8px; background: rgba(74,124,124,0.09); border: 1px solid rgba(74,124,124,0.3); }
+  .region-banner.coast { background: rgba(74,124,124,0.13); }
+  .rb-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: #3a5f5f; white-space: nowrap; }
+  .rb-text { flex: 1; min-width: 220px; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.7); }
+  .rb-text b { color: #1c1611; }
+  .rb-clear { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; padding: 4px 9px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .rb-clear:hover { background: rgba(28,22,17,0.06); }
   .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; align-items: start; }
   .chart-cell { display: flex; flex-direction: column; position: relative; }
   .expand-btn { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
