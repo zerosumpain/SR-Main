@@ -617,6 +617,18 @@ export const jkaiBuilds = pgTable('jkai_builds', {
 export type JkaiBuild = typeof jkaiBuilds.$inferSelect;
 export type NewJkaiBuild = typeof jkaiBuilds.$inferInsert;
 
+// Per-project public/private overlay for the /projects page. Keyed by the URL
+// segment after /projects/ (a static card key or an AI build's publishedSlug).
+// Absence of a row means PUBLIC — the feature is inert until a project is
+// explicitly toggled private.
+export const projectVisibility = pgTable('project_visibility', {
+  projectKey: text('project_key').primaryKey(),
+  isPublic: boolean('is_public').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ProjectVisibility = typeof projectVisibility.$inferSelect;
+
 /**
  * Per-event log written by every JKAI-built app. The app POSTs to
  * /api/jkai/builds/<id>/events (same-origin from the proxy iframe; uses the

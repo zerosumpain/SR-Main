@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { requireProjectPublic } from '$lib/projects/guard';
 import type { EstatePayload, ResolvedStat } from './lib/types';
 import {
   EES_PUBLICATIONS_STAT,
@@ -62,9 +63,12 @@ async function build(f: typeof fetch): Promise<EstatePayload> {
   return { stats, publications, publicationsLive, fetchedAt };
 }
 
-export const load: PageServerLoad = async ({ fetch, setHeaders }) => {
-  // Allow a shared/CDN cache to hold the rendered page for 30 min.
-  setHeaders({ 'cache-control': 'public, max-age=0, s-maxage=1800' });
+export const load: PageServerLoad = async ({ fetch, setHeaders, locals }) => {
+  const { authedPrivate } = await requireProjectPublic('dfe-data-estate', locals);
+  // Never let a shared cache hold an authed preview of a private project.
+  setHeaders({
+    'cache-control': authedPrivate ? 'private, no-store' : 'public, max-age=0, s-maxage=1800',
+  });
 
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) {

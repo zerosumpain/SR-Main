@@ -1,27 +1,40 @@
 import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
+import { jkaiBuilds, projectVisibility } from '$lib/db/schema';
 import { isNotNull, desc } from 'drizzle-orm';
+import { resolveVisibilityMap, isProjectPublic } from '$lib/projects/visibility';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
   const session = await locals.auth();
+  const authenticated = !!session?.user;
 
-  const published = await db
-    .select({
-      id: jkaiBuilds.id,
-      title: jkaiBuilds.title,
-      prompt: jkaiBuilds.prompt,
-      publishedSlug: jkaiBuilds.publishedSlug,
-      iterationsCompleted: jkaiBuilds.iterationsCompleted,
-      createdAt: jkaiBuilds.createdAt,
-      updatedAt: jkaiBuilds.updatedAt,
-    })
-    .from(jkaiBuilds)
-    .where(isNotNull(jkaiBuilds.publishedSlug))
-    .orderBy(desc(jkaiBuilds.updatedAt));
+  const [published, visRows] = await Promise.all([
+    db
+      .select({
+        id: jkaiBuilds.id,
+        title: jkaiBuilds.title,
+        prompt: jkaiBuilds.prompt,
+        publishedSlug: jkaiBuilds.publishedSlug,
+        iterationsCompleted: jkaiBuilds.iterationsCompleted,
+        createdAt: jkaiBuilds.createdAt,
+        updatedAt: jkaiBuilds.updatedAt,
+      })
+      .from(jkaiBuilds)
+      .where(isNotNull(jkaiBuilds.publishedSlug))
+      .orderBy(desc(jkaiBuilds.updatedAt)),
+    db
+      .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
+      .from(projectVisibility),
+  ]);
 
-  return {
-    projects: published,
-    authenticated: !!session?.user,
-  };
+  const visibility = resolveVisibilityMap(visRows);
+
+  // Attach each build's resolved visibility; hide private builds from the public.
+  const withVis = published.map((p) => ({
+    ...p,
+    isPublic: isProjectPublic(visibility, p.publishedSlug!),
+  }));
+  const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
+
+  return { projects, authenticated, visibility };
 };

@@ -1,7 +1,16 @@
 import type { RequestHandler } from './$types';
 import { getPublishedDir } from '$lib/jkai/sandbox';
+import { db } from '$lib/db';
+import { projectVisibility } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { isProjectPublic } from '$lib/projects/visibility';
 import { readFile, stat } from 'fs/promises';
 import { join, extname } from 'path';
+
+// Relocated static bundles (whitehall, brass-and-rails) use relative ./assets/
+// paths across multiple HTML files, so the trailing slash must be preserved —
+// never let SvelteKit strip it (default is 'never').
+export const trailingSlash = 'ignore';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -40,9 +49,34 @@ async function tryFile(filePath: string): Promise<{ data: ArrayBuffer; mime: str
   return null;
 }
 
-export const GET: RequestHandler = async ({ params }) => {
-  const baseDir = join(getPublishedDir(), params.slug);
+export const GET: RequestHandler = async ({ params, url, locals }) => {
   const requestedPath = params.path || '';
+
+  // Visibility gate: a private project (and all its assets) 404s for the public.
+  // The signed-in owner can still open it to preview.
+  const [vis] = await db
+    .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
+    .from(projectVisibility)
+    .where(eq(projectVisibility.projectKey, params.slug));
+  const visMap = vis ? { [vis.projectKey]: vis.isPublic } : {};
+  const isPublic = isProjectPublic(visMap, params.slug);
+  let authed = false;
+  if (!isPublic) {
+    const session = await locals.auth();
+    authed = !!session?.user;
+    if (!authed) return new Response('Not found', { status: 404 });
+  }
+
+  // Directory root without a trailing slash breaks the bundles' relative asset
+  // paths — redirect /projects/<slug> -> /projects/<slug>/ before serving.
+  if (!requestedPath && !url.pathname.endsWith('/')) {
+    return new Response(null, {
+      status: 308,
+      headers: { Location: url.pathname + '/' + url.search },
+    });
+  }
+
+  const baseDir = join(getPublishedDir(), params.slug);
 
   // Security: prevent path traversal
   const resolved = join(baseDir, requestedPath);
@@ -67,10 +101,13 @@ export const GET: RequestHandler = async ({ params }) => {
     return new Response('Not found', { status: 404 });
   }
 
-  return new Response(result.data, {
-    headers: {
-      'Content-Type': result.mime,
-      'Cache-Control': 'public, max-age=3600',
-    },
-  });
+  const headers: Record<string, string> = { 'Content-Type': result.mime };
+  if (isPublic) {
+    headers['Cache-Control'] = 'public, max-age=3600';
+  } else {
+    // Authed preview of a private project — never cache or index it.
+    headers['Cache-Control'] = 'private, no-store';
+    headers['X-Robots-Tag'] = 'noindex';
+  }
+  return new Response(result.data, { headers });
 };

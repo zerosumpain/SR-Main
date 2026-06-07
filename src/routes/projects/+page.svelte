@@ -6,6 +6,33 @@
   let projects = $state(data.projects);
   let removing = $state<string | null>(null);
 
+  // Per-project public/private overlay. Seeded from the server; toggles update
+  // it optimistically. A missing key means public.
+  let vis = $state<Record<string, boolean>>({ ...(data.visibility ?? {}) });
+  let toggling = $state<string | null>(null);
+
+  const isPub = (key: string) => vis[key] ?? true;
+  const showCard = (key: string) => data.authenticated || isPub(key);
+
+  async function toggleVisibility(key: string) {
+    const next = !isPub(key);
+    toggling = key;
+    vis = { ...vis, [key]: next }; // optimistic
+    try {
+      const res = await fetch('/api/projects/visibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, isPublic: next }),
+      });
+      if (!res.ok) vis = { ...vis, [key]: !next }; // revert on failure
+    } catch (err) {
+      console.error('Failed to toggle visibility:', err);
+      vis = { ...vis, [key]: !next };
+    } finally {
+      toggling = null;
+    }
+  }
+
   function formatDate(d: string | Date) {
     return new Date(d).toLocaleDateString('en-GB', {
       day: 'numeric',
@@ -41,6 +68,32 @@
 
 <PageHeader title="PROJECTS" />
 
+{#snippet visToggle(key: string)}
+  {#if data.authenticated}
+    <span class="flex items-center gap-2 relative z-10 ml-auto">
+      {#if !isPub(key)}
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: rgba(180, 50, 50, 0.12); color: #b43232;"
+        >
+          Private
+        </span>
+      {/if}
+      <button
+        onclick={() => toggleVisibility(key)}
+        disabled={toggling === key}
+        class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors"
+        style="border-color: var(--card-border); color: var(--text-secondary); opacity: {toggling === key ? 0.5 : 1};"
+        title={isPub(key)
+          ? 'Visible to the public — click to make private'
+          : 'Hidden from the public — click to make public'}
+      >
+        {toggling === key ? '…' : isPub(key) ? 'Public' : 'Private'}
+      </button>
+    </span>
+  {/if}
+{/snippet}
+
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <div class="max-w-4xl mb-12">
     <p class="text-base leading-relaxed max-w-lg" style="color: var(--text-secondary);">
@@ -50,6 +103,7 @@
   </div>
 
   <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+    {#if showCard('dfe-data-estate')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -85,9 +139,12 @@
         >
           live APIs · 16 services · OGL
         </span>
+        {@render visToggle('dfe-data-estate')}
       </div>
     </div>
+    {/if}
 
+    {#if showCard('policy-engine')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -124,9 +181,12 @@
         >
           system dynamics · Monte-Carlo · cited
         </span>
+        {@render visToggle('policy-engine')}
       </div>
     </div>
+    {/if}
 
+    {#if showCard('whitehall')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -162,9 +222,12 @@
         >
           Three.js · civil service · special projects
         </span>
+        {@render visToggle('whitehall')}
       </div>
     </div>
+    {/if}
 
+    {#if showCard('brass-and-rails')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -200,9 +263,12 @@
         >
           Three.js · tilt-shift · learning AI
         </span>
+        {@render visToggle('brass-and-rails')}
       </div>
     </div>
+    {/if}
 
+    {#if showCard('data-convergence')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
       style="background: var(--card-bg); border-color: var(--card-border);"
@@ -237,8 +303,10 @@
         >
           Canvas · DAG · braid render
         </span>
+        {@render visToggle('data-convergence')}
       </div>
     </div>
+    {/if}
 
     {#if projects.length === 0}
       <div
@@ -289,14 +357,17 @@
             </div>
 
             {#if data.authenticated}
-              <button
-                onclick={() => removeProject(project.id, project.publishedSlug!)}
-                disabled={removing === project.id}
-                class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors hover:bg-red-500/10"
-                style="border-color: #b43232; color: #b43232; opacity: {removing === project.id ? 0.5 : 1};"
-              >
-                {removing === project.id ? 'Removing...' : 'Remove'}
-              </button>
+              <div class="flex items-center gap-2">
+                {@render visToggle(project.publishedSlug!)}
+                <button
+                  onclick={() => removeProject(project.id, project.publishedSlug!)}
+                  disabled={removing === project.id}
+                  class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors hover:bg-red-500/10"
+                  style="border-color: #b43232; color: #b43232; opacity: {removing === project.id ? 0.5 : 1};"
+                >
+                  {removing === project.id ? 'Removing...' : 'Remove'}
+                </button>
+              </div>
             {/if}
           </div>
         </div>
