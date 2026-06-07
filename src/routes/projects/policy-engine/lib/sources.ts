@@ -26,4 +26,8 @@ export const SOURCES: Source[] = [
   { org: 'Commons Library', what: 'Pupil Premium (SN06700); Post-16 White Paper; teacher recruitment briefings', url: 'https://commonslibrary.parliament.uk/' },
   { org: 'Teacher value-added evidence', what: 'Chetty/Friedman/Rockoff & Hanushek (1 SD teacher VA ≈ +0.10–0.20 SD pupil scores)', url: 'https://opportunityinsights.org/wp-content/uploads/2018/10/teachers_wp.pdf' },
   { org: 'School-spending evidence', what: 'Jackson et al. — effects of school spending (weak/contested £→outcome link)', url: 'https://www.brookings.edu/articles/a-state-level-perspective-on-school-spending-and-educational-outcomes/' },
+  { org: 'OECD — PISA 2022 (Global tab)', what: 'Maths/reading/science scores, equity (ESCS variance + advantaged−disadvantaged gap), cumulative spend per student 6–15 (Table I.B3.2.2) & 2018→22 trend with significance', url: 'https://www.oecd.org/en/publications/pisa-2022-results-volume-i_53f23881-en.html' },
+  { org: 'OECD — Education at a Glance 2024', what: 'Annual expenditure per student & % of GDP on education (context badges on the Global tab)', url: 'https://www.oecd.org/en/about/programmes/education-at-a-glance.html' },
+  { org: 'DfE/NFER — PISA 2022 National Report for England', what: 'England-specific PISA means (492/496/503) and the response-rate caveat', url: 'https://assets.publishing.service.gov.uk/media/656dc3321104cf0013fa742f/PISA_2022_England_National_Report.pdf' },
+  { org: 'World Bank', what: 'GDP per capita PPP, and government education spend %GDP for non-OECD Singapore & Vietnam', url: 'https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.CD' },
 ];

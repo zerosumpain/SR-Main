@@ -19,7 +19,7 @@
       by region</b>, and translated into real numbers of children.
     </p>
     <div class="cta-row">
-      <button class="pe-next" onclick={() => app.toggleDrawer()}>Open the levers &amp; start →</button>
+      <a class="pe-next" href="/projects/policy-engine/outcomes" onclick={() => app.openDrawer()}>Open the levers &amp; start →</a>
       <a class="cta-ghost" href="/projects/policy-engine/outcomes">or jump to the outcomes</a>
       <button class="cta-ghost as-btn" onclick={() => (app.showHelp = true)}>How does this work?</button>
     </div>

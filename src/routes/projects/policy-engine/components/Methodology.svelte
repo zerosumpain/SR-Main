@@ -1,7 +1,12 @@
 <script lang="ts">
   import { LEVERS, GROUP_META } from '../lib/levers';
   import { SOURCES } from '../lib/sources';
+  import { BY_MATHS, OECD_AVG, SPEND_THRESHOLD, ENGLAND_PISA, TIER_META } from '../lib/comparators';
   import CausalFlow from './CausalFlow.svelte';
+
+  const tierShort: Record<string, string> = { anchor: 'anchor', leader: 'leader', peer: 'peer', other: 'wildcard' };
+  const compTrend = (v: number | null, sig: boolean | null) =>
+    v == null ? 'n/a' : `${v > 0 ? '+' : ''}${v}${sig === false ? ' (n.s.)' : ''}`;
 
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
 
@@ -181,6 +186,72 @@ attainment ─▶ NEET                                                       (+ 
   </section>
 
   <section>
+    <h3>International comparators (the Global tab)</h3>
+    <p>
+      The <a href="/projects/policy-engine/global">Global</a> tab is a separate, non-modelled exhibit: it does <b>not</b> run the engine,
+      it stress-tests the engine’s three core assumptions (money is a weak/conditional lever; equity is the real differentiator; gains are
+      reversible) against real cross-country data. Ten systems are compared — the <b>UK</b> anchor plus three deliberately chosen tiers:
+      <b>education leaders</b> (Singapore, Japan, Estonia), <b>economic peers</b> (France, Germany, Italy) and <b>wildcards</b>
+      (Ireland, Poland, Vietnam). Every figure was independently re-verified against the OECD/World-Bank primary sources before publishing;
+      the audit found all 33 PISA scores and all equity metrics correct, and corrected two presentation issues (below).
+    </p>
+    <p><b>The four measures, and exactly what each means:</b></p>
+    <ul>
+      <li><b>Attainment</b> — PISA 2022 mean scores in maths, reading and science (OECD, tested at age 15).</li>
+      <li><b>Equity</b> — two figures from each country’s official PISA country note: the <i>advantaged−disadvantaged maths gap</i> (top
+        vs bottom ESCS socio-economic quartile, in score points; lower = fairer — the bar in chart 2), and the % of maths-score variance
+        explained by background. Lower means a child’s circumstances predict their results less.</li>
+      <li><b>Spending</b> — the scatter uses <b>cumulative expenditure per student over ages 6–15 (USD PPP)</b>, the exact measure OECD
+        itself plots against PISA (Table I.B3.2.2), because it matches the tested cohort and excludes tertiary + R&D. OECD finds that above
+        a <b>~USD&nbsp;{(SPEND_THRESHOLD / 1000).toFixed(0)},000</b> cumulative threshold there is “almost no relationship between extra
+        investment and performance”; <b>8 of the 10 sit above it</b>. The card badges show annual per-student spend separately, as context only.</li>
+      <li><b>Trend</b> — change in PISA maths 2018→2022, with OECD’s significance flag preserved.</li>
+    </ul>
+    <p><b>Caveats made explicit (not hidden):</b></p>
+    <ul>
+      <li><b>England ≠ UK.</b> PISA reports the UK as a whole; England specifically scored higher — maths {ENGLAND_PISA.maths}, reading
+        {ENGLAND_PISA.reading}, science {ENGLAND_PISA.science} (vs UK 489/494/500). England’s school response rate also fell below PISA
+        standards, so its means may be flattered. The charts plot the comparable UK figure.</li>
+      <li><b>Japan (+9) and Singapore (+6) maths are NOT statistically significant</b> — OECD: “about the same as in 2018 in mathematics”.
+        Shown hatched and flagged “n.s.”; their genuine gains were in reading/science.</li>
+      <li><b>Italy’s maths trend is −16</b> (487→471), corrected from an earlier −15.</li>
+      <li><b>Estonia’s cumulative spend was never published by OECD</b> (the only blank in Table I.B3.2.2); its ≈$90k dot is reconstructed
+        from annual ISCED 1+2 per-student spend and marked with an asterisk + a dashed outline.</li>
+      <li><b>Singapore &amp; Vietnam</b> are non-OECD, so their annual %-GDP/per-student figures are a narrower World-Bank proxy (not
+        plotted); their cumulative-6→15 figure, however, is comparable and is. <b>Ireland &amp; Singapore GDP/capita</b> are inflated by
+        multinational accounting (Ireland’s GNI* is the honest base). <b>Vietnam’s 2018→22 trend</b> is not comparable across cycles.</li>
+    </ul>
+    <p><b>The headline findings:</b> spending barely predicts maths once past the $75k threshold (Germany and the UK spend most and trail
+      cheaper Estonia and Japan; Vietnam nears England on a ninth of the spend); equity varies enormously at the same price (England’s gap
+      of 86 is fairer than the OECD’s 93 and far fairer than France’s 113 / Germany’s 111 at equal-or-higher spend, while Ireland’s 74 is
+      fairest of all); and gains are reversible (Germany −25, Poland −27 in a single cycle). All three corroborate the engine’s design.</p>
+    <table>
+      <thead><tr><th>Country</th><th>Tier</th><th>Maths</th><th>Read</th><th>Sci</th><th>Gap</th><th>Cumul. 6–15</th><th>Trend</th></tr></thead>
+      <tbody>
+        {#each BY_MATHS as c}
+          <tr>
+            <td>{c.flag} {c.name}</td>
+            <td class="src">{tierShort[c.tier]}</td>
+            <td class="num">{c.maths}</td><td class="num">{c.reading}</td><td class="num">{c.science}</td>
+            <td class="num">{c.escsGap}</td>
+            <td class="num">${(c.spendCumulative! / 1000).toFixed(0)}k{c.spendCumulativeEst ? '*' : ''}</td>
+            <td class="num">{compTrend(c.mathsTrend, c.trendSig)}</td>
+          </tr>
+        {/each}
+        <tr class="avg">
+          <td>OECD average</td><td class="src">—</td>
+          <td class="num">{OECD_AVG.maths}</td><td class="num">{OECD_AVG.reading}</td><td class="num">{OECD_AVG.science}</td>
+          <td class="num">{OECD_AVG.escsGap}</td>
+          <td class="num">${(OECD_AVG.spendCumulative / 1000).toFixed(0)}k</td>
+          <td class="num">{OECD_AVG.mathsTrend}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="caveat">PISA 2022 (OECD, Dec 2023); cumulative spend = Table I.B3.2.2; England means = DfE/NFER PISA 2022 National Report
+      for England. *Estonia cumulative reconstructed (see above). “n.s.” = not statistically significant.</p>
+  </section>
+
+  <section>
     <h3>Sources</h3>
     <ul class="srclist">
       {#each SOURCES as s}
@@ -217,6 +288,7 @@ attainment ─▶ NEET                                                       (+ 
   td { padding: 5px 8px 5px 0; border-bottom: 1px solid rgba(28,22,17,0.07); color: rgba(28,22,17,0.8); vertical-align: top; }
   td.num { font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; }
   td.src { color: rgba(28,22,17,0.55); font-size: 10.5px; }
+  tr.avg td { font-weight: 600; border-top: 1px solid rgba(28,22,17,0.25); color: rgba(28,22,17,0.7); }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .conf { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
   .conf-high { background: rgba(47,125,79,0.16); color: #2f7d4f; }

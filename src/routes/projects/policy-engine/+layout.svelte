@@ -7,8 +7,6 @@
   import { encodeLevers, decodeLevers, tokenFromHash, loadSaved, persistSaved } from './lib/scenarios';
   import { REGION_OPTIONS } from './lib/regions';
   import { SOURCES } from './lib/sources';
-  import ScenarioReadout from './components/ScenarioReadout.svelte';
-  import CompareReadout from './components/CompareReadout.svelte';
   import LeverDrawer from './components/LeverDrawer.svelte';
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import SectionNav from './components/SectionNav.svelte';
@@ -78,35 +76,8 @@
       <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">? How to use</button>
     </header>
 
-    <div class="scenebar">
-      <ScenarioSelector />
-      <p class="scene-desc">{app.scenarioDescription}</p>
-      <div class="controls">
-        <div class="seg" role="group" aria-label="Horizon">{#each [2030, 2035, 2040] as h}<button class:on={app.horizon === h} onclick={() => app.setHorizon(h)}>{h}</button>{/each}</div>
-        <select class="csel" class:on={app.region !== 'all'} bind:value={app.region} title="Re-base onto a region or the coastal cross-cut">{#each REGION_OPTIONS as o}<option value={o.code}>{o.name}</option>{/each}</select>
-        <button class="cbtn" class:on={app.showBands} onclick={() => (app.showBands = !app.showBands)} title="Monte-Carlo uncertainty bands">Uncertainty {app.showBands ? 'on' : 'off'}</button>
-        {#if !app.compareB}
-          <button class="cbtn" onclick={() => app.pinAsB()} title="Pin this scenario as B, then change A to compare">⇆ Compare</button>
-        {:else}
-          <span class="cmp-badge"><i></i>B: {app.compareB.name}</span>
-          <button class="cbtn" onclick={() => app.swapAB()} title="Swap A and B">⇄</button>
-          <button class="cbtn danger" onclick={() => app.clearCompare()}>✕</button>
-        {/if}
-        <button class="cbtn share" class:ok={copied} onclick={copyLink}>{copied ? '✓ Copied' : '↗ Copy link'}</button>
-      </div>
-    </div>
-
-    {#if app.mounted}
-      <div class="readout-shell">
-        {#if app.compareB && app.viewSimB}
-          <CompareReadout simA={app.viewSim} simB={app.viewSimB} nameA={app.scenarioName} nameB={app.compareB.name} horizon={app.horizon} />
-        {:else}
-          <ScenarioReadout sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} scenarioName={app.scenarioName} />
-        {/if}
-      </div>
-      {#if app.insolvencyYear}
-        <div class="cliff" role="alert">⚠ <b>SEND funding cliff:</b> the DSG override ends March 2028; on this path the high-needs deficit breaches insolvency by <b>{app.insolvencyYear}</b> (£{app.horizonDeficit.toFixed(0)}bn by {app.horizon}). <a href="/projects/policy-engine/outcomes">See the deficit ↗</a></div>
-      {/if}
+    {#if app.mounted && app.insolvencyYear}
+      <div class="cliff" role="alert">⚠ <b>SEND funding cliff:</b> the DSG override ends March 2028; on this path the high-needs deficit breaches insolvency by <b>{app.insolvencyYear}</b> (£{app.horizonDeficit.toFixed(0)}bn by {app.horizon}). <a href="/projects/policy-engine/outcomes">See the deficit ↗</a></div>
     {/if}
   </div>
 
@@ -123,6 +94,23 @@
     </aside>
     <main class="content">
       <SectionNav />
+      <div class="scenebar">
+        <ScenarioSelector />
+        <p class="scene-desc">{app.scenarioDescription}</p>
+        <div class="controls">
+          <div class="seg" role="group" aria-label="Horizon">{#each [2030, 2035, 2040] as h}<button class:on={app.horizon === h} onclick={() => app.setHorizon(h)}>{h}</button>{/each}</div>
+          <select class="csel" class:on={app.region !== 'all'} bind:value={app.region} title="Re-base onto a region or the coastal cross-cut">{#each REGION_OPTIONS as o}<option value={o.code}>{o.name}</option>{/each}</select>
+          <button class="cbtn" class:on={app.showBands} onclick={() => (app.showBands = !app.showBands)} title="Monte-Carlo uncertainty bands">Uncertainty {app.showBands ? 'on' : 'off'}</button>
+          {#if !app.compareB}
+            <button class="cbtn" onclick={() => app.pinAsB()} title="Pin this scenario as B, then change A to compare">⇆ Compare</button>
+          {:else}
+            <span class="cmp-badge"><i></i>B: {app.compareB.name}</span>
+            <button class="cbtn" onclick={() => app.swapAB()} title="Swap A and B">⇄</button>
+            <button class="cbtn danger" onclick={() => app.clearCompare()}>✕</button>
+          {/if}
+          <button class="cbtn share" class:ok={copied} onclick={copyLink}>{copied ? '✓ Copied' : '↗ Copy link'}</button>
+        </div>
+      </div>
       {@render children()}
     </main>
   </div>
@@ -164,7 +152,8 @@
     background: rgba(47,125,79,0.08); color: #2f7d4f; cursor: pointer; }
   .help-btn:hover { background: rgba(47,125,79,0.16); }
 
-  .scenebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 6px 28px; border-top: 1px solid rgba(28,22,17,0.07); }
+  /* scenario controls now sit in-flow just beneath the section nav (off the sticky top line) */
+  .scenebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 9px 32px; background: rgba(241,234,214,0.55); border-bottom: 1px solid rgba(28,22,17,0.1); }
   .scene-desc { flex: 1 1 320px; min-width: 240px; margin: 0; font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.66);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .controls { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-left: auto; }
@@ -181,7 +170,6 @@
   .cmp-badge { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #3a5fa8; background: rgba(58,95,168,0.1); border: 1px solid rgba(58,95,168,0.3); border-radius: 5px; padding: 3px 7px; }
   .cmp-badge i { width: 8px; height: 3px; border-radius: 2px; background: #3a5fa8; }
 
-  .readout-shell { padding: 8px 28px 4px; }
   .cliff { margin: 4px 28px 8px; padding: 7px 12px; font-size: 12px; line-height: 1.45; border-radius: 7px; background: rgba(177,69,94,0.1); color: #8a2d3a; border: 1px solid rgba(177,69,94,0.25); }
   .cliff b { color: #6f2230; } .cliff a { color: #8a2d3a; }
 
@@ -240,7 +228,7 @@
   .sources-foot a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
 
   @media (max-width: 760px) {
-    .masthead { padding: 9px 14px 8px; } .scenebar { padding: 6px 14px; } .readout-shell { padding: 8px 14px 4px; }
+    .masthead { padding: 9px 14px 8px; } .scenebar { padding: 9px 14px; }
     .cliff { margin: 4px 14px 8px; } .foot { padding: 16px 14px 22px; } .subnav { margin-left: 0; }
     :global(.pe-route) { padding: 18px 14px 8px; }
   }
