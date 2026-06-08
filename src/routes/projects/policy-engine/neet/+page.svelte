@@ -6,6 +6,7 @@
     NEET_NOW, LA_SPREAD, LA_NOTE, SILOS, LEO_NOTE, JOIN_SPOKES,
     NL_ESL, EUROSTAT_NEET, ESTONIA_FUNNEL, ABC, RONI_INPUTS,
     NEET_INTL, NEET_TIER_META, NEET_KEY_STATS,
+    AI_INTRO, AI_ROLES, AI_STATS, AI_CAUTIONS,
   } from '../lib/neet';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -370,9 +371,43 @@
     <p class="offaxis">{eli ? 'The data finds the young person; a person re-engages them — and the goal is always to offer help, never to punish or write anyone off.' : 'A spine-plus-identifier system would let England track its modelled NEET projection (above) against live attendance and act on individuals — provided the framing stays support-targeting, not punishment. The data finds the young person; a person re-engages them.'}</p>
   </section>
 
-  <!-- ===================== 8 · ethics ===================== -->
+  <!-- ===================== 8 · how AI could help ===================== -->
   <section class="block">
-    <h2 class="pe-h2">8 · Doing it humanely</h2>
+    <h2 class="pe-h2">8 · How AI could improve England’s NEET approach</h2>
+    <p class="cap">{eli ? AI_INTRO.eli5 : AI_INTRO.research}</p>
+    <div class="airoles">
+      {#each AI_ROLES as r (r.key)}
+        <article class="airole" style="--rc:{r.colour}">
+          <header class="ar-head">
+            <span class="ar-icon">{r.icon}</span>
+            <div class="ar-heads">
+              <span class="ar-tag">{r.tag}</span>
+              <h3 class="ar-title">{r.title}</h3>
+            </div>
+            <span class="ar-verdict">{r.verdict}</span>
+          </header>
+          <p class="ar-prose">{eli ? r.eli5 : r.research}</p>
+          <p class="ar-eg"><span class="ar-eg-tag">Grounding example</span>{r.example} <a href={r.exampleUrl} target="_blank" rel="noopener">↗</a></p>
+        </article>
+      {/each}
+    </div>
+
+    <div class="stats ai-stats">
+      {#each AI_STATS as s (s.big)}
+        <a class="stat" href={s.url} target="_blank" rel="noopener"><span class="stat-big">{s.big}</span><span class="stat-lab">{s.label}</span></a>
+      {/each}
+    </div>
+
+    <div class="aicaution">
+      <span class="aic-tag">⚠ The honest caveats</span>
+      <ul>{#each AI_CAUTIONS as c (c)}<li>{c}</li>{/each}</ul>
+      <p class="aic-foot">{eli ? 'The full safety rules — checking for bias, the law, and always keeping a human in charge — are in the next section.' : 'The full guardrails — bias auditing, DPIAs, the automated-decisions law and human-in-the-loop — are in the next section.'}</p>
+    </div>
+  </section>
+
+  <!-- ===================== 9 · ethics ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">9 · Doing it humanely</h2>
     <p class="cap">
       {eli
         ? 'Because this is about vulnerable young people, the risks matter as much as the benefits. Build a system that predicts who’s “at risk” and you can do real damage if you get it wrong.'
@@ -541,8 +576,30 @@
   .pe-next.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(28,22,17,0.3); }
   .pe-next.ghost:hover { background: rgba(28,22,17,0.06); }
 
+  /* AI-for-NEET roles */
+  .airoles { display: flex; flex-direction: column; gap: 11px; }
+  .airole { border: 1px solid rgba(28,22,17,0.12); border-left: 4px solid var(--rc); border-radius: 11px; padding: 13px 16px; background: rgba(255,255,255,0.42); }
+  .ar-head { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 7px; }
+  .ar-icon { font-size: 22px; line-height: 1.15; }
+  .ar-heads { flex: 1; min-width: 0; }
+  .ar-tag { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; color: var(--rc); }
+  .ar-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin: 1px 0 0; color: var(--ink); line-height: 1.2; }
+  .ar-verdict { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #fff; background: var(--rc); border-radius: 5px;
+    padding: 3px 8px; align-self: center; text-align: center; max-width: 160px; line-height: 1.25; }
+  .ar-prose { margin: 0 0 9px; font-size: 13.5px; line-height: 1.6; color: rgba(28,22,17,0.8); }
+  .ar-eg { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.68); padding: 8px 11px; border-radius: 8px; background: color-mix(in srgb, var(--rc) 7%, transparent); }
+  .ar-eg-tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: var(--rc); border-radius: 3px; padding: 1px 6px; margin-right: 7px; }
+  .ar-eg a { color: var(--rc); font-weight: 700; text-decoration: none; }
+  .ai-stats { margin-top: 14px; }
+  .aicaution { margin-top: 14px; padding: 12px 16px; border-radius: 11px; background: rgba(177,69,94,0.05); border: 1px solid rgba(177,69,94,0.22); }
+  .aic-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #b1455e; font-weight: 600; margin-bottom: 7px; }
+  .aicaution ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .aicaution li { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76); }
+  .aic-foot { margin: 9px 0 0; font-size: 12px; color: rgba(28,22,17,0.6); font-style: italic; }
+
   @media (max-width: 820px) {
     .silomap, .joinwrap { grid-template-columns: 1fr; } .join { margin: 0 auto; }
     .hub-abc { grid-template-columns: 1fr; }
+    .ar-head { flex-wrap: wrap; } .ar-verdict { max-width: none; align-self: flex-start; }
   }
 </style>

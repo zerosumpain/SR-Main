@@ -53,6 +53,25 @@
     {/if}
   </div>
 
+  <aside class="seealso">
+    <span class="sa-tag">Beyond the model</span>
+    {#if app.narrative === 'eli5'}
+      <p>
+        This model is a careful guess. Two companion pages look at how you’d <b>check it against the real world</b>:
+        <a href="/projects/policy-engine/monitor">Monitoring</a> — how you’d actually tell whether a policy worked (through the new
+        “data spine” and AI, and what other countries already do); and <a href="/projects/policy-engine/neet">NEET</a> — a worked
+        example: spotting young people slipping out of school or work, early enough to help.
+      </p>
+    {:else}
+      <p>
+        Everything here is an explicit, research-backed <b>hypothesis</b>. Two companion studies ask how you’d <b>validate it against
+        reality</b>: <a href="/projects/policy-engine/monitor">Monitoring</a> — measuring policy impact through the DfE data spine and AI,
+        and what Estonia, the Netherlands and others already run; and <a href="/projects/policy-engine/neet">NEET</a> — a worked example,
+        designing a humane early-warning system to catch young people before they fall out of education, employment or training.
+      </p>
+    {/if}
+  </aside>
+
   <h2 class="pe-h2">Outcomes at a glance</h2>
   {#if app.mounted}<Scorecard sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} />{/if}
 
@@ -141,4 +160,13 @@
   .ld-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
   .ld-ref { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
   .ld-foot a { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  .seealso { margin: 16px 0 4px; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(47,111,151,0.25);
+    border-left: 3px solid #2f6f97; background: rgba(47,111,151,0.06); }
+  .sa-tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #2f6f97; font-weight: 600; margin-bottom: 5px; }
+  .seealso p { margin: 0; font-size: 14px; line-height: 1.6; color: rgba(28,22,17,0.78); }
+  .seealso b { color: #1c1611; }
+  .seealso a { color: #2f6f97; font-weight: 500; text-decoration: none; border-bottom: 1px solid rgba(47,111,151,0.4); }
+  .seealso a:hover { border-bottom-color: #2f6f97; }
 </style>
