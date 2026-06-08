@@ -303,14 +303,14 @@
       <!-- Estonia funnel: identification ≠ engagement -->
       <div class="panel">
         <h3 class="panel-h">🇪🇪 Found ≠ reached</h3>
-        <svg viewBox="0 0 360 170" role="img" aria-label="Estonia funnel: from register list to young people actually reached">
+        <div class="efunnel">
           {#each ESTONIA_FUNNEL as st, i (st.label)}
-            {@const w = (st.pct / 100) * 300}
-            {@const y = 8 + i * 38}
-            <rect x={(360 - w) / 2} y={y} width={w} height="28" rx="4" fill="#2f6f97" opacity={1 - i * 0.18} />
-            <text x="180" y={y + 18} class="fn-v" text-anchor="middle">{st.pct === 100 ? '✓' : `${st.pct}%`}</text>
+            <div class="ef-row">
+              <div class="ef-bar" style="width:{st.pct}%; opacity:{(1 - i * 0.17).toFixed(2)}">{st.pct === 100 ? '✓' : `${st.pct}%`}</div>
+              <div class="ef-lab"><b>{st.label}</b><span>{st.sub}</span></div>
+            </div>
           {/each}
-        </svg>
+        </div>
         <p class="panel-cap"><b>Only ~1 in 5</b> of those identified were actually reached. Finding them is the easy part.</p>
       </div>
     </div>
@@ -482,7 +482,13 @@
   .euavg { stroke: rgba(28,22,17,0.4); stroke-width: 1.2; stroke-dasharray: 3 3; }
   .ern { font-family: 'DM Sans', sans-serif; font-size: 11px; fill: rgba(28,22,17,0.8); }
   .erv { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; fill: rgba(28,22,17,0.7); }
-  .fn-v { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; fill: #fff; }
+  .efunnel { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+  .ef-row { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 12px; }
+  .ef-bar { width: 100%; min-width: 38px; height: 24px; display: grid; place-items: center; background: #2f6f97; color: #fff; border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; }
+  .ef-lab { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .ef-lab b { font-size: 11.5px; line-height: 1.25; color: var(--ink); }
+  .ef-lab span { font-size: 10px; line-height: 1.3; color: rgba(28,22,17,0.55); }
   .trio-note { margin: 12px 0 0; padding: 10px 13px; border-radius: 9px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76);
     background: rgba(47,111,151,0.06); border: 1px solid rgba(47,111,151,0.2); }
   .trio-note b { color: var(--ink); }
