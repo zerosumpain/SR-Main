@@ -323,7 +323,7 @@
     </div>
   </section>
 
-  <a class="pe-next" href="/projects/policy-engine/method">How it all works → Method</a>
+  <a class="pe-next" href="/projects/policy-engine/monitor">Next → How we’d know if it worked</a>
 </div>
 
 <style>
