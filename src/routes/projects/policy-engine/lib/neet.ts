@@ -128,7 +128,7 @@ export const NEET_INTL: NeetIntlRow[] = [
     system: '16+ Data Hub (Skills Development Scotland)',
     mechanism: 'A secure shared portal on 16–24s links local authorities, colleges, the Scottish Funding Council, SAAS, DWP and (from 2025) HMRC — capturing expected leaving dates and destinations — so anyone without a positive destination is quickly identified.',
     result: '2025 measure: 93.4% of 16–19s participating, 3.9% NEET, 2.8% status unknown (the 2025 HMRC-data inclusion raised participation and breaks like-for-like comparison).',
-    lesson: 'A UK-domestic proof of concept already exists: cross-agency data-sharing sharply cuts the “unknown” cohort that plagues England’s NCCIS returns.',
+    lesson: 'A UK-domestic proof of concept already exists: cross-agency data-sharing sharply cuts the “unknown” cohort that plagues England’s CCIS-based tracking.',
     sourceUrl: 'https://www.skillsdevelopmentscotland.co.uk/media/2y3ex4it/2025-annual-participation-measure-statistics.pdf',
   },
   {
@@ -222,5 +222,59 @@ export const AI_CAUTIONS = [
   'Accuracy on paper ≠ impact: Wisconsin’s DEWS had no measurable effect on flagged students’ graduation, and the US EWIMS trial moved leading indicators but not graduation. A flag without attached human capacity to act changes nothing.',
   'Risk flags can encode protected characteristics as “risk” — DfE’s own RONI guidance lists some ethnic-minority groups, and free school meals is a poverty proxy. Bias must be actively audited, not assumed away.',
   'The strongest “positive” claims are vendor/council self-reports, not independent evaluations (e.g. Xantura/EY’s ~40% homelessness-reduction figure ran during the atypical Covid period and concerns homelessness, not NEET). Treat magnitudes as unverified.',
+];
+
+// ---- CCIS — the system local authorities submit NEET data into (verified, adversarially fact-checked) ----
+// Naming held strictly per DfE usage: CCIS = the LOCAL LA product; NCCIS = the national return/aggregation
+// layer. The spec is the "NCCIS management information requirement" (DfE also titles it "CCIS …"). CCIS expands
+// to "Client Caseload Information System" — NOT "Careers, Education…" or "Connexions…". These LA NEET figures are
+// management information, NOT accredited official statistics, and are not comparable with the LFS 16–24 measure.
+
+export const CCIS_INTRO = {
+  research: `Behind those local-authority figures sits a real, dated piece of machinery — and it is the concrete system a data spine, a consistent identifier and AI record-linkage would actually overhaul. Each council runs its own <b>CCIS</b> (a supplier-procured, DfE-spec product) recording every 16–17-year-old’s current activity in three buckets — in education/employment/training, NEET, or <b>“activity not known”</b> — plus the date it was last confirmed, under the Education and Skills Act 2008 s.68 support duty. Every month it extracts an XML return to DfE’s <b>NCCIS</b>, which feeds the published LA NEET figures. Critically, these are <b>management information, not accredited official statistics</b>: they cover only the 16–17s a council knows about, and cannot be compared with the LFS-based national NEET 16–24 number this page opened with.`,
+  eli5: `Behind those council figures is the actual system they use, called <b>CCIS</b>. Each council keeps its own list of what every 16- and 17-year-old is doing — in school or college, in work or training, NEET, or “not known” — and once a month sends a snapshot up to a national system, <b>NCCIS</b>, which is where the country’s 16–17 NEET numbers come from. It works, but it’s a once-a-month photo built from a lot of phone-calls — and it’s a rough management count, not the same official measure as the “million NEETs” figure at the top of this page.`,
+};
+
+export const CCIS_NAMING = [
+  { name: 'CCIS', expand: 'Client Caseload Information System', detail: 'The local product each LA runs (bought from a supplier) to track every young person’s current activity and when it was last confirmed. Really a DfE data <b>standard</b> — the 117-page “NCCIS management information requirement” — that LA products must meet; there is no single central system.', colour: '#566a8c' },
+  { name: 'NCCIS', expand: 'National CCIS', detail: 'The DfE return/aggregation layer LAs upload their monthly XML to, and which the published statistics — and the new national RONI tool — are built from. DfE uses both names; the spec’s cover says both.', colour: '#4a7c7c' },
+];
+
+export interface PointDetail { point: string; detail: string; }
+
+export const CCIS_ROLE: PointDetail[] = [
+  { point: 'Tracks each 16–17-year-old’s activity — and when it was last confirmed', detail: 'Status is coded into EET, NEET and “activity not known” (which splits into “situation not known”, “cannot be contacted” and “refused to disclose”). Cohort: academic age 16–17, tracked to 18 — and to 25 for EHC-plan holders.' },
+  { point: 'Evidences the council’s statutory support duty', detail: 'Education and Skills Act 2008 s.68: LAs must encourage, enable or assist participation. (The duty ON young people to stay in education or training to 18 — Raising the Participation Age — is Part 1 of the same Act, not s.68.)' },
+  { point: 'Produces the monthly NCCIS return', detail: 'LA systems extract a monthly XML return to DfE; the September Guarantee rides within it; the Annual Activity Survey (Year-11 destinations as at 1 November) goes separately as a CSV.' },
+  { point: 'Feeds the LA NEET statistics — as management information', detail: 'NEET/“not known” is a December/January/February three-month average; participation a March snapshot. Not accredited official statistics, and not comparable with the LFS 16–24 figure.' },
+];
+
+export const CCIS_LIMITS: PointDetail[] = [
+  { point: 'Monthly batch, not real-time', detail: 'A once-a-month XML extract on a legacy data standard, so the figures lag — which is exactly why DfE averages three months of returns rather than trusting a single snapshot.' },
+  { point: 'Tracking quality varies wildly by council', detail: 'DfE warns of “considerable variation … in how well 16/17 year olds are tracked”; the Dec 2024–Feb 2025 NEET/“not known” spread ran 0.0% (City of London) to 21.5% (Dudley). Some LAs are suppressed for system migrations — so a council can look good by chasing harder, not by having fewer lost young people.' },
+  { point: 'A persistent “not known / no record” cohort', detail: 'September 2025: ~80,000 of a ~1.3m cohort with no suitable offer recorded — including ~44,000 (~3%) where councils held “no record” of whether an offer was even made, read by commentators as young people “lost to the system”.' },
+  { point: 'No shared identifier → manual, lossy matching', detail: 'Each agency keys data on its own reference numbers, so confirming where a young person actually is means manual matching across systems never designed to join up. That gap — not a missing dashboard — is the thing to overhaul.' },
+];
+
+export interface OverhaulRow { dimension: string; today: string; overhauled: string; }
+
+export const CCIS_OVERHAUL: OverhaulRow[] = [
+  { dimension: 'Update cadence', today: 'Monthly XML batch to NCCIS; the LA NEET figure is a Dec/Jan/Feb average — a once-a-month photo that lags reality.', overhauled: 'Near-source, continuous status updates from registers (attendance, enrolment, payroll/benefit signals) so “last confirmed” is days old — the model the Netherlands’ DUO/Verzuimloket already runs nationally.' },
+  { dimension: 'Resolving “not known”', today: 'Manual chasing of young people and providers; the unresolved fall into “situation not known / cannot be contacted / refused”, inflating the figure and varying by LA.', overhauled: 'Probabilistic record linkage (e.g. MoJ/ADR-UK’s Splink) auto-matches the cohort across School Census/NPD, ILR, apprenticeships and DWP/HMRC — the cross-register move Scotland’s 16+ Data Hub already uses. (A logical, not-yet-announced application.)' },
+  { dimension: 'Joining records', today: 'Each agency keys on its own reference numbers; CCIS relies on manual matching across systems that don’t share an identifier.', overhauled: 'A consistent child identifier — a regulation-making power in the Children’s Wellbeing and Schools Act 2026, the NHS number the likely candidate (to be confirmed in regulations) — lets registers join by design. Estonia’s EHIS is the mature version.' },
+  { dimension: 'Risk identification', today: 'Schools hand-populate Risk-of-NEET indicators; effort and consistency vary, and at-risk lists are labour-intensive to build.', overhauled: 'An announced national RONI tool auto-generates at-risk lists twice a year from the NCCIS data, cutting school data-entry — staff still filter the list. (In DfE’s Jan 2025 guidance; not yet fully live.)' },
+  { dimension: 'Underlying architecture', today: 'A legacy standard plus LA-procured products of varying quality, aggregated through a national return — bolt-ons, not connected infrastructure.', overhauled: 'The Schools White Paper (Feb 2026) commits to a national “data spine” to connect fragmented systems. (A commitment; it doesn’t yet name CCIS or 16–18 tracking — that linkage is implied.)' },
+];
+
+export const CCIS_AIVALUE = {
+  research: `The honest framing: AI here is <b>record-linkage, not magic</b>. CCIS’s core pain is the “not known” cohort and the manual matching that creates it — exactly what probabilistic linkage solves. Pointed at NEET tracking, a tool like Splink could auto-resolve much of “not known” by matching across School Census/NPD, ILR, apprenticeships and DWP/HMRC — auto-populating activity instead of chasing it, and nowcasting NEET faster than the lagged monthly return. It is not speculative as a method: Scotland’s 16+ Data Hub already shrinks the “unconfirmed” cohort this way, and once a consistent identifier exists much of the matching becomes deterministic. The announced RONI-in-NCCIS tool is the triage layer on top. But the limits are real: the UK GDPR’s rules on solely-automated significant decisions (Arts 22A–D) mean AI can resolve a <i>probable</i> status and prioritise outreach, but confirming “EET” or directing an intervention needs a human; a match is a probable status, not confirmed engagement; and part of “not known” is genuinely unreachable. Better tracking is necessary — but tracking is not engagement.`,
+  eli5: `When a young person is in the council’s “don’t know” box, somewhere else — a college roll, an apprenticeship list, a pay or benefits record — there’s almost certainly a line saying where they are, just filed under a different number. AI record-matching finds that line and fills the box in automatically, instead of someone making twenty phone-calls. Scotland does a version of this and it shrank their “don’t know” pile. The catches: the computer should suggest, not decide — a human confirms before anyone acts, because the law says so; a match is a good guess, not proof someone’s OK; and some young people are off every list and no matching finds them. Finding them is the easy bit; helping them is the hard bit.`,
+};
+
+export const CCIS_STATS = [
+  { big: '117 pages', label: 'the current “NCCIS management information requirement: 2026 to 2027” spec (updated 31 Dec 2025) — the data standard every LA product must meet', url: 'https://assets.publishing.service.gov.uk/media/6943ca108f4636fa2c547e25/NCCIS_management_information_requirement_2026_to_2027.pdf' },
+  { big: 'Monthly', label: 'frequency of the XML batch return LAs submit to DfE via NCCIS — a once-a-month photo, not a live feed', url: 'https://explore-education-statistics.service.gov.uk/methodology/participation-in-education-training-and-neet-age-16-to-17-by-local-authority' },
+  { big: '0.0–21.5%', label: 'spread in 16–17 NEET/“not known” across LAs (Dec 2024–Feb 2025 avg): City of London to Dudley — the tracking-quality gap', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/participation-in-education-training-and-neet-age-16-to-17-by-local-authority/2024-25' },
+  { big: 'Twice a year', label: 'how often the announced national RONI tool would generate at-risk lists from the NCCIS data', url: 'https://policyconnect.org.uk/blog/government-announces-new-risk-neet-indicator-roni-process/' },
 ];
 

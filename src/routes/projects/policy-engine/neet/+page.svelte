@@ -7,6 +7,7 @@
     NL_ESL, EUROSTAT_NEET, ESTONIA_FUNNEL, ABC, RONI_INPUTS,
     NEET_INTL, NEET_TIER_META, NEET_KEY_STATS,
     AI_INTRO, AI_ROLES, AI_STATS, AI_CAUTIONS,
+    CCIS_INTRO, CCIS_NAMING, CCIS_ROLE, CCIS_LIMITS, CCIS_OVERHAUL, CCIS_AIVALUE, CCIS_STATS,
   } from '../lib/neet';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -152,20 +153,33 @@
     {/if}
   </section>
 
-  <!-- ===================== 3 · the Not Known cohort ===================== -->
+  <!-- ===================== 3 · CCIS ===================== -->
   <section class="block">
-    <h2 class="pe-h2">3 · How England tracks 16–17s — and why “Not Known” breaks it</h2>
-    <p class="cap">
-      {#if eli}
-        Councils are legally meant to keep tabs on every 16- and 17-year-old. But the checking is occasional, not live — so when they lose
-        touch with someone, that young person is filed as <b>“activity not known”</b> rather than as a problem to chase. In Dudley only 2.4% were
-        officially NEET, but nearly 1 in 5 were simply lost. The “Not Known” gap, not measured NEET, is the real failure.
-      {:else}
-        The statutory architecture exists — the Education and Skills Act 2008 (Raising the Participation Age) duties, NCCIS caseload tracking, the
-        September Guarantee — but it is periodic and status-based, not real-time. Activity that isn’t reconfirmed in a set window is logged
-        <b>“activity not known”</b>; headline NEET is a Dec/Jan/Feb average. The result: the <b>“Not Known” cohort, not measured NEET, is the dominant
-        tracking failure</b>. Dudley’s headline 21.5% is mostly lost contact (19.1% “not known”), not genuine risk.
-      {/if}
+    <h2 class="pe-h2">3 · CCIS — how England actually tracks (and loses) its 16–17s</h2>
+    <p class="cap">{@html eli ? CCIS_INTRO.eli5 : CCIS_INTRO.research}</p>
+
+    <div class="naming">
+      {#each CCIS_NAMING as n (n.name)}
+        <div class="nm-box" style="--nc:{n.colour}">
+          <span class="nm-name">{n.name}</span>
+          <span class="nm-expand">{n.expand}</span>
+          <p class="nm-detail">{@html n.detail}</p>
+        </div>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">What CCIS does</h3>
+    <div class="pdgrid">
+      {#each CCIS_ROLE as r (r.point)}
+        <div class="pd"><span class="pd-point">{r.point}</span><span class="pd-detail">{r.detail}</span></div>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">Its defining failure — the “Not Known” cohort</h3>
+    <p class="cap small">
+      {eli
+        ? 'When a council loses touch, the young person is filed as “activity not known” rather than chased — and councils that track harder simply look better. In Dudley only 2.4% were officially NEET, but nearly 1 in 5 were “not known”.'
+        : 'Activity that isn’t reconfirmed in time is logged “activity not known”, not NEET — so the spread below is mostly tracking quality, not genuine risk. Dudley’s headline 21.5% is overwhelmingly lost contact (19.1% “not known”); the “Not Known” cohort, not measured NEET, is the dominant tracking failure.'}
     </p>
     <div class="chart">
       <svg viewBox="0 0 760 {lTop + LA_SPREAD.length * lRowH + 30}" role="img" aria-label="Local-authority 16 to 17 NEET versus activity not known">
@@ -196,6 +210,42 @@
       </svg>
     </div>
     <p class="offaxis">{LA_NOTE} <a href="https://feweek.co.uk/missing-teenagers-suggests-a-worthless-guarantee/" target="_blank" rel="noopener">Around 80,000 of 1.3m leavers had no recorded suitable offer in 2025 ↗</a>, and ~44% of NEETs are “hidden” — not on any out-of-work benefit, so the systems built to find them never see them.</p>
+
+    <h3 class="sub-h">Why it creaks</h3>
+    <div class="pdgrid">
+      {#each CCIS_LIMITS as r (r.point)}
+        <div class="pd lim"><span class="pd-point">{r.point}</span><span class="pd-detail">{r.detail}</span></div>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">How you’d overhaul it</h3>
+    <p class="cap small">
+      {eli
+        ? 'Each row is a job CCIS does, how it works today, and how the new ideas on this page — a shared ID for every child, a “data spine”, and AI record-matching — would change it. (These reforms are announced or planned, not built.)'
+        : 'Each row pairs a CCIS function with how it works today and how the announced reforms — a consistent identifier, the data spine and AI record-linkage — would change it. The point: the thing to overhaul is the system, not to bolt on another dashboard. (Reforms are announced/planned, not delivered.)'}
+    </p>
+    <div class="overhaul">
+      <div class="oh-head"><span class="oh-dim">Function</span><span>CCIS today</span><span>Overhauled — identifier · spine · AI</span></div>
+      {#each CCIS_OVERHAUL as o (o.dimension)}
+        <div class="oh-row">
+          <span class="oh-dim">{o.dimension}</span>
+          <span class="oh-today">{o.today}</span>
+          <span class="oh-new">{o.overhauled}</span>
+        </div>
+      {/each}
+    </div>
+
+    <div class="ccis-ai">
+      <span class="ccis-ai-tag">⚙ Where AI actually fits</span>
+      <p>{@html eli ? CCIS_AIVALUE.eli5 : CCIS_AIVALUE.research}</p>
+      <p class="ccis-ai-foot">{eli ? 'The matching trick is explained more in the AI section further down. And the catch never changes: finding a young person isn’t the same as helping one.' : 'The record-linkage mechanism (the FIND role) is detailed in §8 below; the honest caveat — a match is a status, not engagement — runs through the whole page.'}</p>
+    </div>
+
+    <div class="stats ccis-stats">
+      {#each CCIS_STATS as s (s.big)}
+        <a class="stat" href={s.url} target="_blank" rel="noopener"><span class="stat-big">{s.big}</span><span class="stat-lab">{s.label}</span></a>
+      {/each}
+    </div>
   </section>
 
   <!-- ===================== 4 · the data exists but isn't actionable ===================== -->
@@ -597,9 +647,43 @@
   .aicaution li { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76); }
   .aic-foot { margin: 9px 0 0; font-size: 12px; color: rgba(28,22,17,0.6); font-style: italic; }
 
+  /* CCIS deep-dive */
+  .cap.small { font-size: 13px; margin: 0 0 12px; }
+  .sub-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; color: var(--ink); margin: 24px 0 10px; padding-bottom: 5px; border-bottom: 1px solid rgba(28,22,17,0.12); }
+  .naming { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+  .nm-box { border: 1px solid rgba(28,22,17,0.12); border-left: 4px solid var(--nc); border-radius: 10px; padding: 11px 14px; background: rgba(255,255,255,0.42); }
+  .nm-name { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; color: var(--nc); letter-spacing: 0.04em; }
+  .nm-expand { font-family: 'Fraunces', serif; font-style: italic; font-size: 13px; color: rgba(28,22,17,0.7); margin-left: 7px; }
+  .nm-detail { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.78); }
+  .pdgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .pd { border: 1px solid rgba(28,22,17,0.1); border-radius: 9px; padding: 10px 13px; background: rgba(255,255,255,0.38); }
+  .pd.lim { background: rgba(177,69,94,0.04); border-color: rgba(177,69,94,0.18); }
+  .pd-point { display: block; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px; color: var(--ink); margin-bottom: 3px; }
+  .pd-detail { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
+  .overhaul { border: 1px solid rgba(28,22,17,0.12); border-radius: 11px; overflow: hidden; background: rgba(255,255,255,0.4); }
+  .oh-head, .oh-row { display: grid; grid-template-columns: 128px 1fr 1.15fr; gap: 12px; padding: 10px 14px; }
+  .oh-head { background: rgba(28,22,17,0.05); border-bottom: 1px solid rgba(28,22,17,0.12); font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
+  .oh-head span:last-child { color: #2f7d4f; }
+  .oh-row { border-bottom: 1px solid rgba(28,22,17,0.07); align-items: start; }
+  .oh-row:last-child { border-bottom: none; }
+  .oh-dim { font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 12.5px; color: var(--ink); }
+  .oh-today { font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.62); }
+  .oh-new { font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.82); padding-left: 12px; border-left: 2px solid rgba(47,125,79,0.4); }
+  .ccis-ai { margin-top: 16px; padding: 13px 16px; border-radius: 11px; background: rgba(47,111,151,0.06); border: 1px solid rgba(47,111,151,0.22); }
+  .ccis-ai-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #2f6f97; font-weight: 600; margin-bottom: 6px; }
+  .ccis-ai p { margin: 0; font-size: 13.5px; line-height: 1.6; color: rgba(28,22,17,0.82); }
+  .ccis-ai-foot { margin-top: 8px !important; font-size: 12px !important; color: rgba(28,22,17,0.6) !important; font-style: italic; }
+  .ccis-stats { margin-top: 14px; }
+
   @media (max-width: 820px) {
     .silomap, .joinwrap { grid-template-columns: 1fr; } .join { margin: 0 auto; }
     .hub-abc { grid-template-columns: 1fr; }
     .ar-head { flex-wrap: wrap; } .ar-verdict { max-width: none; align-self: flex-start; }
+    .naming, .pdgrid { grid-template-columns: 1fr; }
+    .oh-head { display: none; }
+    .oh-row { grid-template-columns: 1fr; gap: 5px; border-bottom: 1px solid rgba(28,22,17,0.12); }
+    .oh-today::before { content: 'Today — '; font-weight: 600; color: rgba(28,22,17,0.5); }
+    .oh-new { padding-left: 0; border-left: none; border-top: 1px dashed rgba(47,125,79,0.4); padding-top: 6px; }
+    .oh-new::before { content: 'Overhauled — '; font-weight: 600; color: #2f7d4f; }
   }
 </style>
