@@ -63,18 +63,20 @@ async function build(f: typeof fetch): Promise<EstatePayload> {
   return { stats, publications, publicationsLive, fetchedAt };
 }
 
-export const load: PageServerLoad = async ({ fetch, setHeaders, locals }) => {
-  const { authedPrivate } = await requireProjectPublic('dfe-data-estate', locals);
-  // Never let a shared cache hold an authed preview of a private project.
-  setHeaders({
-    'cache-control': authedPrivate ? 'private, no-store' : 'public, max-age=0, s-maxage=1800',
+export const load: PageServerLoad = async (event) => {
+  const { authedPrivate, viaShare } = await requireProjectPublic('dfe-data-estate', event);
+  // Never let a shared cache hold an authed preview OR a shared private view.
+  const noStore = authedPrivate || viaShare;
+  event.setHeaders({
+    'cache-control': noStore ? 'private, no-store' : 'public, max-age=0, s-maxage=1800',
+    ...(noStore ? { 'x-robots-tag': 'noindex' } : {}),
   });
 
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) {
     return { estate: cache.data };
   }
-  const data = await build(fetch);
+  const data = await build(event.fetch);
   cache = { at: now, data };
   return { estate: data };
 };

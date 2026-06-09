@@ -629,6 +629,32 @@ export const projectVisibility = pgTable('project_visibility', {
 
 export type ProjectVisibility = typeof projectVisibility.$inferSelect;
 
+// Secure per-project share links. A row grants access to ONE project page even
+// when it is private, via an unguessable token. We store only the sha256 of the
+// token (the raw token is shown once at creation); a row is live while revokedAt
+// is null and expiresAt is null-or-future. One project can have many links.
+export const projectShares = pgTable(
+  'project_share',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    projectKey: text('project_key').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    label: text('label'),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex('project_share_token_hash_idx').on(t.tokenHash),
+    byProject: index('project_share_project_idx').on(t.projectKey),
+  }),
+);
+
+export type ProjectShare = typeof projectShares.$inferSelect;
+
 /**
  * Per-event log written by every JKAI-built app. The app POSTs to
  * /api/jkai/builds/<id>/events (same-origin from the proxy iframe; uses the

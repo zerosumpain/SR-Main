@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { projectVisibility } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isProjectPublic } from '$lib/projects/visibility';
+import { resolveShareToken } from '$lib/projects/guard';
 import { readFile, stat } from 'fs/promises';
 import { join, extname } from 'path';
 
@@ -49,31 +50,41 @@ async function tryFile(filePath: string): Promise<{ data: ArrayBuffer; mime: str
   return null;
 }
 
-export const GET: RequestHandler = async ({ params, url, locals }) => {
+export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   const requestedPath = params.path || '';
 
   // Visibility gate: a private project (and all its assets) 404s for the public.
-  // The signed-in owner can still open it to preview.
+  // The signed-in owner can preview it; a valid share token (?t= or the project
+  // cookie) also grants access to a private project without signing in.
   const [vis] = await db
     .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
     .from(projectVisibility)
     .where(eq(projectVisibility.projectKey, params.slug));
   const visMap = vis ? { [vis.projectKey]: vis.isPublic } : {};
   const isPublic = isProjectPublic(visMap, params.slug);
-  let authed = false;
   if (!isPublic) {
     const session = await locals.auth();
-    authed = !!session?.user;
-    if (!authed) return new Response('Not found', { status: 404 });
+    const authed = !!session?.user;
+    if (!authed && !(await resolveShareToken(params.slug, { locals, url, cookies }))) {
+      return new Response('Not found', { status: 404 });
+    }
   }
 
   // Directory root without a trailing slash breaks the bundles' relative asset
-  // paths — redirect /projects/<slug> -> /projects/<slug>/ before serving.
+  // paths — redirect /projects/<slug> -> /projects/<slug>/ before serving. The
+  // share token has already been exchanged for the psh_ cookie above, so drop it
+  // from the Location (keeps the live token out of history/logs); a private
+  // project's redirect must also stay uncacheable and unindexed.
   if (!requestedPath && !url.pathname.endsWith('/')) {
-    return new Response(null, {
-      status: 308,
-      headers: { Location: url.pathname + '/' + url.search },
-    });
+    const qs = new URLSearchParams(url.search);
+    qs.delete('t');
+    const search = qs.toString();
+    const headers: Record<string, string> = { Location: url.pathname + '/' + (search ? '?' + search : '') };
+    if (!isPublic) {
+      headers['Cache-Control'] = 'private, no-store';
+      headers['X-Robots-Tag'] = 'noindex';
+    }
+    return new Response(null, { status: 308, headers });
   }
 
   const baseDir = join(getPublishedDir(), params.slug);

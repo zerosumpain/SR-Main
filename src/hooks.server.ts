@@ -30,6 +30,7 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   { pattern: /^\/api\/workflows\/webhook(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/jkai\/builds(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 },
   { pattern: /^\/api\/jkai\/(conversations|chat)(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 },
+  { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
 ];
 
 // Start the health data sync scheduler
@@ -342,6 +343,17 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Frame-Options', 'DENY');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Defence-in-depth for share links: any /projects/* response opened with a
+  // share token (?t=) must never be edge-cached, indexed, or leak the token
+  // onward via Referer — even if a route handler forgets. (Per-route guards
+  // already set no-store/noindex for shared/private views; this is the backstop,
+  // and no-referrer additionally stops the live token in the URL reaching any
+  // same-origin sub-resource via the Referer header.)
+  if (event.url.pathname.startsWith('/projects/') && event.url.searchParams.has('t')) {
+    response.headers.set('Cache-Control', 'private, no-store');
+    response.headers.set('X-Robots-Tag', 'noindex');
+    response.headers.set('Referrer-Policy', 'no-referrer');
+  }
   response.headers.set(
     'Permissions-Policy',
     'geolocation=(self), microphone=(), camera=(), payment=(), usb=()',

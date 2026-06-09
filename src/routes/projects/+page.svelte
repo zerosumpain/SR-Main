@@ -1,10 +1,13 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import ShareModal from './ShareModal.svelte';
 
   let { data }: { data: PageData } = $props();
   let projects = $state(data.projects);
   let removing = $state<string | null>(null);
+  // The project whose secure-share panel is open (owner-only).
+  let shareModal = $state<{ key: string; href: string; title: string } | null>(null);
 
   // Per-project public/private overlay. Seeded from the server; toggles update
   // it optimistically. A missing key means public.
@@ -68,7 +71,7 @@
 
 <PageHeader title="PROJECTS" />
 
-{#snippet visToggle(key: string)}
+{#snippet visToggle(key: string, href: string, title: string)}
   {#if data.authenticated}
     <span class="flex items-center gap-2 relative z-10 ml-auto">
       {#if !isPub(key)}
@@ -79,6 +82,14 @@
           Private
         </span>
       {/if}
+      <button
+        onclick={() => (shareModal = { key, href, title })}
+        class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors"
+        style="border-color: var(--card-border); color: var(--text-secondary);"
+        title="Create a secure share link — opens this project for a recipient even while private"
+      >
+        Share
+      </button>
       <button
         onclick={() => toggleVisibility(key)}
         disabled={toggling === key}
@@ -139,7 +150,7 @@
         >
           live APIs · 16 services · OGL
         </span>
-        {@render visToggle('dfe-data-estate')}
+        {@render visToggle('dfe-data-estate', '/projects/dfe-data-estate', 'The Data Estate')}
       </div>
     </div>
     {/if}
@@ -181,7 +192,7 @@
         >
           system dynamics · Monte-Carlo · cited
         </span>
-        {@render visToggle('policy-engine')}
+        {@render visToggle('policy-engine', '/projects/policy-engine', 'Education Policy Modelling')}
       </div>
     </div>
     {/if}
@@ -222,7 +233,7 @@
         >
           Three.js · civil service · special projects
         </span>
-        {@render visToggle('whitehall')}
+        {@render visToggle('whitehall', '/projects/whitehall/', 'Whitehall')}
       </div>
     </div>
     {/if}
@@ -263,7 +274,7 @@
         >
           Three.js · tilt-shift · learning AI
         </span>
-        {@render visToggle('brass-and-rails')}
+        {@render visToggle('brass-and-rails', '/projects/brass-and-rails/', 'Brass & Rails')}
       </div>
     </div>
     {/if}
@@ -303,7 +314,7 @@
         >
           Canvas · DAG · braid render
         </span>
-        {@render visToggle('data-convergence')}
+        {@render visToggle('data-convergence', '/projects/data-convergence', 'The Spine')}
       </div>
     </div>
     {/if}
@@ -358,7 +369,7 @@
 
             {#if data.authenticated}
               <div class="flex items-center gap-2">
-                {@render visToggle(project.publishedSlug!)}
+                {@render visToggle(project.publishedSlug!, `/projects/${project.publishedSlug}/`, project.title ?? 'Project')}
                 <button
                   onclick={() => removeProject(project.id, project.publishedSlug!)}
                   disabled={removing === project.id}
@@ -384,3 +395,12 @@
     <a href="/" class="nav-link">Home</a>
   </div>
 </footer>
+
+{#if shareModal}
+  <ShareModal
+    projectKey={shareModal.key}
+    href={shareModal.href}
+    title={shareModal.title}
+    onClose={() => (shareModal = null)}
+  />
+{/if}
