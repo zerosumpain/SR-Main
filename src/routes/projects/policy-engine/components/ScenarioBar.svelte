@@ -14,7 +14,7 @@
 <div class="bar">
   <span class="lab">Scenario</span>
   <div class="chips">
-    {#each PRESETS as p (p.name)}
+    {#each PRESETS.filter((p) => !p.optimize) as p (p.name)}
       <button class="chip" class:active={activeName === p.name} title={desc(p)} onclick={() => onApply(p)}>
         {nm(p)}
       </button>

@@ -44,29 +44,41 @@
     <section class="blk">
       <h3>Start from a stance</h3>
       <ScenarioBar activeName={app.activePreset} onApply={(p) => app.applyPreset(p)} />
-      <div class="opt-ctl" title="Set a budget, then click 'Best value' to preview the gap-optimal allocation, then 'Apply'">
-        <span class="oc-lab">Best-value £</span>
-        <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={app.optimizeBudget}
-               oninput={(e) => (app.optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
-               onchange={() => app.previewOptimize()} aria-label="Best-value budget" />
-        <span class="oc-val">£{app.optimizeBudget.toFixed(1)}bn/yr</span>
-      </div>
-      {#if app.optimizeResult}
-        <div class="opt-res">
-          <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)} aria-expanded={tipOpen}>
-            {app.optimizeApplied ? '✓ applied:' : '◷ best £' + app.optimizeResult.budget.toFixed(1) + 'bn would'}
-            close {app.optimizeResult.closed.toFixed(1)}mo ({app.optimizeResult.baselineGap.toFixed(1)}→{app.optimizeResult.gap.toFixed(1)}) by {app.optimizeResult.horizon} ▾
-          </button>
-          {#if tipOpen}
-            <div class="opt-tip">
-              {#each app.optimizeResult.breakdown as r (r.id)}
-                <span class="tip-row"><i style="background:{r.colour}"></i><span class="tl">{rname(r.id, r.label)}</span><b>{r.display}</b><em>£{r.costBn.toFixed(2)}bn</em></span>
-              {/each}
-            </div>
-          {/if}
-          <button class="opt-apply" onclick={() => app.applyOptimized()} disabled={app.optimizeApplied}>{app.optimizeApplied ? '✓ Applied' : 'Apply to sliders →'}</button>
+
+      <!-- The "Best value" scenario IS the budget slider: one cohesive control. -->
+      <div class="bestval" class:on={!!app.optimizeResult}>
+        <div class="bv-head">
+          <span class="bv-title">⚙ {app.narrative === 'eli5' ? 'Best bang for the buck' : 'Best value'}</span>
+          <span class="bv-sub">{app.narrative === 'eli5'
+            ? 'Pick a yearly budget — the computer finds the mix that closes the gap most, and skips poor-value spending.'
+            : 'Set a yearly budget — the optimiser allocates it to the most gap-efficient levers, then “Apply to sliders”.'}</span>
         </div>
-      {/if}
+        <div class="opt-ctl">
+          <span class="oc-lab">Budget</span>
+          <input class="oc-slider" type="range" min="1" max="15" step="0.5" value={app.optimizeBudget}
+                 oninput={(e) => (app.optimizeBudget = Number((e.currentTarget as HTMLInputElement).value))}
+                 onchange={() => app.previewOptimize()} aria-label="Best-value budget" />
+          <span class="oc-val">£{app.optimizeBudget.toFixed(1)}bn/yr</span>
+        </div>
+        {#if app.optimizeResult}
+          <div class="opt-res">
+            <button class="opt-note" type="button" onclick={() => (tipOpen = !tipOpen)} aria-expanded={tipOpen}>
+              {app.optimizeApplied ? '✓ applied:' : '◷ best £' + app.optimizeResult.budget.toFixed(1) + 'bn would'}
+              close {app.optimizeResult.closed.toFixed(1)}mo ({app.optimizeResult.baselineGap.toFixed(1)}→{app.optimizeResult.gap.toFixed(1)}) by {app.optimizeResult.horizon} ▾
+            </button>
+            {#if tipOpen}
+              <div class="opt-tip">
+                {#each app.optimizeResult.breakdown as r (r.id)}
+                  <span class="tip-row"><i style="background:{r.colour}"></i><span class="tl">{rname(r.id, r.label)}</span><b>{r.display}</b><em>£{r.costBn.toFixed(2)}bn</em></span>
+                {/each}
+              </div>
+            {/if}
+            <button class="opt-apply" onclick={() => app.applyOptimized()} disabled={app.optimizeApplied}>{app.optimizeApplied ? '✓ Applied' : 'Apply to sliders →'}</button>
+          </div>
+        {:else}
+          <button class="opt-find" onclick={() => app.previewOptimize()}>Find the best mix →</button>
+        {/if}
+      </div>
       <div class="io-row">
         <SavedScenarios saved={app.saved} suggestedName={app.scenarioName} onSave={(n) => app.saveCurrentAs(n)} onLoad={(s) => app.loadSavedScenario(s)} onPin={(s) => app.pinSavedAsB(s)} onDelete={(id) => app.deleteSaved(id)} />
         <button class="mini" onclick={exportJson}>Export</button>
@@ -97,13 +109,20 @@
   h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13.5px; margin: 0 0 8px; color: var(--ink, #1c1611); }
   .rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
   .rh-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.45); }
-  .opt-ctl { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; margin-top: 10px; border: 1px solid rgba(47,125,79,0.35); border-radius: 14px; background: rgba(47,125,79,0.06); }
+  .bestval { margin-top: 12px; padding: 10px 12px; border: 1px solid rgba(47,125,79,0.3); border-radius: 10px; background: rgba(47,125,79,0.05); display: flex; flex-direction: column; gap: 8px; }
+  .bestval.on { border-color: rgba(47,125,79,0.55); background: rgba(47,125,79,0.09); }
+  .bv-head { display: flex; flex-direction: column; gap: 2px; }
+  .bv-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: #2f7d4f; }
+  .bv-sub { font-size: 10.5px; line-height: 1.4; color: rgba(28,22,17,0.6); }
+  .opt-find { align-self: flex-start; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 5px 12px; border-radius: 14px; border: 1px solid #2f7d4f; background: rgba(47,125,79,0.12); color: #2f7d4f; cursor: pointer; }
+  .opt-find:hover { background: rgba(47,125,79,0.2); }
+  .opt-ctl { display: flex; align-items: center; gap: 8px; }
   .oc-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #2f7d4f; }
-  .oc-slider { -webkit-appearance: none; appearance: none; width: 90px; height: 4px; border-radius: 3px; background: rgba(47,125,79,0.25); outline: none; cursor: pointer; }
+  .oc-slider { -webkit-appearance: none; appearance: none; flex: 1; min-width: 70px; height: 4px; border-radius: 3px; background: rgba(47,125,79,0.25); outline: none; cursor: pointer; }
   .oc-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #2f7d4f; cursor: pointer; }
   .oc-slider::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #2f7d4f; border: none; }
   .oc-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: #2f7d4f; }
-  .opt-res { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .opt-res { display: flex; flex-direction: column; gap: 6px; }
   .opt-note { color: #2f7d4f; font-size: 10.5px; font-family: 'JetBrains Mono', monospace; background: none; border: none; padding: 0; cursor: pointer; text-align: left; line-height: 1.4; }
   .opt-tip { display: flex; flex-direction: column; gap: 3px; background: var(--paper-deep, #e7decc); border: 1px solid rgba(28,22,17,0.2); border-radius: 7px; padding: 8px 10px; }
   .tip-row { display: grid; grid-template-columns: 9px 1fr auto auto; align-items: baseline; gap: 6px; font-size: 10.5px; color: rgba(28,22,17,0.8); }

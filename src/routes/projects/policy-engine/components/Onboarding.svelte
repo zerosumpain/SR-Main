@@ -2,7 +2,7 @@
   import { app } from '../lib/appState.svelte';
 
   const STEPS = [
-    { n: '1', t: 'Set the policy', d: 'Open the <b>Levers</b> on the left and drag the sliders — or pick a ready-made <b>Scenario</b> from the bar at the top (e.g. “Attendance blitz”). The levers stay docked beside the data, so you can watch your changes land.' },
+    { n: '1', t: 'Set the policy', d: 'Open the <b>Levers</b> on the left and drag the sliders — or pick a ready-made <b>Scenario</b> (Do nothing / What the government promised / Best value). The levers stay docked beside the data, so you can watch your changes land.' },
     { n: '2', t: 'Watch the outcomes', d: 'The scorecard up top and the charts on <b>Outcomes</b> update live: the disadvantage gap, attainment, the SEND funding cliff, absence and youth unemployment — your package versus doing nothing.' },
     { n: '3', t: 'Go deeper', d: '<b>Population</b> turns the results into real children and lifetime-earnings; <b>Regions</b> breaks them down by area; <b>Method</b> shows every calculation and source.' },
   ];
