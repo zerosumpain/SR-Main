@@ -1,5 +1,9 @@
 import type { RequestHandler } from './$types';
 
+// Don't let SvelteKit strip the trailing slash first (that would double-redirect);
+// our handler does the single canonical redirect itself.
+export const trailingSlash = 'ignore';
+
 // This legacy path served published bundles from getPublishedDir()/<slug> with
 // NO visibility/share guard — so a private project (incl. whitehall/brass-and-rails)
 // would have leaked here regardless of the /projects visibility + share controls.
