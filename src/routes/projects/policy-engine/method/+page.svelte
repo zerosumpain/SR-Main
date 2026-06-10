@@ -96,9 +96,9 @@
 
   <h2 class="pe-h2 anchor" id="levers">Every lever — what it does &amp; why</h2>
   {#if app.narrative === 'eli5'}
-    <p class="sec-blurb">All 35 sliders, grouped. Each one says what it is, what the research shows, how the model uses it, and what it changes. Tap a group to open it.</p>
+    <p class="sec-blurb">All {LEVERS.length} sliders, grouped. Each one says what it is, what the research shows, how the model uses it, and what it changes. Tap a group to open it.</p>
   {:else}
-    <p class="sec-blurb">All 35 levers, grouped. Each shows what it represents, what the evidence says, how the <b>model</b> treats it, and which outcomes it drives. Click a group to expand.</p>
+    <p class="sec-blurb">All {LEVERS.length} levers, grouped. Each shows what it represents, what the evidence says, how the <b>model</b> treats it, and which outcomes it drives. Click a group to expand.</p>
   {/if}
   <div class="lever-docs">
     {#each GROUP_ORDER as g}

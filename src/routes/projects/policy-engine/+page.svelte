@@ -4,23 +4,24 @@
 
 <svelte:head>
   <title>Education Policy Modelling — England Schools Simulator</title>
-  <meta name="description" content="An interactive, research-backed simulation of England education policy 2025–2040: move the policy levers and watch the disadvantage gap, attainment, the SEND deficit and NEET respond — with cited sources, assumptions and uncertainty." />
+  <meta name="description" content="A research-backed working model of England's school system, 2025–2040: move the policy levers and watch attainment, the disadvantage gap, the SEND deficit, absence and NEET respond together — plus five intelligence field studies on the data needed to steer any of it." />
 </svelte:head>
 
 <div class="pe-route wide">
   <section class="hero">
     <span class="pe-eyebrow">England schools · 2025–2040</span>
-    <h1 class="hero-h1">Could England close its disadvantage gap?</h1>
+    <h1 class="hero-h1">What would it actually take?</h1>
     <p class="hero-lede">
-      The disadvantage gap is the headline — a poorer sixteen-year-old leaves school about <b>nineteen months of learning</b> behind
-      their classmates, and that gap has stopped closing. But it’s only one thread. This is a working model of the <b>whole school
-      system</b>: move the 35 policies a government actually controls and watch the gap, GCSE results, the <b>SEND funding cliff</b>,
-      school absence, child poverty and <b>youth unemployment</b> respond together — year by year to 2040, nationally <b>and broken down
-      by region</b>, and translated into real numbers of children.
+      A working model of <b>England’s whole school system</b> — and the intelligence to steer it. Move the <b>39 policies</b> a
+      government actually controls and watch the dashboard respond together, year by year to 2040: GCSE attainment, the
+      <b>disadvantage gap</b> (still ~nineteen months at sixteen), the <b>SEND funding cliff</b>, school absence, child poverty,
+      <b>youth unemployment</b> and the teacher workforce — nationally, by region, and in real numbers of children. Then go deeper:
+      five <b>field studies</b> pull the threads inside the system, each ending in the same strategic question — <b>what data would
+      tell us this is working?</b>
     </p>
     <div class="cta-row">
       <a class="pe-next" href="/projects/policy-engine/outcomes" onclick={() => app.openDrawer()}>Open the levers &amp; start →</a>
-      <a class="cta-ghost" href="/projects/policy-engine/outcomes">or jump to the outcomes</a>
+      <a class="cta-ghost" href="/projects/policy-engine/outcomes">or read the Briefing</a>
       <button class="cta-ghost as-btn" onclick={() => (app.showHelp = true)}>How does this work?</button>
     </div>
   </section>
@@ -43,8 +44,10 @@
       </p>
       <p>
         It is <b>not</b> a crystal ball. It’s a place to ask “what would it actually take?”, see the hard trade-offs, and test an idea
-        against the evidence. Flip <b>Explain it as</b> at the top of the page between <i>Research</i> and <i>ELI5</i> to read everything
-        in plain or technical language.
+        against the evidence. And half the site isn’t about the simulator at all: the <b>field studies</b> dig into who’s actually
+        making a difference, what other countries do, and the data the government would need to spot problems early — from young
+        people drifting out of work to whole towns being left behind. Flip <b>Explain it as</b> at the top of the page between
+        <i>Research</i> and <i>ELI5</i> to read everything in plain or technical language.
       </p>
     {:else}
       <p>
@@ -69,8 +72,11 @@
       <p>
         It is <b>not</b> a forecast, and not a substitute for judgement. It is a transparent place to ask “what would it actually take?”,
         to see the trade-offs (the SEND deficit cliff, the cost of pay competitiveness, the regional concentration of the gap), and to
-        pressure-test a stance against the research. Use the <b>Explain it as</b> toggle (top of every page) to switch between the full
-        research narrative and a plain-English one.
+        pressure-test a stance against the research. The simulator is also only half of it: each <b>field study</b> is an intelligence
+        exploration — exemplar places and programmes with honest evidence tiers, international response patterns, the NEET early-warning
+        case, the data-sharing settlement — converging on one strategic thread: <b>how the department should use data to know whether any
+        of this is working</b>. Use the <b>Explain it as</b> toggle (top of every page) to switch between the full research narrative
+        and a plain-English one.
       </p>
     {/if}
   </section>
