@@ -5,10 +5,11 @@
   // repositioned from collector to steward.
   import { app } from '../lib/appState.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import SpineSwitchboard from '../components/SpineSwitchboard.svelte';
   import { STORIES } from '../lib/stories';
   import {
-    JIGSAW_HERO, HOLDERS, RING_META, RACI, RACI_COLS, TISSUE, GRAVEYARD, JIGSAW_GAPS,
-    VALUE_OFFER, VALUE_DONTS, type Holder, type Ring,
+    JIGSAW_HERO, HOLDERS, RING_META, RACI, RACI_COLS, TISSUE, TISSUE_KIND_META, GRAVEYARD,
+    JIGSAW_GAPS, VALUE_OFFER, VALUE_DONTS, type Holder, type Ring, type TissueKind,
   } from '../lib/jigsawIntel';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -56,6 +57,9 @@
       <p class="h81-lab">{eli ? JIGSAW_HERO.labelEli5 : JIGSAW_HERO.label}</p>
     </div>
     <p class="h81-kicker">{eli ? JIGSAW_HERO.kicker.eli5 : JIGSAW_HERO.kicker.research}</p>
+    <div class="refrow">
+      {#each JIGSAW_HERO.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+    </div>
   </section>
 
   <!-- ===================== 2 · the map ===================== -->
@@ -112,6 +116,11 @@
           <div class="hc-cell can"><span class="hc-k">{eli ? 'Where the DfE could help' : 'Where DfE can help'}</span><p>{selected.dfeCan}</p></div>
           <div class="hc-cell cant"><span class="hc-k">{eli ? 'Where it can’t (or shouldn’t)' : 'Where DfE can’t'}</span><p>{selected.dfeCant}</p></div>
         </div>
+        {#if selected.refs?.length}
+          <div class="refrow">
+            {#each selected.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </section>
@@ -156,22 +165,30 @@
     <h2 class="pe-h2">4 · The connective tissue — and the graveyard</h2>
     <p class="cap">
       {eli
-        ? 'A handful of small organisations write the common rules that let all these systems talk. Here’s who they are, how fragile they are — and the two times Britain built this capability and then deleted it.'
-        : 'The standards and networks layer that joins (or could join) the jigsaw — real bodies, real fragility. Health funds its record-standards institution properly; the education and social-care equivalents run on goodwill and grants. And the graveyard matters: this capability has been built and dismantled twice.'}
+        ? 'A whole ecosystem of mostly-small organisations writes the rules, runs the pipes and checks the evidence that let all these systems talk. Here’s the full wall: who they are, what they actually run, and how fragile each one is — then the two times Britain built this capability and deleted it.'
+        : 'The full connective-tissue landscape, grouped: the rule-writers, the live pipes and working tools, the sector organising itself, and the evidence layer. Read the fragility lines together and a pattern emerges — health funds its standards institution properly; nearly everything else runs on grant rounds, goodwill and one hosting council. And the graveyard matters: this capability has been built and dismantled twice.'}
     </p>
-    <div class="ti-cards">
-      {#each TISSUE as t (t.name)}
-        <article class="ti" style="--tc:{t.colour}">
-          <header class="ti-head"><span class="ti-name">{t.name}</span><span class="ti-status">{t.status}</span></header>
-          <p class="ti-what">{t.what}</p>
-          <p class="ti-frag">▸ {t.fragility}</p>
-          <a class="ti-src" href={t.url} target="_blank" rel="noopener">source ↗</a>
-        </article>
-      {/each}
-    </div>
+    {#each Object.entries(TISSUE_KIND_META) as [kind, km] (kind)}
+      <div class="ti-grp">
+        <span class="ti-grp-lab">{eli ? km.eli5 : km.label}</span>
+        <div class="ti-cards">
+          {#each TISSUE.filter((t) => t.kind === (kind as TissueKind)) as t (t.name)}
+            <article class="ti" style="--tc:{t.colour}">
+              <header class="ti-head"><span class="ti-name">{t.name}</span><span class="ti-status">{t.status}</span></header>
+              <p class="ti-what">{t.what}</p>
+              <p class="ti-frag">▸ {t.fragility}</p>
+              <a class="ti-src" href={t.url} target="_blank" rel="noopener">source ↗</a>
+            </article>
+          {/each}
+        </div>
+      </div>
+    {/each}
     <div class="grave">
       <span class="gr-lab">⚰ {GRAVEYARD.title}</span>
       <p>{eli ? GRAVEYARD.eli5 : GRAVEYARD.research}</p>
+      <div class="refrow">
+        {#each GRAVEYARD.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+      </div>
     </div>
   </section>
 
@@ -180,14 +197,32 @@
     <h2 class="pe-h2">5 · The named gaps</h2>
     <div class="gaps">
       {#each JIGSAW_GAPS as g (g.gap)}
-        <div class="gp"><span class="gp-name">{g.gap}</span><p class="gp-det">{eli ? g.eli5 : g.detail}</p></div>
+        <div class="gp">
+          <span class="gp-name">{g.gap}</span><p class="gp-det">{eli ? g.eli5 : g.detail}</p>
+          {#if g.refs?.length}
+            <div class="refrow">
+              {#each g.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+            </div>
+          {/if}
+        </div>
       {/each}
     </div>
   </section>
 
-  <!-- ===================== 6 · the value offer ===================== -->
+  <!-- ===================== 6 · the switchboard ===================== -->
   <section class="block">
-    <h2 class="pe-h2">6 · The value offer — collector to steward</h2>
+    <h2 class="pe-h2">6 · The switchboard — wiring the jigsaw into the spine</h2>
+    <p class="cap">
+      {eli
+        ? 'Here are the joins worth building, drawn as wires. Pick one: watch where the information starts, whether it goes through the new central “data spine” or straight between services, and who it reaches. Each one says what the sharer gets back — sharing should never be a one-way street.'
+        : 'The opportunity space, made concrete: every named join drawn as a wire from the holder who has the signal, through (or deliberately around) the data spine, to the receiver whose decision it changes. Grouped by what unlocks it — one is live today, three are buildable now, four wait on the identifier, one on a policy decision. Every wire passes the anti-paternal test: it states what the source GETS BACK, not just what the centre extracts. Select a wire or a chip.'}
+    </p>
+    <SpineSwitchboard />
+  </section>
+
+  <!-- ===================== 7 · the value offer ===================== -->
+  <section class="block" id="value-offer">
+    <h2 class="pe-h2">7 · The value offer — collector to steward</h2>
     <p class="cap">
       {eli
         ? 'If the department changed what kind of help it offers, here’s what that would look like — five moves, each fixing a join rather than building a database.'
@@ -275,6 +310,9 @@
   .rk-noa { background: rgba(177,69,94,0.12); color: #8a2d3a; }
 
   /* 4 · tissue + graveyard */
+  .ti-grp { margin-bottom: 18px; }
+  .ti-grp-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(28,22,17,0.55); font-weight: 700; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px dashed rgba(28,22,17,0.25); }
   .ti-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
   .ti { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--tc); border-radius: 10px; padding: 12px 14px;
     background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 6px; }
@@ -293,6 +331,12 @@
   .gp { border: 1px dashed rgba(177,69,94,0.45); border-radius: 9px; padding: 10px 12px; background: rgba(177,69,94,0.04); }
   .gp-name { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: #8a2d3a; text-transform: uppercase; letter-spacing: 0.04em; }
   .gp-det { margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+
+  /* citation chips */
+  .refrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .refchip { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: #2f6f97; text-decoration: none;
+    border: 1px solid rgba(47,111,151,0.3); border-radius: 5px; padding: 2px 7px; background: rgba(47,111,151,0.05); }
+  .refchip:hover { border-color: #2f6f97; background: rgba(47,111,151,0.1); }
 
   /* 6 · value offer */
   .vo-moves { display: flex; flex-direction: column; gap: 9px; max-width: 96ch; margin-bottom: 14px; }
