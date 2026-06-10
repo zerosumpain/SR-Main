@@ -3,22 +3,29 @@
   import OutcomeChart from '../components/OutcomeChart.svelte';
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import TriageSimulator from '../components/TriageSimulator.svelte';
+  import DataEstateMap from '../components/DataEstateMap.svelte';
+  import StakeholderMap from '../components/StakeholderMap.svelte';
   import { STORIES } from '../lib/stories';
   import {
-    NEET_NOW, LA_SPREAD, LA_NOTE, SILOS, LEO_NOTE, JOIN_SPOKES,
+    NEET_NOW, LA_SPREAD, LA_NOTE, LEO_NOTE, JOIN_SPOKES,
     NL_ESL, EUROSTAT_NEET, ESTONIA_FUNNEL, ABC, RONI_INPUTS,
     NEET_INTL, NEET_TIER_META, NEET_KEY_STATS,
     AI_INTRO, AI_ROLES, AI_STATS, AI_CAUTIONS,
     CCIS_INTRO, CCIS_NAMING, CCIS_ROLE, CCIS_LIMITS, CCIS_OVERHAUL, CCIS_AIVALUE, CCIS_STATS,
+    TOOLING_LADDER, FAILURE_GALLERY, OPPORTUNITY_LADDER, GOVERNANCE_CHECKLIST,
   } from '../lib/neet';
 
   const eli = $derived(app.narrative === 'eli5');
   const fmtK = (n: number) =>
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}m` : `${Math.round(n / 1000)}k`;
 
-  // ---- live model hook: the engine already projects NEET ----
+  // ---- live model hook: the engine projects NEET in three segments ----
   const neetSeries = $derived([
     { label: app.scenarioDisplayName, color: '#566a8c', values: app.viewSim.map((y) => y.neet), emphasis: true },
+    { label: eli ? 'Looking for work' : 'Unemployed', color: '#2f6f97', values: app.viewSim.map((y) => y.neetUnemployed) },
+    { label: eli ? 'Too unwell' : 'Inactive (health)', color: '#7a5aa6', values: app.viewSim.map((y) => y.neetInactiveHealth) },
+    { label: eli ? 'Other reasons' : 'Inactive (other)', color: '#9a7b1f', values: app.viewSim.map((y) => y.neetInactiveOther) },
     { label: eli ? 'Do nothing new' : 'Status quo', color: 'rgba(28,22,17,0.42)', values: app.viewBase.map((y) => y.neet), dashed: true },
   ]);
   const neetAtH = $derived(app.viewSim.find((y) => y.year === app.horizon)?.neet ?? 0);
@@ -154,9 +161,50 @@
     {/if}
   </section>
 
-  <!-- ===================== 3 · CCIS ===================== -->
+  <!-- ===================== 3 · the risk-tooling ladder ===================== -->
   <section class="block">
-    <h2 class="pe-h2">3 · CCIS — how England actually tracks (and loses) its 16–17s</h2>
+    <h2 class="pe-h2">3 · The risk-tooling ladder: checklist → weights → ML</h2>
+    <p class="cap">
+      {eli
+        ? 'England already scores children for NEET risk — three ways, of increasing cleverness. The strange part: nobody publishes how accurate any of it is.'
+        : 'Risk scoring is not hypothetical — it is current practice, on a ladder of sophistication. The load-bearing fact sits at the top: no deployed English NEET model has ever published its precision or recall. The accuracy of the national practice is unverifiable by design.'}
+    </p>
+    <div class="ladder">
+      {#each TOOLING_LADDER as r (r.rung)}
+        <article class="rung" style="--rc:{r.colour}">
+          <header class="rung-head"><span class="rung-n">{r.rung}</span><span class="rung-name">{r.name}</span></header>
+          <p class="rung-what">{eli ? r.whatEli5 : r.what}</p>
+          {#if !eli}<p class="rung-status"><b>Status:</b> {r.status}</p>{/if}
+          <p class="rung-weak"><b>{eli ? 'The catch:' : 'Weakness:'}</b> {r.weakness}</p>
+        </article>
+      {/each}
+    </div>
+    <h3 class="sub-h">{eli ? 'The horror stories that set the rules' : 'The failure gallery — each one a design rule'}</h3>
+    <div class="failures">
+      {#each FAILURE_GALLERY as f (f.name)}
+        <article class="fail">
+          <span class="fail-name">{f.name}</span>
+          <p class="fail-what">{f.what}</p>
+          <p class="fail-rule">▸ {f.rule} <a href={f.url} target="_blank" rel="noopener">↗</a></p>
+        </article>
+      {/each}
+    </div>
+  </section>
+
+  <!-- ===================== 4 · the triage simulator ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">4 · Try it: the triage trade-off</h2>
+    <p class="cap">
+      {eli
+        ? 'This is the decision every early-warning system forces: flag more children and you catch more future NEETs — but you also wrongly label more, and someone has to support everyone on the list. Slide the slider and watch all three move at once.'
+        : 'The central strategic decision of any early-warning system, made tangible: the flag-rate threshold trades recall against precision against caseload, simultaneously. Built on the published DfE/NatCen/Impetus risk multipliers with their uncertainty carried through — the numbers no deployed system will show you.'}
+    </p>
+    <TriageSimulator />
+  </section>
+
+  <!-- ===================== 5 · CCIS ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">5 · CCIS — how England actually tracks (and loses) its 16–17s</h2>
     <p class="cap">{@html eli ? CCIS_INTRO.eli5 : CCIS_INTRO.research}</p>
 
     <div class="naming">
@@ -239,7 +287,7 @@
     <div class="ccis-ai">
       <span class="ccis-ai-tag">⚙ Where AI actually fits</span>
       <p>{@html eli ? CCIS_AIVALUE.eli5 : CCIS_AIVALUE.research}</p>
-      <p class="ccis-ai-foot">{eli ? 'The matching trick is explained more in the AI section further down. And the catch never changes: finding a young person isn’t the same as helping one.' : 'The record-linkage mechanism (the FIND role) is detailed in §8 below; the honest caveat — a match is a status, not engagement — runs through the whole page.'}</p>
+      <p class="ccis-ai-foot">{eli ? 'The matching trick is explained more in the AI section further down. And the catch never changes: finding a young person isn’t the same as helping one.' : 'The record-linkage mechanism (the FIND role) is detailed in §11 below; the honest caveat — a match is a status, not engagement — runs through the whole page.'}</p>
     </div>
 
     <div class="stats ccis-stats">
@@ -249,31 +297,21 @@
     </div>
   </section>
 
-  <!-- ===================== 4 · the data exists but isn't actionable ===================== -->
+  <!-- ===================== 6 · the data estate, triaged ===================== -->
   <section class="block">
-    <h2 class="pe-h2">4 · The data exists — it just isn’t actionable</h2>
+    <h2 class="pe-h2">6 · The data estate — proven, wasted, missing</h2>
     <p class="cap">
       {eli
-        ? 'England already holds almost everything you’d need to spot a young person drifting — school, college, benefits and pay records. The catch: it’s scattered, and the one big linked dataset (LEO) is anonymised and out of date, so it’s good for research, not for phoning a specific teenager who’s gone missing.'
-        : 'A young person’s status is reconstructed late from siloed systems. They CAN be linked — DfE’s LEO already joins ~39m people’s records — but LEO is de-identified and lagged: built for outcomes analysis, not for a local authority to act on a named individual. That operational gap is exactly what a spine would close.'}
+        ? 'England already holds almost everything you’d need to spot a young person drifting — school, college, benefits and pay records. Green boxes work today; orange ones exist but sit unused for this; red dashed ones don’t exist at all. Click any box. Notice where the red stripes are: after 18.'
+        : 'The estate, triaged node by node: what exists and is proven, what exists but is underused for NEET, and the missing links. Click a node for its latency, access route and the strategic gap. The hatched column is the age-18 dark zone — tracking ends exactly where the NEET problem peaks.'}
     </p>
-    <div class="silomap">
-      <div class="silo-col">
-        <span class="silo-lab">The silos</span>
-        {#each SILOS as s (s.id)}<span class="silo"><b>{s.label}</b><small>{s.who}</small></span>{/each}
-      </div>
-      <div class="silo-mid">
-        <div class="silo-leo">LEO<small>linked, but de-identified &amp; lagged → research only</small></div>
-        <span class="silo-arrow">vs</span>
-        <div class="silo-spine">DATA SPINE<small>standardised + connected → a live, identified LA tracker</small></div>
-      </div>
-    </div>
+    <DataEstateMap />
     <p class="offaxis">{LEO_NOTE}</p>
   </section>
 
-  <!-- ===================== 5 · the join key ===================== -->
+  <!-- ===================== 7 · the join key ===================== -->
   <section class="block">
-    <h2 class="pe-h2">5 · The join key: one number per child</h2>
+    <h2 class="pe-h2">7 · The join key: one number per child</h2>
     <p class="cap">
       {eli
         ? 'Connecting school systems is only half the job. To really catch a young person falling through, you often need to see across health, social care and benefits too — and for that you need one shared number that means “this same child” everywhere. A new law creates exactly that.'
@@ -311,9 +349,9 @@
     </div>
   </section>
 
-  <!-- ===================== 6 · what works abroad ===================== -->
+  <!-- ===================== 8 · what works abroad ===================== -->
   <section class="block">
-    <h2 class="pe-h2">6 · What works abroad</h2>
+    <h2 class="pe-h2">8 · What works abroad</h2>
     <p class="cap">
       {eli
         ? 'Other countries already do this well, and they all do roughly the same thing: give every young person one ID, link the records, and have a named local person actually chase the ones who go missing. But note the honest catch in the third chart.'
@@ -390,9 +428,20 @@
     {/each}
   </section>
 
-  <!-- ===================== 7 · designing it: attendance as hub ===================== -->
+  <!-- ===================== 9 · who owns what ===================== -->
   <section class="block">
-    <h2 class="pe-h2">7 · Designing England’s early-warning system: attendance as the hub</h2>
+    <h2 class="pe-h2">9 · Who owns what — and the five fault lines</h2>
+    <p class="cap">
+      {eli
+        ? 'Part of why this is hard: the job is split between government departments, councils, colleges and the NHS — and some squares on the board belong to nobody at all.'
+        : 'The coordination problem, mapped: life stage × function, with the documented fault lines numbered. The pattern to notice is not who owns each cell — it is that the 18–24 tracking cell is EMPTY, and the health column never connects to the rest.'}
+    </p>
+    <StakeholderMap />
+  </section>
+
+  <!-- ===================== 10 · designing it: attendance as hub ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">10 · Designing England’s early-warning system: attendance as the hub</h2>
     <p class="cap">
       {eli
         ? 'If you want to spot a young person heading for trouble early, the best clues aren’t exam results — they’re the everyday signals a school can change: are they turning up, how’s their behaviour, are they passing? “A” (attendance) is the biggest tell — and England already collects it twice a day.'
@@ -422,9 +471,9 @@
     <p class="offaxis">{eli ? 'The data finds the young person; a person re-engages them — and the goal is always to offer help, never to punish or write anyone off.' : 'A spine-plus-identifier system would let England track its modelled NEET projection (above) against live attendance and act on individuals — provided the framing stays support-targeting, not punishment. The data finds the young person; a person re-engages them.'}</p>
   </section>
 
-  <!-- ===================== 8 · how AI could help ===================== -->
+  <!-- ===================== 11 · how AI could help ===================== -->
   <section class="block">
-    <h2 class="pe-h2">8 · How AI could improve England’s NEET approach</h2>
+    <h2 class="pe-h2">11 · How AI could improve England’s NEET approach</h2>
     <p class="cap">{eli ? AI_INTRO.eli5 : AI_INTRO.research}</p>
     <div class="airoles">
       {#each AI_ROLES as r (r.key)}
@@ -449,6 +498,37 @@
       {/each}
     </div>
 
+    <h3 class="sub-h">{eli ? 'Everything data and AI could do here, ranked by how proven it is' : 'The opportunity ladder — eight shapes, ranked evidence → novelty'}</h3>
+    <p class="cap small">
+      {eli
+        ? 'From safest bets at the top to the genuinely new idea at the bottom: stop asking only “who’s at risk?” and start asking “who would this programme actually help?”'
+        : 'Each rung names what it is, the data it needs (cross-reference the estate map above), where the evidence stands, and the governance price. The frontier rung is the strategic one: risk-based targeting wastes spend on high-risk/low-responsiveness cases — uplift modelling targets by treatment effect, and the UK uniquely has the ingredients (YFF’s RCT portfolio × LEO outcomes).'}
+    </p>
+    <div class="opp-scroll">
+      <table class="opp">
+        <thead><tr><th>#</th><th>{eli ? 'Idea' : 'Shape'}</th><th>{eli ? 'What it is' : 'What'}</th><th>{eli ? 'Needs' : 'Data it needs'}</th><th>{eli ? 'How proven' : 'Evidence'}</th><th>{eli ? 'Safety rules' : 'Governance price'}</th></tr></thead>
+        <tbody>
+          {#each OPPORTUNITY_LADDER as o (o.rank)}
+            <tr class:frontier={o.frontier}>
+              <td class="num">{o.rank}</td>
+              <td class="opp-name">{o.name}{#if o.frontier}<span class="front-tag">the frontier</span>{/if}</td>
+              <td>{o.what}</td>
+              <td class="opp-needs">{o.needs}</td>
+              <td class="opp-ev">{o.evidence}</td>
+              <td class="opp-gov">{o.governance}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub-h">{eli ? 'The non-negotiables' : 'The governance checklist — distilled from the failure gallery'}</h3>
+    <div class="govgrid">
+      {#each GOVERNANCE_CHECKLIST as g (g.item)}
+        <div class="gov"><span class="gov-item">✓ {g.item}</span><span class="gov-why">{g.why}</span></div>
+      {/each}
+    </div>
+
     <div class="aicaution">
       <span class="aic-tag">⚠ The honest caveats</span>
       <ul>{#each AI_CAUTIONS as c (c)}<li>{c}</li>{/each}</ul>
@@ -456,9 +536,9 @@
     </div>
   </section>
 
-  <!-- ===================== 9 · ethics ===================== -->
+  <!-- ===================== 12 · ethics ===================== -->
   <section class="block">
-    <h2 class="pe-h2">9 · Doing it humanely</h2>
+    <h2 class="pe-h2">12 · Doing it humanely</h2>
     <p class="cap">
       {eli
         ? 'Because this is about vulnerable young people, the risks matter as much as the benefits. Build a system that predicts who’s “at risk” and you can do real damage if you get it wrong.'
@@ -530,20 +610,38 @@
   .rv { font-family: 'JetBrains Mono', monospace; font-size: 11px; fill: rgba(28,22,17,0.7); }
   .leg { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; fill: rgba(28,22,17,0.6); }
 
-  /* silo map */
-  .silomap { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; align-items: center;
-    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 14px 16px; }
-  .silo-col { display: flex; flex-direction: column; gap: 6px; }
-  .silo-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); margin-bottom: 2px; }
-  .silo { display: flex; flex-direction: column; padding: 6px 9px; border-radius: 7px; background: rgba(28,22,17,0.05); border: 1px dashed rgba(28,22,17,0.25); }
-  .silo b { font-size: 12px; color: var(--ink); } .silo small { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
-  .silo-mid { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-  .silo-leo { width: 100%; text-align: center; padding: 10px; border-radius: 9px; background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.18); font-family: 'JetBrains Mono', monospace; font-weight: 600; color: rgba(28,22,17,0.6); }
-  .silo-leo small, .silo-spine small { display: block; font-weight: 400; font-size: 10px; margin-top: 3px; }
-  .silo-leo small { color: rgba(28,22,17,0.5); }
-  .silo-arrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(28,22,17,0.4); }
-  .silo-spine { width: 100%; text-align: center; padding: 10px; border-radius: 9px; background: linear-gradient(90deg, #566a8c, #3f7d6e); color: #fff; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .silo-spine small { color: rgba(255,255,255,0.85); }
+  /* ---- risk-tooling ladder + failure gallery (§3) ---- */
+  .ladder { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 11px; margin-bottom: 16px; }
+  .rung { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--rc); border-radius: 10px; padding: 11px 13px; background: rgba(255,255,255,0.42); }
+  .rung-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+  .rung-n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; color: var(--rc); }
+  .rung-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink); }
+  .rung-what { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .rung-status { margin: 0 0 6px; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.6); }
+  .rung-status b, .rung-weak b { color: var(--ink); }
+  .rung-weak { margin: 0; font-size: 11.5px; line-height: 1.45; color: #8a2d3a; }
+  .failures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; }
+  .fail { border: 1px dashed rgba(177,69,94,0.45); border-radius: 9px; padding: 10px 12px; background: rgba(177,69,94,0.04); }
+  .fail-name { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #8a2d3a; }
+  .fail-what { margin: 5px 0; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.72); }
+  .fail-rule { margin: 0; font-size: 11.5px; line-height: 1.4; font-weight: 600; color: var(--ink); }
+  .fail-rule a { color: #2f6f97; text-decoration: none; }
+
+  /* ---- opportunity ladder + governance (§11) ---- */
+  .opp-scroll { overflow-x: auto; margin-bottom: 16px; }
+  .opp { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 11.5px; }
+  .opp th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 4px 10px 5px 0; border-bottom: 1px solid rgba(28,22,17,0.18); }
+  .opp td { padding: 7px 10px 7px 0; border-bottom: 1px solid rgba(28,22,17,0.07); color: rgba(28,22,17,0.76); vertical-align: top; line-height: 1.45; }
+  .opp td.num { font-family: 'JetBrains Mono', monospace; }
+  .opp-name { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .front-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #7a5aa6; margin-top: 2px; }
+  tr.frontier td { background: rgba(122,90,166,0.06); }
+  .opp-needs, .opp-gov { font-size: 11px; color: rgba(28,22,17,0.62); }
+  .opp-ev { font-size: 11px; }
+  .govgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 9px; margin-bottom: 16px; }
+  .gov { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: 1px solid rgba(47,125,79,0.3); border-radius: 8px; background: rgba(47,125,79,0.04); }
+  .gov-item { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: #2f7d4f; }
+  .gov-why { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.66); }
 
   /* join key */
   .joinwrap { display: grid; grid-template-columns: 380px 1fr; gap: 16px; align-items: center;
@@ -677,7 +775,7 @@
   .ccis-stats { margin-top: 14px; }
 
   @media (max-width: 820px) {
-    .silomap, .joinwrap { grid-template-columns: 1fr; } .join { margin: 0 auto; }
+    .joinwrap { grid-template-columns: 1fr; } .join { margin: 0 auto; }
     .hub-abc { grid-template-columns: 1fr; }
     .ar-head { flex-wrap: wrap; } .ar-verdict { max-width: none; align-self: flex-start; }
     .naming, .pdgrid { grid-template-columns: 1fr; }

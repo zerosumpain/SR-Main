@@ -7,7 +7,8 @@ import type { Band } from './params';
 import { LEVERS } from './levers';
 
 // deterministic RNG so a given scenario yields stable bands across re-renders
-function mulberry32(seed: number): () => number {
+// (exported for reuse by the triage model's uncertainty sampling)
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a |= 0; a = (a + 0x6d2b79f5) | 0;
@@ -18,7 +19,7 @@ function mulberry32(seed: number): () => number {
 }
 
 /** Inverse-CDF sample from a triangular(low, central, high) distribution. */
-function triangular(rng: () => number, a: number, c: number, b: number): number {
+export function triangular(rng: () => number, a: number, c: number, b: number): number {
   if (b <= a) return c;
   const cc = Math.min(Math.max(c, a), b);
   const u = rng();

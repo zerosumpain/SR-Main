@@ -278,3 +278,95 @@ export const CCIS_STATS = [
   { big: 'Twice a year', label: 'how often the announced national RONI tool would generate at-risk lists from the NCCIS data', url: 'https://policyconnect.org.uk/blog/government-announces-new-risk-neet-indicator-roni-process/' },
 ];
 
+
+// ---------------------------------------------------------------------------
+// The risk-tooling ladder (2026-06): how NEET risk scoring is actually practised
+// in England — checklist → weighted index → ML — and the failure gallery that
+// constrains any DfE deployment. [DfE RONI guidance Jan 2025; IFF/NatCen research
+// Apr 2026 via Youth Futures; Bristol CC ATRS record; Ada Lovelace Critical Analytics?]
+// ---------------------------------------------------------------------------
+export interface ToolingRung {
+  rung: number; name: string; what: string; whatEli5: string;
+  status: string; weakness: string; colour: string;
+}
+
+export const TOOLING_LADDER: ToolingRung[] = [
+  {
+    rung: 1, name: 'RONI — the checklist', colour: '#9a7b1f',
+    what: 'Unweighted points over ~15 indicators (absence, exclusions, SEND, FSM, care status…). Emerged from LA practice in the early 2010s; nationalised by DfE guidance in January 2025: LAs generate twice-yearly at-risk lists from NCCIS, refined by careers leaders who know the young person.',
+    whatEli5: 'A tick-list: one point for each warning sign. Councils now have to run it twice a year, and a teacher who knows the child checks the list.',
+    status: 'National guidance since Jan 2025; OnTrack+ (Careers & Enterprise Company) delivers it inside schools for Years 7–11.',
+    weakness: 'Unweighted — treats every marker the same when the real risks differ 2–3×; Years 10–11 focus is too late (signals are visible from primary school); huge variation in whether and how LAs run it.',
+  },
+  {
+    rung: 2, name: 'NERI — the weighted index', colour: '#b4632e',
+    what: 'NatCen’s statistically-derived upgrade (Blackpool case study, Apr 2026): weights estimated from admin data on >1 million young people. Key findings — prior attainment predicts NEET well before GCSEs; FSM + care experience compound.',
+    whatEli5: 'The smarter version: each warning sign counts for what it’s actually worth, worked out from a million real records — and it can spot risk from primary school.',
+    status: 'Research-stage with a published methodology; not yet the national standard.',
+    weakness: 'Still risk-ranking, not treatment-effect ranking; still only as good as the data the LA can see (no health signal).',
+  },
+  {
+    rung: 3, name: 'Machine learning', colour: '#b1455e',
+    what: 'Bristol City Council runs the only NEET model in England with a published ATRS transparency record: decision trees on the Think Family database (education + police + DWP + NHS), refreshed weekly, advisory-only, viewed by ~150 safeguarding staff. Essex runs a validated RONI dashboard; Xantura/EY sell council risk models commercially.',
+    whatEli5: 'A few councils use proper prediction software. Bristol is the only one that publishes how its model works — and even Bristol won’t say how accurate it is.',
+    status: 'Scattered LA deployments; vendor models documented as opaque (Ada Lovelace’s Barking & Dagenham ethnography).',
+    weakness: 'NO deployed English NEET model has published precision/recall. Bristol’s record says the metrics exist internally — and discloses none. The accuracy of the entire national practice is unverifiable.',
+  },
+];
+
+export interface FailureCase { name: string; what: string; rule: string; url: string; }
+
+export const FAILURE_GALLERY: FailureCase[] = [
+  {
+    name: 'Ofqual 2020',
+    what: 'The exam algorithm: 40% of teacher grades downgraded, systematic disadvantage to large state colleges, attempted NDAs on the Royal Statistical Society, full U-turn.',
+    rule: 'Publish the method BEFORE results land on individuals — never after.',
+    url: 'https://en.wikipedia.org/wiki/Ofqual_exam_results_algorithm',
+  },
+  {
+    name: 'DfE ABIE (2025)',
+    what: 'DfE’s own AI-set school attendance targets — suspended over data-quality problems; a quarter of schools never received targets; heads publicly sceptical.',
+    rule: 'National-scale ML fails on data quality and user trust before it fails on modelling.',
+    url: 'https://schoolsweek.co.uk/ai-to-set-minimum-attendance-targets-for-all-schools/',
+  },
+  {
+    name: 'DWP UC advances model',
+    what: 'Fraud-risk scoring deployed 2021; the Public Law Project called its fairness assessment “flawed and inadequate”; disclosure resisted for years.',
+    rule: 'Advisory scores attach to an OFFER of support — never to sanction or rationing.',
+    url: 'https://committees.parliament.uk/writtenevidence/152681/pdf/',
+  },
+  {
+    name: 'Wisconsin DEWS',
+    what: 'US dropout early-warning system: ~74% false-alarm rate, racial bias gaps, no measurable effect on graduation.',
+    rule: 'Report precision/recall by subgroup, publicly — accuracy headlines hide the failure mode.',
+    url: 'https://themarkup.org/machine-learning/2023/04/27/false-alarm-how-wisconsin-uses-race-and-income-to-label-students-high-risk',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// The ML/AI opportunity ladder: eight shapes ranked by evidence-to-novelty, each
+// with its data dependency and governance price. [research dossier 2026-06-10]
+// ---------------------------------------------------------------------------
+export interface OpportunityRung {
+  rank: number; name: string; what: string; needs: string; evidence: string; governance: string; frontier?: boolean;
+}
+
+export const OPPORTUNITY_LADDER: OpportunityRung[] = [
+  { rank: 1, name: 'Validated weighted risk index', what: 'NERI-style weights, validated against LEO 5-year outcomes, distributed through OnTrack+/NCCIS.', needs: 'NPD + NCCIS + LEO (all exist)', evidence: 'Method proven; validation undone — the cheapest credible move', governance: 'DPIA + ATRS record with published precision/recall' },
+  { rank: 2, name: 'Attendance-feed early warning', what: 'Trajectory flags (sudden deterioration, Years 9–11) pushed to LAs and careers leaders in-year.', needs: 'Daily attendance feed (exists, school-level only)', evidence: 'DfE already runs ML on this data; ABIE shows the data-quality work needed first', governance: 'Individual-level DPIA; human-in-the-loop; opt-out clarity' },
+  { rank: 3, name: 'Transition survival analysis', what: 'Time-to-NEET / time-to-re-engagement hazards over the Year-11 cliff and the age-18 dark zone.', needs: 'NPD→ILR→NCCIS→LEO spine (research access)', evidence: 'No published UK work — a genuine analytical gap', governance: 'Research-grade first; SRS access' },
+  { rank: 4, name: 'Place-based NEET forecasting', what: 'Local NEET-supply forecasts (how many, what needs, where) to size Youth Guarantee provision.', needs: 'LA-level cohort + labour-market data', evidence: 'YFF risk-factor maps exist; commissioning demand is live (£820m to allocate)', governance: 'Lowest ethical risk — no person-level flags; a good first product' },
+  { rank: 5, name: 'Service matching', what: 'Matching young people to provision — the Dutch RMC function, algorithmically assisted.', needs: 'A national provision taxonomy (does not exist)', evidence: 'Unproven in the UK', governance: 'Recommender-grade transparency; right to explanation' },
+  { rank: 6, name: 'LLM-assisted casework', what: 'Transcription, summarisation and next-step suggestions for careers advisers and tracking teams.', needs: 'Casework systems integration', evidence: 'Beam Magic Notes: 100+ LAs, ~12 hrs/week saved in social care — the adjacent proof', governance: 'Workflow side only — never the scoring side; accuracy review' },
+  { rank: 7, name: 'NEET nowcasting', what: 'Admin-data nowcast of the national/local NEET rate, faster than the lagged and volatile LFS.', needs: 'HMRC RTI + DWP + ILR at monthly cadence', evidence: 'IFS has shown admin data tracks NEET better than the survey', governance: 'Aggregate-only — minimal personal-data risk' },
+  { rank: 8, name: 'Uplift modelling', frontier: true, what: 'Target by TREATMENT EFFECT, not risk: who would benefit from which intervention. Risk-based targeting wastes spend on high-risk/low-responsiveness cases.', needs: 'RCT outcomes (YFF portfolio) × LEO linkage', evidence: 'Causal-forest analyses of US summer-jobs RCTs found benefits concentrated in subgroups standard methods miss; not yet done for UK NEET', governance: 'The full stack — and the strongest strategic argument in this field study' },
+];
+
+export const GOVERNANCE_CHECKLIST: { item: string; why: string }[] = [
+  { item: 'DPIA, published', why: 'DfE already publishes the attendance-collection DPIA; an unpublished one signals something to hide.' },
+  { item: 'ATRS record from day one — WITH metrics', why: 'Mandatory for central departments since 2024. Bristol’s record is the template; its omission of precision/recall is the gap a DfE record must not repeat.' },
+  { item: 'Human-in-the-loop that can overrule', why: 'ICO guidance requires review that is active, trained and empowered — not tokenistic sign-off. The Jan-2025 RONI guidance already encodes this; keep it in anything ML.' },
+  { item: 'Subgroup error rates, published', why: 'Recall parity across SEND type, ethnicity and FSM is where early-warning systems actually fail (Wisconsin).' },
+  { item: 'Sunset & review clauses', why: 'Bristol’s 6-monthly review is good practice; models degrade as cohorts and policies shift.' },
+  { item: 'Challenger capacity on vendor models', why: 'The LGA pattern: contractual accuracy measures plus an in-house team able to interrogate the supplier’s claims.' },
+];

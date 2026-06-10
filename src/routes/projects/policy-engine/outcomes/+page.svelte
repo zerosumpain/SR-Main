@@ -4,6 +4,8 @@
   import ChartModal from '../components/ChartModal.svelte';
   import StorySection from '../components/StorySection.svelte';
   import CompareReadout from '../components/CompareReadout.svelte';
+  import MeasurementPopover from '../components/MeasurementPopover.svelte';
+  import { MEASUREMENT } from '../lib/measurement';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from '../lib/params';
   import { chartSummary } from '../lib/summaries';
   import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '../lib/levers';
@@ -211,6 +213,9 @@
                   {#each movers as id (id)}<button class="hint-chip" onclick={() => app.focusLever(id)} title="Jump to this slider in the levers drawer">{lname(id)}</button>{/each}
                 </div>
               {/if}
+              {#if MEASUREMENT[CHART_PRIMARY[c.title]]}
+                <div class="mrow"><MeasurementPopover m={MEASUREMENT[CHART_PRIMARY[c.title]]} /></div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -250,5 +255,6 @@
   .hint-chip { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #2f6f97; background: rgba(47,111,151,0.08); border: 1px solid rgba(47,111,151,0.3);
     border-radius: 12px; padding: 2px 9px; cursor: pointer; line-height: 1.3; }
   .hint-chip:hover { background: rgba(47,111,151,0.16); border-color: #2f6f97; }
+  .mrow { margin: 5px 2px 0; }
   @media (max-width: 760px) { .expand { opacity: 1; } }
 </style>
