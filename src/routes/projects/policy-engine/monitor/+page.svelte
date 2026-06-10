@@ -8,6 +8,10 @@
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import StorySection from '../components/StorySection.svelte';
   import { STORIES } from '../lib/stories';
+  import {
+    SUBSID_NOTES, SECTOR_LEDGER, TRUST_LEDGER, COUNTERWEIGHTS, SHARING_LADDER, AGENDAS,
+    SUBSID_TEST, SUBSID_PRINCIPLES,
+  } from '../lib/monitorIntel';
 
   const eli = $derived(app.narrative === 'eli5');
   const TAG_COLOUR: Record<string, string> = { spine: '#2f6f97', identifier: '#7a5aa6', attendance: '#b1455e', ai: '#3f7d6e' };
@@ -37,6 +41,13 @@
 
 <div class="pe-route wide">
   <StoryMasthead story={STORIES.monitor} />
+
+  {#snippet subnote(k: string)}
+    <aside class="subsid">
+      <span class="sb-lab">⚖ Central or local?</span>
+      <p>{eli ? SUBSID_NOTES[k].eli5 : SUBSID_NOTES[k].research}</p>
+    </aside>
+  {/snippet}
 
   <div class="pe-prose lede">
     {#if eli}
@@ -107,6 +118,7 @@
         ? 'The White Paper’s goal: data should “flow seamlessly, not be locked within individual systems”, so schools get quicker insight into what’s working.'
         : 'White Paper (CP 1508-I): data should “flow seamlessly, not be locked within individual systems”, giving schools “more immediate insight about the effectiveness of interventions”. That last clause is the thesis of this page.'}
     </p>
+    {@render subnote('silos')}
   </section>
 
   <!-- ===================== 2 · spine + join key ===================== -->
@@ -120,8 +132,8 @@
     </p>
     <p class="offaxis warn">
       {eli
-        ? 'Reality check: the spine is a promise, not a built thing. As of mid-2026 there’s no design and no finish date — just the commitment and a £200k boss hired to deliver it.'
-        : 'Honest status: the data spine is an announced commitment, not a live system — as of June 2026 there is no published architecture, build timeline or delivery date. Everything on this page is read against that fact.'}
+        ? 'Reality check: the spine is a promise, not a built thing. As of mid-2026 there’s no published design, no procurement and no finish date — which also means the big choices about how it works are still open.'
+        : 'Honest status: the data spine is an announced commitment, not a live system — as of June 2026 there are no published architecture, procurement or delivery artefacts. That cuts both ways: nothing is built, so the custody design (the theme of this page) is still entirely choosable.'}
     </p>
     {/snippet}
     {#snippet data()}
@@ -200,6 +212,7 @@
         </p>
       </div>
     </div>
+    {@render subnote('attendance')}
   </section>
 
   <!-- ===================== 4 · AI in the loop ===================== -->
@@ -285,9 +298,142 @@
     </div>
   </section>
 
-  <!-- ===================== 6 · ethics ===================== -->
+  <!-- ===================== 6 · the sector ledger ===================== -->
   <section class="block">
-    <h2 class="pe-h2">6 · The hard part — support, not surveillance</h2>
+    <h2 class="pe-h2">6 · Who shares what today — the sector ledger</h2>
+    <p class="cap">
+      {eli
+        ? 'Before designing anything new, the honest baseline: what each part of the system already hands to the centre, since when, and what it keeps. Plus the history of how that trust was earned, lost and partly rebuilt.'
+        : 'The current sharing settlement, sector by sector: every statutory flow, its cadence and vintage, and what deliberately stays local — followed by the trust ledger, because the published register and approval machinery exist as scar tissue from specific failures.'}
+    </p>
+    <div class="ledger">
+      {#each SECTOR_LEDGER as s (s.sector)}
+        <article class="sec" style="--sc:{s.colour}">
+          <h3 class="sec-h">{s.sector}</h3>
+          <div class="sec-flows">
+            {#each s.shares as f (f.name)}
+              <div class="flow">
+                <span class="fl-name">{f.name}</span>
+                <span class="fl-meta">{f.cadence} · since {f.since}</span>
+                {#if !eli}<span class="fl-note">{f.note}</span>{/if}
+              </div>
+            {/each}
+          </div>
+          <p class="sec-not"><b>{eli ? 'Stays local:' : 'Not centrally collected:'}</b> {eli ? '' : s.notShared}{#if eli}{s.eli5}{/if}</p>
+        </article>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">{eli ? 'How the trust was won and lost' : 'The trust ledger, 2002–2026'}</h3>
+    <div class="trust">
+      {#each TRUST_LEDGER as t (t.year + t.event)}
+        <div class="tr-ev {t.tone}">
+          <span class="tr-yr">{t.year}</span>
+          <span class="tr-what">{t.event}</span>
+        </div>
+      {/each}
+    </div>
+    {@render subnote('ledger')}
+  </section>
+
+  <!-- ===================== 7 · the sector-led counterweight ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">7 · The counterweight — centre funds, sector owns</h2>
+    <p class="cap">
+      {eli
+        ? 'The alternative to “send it all to Whitehall” already exists and works. In each of these, the centre pays for tools or sets a framework — and the data stays with the people who collected it.'
+        : 'The working alternatives to central custody, by sector. The common architecture: the centre funds, convenes or legislates the plumbing; the sector builds, owns and operates. These are the receipts for a non-paternal posture.'}
+    </p>
+    <div class="cw-cards">
+      {#each COUNTERWEIGHTS as c (c.name)}
+        <article class="cw" style="--cc:{c.colour}">
+          <header class="cw-head"><span class="cw-name">{c.name}</span><span class="cw-sec">{c.sector}</span></header>
+          <p class="cw-what">{c.what}</p>
+          <p class="cw-num"><b>{eli ? 'Scale:' : 'Numbers:'}</b> {c.numbers}</p>
+          <p class="cw-lesson"><span class="cw-tag">The lesson</span>{c.lesson}</p>
+          <a class="cw-src" href={c.url} target="_blank" rel="noopener">source ↗</a>
+        </article>
+      {/each}
+    </div>
+    {@render subnote('counterweight')}
+  </section>
+
+  <!-- ===================== 8 · the sharing ladder ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">8 · The sharing ladder — five ways to learn without taking</h2>
+    <p class="cap">
+      {eli
+        ? 'Technology has quietly solved most of this argument: there are now at least five ways to answer national questions from local data, from “take a copy of everything” down to “the data never moves at all”.'
+        : 'The methodological menu, ordered from most to least extractive. The strategic question for every future collection: what is the LOWEST rung that meets the purpose? Today’s estate sits almost entirely on rung 1; health has industrialised rung 4.'}
+    </p>
+    <div class="rungs">
+      {#each SHARING_LADDER as r (r.rung)}
+        <article class="lrung" class:opp={r.opportunity} style="--lc:{r.colour}">
+          <header class="lr-head">
+            <span class="lr-n">{r.rung}</span>
+            <span class="lr-name">{r.name}</span>
+            {#if r.opportunity}<span class="lr-opp">{eli ? 'the missing piece' : 'the unbuilt opportunity'}</span>{/if}
+          </header>
+          <p class="lr-how">{r.how}</p>
+          <div class="lr-meta">
+            <span><b>{eli ? 'Who keeps the data:' : 'Custody:'}</b> {r.custody}</span>
+            <span><b>{eli ? 'In schools today:' : 'In education:'}</b> {r.inEducation}</span>
+          </div>
+        </article>
+      {/each}
+    </div>
+    {@render subnote('ladder')}
+  </section>
+
+  <!-- ===================== 9 · the agenda collision map ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">9 · The agendas that overlink</h2>
+    <p class="cap">
+      {eli
+        ? 'The spine isn’t happening in a vacuum — half a dozen big government plans pull on the same data. Each card says what the plan is and what it means for schools data.'
+        : 'The strategic context: every live cross-government data agenda intersects the spine, and each will inherit — or set — its custody posture. The map, with the education implication drawn out per agenda.'}
+    </p>
+    <div class="ag-cards">
+      {#each AGENDAS as a (a.name)}
+        <article class="ag" style="--ac:{a.colour}">
+          <header class="ag-head"><span class="ag-name">{a.name}</span><span class="ag-owner">{a.owner}</span></header>
+          <p class="ag-what">{a.what}</p>
+          <p class="ag-link"><span class="ag-tag">{eli ? 'What it means here' : 'For the spine'}</span>{a.spineLink}</p>
+        </article>
+      {/each}
+    </div>
+    {@render subnote('agendas')}
+  </section>
+
+  <!-- ===================== 10 · the subsidiarity test ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">10 · The subsidiarity test — when should the centre collect?</h2>
+    <p class="cap">
+      {eli
+        ? 'Pulling the thread that’s run through this whole page into four questions any new data collection should have to answer — and the posture that falls out of them.'
+        : 'The theme, made operational: four questions that decide whether central collection, central support or local custody is the right answer for any proposed flow — the test the spine’s architecture should be held to.'}
+    </p>
+    <div class="test">
+      {#each SUBSID_TEST as t, i (t.q)}
+        <div class="tq">
+          <span class="tq-n">{i + 1}</span>
+          <div class="tq-body">
+            <span class="tq-q">{t.q}</span>
+            <span class="tq-a yes"><b>{eli ? 'If yes →' : 'Yes →'}</b> {t.ifYes}</span>
+            <span class="tq-a no"><b>{eli ? 'If no →' : 'No →'}</b> {t.ifNo}</span>
+          </div>
+        </div>
+      {/each}
+    </div>
+    <div class="posture">
+      <span class="po-lab">{eli ? 'The non-bossy rulebook' : 'The non-paternal posture, in one paragraph'}</span>
+      <p>{eli ? SUBSID_PRINCIPLES.eli5 : SUBSID_PRINCIPLES.research}</p>
+    </div>
+  </section>
+
+  <!-- ===================== 11 · ethics ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">11 · The hard part — support, not surveillance</h2>
     <p class="cap">
       {eli
         ? 'The same tools that spot a struggling child early can also brand them unfairly. This isn’t hypothetical — here’s what went wrong elsewhere, and the guardrails that keep it honest.'
@@ -330,6 +476,86 @@
   .offaxis b { color: var(--ink); }
   .offaxis.warn { background: rgba(177,69,94,0.07); border-color: rgba(177,69,94,0.22); color: #7a3340; }
   .offaxis.warn b { color: #6f2230; }
+  .sub-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin: 22px 0 10px; color: var(--ink, #1c1611); }
+
+  /* the recurring theme aside */
+  .subsid { margin: 14px 0 0; padding: 11px 14px; border-radius: 9px; max-width: 88ch;
+    border: 1px solid rgba(154,123,31,0.35); border-left: 3px solid #9a7b1f; background: rgba(154,123,31,0.06); }
+  .sb-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #7a621a; font-weight: 600; margin-bottom: 5px; }
+  .subsid p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); }
+
+  /* 6 · sector ledger */
+  .ledger { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 12px; }
+  .sec { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--sc); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 8px; }
+  .sec-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: var(--sc); }
+  .sec-flows { display: flex; flex-direction: column; gap: 7px; }
+  .flow { border-left: 2px solid rgba(28,22,17,0.15); padding-left: 9px; display: flex; flex-direction: column; gap: 1px; }
+  .fl-name { font-size: 12px; font-weight: 600; color: var(--ink, #1c1611); }
+  .fl-meta { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .fl-note { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.65); }
+  .sec-not { margin: 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); padding-top: 6px; border-top: 1px dashed rgba(28,22,17,0.15); }
+  .sec-not b { color: var(--ink, #1c1611); }
+
+  .trust { display: flex; flex-direction: column; gap: 6px; max-width: 88ch; }
+  .tr-ev { display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: 7px; }
+  .tr-ev.bad { background: rgba(177,69,94,0.06); border-left: 3px solid rgba(177,69,94,0.5); }
+  .tr-ev.good { background: rgba(47,125,79,0.06); border-left: 3px solid rgba(47,125,79,0.5); }
+  .tr-ev.neutral { background: rgba(28,22,17,0.03); border-left: 3px solid rgba(28,22,17,0.25); }
+  .tr-yr { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ink, #1c1611); }
+  .tr-what { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.76); }
+
+  /* 7 · counterweights */
+  .cw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; }
+  .cw { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--cc); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }
+  .cw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .cw-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink, #1c1611); }
+  .cw-sec { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cc); }
+  .cw-what, .cw-num { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .cw-num b { color: var(--ink, #1c1611); }
+  .cw-lesson { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .cw-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cc); margin-bottom: 2px; }
+  .cw-src { margin-top: auto; align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  /* 8 · sharing ladder */
+  .rungs { display: flex; flex-direction: column; gap: 10px; max-width: 96ch; }
+  .lrung { border: 1px solid rgba(28,22,17,0.13); border-left: 4px solid var(--lc); border-radius: 10px; padding: 11px 14px; background: rgba(255,255,255,0.42); }
+  .lrung.opp { background: rgba(63,125,110,0.07); border-color: rgba(63,125,110,0.45); }
+  .lr-head { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; }
+  .lr-n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--lc); }
+  .lr-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .lr-opp { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #fff; background: #3f7d6e; padding: 2px 7px; border-radius: 4px; }
+  .lr-how { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .lr-meta { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.68); }
+  .lr-meta b { color: var(--ink, #1c1611); }
+
+  /* 9 · agendas */
+  .ag-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; }
+  .ag { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--ac); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }
+  .ag-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .ag-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .ag-owner { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .ag-what { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .ag-link { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .ag-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ac); margin-bottom: 2px; }
+
+  /* 10 · the test */
+  .test { display: flex; flex-direction: column; gap: 10px; max-width: 96ch; margin-bottom: 16px; }
+  .tq { display: flex; gap: 12px; align-items: flex-start; border: 1px solid rgba(28,22,17,0.12); border-radius: 10px; padding: 11px 14px; background: rgba(255,255,255,0.4); }
+  .tq-n { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--ink, #1c1611); color: var(--paper, #f1ead6);
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+  .tq-body { display: flex; flex-direction: column; gap: 4px; }
+  .tq-q { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; color: var(--ink, #1c1611); }
+  .tq-a { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .tq-a.yes b { color: #2f7d4f; } .tq-a.no b { color: #b4632e; }
+  .posture { border: 1px solid rgba(74,124,124,0.35); border-left: 3px solid #4a7c7c; border-radius: 10px;
+    background: rgba(74,124,124,0.06); padding: 13px 16px; max-width: 96ch; }
+  .po-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a5f5f; font-weight: 600; margin-bottom: 6px; }
+  .posture p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
 
   /* 1 · spine before/after */
   .spinemap { display: grid; grid-template-columns: 1fr auto 1.25fr; align-items: center; gap: 10px;
