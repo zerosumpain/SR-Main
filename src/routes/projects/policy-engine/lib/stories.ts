@@ -58,7 +58,7 @@ export const STORIES: Record<string, Story> = {
     ],
   },
   jigsaw: {
-    no: 6, route: '/projects/policy-engine/jigsaw',
+    no: 5, route: '/projects/policy-engine/jigsaw',
     theme: 'The information jigsaw',
     question: 'Who actually holds the picture of a child?',
     thesis: 'Nobody does — and nobody should. The picture of a child is distributed across school, council, NHS, police, courts and household systems by design. DfE is one holder among seventeen; the failures that harm children happen at the JOINS — and most of the joins are nobody’s job.',
@@ -70,7 +70,7 @@ export const STORIES: Record<string, Story> = {
     ],
   },
   neet: {
-    no: 5, route: '/projects/policy-engine/neet',
+    no: 6, route: '/projects/policy-engine/neet',
     theme: 'The early-warning system',
     question: 'A million young people are NEET. Could data have seen it coming?',
     thesis: 'The strongest NEET predictors — absence, EHCP, attainment — are visible in DfE’s own data years before age 16. The question isn’t whether to build early warning; it’s whether to do it credibly: weighted, validated against LEO, governed in the open.',

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The Information Jigsaw — Field Study №6: the flipside of Monitoring. Who holds
+  // The Information Jigsaw — Field Study №5: the flipside of Monitoring. Who holds
   // which piece of the picture of a child, their informational challenges, where DfE
   // can help (and can't), the RACI of information jobs, and the value offer if DfE
   // repositioned from collector to steward.

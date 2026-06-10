@@ -605,7 +605,7 @@
       </p>
     </div>
     <div class="closer-links">
-      <a class="pe-next" href="/projects/policy-engine/monitor">← The general case: monitoring &amp; the data spine</a>
+      <a class="pe-next" href="/projects/policy-engine/memo">Where all six studies land → The Memo</a>
       <a class="pe-next ghost" href="/projects/policy-engine">Open the levers and move the NEET line →</a>
     </div>
   </section>

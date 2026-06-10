@@ -16,6 +16,7 @@
     { href: '/projects/policy-engine/jigsaw', label: 'Jigsaw' },
     { href: '/projects/policy-engine/neet', label: 'NEET' },
   ];
+  const MEMO = { href: '/projects/policy-engine/memo', label: 'The Memo' };
   const METHOD = { href: '/projects/policy-engine/method', label: 'How it works' };
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
   const active = (href: string) => pathname === href.replace(/\/$/, '');
@@ -28,6 +29,7 @@
     <span class="grp-lab" aria-hidden="true">Field studies</span>
     {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
+    <a class="tab memo" class:active={active(MEMO.href)} href={MEMO.href} title="The capstone — every field study synthesised into one decision memo">✎ {MEMO.label}</a>
     <a class="tab method" class:active={active(METHOD.href)} href={METHOD.href} title="The explainer — how the engine works (not part of the walk-through)">⚙ {METHOD.label}</a>
   </nav>
   <div class="detail" role="group" aria-label="Explanation detail">
@@ -56,6 +58,9 @@
   .tab.method { border-style: dashed; background: transparent; color: var(--ink-soft, rgba(28,22,17,0.6)); }
   .tab.method:hover { background: rgba(28,22,17,0.05); color: var(--ink, #1c1611); }
   .tab.method.active { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); border-style: solid; }
+  .tab.memo { border-width: 1.5px; border-color: rgba(138,45,58,0.6); color: #8a2d3a; background: rgba(177,69,94,0.05); }
+  .tab.memo:hover { background: rgba(177,69,94,0.12); border-color: #8a2d3a; }
+  .tab.memo.active { background: #8a2d3a; color: var(--paper, #f1ead6); border-color: #8a2d3a; }
   @media (max-width: 620px) { .nav-sep { display: none; } }
   .detail { display: inline-flex; align-items: center; gap: 7px; }
   .d-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
