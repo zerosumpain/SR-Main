@@ -33,9 +33,9 @@
 </div>
 <p class="svi-foot">
   {#if eli}
-    Both are run by the same new £200k boss, so they’re built together — but they’re different things. The spine connects the school system to itself; the identifier lets schools, the NHS, social care and the police tell they mean the <b>same child</b>.
+    They’re being built by the same team — but they’re different things. The spine connects the school system to itself; the identifier lets schools, the NHS, social care and the police tell they mean the <b>same child</b>.
   {:else}
-    Both sit under the same new Director General, so they’re steered together — but they are <b>legally and operationally distinct</b>. The spine is intra-education connectivity; the consistent identifier is the cross-domain key that resolves datasets to the same child. Confusing the two is the most common error in coverage of the policy.
+    They are steered together inside DfE — but they are <b>legally and operationally distinct</b>. The spine is intra-education connectivity; the consistent identifier is the cross-domain key that resolves datasets to the same child. Confusing the two is the most common error in coverage of the policy.
   {/if}
 </p>
 
