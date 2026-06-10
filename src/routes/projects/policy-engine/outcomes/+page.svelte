@@ -2,6 +2,8 @@
   import { app } from '../lib/appState.svelte';
   import OutcomeChart, { type ChartSeries } from '../components/OutcomeChart.svelte';
   import ChartModal from '../components/ChartModal.svelte';
+  import StorySection from '../components/StorySection.svelte';
+  import CompareReadout from '../components/CompareReadout.svelte';
   import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from '../lib/params';
   import { chartSummary } from '../lib/summaries';
   import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '../lib/levers';
@@ -173,29 +175,44 @@
     <div class="rgn-note">◉ Re-based onto <b>{app.regionName}</b>: attainment, the gap, absence, GLD &amp; NEET are regional; SEND, cost &amp; workforce stay national.</div>
   {/if}
 
+  {#if app.showBands}
+    <p class="mc-note">{app.narrative === 'eli5'
+      ? 'The shaded fans show how unsure the model is: the line could plausibly land anywhere inside them.'
+      : 'Shaded fans are P10–P90 from a 110-draw Monte Carlo across every effect-size band, plus a shared structural multiplier for correlated model uncertainty.'}</p>
+  {/if}
+
+  {#if app.compareB && app.viewSimB}
+    <div class="cmp-wrap">
+      <CompareReadout simA={app.viewSim} simB={app.viewSimB} nameA={app.scenarioDisplayName} nameB={app.compareB.name} horizon={app.horizon} />
+    </div>
+  {/if}
+
   {#each themes as th (th.key)}
-    <section class="theme">
-      <h2 class="pe-h2">{th.title}</h2>
-      <p class="theme-prose">{app.narrative === 'eli5' ? th.eli5 : th.prose}</p>
-      <div class="grid">
-        {#each th.charts as c (c.title)}
-          {@const sm = sumFor(c)}
-          {@const movers = KEY_LEVERS[CHART_PRIMARY[c.title]] ?? []}
-          <div class="cell">
-            <button class="expand" onclick={() => (expanded = c)} aria-label="Expand {c.title}">⤢</button>
-            <OutcomeChart title={dispTitle(c.title)} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
-              horizonYear={app.horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
-            <p class="summary tone-{sm.tone}">{app.narrative === 'eli5' ? sm.eli5 : sm.text}</p>
-            {#if movers.length}
-              <div class="hint">
-                <span class="hint-lab">▸ sliders that move this:</span>
-                {#each movers as id (id)}<button class="hint-chip" onclick={() => app.focusLever(id)} title="Jump to this slider in the levers drawer">{lname(id)}</button>{/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    </section>
+    <StorySection title={th.title}>
+      {#snippet prose()}
+        <p class="theme-prose">{app.narrative === 'eli5' ? th.eli5 : th.prose}</p>
+      {/snippet}
+      {#snippet data()}
+        <div class="grid">
+          {#each th.charts as c (c.title)}
+            {@const sm = sumFor(c)}
+            {@const movers = KEY_LEVERS[CHART_PRIMARY[c.title]] ?? []}
+            <div class="cell">
+              <button class="expand" onclick={() => (expanded = c)} aria-label="Expand {c.title}">⤢</button>
+              <OutcomeChart title={dispTitle(c.title)} unit={c.unit} years={allYears} series={c.series} baseYear={BASE_YEAR}
+                horizonYear={app.horizon} dp={c.dp} zeroBased={c.zeroBased} target={c.target} />
+              <p class="summary tone-{sm.tone}">{app.narrative === 'eli5' ? sm.eli5 : sm.text}</p>
+              {#if movers.length}
+                <div class="hint">
+                  <span class="hint-lab">▸ sliders that move this:</span>
+                  {#each movers as id (id)}<button class="hint-chip" onclick={() => app.focusLever(id)} title="Jump to this slider in the levers drawer">{lname(id)}</button>{/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/snippet}
+    </StorySection>
   {/each}
 
   <a class="pe-next" href="/projects/policy-engine/population">Now in real children → Population</a>
@@ -212,9 +229,10 @@
   .rgn-note { margin: 0 0 6px; padding: 6px 10px; border-radius: 7px; font-size: 11px; color: rgba(28,22,17,0.7);
     background: rgba(74,124,124,0.1); border: 1px solid rgba(74,124,124,0.3); }
   .rgn-note b { color: #1c1611; }
-  .theme { margin: 26px 0; }
-  .theme-prose { margin: 0 0 14px; font-size: 15px; line-height: 1.58; color: rgba(28,22,17,0.68); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 14px; align-items: start; }
+  .theme-prose { margin: 0; font-size: 15px; line-height: 1.62; color: rgba(28,22,17,0.68); }
+  .mc-note { margin: 0 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.5; color: rgba(28,22,17,0.5); max-width: 88ch; }
+  .cmp-wrap { margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; align-items: start; }
   .cell { display: flex; flex-direction: column; position: relative; }
   .expand { position: absolute; top: 6px; right: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 5px;
     border: 1px solid rgba(28,22,17,0.18); background: rgba(255,255,255,0.7); color: rgba(28,22,17,0.6); cursor: pointer;

@@ -25,14 +25,18 @@ class AppState {
   compareB = $state<{ levers: LeverState; name: string } | null>(null);
   saved = $state<SavedScenario[]>([]);
   mounted = $state(false);
+  basePreset = $state<string | null>(null);              // the preset the user started from (survives lever edits)
 
   // ---- UI state ----
   narrative = $state<'research' | 'eli5'>('research');   // narrative register, site-wide
-  drawerOpen = $state(false);                            // levers sidebar docked open
-  drawerUserSet = $state(false);                         // user has manually opened/closed it (suppresses route default)
-  toggleDrawer() { this.drawerOpen = !this.drawerOpen; this.drawerUserSet = true; }
-  closeDrawer() { this.drawerOpen = false; this.drawerUserSet = true; }
-  openDrawer() { this.drawerOpen = true; this.drawerUserSet = true; }
+  // levers sidebar: 'closed' (spine) / 'peek' (slim changed-levers rail) / 'full' (drawer)
+  drawerMode = $state<'closed' | 'peek' | 'full'>('closed');
+  drawerUserSet = $state(false);                         // user has manually set it (suppresses route default)
+  get drawerOpen() { return this.drawerMode === 'full'; } // legacy readers
+  toggleDrawer() { this.drawerMode = this.drawerMode === 'full' ? 'closed' : 'full'; this.drawerUserSet = true; }
+  closeDrawer() { this.drawerMode = 'closed'; this.drawerUserSet = true; }
+  peekDrawer() { this.drawerMode = 'peek'; this.drawerUserSet = true; }
+  openDrawer() { this.drawerMode = 'full'; this.drawerUserSet = true; }
   highlightLever = $state<string | null>(null);          // a lever to scroll-to + flash in the rail
   focusLever(id: string) { this.openDrawer(); this.highlightLever = id; }
   showHelp = $state(false);                              // onboarding / how-to-use overlay
@@ -58,7 +62,26 @@ class AppState {
   // ---- scenario identity ----
   activePreset = $derived(PRESETS.find((p) => this.eq(this.levers, p.levers))?.name ?? null);
   matchedSaved = $derived(this.saved.find((s) => this.eq(this.levers, s.levers))?.name ?? null);
-  scenarioName = $derived(this.activePreset ?? this.matchedSaved ?? (this.optimizeApplied ? 'Optimised allocation' : 'Custom scenario'));
+  /** Lever values of the preset the user started from (null if none / optimize preset). */
+  basePresetLevers = $derived.by<LeverState | null>(() => {
+    if (!this.basePreset) return null;
+    const p = PRESETS.find((x) => x.name === this.basePreset && !x.optimize);
+    return p ? p.levers : null;
+  });
+  /** Levers differing from the starting point (the base preset, else announced policy). */
+  changedFromBase = $derived.by(() => {
+    const base = this.basePresetLevers ?? policyLevers();
+    return LEVERS.filter((l) => (this.levers[l.id] ?? l.baseline) !== (base[l.id] ?? l.baseline))
+      .map((l) => ({ id: l.id, value: this.levers[l.id] ?? l.baseline, baseValue: base[l.id] ?? l.baseline }));
+  });
+  scenarioName = $derived.by(() => {
+    if (this.activePreset) return this.activePreset;
+    if (this.matchedSaved) return this.matchedSaved;
+    if (this.optimizeApplied) return 'Optimised allocation';
+    const n = this.changedFromBase.length;
+    if (this.basePreset && this.basePresetLevers && n > 0) return `${this.basePreset} +${n} change${n === 1 ? '' : 's'}`;
+    return 'Custom scenario';
+  });
   scenarioDescription = $derived.by(() => {
     const eli = this.narrative === 'eli5';
     const p = PRESETS.find((x) => this.eq(this.levers, x.levers));
@@ -67,7 +90,16 @@ class AppState {
     if (this.optimizeApplied && this.optimizeResult) return eli
       ? `The best mix the computer could find for about £${this.optimizeResult.budget.toFixed(1)}bn a year.`
       : `The budget-optimal allocation: the most disadvantage-gap closed for £${this.optimizeResult.budget.toFixed(1)}bn/yr, solved live against the engine.`;
+    const n = this.changedFromBase.length;
+    if (this.basePreset && this.basePresetLevers && n > 0) return eli
+      ? `You started from “${this.scenarioBaseDisplay}” and changed ${n} slider${n === 1 ? '' : 's'}. Open the Levers to see which.`
+      : `Started from “${this.basePreset}” with ${n} lever${n === 1 ? '' : 's'} changed — open the Levers drawer to see what differs, or reset back to the stance.`;
     return eli ? 'Your own mix of policies. Pick a ready-made one above, or open the Levers to build it.' : 'A custom package — your own combination of levers. Pick a named stance, or open the Levers drawer to tune it.';
+  });
+  /** Display name for the base preset in the current register. */
+  scenarioBaseDisplay = $derived.by(() => {
+    const p = PRESETS.find((x) => x.name === this.basePreset);
+    return this.narrative === 'eli5' && p?.eli5Name ? p.eli5Name : (this.basePreset ?? '');
   });
   // ELI5-aware display name (the canonical scenarioName stays for matching/identity)
   scenarioDisplayName = $derived.by(() => {
@@ -76,6 +108,8 @@ class AppState {
     if (p?.eli5Name) return p.eli5Name;
     if (this.matchedSaved) return this.matchedSaved;
     if (this.optimizeApplied) return 'Best mix found';
+    const n = this.changedFromBase.length;
+    if (this.basePreset && this.basePresetLevers && n > 0) return `${this.scenarioBaseDisplay} +${n} change${n === 1 ? '' : 's'}`;
     return 'Your own mix';
   });
 
@@ -89,7 +123,12 @@ class AppState {
   // ---- lever actions ----
   setLever(id: string, v: number) { this.optimizeResult = null; this.levers = { ...this.levers, [id]: v }; }
   resetLever(id: string) { this.optimizeResult = null; this.levers = { ...this.levers, [id]: LEVERS_BY_ID[id].baseline }; }
-  resetAll() { this.optimizeResult = null; this.levers = policyLevers(); }
+  resetAll() { this.optimizeResult = null; this.basePreset = null; this.levers = policyLevers(); }
+  /** Re-apply the preset the user started from (discard their modifications). */
+  resetToBase() {
+    const b = this.basePresetLevers;
+    if (b) { this.optimizeResult = null; this.levers = { ...b }; }
+  }
   resetAgeId() {
     this.optimizeResult = null;
     const next = { ...this.levers };
@@ -100,7 +139,7 @@ class AppState {
 
   applyPreset(p: Preset) {
     if (p.optimize) { this.previewOptimize(); }
-    else { this.optimizeResult = null; this.levers = { ...p.levers }; }
+    else { this.optimizeResult = null; this.basePreset = p.name; this.levers = { ...p.levers }; }
   }
 
   // ---- optimiser ----
@@ -113,7 +152,7 @@ class AppState {
     };
     this.optimizeApplied = false;
   }
-  applyOptimized() { if (this.optimizeResult) { this.levers = { ...this.optimizeResult.alloc }; this.optimizeApplied = true; } }
+  applyOptimized() { if (this.optimizeResult) { this.basePreset = null; this.levers = { ...this.optimizeResult.alloc }; this.optimizeApplied = true; } }
 
   // ---- comparison ----
   pinAsB() { this.compareB = { levers: { ...this.levers }, name: this.scenarioName }; }
@@ -129,7 +168,7 @@ class AppState {
   // ---- saved scenarios ----
   saveCurrentAs(name: string) { this.saved = [makeSaved(name, this.levers), ...this.saved]; }
   deleteSaved(id: string) { this.saved = this.saved.filter((s) => s.id !== id); }
-  loadSavedScenario(s: SavedScenario) { this.optimizeResult = null; this.levers = { ...s.levers }; }
+  loadSavedScenario(s: SavedScenario) { this.optimizeResult = null; this.basePreset = null; this.levers = { ...s.levers }; }
   pinSavedAsB(s: SavedScenario) { this.compareB = { levers: { ...s.levers }, name: s.name }; }
 }
 

@@ -39,11 +39,16 @@
 
   $effect(() => {
     if (!host) return;
+    // Trailing debounce: drawer open/close animates the grid, which would otherwise
+    // re-render the SVG every observed frame — settle once instead.
+    let t: ReturnType<typeof setTimeout> | null = null;
     const ro = new ResizeObserver((entries) => {
-      for (const e of entries) w = Math.max(280, e.contentRect.width);
+      const cw = entries[entries.length - 1]?.contentRect.width ?? 0;
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { w = Math.max(280, cw); }, 80);
     });
     ro.observe(host);
-    return () => ro.disconnect();
+    return () => { if (t) clearTimeout(t); ro.disconnect(); };
   });
 
   const innerW = $derived(w - padL - padR);

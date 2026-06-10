@@ -8,6 +8,7 @@
   import { REGION_OPTIONS } from './lib/regions';
   import { SOURCES } from './lib/sources';
   import LeverDrawer from './components/LeverDrawer.svelte';
+  import PeekRail from './components/PeekRail.svelte';
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import SectionNav from './components/SectionNav.svelte';
   import Onboarding from './components/Onboarding.svelte';
@@ -25,11 +26,26 @@
     const token = tokenFromHash(location.hash);
     const fromLink = token ? decodeLevers(token) : null;
     if (fromLink) app.levers = fromLink;
-    else { try { const raw = localStorage.getItem(STORAGE); if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') app.levers = { ...policyLevers(), ...p }; } } catch { /* ignore */ } }
+    else {
+      try {
+        const raw = localStorage.getItem(STORAGE);
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p && typeof p === 'object') {
+            // new shape: { levers, basePreset } — legacy shape: a bare lever map
+            const lv = p.levers && typeof p.levers === 'object' ? p.levers : p;
+            app.levers = { ...policyLevers(), ...lv };
+            if (typeof p.basePreset === 'string') app.basePreset = p.basePreset;
+          }
+        }
+      } catch { /* ignore */ }
+    }
     app.saved = loadSaved();
     try {
       const n = localStorage.getItem('epm-narrative');
       if (n === 'research' || n === 'eli5') app.narrative = n;
+      const dm = localStorage.getItem('epm-drawer-mode');
+      if (dm === 'closed' || dm === 'peek' || dm === 'full') { app.drawerMode = dm; app.drawerUserSet = true; }
       // show for new users, and again on a return visit if it's been > 15 minutes since last seen
       const at = Number(localStorage.getItem('epm-onboarded-at') || 0);
       if (!at || Date.now() - at > 15 * 60 * 1000) app.showHelp = true;
@@ -37,13 +53,14 @@
     app.mounted = true;
   });
   $effect(() => { if (app.mounted) { try { localStorage.setItem('epm-narrative', app.narrative); } catch { /* ignore */ } } });
-  // default the levers open alongside the data on the data pages (until the user decides otherwise)
-  $effect(() => { if (app.mounted && !app.drawerUserSet) app.drawerOpen = isDataRoute; });
+  // default the levers to a slim peek beside the data on the data pages (until the user decides otherwise)
+  $effect(() => { if (app.mounted && !app.drawerUserSet) app.drawerMode = isDataRoute ? 'peek' : 'closed'; });
+  $effect(() => { if (app.mounted && app.drawerUserSet) { try { localStorage.setItem('epm-drawer-mode', app.drawerMode); } catch { /* ignore */ } } });
   function setUrl(url: string) { try { replaceState(url, {}); } catch { try { history.replaceState(history.state, '', url); } catch { /* ignore */ } } }
   $effect(() => {
     if (!app.mounted) return;
     pathname;
-    try { localStorage.setItem(STORAGE, JSON.stringify(app.levers)); } catch { /* quota */ }
+    try { localStorage.setItem(STORAGE, JSON.stringify({ levers: app.levers, basePreset: app.basePreset })); } catch { /* quota */ }
     const enc = app.eq(app.levers, policyLevers()) ? '' : encodeLevers(app.levers);
     const want = enc ? `#s=${enc}` : '';
     if (typeof location !== 'undefined' && location.hash !== want) setUrl(enc ? `${location.pathname}${location.search}#s=${enc}` : location.pathname + location.search);
@@ -82,15 +99,17 @@
     {/if}
   </div>
 
-  <div class="shell" class:open={app.drawerOpen} style="--topH:{topH}px">
+  <div class="shell" class:open={app.drawerOpen} class:peek={app.drawerMode === 'peek'} style="--topH:{topH}px">
     {#if app.drawerOpen}
       <button class="side-scrim" aria-label="Close levers" onclick={() => app.closeDrawer()}></button>
     {/if}
-    <aside class="side" class:open={app.drawerOpen}>
+    <aside class="side" class:open={app.drawerOpen} class:peek={app.drawerMode === 'peek'}>
       {#if app.drawerOpen}
         <LeverDrawer />
+      {:else if app.drawerMode === 'peek'}
+        <PeekRail />
       {:else}
-        <button class="spine" onclick={() => app.openDrawer()} title="Show the policy levers"><span class="spine-txt">☰ &nbsp; Policy levers</span></button>
+        <button class="spine" onclick={() => app.peekDrawer()} title="Show the policy levers"><span class="spine-txt">☰ &nbsp; Policy levers</span></button>
       {/if}
     </aside>
     <main class="content">
@@ -98,10 +117,12 @@
       <div class="scenebar">
         <ScenarioSelector />
         <p class="scene-desc">{app.scenarioDescription}</p>
+        <details class="ctrl-disc">
+        <summary class="ctrl-sum">⚙ Scenario controls</summary>
         <div class="controls">
           <div class="seg" role="group" aria-label="Horizon">{#each [2030, 2035, 2040] as h}<button class:on={app.horizon === h} onclick={() => app.setHorizon(h)}>{h}</button>{/each}</div>
           <select class="csel" class:on={app.region !== 'all'} bind:value={app.region} title="Re-base onto a region or the coastal cross-cut">{#each REGION_OPTIONS as o}<option value={o.code}>{o.name}</option>{/each}</select>
-          <button class="cbtn" class:on={app.showBands} onclick={() => (app.showBands = !app.showBands)} title="Monte-Carlo uncertainty bands">Uncertainty {app.showBands ? 'on' : 'off'}</button>
+          <button class="cbtn" class:on={app.showBands} onclick={() => (app.showBands = !app.showBands)} title="110-draw Monte Carlo across every effect-size band plus a shared structural multiplier; the shaded fan on charts is P10–P90.">Uncertainty {app.showBands ? 'on' : 'off'}</button>
           {#if !app.compareB}
             <button class="cbtn" onclick={() => app.pinAsB()} title="Pin this scenario as B, then change A to compare">⇆ Compare</button>
           {:else}
@@ -111,6 +132,7 @@
           {/if}
           <button class="cbtn share" class:ok={copied} onclick={copyLink}>{copied ? '✓ Copied' : '↗ Copy link'}</button>
         </div>
+        </details>
       </div>
       {@render children()}
     </main>
@@ -160,6 +182,17 @@
   .scene-desc { flex: 1 1 320px; min-width: 240px; margin: 0; font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.66);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .controls { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-left: auto; }
+  /* desktop: the disclosure is transparent; mobile (≤700px): controls collapse behind it */
+  .ctrl-disc { display: contents; }
+  .ctrl-sum { display: none; }
+  @media (max-width: 700px) {
+    .ctrl-disc { display: block; margin-left: auto; }
+    .ctrl-sum { display: inline-block; list-style: none; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      padding: 4px 9px; border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; background: rgba(255,255,255,0.5); color: var(--ink); }
+    .ctrl-sum::-webkit-details-marker { display: none; }
+    .ctrl-disc[open] .ctrl-sum { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .ctrl-disc .controls { margin: 8px 0 2px; }
+  }
   .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 6px; }
   .seg button { background: transparent; border: none; color: var(--ink); padding: 4px 9px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
   .seg button.on { background: var(--ink); color: var(--paper); }
@@ -179,6 +212,7 @@
   /* two-column app shell: the levers dock IN FLOW beside the data, so moving a slider visibly
      updates the adjacent charts. The sidebar is sticky (stays as the content scrolls); never overlays on desktop. */
   .shell { position: relative; z-index: 1; display: grid; grid-template-columns: 46px minmax(0, 1fr); transition: grid-template-columns 0.22s ease; }
+  .shell.peek { grid-template-columns: 132px minmax(0, 1fr); }
   .shell.open { grid-template-columns: 348px minmax(0, 1fr); }
   .side { position: sticky; top: var(--topH, 0px); align-self: start; height: calc(100vh - var(--topH, 0px));
     border-right: 1px solid rgba(28,22,17,0.12); background: rgba(241,234,214,0.5); overflow: hidden; }
@@ -195,10 +229,11 @@
     font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5f5f; font-weight: 600; white-space: nowrap; }
   .content { min-width: 0; }
   @media (max-width: 900px) {
-    /* on narrow screens the sidebar overlays (there's no room to dock) */
-    .shell, .shell.open { grid-template-columns: 1fr; }
+    /* on narrow screens the sidebar overlays (there's no room to dock); peek = hidden */
+    .shell, .shell.open, .shell.peek { grid-template-columns: 1fr; }
     .side { position: fixed; left: 0; top: 0; height: 100vh; width: 0; z-index: 100; transition: width 0.22s ease; box-shadow: 8px 0 30px -16px rgba(0,0,0,0.4); }
     .side.open { width: min(340px, 86vw); }
+    .side.peek { display: none; }
     .shell.open .side-scrim { display: block; position: fixed; inset: 0; z-index: 95; background: rgba(28,22,17,0.3); border: none; }
     .spine { display: none; }
   }

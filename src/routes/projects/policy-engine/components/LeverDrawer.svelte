@@ -10,6 +10,7 @@
 
   let tipOpen = $state(false);
   let importErr = $state<string | null>(null);
+  let importOk = $state(false);
   const railLeverCount = LEVERS.filter((l) => l.group !== 'identification').length;
 
   function exportJson() {
@@ -24,7 +25,8 @@
         const obj = JSON.parse(await f.text());
         const incoming = obj && obj.levers ? obj.levers : obj;
         if (!incoming || typeof incoming !== 'object') throw new Error('No levers found.');
-        app.optimizeResult = null; app.levers = { ...policyLevers(), ...incoming }; importErr = null;
+        app.optimizeResult = null; app.basePreset = null; app.levers = { ...policyLevers(), ...incoming }; importErr = null;
+        importOk = true; setTimeout(() => (importOk = false), 1700);
       } catch (e) { importErr = e instanceof Error ? e.message : 'Bad file'; }
     };
     input.click();
@@ -37,13 +39,19 @@
       <span class="d-title">Policy levers</span>
       <span class="d-sub">{railLeverCount} levers · move one and watch the data →</span>
     </div>
-    <button class="d-close" onclick={() => app.closeDrawer()} title="Collapse the levers" aria-label="Collapse levers">‹</button>
+    <button class="d-close" onclick={() => app.peekDrawer()} title="Collapse to the changed-levers rail" aria-label="Collapse levers">‹</button>
   </div>
 
   <div class="d-body">
     <section class="blk">
       <h3>Start from a stance</h3>
       <ScenarioBar activeName={app.activePreset} onApply={(p) => app.applyPreset(p)} />
+      {#if app.basePreset && app.basePresetLevers && app.changedFromBase.length > 0}
+        <div class="base-row">
+          <span class="base-note">{app.changedFromBase.length} change{app.changedFromBase.length === 1 ? '' : 's'} vs “{app.scenarioBaseDisplay}”</span>
+          <button class="base-reset" onclick={() => app.resetToBase()}>↺ back to {app.scenarioBaseDisplay}</button>
+        </div>
+      {/if}
 
       <!-- The "Best value" scenario IS the budget slider: one cohesive control. -->
       <div class="bestval" class:on={!!app.optimizeResult}>
@@ -82,9 +90,10 @@
       <div class="io-row">
         <SavedScenarios saved={app.saved} suggestedName={app.scenarioName} onSave={(n) => app.saveCurrentAs(n)} onLoad={(s) => app.loadSavedScenario(s)} onPin={(s) => app.pinSavedAsB(s)} onDelete={(id) => app.deleteSaved(id)} />
         <button class="mini" onclick={exportJson}>Export</button>
-        <button class="mini" onclick={importJson}>Import</button>
+        <button class="mini" class:ok={importOk} onclick={importJson}>{importOk ? '✓ Imported' : 'Import'}</button>
         <button class="mini danger" onclick={() => app.resetAll()}>Reset</button>
       </div>
+      <span class="io-hint">JSON shape: {'{ "levers": { "<lever-id>": value } }'}</span>
       {#if importErr}<span class="imp-err">Import failed: {importErr}</span>{/if}
     </section>
 
@@ -134,6 +143,14 @@
   .io-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
   .mini { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: 5px; padding: 5px 9px; color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; }
   .mini.danger { border-color: rgba(177,69,94,0.4); color: #b1455e; }
+  .mini.ok { border-color: #2f7d4f; color: #2f7d4f; }
+  .io-hint { display: block; margin-top: 5px; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.42); }
   .imp-err { display: block; margin-top: 6px; color: #8a2d22; font-size: 11px; }
+  .base-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+    padding: 6px 9px; border: 1px solid rgba(47,111,151,0.25); border-radius: 7px; background: rgba(47,111,151,0.05); }
+  .base-note { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; }
+  .base-reset { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; background: transparent;
+    border: 1px solid rgba(47,111,151,0.4); border-radius: 5px; padding: 3px 7px; cursor: pointer; }
+  .base-reset:hover { background: rgba(47,111,151,0.12); }
   .ageid { margin-top: 12px; }
 </style>
