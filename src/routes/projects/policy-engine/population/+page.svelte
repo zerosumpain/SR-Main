@@ -1,6 +1,8 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import PopulationPanel from '../components/PopulationPanel.svelte';
+  import StoryMasthead from '../components/StoryMasthead.svelte';
+  import { STORIES } from '../lib/stories';
   import { economicImpact, ECON } from '../lib/economics';
 
   const econ = $derived(economicImpact(app.viewSim, app.viewBase, app.horizon, app.scale));
@@ -11,8 +13,7 @@
 <svelte:head><title>Population — Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route">
-  <span class="pe-eyebrow">Population</span>
-  <h1 class="pe-h1">Real children, not percentages</h1>
+  <StoryMasthead story={STORIES.population} />
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
       <p>

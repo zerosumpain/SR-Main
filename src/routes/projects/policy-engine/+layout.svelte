@@ -18,7 +18,8 @@
   let topH = $state(0); // measured sticky-header height, so the levers sidebar docks right beneath it
 
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
-  const isDataRoute = $derived(/\/(outcomes|population|regions|neet)$/.test(pathname));
+  // /neet is a field study, not a scenario page — the drawer must not auto-open there
+  const isDataRoute = $derived(/\/(outcomes|population|regions)$/.test(pathname));
 
   onMount(() => {
     const token = tokenFromHash(location.hash);

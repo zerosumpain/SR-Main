@@ -5,6 +5,8 @@
   } from '../lib/monitoring';
   import SpineVsIdentifier from '../components/SpineVsIdentifier.svelte';
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
+  import StoryMasthead from '../components/StoryMasthead.svelte';
+  import { STORIES } from '../lib/stories';
 
   const eli = $derived(app.narrative === 'eli5');
   const TAG_COLOUR: Record<string, string> = { spine: '#2f6f97', identifier: '#7a5aa6', attendance: '#b1455e', ai: '#3f7d6e' };
@@ -33,8 +35,7 @@
 <svelte:head><title>Monitoring — How would we know if a policy worked? · Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route wide">
-  <span class="pe-eyebrow">The feedback loop · monitoring policy impact</span>
-  <h1 class="pe-h1">How would we actually know if a policy worked?</h1>
+  <StoryMasthead story={STORIES.monitor} />
 
   <div class="pe-prose lede">
     {#if eli}

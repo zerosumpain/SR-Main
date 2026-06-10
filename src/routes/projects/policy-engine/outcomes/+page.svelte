@@ -142,25 +142,28 @@
   }
 </script>
 
-<svelte:head><title>Outcomes — Education Policy Modelling</title></svelte:head>
+<svelte:head><title>The Briefing — Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route wide">
-  <span class="pe-eyebrow">Outcomes</span>
-  <h1 class="pe-h1">What happens, and why</h1>
+  <span class="pe-eyebrow">The Briefing</span>
+  <h1 class="pe-h1">State of the system</h1>
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
       <p>
-        Each chart shows one measure over time. The thick line is your plan; the dashed grey line is what happens if nothing
-        changes. The further apart they are, the bigger the difference your choices make. The blue <b>{app.horizon} ▸</b> mark is the
-        year you’re looking at. Click <b>⤢</b> on any chart to blow it up.
+        This is the overview: every headline measure of England’s schools in one place — the rich–poor gap, results, special needs,
+        absence, poverty, young people out of work, teachers and money. Each chart shows your plan (thick line) against doing nothing
+        (dashed grey); the further apart they are, the bigger the difference your choices make. The blue <b>{app.horizon} ▸</b> mark is
+        the year you’re looking at. Click <b>⤢</b> on any chart to blow it up. The pages after this one each pull on a single thread.
         {#if app.compareB}Right now you’re comparing two of your own plans, <b>A</b> and <b>B</b>.{/if}
       </p>
     {:else}
       <p>
-        Solid line is your package; dashed grey is the status-quo (do-nothing) path; dashed colour is disadvantaged pupils; green dashes
-        mark a government target. The shaded band before {BASE_YEAR} is observed history (hidden in a regional view). The blue
-        <b>{app.horizon} ▸</b> marker tracks the horizon selector and drives each chart’s short narrative. Hover a chart and click
-        <b>⤢</b> to expand it with its narrative for export. {#if app.compareB}<b style="color:#9a3b2e">Scenario A</b> and
+        The high-level readout across the five things the department is accountable for — equity, attainment, the SEND system, system
+        health and money — your scenario against the do-nothing path. Solid line is your package; dashed grey is the status quo; dashed
+        colour is disadvantaged pupils; green dashes mark a government target. The shaded band before {BASE_YEAR} is observed history
+        (hidden in a regional view). The blue <b>{app.horizon} ▸</b> marker tracks the horizon selector and drives each chart’s short
+        narrative; hover a chart and click <b>⤢</b> to expand it. Each Field Study that follows pulls one of these threads — the human
+        scale, the geography, the world, the data, the exit boundary. {#if app.compareB}<b style="color:#9a3b2e">Scenario A</b> and
         <b style="color:#3a5fa8">Scenario B</b> are overlaid on each chart’s headline metric.{/if}
       </p>
     {/if}

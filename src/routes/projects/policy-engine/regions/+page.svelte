@@ -1,13 +1,14 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import RegionsPanel from '../components/RegionsPanel.svelte';
+  import StoryMasthead from '../components/StoryMasthead.svelte';
+  import { STORIES } from '../lib/stories';
 </script>
 
 <svelte:head><title>Regions — Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route wide">
-  <span class="pe-eyebrow">Regions</span>
-  <h1 class="pe-h1">Where the gap lives, and to whom</h1>
+  <StoryMasthead story={STORIES.regions} />
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
       <p>

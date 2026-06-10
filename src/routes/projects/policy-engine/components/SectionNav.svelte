@@ -2,10 +2,13 @@
   import { app } from '../lib/appState.svelte';
   import { page } from '$app/stores';
 
-  // the linear walk-through; Method is the (non-linear) reference, set apart on the right
-  const FLOW = [
+  // Overview + the Briefing anchor the walk-through; the Field Studies each pull one
+  // thread; Method is the (non-linear) reference, set apart on the right.
+  const BRIEFING = [
     { href: '/projects/policy-engine', label: 'Overview' },
-    { href: '/projects/policy-engine/outcomes', label: 'Outcomes' },
+    { href: '/projects/policy-engine/outcomes', label: 'The Briefing' },
+  ];
+  const STUDIES = [
     { href: '/projects/policy-engine/population', label: 'Population' },
     { href: '/projects/policy-engine/regions', label: 'Regions' },
     { href: '/projects/policy-engine/global', label: 'Global' },
@@ -19,7 +22,10 @@
 
 <div class="secnav">
   <nav class="tabs" aria-label="Sections">
-    {#each FLOW as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
+    {#each BRIEFING as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
+    <span class="nav-sep" aria-hidden="true"></span>
+    <span class="grp-lab" aria-hidden="true">Field studies</span>
+    {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
     <a class="tab method" class:active={active(METHOD.href)} href={METHOD.href} title="The explainer — how the engine works (not part of the walk-through)">⚙ {METHOD.label}</a>
   </nav>
@@ -43,6 +49,9 @@
   .tab:hover { background: rgba(28,22,17,0.08); border-color: rgba(28,22,17,0.4); }
   .tab.active { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); border-color: var(--ink, #1c1611); }
   .nav-sep { width: 1px; height: 22px; background: rgba(28,22,17,0.2); margin: 0 6px; }
+  .grp-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: rgba(28,22,17,0.42); margin-right: 2px; }
+  @media (max-width: 620px) { .grp-lab { display: none; } }
   .tab.method { border-style: dashed; background: transparent; color: var(--ink-soft, rgba(28,22,17,0.6)); }
   .tab.method:hover { background: rgba(28,22,17,0.05); color: var(--ink, #1c1611); }
   .tab.method.active { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); border-style: solid; }

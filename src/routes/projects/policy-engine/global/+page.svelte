@@ -1,5 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
+  import StoryMasthead from '../components/StoryMasthead.svelte';
+  import { STORIES } from '../lib/stories';
   import {
     COUNTRIES, OECD_AVG, TIER_META, ANCHOR, SPEND_PLOT, SPEND_THRESHOLD, ENGLAND_PISA,
     BY_EQUITY, BY_TREND, type Country, type Tier,
@@ -41,8 +43,7 @@
 <svelte:head><title>Global comparators — Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route wide">
-  <span class="pe-eyebrow">Global comparators</span>
-  <h1 class="pe-h1">England, against the world</h1>
+  <StoryMasthead story={STORIES.global} />
 
   <div class="pe-prose lede-prose">
     {#if eli}

@@ -2,6 +2,8 @@
   import { app } from '../lib/appState.svelte';
   import OutcomeChart from '../components/OutcomeChart.svelte';
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
+  import StoryMasthead from '../components/StoryMasthead.svelte';
+  import { STORIES } from '../lib/stories';
   import {
     NEET_NOW, LA_SPREAD, LA_NOTE, SILOS, LEO_NOTE, JOIN_SPOKES,
     NL_ESL, EUROSTAT_NEET, ESTONIA_FUNNEL, ABC, RONI_INPUTS,
@@ -52,8 +54,7 @@
 <svelte:head><title>A NEET early-warning system for England · Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route wide">
-  <span class="pe-eyebrow">NEET early warning · catching young people before they fall</span>
-  <h1 class="pe-h1">A NEET early-warning system for England</h1>
+  <StoryMasthead story={STORIES.neet} />
 
   <div class="pe-prose lede">
     {#if eli}
