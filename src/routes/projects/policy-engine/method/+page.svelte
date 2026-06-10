@@ -75,7 +75,7 @@
   <h2 class="pe-h2">Outcomes at a glance</h2>
   {#if app.mounted}<Scorecard sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} />{/if}
 
-  <h2 class="pe-h2">What moves the needle</h2>
+  <h2 class="pe-h2 anchor" id="sensitivity">What moves the needle</h2>
   {#if app.narrative === 'eli5'}
     <p class="sec-blurb">Each bar shows how much one slider, pushed all the way, changes the number you pick. Short bars aren’t broken — that slider probably changes a <i>different</i> thing (like the special-needs debt or youth unemployment).</p>
   {:else}
@@ -83,7 +83,7 @@
   {/if}
   {#if app.mounted}<Sensitivity levers={app.levers} horizon={app.horizon} />{/if}
 
-  <h2 class="pe-h2">Cost &amp; value</h2>
+  <h2 class="pe-h2 anchor" id="cost-value">Cost &amp; value</h2>
   {#if app.narrative === 'eli5'}
     <p class="sec-blurb">What it costs, and what you get for the money. Heads up: funding, pay and special-needs money get more expensive <i>every year</i> they run, so they cost far more than one-off programmes.</p>
   {:else}
@@ -91,10 +91,10 @@
   {/if}
   {#if app.mounted}<CostPanel sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} />{/if}
 
-  <h2 class="pe-h2">The equations</h2>
+  <h2 class="pe-h2 anchor" id="equations">The equations</h2>
   <Methodology />
 
-  <h2 class="pe-h2">Every lever — what it does &amp; why</h2>
+  <h2 class="pe-h2 anchor" id="levers">Every lever — what it does &amp; why</h2>
   {#if app.narrative === 'eli5'}
     <p class="sec-blurb">All 35 sliders, grouped. Each one says what it is, what the research shows, how the model uses it, and what it changes. Tap a group to open it.</p>
   {:else}
@@ -131,6 +131,8 @@
 </div>
 
 <style>
+  /* deep-link targets land below the sticky top stack + section nav */
+  .anchor { scroll-margin-top: calc(var(--topH, 60px) + 64px); }
   .sec-blurb { margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: rgba(28,22,17,0.66); }
   .sec-blurb b { color: #1c1611; }
   .lever-docs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }

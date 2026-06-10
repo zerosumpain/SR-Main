@@ -1,6 +1,8 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import MeasurementPopover from '../components/MeasurementPopover.svelte';
+  import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
   import {
     COUNTRIES, OECD_AVG, TIER_META, ANCHOR, SPEND_PLOT, SPEND_THRESHOLD, ENGLAND_PISA,
@@ -66,7 +68,7 @@
         capacity and attendance, not money</b>. This page pressure-tests all three against the international evidence: ten systems on a
         single comparable yardstick, <b>OECD PISA 2022</b> (maths, reading, science), with the spending measure OECD itself uses and
         equity from each country’s official PISA country note. Every figure here was independently re-verified against the OECD primary
-        sources (see <a href="/projects/policy-engine/method">Method → International comparators</a> for the audit).
+        sources (see <a href="/projects/policy-engine/method#comparators">Method → International comparators</a> for the audit).
       </p>
       <p>
         The cast is deliberately constructed: <b>three education leaders</b> (Singapore, Japan, Estonia) to show how the top is reached;
@@ -163,6 +165,7 @@
         ? '*Estonia is the one country the OECD didn’t publish a total-spend figure for, so its dot (~$90k) is our best estimate from its yearly spending. Singapore and Vietnam aren’t in the rich-countries club, so their yearly budgets are counted differently — but this whole-schooling total is comparable for them.'
         : '*OECD did not publish Estonia’s cumulative figure (the only blank in Table I.B3.2.2); its ~$90k dot is reconstructed from its annual ISCED 1+2 per-student spend. Singapore & Vietnam have no comparable annual %-GDP/per-student EaG figure (non-OECD), but the cumulative-6→15 measure plotted here IS comparable for them.'}
     </p>
+    <div class="mrow"><MeasurementPopover m={MEASUREMENT.pisaComparators} /></div>
   </section>
 
   <!-- ============ CHART B: equity ============ -->
@@ -285,7 +288,7 @@
       Sources: OECD <a href="https://www.oecd.org/en/publications/pisa-2022-results-volume-i_53f23881-en.html" target="_blank" rel="noopener">PISA 2022</a>
       (scores, equity, cumulative spend &amp; 2018→22 trend) and <a href="https://www.oecd.org/en/about/programmes/education-at-a-glance.html" target="_blank" rel="noopener">Education at a Glance 2024</a>
       (annual spend); GDP/capita World Bank. Independently re-verified against the OECD country notes and Table I.B3.2.2; see
-      <a href="/projects/policy-engine/method">Method → International comparators</a> for the full audit and caveats.
+      <a href="/projects/policy-engine/method#comparators">Method → International comparators</a> for the full audit and caveats.
     </p>
   </section>
 
@@ -318,7 +321,7 @@
           {eli
             ? 'Poland and Germany fell off a cliff. Progress isn’t permanent — which is why the model runs all the way to 2040, not just to the next election.'
             : 'Poland and Germany shed 25–27 points in one cycle. The engine’s long horizon (to 2040) and uncertainty bands exist precisely because trajectories are fragile, not guaranteed.'}
-          <a href="/projects/policy-engine/method">How the model handles this ↗</a>
+          <a href="/projects/policy-engine/method#equations">How the model handles this ↗</a>
         </li>
       </ul>
     </div>
@@ -345,6 +348,7 @@
   .eng-note b { color: var(--ink); }
 
   .block { margin: 30px 0; }
+  .mrow { margin: 10px 0 0; }
   .cap { margin: 0 0 14px; font-size: 14px; line-height: 1.58; color: rgba(28,22,17,0.7); max-width: 88ch; }
   .cap b { color: var(--ink); }
   .offaxis { margin: 10px 0 0; padding: 9px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7);

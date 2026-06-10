@@ -183,7 +183,8 @@
   {#if app.showBands}
     <p class="mc-note">{app.narrative === 'eli5'
       ? 'The shaded fans show how unsure the model is: the line could plausibly land anywhere inside them.'
-      : 'Shaded fans are P10–P90 from a 110-draw Monte Carlo across every effect-size band, plus a shared structural multiplier for correlated model uncertainty.'}</p>
+      : 'Shaded fans are P10–P90 from a 110-draw Monte Carlo across every effect-size band, plus a shared structural multiplier for correlated model uncertainty.'}
+      <a class="mc-link" href="/projects/policy-engine/method#eq-mc">{app.narrative === 'eli5' ? 'how the fuzziness is worked out →' : 'the sampling equation →'}</a></p>
   {/if}
 
   {#if app.compareB && app.viewSimB}
@@ -239,6 +240,7 @@
   .rgn-note b { color: #1c1611; }
   .theme-prose { margin: 0; font-size: 15px; line-height: 1.62; color: rgba(28,22,17,0.68); }
   .mc-note { margin: 0 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.5; color: rgba(28,22,17,0.5); max-width: 88ch; }
+  .mc-link { margin-left: 6px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
   .cmp-wrap { margin: 0 0 14px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; align-items: start; }
   .cell { display: flex; flex-direction: column; position: relative; }

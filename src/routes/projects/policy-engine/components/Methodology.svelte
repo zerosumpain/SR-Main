@@ -11,8 +11,10 @@
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
 
   // Key equations, shown verbatim so the calculations are fully transparent.
-  const equations: { title: string; eq: string; note: string }[] = [
+  // `slug` gives each card a deep-linkable anchor (eq-<slug>) used by the field studies.
+  const equations: { title: string; eq: string; note: string; slug?: string }[] = [
     {
+      slug: 'response',
       title: 'Lever response function',
       eq: 'dep = (value − baseline) / (max − baseline)\nf(dep) = (1 − e^(−1.8·dep)) / (1 − e^(−1.8))   [concave, diminishing returns]\nramp(t, τ) = 1 − e^(−Δyears / τ)               [geometric distributed lag]',
       note: 'Every lever contributes effect = maxEffect · f(dep) · ramp. Diminishing returns mean doubling a lever never doubles its effect; the lag τ ranges from ~1y (breakfast) to ~11y (early years → GCSE).',
@@ -43,11 +45,13 @@
       note: 'A high-level estimate of identification + early-support cost. A front-loaded profile (more early-years/primary share) modestly lifts EHCP-pupil attainment and slows late escalation.',
     },
     {
+      slug: 'neet',
       title: 'NEET (the exit boundary) — three segments',
       eq: 'NEET(t) = U(t) + IH(t) + IO(t)        [13.3 = 5.19 + 3.72 + 4.39 at 2025]\npipe(t) = (0.11·ΔPA_dis + 0.05·Δpoverty + 0.30·Δehcp%) · ramp(t, 4)\nU(t)  = (5.19 + 0.45·pipe − 0.6·a8Effect) · Π(1 − cutᵢ/5.19)   [unemployed-active]\nIH(t) = (3.72 + drift·(1 − mhMitig)·t + 0.20·pipe − 0.1·a8Effect) · Π(1 − cutᵢ/3.72)\nIO(t) = (4.39 + 0.35·pipe − 0.3·a8Effect) · Π(1 − cutᵢ/4.39)   [inactive-other]',
       note: 'The NEET stock is decomposed into unemployed-active (39%, cyclical — Youth Guarantee, apprenticeships, careers), inactive-health (28%, sticky — mental health & CAMHS, slower lag: 8 in 10 are still NEET 2+ years on) and inactive-other (33% — care, retention). Upstream pressure (pipe) carries the DfE May-2026 risk-factor associations (persistent absence 3.9×, EHCP ~⅓ NEET at 17–19, poverty ~2×) into the stock with a 4-year turnover lag. Programme cuts act multiplicatively (proportional hazards), so overlapping programmes saturate honestly instead of stacking. The attainment elasticity was reduced 0.35→0.25 as an overlap haircut when the pipeline was added.',
     },
     {
+      slug: 'mc',
       title: 'Monte-Carlo & sensitivity',
       eq: 'each draw d:  sampleᵈ(band) = Triangular(low, central, high) · structMultᵈ\nP10/P50/P90 = percentiles over 180 draws ;  tornado swing = |KPI(min) − KPI(max)|',
       note: 'Effect-size bands are sampled independently per draw, plus a shared structural multiplier (~0.8–1.3) representing correlated model uncertainty so the fan does not collapse. The tornado swings each lever min→max with others held.',
@@ -143,7 +147,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
     <p>The full model is in <code>lib/engine.ts</code>; the calibrated parameters and their sources in
       <code>lib/params.ts</code>. The core relationships:</p>
     {#each equations as e}
-      <div class="eqn">
+      <div class="eqn" id={e.slug ? `eq-${e.slug}` : undefined}>
         <span class="eq-title">{e.title}</span>
         <pre>{e.eq}</pre>
         <p class="eq-note">{e.note}</p>
@@ -187,7 +191,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
     <ul>{#each limitations as l}<li>{l}</li>{/each}</ul>
   </section>
 
-  <section>
+  <section id="comparators">
     <h3>International comparators (the Global tab)</h3>
     <p>
       The <a href="/projects/policy-engine/global">Global</a> tab is a separate, non-modelled exhibit: it does <b>not</b> run the engine,
@@ -270,6 +274,8 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
 
 <style>
   .method { display: flex; flex-direction: column; gap: 16px; max-width: 78ch; }
+  /* deep-link targets land below the sticky top stack + section nav */
+  .eqn[id], section[id] { scroll-margin-top: calc(var(--topH, 60px) + 64px); }
   section { display: flex; flex-direction: column; gap: 7px; }
   h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: var(--ink, #1c1611); }
   p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.78); }

@@ -3,6 +3,8 @@
   import OutcomeChart from '../components/OutcomeChart.svelte';
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import MeasurementPopover from '../components/MeasurementPopover.svelte';
+  import { MEASUREMENT } from '../lib/measurement';
   import TriageSimulator from '../components/TriageSimulator.svelte';
   import DataEstateMap from '../components/DataEstateMap.svelte';
   import StakeholderMap from '../components/StakeholderMap.svelte';
@@ -123,6 +125,7 @@
         <text x={cx(NEET_NOW.total)} y="140" class="cnow">↑ now: {NEET_NOW.total.toLocaleString()} ({NEET_NOW.pct}%)</text>
       </svg>
     </div>
+    <div class="mrow"><MeasurementPopover m={MEASUREMENT.neetComposition} /></div>
   </section>
 
   <!-- ===================== 2 · live model bridge ===================== -->
@@ -153,8 +156,10 @@
           {:else}
             — about the same as the status quo ({baseAtH.toFixed(1)}%).
           {/if}
-          <span class="liveread-cav">A modelled projection, not a forecast. Real monitoring is how you’d find out if it’s right.</span>
+          <span class="liveread-cav">A modelled projection, not a forecast. Real monitoring is how you’d find out if it’s right.
+            <a class="meth-link" href="/projects/policy-engine/method#eq-neet">how the three segments are modelled → Method</a></span>
         </p>
+        <div class="mrow"><MeasurementPopover m={MEASUREMENT.neet} /></div>
       </div>
     {:else}
       <div class="chart skel">The live NEET projection loads here.</div>
@@ -575,6 +580,9 @@
 
 <style>
   .lede { max-width: 80ch; }
+  .mrow { margin: 8px 0 0; }
+  .meth-link { display: inline-block; margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+    color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
   .lede b { color: var(--ink); } .lede a { color: #2f6f97; }
   .block { margin: 34px 0; }
   .block.bridge { background: rgba(86,106,140,0.05); border: 1px solid rgba(86,106,140,0.2); border-radius: 14px; padding: 18px 20px; }

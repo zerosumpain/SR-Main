@@ -2,6 +2,8 @@
   import { app } from '../lib/appState.svelte';
   import PopulationPanel from '../components/PopulationPanel.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import MeasurementPopover from '../components/MeasurementPopover.svelte';
+  import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
   import { economicImpact, ECON, NEET_ECON, neetHeadcountAvoided } from '../lib/economics';
 
@@ -53,6 +55,7 @@
         compare={app.compareB && app.viewSimB ? { sim: app.viewSimB, name: app.compareB.name } : null}
         scale={app.scale} regionName={app.region === 'all' ? '' : app.regionName} />
     {/if}
+    <div class="mrow"><MeasurementPopover m={MEASUREMENT.populationFunnel} /></div>
   </div>
 
   <section class="econ">
@@ -77,6 +80,7 @@
       <div class="ec"><span class="ec-num">{fk(econ.perPupilPV)}</span><span class="ec-lab">per pupil, on average</span></div>
       <div class="ec {econ.disLifetimePV >= 0 ? 'good' : 'bad'}"><span class="ec-num">{fbn(econ.disLifetimePV)}</span><span class="ec-lab">accruing to disadvantaged pupils</span></div>
     </div>
+    <div class="mrow"><MeasurementPopover m={MEASUREMENT.leoEconomics} /></div>
     {#if neetHeads > 1000}
       <p class="neet-ctx">
         {#if app.narrative === 'eli5'}
@@ -108,6 +112,7 @@
 <style>
   .panel { margin: 18px 0 22px; }
   .econ { margin: 8px 0 24px; }
+  .mrow { margin: 8px 0 0; }
   .econ-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 12px 0; }
   .ec { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid rgba(28,22,17,0.14); border-radius: 9px;
     background: rgba(255,255,255,0.4); border-left-width: 3px; border-left-color: rgba(28,22,17,0.3); }

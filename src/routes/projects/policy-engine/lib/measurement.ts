@@ -96,6 +96,42 @@ export const MEASUREMENT: Record<string, Measurement> = {
     better: 'Termly vacancy reporting via the MIS pipe that already carries attendance',
     eli5: 'We count teachers once a year, in November, published the following June — schools know their gaps daily.',
   },
+  // ---- field-study exhibits (the layer extended beyond the Briefing, 2026-06-10) ----
+  populationFunnel: {
+    sources: 'School census cohort counts; EYFSP / KS2 / KS4 stage outcomes (NPD)',
+    latency: 'Each stage measured once, years apart — age 5, 11 and 16',
+    gaps: 'No published statistic follows one real cohort through all three gates; this funnel is synthetic',
+    better: 'Cohort-linked stage reporting — the NPD already contains the longitudinal cut; nobody publishes it',
+    eli5: 'Each checkpoint is measured separately, years apart. The data to follow one real year-group through all three gates already sits in the National Pupil Database — it just isn’t published that way.',
+  },
+  leoEconomics: {
+    sources: 'LEO (NPD ↔ HMRC earnings ↔ DWP benefits); DfE lifetime-earnings estimates',
+    latency: 'Years — earnings observed over tax-year cycles; the per-point constants come from 2002–05 GCSE cohorts',
+    gaps: 'Associational, not causal; dated calibration cohorts; no regional wage adjustment',
+    better: 'Earnings-by-attainment constants refreshed per cohort, with regional splits — the linkage already exists',
+    eli5: 'The pay data behind these pound figures comes from people who sat their GCSEs twenty years ago. The linkage exists to refresh it every year — it just isn’t done.',
+  },
+  regionalBreakdown: {
+    sources: 'DfE EES regional KS4/absence splits; EPI regional gap analysis',
+    latency: 'Annual, published with the national release',
+    gaps: 'Regional NEET relies on a small survey with wide confidence intervals; LA disadvantage definitions vary; a child who moves region vanishes from the series',
+    better: 'LA-level outcome series on consistent definitions + destination measures that follow the child across a move',
+    eli5: 'Regional school results are solid, but regional NEET numbers come from a small survey and wobble a lot — and a child who moves region just disappears from one column and reappears in another.',
+  },
+  pisaComparators: {
+    sources: 'OECD PISA (3-year cycle; 2022 is the latest); Education at a Glance spend tables',
+    latency: 'Three-year test cycle, published ~18 months after sitting; the England-specific report later still',
+    gaps: 'Headline scores are UK-wide, masking England; England’s 2022 school response rate fell below PISA standards; no equity measure exists between cycles',
+    better: 'Between-cycle national equity sampling tied to the PISA scales, so fairness isn’t a once-every-three-years number',
+    eli5: 'The international scoreboard updates every three years and mixes England in with the rest of the UK. Between rounds, England has no comparable fairness measure at all.',
+  },
+  neetComposition: {
+    sources: 'ONS Labour Force Survey NEET bulletin (quarterly) with inactivity-reason splits',
+    latency: 'Quarterly, ~6 weeks after quarter end — carrying ONS volatility warnings since 2023',
+    gaps: 'Survey-based: the million-NEET headline has a wide confidence interval; reason-for-inactivity is self-reported; no published admin-data corroboration',
+    better: 'An admin-data nowcast (HMRC RTI + UC + ILR) corroborating the survey split — IFS has shown admin data tracks NEET better than the survey',
+    eli5: 'The million-NEET headline comes from a survey the ONS itself warns is wobbly. The tax and benefits systems could confirm the number almost in real time — nobody publishes that.',
+  },
   cumulativeCost: {
     sources: 'DfE budgets / HMT estimates; IFS reconstruction',
     latency: 'Spending-review cycles; outturn a year+ later',
