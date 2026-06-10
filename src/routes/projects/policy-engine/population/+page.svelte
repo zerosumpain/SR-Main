@@ -2,6 +2,7 @@
   import { app } from '../lib/appState.svelte';
   import PopulationPanel from '../components/PopulationPanel.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import StorySection from '../components/StorySection.svelte';
   import MeasurementPopover from '../components/MeasurementPopover.svelte';
   import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
@@ -24,6 +25,8 @@
 
 <div class="pe-route">
   <StoryMasthead story={STORIES.population} />
+  <StorySection title="One year-group, three gates">
+  {#snippet prose()}
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
       <p>
@@ -50,7 +53,8 @@
       </p>
     {/if}
   </div>
-
+  {/snippet}
+  {#snippet data()}
   <div class="panel">
     {#if app.mounted}
       <PopulationPanel sim={app.viewSim} baseSim={app.viewBase} horizon={app.horizon} scenarioName={app.scenarioName}
@@ -59,10 +63,12 @@
     {/if}
     <div class="mrow"><MeasurementPopover m={MEASUREMENT.populationFunnel} /></div>
   </div>
+  {/snippet}
+  </StorySection>
 
-  <section class="econ">
-    <h2 class="pe-h2">The economic return</h2>
-    <div class="pe-prose">
+  <StorySection title="The economic return">
+  {#snippet prose()}
+  <div class="pe-prose">
       {#if app.narrative === 'eli5'}
         <p>
           Better results don’t just help children at school — they earn more as adults. Using the government’s own data linking
@@ -76,6 +82,8 @@
         </p>
       {/if}
     </div>
+  {/snippet}
+  {#snippet data()}
     <div class="econ-grid">
       <div class="ec {econ.lifetimePV >= 0 ? 'good' : 'bad'}"><span class="ec-num">{fbn(econ.lifetimePV)}</span><span class="ec-lab">extra lifetime earnings (PV) vs doing nothing</span></div>
       <div class="ec {econ.exchequerPV >= 0 ? 'good' : 'bad'}"><span class="ec-num">{fbn(econ.exchequerPV)}</span><span class="ec-lab">of it back to the exchequer (tax &amp; NICs)</span></div>
@@ -108,14 +116,14 @@
       (×{wageFactor.toFixed(2)}, ONS ASHE-derived) — a crude adjustment that ignores migration between regions.{/if} Sources:
       DfE “GCSE Attainment and Lifetime Earnings”, DfE/LEO, IFS; see the <a href="/projects/policy-engine/method">Method</a> page.
     </p>
-  </section>
+  {/snippet}
+  </StorySection>
 
   <a class="pe-next" href="/projects/policy-engine/regions">Where & to whom → Regions</a>
 </div>
 
 <style>
-  .panel { margin: 18px 0 22px; }
-  .econ { margin: 8px 0 24px; }
+  .panel { margin: 0 0 8px; }
   .mrow { margin: 8px 0 0; }
   .econ-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 12px 0; }
   .ec { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid rgba(28,22,17,0.14); border-radius: 9px;

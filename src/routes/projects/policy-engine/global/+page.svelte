@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import StorySection from '../components/StorySection.svelte';
   import MeasurementPopover from '../components/MeasurementPopover.svelte';
   import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
@@ -109,7 +110,8 @@
 
   <!-- ============ CHART A: cumulative spend vs maths ============ -->
   <section class="block">
-    <h2 class="pe-h2">1 · Does money buy results?</h2>
+    <StorySection title="1 · Does money buy results?">
+    {#snippet prose()}
     <p class="cap">
       {#if eli}
         Each dot is a country. Left-to-right is <b>the total spent on a child’s whole schooling</b> (ages 6–15); up-and-down is its
@@ -124,6 +126,8 @@
         engine’s “money is a conditional lever” assumption.
       {/if}
     </p>
+    {/snippet}
+    {#snippet data()}
     <div class="chart">
       <svg viewBox="0 0 760 460" role="img" aria-label="Scatter plot of cumulative spend per student age 6 to 15 against PISA maths score">
         <!-- above-threshold zone -->
@@ -166,11 +170,14 @@
         : '*OECD did not publish Estonia’s cumulative figure (the only blank in Table I.B3.2.2); its ~$90k dot is reconstructed from its annual ISCED 1+2 per-student spend. Singapore & Vietnam have no comparable annual %-GDP/per-student EaG figure (non-OECD), but the cumulative-6→15 measure plotted here IS comparable for them.'}
     </p>
     <div class="mrow"><MeasurementPopover m={MEASUREMENT.pisaComparators} /></div>
+    {/snippet}
+    </StorySection>
   </section>
 
   <!-- ============ CHART B: equity ============ -->
   <section class="block">
-    <h2 class="pe-h2">2 · The same money, very different fairness</h2>
+    <StorySection title="2 · The same money, very different fairness">
+    {#snippet prose()}
     <p class="cap">
       {#if eli}
         This is England’s quiet strength. The bar is the <b>gap in maths between the richest and poorest quarter of pupils</b> — shorter
@@ -184,6 +191,8 @@
         top of the world, carries one of the widest gaps — a high floor with a very high ceiling.
       {/if}
     </p>
+    {/snippet}
+    {#snippet data()}
     <div class="chart">
       <svg viewBox="0 0 760 {chartH(BY_EQUITY.length)}" role="img" aria-label="Ranked bar chart of the rich–poor maths gap by country">
         <text x={12} y={26} class="hint-l">← fairer</text>
@@ -199,11 +208,14 @@
         {/each}
       </svg>
     </div>
+    {/snippet}
+    </StorySection>
   </section>
 
   <!-- ============ CHART C: trend ============ -->
   <section class="block">
-    <h2 class="pe-h2">3 · Direction of travel since 2018</h2>
+    <StorySection title="3 · Direction of travel since 2018">
+    {#snippet prose()}
     <p class="cap">
       {#if eli}
         How each country’s maths score moved between the last two PISA rounds (2018 → 2022), across the pandemic. Almost everyone fell.
@@ -218,6 +230,8 @@
         not comparable across cycles and is omitted.)
       {/if}
     </p>
+    {/snippet}
+    {#snippet data()}
     <div class="chart">
       <svg viewBox="0 0 760 {chartH(BY_TREND.length)}" role="img" aria-label="Diverging bar chart of the change in PISA maths 2018 to 2022">
         <defs>
@@ -249,6 +263,8 @@
       </svg>
     </div>
     <p class="offaxis">{eli ? 'Hatched bars = “about the same as 2018” — not a statistically reliable change, per the OECD.' : 'Hatched bars are statistically NOT significant (OECD: “about the same as in 2018 in mathematics”) — shown at their measured value but flagged, not counted as real gains.'}</p>
+    {/snippet}
+    </StorySection>
   </section>
 
   <!-- ============ the ten, in their own words ============ -->

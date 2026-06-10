@@ -2,6 +2,7 @@
   import { app } from '../lib/appState.svelte';
   import RegionsPanel from '../components/RegionsPanel.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import StorySection from '../components/StorySection.svelte';
   import MeasurementPopover from '../components/MeasurementPopover.svelte';
   import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
@@ -11,6 +12,8 @@
 
 <div class="pe-route wide">
   <StoryMasthead story={STORIES.regions} />
+  <StorySection title="Nine regions, re-centred to England">
+  {#snippet prose()}
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
       <p>
@@ -44,7 +47,8 @@
       </p>
     {/if}
   </div>
-
+  {/snippet}
+  {#snippet data()}
   <div class="panel">
     {#if app.mounted}
       <RegionsPanel sim={app.sim.years} baseSim={app.baseSim.years} levers={app.levers} horizon={app.horizon}
@@ -52,8 +56,10 @@
     {/if}
     <div class="mrow"><MeasurementPopover m={MEASUREMENT.regionalBreakdown} /></div>
   </div>
+  {/snippet}
+  </StorySection>
 
   <a class="pe-next" href="/projects/policy-engine/global">Now against the world → Global</a>
 </div>
 
-<style>.panel { margin: 18px 0 22px; } .mrow { margin: 8px 0 0; }</style>
+<style>.panel { margin: 0; } .mrow { margin: 8px 0 0; }</style>

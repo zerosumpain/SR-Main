@@ -6,6 +6,7 @@
   import SpineVsIdentifier from '../components/SpineVsIdentifier.svelte';
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import StorySection from '../components/StorySection.svelte';
   import { STORIES } from '../lib/stories';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -110,13 +111,20 @@
 
   <!-- ===================== 2 · spine + join key ===================== -->
   <section class="block">
-    <h2 class="pe-h2">2 · England’s answer — and the thing everyone conflates</h2>
+    <StorySection title="2 · England’s answer — and the thing everyone conflates">
+    {#snippet prose()}
     <p class="cap">
       {eli
         ? 'Two different things got announced close together, and people keep mixing them up. One is the wiring. The other is a shared number for each child. Here’s the difference — and the timeline that put them on the table.'
-        : 'England’s response has two distinct moving parts with different legal bases, easily — and constantly — conflated. The timeline below is the public record; the cards underneath keep the two instruments strictly apart.'}
+        : 'England’s response has two distinct moving parts with different legal bases, easily — and constantly — conflated. The timeline is the public record; the cards beneath it keep the two instruments strictly apart.'}
     </p>
-
+    <p class="offaxis warn">
+      {eli
+        ? 'Reality check: the spine is a promise, not a built thing. As of mid-2026 there’s no design and no finish date — just the commitment and a £200k boss hired to deliver it.'
+        : 'Honest status: the data spine is an announced commitment, not a live system — as of June 2026 there is no published architecture, build timeline or delivery date. Everything on this page is read against that fact.'}
+    </p>
+    {/snippet}
+    {#snippet data()}
     <!-- announcement timeline -->
     <div class="tl">
       <div class="tl-line" aria-hidden="true"></div>
@@ -132,12 +140,8 @@
     </div>
 
     <SpineVsIdentifier />
-
-    <p class="offaxis warn">
-      {eli
-        ? 'Reality check: the spine is a promise, not a built thing. As of mid-2026 there’s no design and no finish date — just the commitment and a £200k boss hired to deliver it.'
-        : 'Honest status: the data spine is an announced commitment, not a live system — as of June 2026 there is no published architecture, build timeline or delivery date. Everything below is read against that fact.'}
-    </p>
+    {/snippet}
+    </StorySection>
   </section>
 
   <!-- ===================== 3 · attendance is the leading indicator ===================== -->
