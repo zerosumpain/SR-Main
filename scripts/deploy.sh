@@ -8,7 +8,8 @@ VPS_DIR="/opt/strange-rambling-svelte"
 SERVICE="strange-rambling-svelte"
 
 echo "==> Building..."
-npm run build
+# The default Node heap OOMs on this 8GB box (post earlyoom/zram tuning) — pin it up.
+NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=8192}" npm run build
 
 # Stamp deploy provenance so prod can be mapped back to git without guesswork.
 # Lands at $VPS_DIR/build/.deploy-sha (build/ is rsync'd below). Read live with:
