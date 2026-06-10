@@ -8,8 +8,8 @@
   import SpineSwitchboard from '../components/SpineSwitchboard.svelte';
   import { STORIES } from '../lib/stories';
   import {
-    JIGSAW_HERO, HOLDERS, RING_META, RACI, RACI_COLS, TISSUE, TISSUE_KIND_META, GRAVEYARD,
-    JIGSAW_GAPS, VALUE_OFFER, VALUE_DONTS, type Holder, type Ring, type TissueKind,
+    JIGSAW_HERO, HOLDERS, RING_META, FAMILY_NOTE, RACI, RACI_COLS, TISSUE, TISSUE_KIND_META,
+    GRAVEYARD, JIGSAW_GAPS, VALUE_OFFER, VALUE_DONTS, type Holder, type Ring, type TissueKind,
   } from '../lib/jigsawIntel';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -123,6 +123,14 @@
         {/if}
       </div>
     {/if}
+
+    <div class="family">
+      <span class="fam-lab">◉ {FAMILY_NOTE.title}</span>
+      <p>{eli ? FAMILY_NOTE.eli5 : FAMILY_NOTE.research}</p>
+      <div class="refrow">
+        {#each FAMILY_NOTE.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+      </div>
+    </div>
   </section>
 
   <!-- ===================== 3 · the RACI ===================== -->
@@ -287,6 +295,11 @@
   .hc-k { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); margin-bottom: 3px; }
   .hc-cell.can .hc-k { color: #2f7d4f; } .hc-cell.cant .hc-k { color: #8a2d3a; }
   .hc-cell p { margin: 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.78); }
+
+  /* the eighteenth holder */
+  .family { margin-top: 16px; border: 1.5px solid rgba(28,22,17,0.5); border-radius: 10px; background: rgba(28,22,17,0.045); padding: 13px 16px; max-width: 96ch; }
+  .fam-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink, #1c1611); font-weight: 700; margin-bottom: 6px; }
+  .family p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
 
   /* 3 · RACI */
   .raci-scroll { overflow-x: auto; }

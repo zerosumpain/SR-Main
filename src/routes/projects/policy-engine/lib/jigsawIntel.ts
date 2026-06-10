@@ -205,6 +205,17 @@ export const HOLDERS: Holder[] = [
   },
 ];
 
+// The eighteenth holder — the one the map can't show: the family itself.
+export const FAMILY_NOTE = {
+  title: 'The eighteenth holder — the centre of the map holds none of the pieces',
+  research: 'Look at the map again: the child sits at the centre, and neither the child nor their family holds a single piece of it. A parent has no way to see their child’s distributed record — subject-access requests to each of seventeen organisations are the only mechanism, and the safeguarding file is partially exempt even from those. The components for something better already exist: health’s About Me standard (PRSB) defines person-held “what matters to me” information; the eRedbook proves parents can hold a clinical record; and every register on this page would be more accurate if the family could see and correct it. A steward that takes the anti-paternal test seriously eventually has to answer: where is the family’s copy?',
+  eli5: 'Strangest of all: the child in the middle of the map — and their parents — can’t see any of it. Seventeen organisations hold pieces of their story, and the family’s only option is writing to each one separately. The NHS already has a standard for letting people hold their own record. Nobody has built the children’s version.',
+  refs: [
+    { label: 'PRSB — the About Me standard', url: 'https://theprsb.org/standards/aboutme/' },
+    { label: 'ICO — subject access and children', url: 'https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/childrens-information/children-and-the-uk-gdpr/' },
+  ] as Ref[],
+};
+
 // ---------------------------------------------------------------------------
 // 3 · The RACI — information jobs × the system
 // ---------------------------------------------------------------------------
