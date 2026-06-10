@@ -11,6 +11,7 @@
   import {
     SUBSID_NOTES, SECTOR_LEDGER, TRUST_LEDGER, COUNTERWEIGHTS, SHARING_LADDER, AGENDAS,
     SUBSID_TEST, SUBSID_PRINCIPLES,
+    EDTECH_THESIS, EDTECH_ESTATE, EDTECH_PRECEDENTS, EDTECH_BARRIERS, EDTECH_LEVERS,
   } from '../lib/monitorIntel';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -385,9 +386,61 @@
     {@render subnote('ladder')}
   </section>
 
-  <!-- ===================== 9 · the agenda collision map ===================== -->
+  <!-- ===================== 9 · the shadow estate (edtech) ===================== -->
   <section class="block">
-    <h2 class="pe-h2">9 · The agendas that overlink</h2>
+    <h2 class="pe-h2">9 · The shadow estate — what the edtech market already measures</h2>
+    <p class="cap">{eli ? EDTECH_THESIS.eli5 : EDTECH_THESIS.research}</p>
+
+    <div class="et-cats">
+      {#each EDTECH_ESTATE as c (c.category)}
+        <article class="etc" style="--ec:{c.colour}">
+          <h3 class="etc-h">{c.category}</h3>
+          <div class="etc-entries">
+            {#each c.entries as e (e.name)}
+              <div class="ete">
+                <span class="ete-name">{e.name}</span>
+                <span class="ete-scale">{e.scale}</span>
+                {#if !eli}<span class="ete-data">{e.data}</span>{/if}
+              </div>
+            {/each}
+          </div>
+          <p class="etc-signal"><span class="etc-tag">{eli ? 'What it could tell us' : 'The system signal'}</span>{c.signal}</p>
+        </article>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">{eli ? 'Proof it can work' : 'The precedents — and the dogs that didn’t bark'}</h3>
+    <div class="et-prec">
+      {#each EDTECH_PRECEDENTS as p (p.name)}
+        <div class="etp">
+          <span class="etp-name">{p.name}</span>
+          <p class="etp-what">{eli ? p.eli5 : p.what}</p>
+        </div>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">{eli ? 'Why it hasn’t happened' : 'The barriers'}</h3>
+    <div class="et-bars">
+      {#each EDTECH_BARRIERS as b (b.kind)}
+        <div class="etb">
+          <span class="etb-kind">{b.kind}</span>
+          <p class="etb-det">{eli ? b.eli5 : b.detail}</p>
+        </div>
+      {/each}
+    </div>
+
+    <h3 class="sub-h">{eli ? 'What the centre could actually do' : 'The levers — none of which require collection'}</h3>
+    <div class="et-levers">
+      {#each EDTECH_LEVERS as l, i (l.name)}
+        <div class="etl"><span class="etl-n">{i + 1}</span><div><span class="etl-name">{l.name}</span><span class="etl-what">{l.what}</span></div></div>
+      {/each}
+    </div>
+    {@render subnote('edtech')}
+  </section>
+
+  <!-- ===================== 10 · the agenda collision map ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">10 · The agendas that overlink</h2>
     <p class="cap">
       {eli
         ? 'The spine isn’t happening in a vacuum — half a dozen big government plans pull on the same data. Each card says what the plan is and what it means for schools data.'
@@ -405,9 +458,9 @@
     {@render subnote('agendas')}
   </section>
 
-  <!-- ===================== 10 · the subsidiarity test ===================== -->
+  <!-- ===================== 11 · the subsidiarity test ===================== -->
   <section class="block">
-    <h2 class="pe-h2">10 · The subsidiarity test — when should the centre collect?</h2>
+    <h2 class="pe-h2">11 · The subsidiarity test — when should the centre collect?</h2>
     <p class="cap">
       {eli
         ? 'Pulling the thread that’s run through this whole page into four questions any new data collection should have to answer — and the posture that falls out of them.'
@@ -431,9 +484,9 @@
     </div>
   </section>
 
-  <!-- ===================== 11 · ethics ===================== -->
+  <!-- ===================== 12 · ethics ===================== -->
   <section class="block">
-    <h2 class="pe-h2">11 · The hard part — support, not surveillance</h2>
+    <h2 class="pe-h2">12 · The hard part — support, not surveillance</h2>
     <p class="cap">
       {eli
         ? 'The same tools that spot a struggling child early can also brand them unfairly. This isn’t hypothetical — here’s what went wrong elsewhere, and the guardrails that keep it honest.'
@@ -532,7 +585,34 @@
   .lr-meta { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.68); }
   .lr-meta b { color: var(--ink, #1c1611); }
 
-  /* 9 · agendas */
+  /* 9 · the shadow estate (edtech) */
+  .et-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 12px; }
+  .etc { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--ec); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 8px; }
+  .etc-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; margin: 0; color: var(--ec); }
+  .etc-entries { display: flex; flex-direction: column; gap: 7px; }
+  .ete { border-left: 2px solid rgba(28,22,17,0.15); padding-left: 9px; display: flex; flex-direction: column; gap: 1px; }
+  .ete-name { font-size: 12px; font-weight: 600; color: var(--ink, #1c1611); }
+  .ete-scale { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .ete-data { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.65); }
+  .etc-signal { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--ink, #1c1611); padding-top: 6px; border-top: 1px dashed rgba(28,22,17,0.15); }
+  .etc-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ec); margin-bottom: 2px; }
+  .et-prec { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+  .etp { border: 1px solid rgba(47,125,79,0.3); border-radius: 9px; padding: 10px 12px; background: rgba(47,125,79,0.04); }
+  .etp-name { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #2f7d4f; text-transform: uppercase; letter-spacing: 0.03em; }
+  .etp-what { margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .et-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+  .etb { border: 1px dashed rgba(177,69,94,0.45); border-radius: 9px; padding: 10px 12px; background: rgba(177,69,94,0.04); }
+  .etb-kind { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #8a2d3a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .etb-det { margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .et-levers { display: flex; flex-direction: column; gap: 8px; max-width: 96ch; }
+  .etl { display: flex; gap: 11px; align-items: flex-start; border: 1px solid rgba(28,22,17,0.12); border-radius: 9px; padding: 10px 13px; background: rgba(255,255,255,0.4); }
+  .etl-n { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--ink, #1c1611); color: var(--paper, #f1ead6);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+  .etl-name { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: 13.5px; color: var(--ink, #1c1611); margin-bottom: 2px; }
+  .etl-what { display: block; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); }
+
+  /* 10 · agendas */
   .ag-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; }
   .ag { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--ac); border-radius: 10px; padding: 12px 14px;
     background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }

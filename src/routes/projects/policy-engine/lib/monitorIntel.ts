@@ -35,8 +35,13 @@ export const SUBSID_NOTES: Record<string, SubsidNote> = {
     research: 'The ladder is the subsidiarity question made technical: each rung moves custody away from the centre while preserving the analytical view. DfE currently operates almost entirely on rung 1; health has proven rung 4 at scale. The least-extractive method that meets the purpose should be the default — today the most-extractive is.',
     eli5: 'There are at least five ways to learn from data without taking it. Schools data uses the most grabby one almost everywhere; the NHS has proven the least grabby one works.',
   },
-  agendas: {
+  edtech: {
     act: '9',
+    research: 'The clearest application of this page’s test: central extraction of edtech data would be exactly wrong — the records should stay with vendors and schools. The centre’s legitimate tools are standards (the spine’s open APIs), procurement terms, and PURCHASED aggregate readouts — a national view assembled from data the centre never holds. The COVID Star study showed the pattern; the task is making it standing policy rather than crisis response.',
+    eli5: 'This is the easiest call on the whole page: the government shouldn’t hoover up the apps’ data. It should set the plumbing rules, use its buying power, and pay for honest national summaries — learning from the data without ever taking it.',
+  },
+  agendas: {
+    act: '10',
     research: 'Every agenda on this map increases the gravitational pull toward central linkage — the SUI, the spine, the NDL. None of them yet states a custody principle. Absent one, “join up” drifts into “collect everything”, and the 2012–2022 trust ledger repeats at larger scale.',
     eli5: 'All these big plans pull data toward the centre. None of them says where the limit is — and without a limit, history suggests the centre keeps taking.',
   },
@@ -281,3 +286,111 @@ export const SUBSID_PRINCIPLES = {
   research: 'A non-paternal posture in one paragraph: collect centrally only where national comparability or allocation genuinely requires it; otherwise fund and host sector-owned capability (the Data to Insight pattern); prefer the least-extractive rung of the ladder that meets the purpose; publish every share and every algorithm; and treat schools, trusts and LAs as analytical peers — sources of questions, not just sources of data. The white paper’s spine can still be built either way. The architecture decision IS the posture decision.',
   eli5: 'The fair rule of thumb: the centre should only take data when the whole country genuinely needs the same numbers — like sharing out money. Everything else: pay for good local tools, let councils and schools keep their own data, use clever methods that answer questions without taking copies, and publish everything you do take. Whether the new “data spine” respects that rule is being decided right now.',
 };
+
+// ---------------------------------------------------------------------------
+// 9 · The shadow estate — the edtech market as an intelligence asset
+// (research dossier 2026-06-10: products, data captured, precedents, barriers)
+// ---------------------------------------------------------------------------
+export const EDTECH_THESIS = {
+  research: 'England already runs a de-facto national learning-measurement system: ~1.2m pupils’ reading behaviour (Renaissance), 2m+ secondary maths learners’ question-level work (Sparx), cognitive baselines in two-thirds of secondaries (GL), national writing benchmarks (No More Marking), 400k wellbeing responses a year (Edurio) and a 50%-share MIS group. It is privately owned and consolidating into US/private-equity hands, legally fenced by the processor/controller fiction, technically unjoined for want of standards and an identifier — and published as national intelligence only when a vendor’s marketing calendar or a national crisis demands it.',
+  eli5: 'The apps schools already use quietly measure more, more often, than the government ever does — every maths question answered, every book read, every detention logged. But that knowledge belongs to a handful of mostly American-owned companies, the systems don’t talk to each other, and the country only hears about it when a company fancies a press release.',
+};
+
+export interface EdtechCategory {
+  category: string;
+  colour: string;
+  entries: { name: string; scale: string; data: string }[];
+  signal: string;     // what this category could tell the system
+}
+
+export const EDTECH_ESTATE: EdtechCategory[] = [
+  {
+    category: 'Learning & homework telemetry', colour: '#2f6f97',
+    entries: [
+      { name: 'Sparx Maths', scale: '~2,600 schools · ~2.2m students', data: 'Question-level responses against a 45,000-item bank; weekly completion benchmarked school-vs-school; already runs a ~96,000-student national Year 7 baseline' },
+      { name: 'Eedi', scale: '60,000+ diagnostic questions', data: 'Every wrong answer tagged to a specific misconception — and the field’s best open-data precedent (17m+ answer records released for the NeurIPS 2020 challenge)' },
+      { name: 'Satchel One / TT Rock Stars', scale: '~1 in 3 secondaries · 16,000+ schools', data: 'Homework set/submission timing at national scale; per-fact times-tables fluency on most of the KS2 cohort' },
+    ],
+    signal: 'A live national map of what children can and can’t do, topic by topic, week by week — between the statutory tests.',
+  },
+  {
+    category: 'Reading & assessment', colour: '#3f7d6e',
+    entries: [
+      { name: 'Renaissance (AR + Star) + GL', scale: '1.21m pupils’ reading · ⅔ of secondaries’ CAT4 · 2m PASS surveys', data: 'Title-level reading volume and comprehension; the de-facto national cognitive baseline; attitudinal surveys — all under one US private-equity roof since the 2023 GL acquisition' },
+      { name: 'No More Marking', scale: '112,000-pupil national studies', data: 'Comparative-judgement writing ages, nationally benchmarked six times a year — in the one core subject with NO statutory measure between Year 6 moderation cycles' },
+      { name: 'NFER tests / Smartgrade / MARK', scale: '“thousands of schools” termly', data: 'Standardised termly attainment against 60,000-pupil reference samples; nationally benchmarked mock SATs' },
+    ],
+    signal: 'Termly subject-level attainment signal that already exists — the in-year readout the statutory system lacks.',
+  },
+  {
+    category: 'Behaviour, safeguarding & pastoral', colour: '#b1455e',
+    entries: [
+      { name: 'Tes (ClassCharts + MyConcern)', scale: 'school counts unpublished', data: 'Arguably England’s largest live behaviour-event dataset plus a major safeguarding log — and Tes has never published a national behaviour-trend analysis from it' },
+      { name: 'CPOMS (Raptor, US)', scale: '14,000+ schools at acquisition', data: 'Safeguarding incident logs — acquired by a US school-security firm in 2021 with no public-interest data conditions' },
+    ],
+    signal: 'The behaviour and safeguarding weather-map nobody publishes — the dogs that didn’t bark.',
+  },
+  {
+    category: 'Engagement, wellbeing & the household edge', colour: '#7a5aa6',
+    entries: [
+      { name: 'ImpactEd (TEP)', scale: '100,000+ pupils, ~200 schools', data: 'Termly engagement tracking — already shown to predict subsequent absence; documented the “age-11 dip” (enjoyment 6.0→3.2 from Y6 to Y8)' },
+      { name: 'Edurio', scale: '~400,000 responses/yr, 2,000+ schools', data: 'The largest national education survey benchmarks in England — staff, pupil and parent voice' },
+      { name: 'ParentPay Group (incl. SIMS)', scale: '20,000+ schools · 3.6m payments/day', data: 'Household hardship signal (meal balances, trip non-payment) at national scale — plus, since acquiring ESS, the legacy MIS estate' },
+    ],
+    signal: 'The leading indicators — engagement and hardship move before attendance and attainment do.',
+  },
+];
+
+export const EDTECH_PRECEDENTS: { name: string; what: string; eli5: string }[] = [
+  {
+    name: 'The COVID learning-loss series — the canonical proof',
+    what: 'When statutory tests were cancelled, DfE commissioned Renaissance + EPI to measure national learning loss from 400,000+ Star assessments — in-year, regionally broken down, properly reweighted. A commercial platform’s telemetry answered a national question the state’s own instruments could not.',
+    eli5: 'During COVID, with exams cancelled, the government simply bought the answer from a homework app’s data — and it worked.',
+  },
+  {
+    name: 'What Kids Are Reading — vendor telemetry as annual national intelligence',
+    what: 'Renaissance has published it since 2008; the 2025 edition covers 1.21m pupils and 25m books, tracking the 4% year-on-year decline in reading volume. The longest-running example — driven by a marketing calendar, not a public duty.',
+    eli5: 'One company already publishes a yearly national report on what a million children read — because it’s good advertising.',
+  },
+  {
+    name: 'The early-warning prototype already ran',
+    what: 'ImpactEd’s Understanding Attendance joined 300,000+ pupils’ attendance records to 80,000 surveys and showed engagement scores predict subsequent absence — a working prototype of the leading-indicator system, built by a social enterprise, not the department.',
+    eli5: 'A small research company already proved you can spot children drifting away from school before the register shows it.',
+  },
+  {
+    name: 'The dogs that didn’t bark',
+    what: 'Tes has never published national behaviour trends from ClassCharts; no DfE access to Google/Microsoft usage telemetry has ever been evidenced; writing has no statutory in-year measure and the private fill-in (No More Marking) found Year 7s “22 months behind” post-COVID. The richest signals are the least visible.',
+    eli5: 'The biggest datasets — behaviour logs, Google Classroom activity — have never produced a single public national insight.',
+  },
+];
+
+export const EDTECH_BARRIERS: { kind: string; detail: string; eli5: string }[] = [
+  {
+    kind: 'Commercial enclosure',
+    detail: 'The consolidation chain: Renaissance acquired GL (2023), ParentPay acquired ESS/SIMS (2023), Raptor (US) acquired CPOMS (2021), Tes took ClassCharts (2016) and MyConcern (2023), Juniper rolled up 14 assessment products. No acquisition carried public-interest data conditions — the CMA cleared ParentPay/ESS with no data-access remedy. Fragmented per-school procurement means no national licence, therefore no national data terms.',
+    eli5: 'A few firms — mostly American-owned — have been buying up the companies that hold children’s learning data, and nobody attached any “the public gets something” strings to the deals.',
+  },
+  {
+    kind: 'Legal fictions and a trust deficit',
+    detail: 'Vendors contract as “processors” with schools as “controllers” of processing schools cannot in practice comprehend or control — schools carry the liability, vendors keep the asset. The ICO’s Children’s Code edtech audit programme and defenddigitalme’s April 2026 critique (naming the Content Store and the aggregator pipes) define the scrutiny any new flow inherits — on top of DfE’s own 2020 audit legacy.',
+    eli5: 'On paper schools are “in charge” of the data; in reality they can’t see or control what the apps do with it — but they carry the blame. Regulators and campaigners are watching closely.',
+  },
+  {
+    kind: 'No standards, no identifier',
+    detail: 'England has no Ed-Fi/Caliper-style interoperability standard in common use; the aggregators (Wonde, Groupcall) are private toll bridges; and the UPN is legally restricted from non-educational use, so platforms key on emails and internal IDs — making cross-platform or platform-to-NPD linkage impossible by design. The data spine’s open-standards commitment is the once-a-decade chance to fix this, and its standards are unspecified as of June 2026.',
+    eli5: 'The apps can’t talk to each other and don’t share a common pupil ID — so the pieces can’t be joined even where everyone wants to. The new “data spine” could fix this, if its rules are written right.',
+  },
+  {
+    kind: 'Statistical honesty',
+    detail: 'Every platform footprint is self-selected (AR skews primary, Sparx secondary); usage ≠ learning (Sparx’s headline association is correlational); reach ≠ use (Oak: 72% of schools, but only 11–13% of teachers on survey); and platform-gaming is a known practitioner phenomenon with no rigorous England study. National inference requires reweighting against the school census — only the DfE/EPI Star study did it properly.',
+    eli5: 'The numbers flatter: schools choose these apps (so they’re not a fair sample), using an app isn’t the same as learning, and children game them. The data is useful — but only with honest statistics.',
+  },
+];
+
+export const EDTECH_LEVERS: { name: string; what: string }[] = [
+  { name: 'A standing in-year telemetry purchase', what: 'Make the COVID Star/EPI model permanent: procure reweighted termly readouts from the big panels (Star, Sparx baselines, GL, NMM) — with WRITING, the subject with no statutory measure, the highest-value gap to fill first.' },
+  { name: 'An early-warning pilot, aggregates first', what: 'Homework-submission decay + behaviour-event drift, joined to the daily attendance feed AT SCHOOL LEVEL — the leading-indicator stack ImpactEd prototyped, designed deliberately below the individual-flagging threshold the failure gallery warns about.' },
+  { name: 'A national misconception map', what: 'Eedi’s tagged misconceptions + Sparx’s question-level analysis against Oak’s open curriculum taxonomy: which specific errors are rising, by year group and region — a thing no statutory instrument can see, and Eedi’s NeurIPS release proves shareable.' },
+  { name: 'Testbeds as evaluation infrastructure', what: 'The £23m EdTech Testbeds (1,000+ schools from Sept 2026) plus EEF’s platform trials make platforms the cheapest RCT vehicle in education. The design choice to influence NOW: standardised outcome measurement across products.' },
+  { name: 'The procurement lever — a “WKAR clause”', what: 'Through the spine’s standards and framework listing, not legislation: open export APIs as a condition of listing; school-controlled portability; and an aggregate-statistics duty on vendors above a usage threshold — if you hold half a million pupils’ data, you publish audited national aggregates annually.' },
+];
