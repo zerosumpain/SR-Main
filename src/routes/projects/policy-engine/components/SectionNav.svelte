@@ -30,7 +30,7 @@
     <span class="grp-lab" aria-hidden="true">Field studies</span>
     {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
-    <a class="tab memo" class:active={active(MEMO.href)} href={MEMO.href} title="The capstone — every field study synthesised into one decision memo">✎ {MEMO.label}</a>
+    <a class="tab memo" class:active={active(MEMO.href)} href={MEMO.href} title="The synthesis — what the field studies add up to, in one place">✎ {MEMO.label}</a>
     <a class="tab method" class:active={active(METHOD.href)} href={METHOD.href} title="The explainer — how the engine works (not part of the walk-through)">⚙ {METHOD.label}</a>
   </nav>
   <div class="detail" role="group" aria-label="Explanation detail">

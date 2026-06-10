@@ -16,23 +16,16 @@
 <svelte:head><title>The memo · Education Policy Modelling</title></svelte:head>
 
 <div class="pe-route">
-  <!-- ===================== memo head ===================== -->
-  <header class="memo-head">
-    <div class="mh-top">
-      <span class="mh-class">DECISION MEMO · SYNTHESIS OF FIELD STUDIES №1–7</span>
-      <span class="mh-stamp">{MEMO_META.stamp}</span>
-    </div>
-    <div class="mh-fields">
-      <div class="mh-f"><span class="mh-k">To</span><span class="mh-v">{MEMO_META.to}</span></div>
-      <div class="mh-f"><span class="mh-k">From</span><span class="mh-v">{MEMO_META.from}</span></div>
-      <div class="mh-f"><span class="mh-k">Date</span><span class="mh-v">{MEMO_META.date}</span></div>
-      <div class="mh-f re"><span class="mh-k">Re</span><span class="mh-v re-v">{MEMO_META.re}</span></div>
-    </div>
+  <!-- ===================== head ===================== -->
+  <header class="syn-head">
+    <span class="sh-tag">SYNTHESIS · FIELD STUDIES №1–7</span>
+    <h1 class="sh-title">{MEMO_META.title}</h1>
+    <p class="sh-sub">{MEMO_META.subtitle}</p>
   </header>
 
-  <!-- ===================== recommendation ===================== -->
+  <!-- ===================== headline finding ===================== -->
   <section class="block">
-    <h2 class="pe-h2">Recommendation</h2>
+    <h2 class="pe-h2">The headline finding</h2>
     <div class="bluf">
       <p>{eli ? MEMO_META.bluf.eli5 : MEMO_META.bluf.research}</p>
     </div>
@@ -40,7 +33,7 @@
 
   <!-- ===================== the case ===================== -->
   <section class="block">
-    <h2 class="pe-h2">The case — six findings</h2>
+    <h2 class="pe-h2">What the evidence shows — six findings</h2>
     <p class="cap">
       {eli
         ? 'Each finding comes from one of the field studies on this site. Click through for the full evidence.'
@@ -62,11 +55,11 @@
 
   <!-- ===================== the moves ===================== -->
   <section class="block">
-    <h2 class="pe-h2">The moves — thirteen, ranked, grouped by what unlocks them</h2>
+    <h2 class="pe-h2">The improvements — thirteen, grouped by what unlocks them</h2>
     <p class="cap">
       {eli
-        ? 'Everything this site recommends, in one list. Blue = could start now. Amber = waits for the new child ID. Purple = needs a money or ministerial decision.'
-        : 'The complete recommendation set, deduped across the field studies. Grouping is by UNLOCK, not by theme: what needs nothing, what the CWS Act identifier enables, and what is genuinely a Spending Review decision. Cost tiers are indicative (£ = specification/publication work · ££ = a programme · £££ = infrastructure).'}
+        ? 'Every improvement the field studies identified, in one list. Blue = possible now. Amber = waits for the new child ID. Purple = needs a money decision.'
+        : 'The complete improvement set, deduped across the field studies. Grouping is by UNLOCK, not by theme: what requires nothing new, what the CWS Act identifier enables, and what is genuinely a resource decision. Cost tiers are indicative (£ = specification/publication work · ££ = a programme · £££ = infrastructure).'}
     </p>
     {#each HORIZONS as h (h)}
       <div class="mv-grp">
@@ -122,7 +115,7 @@
 
   <!-- ===================== the don'ts ===================== -->
   <section class="block">
-    <h2 class="pe-h2">What we are not recommending</h2>
+    <h2 class="pe-h2">What the history cautions against</h2>
     <div class="donts-grid">
       {#each MEMO_DONTS as d (d.title)}
         <div class="dont">
@@ -135,7 +128,7 @@
 
   <!-- ===================== decision requested ===================== -->
   <section class="block">
-    <h2 class="pe-h2">Decision requested</h2>
+    <h2 class="pe-h2">Sequencing — what comes first, and why</h2>
     <div class="decisions">
       {#each DECISIONS as d, i (d.ask)}
         <div class="dec">
@@ -145,7 +138,7 @@
       {/each}
     </div>
     <div class="one-sentence">
-      <span class="os-lab">{eli ? 'The whole memo in one line' : 'The offer, in one sentence'}</span>
+      <span class="os-lab">{eli ? 'The whole page in one line' : 'The throughline, in one sentence'}</span>
       <p>{eli ? ONE_SENTENCE.eli5 : ONE_SENTENCE.research}</p>
     </div>
   </section>
@@ -157,21 +150,13 @@
   .block { margin: 34px 0; }
   .cap { margin: 0 0 16px; font-size: 14.5px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 92ch; }
 
-  /* memo head */
-  .memo-head { margin: 26px 0 8px; border: 1.5px solid rgba(28,22,17,0.65); border-radius: 4px; background: rgba(255,255,255,0.5); max-width: 96ch; }
-  .mh-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-    padding: 8px 16px; border-bottom: 1px solid rgba(28,22,17,0.35); }
-  .mh-class { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.18em; color: rgba(28,22,17,0.55); }
-  .mh-stamp { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #8a2d3a;
-    border: 1.5px solid #8a2d3a; border-radius: 3px; padding: 3px 9px; transform: rotate(-1.6deg); background: rgba(177,69,94,0.05); }
-  .mh-fields { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 5px; }
-  .mh-f { display: flex; gap: 12px; align-items: baseline; }
-  .mh-k { flex: 0 0 44px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(28,22,17,0.5); }
-  .mh-v { font-family: 'DM Sans', sans-serif; font-size: 13.5px; color: var(--ink, #1c1611); }
-  .mh-f.re { margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(28,22,17,0.25); }
-  .re-v { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(17px, 2.6vw, 22px); line-height: 1.25; }
+  /* head */
+  .syn-head { margin: 28px 0 8px; max-width: 96ch; }
+  .sh-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.18em; color: rgba(28,22,17,0.5); }
+  .sh-title { margin: 8px 0 6px; font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(26px, 4.5vw, 40px); line-height: 1.1; color: var(--ink, #1c1611); }
+  .sh-sub { margin: 0; font-size: 14.5px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 80ch; }
 
-  /* recommendation */
+  /* headline finding */
   .bluf { border: 1.5px solid rgba(47,125,79,0.5); border-left: 5px solid #2f7d4f; border-radius: 10px;
     background: rgba(47,125,79,0.06); padding: 16px 20px; max-width: 96ch; }
   .bluf p { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(15px, 2.2vw, 18px); line-height: 1.55; color: var(--ink, #1c1611); }

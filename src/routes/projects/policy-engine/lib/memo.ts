@@ -4,14 +4,11 @@
 // the history teaches, and the decision requested. Self-contained.
 
 export const MEMO_META = {
-  to: 'The Secretary of State for Education',
-  from: 'Field Studies №1–7 (this site)',
-  date: 'June 2026',
-  re: 'The Department’s data value-offer to the children’s system',
-  stamp: 'PERSONAL ANALYSIS · NOT GOVERNMENT POLICY',
+  title: 'The synthesis',
+  subtitle: 'What seven field studies add up to — the improvements to England’s children’s-data system with the highest leverage and the lowest cost, in one place.',
   bluf: {
-    research: 'Reposition the Department’s data role from the system’s biggest collector to its STEWARD — its standards body, its identity infrastructure and its convenor. Fund the joins, not a database. The first-year cost is specification work and single-digit millions; the proven alternative is building the machinery, dismantling it, and commissioning the next review into why information wasn’t shared.',
-    eli5: 'Stop trying to gather all the information in one place. Instead: write the common rules, run the “is this the same child?” service, and pay for the small organisations that help everyone share. It’s cheap, and it fixes the joins where children actually fall through.',
+    research: 'The pattern across all seven studies: the highest-leverage improvements are STEWARDSHIP functions — common standards, identity infrastructure, convening, and funding the connective tissue — rather than expanded central collection. Most of what is missing is specification and publication work over data the state already holds; the recurring failure mode, documented twice in the historical record, is building central machinery instead.',
+    eli5: 'Across all seven studies, the same answer keeps appearing: the biggest improvements come from writing common rules, joining records up, and funding the small organisations that help everyone share — not from gathering more data into one place. Most of the fixes are cheap, because the data already exists.',
   },
 };
 
@@ -70,9 +67,9 @@ export const MEMO_CASE: Finding[] = [
 export type Horizon = 'now' | 'identifier' | 'sr';
 
 export const HORIZON_META: Record<Horizon, { label: string; eli5: string; colour: string }> = {
-  now:        { label: 'Start now — no new law, no new collection', eli5: 'Could start this term', colour: '#2f6f97' },
-  identifier: { label: 'As the identifier lands (CWS Act 2026)', eli5: 'When the new child ID arrives', colour: '#9a7b1f' },
-  sr:         { label: 'Decisions for the next Spending Review', eli5: 'Needs a money decision', colour: '#7a5aa6' },
+  now:        { label: 'No new law or collection needed', eli5: 'Could start any time', colour: '#2f6f97' },
+  identifier: { label: 'Enabled by the identifier (CWS Act 2026)', eli5: 'Possible once the new child ID arrives', colour: '#9a7b1f' },
+  sr:         { label: 'Requires a funding or policy decision', eli5: 'Needs a money decision first', colour: '#7a5aa6' },
 };
 
 export interface Move {
@@ -168,7 +165,7 @@ export const MOVES: Move[] = [
     n: 11, title: 'Flip FSM to auto-enrolment', horizon: 'sr', cost: '£',
     what: 'The DWP/HMRC eligibility pipe already runs; from September 2026 every Universal Credit household is eligible, making entitlement trivially inferable. Auto-enrolment feeds ~215,000 missed children and corrects the disadvantage measure beneath half the Department’s own statistics.',
     eli5: 'Stop making parents fill in forms the computer can already answer. Children get fed; the poverty statistics get honest.',
-    owner: 'Ministerial decision (DfE + DWP)',
+    owner: 'Policy decision (DfE + DWP)',
     evidence: { label: 'Jigsaw — FSM auto-enrolment', href: '/projects/policy-engine/jigsaw' },
   },
   {
@@ -297,24 +294,24 @@ export const MEMO_DONTS: { title: string; why: string; eli5: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Decision requested
+// Sequencing — what the analysis suggests comes first
 // ---------------------------------------------------------------------------
 export const DECISIONS: { ask: string; eli5: string }[] = [
   {
-    ask: 'Agree the posture: the Department repositions from the system’s biggest collector to its steward — standards body, identity infrastructure, convenor — and tests every new collection against the subsidiarity questions.',
-    eli5: 'Agree the new job description: rule-writer and join-maker, not data hoarder.',
+    ask: 'The posture question comes before any individual build: whether the centre’s data role is collector or steward determines the design of everything else, and the subsidiarity test is the practical form of that choice.',
+    eli5: 'First settle the job description — rule-writer and join-maker, or data gatherer — because everything else follows from it.',
   },
   {
-    ask: 'Commission this year’s reversible wins: the safeguarding-transfer and MASH specifications, the registers schema, the attendance early-warning pilot, and the already-held publications (moves 1–3, 5–6).',
-    eli5: 'Start the cheap, safe things now — they’re mostly writing rules and publishing what we already have.',
+    ask: 'The reversible, low-cost items stand on their own merits regardless of wider reform: the safeguarding-transfer and MASH specifications, the registers schema, the attendance early-warning use, and publications over data already held (improvements 1–3, 5–6, 13).',
+    eli5: 'The cheap, safe items don’t need to wait for anything — they’re mostly writing rules and publishing what already exists.',
   },
   {
-    ask: 'Put two items to the Spending Review: the connective-tissue endowment (single-digit £m/yr) and FSM auto-enrolment — and tie identifier-dependent builds (moves 7–10) to the CWS Act commencement timetable.',
-    eli5: 'Ask for the two small money decisions, and line the bigger builds up behind the new child ID.',
+    ask: 'Two items are genuinely resource decisions — the connective-tissue endowment (single-digit £m/yr) and FSM auto-enrolment — while the identifier-dependent builds (improvements 7–10) are naturally sequenced by the CWS Act commencement timetable.',
+    eli5: 'Two things cost real money and need a decision; the bigger technical builds simply queue behind the new child ID.',
   },
 ];
 
 export const ONE_SENTENCE = {
-  research: 'The Department stops being the system’s biggest collector and becomes its standards body, its identity infrastructure and its convenor — the steward of joins it never holds.',
-  eli5: 'The Department’s best offer isn’t holding everyone’s data — it’s making everyone’s data fit together.',
+  research: 'The recurring conclusion of the field studies: the centre adds most value as the system’s standards body, its identity infrastructure and its convenor — the steward of joins it never holds.',
+  eli5: 'The evidence keeps pointing the same way: the centre helps most by making everyone’s data fit together, not by holding it all.',
 };
