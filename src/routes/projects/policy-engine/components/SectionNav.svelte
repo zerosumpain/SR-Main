@@ -15,6 +15,7 @@
     { href: '/projects/policy-engine/monitor', label: 'Monitoring' },
     { href: '/projects/policy-engine/jigsaw', label: 'Jigsaw' },
     { href: '/projects/policy-engine/neet', label: 'NEET' },
+    { href: '/projects/policy-engine/send', label: 'SEND' },
   ];
   const MEMO = { href: '/projects/policy-engine/memo', label: 'The Memo' };
   const METHOD = { href: '/projects/policy-engine/method', label: 'How it works' };

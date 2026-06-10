@@ -69,6 +69,18 @@ export const STORIES: Record<string, Story> = {
       'An endowed standards layer — iStandUK, SAVVI and Open Referral UK currently run on parish-newsletter grants',
     ],
   },
+  send: {
+    no: 7, route: '/projects/policy-engine/send',
+    theme: 'The £12bn blind spot',
+    question: 'How did the costliest subsystem in education end up flying blind?',
+    thesis: 'SEND is the system’s fastest-growing cost and its weakest feedback loop: nine years of statutory plans the state could not see at child level, no data on provision delivered or outcomes by placement, and demand legible only through a tribunal that rules for families 99% of the time. The fiscal cliff is an information failure compounding a funding one.',
+    thesisEli5: 'Special-needs support is the most expensive part of the school system — and the part the government can see least. It doesn’t know who’s waiting, whether help arrives, or what works; the only reliable signal is courts ruling against councils 99 times in 100.',
+    dataAsk: [
+      'A machine-readable SEND record standard shipped WITH the new statutory digital ISPs — the artefact cancelled in 2025, finished under its new name',
+      'Monthly EHCP pipeline reporting per LA, joined to the health-side autism/ADHD/SLT queues',
+      'The placement-outcomes question made answerable: ECHILD-grade linkage + provision-delivered data, before the 2030 transition',
+    ],
+  },
   neet: {
     no: 6, route: '/projects/policy-engine/neet',
     theme: 'The early-warning system',

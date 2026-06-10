@@ -19,7 +19,7 @@
   <!-- ===================== memo head ===================== -->
   <header class="memo-head">
     <div class="mh-top">
-      <span class="mh-class">DECISION MEMO · SYNTHESIS OF FIELD STUDIES №1–6</span>
+      <span class="mh-class">DECISION MEMO · SYNTHESIS OF FIELD STUDIES №1–7</span>
       <span class="mh-stamp">{MEMO_META.stamp}</span>
     </div>
     <div class="mh-fields">
@@ -40,7 +40,7 @@
 
   <!-- ===================== the case ===================== -->
   <section class="block">
-    <h2 class="pe-h2">The case — five findings</h2>
+    <h2 class="pe-h2">The case — six findings</h2>
     <p class="cap">
       {eli
         ? 'Each finding comes from one of the field studies on this site. Click through for the full evidence.'
@@ -62,7 +62,7 @@
 
   <!-- ===================== the moves ===================== -->
   <section class="block">
-    <h2 class="pe-h2">The moves — twelve, ranked, grouped by what unlocks them</h2>
+    <h2 class="pe-h2">The moves — thirteen, ranked, grouped by what unlocks them</h2>
     <p class="cap">
       {eli
         ? 'Everything this site recommends, in one list. Blue = could start now. Amber = waits for the new child ID. Purple = needs a money or ministerial decision.'

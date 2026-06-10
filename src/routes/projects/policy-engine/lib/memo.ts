@@ -5,7 +5,7 @@
 
 export const MEMO_META = {
   to: 'The Secretary of State for Education',
-  from: 'Field Studies №1–6 (this site)',
+  from: 'Field Studies №1–7 (this site)',
   date: 'June 2026',
   re: 'The Department’s data value-offer to the children’s system',
   stamp: 'PERSONAL ANALYSIS · NOT GOVERNMENT POLICY',
@@ -55,6 +55,12 @@ export const MEMO_CASE: Finding[] = [
     research: 'A half-month move in the disadvantage gap is tens of thousands of real children, each carrying LEO-derived lifetime-earnings and exchequer consequences. And place carries a residual poverty does not explain: London’s escape, the North East’s decay, the coastal penalty.',
     eli5: 'Percentages hide real children — and real money over their lifetimes. Where a child grows up matters beyond how poor their family is.',
     link: { label: 'Field Studies №1–2 — Population & Regions', href: '/projects/policy-engine/population' },
+  },
+  {
+    point: 'The costliest subsystem is also the least instrumented.',
+    research: 'High-needs spending has risen 58% in real terms to £10.7bn while outcomes have not improved; deficits of £3–4.6bn (estimates disagree — itself a finding) sit behind an accounting override. Underneath: statutory-plan data that was child-invisible until 2023, 153 EHCP formats, no measure of provision delivered, and a tribunal ruling for families 99% of the time as the system’s only working feedback loop.',
+    eli5: 'Special-needs support costs the most and is measured the least. The state doesn’t know who’s waiting, whether help arrives, or what works — and the courts rule against councils 99 times in 100.',
+    link: { label: 'Field Study №7 — SEND', href: '/projects/policy-engine/send' },
   },
 ];
 
@@ -122,6 +128,13 @@ export const MOVES: Move[] = [
     eli5: 'Several of the most useful statistics need no new data at all — just publishing what’s already in the database, joined up.',
     owner: 'DfE official statistics',
     evidence: { label: 'Population & Regions — the data asks', href: '/projects/policy-engine/population' },
+  },
+  {
+    n: 13, title: 'Ship the SEND record standard with the ISP duty', horizon: 'now', cost: '£',
+    what: 'The white paper puts a statutory digital Individual Support Plan into every nursery, school and college. Publish the machine-readable record standard BEFORE the duty commences — the cancelled 2023–25 digital-EHCP work is sitting in DfE’s own design history — or 153 EHCP formats become 153 ISP formats.',
+    eli5: 'New digital support plans are coming anyway. Agree one format before every council invents its own — again.',
+    owner: 'DfE SEND + standards team',
+    evidence: { label: 'SEND — the information crisis', href: '/projects/policy-engine/send' },
   },
   {
     n: 7, title: 'Build identity resolution as shared infrastructure', horizon: 'identifier', cost: '£££',
@@ -232,13 +245,23 @@ export const INSTRUMENTS: Instrument[] = [
   },
   {
     name: 'EHCP assessment-pipeline reporting',
-    today: 'Annual January snapshot; the queue of waiting families barely published', target: 'Monthly pipeline — demand is the leading indicator, prevalence the lagging one',
-    owner: 'DfE SEND', cost: '£', study: { label: 'The Briefing', href: '/projects/policy-engine/outcomes' },
+    today: 'Annual January snapshot; the queue of waiting families barely published; no national ADHD wait count exists at all', target: 'Monthly pipeline per LA, joined to the health-side assessment queues',
+    owner: 'DfE SEND + NHSE', cost: '£', study: { label: 'SEND', href: '/projects/policy-engine/send' },
+  },
+  {
+    name: 'Child-level SEND record standard (ISP/EHCP)',
+    today: '153 LA templates; the standardised digital EHCP cancelled in 2025 (“never completed”)', target: 'One machine-readable standard, shipped with the statutory ISP duty',
+    owner: 'DfE SEND + standards', cost: '£', study: { label: 'SEND', href: '/projects/policy-engine/send' },
+  },
+  {
+    name: 'Provision-delivered & placement-outcomes data',
+    today: 'No collection records what a plan delivers or how placements compare; the white paper’s inclusion claim rests on contested comparisons', target: 'ISP-collected delivery data + an ECHILD-grade placement-outcomes study before the 2030 transition',
+    owner: 'DfE + ADR UK', cost: '££', study: { label: 'SEND', href: '/projects/policy-engine/send' },
   },
   {
     name: 'In-year high-needs spend visibility',
-    today: 'DSG deficits in accounts a year+ late, held off-book by the statutory override', target: 'Quarterly high-needs spend vs budget by LA, published',
-    owner: 'DfE + MHCLG', cost: '£', study: { label: 'The Briefing', href: '/projects/policy-engine/outcomes' },
+    today: 'DSG deficits in accounts a year+ late, held off-book by the statutory override; estimates of the national deficit disagree by £1.5bn', target: 'Quarterly high-needs spend vs budget by LA, published',
+    owner: 'DfE + MHCLG', cost: '£', study: { label: 'SEND', href: '/projects/policy-engine/send' },
   },
   {
     name: 'Termly teacher-vacancy signal',
