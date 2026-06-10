@@ -58,11 +58,11 @@ export const TIMELINE: TimelineEvent[] = [
     url: 'https://www.legislation.gov.uk/ukpga/2026/21/enacted',
   },
   {
-    date: '21 May 2026', t: 1.0, tag: 'spine',
-    title: 'A £200k DG hired to build it',
-    what: 'DfE posts a Director General for Digital and Infrastructure (up to £200,000) whose remit explicitly includes “creating a powerful data spine” and oversight of the single-identifier policy — steering both together.',
-    eli5: 'A senior £200k boss is hired to actually make the spine happen.',
-    url: 'https://www.edtechinnovationhub.com/news/englands-dfe-creates-200000-digital-and-ai-role-covering-data-cyber-estates-and-school-safety',
+    date: 'mid-2026', t: 1.0, tag: 'spine',
+    title: 'Pre-delivery: the design is still open',
+    what: 'DfE digital leadership now owns delivery of the spine and the single-identifier policy together — but as of June 2026 no architecture, procurement or delivery plan has been published. The custody question (connect vs collect) remains undecided.',
+    eli5: 'The government has put people in charge of building the spine — but nothing has been designed or bought yet, so the big choices are still open.',
+    url: 'https://dfedigital.blog.gov.uk/',
   },
 ];
 
