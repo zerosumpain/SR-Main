@@ -13,6 +13,7 @@
 </script>
 
 <div class="tc">
+  <div class="tc-scroll">
   <svg viewBox="0 0 760 260" role="img" aria-label="NEET rate by single year of age, 16 to 24, with the age-18 tracking dark zone">
     <!-- the dark zone: tracking duty ends at 18 -->
     <defs>
@@ -43,6 +44,7 @@
     <text x={(X0 + X1) / 2} y={Y1 + 33} class="ax-title">→ age</text>
     <text x={16} y={(Y0 + Y1) / 2} class="ax-title" transform="rotate(-90 16 {(Y0 + Y1) / 2})">→ % NEET at that age</text>
   </svg>
+  </div>
   <p class="tc-note">
     {eli
       ? 'When do young people fall out? Hardly any at 16–17, while councils are still required to keep track. The cliff comes at 18 — the exact age the tracking duty ends — and from there the rate never comes back down.'
@@ -52,7 +54,9 @@
 
 <style>
   .tc { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; }
-  .tc svg { display: block; width: 100%; height: auto; }
+  /* keep annotation text legible on phones: scroll sideways rather than shrink */
+  .tc-scroll { overflow-x: auto; }
+  .tc svg { display: block; width: 100%; min-width: 560px; height: auto; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
   .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
   .ax-x { text-anchor: middle; } .ax-y { text-anchor: end; }

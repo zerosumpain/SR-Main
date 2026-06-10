@@ -23,6 +23,7 @@
 </script>
 
 <div class="nm">
+  <div class="nm-scroll">
   <svg viewBox="0 0 760 250" role="img" aria-label="Quarterly survey measurement of NEET versus a hypothetical monthly admin-data nowcast">
     {#each [11, 12, 13, 14, 15] as g}
       <line x1={X0} x2={X1} y1={y(g)} y2={y(g)} class="grid" />
@@ -52,6 +53,7 @@
     <text x={x(2) + 10} y={y(lfs[0].v) + 22} class="cl lfs">{eli ? 'what we actually get: a wobbly survey, late' : 'LFS: quarterly, ±0.9pp, published ~6 weeks late →'}</text>
     <text x={(X0 + X1) / 2} y={Y1 + 33} class="ax-title">→ months (illustrative)</text>
   </svg>
+  </div>
   <p class="nm-note">
     <b>{eli ? 'Pretend numbers, real contrast.' : 'Illustrative series — the contrast is the exhibit.'}</b>
     {eli
@@ -62,7 +64,9 @@
 
 <style>
   .nm { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; }
-  .nm svg { display: block; width: 100%; height: auto; }
+  /* keep label text legible on phones: scroll sideways rather than shrink */
+  .nm-scroll { overflow-x: auto; }
+  .nm svg { display: block; width: 100%; min-width: 560px; height: auto; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
   .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
   .ax-x { text-anchor: middle; } .ax-y { text-anchor: end; }

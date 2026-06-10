@@ -3,13 +3,12 @@
 
   const STEPS = [
     { n: '1', t: 'Set the policy', d: 'Open the <b>Levers</b> on the left and drag the sliders — or pick a ready-made <b>Scenario</b> (Do nothing / What the government promised / Best value). The levers stay docked beside the data, so you can watch your changes land.' },
-    { n: '2', t: 'Watch the outcomes', d: 'The scorecard up top and the charts on <b>Outcomes</b> update live: the disadvantage gap, attainment, the SEND funding cliff, absence and youth unemployment — your package versus doing nothing.' },
-    { n: '3', t: 'Go deeper', d: '<b>Population</b> turns the results into real children and lifetime-earnings; <b>Regions</b> breaks them down by area; <b>Method</b> shows every calculation and source.' },
+    { n: '2', t: 'Read the Briefing', d: 'The charts on <b>The Briefing</b> update live: the disadvantage gap, attainment, the SEND funding cliff, absence and NEET — your package versus doing nothing.' },
+    { n: '3', t: 'Pull a thread', d: 'Each <b>Field Study</b> follows one story: <b>Population</b> turns rates into real children, <b>Regions</b> maps where the gap lives, <b>NEET</b> builds the early-warning case, and <b>Method</b> shows every calculation and source.' },
   ];
 
-  // Record when the user last saw the modal so it re-shows on a later visit (but not on every
-  // refresh during an active session). See the 15-minute window check in +layout.svelte.
-  function markSeen() { try { localStorage.setItem('epm-onboarded-at', String(Date.now())); } catch { /* ignore */ } }
+  // Seen once, dismissed for good — the "? How to use" button is the way back.
+  function markSeen() { try { localStorage.setItem('epm-onboarded', '1'); } catch { /* ignore */ } }
   function choose(mode: 'research' | 'eli5') {
     app.narrative = mode;
     try { localStorage.setItem('epm-narrative', mode); } catch { /* ignore */ }
@@ -22,7 +21,7 @@
 {#if app.showHelp}
   <div class="ob-backdrop" role="presentation" onclick={dismiss}>
     <div class="ob" role="dialog" aria-modal="true" aria-label="How to use Education Policy Modelling" onclick={(e) => e.stopPropagation()}>
-      <span class="ob-eyebrow">Field Study №4 · How to use it</span>
+      <span class="ob-eyebrow">Education Policy Modelling · How to use it</span>
       <h2 class="ob-h">A flight simulator for England’s schools</h2>
       <p class="ob-lede">
         Move the policies a government actually controls and watch what happens to the disadvantage gap — and to real children —

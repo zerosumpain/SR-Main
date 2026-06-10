@@ -197,8 +197,8 @@
   .tl { font-size: 11px; line-height: 1.35; color: rgba(28,22,17,0.65); }
   .tb { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.45); }
 
-  .tri-chart { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; }
-  .tri-chart svg { display: block; width: 100%; height: auto; }
+  .tri-chart { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
+  .tri-chart svg { display: block; width: 100%; min-width: 560px; height: auto; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
   .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
   .ax-x { text-anchor: middle; } .ax-y { text-anchor: end; }

@@ -46,9 +46,10 @@
       if (n === 'research' || n === 'eli5') app.narrative = n;
       const dm = localStorage.getItem('epm-drawer-mode');
       if (dm === 'closed' || dm === 'peek' || dm === 'full') { app.drawerMode = dm; app.drawerUserSet = true; }
-      // show for new users, and again on a return visit if it's been > 15 minutes since last seen
-      const at = Number(localStorage.getItem('epm-onboarded-at') || 0);
-      if (!at || Date.now() - at > 15 * 60 * 1000) app.showHelp = true;
+      // show ONCE for new users; an explicit dismissal persists for good (reopen via "? How to use").
+      // Back-compat: any legacy epm-onboarded-at timestamp counts as having seen it.
+      const seen = localStorage.getItem('epm-onboarded') === '1' || Number(localStorage.getItem('epm-onboarded-at') || 0) > 0;
+      if (!seen) app.showHelp = true;
     } catch { /* ignore */ }
     app.mounted = true;
   });
@@ -90,7 +91,7 @@
       <a class="back" href="/projects">← Field studies</a>
       <a class="brand" href="/projects/policy-engine">Education Policy Modelling</a>
       <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰ Levers</button>
-      <span class="tagline">FIELD STUDY №4 · ENGLAND SCHOOLS · 2025–2040</span>
+      <span class="tagline">ENGLAND SCHOOLS · 2025–2040</span>
       <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">? How to use</button>
     </header>
 
