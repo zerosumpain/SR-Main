@@ -121,7 +121,7 @@
           { title: 'NEET (16–24)', unit: '%', dp: 1, series: [
             { label: 'Headline — your', color: C_YOU, values: withHist('neet'), emphasis: true, band: bandFor('neet') },
             { label: 'Unemployed', color: '#2f6f97', values: proj('neetUnemployed') },
-            { label: 'Inactive (health)', color: '#7a5aa6', values: proj('neetInactiveHealth') },
+            { label: 'Inactive (health)', color: '#7a5aa6', values: proj('neetInactiveHealth'), band: bandFor('neetInactiveHealth') },
             { label: 'Inactive (other)', color: '#9a7b1f', values: proj('neetInactiveOther') },
             { label: 'Status quo', color: C_BASE, values: proj('neet', vb), dashed: true }] },
           { title: 'Teacher shortfall (6,500 pledge)', unit: 'k FTE — neg = surplus', dp: 1, zeroBased: true, series: [

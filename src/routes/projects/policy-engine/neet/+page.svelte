@@ -6,8 +6,13 @@
   import MeasurementPopover from '../components/MeasurementPopover.svelte';
   import { MEASUREMENT } from '../lib/measurement';
   import TriageSimulator from '../components/TriageSimulator.svelte';
+  import UpliftSimulator from '../components/UpliftSimulator.svelte';
+  import TransitionCurve from '../components/TransitionCurve.svelte';
+  import NowcastMock from '../components/NowcastMock.svelte';
   import DataEstateMap from '../components/DataEstateMap.svelte';
   import StakeholderMap from '../components/StakeholderMap.svelte';
+  import { selectEstateNode } from '../lib/estateSel.svelte';
+  import { ESTATE_BY_ID } from '../lib/dataestate';
   import { STORIES } from '../lib/stories';
   import {
     NEET_NOW, LA_SPREAD, LA_NOTE, LEO_NOTE, JOIN_SPOKES,
@@ -28,6 +33,7 @@
     { label: eli ? 'Looking for work' : 'Unemployed', color: '#2f6f97', values: app.viewSim.map((y) => y.neetUnemployed) },
     { label: eli ? 'Too unwell' : 'Inactive (health)', color: '#7a5aa6', values: app.viewSim.map((y) => y.neetInactiveHealth) },
     { label: eli ? 'Other reasons' : 'Inactive (other)', color: '#9a7b1f', values: app.viewSim.map((y) => y.neetInactiveOther) },
+    { label: eli ? 'Stuck 12+ months' : 'Long-term (12+ mo)', color: '#8a2d3a', values: app.viewSim.map((y) => y.neetLongTerm), dashed: true },
     { label: eli ? 'Do nothing new' : 'Status quo', color: 'rgba(28,22,17,0.42)', values: app.viewBase.map((y) => y.neet), dashed: true },
   ]);
   const neetAtH = $derived(app.viewSim.find((y) => y.year === app.horizon)?.neet ?? 0);
@@ -126,6 +132,14 @@
       </svg>
     </div>
     <div class="mrow"><MeasurementPopover m={MEASUREMENT.neetComposition} /></div>
+
+    <h3 class="sub-h">{eli ? 'When do they fall?' : 'When they fall — the transition curve'}</h3>
+    <p class="cap small">
+      {eli
+        ? 'The same million, sliced by age. Almost nobody is NEET at 16. The cliff is at 18 — the exact age the official tracking stops.'
+        : 'The hazard is not evenly spread: it concentrates at the 17→18 transition, and the rate then plateaus rather than recovering. Note where the hatching starts.'}
+    </p>
+    <TransitionCurve />
   </section>
 
   <!-- ===================== 2 · live model bridge ===================== -->
@@ -312,6 +326,9 @@
     </p>
     <DataEstateMap />
     <p class="offaxis">{LEO_NOTE}</p>
+
+    <h3 class="sub-h">{eli ? 'What faster data would look like' : 'The nowcast: what the estate could already tell us'}</h3>
+    <NowcastMock />
   </section>
 
   <!-- ===================== 7 · the join key ===================== -->
@@ -518,7 +535,15 @@
               <td class="num">{o.rank}</td>
               <td class="opp-name">{o.name}{#if o.frontier}<span class="front-tag">the frontier</span>{/if}</td>
               <td>{o.what}</td>
-              <td class="opp-needs">{o.needs}</td>
+              <td class="opp-needs">{o.needs}
+                {#if o.needIds?.length}
+                  <span class="need-chips">
+                    {#each o.needIds as nid (nid)}
+                      <button class="need-chip" onclick={() => selectEstateNode(nid)} title="Jump to this node on the estate map">▴ {ESTATE_BY_ID[nid].name}</button>
+                    {/each}
+                  </span>
+                {/if}
+              </td>
               <td class="opp-ev">{o.evidence}</td>
               <td class="opp-gov">{o.governance}</td>
             </tr>
@@ -526,6 +551,14 @@
         </tbody>
       </table>
     </div>
+
+    <h3 class="sub-h">{eli ? 'Try the frontier: pick who to help, two ways' : 'Try the frontier: risk-targeting vs uplift-targeting'}</h3>
+    <p class="cap small">
+      {eli
+        ? 'The bottom rung of the ladder, as a toy you can drive. Same money, same year-group — two ways of choosing who gets a programme place.'
+        : 'Rung 8, made tangible. The same synthetic cohort as the triage simulator — but now a budget buys programme places, and the choice of WHO gets them is the policy. Risk-ranking is today’s default; treatment-effect-ranking is what the YFF-RCT × LEO linkage would enable.'}
+    </p>
+    <UpliftSimulator />
 
     <h3 class="sub-h">{eli ? 'The non-negotiables' : 'The governance checklist — distilled from the failure gallery'}</h3>
     <div class="govgrid">
@@ -645,6 +678,10 @@
   .front-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #7a5aa6; margin-top: 2px; }
   tr.frontier td { background: rgba(122,90,166,0.06); }
   .opp-needs, .opp-gov { font-size: 11px; color: rgba(28,22,17,0.62); }
+  .need-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .need-chip { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: #3a5f5f; background: rgba(74,124,124,0.08);
+    border: 1px solid rgba(74,124,124,0.3); border-radius: 8px; padding: 1px 6px; cursor: pointer; white-space: nowrap; }
+  .need-chip:hover { background: rgba(74,124,124,0.18); border-color: #4a7c7c; }
   .opp-ev { font-size: 11px; }
   .govgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 9px; margin-bottom: 16px; }
   .gov { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: 1px solid rgba(47,125,79,0.3); border-radius: 8px; background: rgba(47,125,79,0.04); }

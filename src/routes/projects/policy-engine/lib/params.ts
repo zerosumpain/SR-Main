@@ -282,6 +282,18 @@ export const NEETSEG = {
   // health-segment stickiness: 8 in 10 health-inactive NEETs are still NEET 2+ yrs
   // later (Milburn) — modelled as a slower lever response on that stock
   healthLag: 4,
+  // ---- persistence (the long-term-NEET stock) ----
+  // Annual P(still NEET next year) per segment. Health calibrated to Milburn's 8-in-10
+  // over 2+ years (√0.8 ≈ 0.89, haircut for measurement); unemployed churns cyclically;
+  // 6 in 10 NEETs have never worked (up from 4 in 10 in 2005) — persistence is the story.
+  persist: {
+    unemployed: band(0.30, 0.40, 0.50),
+    health: band(0.78, 0.86, 0.93),
+    other: band(0.50, 0.60, 0.70),
+  },
+  // re-engagement levers act on the EXISTING stock, not just inflow:
+  persistCutU: band(0.05, 0.12, 0.22),   // absolute cut in unemployed persistence at full Youth/Jobs Guarantee [Youth Contract keyworker model]
+  persistCutIH: band(0.03, 0.08, 0.15),  // absolute cut in health persistence at full MH+CAMHS [ASSUMPTION — no UK estimate exists]
 };
 
 // Upstream pipeline pressure: pp of headline NEET per unit deviation of the modelled

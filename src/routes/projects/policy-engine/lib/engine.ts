@@ -91,6 +91,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
   let shortfall = BASELINE.teacherShortfall;
   let teachersFTE = POP.teachersFTE0;
   let cumulativeCost = 0;
+  // prior-year NEET segments, for the persistence (long-term) stock
+  let prevU = BASELINE.neetUnemployed, prevIH = BASELINE.neetInactiveHealth, prevIO = BASELINE.neetInactiveOther;
 
   // SEND/EHCP identification-by-age profile: constant across the horizon (levers are sustained).
   const idShift = earlyIdShift(levers);                                  // [0,1] front-loading vs baseline
@@ -341,6 +343,19 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
 
     const neet = neetUnemployed + neetInactiveHealth + neetInactiveOther;
 
+    // ---- persistence: the long-term (12+ month) NEET stock ----
+    // Of LAST year's stock, the share still NEET this year — per-segment persistence,
+    // with re-engagement levers acting on the EXISTING stock (not just inflow): the
+    // Youth/Jobs Guarantee keyworker model cuts unemployed persistence; MH + CAMHS
+    // chip the (much stickier) health persistence. [Milburn 2026: 6 in 10 never worked]
+    const pU = clamp(R(NEETSEG.persist.unemployed)
+      - R(NEETSEG.persistCutU) * concave(depPos('youth_guarantee')) * ramp(ys, 2), 0.10, 0.95);
+    const pIH = clamp(R(NEETSEG.persist.health)
+      - R(NEETSEG.persistCutIH) * concave(0.6 * depPos('mental_health') + 0.4 * depPos('camhs')) * ramp(ys, NEETSEG.healthLag), 0.30, 0.97);
+    const pIO = R(NEETSEG.persist.other);
+    const neetLongTerm = Math.min(0.9 * neet, pU * prevU + pIH * prevIH + pIO * prevIO);
+    prevU = neetUnemployed; prevIH = neetInactiveHealth; prevIO = neetInactiveOther;
+
     // ---------------- FUNDING per pupil ----------------
     // High-needs cost pressure above the 2025 level leaks from mainstream per-pupil funding.
     const sendLeak = ys > 0 ? 50 * Math.max(0, dsgSpend - 12.0) : 0;
@@ -408,7 +423,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       ehcpAttainment8, tribunalAppeals, insolvencyRisk,
       absenceOverall, persistentAbsence, persistentAbsenceDis, severeAbsence,
       teacherShortfall, teachersFTE, fundingPerPupil, childPoverty,
-      neet, neetUnemployed, neetInactiveHealth, neetInactiveOther,
+      neet, neetUnemployed, neetInactiveHealth, neetInactiveOther, neetLongTerm,
       annualCost, cumulativeCost,
     });
   }

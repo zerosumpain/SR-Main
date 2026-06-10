@@ -349,17 +349,19 @@ export const FAILURE_GALLERY: FailureCase[] = [
 // ---------------------------------------------------------------------------
 export interface OpportunityRung {
   rank: number; name: string; what: string; needs: string; evidence: string; governance: string; frontier?: boolean;
+  /** estate-map node ids this shape depends on (renders as jump-chips) */
+  needIds?: string[];
 }
 
 export const OPPORTUNITY_LADDER: OpportunityRung[] = [
-  { rank: 1, name: 'Validated weighted risk index', what: 'NERI-style weights, validated against LEO 5-year outcomes, distributed through OnTrack+/NCCIS.', needs: 'NPD + NCCIS + LEO (all exist)', evidence: 'Method proven; validation undone — the cheapest credible move', governance: 'DPIA + ATRS record with published precision/recall' },
-  { rank: 2, name: 'Attendance-feed early warning', what: 'Trajectory flags (sudden deterioration, Years 9–11) pushed to LAs and careers leaders in-year.', needs: 'Daily attendance feed (exists, school-level only)', evidence: 'DfE already runs ML on this data; ABIE shows the data-quality work needed first', governance: 'Individual-level DPIA; human-in-the-loop; opt-out clarity' },
-  { rank: 3, name: 'Transition survival analysis', what: 'Time-to-NEET / time-to-re-engagement hazards over the Year-11 cliff and the age-18 dark zone.', needs: 'NPD→ILR→NCCIS→LEO spine (research access)', evidence: 'No published UK work — a genuine analytical gap', governance: 'Research-grade first; SRS access' },
-  { rank: 4, name: 'Place-based NEET forecasting', what: 'Local NEET-supply forecasts (how many, what needs, where) to size Youth Guarantee provision.', needs: 'LA-level cohort + labour-market data', evidence: 'YFF risk-factor maps exist; commissioning demand is live (£820m to allocate)', governance: 'Lowest ethical risk — no person-level flags; a good first product' },
+  { rank: 1, needIds: ['census', 'nccis', 'leo'],  name: 'Validated weighted risk index', what: 'NERI-style weights, validated against LEO 5-year outcomes, distributed through OnTrack+/NCCIS.', needs: 'NPD + NCCIS + LEO (all exist)', evidence: 'Method proven; validation undone — the cheapest credible move', governance: 'DPIA + ATRS record with published precision/recall' },
+  { rank: 2, needIds: ['attendance'],  name: 'Attendance-feed early warning', what: 'Trajectory flags (sudden deterioration, Years 9–11) pushed to LAs and careers leaders in-year.', needs: 'Daily attendance feed (exists, school-level only)', evidence: 'DfE already runs ML on this data; ABIE shows the data-quality work needed first', governance: 'Individual-level DPIA; human-in-the-loop; opt-out clarity' },
+  { rank: 3, needIds: ['census', 'ilr', 'nccis', 'leo'],  name: 'Transition survival analysis', what: 'Time-to-NEET / time-to-re-engagement hazards over the Year-11 cliff and the age-18 dark zone.', needs: 'NPD→ILR→NCCIS→LEO spine (research access)', evidence: 'No published UK work — a genuine analytical gap', governance: 'Research-grade first; SRS access' },
+  { rank: 4, needIds: ['nccis'],  name: 'Place-based NEET forecasting', what: 'Local NEET-supply forecasts (how many, what needs, where) to size Youth Guarantee provision.', needs: 'LA-level cohort + labour-market data', evidence: 'YFF risk-factor maps exist; commissioning demand is live (£820m to allocate)', governance: 'Lowest ethical risk — no person-level flags; a good first product' },
   { rank: 5, name: 'Service matching', what: 'Matching young people to provision — the Dutch RMC function, algorithmically assisted.', needs: 'A national provision taxonomy (does not exist)', evidence: 'Unproven in the UK', governance: 'Recommender-grade transparency; right to explanation' },
   { rank: 6, name: 'LLM-assisted casework', what: 'Transcription, summarisation and next-step suggestions for careers advisers and tracking teams.', needs: 'Casework systems integration', evidence: 'Beam Magic Notes: 100+ LAs, ~12 hrs/week saved in social care — the adjacent proof', governance: 'Workflow side only — never the scoring side; accuracy review' },
-  { rank: 7, name: 'NEET nowcasting', what: 'Admin-data nowcast of the national/local NEET rate, faster than the lagged and volatile LFS.', needs: 'HMRC RTI + DWP + ILR at monthly cadence', evidence: 'IFS has shown admin data tracks NEET better than the survey', governance: 'Aggregate-only — minimal personal-data risk' },
-  { rank: 8, name: 'Uplift modelling', frontier: true, what: 'Target by TREATMENT EFFECT, not risk: who would benefit from which intervention. Risk-based targeting wastes spend on high-risk/low-responsiveness cases.', needs: 'RCT outcomes (YFF portfolio) × LEO linkage', evidence: 'Causal-forest analyses of US summer-jobs RCTs found benefits concentrated in subgroups standard methods miss; not yet done for UK NEET', governance: 'The full stack — and the strongest strategic argument in this field study' },
+  { rank: 7, needIds: ['leo', 'ilr'],  name: 'NEET nowcasting', what: 'Admin-data nowcast of the national/local NEET rate, faster than the lagged and volatile LFS.', needs: 'HMRC RTI + DWP + ILR at monthly cadence', evidence: 'IFS has shown admin data tracks NEET better than the survey', governance: 'Aggregate-only — minimal personal-data risk' },
+  { rank: 8, needIds: ['leo'],  name: 'Uplift modelling', frontier: true, what: 'Target by TREATMENT EFFECT, not risk: who would benefit from which intervention. Risk-based targeting wastes spend on high-risk/low-responsiveness cases.', needs: 'RCT outcomes (YFF portfolio) × LEO linkage', evidence: 'Causal-forest analyses of US summer-jobs RCTs found benefits concentrated in subgroups standard methods miss; not yet done for UK NEET', governance: 'The full stack — and the strongest strategic argument in this field study' },
 ];
 
 export const GOVERNANCE_CHECKLIST: { item: string; why: string }[] = [
@@ -369,4 +371,15 @@ export const GOVERNANCE_CHECKLIST: { item: string; why: string }[] = [
   { item: 'Subgroup error rates, published', why: 'Recall parity across SEND type, ethnicity and FSM is where early-warning systems actually fail (Wisconsin).' },
   { item: 'Sunset & review clauses', why: 'Bristol’s 6-monthly review is good practice; models degrade as cohorts and policies shift.' },
   { item: 'Challenger capacity on vendor models', why: 'The LGA pattern: contractual accuracy measures plus an in-house team able to interrogate the supplier’s claims.' },
+];
+
+// ---------------------------------------------------------------------------
+// The transition curve: NEET rate by single year of age, 16→24. Calibrated to the
+// DfE 2025 annual brief (16–17: 4.0%; 18–24: 16.0%) — single-age points interpolated
+// to those anchors. The story is the SHAPE: the post-GCSE step, the age-18 jump, and
+// the plateau that begins exactly where the tracking duty ends.
+// ---------------------------------------------------------------------------
+export const AGE_PROFILE: { age: number; pct: number }[] = [
+  { age: 16, pct: 2.8 }, { age: 17, pct: 5.2 }, { age: 18, pct: 11.5 }, { age: 19, pct: 14.0 },
+  { age: 20, pct: 15.5 }, { age: 21, pct: 16.4 }, { age: 22, pct: 16.8 }, { age: 23, pct: 17.0 }, { age: 24, pct: 17.2 },
 ];

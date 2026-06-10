@@ -73,10 +73,14 @@ export interface EconomicImpact {
   a8DeltaAtHorizon: number; // the Attainment-8 lift at the horizon (for the caveat)
 }
 
-/** Monetise the attainment gain of a scenario vs its comparator, summed over the leaving cohorts. */
-export function economicImpact(sim: YearResult[], base: YearResult[], horizon: number, scale = 1): EconomicImpact {
+/** Monetise the attainment gain of a scenario vs its comparator, summed over the leaving
+ *  cohorts. `wageFactor` re-bases the per-point PV onto a region's wage level (see
+ *  regions.regionEarnings) — a crude but honest adjustment: regional A8 points feed
+ *  regional wage distributions. */
+export function economicImpact(sim: YearResult[], base: YearResult[], horizon: number, scale = 1, wageFactor = 1): EconomicImpact {
   const cohort = POP.cohortYearGroup * M * scale;
   const disCohort = cohort * POP.disadvShare;
+  const pvPerPoint = ECON.pvPerA8Point * wageFactor;
   const start = sim[0].year;
   let lifetime = 0, dis = 0, cohorts = 0, a8DeltaH = 0;
   for (const r of sim) {
@@ -86,8 +90,8 @@ export function economicImpact(sim: YearResult[], base: YearResult[], horizon: n
     cohorts++;
     const dA8 = r.attainment8 - b.attainment8;
     const dA8dis = r.attainment8Dis - b.attainment8Dis;
-    lifetime += dA8 * ECON.pvPerA8Point * cohort;
-    dis += dA8dis * ECON.pvPerA8Point * disCohort;
+    lifetime += dA8 * pvPerPoint * cohort;
+    dis += dA8dis * pvPerPoint * disCohort;
     if (r.year === horizon) a8DeltaH = dA8;
   }
   return {

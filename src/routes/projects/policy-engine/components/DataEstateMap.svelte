@@ -4,9 +4,15 @@
   // detail card on click. CSS-grid layout (responsive); linkage listed in the card.
   import { app } from '../lib/appState.svelte';
   import { ESTATE, ESTATE_BY_ID, STAGE_META, TIER_META, type EstateStage } from '../lib/dataestate';
+  import { estateSel } from '../lib/estateSel.svelte';
 
   const eli = $derived(app.narrative === 'eli5');
   let selectedId = $state<string | null>('attendance');
+  // consume external selections (the opportunity ladder's "needs" chips)
+  $effect(() => {
+    const id = estateSel.id;
+    if (id && ESTATE_BY_ID[id]) { selectedId = id; estateSel.id = null; }
+  });
   const selected = $derived(selectedId ? ESTATE_BY_ID[selectedId] : null);
   const STAGES: EstateStage[] = ['pre16', 'transition', 'post18'];
   const inStage = (s: EstateStage) => ESTATE.filter((n) => n.stage === s);
@@ -18,7 +24,7 @@
   };
 </script>
 
-<div class="dem">
+<div class="dem" id="estate-map">
   <div class="dem-legend">
     {#each Object.entries(TIER_META) as [k, t] (k)}
       <span class="lg"><i class="lg-dot {k}" style="--c:{t.colour}"></i>{eli ? t.eli5 : t.label}</span>

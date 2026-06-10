@@ -108,6 +108,20 @@ export function regionScale(code: string): number {
   return REGIONS_BY_CODE[code]?.pupilShare ?? 1;
 }
 
+// Regional earnings relative to England (≈ ONS ASHE median gross weekly pay, 2024-ish).
+// Scales the LEO monetisation when a region is selected — a London A8 point is worth
+// more in £ than a North East one, because the wage distribution it feeds differs.
+const EARNINGS_IDX: Record<string, number> = {
+  LDN: 1.25, SE: 1.06, EE: 1.00, SW: 0.93, EM: 0.91, WM: 0.93, NW: 0.93, YH: 0.90, NE: 0.88,
+  COAST: 0.90, // coastal cross-cut: blended, below-average wage areas
+};
+
+/** Earnings factor for the LEO monetisation in a geographic view (1 = England). */
+export function regionEarnings(code: string): number {
+  if (code === 'all') return 1;
+  return EARNINGS_IDX[code] ?? 1;
+}
+
 export interface RegionView { code: string; name: string; isCut: boolean; }
 export const REGION_OPTIONS: RegionView[] = [
   { code: 'all', name: 'England (all)', isCut: false },
@@ -139,6 +153,7 @@ function applyOffsets(nat: YearResult, off: { gap: number; a8: number; pa: numbe
     neetUnemployed: nat.neetUnemployed * nf,
     neetInactiveHealth: nat.neetInactiveHealth * nf,
     neetInactiveOther: nat.neetInactiveOther * nf,
+    neetLongTerm: nat.neetLongTerm * nf,
   };
 }
 

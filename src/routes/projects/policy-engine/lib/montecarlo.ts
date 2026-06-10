@@ -31,7 +31,8 @@ export function triangular(rng: () => number, a: number, c: number, b: number): 
 /** Numeric YearResult fields exposed as Monte-Carlo / sensitivity outcomes. */
 export const MC_KEYS = [
   'gapKS4', 'attainment8', 'attainment8Dis', 'grade5EM', 'ks2RWM', 'gld',
-  'ehcpPct', 'highNeedsDeficitStock', 'persistentAbsence', 'neet', 'neetInactiveHealth', 'childPoverty',
+  'ehcpPct', 'highNeedsDeficitStock', 'persistentAbsence',
+  'neet', 'neetUnemployed', 'neetInactiveHealth', 'neetInactiveOther', 'neetLongTerm', 'childPoverty',
   'cumulativeCost', 'teacherShortfall',
 ] as const;
 export type McKey = (typeof MC_KEYS)[number];

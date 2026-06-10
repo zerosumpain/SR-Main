@@ -21,7 +21,8 @@
     { id: 'd_std',    label: 'Curriculum · reading · RISE', col: 0, colour: g('standards') },
     { id: 'd_send',   label: 'SEND inclusion · early ID', col: 0, colour: g('send') },
     { id: 'd_reform', label: 'EHCP reform', col: 0, colour: g('send') },
-    { id: 'd_p16',    label: 'Post-16 · mental health', col: 0, colour: g('post16') },
+    { id: 'd_p16',    label: 'Post-16 skills · Youth Guarantee · apprenticeships', col: 0, colour: g('post16') },
+    { id: 'd_mh',     label: 'Youth mental-health support', col: 0, colour: g('post16') },
     { id: 'd_fund',   label: 'School & high-needs funding', col: 0, colour: g('macro') },
     // wider determinants & services (col 0)
     { id: 'd_pipeline', label: 'SEND specialist capacity', col: 0, colour: g('indirect') },
@@ -37,11 +38,14 @@
     { id: 'm_abs',  label: 'Disadvantaged absence', col: 1, colour: INK },
     { id: 'm_cap',  label: 'Teacher capacity', col: 1, colour: INK },
     { id: 'm_ehcp', label: 'EHCP demand & inclusion', col: 1, colour: INK },
+    { id: 'm_pipe', label: 'NEET pipeline', col: 1, colour: INK },
     // outcomes (col 2)
     { id: 'o_gap',  label: 'Disadvantage gap (KS4)', col: 2, colour: '#b1455e' },
     { id: 'o_att',  label: 'Attainment (A8 · KS2 · GLD)', col: 2, colour: '#2f6f97' },
     { id: 'o_send', label: 'SEND deficit · tribunals', col: 2, colour: '#7a5aa6' },
-    { id: 'o_neet', label: 'NEET (16–24)', col: 2, colour: '#5a6b3a' },
+    { id: 'o_neet_u',  label: 'NEET — unemployed', col: 2, colour: '#2f6f97' },
+    { id: 'o_neet_ih', label: 'NEET — inactive (health)', col: 2, colour: '#7a5aa6' },
+    { id: 'o_neet_io', label: 'NEET — inactive (other)', col: 2, colour: '#9a7b1f' },
   ];
 
   const edges: Edge[] = [
@@ -68,22 +72,31 @@
     { from: 'd_reform', to: 'o_send', kind: 'risk', label: 'double-edged' },
     { from: 'm_ehcp', to: 'o_send' },
     { from: 'd_fund', to: 'o_send', kind: 'risk', label: '2028 override cliff' },
-    { from: 'o_att', to: 'o_neet' },
-    { from: 'd_p16', to: 'o_neet' },
-    { from: 'd_p16', to: 'm_ehcp', kind: 'weak' },
+    // the NEET pipeline: upstream mediators feed the three segments
+    { from: 'm_abs', to: 'm_pipe', label: 'risk-factor pipeline (DfE 2026)' },
+    { from: 'm_pov', to: 'm_pipe' },
+    { from: 'm_ehcp', to: 'm_pipe' },
+    { from: 'm_pipe', to: 'o_neet_u' },
+    { from: 'm_pipe', to: 'o_neet_ih', kind: 'risk', label: 'sticky stock + ill-health drift' },
+    { from: 'm_pipe', to: 'o_neet_io' },
+    { from: 'o_att', to: 'o_neet_u' },
+    { from: 'd_p16', to: 'o_neet_u', kind: 'strong', label: 'work-route levers' },
+    { from: 'd_mh', to: 'o_neet_ih' },
+    { from: 'd_mh', to: 'm_abs', kind: 'weak' },
+    { from: 'd_mh', to: 'm_ehcp', kind: 'weak' },
     // wider determinants & services
     { from: 'd_pipeline', to: 'm_abs' },   // supported SEND pupils attend more (pipelinePAcut)
     { from: 'd_pipeline', to: 'o_send' },  // provision adequacy → ehcp attainment, tribunals, deficit
     { from: 'd_camhs', to: 'm_abs' },      // severe-absence cut
     { from: 'd_camhs', to: 'm_ehcp', kind: 'weak' }, // damps SEMH EHCP demand
-    { from: 'd_camhs', to: 'o_neet' },
+    { from: 'd_camhs', to: 'o_neet_ih' },
     { from: 'd_eal', to: 'o_att' },
     { from: 'd_care', to: 'o_send' },
-    { from: 'd_care', to: 'o_neet' },
+    { from: 'd_care', to: 'o_neet_io' },
     { from: 'd_behave', to: 'm_abs' },     // severe-absence cut
-    { from: 'd_behave', to: 'o_neet' },    // exclusion→AP→NEET pipeline
+    { from: 'd_behave', to: 'o_neet_u' },  // exclusion→AP→NEET pipeline
     { from: 'd_place', to: 'o_gap', kind: 'weak' },
-    { from: 'd_place', to: 'o_neet' },
+    { from: 'd_place', to: 'o_neet_u' },
     { from: 'd_tutor', to: 'o_gap' },
     { from: 'd_housing', to: 'm_abs', kind: 'risk' },
     { from: 'd_housing', to: 'o_gap', kind: 'risk' },

@@ -365,7 +365,7 @@ export const LEVER_META: Record<string, LeverMeta> = {
   attendance:     { drives: ['absence', 'gap', 'attainment'], modelNote: 'The single highest-leverage gap lever — EPI attributes the entire post-2019 widening to disadvantaged absence, which this cuts directly.' },
   post16_skills:  { drives: ['neet'], modelNote: 'Acts on the post-16 destination boundary (NEET), not school-age attainment — mostly on the unemployed segment.' },
   mental_health:  { drives: ['neet', 'absence'], modelNote: 'Cuts the INACTIVE-HEALTH NEET segment and the rising tail of severe absence — the Milburn "generational fault line". Slower-acting: that stock is sticky (8 in 10 still NEET 2+ years on).' },
-  youth_guarantee: { drives: ['neet'], modelNote: 'Acts on the UNEMPLOYED-active NEET segment (keyworker re-engagement); no effect on the health-driven segment — careers fairs don’t fix CAMHS waiting lists.' },
+  youth_guarantee: { drives: ['neet'], modelNote: 'Acts on the UNEMPLOYED-active NEET segment twice over: cuts inflow AND cuts persistence (keyworkers re-engage the existing stock). No effect on the health-driven segment — careers fairs don’t fix CAMHS waiting lists.' },
   careers_gatsby:  { drives: ['neet'], modelNote: 'Cuts NEET inflow across segments (60/30/10 unemployed/other/health) — correlational evidence, so the band is wide.' },
   apprenticeships: { drives: ['neet'], modelNote: 'Unemployed-segment lever: the highest-impact, lowest-certainty intervention in the YFF evidence — the wide band is honest about that.' },
   post16_premium:  { drives: ['neet'], modelNote: 'Funds post-16 retention, reducing inflow to the unemployed and inactive-other segments. A proposal, not policy — baseline and announced-policy are both £0.' },

@@ -6,8 +6,10 @@
   import { MEASUREMENT } from '../lib/measurement';
   import { STORIES } from '../lib/stories';
   import { economicImpact, ECON, NEET_ECON, neetHeadcountAvoided } from '../lib/economics';
+  import { regionEarnings } from '../lib/regions';
 
-  const econ = $derived(economicImpact(app.viewSim, app.viewBase, app.horizon, app.scale));
+  const wageFactor = $derived(regionEarnings(app.region));
+  const econ = $derived(economicImpact(app.viewSim, app.viewBase, app.horizon, app.scale, wageFactor));
   const neetPpAvoided = $derived.by(() => {
     const y = app.viewSim.find((r) => r.year === app.horizon);
     const b = app.viewBase.find((r) => r.year === app.horizon);
@@ -101,7 +103,9 @@
       value (~£{ECON.pvPerA8Point.toLocaleString()} PV/point, from the DfE’s ~£100k-per-standard-deviation estimate). The earnings–
       attainment link is <b>associational</b> — it partly reflects that higher-attaining people would earn more anyway (selection bias) —
       and the constant comes from 2000s GCSE cohorts. To avoid double-counting we monetise <b>only</b> attainment, not a separate
-      NEET wage-scar (13–21%) or the ~£150 PV per absence day, which the model already feeds through attainment. Sources:
+      NEET wage-scar (13–21%) or the ~£150 PV per absence day, which the model already feeds through attainment.
+      {#if app.region !== 'all'}In this regional view the per-point value is scaled by <b>{app.regionName}</b>’s relative earnings
+      (×{wageFactor.toFixed(2)}, ONS ASHE-derived) — a crude adjustment that ignores migration between regions.{/if} Sources:
       DfE “GCSE Attainment and Lifetime Earnings”, DfE/LEO, IFS; see the <a href="/projects/policy-engine/method">Method</a> page.
     </p>
   </section>

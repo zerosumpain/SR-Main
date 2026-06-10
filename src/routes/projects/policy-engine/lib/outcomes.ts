@@ -57,6 +57,8 @@ export const OUTCOMES: OutcomeMeta[] = [
     blurb: 'Health-driven inactive segment (~28% and rising): sticky — 8 in 10 still NEET 2+ years later; responds to mental-health and CAMHS capacity, not job schemes.' },
   { id: 'neetInactiveOther', label: 'NEET — inactive (other)', short: 'NEET (IO)', unit: '%', goodIfUp: false, dp: 1, group: 'system',
     blurb: 'Inactive for other reasons (~33%): caring, discouragement; slow-moving; responds to retention funding and care-experienced support.' },
+  { id: 'neetLongTerm', label: 'NEET 12+ months (long-term)', short: 'NEET (LT)', unit: '%', goodIfUp: false, dp: 1, group: 'system',
+    blurb: 'The persistence stock: of last year’s NEETs, those still NEET — ~60% of the stock at baseline. Re-engagement levers (Youth Guarantee keyworkers, MH support) act on this directly, not just on inflow.' },
   { id: 'fundingPerPupil', label: 'Funding per pupil', short: '£/pupil', unit: '£', goodIfUp: true, neutral: true, dp: 0, group: 'money',
     blurb: 'Real-terms mainstream funding per pupil (2025 prices).' },
   { id: 'cumulativeCost', label: 'Cumulative programme cost', short: 'Cost', unit: '£bn', goodIfUp: false, neutral: true, dp: 1, group: 'money',
@@ -74,6 +76,7 @@ export const OUTCOME_ELI5_LABEL: Record<string, string> = {
   persistentAbsence: 'Missing school', persistentAbsenceDis: 'Poorer kids missing school', severeAbsence: 'Missing half of school',
   teacherShortfall: 'Teachers short', childPoverty: 'Children in poverty', neet: 'Not working or studying',
   neetUnemployed: 'Looking for work, can’t find it', neetInactiveHealth: 'Too unwell to work or study', neetInactiveOther: 'Out for other reasons (caring etc.)',
+  neetLongTerm: 'Stuck for over a year',
   fundingPerPupil: 'Spend per pupil', cumulativeCost: 'Extra spending',
 };
 
@@ -100,6 +103,7 @@ export const OUTCOME_ELI5: Record<string, string> = {
   neetUnemployed: 'Young adults with no job who ARE looking. Job schemes and apprenticeships help here. Lower is better.',
   neetInactiveHealth: 'Young adults out of work and study because they’re unwell — the fastest-growing group. Health support helps; job fairs don’t. Lower is better.',
   neetInactiveOther: 'Young adults out for other reasons, like caring for someone. Lower is better.',
+  neetLongTerm: 'Young adults who’ve been out of work and study for more than a year — the hardest group to bring back. Lower is better.',
   fundingPerPupil: 'The real-terms money spent per pupil. Higher is generally better.',
   cumulativeCost: 'The total extra money this plan spends compared with doing nothing.',
 };

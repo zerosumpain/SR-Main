@@ -93,6 +93,7 @@ export interface YearResult {
   neetUnemployed: number;       // % 16-24, unemployed-active segment (cyclical)
   neetInactiveHealth: number;   // % 16-24, inactive-health segment (sticky; the Milburn fault line)
   neetInactiveOther: number;    // % 16-24, inactive-other segment (caring / discouraged)
+  neetLongTerm: number;         // % 16-24 NEET for 12+ months (persistence stock; always < neet)
 
   // --- Money ---
   annualCost: number;     // £bn additional annual programme cost vs baseline

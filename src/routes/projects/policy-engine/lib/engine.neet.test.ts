@@ -51,3 +51,34 @@ describe('NEET segments', () => {
     }
   });
 });
+
+describe('NEET persistence (long-term stock)', () => {
+  it('long-term NEET is positive and below the headline in every year', () => {
+    for (const levers of [baselineLevers(), policyLevers()]) {
+      for (const y of runSim(levers).years) {
+        expect(y.neetLongTerm).toBeGreaterThan(0);
+        expect(y.neetLongTerm).toBeLessThan(y.neet);
+      }
+    }
+  });
+
+  it('at the 2025 baseline, roughly 55–65% of the stock is long-term', () => {
+    const y0 = at(runSim(baselineLevers()).years, 2025);
+    const share = y0.neetLongTerm / y0.neet;
+    expect(share).toBeGreaterThan(0.55);
+    expect(share).toBeLessThan(0.65);
+  });
+
+  it('the youth guarantee cuts persistence: long-term NEET falls by more than its flow effect alone', () => {
+    const base = at(runSim(baselineLevers()).years, 2035);
+    const yg = at(runSim(maxed(baselineLevers(), 'youth_guarantee')).years, 2035);
+    // LT share of the stock falls (re-engagement of the EXISTING stock, not just less inflow)
+    expect(yg.neetLongTerm / yg.neet).toBeLessThan(base.neetLongTerm / base.neet);
+  });
+
+  it('mental health reduces health-segment persistence (LT share falls)', () => {
+    const base = at(runSim(baselineLevers()).years, 2035);
+    const mh = at(runSim(maxed(baselineLevers(), 'mental_health')).years, 2035);
+    expect(mh.neetLongTerm / mh.neet).toBeLessThan(base.neetLongTerm / base.neet);
+  });
+});
