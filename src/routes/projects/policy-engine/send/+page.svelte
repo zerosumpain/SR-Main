@@ -217,7 +217,7 @@
     </div>
   </section>
 
-  <a class="pe-next" href="/projects/policy-engine/memo">These asks, ranked against everything else → The Memo</a>
+  <a class="pe-next" href="/projects/policy-engine/attendance">The signal that predicts it all → Field Study №8: Attendance</a>
 </div>
 
 <style>

@@ -81,6 +81,18 @@ export const STORIES: Record<string, Story> = {
       'The placement-outcomes question made answerable: ECHILD-grade linkage + provision-delivered data, before the 2030 transition',
     ],
   },
+  attendance: {
+    no: 8, route: '/projects/policy-engine/attendance',
+    theme: 'The leading indicator',
+    question: 'England built the world’s best attendance instrument. Is it working?',
+    thesis: 'Attendance is simultaneously the biggest post-pandemic schooling problem — severe absence at a record 176,000 children — and the estate’s biggest data success: 99% of schools transmitting pupil-level data daily. What is missing is the loop: no independent evaluation of the instrument, no child-level early-warning use, and half a million fines a year issued without evidence they work.',
+    thesisEli5: 'A record number of children miss more than half of school — yet attendance is the one thing the government now measures brilliantly, every school, every day. The missing piece: proof the measuring helps, and the nerve to use it child by child.',
+    dataAsk: [
+      'An independent causal evaluation of the daily feed, the similar-schools nudges and the fines framework — the natural experiments are already in the data',
+      'Child-level trajectory flags (governed, published error rates, help-only) — the loop the school-level benchmarking stops short of',
+      'The trust account settled: DPIA signed off, retention justified, families able to see their own child’s record',
+    ],
+  },
   neet: {
     no: 6, route: '/projects/policy-engine/neet',
     theme: 'The early-warning system',

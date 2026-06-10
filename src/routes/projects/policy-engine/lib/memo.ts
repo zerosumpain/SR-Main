@@ -5,10 +5,10 @@
 
 export const MEMO_META = {
   title: 'The synthesis',
-  subtitle: 'What seven field studies add up to — the improvements to England’s children’s-data system with the highest leverage and the lowest cost, in one place.',
+  subtitle: 'What eight field studies add up to — the improvements to England’s children’s-data system with the highest leverage and the lowest cost, in one place.',
   bluf: {
-    research: 'The pattern across all seven studies: the highest-leverage improvements are STEWARDSHIP functions — common standards, identity infrastructure, convening, and funding the connective tissue — rather than expanded central collection. Most of what is missing is specification and publication work over data the state already holds; the recurring failure mode, documented twice in the historical record, is building central machinery instead.',
-    eli5: 'Across all seven studies, the same answer keeps appearing: the biggest improvements come from writing common rules, joining records up, and funding the small organisations that help everyone share — not from gathering more data into one place. Most of the fixes are cheap, because the data already exists.',
+    research: 'The pattern across all eight studies: the highest-leverage improvements are STEWARDSHIP functions — common standards, identity infrastructure, convening, and funding the connective tissue — rather than expanded central collection. Most of what is missing is specification and publication work over data the state already holds; the recurring failure mode, documented twice in the historical record, is building central machinery instead.',
+    eli5: 'Across all eight studies, the same answer keeps appearing: the biggest improvements come from writing common rules, joining records up, and funding the small organisations that help everyone share — not from gathering more data into one place. Most of the fixes are cheap, because the data already exists.',
   },
 };
 
@@ -58,6 +58,12 @@ export const MEMO_CASE: Finding[] = [
     research: 'High-needs spending has risen 58% in real terms to £10.7bn while outcomes have not improved; deficits of £3–4.6bn (estimates disagree — itself a finding) sit behind an accounting override. Underneath: statutory-plan data that was child-invisible until 2023, 153 EHCP formats, no measure of provision delivered, and a tribunal ruling for families 99% of the time as the system’s only working feedback loop.',
     eli5: 'Special-needs support costs the most and is measured the least. The state doesn’t know who’s waiting, whether help arrives, or what works — and the courts rule against councils 99 times in 100.',
     link: { label: 'Field Study №7 — SEND', href: '/projects/policy-engine/send' },
+  },
+  {
+    point: 'The estate’s best instrument exists — and its impact is unproven.',
+    research: 'Attendance shows what good looks like: 99% of schools transmitting pupil-level data daily, statistics published fortnightly. It also shows the gap that remains: severe absence at a record despite the instrument, government attribution claims with no independent evaluation, half a million penalty notices a year issued without evidence they work, and a feed used to benchmark schools rather than to notice a child drifting.',
+    eli5: 'The daily attendance data proves brilliant measurement is possible. It also proves measurement alone isn’t enough — the deepest absence problem is still growing, and nobody has tested whether the tools or the fines actually work.',
+    link: { label: 'Field Study №8 — Attendance', href: '/projects/policy-engine/attendance' },
   },
 ];
 
@@ -117,7 +123,7 @@ export const MOVES: Move[] = [
     what: 'The estate’s newest, fastest asset is used to benchmark schools. Add individual trajectory flags — sudden deterioration in Years 9–11 pushed to LAs and careers leaders in-year — making attendance the hub of the NEET early-warning design.',
     eli5: 'The government already sees attendance daily. Use it to notice a child drifting away in time to act, not just to rank schools.',
     owner: 'DfE attendance + careers system',
-    evidence: { label: 'NEET — attendance as the hub', href: '/projects/policy-engine/neet' },
+    evidence: { label: 'Attendance — closing the loop', href: '/projects/policy-engine/attendance' },
   },
   {
     n: 6, title: 'Publish the tables the data already supports', horizon: 'now', cost: '£',
@@ -212,8 +218,13 @@ export const INSTRUMENTS: Instrument[] = [
   },
   {
     name: 'Individual attendance early-warning flags',
-    today: 'Daily feed used for school benchmarking only', target: 'Trajectory deterioration flags to LAs and careers leaders, in-year',
-    owner: 'DfE attendance', cost: '£', study: { label: 'NEET · Monitoring', href: '/projects/policy-engine/neet' },
+    today: 'Daily feed used for school benchmarking only; severe absence rising while the rest improves', target: 'Trajectory deterioration flags to LAs and careers leaders, in-year — governed, error rates published',
+    owner: 'DfE attendance', cost: '£', study: { label: 'Attendance', href: '/projects/policy-engine/attendance' },
+  },
+  {
+    name: 'Evaluation of the attendance instrument & fines',
+    today: 'Impact attributed by press release; the only intervention evaluation is uncontrolled; 492,800 notices/yr never evaluated', target: 'An independent causal programme exploiting the rollout and regional enforcement variation already in the data',
+    owner: 'DfE + EEF/Foundations', cost: '£', study: { label: 'Attendance', href: '/projects/policy-engine/attendance' },
   },
   {
     name: 'Published error rates for any deployed risk model',

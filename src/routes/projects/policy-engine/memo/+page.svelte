@@ -18,7 +18,7 @@
 <div class="pe-route">
   <!-- ===================== head ===================== -->
   <header class="syn-head">
-    <span class="sh-tag">SYNTHESIS · FIELD STUDIES №1–7</span>
+    <span class="sh-tag">SYNTHESIS · FIELD STUDIES №1–8</span>
     <h1 class="sh-title">{MEMO_META.title}</h1>
     <p class="sh-sub">{MEMO_META.subtitle}</p>
   </header>
@@ -33,7 +33,7 @@
 
   <!-- ===================== the case ===================== -->
   <section class="block">
-    <h2 class="pe-h2">What the evidence shows — six findings</h2>
+    <h2 class="pe-h2">What the evidence shows — seven findings</h2>
     <p class="cap">
       {eli
         ? 'Each finding comes from one of the field studies on this site. Click through for the full evidence.'
