@@ -57,6 +57,18 @@ export const STORIES: Record<string, Story> = {
       'In-year feedback: the daily attendance feed shows near-real-time is possible — nothing equivalent exists post-16',
     ],
   },
+  jigsaw: {
+    no: 6, route: '/projects/policy-engine/jigsaw',
+    theme: 'The information jigsaw',
+    question: 'Who actually holds the picture of a child?',
+    thesis: 'Nobody does — and nobody should. The picture of a child is distributed across school, council, NHS, police, courts and household systems by design. DfE is one holder among seventeen; the failures that harm children happen at the JOINS — and most of the joins are nobody’s job.',
+    thesisEli5: 'No single organisation knows a child’s whole story: the school knows one part, the doctor another, the council a third. The tragedies happen when those parts never meet — and right now, making them meet is mostly nobody’s job.',
+    dataAsk: [
+      'A cross-vendor safeguarding-record transfer standard — the richest record currently breaks at every school move',
+      'A MASH data specification, with the new consistent identifier doing frontline matching rather than research-only linkage',
+      'An endowed standards layer — iStandUK, SAVVI and Open Referral UK currently run on parish-newsletter grants',
+    ],
+  },
   neet: {
     no: 5, route: '/projects/policy-engine/neet',
     theme: 'The early-warning system',
