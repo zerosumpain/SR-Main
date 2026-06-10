@@ -9,6 +9,9 @@
     COUNTRIES, OECD_AVG, TIER_META, ANCHOR, SPEND_PLOT, SPEND_THRESHOLD, ENGLAND_PISA,
     BY_EQUITY, BY_TREND, type Country, type Tier,
   } from '../lib/comparators';
+  import {
+    BORROWINGS, VERDICT_META, BORROW_CAUTION, RESPONSES, ANTIPATTERN, RESPONSE_CHECKLIST, READOUTS, READOUT_GAP,
+  } from '../lib/globalIntel';
 
   const eli = $derived(app.narrative === 'eli5');
   const tc = (t: Tier) => TIER_META[t].colour;
@@ -308,6 +311,85 @@
     </p>
   </section>
 
+  <!-- ============ 4 · the borrowing ledger ============ -->
+  <section class="block">
+    <h2 class="pe-h2">4 · The borrowing ledger — what England imported</h2>
+    <p class="cap">
+      {eli
+        ? 'Comparing is step one; copying is where it gets dangerous. Here’s what England actually took from the scoreboard’s winners — with an honest badge for what the evaluations found.'
+        : 'Benchmarking’s sharp end is policy borrowing. The ledger of England’s imports, each with its evaluated verdict — and the pattern is uncomfortable: the flagship import scaled for a decade before its first RCT.'}
+    </p>
+    <div class="bw-cards">
+      {#each BORROWINGS as b (b.name)}
+        <article class="bw" style="--vc:{VERDICT_META[b.verdict].colour}">
+          <header class="bw-head">
+            <div class="bw-names"><span class="bw-name">{b.name}</span><span class="bw-from">from {b.from} · {b.when}</span></div>
+            <span class="bw-verdict" style="background:{VERDICT_META[b.verdict].colour}">{eli ? VERDICT_META[b.verdict].eli5 : VERDICT_META[b.verdict].label}</span>
+          </header>
+          <p class="bw-what">{b.what}</p>
+          <p class="bw-outcome"><b>{eli ? 'What happened:' : 'Outcome:'}</b> {b.outcome}</p>
+          <p class="bw-lesson"><span class="bw-tag">The lesson</span>{b.lesson}</p>
+          <a class="bw-src" href={b.url} target="_blank" rel="noopener">source ↗</a>
+        </article>
+      {/each}
+    </div>
+    <p class="caution">{eli ? BORROW_CAUTION.eli5 : BORROW_CAUTION.research}</p>
+  </section>
+
+  <!-- ============ 5 · the response function ============ -->
+  <section class="block">
+    <h2 class="pe-h2">5 · How serious systems answer the scoreboard</h2>
+    <p class="cap">
+      {eli
+        ? 'A bad result is a test of the system that receives it. Four countries, four very different responses — and England’s own record, which is the cautionary one.'
+        : 'The response function is the real differentiator: what a system DOES with a result matters more than the result. Four named patterns — then England’s documented anti-pattern, and the checklist it implies.'}
+    </p>
+    <div class="rs-cards">
+      {#each RESPONSES as r (r.country)}
+        <article class="rs" style="--rc:{r.colour}">
+          <header class="rs-head"><span class="rs-flag">{r.flag}</span><span class="rs-name">{r.country}</span><span class="rs-pattern">{r.pattern}</span></header>
+          <p class="rs-story">{r.story}</p>
+          <p class="rs-lesson"><span class="rs-tag">The lesson</span>{r.lesson}</p>
+          <a class="rs-src" href={r.url} target="_blank" rel="noopener">source ↗</a>
+        </article>
+      {/each}
+    </div>
+    <div class="anti">
+      <span class="anti-lab">⚠ {ANTIPATTERN.title}</span>
+      <p>{eli ? ANTIPATTERN.eli5 : ANTIPATTERN.research} <a href={ANTIPATTERN.url} target="_blank" rel="noopener">UKSA letter ↗</a></p>
+    </div>
+    <h3 class="sub-h">{eli ? 'What a grown-up response function needs' : 'The response-function checklist — England scored'}</h3>
+    <div class="check">
+      {#each RESPONSE_CHECKLIST as c (c.item)}
+        <div class="ck"><span class="ck-item">✓ {c.item}</span><span class="ck-status">{c.status}</span></div>
+      {/each}
+    </div>
+  </section>
+
+  <!-- ============ 6 · the next readouts ============ -->
+  <section class="block">
+    <h2 class="pe-h2">6 · The next readout</h2>
+    <p class="cap">
+      {eli
+        ? 'What’s coming, when — and in each case, what England should actually be watching for (hint: it’s usually not the ranking).'
+        : 'The cycle calendar, with the England angle per study. The meta-point: after 2022’s response-rate failure, sample integrity is the score that matters.'}
+    </p>
+    <div class="ro-cards">
+      {#each READOUTS as r (r.study)}
+        <article class="ro" style="--oc:{r.colour}">
+          <header class="ro-head"><span class="ro-study">{r.study}</span><span class="ro-when">{r.when}</span></header>
+          <p class="ro-what">{r.what}</p>
+          <p class="ro-angle"><span class="ro-tag">{eli ? 'Watch for' : 'The England angle'}</span>{r.englandAngle}</p>
+        </article>
+      {/each}
+    </div>
+    <div class="gap-box">
+      <span class="gb-lab">{eli ? 'The missing instrument' : 'The structural gap'}</span>
+      <p>{eli ? READOUT_GAP.eli5 : READOUT_GAP.research}</p>
+      <a class="gb-link" href="/projects/policy-engine/monitor">The same theme, system-wide → the data spine</a>
+    </div>
+  </section>
+
   <!-- ============ tie back to the engine ============ -->
   <section class="block takeaway">
     <h2 class="pe-h2">{eli ? 'So what does this mean for the sliders?' : 'How this compares with the model’s assumptions'}</h2>
@@ -416,6 +498,60 @@
   .cc-lesson { margin: 0; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.74); }
 
   .src-note { margin: 14px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.5); }
+  .sub-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin: 20px 0 10px; color: var(--ink, #1c1611); }
+
+  /* 4 · borrowing ledger */
+  .bw-cards, .rs-cards, .ro-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 12px; }
+  .bw, .rs, .ro { border: 1px solid rgba(28,22,17,0.13); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }
+  .bw { border-top: 3px solid var(--vc); }
+  .bw-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .bw-names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .bw-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .bw-from { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
+  .bw-verdict { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #fff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+  .bw-what, .bw-outcome { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .bw-outcome b { color: var(--ink, #1c1611); }
+  .bw-lesson { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .bw-tag, .rs-tag, .ro-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+  .bw-tag { color: var(--vc); }
+  .bw-src, .rs-src { margin-top: auto; align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .caution { margin: 14px 0 0; padding: 11px 14px; border-radius: 9px; max-width: 96ch; font-size: 12.5px; line-height: 1.55;
+    color: rgba(28,22,17,0.76); border: 1px dashed rgba(122,90,166,0.45); background: rgba(122,90,166,0.05); }
+
+  /* 5 · responses */
+  .rs { border-top: 3px solid var(--rc); }
+  .rs-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .rs-flag { font-size: 17px; }
+  .rs-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink, #1c1611); flex: 1; }
+  .rs-pattern { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--rc); }
+  .rs-story { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .rs-lesson { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .rs-tag { color: var(--rc); }
+  .anti { margin: 14px 0 0; border: 1px solid rgba(177,69,94,0.4); border-left: 3px solid #b1455e; border-radius: 10px;
+    background: rgba(177,69,94,0.05); padding: 12px 15px; max-width: 96ch; }
+  .anti-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8a2d3a; font-weight: 600; margin-bottom: 6px; }
+  .anti p { margin: 0; font-size: 12.5px; line-height: 1.6; color: rgba(28,22,17,0.78); }
+  .anti a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .check { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 9px; }
+  .ck { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.4); }
+  .ck-item { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: #2f7d4f; }
+  .ck-status { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.66); }
+
+  /* 6 · readouts */
+  .ro { border-top: 3px solid var(--oc); }
+  .ro-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .ro-study { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink, #1c1611); }
+  .ro-when { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--oc); }
+  .ro-what { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .ro-angle { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .ro-tag { color: var(--oc); }
+  .gap-box { margin: 14px 0 0; border: 1px solid rgba(74,124,124,0.35); border-left: 3px solid #4a7c7c; border-radius: 10px;
+    background: rgba(74,124,124,0.06); padding: 13px 16px; max-width: 96ch; }
+  .gb-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a5f5f; font-weight: 600; margin-bottom: 6px; }
+  .gap-box p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
+  .gb-link { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
   .src-note a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
 
   .takeaway { border-top: 1px solid rgba(28,22,17,0.12); padding-top: 14px; }

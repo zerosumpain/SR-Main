@@ -8,6 +8,9 @@
   import { STORIES } from '../lib/stories';
   import { economicImpact, ECON, NEET_ECON, neetHeadcountAvoided } from '../lib/economics';
   import { regionEarnings } from '../lib/regions';
+  import { COHORTS, KIND_META, ADMIN_COHORTS, TIDE_STATS, TIDE_LONDON, TIDE_DATA, COUNTING, POP_TAKEAWAY } from '../lib/populationIntel';
+
+  const eli = $derived(app.narrative === 'eli5');
 
   const wageFactor = $derived(regionEarnings(app.region));
   const econ = $derived(economicImpact(app.viewSim, app.viewBase, app.horizon, app.scale, wageFactor));
@@ -25,7 +28,7 @@
 
 <div class="pe-route">
   <StoryMasthead story={STORIES.population} />
-  <StorySection title="One year-group, three gates">
+  <StorySection title="1 · One year-group, three gates">
   {#snippet prose()}
   <div class="pe-prose">
     {#if app.narrative === 'eli5'}
@@ -66,7 +69,7 @@
   {/snippet}
   </StorySection>
 
-  <StorySection title="The economic return">
+  <StorySection title="2 · The economic return">
   {#snippet prose()}
   <div class="pe-prose">
       {#if app.narrative === 'eli5'}
@@ -119,12 +122,134 @@
   {/snippet}
   </StorySection>
 
+  <!-- ===================== 3 · the cohort tradition ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">3 · The cohort tradition — following the children for real</h2>
+    <p class="cap">
+      {eli
+        ? 'The funnel above follows a pretend year-group. Britain invented the real thing: for 80 years it has followed actual babies through life — and each study changed what governments did. Then it nearly lost the habit.'
+        : 'The synthetic cohort above has a real ancestor: Britain’s birth-cohort tradition is the most powerful population-intelligence instrument any country has built — an unbroken 80-year chain in which each study bought specific policy. The ledger, including the failure.'}
+    </p>
+    <div class="co-cards">
+      {#each COHORTS as c (c.name)}
+        <article class="co" style="--kc:{KIND_META[c.kind].colour}">
+          <header class="co-head">
+            <div class="co-names"><span class="co-name">{c.name}</span><span class="co-meta">{c.born} · {c.size}</span></div>
+            <span class="co-kind" style="background:{KIND_META[c.kind].colour}">{eli ? KIND_META[c.kind].eli5 : KIND_META[c.kind].label}</span>
+          </header>
+          <p class="co-what">{c.what}</p>
+          <p class="co-bought"><span class="co-tag">{eli ? 'What it changed' : 'What it bought policy'}</span>{c.bought}</p>
+          <a class="co-src" href={c.url} target="_blank" rel="noopener">source ↗</a>
+        </article>
+      {/each}
+    </div>
+    <div class="admin-box">
+      <span class="ab-lab">{eli ? 'The quiet revolution' : 'The admin estate became the bigger cohort machine'}</span>
+      <p>{eli ? ADMIN_COHORTS.eli5 : ADMIN_COHORTS.research}</p>
+    </div>
+  </section>
+
+  <!-- ===================== 4 · the demographic tide ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">4 · The demographic tide</h2>
+    <p class="cap">
+      {eli
+        ? 'The biggest population story in education right now isn’t a gap or a score — it’s that there are simply fewer children. Every number on this page is about to shrink, and that forces choices.'
+        : 'The population denominators this page rests on are falling fast — the live strategic issue every other field study sits inside. The numbers, the choice they force, and the data that should be steering it.'}
+    </p>
+    <div class="tide-stats">
+      {#each TIDE_STATS as s (s.big)}
+        <div class="ts"><span class="ts-big">{s.big}</span><span class="ts-lab">{eli ? s.eli5 : s.label}</span></div>
+      {/each}
+    </div>
+    <p class="tide-note">{eli ? TIDE_LONDON.eli5 : TIDE_LONDON.research}</p>
+    <div class="admin-box teal">
+      <span class="ab-lab">{eli ? 'The early-warning opportunity' : 'The place-planning data gap'}</span>
+      <p>{eli ? TIDE_DATA.eli5 : TIDE_DATA.research}</p>
+    </div>
+  </section>
+
+  <!-- ===================== 5 · counting the next generation ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">5 · Counting the next generation</h2>
+    <p class="cap">
+      {eli
+        ? 'Even the basic job of counting people is being rethought — and the boldest idea abroad is to go further: use the records to work out, child by child, where early help pays off most.'
+        : 'How the state counts children is itself in flux — and the frontier abroad is actuarial: pricing lifetime trajectories from linked records to target early intervention. The models, and the UK’s specific gap.'}
+    </p>
+    <div class="cm-cards">
+      {#each COUNTING as m (m.name)}
+        <article class="cm" style="--mc:{m.colour}">
+          <header class="cm-head"><span class="cm-name">{m.name}</span><span class="cm-status">{m.status}</span></header>
+          <p class="cm-what">{m.what}</p>
+          <p class="cm-lesson"><span class="cm-tag">The lesson</span>{m.lesson}</p>
+          <a class="cm-src" href={m.url} target="_blank" rel="noopener">source ↗</a>
+        </article>
+      {/each}
+    </div>
+    <div class="takeaway-box">
+      <span class="tb-lab">{eli ? 'The bottom line' : 'For the data strategist'}</span>
+      <p>{eli ? POP_TAKEAWAY.eli5 : POP_TAKEAWAY.research}</p>
+      <a class="tb-link" href="/projects/policy-engine/monitor">How the records would join up → the data spine</a>
+    </div>
+  </section>
+
   <a class="pe-next" href="/projects/policy-engine/regions">Where & to whom → Regions</a>
 </div>
 
 <style>
   .panel { margin: 0 0 8px; }
   .mrow { margin: 8px 0 0; }
+  .block { margin: 34px 0; }
+  .cap { margin: 0 0 16px; font-size: 14.5px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 90ch; }
+
+  /* 3 · cohort cards */
+  .co-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
+  .co { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--kc); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }
+  .co-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .co-names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .co-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .co-meta { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
+  .co-kind { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: #fff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+  .co-what { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .co-bought { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .co-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--kc); margin-bottom: 2px; }
+  .co-src { margin-top: auto; align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  .admin-box { border: 1px solid rgba(86,106,140,0.35); border-left: 3px solid #566a8c; border-radius: 10px;
+    background: rgba(86,106,140,0.06); padding: 13px 16px; max-width: 96ch; }
+  .admin-box.teal { border-color: rgba(74,124,124,0.35); border-left-color: #4a7c7c; background: rgba(74,124,124,0.06); }
+  .ab-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #3b4d6b; font-weight: 600; margin-bottom: 6px; }
+  .admin-box.teal .ab-lab { color: #3a5f5f; }
+  .admin-box p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
+
+  /* 4 · tide */
+  .tide-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 10px; margin-bottom: 12px; }
+  .ts { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid rgba(28,22,17,0.14);
+    border-left: 3px solid #b4632e; border-radius: 9px; background: rgba(255,255,255,0.42); }
+  .ts-big { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22px; line-height: 1; color: var(--ink, #1c1611); }
+  .ts-lab { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.65); }
+  .tide-note { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 96ch; }
+
+  /* 5 · counting models */
+  .cm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
+  .cm { border: 1px solid rgba(28,22,17,0.13); border-top: 3px solid var(--mc); border-radius: 10px; padding: 12px 14px;
+    background: rgba(255,255,255,0.42); display: flex; flex-direction: column; gap: 7px; }
+  .cm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .cm-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .cm-status { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--mc); }
+  .cm-what { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .cm-lesson { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink, #1c1611); }
+  .cm-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mc); margin-bottom: 2px; }
+  .cm-src { margin-top: auto; align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  .takeaway-box { border: 1px solid rgba(74,124,124,0.35); border-left: 3px solid #4a7c7c; border-radius: 10px;
+    background: rgba(74,124,124,0.06); padding: 13px 16px; max-width: 96ch; }
+  .tb-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a5f5f; font-weight: 600; margin-bottom: 6px; }
+  .takeaway-box p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
+  .tb-link { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
   .econ-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 12px 0; }
   .ec { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid rgba(28,22,17,0.14); border-radius: 9px;
     background: rgba(255,255,255,0.4); border-left-width: 3px; border-left-color: rgba(28,22,17,0.3); }
