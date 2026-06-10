@@ -34,6 +34,36 @@ export const ECON = {
   pvPerAbsenceDay: 150,
 };
 
+// NEET economics — CONTEXT figures, never added to the headline LEO PV (part of any
+// NEET reduction is attainment-driven and therefore already monetised above; adding a
+// lifetime scar on top would double-count). Two anchors, used as a LOW–HIGH range:
+//  • Coles et al. (2010, University of York, for the Audit Commission): lifetime
+//    public-finance cost ~£56k / resource cost ~£104k per NEET young person (2010 prices).
+//  • Milburn interim review (2026): lifetime earnings loss up to £300k per person —
+//    an upper bound; the £125bn/yr aggregate is quoted in prose only, flagged contested.
+export const NEET_ECON = {
+  perPersonLifetimeLow: 104_000,
+  perPersonLifetimeHigh: 300_000,
+  source: 'Coles et al. (2010, University of York); Milburn interim review (2026)',
+};
+
+/** Headcount of 16–24s out of NEET at a horizon, from a pp-of-rate reduction. */
+export function neetHeadcountAvoided(ppReduction: number, scale = 1): number {
+  return Math.max(0, ppReduction / 100) * POP.youth16to24 * M * scale;
+}
+
+/** Cumulative NEET-years avoided vs a comparator, summed across projection years. */
+export function neetYearsAvoided(sim: YearResult[], base: YearResult[], horizon: number, scale = 1): number {
+  let total = 0;
+  for (const r of sim) {
+    if (!r.isProjection || r.year > horizon) continue;
+    const b = base.find((x) => x.year === r.year);
+    if (!b) continue;
+    total += Math.max(0, (b.neet - r.neet) / 100) * POP.youth16to24 * M * scale;
+  }
+  return total;
+}
+
 export interface EconomicImpact {
   cohorts: number;          // number of leaving cohorts 2026..horizon
   lifetimePV: number;       // £ PV total lifetime-earnings gain (all pupils, all cohorts) vs status quo

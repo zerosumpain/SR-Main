@@ -89,7 +89,10 @@ export interface YearResult {
   teachersFTE: number;          // total teacher FTE (000s)
   fundingPerPupil: number;      // real-terms £ per pupil (2025 prices)
   childPoverty: number;         // % children in relative poverty (AHC)
-  neet: number;                 // % NEET 16-24
+  neet: number;                 // % NEET 16-24 (headline = sum of the three segments)
+  neetUnemployed: number;       // % 16-24, unemployed-active segment (cyclical)
+  neetInactiveHealth: number;   // % 16-24, inactive-health segment (sticky; the Milburn fault line)
+  neetInactiveOther: number;    // % 16-24, inactive-other segment (caring / discouraged)
 
   // --- Money ---
   annualCost: number;     // £bn additional annual programme cost vs baseline

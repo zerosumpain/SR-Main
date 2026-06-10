@@ -2,6 +2,7 @@
   import type { YearResult } from '../lib/types';
   import OutcomeChart, { type ChartSeries } from './OutcomeChart.svelte';
   import { fmtGBPbn, fmtGBP, fmtNum } from '../lib/format';
+  import { neetYearsAvoided } from '../lib/economics';
 
   interface Props { sim: YearResult[]; baseSim: YearResult[]; horizon: number; }
   let { sim, baseSim, horizon }: Props = $props();
@@ -32,11 +33,15 @@
       cumExtraG5 += Math.max(0, ((sim[i].grade5EM - baseSim[i].grade5EM) / 100) * KS4_COHORT);
     }
     const deficitAvoided = bEnd.highNeedsDeficitStock - yEnd.highNeedsDeficitStock;
+    const neetYears = neetYearsAvoided(sim, baseSim, horizon);
     return {
-      cum, gapClosed, a8Gain, cumExtraG5, deficitAvoided,
+      cum, gapClosed, a8Gain, cumExtraG5, deficitAvoided, neetYears,
       perMonth: gapClosed > 0.05 ? cum / gapClosed : null,
       perA8: a8Gain > 0.05 ? cum / a8Gain : null,
       perG5: cumExtraG5 > 1000 ? (cum * 1e9) / cumExtraG5 : null,
+      // whole-package ratio: the spend buys every outcome at once, so this is an
+      // upper bound on the true cost of the NEET channel alone
+      perNeetYear: neetYears > 1000 ? (cum * 1e9) / neetYears : null,
     };
   });
 </script>
@@ -76,6 +81,14 @@
       <div class="eff-card">
         <span class="ev">{eff.deficitAvoided > 0 ? fmtGBPbn(eff.deficitAvoided, 1) : '—'}</span>
         <span class="el">SEND deficit avoided</span>
+      </div>
+      <div class="eff-card">
+        <span class="ev">{eff.neetYears > 1000 ? `${Math.round(eff.neetYears / 1000)}k` : '—'}</span>
+        <span class="el">NEET-years avoided (cumulative)</span>
+      </div>
+      <div class="eff-card">
+        <span class="ev">{eff.perNeetYear ? fmtGBP(Math.round(eff.perNeetYear / 1000) * 1000) : '—'}</span>
+        <span class="el">whole-package cost per NEET-year avoided (upper bound)</span>
       </div>
     </div>
   </div>

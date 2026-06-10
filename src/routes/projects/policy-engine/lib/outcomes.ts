@@ -50,7 +50,13 @@ export const OUTCOMES: OutcomeMeta[] = [
   { id: 'childPoverty', label: 'Child poverty', short: 'Poverty', unit: '%', goodIfUp: false, dp: 1, group: 'system',
     blurb: 'Children in relative poverty (after housing costs).' },
   { id: 'neet', label: 'NEET (16–24)', short: 'NEET', unit: '%', goodIfUp: false, dp: 1, group: 'system',
-    blurb: 'Not in education, employment or training — increasingly driven by youth mental ill-health (Milburn 2026).' },
+    blurb: 'Not in education, employment or training — the sum of three modelled segments with very different dynamics.' },
+  { id: 'neetUnemployed', label: 'NEET — unemployed', short: 'NEET (U)', unit: '%', goodIfUp: false, dp: 1, group: 'system',
+    blurb: 'Unemployed-active segment (~39% of the stock): cyclical; moved by the Youth Guarantee, apprenticeships and careers provision.' },
+  { id: 'neetInactiveHealth', label: 'NEET — inactive (health)', short: 'NEET (IH)', unit: '%', goodIfUp: false, dp: 1, group: 'system',
+    blurb: 'Health-driven inactive segment (~28% and rising): sticky — 8 in 10 still NEET 2+ years later; responds to mental-health and CAMHS capacity, not job schemes.' },
+  { id: 'neetInactiveOther', label: 'NEET — inactive (other)', short: 'NEET (IO)', unit: '%', goodIfUp: false, dp: 1, group: 'system',
+    blurb: 'Inactive for other reasons (~33%): caring, discouragement; slow-moving; responds to retention funding and care-experienced support.' },
   { id: 'fundingPerPupil', label: 'Funding per pupil', short: '£/pupil', unit: '£', goodIfUp: true, neutral: true, dp: 0, group: 'money',
     blurb: 'Real-terms mainstream funding per pupil (2025 prices).' },
   { id: 'cumulativeCost', label: 'Cumulative programme cost', short: 'Cost', unit: '£bn', goodIfUp: false, neutral: true, dp: 1, group: 'money',
@@ -67,6 +73,7 @@ export const OUTCOME_ELI5_LABEL: Record<string, string> = {
   highNeedsDeficitStock: 'Special-needs debt', ehcpAttainment8: 'Special-needs GCSE score', tribunalAppeals: 'Special-needs appeals',
   persistentAbsence: 'Missing school', persistentAbsenceDis: 'Poorer kids missing school', severeAbsence: 'Missing half of school',
   teacherShortfall: 'Teachers short', childPoverty: 'Children in poverty', neet: 'Not working or studying',
+  neetUnemployed: 'Looking for work, can’t find it', neetInactiveHealth: 'Too unwell to work or study', neetInactiveOther: 'Out for other reasons (caring etc.)',
   fundingPerPupil: 'Spend per pupil', cumulativeCost: 'Extra spending',
 };
 
@@ -90,6 +97,9 @@ export const OUTCOME_ELI5: Record<string, string> = {
   teacherShortfall: 'How many teachers short of the pledge the country is. Lower (or a surplus) is better.',
   childPoverty: 'The share of children growing up in poverty. Lower is better.',
   neet: 'The share of young adults with no job, education or training. Lower is better.',
+  neetUnemployed: 'Young adults with no job who ARE looking. Job schemes and apprenticeships help here. Lower is better.',
+  neetInactiveHealth: 'Young adults out of work and study because they’re unwell — the fastest-growing group. Health support helps; job fairs don’t. Lower is better.',
+  neetInactiveOther: 'Young adults out for other reasons, like caring for someone. Lower is better.',
   fundingPerPupil: 'The real-terms money spent per pupil. Higher is generally better.',
   cumulativeCost: 'The total extra money this plan spends compared with doing nothing.',
 };

@@ -56,6 +56,10 @@ export const BASELINE = {
   fundingPerPupil: 7100,    // £ real, blended primary/secondary 2024/25    [IFS]
   childPoverty: 31.0,       // % relative AHC                               [CPAG/DWP HBAI]
   neet: 13.3,               // % 16-24                                      [DfE/ONS 2025]
+  // NEET composition, England 2025 (ONS Jan–Mar 2026 splits — 39% unemployed-active /
+  // 28% inactive-health / 33% inactive-other — applied to the DfE England rate)
+  // [ONS NEET bulletin May 2026; Resolution Foundation False Starts 2025]
+  neetUnemployed: 5.19, neetInactiveHealth: 3.72, neetInactiveOther: 4.39,
 };
 
 // Conversion constants tying disadvantaged sub-levels to the stage gap (months).
@@ -198,6 +202,7 @@ export const CH: ChannelParams = {
     place_investment: 3, tutoring: 1, eal_support: 2, care_support: 2, behaviour_support: 2,
     mission_ne: 5, mission_coastal: 5,
     send_pipeline: 3, camhs: 2, housing_instability: 2,
+    youth_guarantee: 2, careers_gatsby: 3, apprenticeships: 3, post16_premium: 3,
     eypp: 6, ey_quality: 7, ey_access: 6,   // early-years channels are slow
   },
 };
@@ -234,7 +239,9 @@ export const SYS = {
   paDisLeverage: 1.3,                         // disadvantaged PA more sensitive
   severeDrift: 0.05,                          // pp/yr severe absence keeps rising w/o intensive support [DfE — diverging tail]
   severeMentorCut: band(0.3, 0.8, 1.5),       // pp cut at full mentor coverage [DfE mentor pilot, haircut]
-  neetPerA8: band(0.15, 0.35, 0.6),           // pp NEET fall per +1 A8 point [EPI: unqualified ~2x NEET]
+  // reduced from (0.15, 0.35, 0.6) when NEETPIPE.absenceK was added — overlap haircut,
+  // since absence now acts on NEET both via attainment and via the direct pipeline term
+  neetPerA8: band(0.10, 0.25, 0.45),          // pp NEET fall per +1 A8 point [EPI: unqualified ~2x NEET]
   youthIllHealthDrift: band(0.05, 0.20, 0.40),// pp/yr exogenous NEET rise (mental health) [Milburn 2026: →1.25m]
   povertyActionMax: band(1.5, 3.5, 5.0),      // pp child-poverty cut at full anti-poverty effort [Child Poverty Strategy 550k≈3.7pp]
   fsmPovertyCut: band(0.3, 0.7, 1.2),         // pp from FSM expansion [DfE ~100k, take-up-discounted]
@@ -246,12 +253,47 @@ export const SYS = {
 // Post-16 / skills / youth mental health (the NEET exit boundary — the Milburn review)
 // ---------------------------------------------------------------------------
 export const POST16 = {
-  // pp NEET reduction at full post-16/skills effort (Youth Guarantee, T/V-levels, foundation apprenticeships)
-  neetMax: band(0.5, 1.2, 2.2),          // [DfE Post-16 White Paper 2025; Youth Guarantee £1.5bn]
+  // post16_skills RE-SCOPED 2026-06: the Youth Guarantee and apprenticeships are now
+  // their own levers (below), so this is T/V-levels + Skills England + study-programme
+  // quality only — reduced from (0.5, 1.2, 2.2) to avoid double-counting.
+  neetMax: band(0.3, 0.8, 1.5),          // [DfE Post-16 White Paper 2025]
   // youth mental-health support: Milburn 2026 finds inactivity is now health/mental-health-driven
   mhNeetMax: band(0.4, 1.0, 1.8),        // pp NEET reduction at full mental-health support
   mhDriftMitig: band(0.3, 0.55, 0.8),    // fraction of the exogenous youth-ill-health NEET drift removed
   mhSevereMax: band(0.2, 0.6, 1.2),      // pp severe-absence cut at full MH support [mental ill-health drives severe absence]
+  // ---- 2026-06 NEET levers (effects land on segments — see engine.ts) ----
+  youthGuaranteeMax: band(0.3, 0.8, 1.5),   // pp off unemployed-NEET at full rollout [Youth Contract keyworker ≈+1.8pp re-engagement; £820m + 18–24 Jobs Guarantee; confidence low–medium]
+  careersMax: band(0.2, 0.7, 1.4),          // pp off NEET inflow at full Gatsby coverage [CEC/Gatsby: −8% NEET likelihood, −20% in disadvantaged schools — CORRELATIONAL]
+  apprenticeshipsMax: band(0.2, 0.8, 1.8),  // pp off unemployed-NEET at full 16–24 start recovery [YFF toolkit: high impact / LOW evidence security — deliberately wide]
+  post16PremiumMax: band(0.1, 0.5, 1.0),    // pp off NEET (U+O) via post-16 retention [EPI 16–19 premium proposal; no causal estimate exists]
+};
+
+// ---------------------------------------------------------------------------
+// NEET segment dynamics. The single NEET scalar is decomposed into three stocks
+// with different drivers and stickiness [ONS May 2026; Milburn interim 2026;
+// Resolution Foundation False Starts 2025 / Lost in Transition 2026].
+// ---------------------------------------------------------------------------
+export const NEETSEG = {
+  // share of the attainment elasticity (SYS.neetPerA8) landing on each segment —
+  // qualifications move employability (U) most, health-driven inactivity least
+  a8Share: { unemployed: 0.6, other: 0.3, health: 0.1 },
+  // share of the upstream pipeline pressure landing on each segment
+  pipeShare: { unemployed: 0.45, other: 0.35, health: 0.20 },
+  // health-segment stickiness: 8 in 10 health-inactive NEETs are still NEET 2+ yrs
+  // later (Milburn) — modelled as a slower lever response on that stock
+  healthLag: 4,
+};
+
+// Upstream pipeline pressure: pp of headline NEET per unit deviation of the modelled
+// mediators, derived from DfE "Risk factors for becoming NEET" (May 2026) relative
+// risks (persistent absence 3.9×; EHCP ~⅓ NEET at 17–19; FSM/poverty ~2×) scaled by
+// cohort shares. ASSOCIATIONAL, not causal — confidence: medium. Acts with the
+// stock-turnover lag (school cohorts age into the 16–24 stock gradually).
+export const NEETPIPE = {
+  absenceK: band(0.05, 0.11, 0.20),   // pp NEET per pp disadvantaged persistent absence above 29.9
+  povertyK: band(0.02, 0.05, 0.10),   // pp NEET per pp child poverty above 31.0
+  ehcpK:    band(0.10, 0.30, 0.60),   // pp NEET per pp EHCP prevalence above 5.3 (composition pressure)
+  lag: 4,                              // years for school-cohort pressure to propagate into the 16–24 stock
 };
 
 // ---------------------------------------------------------------------------
@@ -330,8 +372,12 @@ export const COST = {
   riseFullBn: 0.10,                           // £bn full RISE coverage [gov £20m+ scaled]
   attendanceFullBn: 0.10,                     // £bn full mentor coverage [gov £15m/3yr scaled]
   fundingPerPctBn: 0.65,                      // £bn per +1%/yr core schools funding
-  post16FullBn: 1.5,                          // £bn full post-16/skills effort [Youth Guarantee £1.5bn]
+  post16FullBn: 1.0,                          // £bn full post-16/skills effort (re-scoped: YG/apprenticeships split out)
   mentalHealthFullBn: 0.6,                    // £bn full youth mental-health support
+  youthGuaranteeFullBn: 1.2,                  // £bn/yr full Youth+Jobs Guarantee (£820m/3yr + £1bn 18–24 expansion ≈ £1.2bn/yr at scale) [Commons Library CBP-10827]
+  careersFullBn: 0.3,                         // £bn full Gatsby-benchmark careers infrastructure (CEC scale-up)
+  apprenticeshipsFullBn: 1.0,                 // £bn full 16–24 start recovery (SME full funding + levy reform headroom)
+  post16PremiumPerPound: 0.43e6 / 1e9,        // £bn per £1/student over ~0.43m disadvantaged 16–18s [IFS/EPI]
   readingFullBn: 0.15,                        // £bn full reading/oracy CPD programme [Reading Ambition]
   // wider determinants & services
   sendPipelineFullBn: 0.6,                    // £bn full EP/SALT/OT specialist-capacity expansion

@@ -43,9 +43,9 @@
       note: 'A high-level estimate of identification + early-support cost. A front-loaded profile (more early-years/primary share) modestly lifts EHCP-pupil attainment and slows late escalation.',
     },
     {
-      title: 'NEET (the exit boundary)',
-      eq: 'NEET(t) = 13.3 + drift·(1 − mhDriftMitig)·t − 0.35·(A8_all − 46.0) − post16/MH terms',
-      note: 'An exogenous youth-ill-health drift (Milburn) pushes NEET up; attainment, post-16/skills and mental-health support pull it down. Unqualified young people have ~2× the NEET rate.',
+      title: 'NEET (the exit boundary) — three segments',
+      eq: 'NEET(t) = U(t) + IH(t) + IO(t)        [13.3 = 5.19 + 3.72 + 4.39 at 2025]\npipe(t) = (0.11·ΔPA_dis + 0.05·Δpoverty + 0.30·Δehcp%) · ramp(t, 4)\nU(t)  = (5.19 + 0.45·pipe − 0.6·a8Effect) · Π(1 − cutᵢ/5.19)   [unemployed-active]\nIH(t) = (3.72 + drift·(1 − mhMitig)·t + 0.20·pipe − 0.1·a8Effect) · Π(1 − cutᵢ/3.72)\nIO(t) = (4.39 + 0.35·pipe − 0.3·a8Effect) · Π(1 − cutᵢ/4.39)   [inactive-other]',
+      note: 'The NEET stock is decomposed into unemployed-active (39%, cyclical — Youth Guarantee, apprenticeships, careers), inactive-health (28%, sticky — mental health & CAMHS, slower lag: 8 in 10 are still NEET 2+ years on) and inactive-other (33% — care, retention). Upstream pressure (pipe) carries the DfE May-2026 risk-factor associations (persistent absence 3.9×, EHCP ~⅓ NEET at 17–19, poverty ~2×) into the stock with a 4-year turnover lag. Programme cuts act multiplicatively (proportional hazards), so overlapping programmes saturate honestly instead of stacking. The attainment elasticity was reduced 0.35→0.25 as an overlap haircut when the pipeline was added.',
     },
     {
       title: 'Monte-Carlo & sensitivity',
@@ -66,7 +66,8 @@
     ['Persistent absence (all / disadv.)', '17.6% / 29.9%', 'DfE EES absence 2024/25'],
     ['Teachers (FTE) / 6,500 pledge gap', '468k / 6.5k', 'DfE SWC 2024; NFER 2025'],
     ['Child poverty (relative, AHC)', '31% (~4.5m)', 'DWP HBAI; CPAG'],
-    ['NEET (16–24)', '13.3% (~840k)', 'DfE/ONS 2025; Milburn review 2026'],
+    ['NEET (16–24)', '13.3% (~840k England; UK >1m, 13.5%)', 'DfE 2025; ONS May 2026; Milburn 2026'],
+    ['NEET composition (U / IH / IO)', '39% / 28% / 33%', 'ONS May 2026; RF False Starts 2025'],
   ];
 
   const techniques = [
@@ -124,7 +125,8 @@ funding ─▶ teacher capacity ─▶ attainment level                         
 breakfast + attendance mentors ─▶ attendance ─▶ attainment & the gap     (the strongest single lever)
 early SEND + inclusive mainstream ─▶ slows EHCP demand ─▶ shrinks deficit
 EHCP reform ─▶ cuts deficit BUT harms SEND attainment & raises tribunals (unless matched by inclusion)
-attainment ─▶ NEET                                                       (+ exogenous youth ill-health)</pre>
+absence + poverty + SEND ─▶ NEET pipeline ─▶ 3 NEET segments             (U cyclical · IH sticky · IO other)
+attainment ─▶ NEET (mostly the unemployed segment)                       (+ exogenous youth ill-health → IH)</pre>
   </section>
 
   <section>

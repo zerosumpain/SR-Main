@@ -1,0 +1,53 @@
+// engine.neet.test.ts — the 3-segment NEET stock + evidence pipeline (Phase C of the
+// 2026-06-10 realignment). Segments must sum to the headline, reproduce the 2025
+// composition, and respond to the RIGHT levers (mental health → health segment;
+// youth guarantee → unemployed segment; upstream absence → pipeline).
+
+import { describe, it, expect } from 'vitest';
+import { runSim } from './engine';
+import { baselineLevers, policyLevers, LEVERS_BY_ID } from './levers';
+import { BASELINE } from './params';
+
+const at = (years: ReturnType<typeof runSim>['years'], y: number) => years.find((r) => r.year === y)!;
+const maxed = (base: Record<string, number>, id: string) => ({ ...base, [id]: LEVERS_BY_ID[id].max });
+
+describe('NEET segments', () => {
+  it('segments sum to the headline in every year', () => {
+    for (const levers of [baselineLevers(), policyLevers()]) {
+      for (const y of runSim(levers).years) {
+        expect(y.neetUnemployed + y.neetInactiveHealth + y.neetInactiveOther).toBeCloseTo(y.neet, 6);
+      }
+    }
+  });
+
+  it('reproduces the 2025 baseline composition', () => {
+    const y0 = at(runSim(baselineLevers()).years, 2025);
+    expect(y0.neet).toBeCloseTo(BASELINE.neet, 6);
+    expect(y0.neetUnemployed).toBeCloseTo(BASELINE.neetUnemployed, 6);
+    expect(y0.neetInactiveHealth).toBeCloseTo(BASELINE.neetInactiveHealth, 6);
+    expect(y0.neetInactiveOther).toBeCloseTo(BASELINE.neetInactiveOther, 6);
+  });
+
+  it('mental health acts on the health segment, youth guarantee on the unemployed segment', () => {
+    const base = at(runSim(baselineLevers()).years, 2035);
+    const mh = at(runSim(maxed(baselineLevers(), 'mental_health')).years, 2035);
+    const yg = at(runSim(maxed(baselineLevers(), 'youth_guarantee')).years, 2035);
+    expect(base.neetInactiveHealth - mh.neetInactiveHealth)
+      .toBeGreaterThan(base.neetUnemployed - mh.neetUnemployed);
+    expect(base.neetUnemployed - yg.neetUnemployed).toBeGreaterThan(0.3);
+    expect(Math.abs(base.neetInactiveHealth - yg.neetInactiveHealth)).toBeLessThan(0.05);
+  });
+
+  it('worse upstream absence raises NEET via the pipeline', () => {
+    const worse = maxed(baselineLevers(), 'housing_instability'); // raises disadvantaged PA
+    expect(at(runSim(worse).years, 2035).neet)
+      .toBeGreaterThan(at(runSim(baselineLevers()).years, 2035).neet);
+  });
+
+  it('new levers carry cost', () => {
+    for (const id of ['youth_guarantee', 'careers_gatsby', 'apprenticeships', 'post16_premium']) {
+      const sim = runSim(maxed(baselineLevers(), id));
+      expect(at(sim.years, 2030).cumulativeCost).toBeGreaterThan(0);
+    }
+  });
+});

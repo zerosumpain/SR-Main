@@ -18,6 +18,7 @@ import type { LeverState, SimResult, YearResult } from './types';
 import { LEVERS_BY_ID, ageIdTotals, earlyIdShift } from './levers';
 import {
   BASE_YEAR, END_YEAR, POP, BASELINE, GAP_TO_LEVEL, CH, SEND, SYS, POST16, WORK, AGEID, IND, EY_KS4_LAG, EY_FADEOUT, COST,
+  NEETSEG, NEETPIPE,
   type Band,
 } from './params';
 
@@ -288,20 +289,57 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     );
     const senSupportPct = BASELINE.senSupportPct + 0.1 * depPos('send_early') * ramp(ys, 2); // mild rise w/ early ID
 
-    // ---------------- NEET (post-16 exit boundary — the Milburn review) ----------------
+    // ---------------- NEET (post-16 exit boundary), three segments ----------------
+    // U = unemployed-active (cyclical) · IH = inactive-health (sticky; the Milburn
+    // "generational fault line") · IO = inactive-other (caring / discouraged).
+    // Headline = sum. Composition: ONS May 2026; risk pipeline: DfE risk-factors May 2026.
     const mhDriftMitig = R(POST16.mhDriftMitig) * concave(depPos('mental_health')) * ramp(ys, 3);
-    const neet = clamp(
-      BASELINE.neet + R(SYS.youthIllHealthDrift) * (1 - mhDriftMitig) * ys
-        - R(SYS.neetPerA8) * (attainment8 - BASELINE.attainment8)
-        - 0.08 * structReductionsK4
-        - R(POST16.neetMax) * concave(depPos('post16_skills')) * ramp(ys, 2)
-        - R(POST16.mhNeetMax) * concave(depPos('mental_health')) * ramp(ys, 2)
-        - R(IND.careNeet) * concave(depPos('care_support')) * ramp(ys, 2)         // care-experienced support
-        - R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2) // cut exclusion→AP→NEET pipeline
-        - R(IND.placeNeet) * concave(depPos('place_investment')) * ramp(ys, 2)     // place-based investment
-        - R(IND.camhsNeet) * concave(depPos('camhs')) * ramp(ys, 2),               // CAMHS access
-      5, 25,
-    );
+    // upstream pipeline pressure (pp on headline NEET) from the modelled mediators —
+    // associational multipliers, propagating with the stock-turnover lag
+    const pipe = (R(NEETPIPE.absenceK) * (persistentAbsenceDis - PA_DIS_BASE)
+      + R(NEETPIPE.povertyK) * (childPoverty - BASELINE.childPoverty)
+      + R(NEETPIPE.ehcpK) * (ehcpPct - BASELINE.ehcpPct)) * ramp(ys, NEETPIPE.lag);
+    const a8Effect = R(SYS.neetPerA8) * (attainment8 - BASELINE.attainment8) + 0.08 * structReductionsK4;
+    const careersCut = R(POST16.careersMax) * concave(depPos('careers_gatsby')) * ramp(ys, 3);
+    // Programme cuts act MULTIPLICATIVELY on each segment (proportional hazards): each
+    // term's pp-at-full-deployment is converted to a fraction of the segment's 2025
+    // base, so overlapping programmes saturate instead of additively clamping the
+    // small segment bases to their floors (which would deaden every marginal lever).
+    const survive = (cutsPp: number[], basePp: number) =>
+      cutsPp.reduce((m, c) => m * clamp(1 - Math.max(0, c) / basePp, 0.3, 1), 1);
+
+    const uPressure = BASELINE.neetUnemployed
+      + NEETSEG.pipeShare.unemployed * pipe - NEETSEG.a8Share.unemployed * a8Effect;
+    const neetUnemployed = clamp(uPressure * survive([
+      0.6 * careersCut,
+      R(POST16.neetMax) * concave(depPos('post16_skills')) * ramp(ys, 2),
+      R(POST16.youthGuaranteeMax) * concave(depPos('youth_guarantee')) * ramp(ys, 2),
+      R(POST16.apprenticeshipsMax) * concave(depPos('apprenticeships')) * ramp(ys, 3),
+      0.5 * R(POST16.post16PremiumMax) * concave(depPos('post16_premium')) * ramp(ys, 3),
+      0.6 * R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2), // exclusion→AP→NEET pipeline
+      R(IND.placeNeet) * concave(depPos('place_investment')) * ramp(ys, 2),
+      0.5 * R(IND.careNeet) * concave(depPos('care_support')) * ramp(ys, 2),
+    ], BASELINE.neetUnemployed), 1.0, 10);
+
+    const ihPressure = BASELINE.neetInactiveHealth
+      + R(SYS.youthIllHealthDrift) * (1 - mhDriftMitig) * ys
+      + NEETSEG.pipeShare.health * pipe - NEETSEG.a8Share.health * a8Effect;
+    const neetInactiveHealth = clamp(ihPressure * survive([
+      0.1 * careersCut,
+      R(POST16.mhNeetMax) * concave(depPos('mental_health')) * ramp(ys, NEETSEG.healthLag),
+      R(IND.camhsNeet) * concave(depPos('camhs')) * ramp(ys, NEETSEG.healthLag),
+    ], BASELINE.neetInactiveHealth), 1.0, 12);
+
+    const ioPressure = BASELINE.neetInactiveOther
+      + NEETSEG.pipeShare.other * pipe - NEETSEG.a8Share.other * a8Effect;
+    const neetInactiveOther = clamp(ioPressure * survive([
+      0.3 * careersCut,
+      0.5 * R(POST16.post16PremiumMax) * concave(depPos('post16_premium')) * ramp(ys, 3),
+      0.4 * R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2),
+      0.5 * R(IND.careNeet) * concave(depPos('care_support')) * ramp(ys, 2),
+    ], BASELINE.neetInactiveOther), 1.0, 9);
+
+    const neet = neetUnemployed + neetInactiveHealth + neetInactiveOther;
 
     // ---------------- FUNDING per pupil ----------------
     // High-needs cost pressure above the 2025 level leaks from mainstream per-pupil funding.
@@ -344,6 +382,10 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + Math.max(0, val('attendance') - 10) / 90 * COST.attendanceFullBn
       + Math.max(0, val('post16_skills') - 20) / 80 * COST.post16FullBn
       + Math.max(0, val('mental_health') - 25) / 75 * COST.mentalHealthFullBn
+      + Math.max(0, val('youth_guarantee') - 15) / 85 * COST.youthGuaranteeFullBn
+      + Math.max(0, val('careers_gatsby') - 35) / 65 * COST.careersFullBn
+      + Math.max(0, val('apprenticeships') - 30) / 70 * COST.apprenticeshipsFullBn
+      + val('post16_premium') * COST.post16PremiumPerPound
       + ageIdDelta // SEND/EHCP identification-by-age: additional ("stretch") cost vs baseline
       + Math.max(0, val('send_pipeline') - 30) / 70 * COST.sendPipelineFullBn
       + Math.max(0, val('camhs') - 30) / 70 * COST.camhsFullBn
@@ -365,7 +407,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       ehcpCount, ehcpPct, senSupportPct, highNeedsSpend, highNeedsDeficitStock: deficitStock,
       ehcpAttainment8, tribunalAppeals, insolvencyRisk,
       absenceOverall, persistentAbsence, persistentAbsenceDis, severeAbsence,
-      teacherShortfall, teachersFTE, fundingPerPupil, childPoverty, neet,
+      teacherShortfall, teachersFTE, fundingPerPupil, childPoverty,
+      neet, neetUnemployed, neetInactiveHealth, neetInactiveOther,
       annualCost, cumulativeCost,
     });
   }

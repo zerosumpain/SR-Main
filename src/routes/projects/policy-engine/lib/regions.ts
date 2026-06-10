@@ -122,6 +122,10 @@ function applyOffsets(nat: YearResult, off: { gap: number; a8: number; pa: numbe
   const grade5EM = clamp(nat.grade5EM + 2.2 * off.a8, 5, 95);
   const persistentAbsence = clamp(nat.persistentAbsence + off.pa, 3, 45);
   const gld = clamp(nat.gld + off.gld, 40, 95);
+  // worse attainment → more NEET (engine's neetPerA8 ≈ 0.25pp per A8 point + regional labour-market residual)
+  const neet = clamp(nat.neet - 0.35 * off.a8, 5, 30);
+  // the three segments scale proportionally so they always sum to the regional headline
+  const nf = nat.neet > 0 ? neet / nat.neet : 1;
   return {
     ...nat,
     gapKS4, attainment8, grade5EM, gld, persistentAbsence,
@@ -131,8 +135,10 @@ function applyOffsets(nat: YearResult, off: { gap: number; a8: number; pa: numbe
     attainment8Dis: clamp(attainment8 - GAP_TO_LEVEL.ks4A8 * gapKS4, 15, 70),
     grade5EMDis: clamp(grade5EM - GAP_TO_LEVEL.ks4G5 * gapKS4, 2, 95),
     gldDis: clamp(gld - (nat.gld - nat.gldDis), 25, 95),
-    // worse attainment → more NEET (engine's neetPerA8 ≈ 0.35pp per A8 point)
-    neet: clamp(nat.neet - 0.35 * off.a8, 5, 30),
+    neet,
+    neetUnemployed: nat.neetUnemployed * nf,
+    neetInactiveHealth: nat.neetInactiveHealth * nf,
+    neetInactiveOther: nat.neetInactiveOther * nf,
   };
 }
 

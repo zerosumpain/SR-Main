@@ -3,9 +3,15 @@
   import PopulationPanel from '../components/PopulationPanel.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import { STORIES } from '../lib/stories';
-  import { economicImpact, ECON } from '../lib/economics';
+  import { economicImpact, ECON, NEET_ECON, neetHeadcountAvoided } from '../lib/economics';
 
   const econ = $derived(economicImpact(app.viewSim, app.viewBase, app.horizon, app.scale));
+  const neetPpAvoided = $derived.by(() => {
+    const y = app.viewSim.find((r) => r.year === app.horizon);
+    const b = app.viewBase.find((r) => r.year === app.horizon);
+    return y && b ? Math.max(0, b.neet - y.neet) : 0;
+  });
+  const neetHeads = $derived(neetHeadcountAvoided(neetPpAvoided, app.scale));
   const fbn = (v: number) => `${v < 0 ? '−' : ''}£${(Math.abs(v) / 1e9).toFixed(1)}bn`;
   const fk = (v: number) => `${v < 0 ? '−' : ''}£${Math.round(Math.abs(v) / 1000)}k`;
 </script>
@@ -71,6 +77,21 @@
       <div class="ec"><span class="ec-num">{fk(econ.perPupilPV)}</span><span class="ec-lab">per pupil, on average</span></div>
       <div class="ec {econ.disLifetimePV >= 0 ? 'good' : 'bad'}"><span class="ec-num">{fbn(econ.disLifetimePV)}</span><span class="ec-lab">accruing to disadvantaged pupils</span></div>
     </div>
+    {#if neetHeads > 1000}
+      <p class="neet-ctx">
+        {#if app.narrative === 'eli5'}
+          Separately: by {app.horizon} your plan has about <b>{Math.round(neetHeads / 1000)}k fewer young people</b> with no job,
+          education or training. Each one avoided is worth roughly <b>£104k–£300k</b> over a lifetime — but we don't add that to the
+          totals above, because part of it is already counted through better grades.
+        {:else}
+          Context, <b>not added to the totals above</b>: at {app.horizon} the modelled NEET rate is {neetPpAvoided.toFixed(1)}pp lower
+          than the status quo ≈ <b>{Math.round(neetHeads / 1000)}k fewer 16–24-year-olds NEET</b>. Published lifetime costs run
+          <b>£{Math.round(NEET_ECON.perPersonLifetimeLow / 1000)}k–£{Math.round(NEET_ECON.perPersonLifetimeHigh / 1000)}k per person</b>
+          ({NEET_ECON.source}) — the upper figure is Milburn's earnings-scarring bound. Adding this to the LEO PV would double-count
+          the attainment-driven share of the NEET reduction, so it stays a context line.
+        {/if}
+      </p>
+    {/if}
     <p class="econ-caveat">
       ⚠ <b>Treat as illustrative, not causal.</b> These figures multiply the modelled Attainment-8 change by a per-point earnings
       value (~£{ECON.pvPerA8Point.toLocaleString()} PV/point, from the DfE’s ~£100k-per-standard-deviation estimate). The earnings–
@@ -94,6 +115,9 @@
   .ec-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; line-height: 1; color: var(--ink, #1c1611); }
   .ec.good .ec-num { color: #2f7d4f; } .ec.bad .ec-num { color: #b1455e; }
   .ec-lab { font-size: 11px; line-height: 1.35; color: rgba(28,22,17,0.6); }
+  .neet-ctx { margin: 2px 0 10px; padding: 9px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.55;
+    color: rgba(28,22,17,0.7); background: rgba(86,106,140,0.07); border: 1px solid rgba(86,106,140,0.25); }
+  .neet-ctx b { color: var(--ink, #1c1611); }
   .econ-caveat { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.62); }
   .econ-caveat b { color: var(--ink, #1c1611); } .econ-caveat a { color: #2f6f97; }
 </style>

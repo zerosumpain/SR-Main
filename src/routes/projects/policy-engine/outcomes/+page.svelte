@@ -20,7 +20,7 @@
     ehcpAttainment8: ['inclusion_fund', 'send_early', 'ehcp_reform', 'send_pipeline', 'care_support'],
     persistentAbsence: ['attendance', 'breakfast', 'mental_health', 'behaviour_support', 'housing_instability'],
     childPoverty: ['poverty_action', 'fsm'],
-    neet: ['post16_skills', 'mental_health', 'care_support', 'behaviour_support', 'camhs'],
+    neet: ['youth_guarantee', 'mental_health', 'apprenticeships', 'careers_gatsby', 'post16_premium'],
     teacherShortfall: ['teachers', 'teacher_pay', 'bursaries', 'school_funding'],
     cumulativeCost: [],
   };
@@ -106,8 +106,8 @@
             { label: 'Your scenario', color: C_YOU, values: proj('ehcpAttainment8'), emphasis: true },
             { label: 'Status quo', color: C_BASE, values: proj('ehcpAttainment8', vb), dashed: true }] }] },
       { key: 'system', title: 'System health & destinations', prose:
-        'The mechanisms behind the headline. Disadvantaged persistent absence is the gap’s engine; child poverty is the upstream tide; NEET is the exit boundary the Milburn review warns is becoming a “generational fault line”, driven increasingly by youth mental ill-health; teacher shortfall is the capacity constraint that recruitment, pay and funding all chase.',
-        eli5: 'The machinery behind the headline: poorer kids missing school (the main driver of the gap), poverty as the background tide, young people ending up with no job or training, and whether there are enough teachers.',
+        'The mechanisms behind the headline. Disadvantaged persistent absence is the gap’s engine; child poverty is the upstream tide; teacher shortfall is the capacity constraint that recruitment, pay and funding all chase. NEET — the exit boundary — is modelled as three distinct stocks, because 61% of today’s NEETs are inactive, not unemployed: the unemployed segment responds to the Youth Guarantee and apprenticeships, the health-driven segment (the Milburn “fault line”) only to mental-health and CAMHS capacity, and the rest to retention and care support. The NEET field study pulls this thread fully.',
+        eli5: 'The machinery behind the headline: poorer kids missing school (the main driver of the gap), poverty as the background tide, and whether there are enough teachers. The “no job or training” line is split into three: those looking for work, those too unwell to work (the fastest-growing group — job schemes don’t help them, health support does), and those out for other reasons like caring.',
         charts: [
           { title: 'Persistent absence', unit: '% missing ≥10%', dp: 1, series: [
             { label: 'All — your', color: C_YOU, values: withHist('persistentAbsence'), emphasis: true, band: bandFor('persistentAbsence') },
@@ -117,7 +117,10 @@
             { label: 'Your scenario', color: C_YOU, values: withHist('childPoverty'), emphasis: true, band: bandFor('childPoverty') },
             { label: 'Status quo', color: C_BASE, values: proj('childPoverty', vb), dashed: true }] },
           { title: 'NEET (16–24)', unit: '%', dp: 1, series: [
-            { label: 'Your scenario', color: C_YOU, values: withHist('neet'), emphasis: true, band: bandFor('neet') },
+            { label: 'Headline — your', color: C_YOU, values: withHist('neet'), emphasis: true, band: bandFor('neet') },
+            { label: 'Unemployed', color: '#2f6f97', values: proj('neetUnemployed') },
+            { label: 'Inactive (health)', color: '#7a5aa6', values: proj('neetInactiveHealth') },
+            { label: 'Inactive (other)', color: '#9a7b1f', values: proj('neetInactiveOther') },
             { label: 'Status quo', color: C_BASE, values: proj('neet', vb), dashed: true }] },
           { title: 'Teacher shortfall (6,500 pledge)', unit: 'k FTE — neg = surplus', dp: 1, zeroBased: true, series: [
             { label: 'Your scenario', color: C_YOU, values: proj('teacherShortfall'), emphasis: true, band: bandFor('teacherShortfall') },
