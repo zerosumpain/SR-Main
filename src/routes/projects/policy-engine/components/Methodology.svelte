@@ -180,17 +180,17 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
 
   <section>
     <h3>Calibrated baselines (2025)</h3>
-    <table>
+    <div class="tbl-scroll"><table>
       <thead><tr><th>Metric</th><th>Value</th><th>Source</th></tr></thead>
       <tbody>
         {#each baselines as [m, v, s]}<tr><td>{m}</td><td class="num">{v}</td><td class="src">{s}</td></tr>{/each}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <section>
     <h3>Levers &amp; evidence</h3>
-    <table>
+    <div class="tbl-scroll"><table>
       <thead><tr><th>Lever</th><th>Represents</th><th>Confidence</th></tr></thead>
       <tbody>
         {#each LEVERS as L}
@@ -201,7 +201,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
           </tr>
         {/each}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <section>
@@ -254,7 +254,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
       cheaper Estonia and Japan; Vietnam nears England on a ninth of the spend); equity varies enormously at the same price (England’s gap
       of 86 is fairer than the OECD’s 93 and far fairer than France’s 113 / Germany’s 111 at equal-or-higher spend, while Ireland’s 74 is
       fairest of all); and gains are reversible (Germany −25, Poland −27 in a single cycle). All three are consistent with the engine’s design — though cross-country correlations are suggestive, not causal.</p>
-    <table>
+    <div class="tbl-scroll"><table>
       <thead><tr><th>Country</th><th>Tier</th><th>Maths</th><th>Read</th><th>Sci</th><th>Gap</th><th>Cumul. 6–15</th><th>Trend</th></tr></thead>
       <tbody>
         {#each BY_MATHS as c}
@@ -275,7 +275,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
           <td class="num">{OECD_AVG.mathsTrend}</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <p class="caveat">PISA 2022 (OECD, Dec 2023); cumulative spend = Table I.B3.2.2; England means = DfE/NFER PISA 2022 National Report
       for England. *Estonia cumulative reconstructed (see above). “n.s.” = not statistically significant.</p>
   </section>
@@ -314,6 +314,7 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
   ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
   li { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.78); }
   .tech li b { color: var(--ink, #1c1611); }
+  .tbl-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
   th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
   td { padding: 5px 8px 5px 0; border-bottom: 1px solid rgba(28,22,17,0.07); color: rgba(28,22,17,0.8); vertical-align: top; }
