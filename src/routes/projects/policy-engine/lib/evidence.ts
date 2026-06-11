@@ -360,6 +360,23 @@ export const ANALYSES: Analysis[] = [
     claim: 'A landscape review of AI in state schools identifies opportunities and risks across teaching, marking and careers guidance, and flags gaps in data, privacy, transparency and regulation as preconditions for safe use.',
     area: ['data', 'attainment'], themes: ['data-gap', 'measurement-validity'], levers: [], outcomes: [], strength: 'moderate',
     url: 'https://www.adalovelaceinstitute.org/report/a-learning-curve/' },
+
+  // ---- Milburn review (DWP) — "Young People and Work" (diagnostic, May 2026) ----
+  { id: 'milburn-neet-2026', org: 'Milburn review', orgFull: 'Milburn review (DWP) — Young People and Work (interim)', lean: 'official',
+    title: 'Young People and Work — interim diagnostic report', year: 2026,
+    claim: 'About 1m 16–24-year-olds are NEET (~1 in 8), projected to ~1.25m (1 in 6) within five years without reform; the review estimates a ~£125bn annual cost ("more than we spend on education each year") and finds about £1 spent on youth employment support for every ~£25 on benefits.',
+    area: ['neet'], themes: ['early-identification', 'equity-not-money', 'participation-by-design'], levers: ['mental_health', 'youth_guarantee', 'entry_level', 'post16_premium'], outcomes: ['neet', 'neetInactiveHealth'], strength: 'moderate',
+    url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { id: 'milburn-youth-economy', org: 'Milburn review', orgFull: 'Milburn review (DWP) — Young People and Work (interim)', lean: 'official',
+    title: 'The youth economy — how the labour market produces detachment', year: 2026,
+    claim: 'The youth share of the labour market has fallen even as overall employment rose; entry-level roles have become fewer and more demanding and recruitment "more remote, more automated and less human"; 6 in 10 NEETs have never had a job, up from 4 in 10 in 2005.',
+    area: ['neet'], themes: ['participation-by-design'], levers: ['entry_level', 'apprenticeships'], outcomes: ['neetUnemployed', 'neet'], strength: 'moderate',
+    url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { id: 'milburn-health-driver', org: 'Milburn review', orgFull: 'Milburn review (DWP) — Young People and Work (interim)', lean: 'official',
+    title: 'Health — configured for treatment, not participation', year: 2026,
+    claim: 'Health-related reasons for youth NEET rose ~70% over a decade; mental health is the primary condition for more than 4 in 10 disabled NEETs; of those entering health-related inactivity 2017–19, ~8 in 10 were still NEET 2+ years later — making the inactivity sticky rather than cyclical.',
+    area: ['neet'], themes: ['early-identification', 'participation-by-design'], levers: ['mental_health', 'camhs'], outcomes: ['neetInactiveHealth'], strength: 'moderate',
+    url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
 ];
 
 export const ANALYSES_BY_ID: Record<string, Analysis> = Object.fromEntries(ANALYSES.map((a) => [a.id, a]));
