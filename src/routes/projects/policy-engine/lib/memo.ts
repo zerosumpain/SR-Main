@@ -43,7 +43,7 @@ export const MEMO_CASE: Finding[] = [
   },
   {
     point: 'The predictors are already in the Department’s own data, years early.',
-    research: 'Absence, prior attainment and EHCP status — visible at age 13–14 in data DfE already holds — are the strongest predictors of the million-young-person NEET outcome. England runs a deterministic checklist (RONI) with no published error rates; the question is not whether to build early warning, but whether to do it credibly.',
+    research: 'Absence, prior attainment and EHCP status — visible at age 13–14 in data DfE already holds — are the strongest predictors of the million-young-person NEET outcome. The Milburn review (2026) reframes the scale ("the fork in the road": ~£125bn/yr, £1 of youth support per ~£25 of benefits) and locates the failure across the youth economy, health, welfare and an architecture that is "a system in name, not in design". England runs a deterministic checklist (RONI) with no published error rates; the question is not whether to build early warning, but whether to do it credibly — and whether anyone owns the cross-department join.',
     eli5: 'Most young people who end up out of work and education showed warning signs at school years earlier, in data the government already collects.',
     link: { label: 'Field Study №6 — NEET', href: '/projects/policy-engine/neet' },
   },
@@ -215,6 +215,12 @@ export const INSTRUMENTS: Instrument[] = [
     name: 'Post-16 participation signal & NEET nowcast',
     today: 'Tracking goes dark at 18; the headline rests on a survey with volatility warnings', target: 'RTI/UC/ILR-linked EET status, near-real-time, corroborating the survey',
     owner: 'DfE + DWP + HMRC', cost: '££', study: { label: 'NEET', href: '/projects/policy-engine/neet' },
+  },
+  {
+    name: 'Cross-department youth-participation view',
+    today: 'NEET status fragments across DfE, DWP, HMRC and NHS; the labour-DEMAND side (entry-level vacancies, work experience) is unmeasured, so the £1:£25 support-vs-benefits split is invisible',
+    target: 'A joined 16–24 EET + entry-level-vacancy signal and spend-per-stage accounting — the participation-by-design data ask (Milburn ch.7: "a system in name, not in design")',
+    owner: 'DfE + DWP + HMRC + NHSE', cost: '££', study: { label: 'NEET', href: '/projects/policy-engine/neet' },
   },
   {
     name: 'Individual attendance early-warning flags',
