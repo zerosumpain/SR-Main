@@ -1,7 +1,7 @@
-// memo.ts — the capstone: a decision memo that synthesises every field study into
-// one strategic artefact. The moves (ranked, grouped by what unlocks them), the
-// missing-instruments register (every data ask on the site, deduped), the don'ts
-// the history teaches, and the decision requested. Self-contained.
+// memo.ts — the capstone: a synthesis that draws every field study into one
+// analytical summary. The identified improvements (ranked, grouped by what unlocks
+// them), the missing-instruments register (every data ask on the site, deduped),
+// what the historical record cautions against, and the suggested sequencing. Self-contained.
 
 export const MEMO_META = {
   title: 'The synthesis',
@@ -25,8 +25,8 @@ export interface Finding {
 export const MEMO_CASE: Finding[] = [
   {
     point: 'Money alone does not separate systems — equity does.',
-    research: 'England spends near the leaders (OECD cumulative basis) yet concentrates disadvantage harder than the systems it envies. The binding constraint is not the budget line; it is knowing where and for whom the system fails, soon enough to act.',
-    eli5: 'We don’t spend unusually little. The best countries differ in how fairly outcomes are spread — and you can’t fix what you can’t see.',
+    research: 'England spends near the leaders (OECD cumulative basis) yet concentrates disadvantage more than the higher-equity systems it is compared against. On this evidence the binding constraint is not the budget line; it is knowing where and for whom the system underperforms, soon enough to act.',
+    eli5: 'England does not spend unusually little. The higher-performing countries differ mainly in how evenly outcomes are spread — and a system cannot act on what it cannot see.',
     link: { label: 'Field Study №3 — Global', href: '/projects/policy-engine/global' },
   },
   {
@@ -49,7 +49,7 @@ export const MEMO_CASE: Finding[] = [
   },
   {
     point: 'Counted as children rather than rates, the stakes are quantifiable — and unevenly placed.',
-    research: 'A half-month move in the disadvantage gap is tens of thousands of real children, each carrying LEO-derived lifetime-earnings and exchequer consequences. And place carries a residual poverty does not explain: London’s escape, the North East’s decay, the coastal penalty.',
+    research: 'A half-month move in the disadvantage gap is tens of thousands of children, each carrying LEO-derived lifetime-earnings and exchequer consequences. And place carries a residual that poverty does not explain: London’s above-trend outcomes, the North East’s decline, the coastal-area shortfall.',
     eli5: 'Percentages hide real children — and real money over their lifetimes. Where a child grows up matters beyond how poor their family is.',
     link: { label: 'Field Studies №1–2 — Population & Regions', href: '/projects/policy-engine/population' },
   },
@@ -91,93 +91,93 @@ export interface Move {
 
 export const MOVES: Move[] = [
   {
-    n: 1, title: 'Adopt the subsidiarity test as a standing gate', horizon: 'now', cost: '£',
-    what: 'Every proposed collection answers four questions — does the decision live centrally? can the signal be learned without taking the data? what does the holder get back? what gets retired? — before it is approved. The test exists; make it procedure.',
-    eli5: 'Before the centre demands new data, it must show the decision really is the centre’s to make — and give something back.',
+    n: 1, title: 'The subsidiarity test as a standing gate', horizon: 'now', cost: '£',
+    what: 'A criterion that can be applied to every proposed collection via four questions — does the decision live centrally? can the signal be learned without taking the data? what does the holder get back? what gets retired? The test already exists; applying it as routine procedure requires no new law or collection.',
+    eli5: 'A check that can be applied before the centre requests new data: does the decision actually sit with the centre, and what does the data holder get back?',
     owner: 'DfE data & statistics directorate',
     evidence: { label: 'Monitoring — the subsidiarity test', href: '/projects/policy-engine/monitor' },
   },
   {
-    n: 2, title: 'Write the two missing specifications', horizon: 'now', cost: '£',
-    what: 'A cross-vendor safeguarding-record transfer standard (the CTF precedent, applied to the file it excluded), and — with the Home Office and NHS England — the MASH data specification. Both are unowned; both are specification work, not systems.',
-    eli5: 'Write the common rules so the worry-file follows the child between schools, and so the emergency front door stops retyping names.',
+    n: 2, title: 'The two missing specifications', horizon: 'now', cost: '£',
+    what: 'A cross-vendor safeguarding-record transfer standard (the CTF precedent, applied to the file it excluded), and — with the Home Office and NHS England — the MASH data specification. Both are currently unowned; both are specification work, not systems.',
+    eli5: 'Common rules so the safeguarding file follows the child between schools, and so the emergency front door stops re-entering names.',
     owner: 'DfE standards team + Home Office + NHSE',
     evidence: { label: 'Jigsaw — the switchboard', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 3, title: 'Set the registers standard before fragmentation', horizon: 'now', cost: '£',
-    what: 'One collection schema for the new children-not-in-school registers, with national de-duplication for children who move between LAs. 153 local formats are being born right now — the standard is cheap today and expensive in five years.',
-    eli5: 'Every council is starting a list of children not in school. Agree one format now, before there are 153 different ones.',
+    n: 3, title: 'The registers standard, before fragmentation', horizon: 'now', cost: '£',
+    what: 'One collection schema for the new children-not-in-school registers, with national de-duplication for children who move between LAs. 153 local formats are being created now — setting the standard early is low-cost; retrofitting it across 153 formats later is not.',
+    eli5: 'Every council is starting a list of children not in school. A single agreed format now avoids 153 different ones later.',
     owner: 'DfE (CWS Act implementation)',
     evidence: { label: 'Jigsaw — registers, fused', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 4, title: 'Endow the connective tissue', horizon: 'sr', cost: '£',
-    what: 'A multi-year settlement for the standards and sector-tooling layer — iStandUK, SAVVI, Open Referral UK, the Data to Insight pattern — the way health endows the PRSB. Collectively less than one national IT procurement; currently funded in £190k rounds by a different department.',
-    eli5: 'The tiny organisations that keep the common rules alive run on scraps. Fund them properly — it costs less than one big IT project.',
+    n: 4, title: 'Funding the connective tissue', horizon: 'sr', cost: '£',
+    what: 'A multi-year settlement for the standards and sector-tooling layer — iStandUK, SAVVI, Open Referral UK, the Data to Insight pattern — comparable to how health funds the PRSB. Collectively less than one national IT procurement; currently funded in £190k rounds by a different department.',
+    eli5: 'The small organisations that maintain the common rules are funded in short rounds. A stable settlement would cost less than one large IT project.',
     owner: 'DfE + MHCLG (joint settlement)',
     evidence: { label: 'Jigsaw — the connective tissue', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 5, title: 'Turn the attendance feed into an early-warning instrument', horizon: 'now', cost: '££',
-    what: 'The estate’s newest, fastest asset is used to benchmark schools. Add individual trajectory flags — sudden deterioration in Years 9–11 pushed to LAs and careers leaders in-year — making attendance the hub of the NEET early-warning design.',
-    eli5: 'The government already sees attendance daily. Use it to notice a child drifting away in time to act, not just to rank schools.',
+    n: 5, title: 'The attendance feed as an early-warning instrument', horizon: 'now', cost: '££',
+    what: 'The estate’s newest, fastest asset is currently used to benchmark schools. Adding individual trajectory flags — sudden deterioration in Years 9–11, surfaced to LAs and careers leaders in-year — would make attendance the hub of the NEET early-warning design.',
+    eli5: 'The government already receives attendance daily. The same feed could surface a child disengaging in time to act, rather than serving only to rank schools.',
     owner: 'DfE attendance + careers system',
     evidence: { label: 'Attendance — closing the loop', href: '/projects/policy-engine/attendance' },
   },
   {
-    n: 6, title: 'Publish the tables the data already supports', horizon: 'now', cost: '£',
+    n: 6, title: 'The tables the data already supports', horizon: 'now', cost: '£',
     what: 'Cohort-linked stage reporting (one real year-group followed through age 5 → 11 → 16 — the NPD already holds it); LA-level outcome series on consistent disadvantage definitions; destination measures that follow a child across a move; LEO earnings constants refreshed per cohort.',
-    eli5: 'Several of the most useful statistics need no new data at all — just publishing what’s already in the database, joined up.',
+    eli5: 'Several of the most useful statistics need no new data at all — only publishing what is already in the database, joined up.',
     owner: 'DfE official statistics',
     evidence: { label: 'Population & Regions — the data asks', href: '/projects/policy-engine/population' },
   },
   {
-    n: 13, title: 'Ship the SEND record standard with the ISP duty', horizon: 'now', cost: '£',
-    what: 'The white paper puts a statutory digital Individual Support Plan into every nursery, school and college. Publish the machine-readable record standard BEFORE the duty commences — the cancelled 2023–25 digital-EHCP work is sitting in DfE’s own design history — or 153 EHCP formats become 153 ISP formats.',
-    eli5: 'New digital support plans are coming anyway. Agree one format before every council invents its own — again.',
+    n: 13, title: 'The SEND record standard, with the ISP duty', horizon: 'now', cost: '£',
+    what: 'The white paper puts a statutory digital Individual Support Plan into every nursery, school and college. Publishing the machine-readable record standard before the duty commences — the cancelled 2023–25 digital-EHCP work sits in DfE’s own design history — is what would prevent 153 EHCP formats becoming 153 ISP formats.',
+    eli5: 'New digital support plans are coming. Agreeing one format before the duty starts avoids every council creating its own again.',
     owner: 'DfE SEND + standards team',
-    evidence: { label: 'SEND — the information crisis', href: '/projects/policy-engine/send' },
+    evidence: { label: 'SEND — the information gap', href: '/projects/policy-engine/send' },
   },
   {
-    n: 7, title: 'Build identity resolution as shared infrastructure', horizon: 'identifier', cost: '£££',
-    what: 'The consistent identifier exposed as a national matching service the MASH (and any authorised join) can call — the Wigan pilot’s lessons generalised; ECHILD-grade linkage moved from research-only to operations. The single most valuable join on the switchboard.',
-    eli5: 'Build the “is this the same child?” service once, nationally, so every local team stops doing it by hand.',
+    n: 7, title: 'Identity resolution as shared infrastructure', horizon: 'identifier', cost: '£££',
+    what: 'The consistent identifier exposed as a national matching service the MASH (and any authorised join) can call — the Wigan pilot’s lessons generalised; ECHILD-grade linkage moved from research-only to operations. The highest-value join on the switchboard.',
+    eli5: 'An “is this the same child?” service built once, nationally, so local teams no longer do it by hand.',
     owner: 'DfE + NHSE (PDS) + DSIT',
     evidence: { label: 'Jigsaw — identity resolution', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 8, title: 'Ship the Encompass-pattern flows', horizon: 'identifier', cost: '££',
+    n: 8, title: 'The Encompass-pattern flows', horizon: 'identifier', cost: '££',
     what: 'Push-based, deadline-bound, purpose-narrow notifications for the named joins: temporary accommodation → school, A&E attendance → DSL (the Cardiff Model’s minimum-data form), family-court milestones → social care. Each is one flow, not a database — the proven statutory template.',
-    eli5: 'Copy the one flow that works (police warn the school by morning) for housing moves, hospital visits and court decisions.',
+    eli5: 'Extending the one flow that works (police notify the school by morning) to housing moves, hospital visits and court decisions.',
     owner: 'DfE convening MHCLG / NHSE / MoJ',
     evidence: { label: 'Jigsaw — the switchboard', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 9, title: 'Close the age-18 dark zone', horizon: 'identifier', cost: '££',
+    n: 9, title: 'Closing the age-18 tracking gap', horizon: 'identifier', cost: '££',
     what: 'Near-real-time EET status for 16–24s from RTI/UC/ILR linkage — the join LEO already proves at research cadence, run operationally; plus an admin-data nowcast to corroborate the survey the ONS itself flags as volatile.',
-    eli5: 'We stop tracking young people at 18, exactly when a million of them are out of work or education. The tax system already knows — connect it.',
+    eli5: 'Tracking currently stops at 18, the point at which around a million young people are out of work or education. The tax system already holds the status — linking it would close the gap.',
     owner: 'DfE + DWP + HMRC',
     evidence: { label: 'NEET — the data estate', href: '/projects/policy-engine/neet' },
   },
   {
     n: 10, title: 'A validated risk index — governed in the open', horizon: 'identifier', cost: '££',
-    what: 'Replace the unvalidated RONI checklist with nationally validated weights, tested against LEO five-year outcomes, with published precision/recall and an algorithmic transparency record — triage aid, never verdict. The Wisconsin failure and the Allegheny success differ in governance, not technology.',
-    eli5: 'If the state scores children’s risk, the scoring must be tested, published and challengeable — used to offer help, never to label.',
+    what: 'Replacing the unvalidated RONI checklist with nationally validated weights, tested against LEO five-year outcomes, with published precision/recall and an algorithmic transparency record — functioning as a triage aid, not a verdict. The Wisconsin and Allegheny cases differ in governance, not technology.',
+    eli5: 'Where the state scores children’s risk, the evidenced condition for it working is that the scoring is tested, published and challengeable — used to offer help rather than to label.',
     owner: 'DfE + What Works (Foundations)',
     evidence: { label: 'NEET — the tooling ladder', href: '/projects/policy-engine/neet' },
   },
   {
-    n: 11, title: 'Flip FSM to auto-enrolment', horizon: 'sr', cost: '£',
-    what: 'The DWP/HMRC eligibility pipe already runs; from September 2026 every Universal Credit household is eligible, making entitlement trivially inferable. Auto-enrolment feeds ~215,000 missed children and corrects the disadvantage measure beneath half the Department’s own statistics.',
-    eli5: 'Stop making parents fill in forms the computer can already answer. Children get fed; the poverty statistics get honest.',
+    n: 11, title: 'FSM auto-enrolment', horizon: 'sr', cost: '£',
+    what: 'The DWP/HMRC eligibility pipe already runs; from September 2026 every Universal Credit household is eligible, making entitlement readily inferable. Auto-enrolment would reach ~215,000 currently-missed children and correct the disadvantage measure beneath about half the Department’s own statistics.',
+    eli5: 'Auto-enrolment removes a form the data can already complete: more eligible children are fed, and the poverty statistics become more accurate.',
     owner: 'Policy decision (DfE + DWP)',
     evidence: { label: 'Jigsaw — FSM auto-enrolment', href: '/projects/policy-engine/jigsaw' },
   },
   {
-    n: 12, title: 'Climb the sharing ladder instead of expanding extraction', horizon: 'sr', cost: '££',
-    what: 'Build rung 4 — federated analytics over school and MIS data (an OpenSAFELY-for-schools) — rather than widening central collection; and write the evaluation-grade data clause (the “WKAR clause”) into edtech procurement frameworks so the shadow estate starts paying its evidence rent.',
-    eli5: 'Learn from data where it lives instead of hoovering it up — and make edtech companies share what their products learn about what works.',
+    n: 12, title: 'The sharing ladder, instead of expanding extraction', horizon: 'sr', cost: '££',
+    what: 'Building rung 4 — federated analytics over school and MIS data (an OpenSAFELY-for-schools) — rather than widening central collection; and writing the evaluation-grade data clause (the “WKAR clause”) into edtech procurement frameworks so the shadow estate contributes evidence on what works.',
+    eli5: 'Analysing data where it is held rather than collecting it centrally — and requiring edtech products to share what they reveal about what works.',
     owner: 'DfE digital + procurement',
     evidence: { label: 'Monitoring — the ladder & the shadow estate', href: '/projects/policy-engine/monitor' },
   },
@@ -283,24 +283,24 @@ export const INSTRUMENTS: Instrument[] = [
 // ---------------------------------------------------------------------------
 export const MEMO_DONTS: { title: string; why: string; eli5: string }[] = [
   {
-    title: 'Don’t build the central child database',
-    why: 'ContactPoint (£224m) was dismantled in 2010 for reasons that have not changed; the Panel’s evidence says the failures are cultural as much as technical. Central custody of concern-level records is the road already travelled.',
-    eli5: 'We built the giant database of every child once. It cost £224 million and was switched off. Don’t do it again.',
+    title: 'The central child database',
+    why: 'ContactPoint (£224m) was dismantled in 2010 for reasons that have not changed; the Panel’s evidence indicates the failures are cultural as much as technical. Central custody of concern-level records is an approach already attempted and withdrawn.',
+    eli5: 'A single national database of every child was built once. It cost £224 million and was decommissioned — a precedent the record cautions against repeating.',
   },
   {
-    title: 'Don’t add collections without retiring others',
-    why: 'Registry-by-crisis (the RAAC questionnaire pattern) accretes burden and erodes the goodwill every flow on this site depends on. The subsidiarity test’s fourth question — what gets retired? — is the discipline.',
-    eli5: 'Every time the centre asks schools and councils for something new, it should stop asking for something old.',
+    title: 'Adding collections without retiring others',
+    why: 'Registry-by-crisis (the RAAC questionnaire pattern) accumulates burden and erodes the goodwill the flows on this site depend on. The subsidiarity test’s fourth question — what gets retired? — addresses this.',
+    eli5: 'On the record, new requests to schools and councils that do not retire an old one accumulate burden over time.',
   },
   {
-    title: 'Don’t nationalise the sector’s tooling',
-    why: 'ChAT, Nexus and the analyst collectives work because the sector owns them. Fund them, standardise around them, and leave them owned by the people who use them — centre-funds-sector-owns is the proven counterweight.',
-    eli5: 'Councils built good tools for themselves. Pay for them — don’t take them over.',
+    title: 'Nationalising the sector’s tooling',
+    why: 'ChAT, Nexus and the analyst collectives function in part because the sector owns them. The pattern the record favours is centre-funds-sector-owns: fund and standardise around them while ownership stays with the users.',
+    eli5: 'Councils built effective tools themselves. The pattern that has worked is funding them rather than taking them over.',
   },
   {
-    title: 'Don’t score children in the dark',
-    why: 'Wisconsin’s dropout algorithm ran for years with a ~74% false-alarm rate and no published validation; Allegheny’s governed triage aid narrowed racial disparities. The difference was governance and transparency, not the maths.',
-    eli5: 'If a computer flags a child as “at risk”, the rules must be public, tested and used only to offer help.',
+    title: 'Scoring children without published validation',
+    why: 'Wisconsin’s dropout algorithm ran for years with a ~74% false-alarm rate and no published validation; Allegheny’s governed triage aid narrowed racial disparities. The difference was governance and transparency, not the modelling.',
+    eli5: 'Where a computer flags a child as “at risk”, the evidenced condition for it working is that the rules are public, tested and used only to offer help.',
   },
 ];
 
@@ -317,7 +317,7 @@ export const DECISIONS: { ask: string; eli5: string }[] = [
     eli5: 'The cheap, safe items don’t need to wait for anything — they’re mostly writing rules and publishing what already exists.',
   },
   {
-    ask: 'Two items are genuinely resource decisions — the connective-tissue endowment (single-digit £m/yr) and FSM auto-enrolment — while the identifier-dependent builds (improvements 7–10) are naturally sequenced by the CWS Act commencement timetable.',
+    ask: 'Two items are resource decisions — the connective-tissue settlement (single-digit £m/yr) and FSM auto-enrolment — while the identifier-dependent builds (improvements 7–10) are sequenced by the CWS Act commencement timetable.',
     eli5: 'Two things cost real money and need a decision; the bigger technical builds simply queue behind the new child ID.',
   },
 ];

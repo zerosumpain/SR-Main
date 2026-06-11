@@ -4,7 +4,7 @@
 
 <svelte:head>
   <title>Education Policy Modelling — England Schools Simulator</title>
-  <meta name="description" content="A research-backed working model of England's school system, 2025–2040: move the policy levers and watch attainment, the disadvantage gap, the SEND deficit, absence and NEET respond together — plus five intelligence field studies on the data needed to steer any of it." />
+  <meta name="description" content="A research-backed working model of England's school system, 2025–2040: move the policy levers and watch attainment, the disadvantage gap, the SEND deficit, absence and NEET respond together — plus intelligence field studies and a cross-cutting evidence synthesis on the data needed to steer any of it." />
 </svelte:head>
 
 <div class="pe-route wide">
@@ -16,8 +16,10 @@
       government actually controls and watch the dashboard respond together, year by year to 2040: GCSE attainment, the
       <b>disadvantage gap</b> (still ~nineteen months at sixteen), the <b>SEND funding cliff</b>, school absence, child poverty,
       <b>youth unemployment</b> and the teacher workforce — nationally, by region, and in real numbers of children. Then go deeper:
-      five <b>field studies</b> pull the threads inside the system, each ending in the same strategic question — <b>what data would
-      tell us this is working?</b>
+      nine <b>field studies</b> pull the threads inside the system — from the <b>early years</b>, where most of the gap is set before
+      age 5, to SEND, attendance and NEET — each ending in the same strategic question, <b>what data would tell us this is working?</b>
+      A <b>Themes</b> synthesis then reads across them: what the studies say in common, what the outside analysts find, and where the
+      evidence is genuinely contested.
     </p>
     <div class="cta-row">
       <a class="pe-next" href="/projects/policy-engine/outcomes" onclick={() => app.openDrawer()}>Open the levers &amp; start →</a>
@@ -45,8 +47,8 @@
       <p>
         It is <b>not</b> a crystal ball. It’s a place to ask “what would it actually take?”, see the hard trade-offs, and test an idea
         against the evidence. And half the site isn’t about the simulator at all: the <b>field studies</b> dig into who’s actually
-        making a difference, what other countries do, and the data the government would need to spot problems early — from young
-        people drifting out of work to whole towns being left behind. Flip <b>Explain it as</b> at the top of the page between
+        making a difference, what other countries do, and the data the government would need to spot problems early — from the
+        under-fives, where the gap opens, to young people drifting out of work and the wide differences between regions. Flip <b>Explain it as</b> at the top of the page between
         <i>Research</i> and <i>ELI5</i> to read everything in plain or technical language.
       </p>
     {:else}

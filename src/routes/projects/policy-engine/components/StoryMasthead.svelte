@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import type { Story } from '../lib/stories';
+  import ThemeRail from './ThemeRail.svelte';
 
   let { story }: { story: Story } = $props();
   const eli = $derived(app.narrative === 'eli5');
@@ -19,6 +20,7 @@
       <a class="sm-ask-link" href="/projects/policy-engine/monitor">→ The data spine</a>
     {/if}
   </div>
+  <ThemeRail route={story.route} />
 </header>
 
 <style>

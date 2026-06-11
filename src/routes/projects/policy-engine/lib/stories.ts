@@ -13,6 +13,18 @@ export interface Story {
 }
 
 export const STORIES: Record<string, Story> = {
+  earlyYears: {
+    no: 9, route: '/projects/policy-engine/early-years',
+    theme: 'Before school begins',
+    question: 'The gap is set before age 5. What is happening in the years we measure last?',
+    thesis: 'Around 40% of the eventual age-16 disadvantage gap is already present at age 5, yet the first universal education measure of a child is taken at reception. The 0-5 period is acted on through levers but observed last: the largest new spending (the 30-hour offer) is structured to reach few disadvantaged children, the highest-return window carries the smallest per-child funding, and the pre-school developmental signal sits in health systems that do not connect to education.',
+    thesisEli5: 'Most of the rich–poor gap is already there by the time children start school — but it is the part we measure last. The biggest new childcare money mostly helps better-off families, the years that matter most get the least targeted funding, and the early health checks never reach the school system.',
+    dataAsk: [
+      'A linked perinatal → age-2 development → age-5 GLD readout (ECHILD and Children of the 2020s prove it is constructible; nobody publishes it routinely)',
+      'GLD and the disadvantage gap reported by deprivation decile early enough to act on, not only after reception',
+      'Take-up of the disadvantaged 2-year-old offer joined to age-5 outcomes, to test whether access translates into development',
+    ],
+  },
   population: {
     no: 1, route: '/projects/policy-engine/population',
     theme: 'The human scale',
@@ -61,8 +73,8 @@ export const STORIES: Record<string, Story> = {
     no: 5, route: '/projects/policy-engine/jigsaw',
     theme: 'The information jigsaw',
     question: 'Who actually holds the picture of a child?',
-    thesis: 'Nobody does — and nobody should. The picture of a child is distributed across school, council, NHS, police, courts and household systems by design. DfE is one holder among seventeen; the failures that harm children happen at the JOINS — and most of the joins are nobody’s job.',
-    thesisEli5: 'No single organisation knows a child’s whole story: the school knows one part, the doctor another, the council a third. The tragedies happen when those parts never meet — and right now, making them meet is mostly nobody’s job.',
+    thesis: 'No single body does, and — for privacy reasons examined here — arguably none should. The picture of a child is distributed across school, council, NHS, police, courts and household systems by design. DfE is one holder among seventeen; serious-case reviews concentrate problems at the JOINS between holders, which currently lack a single accountable owner.',
+    thesisEli5: 'No single organisation knows a child’s whole story: the school knows one part, the doctor another, the council a third. The serious failures tend to happen where those parts should meet but don’t — and joining them up is currently nobody’s defined job.',
     dataAsk: [
       'A cross-vendor safeguarding-record transfer standard — the richest record currently breaks at every school move',
       'A MASH data specification, with the new consistent identifier doing frontline matching rather than research-only linkage',
@@ -71,10 +83,10 @@ export const STORIES: Record<string, Story> = {
   },
   send: {
     no: 7, route: '/projects/policy-engine/send',
-    theme: 'The £12bn blind spot',
-    question: 'How did the costliest subsystem in education end up flying blind?',
-    thesis: 'SEND is the system’s fastest-growing cost and its weakest feedback loop: nine years of statutory plans the state could not see at child level, no data on provision delivered or outcomes by placement, and demand legible only through a tribunal that rules for families 99% of the time. The fiscal cliff is an information failure compounding a funding one.',
-    thesisEli5: 'Special-needs support is the most expensive part of the school system — and the part the government can see least. It doesn’t know who’s waiting, whether help arrives, or what works; the only reliable signal is courts ruling against councils 99 times in 100.',
+    theme: 'The £12bn measurement gap',
+    question: 'How did the costliest subsystem in education end up the least instrumented?',
+    thesis: 'SEND is the system’s fastest-growing cost and its weakest feedback loop: statutory plans that were not visible at child level, limited data on provision delivered or outcomes by placement, and demand legible mainly through a tribunal that, of the appeals reaching a hearing, finds for families in about 99% of cases. The funding pressure is compounded by these data limitations.',
+    thesisEli5: 'Special-needs support is the most expensive part of the school system — and the part with the least data. It is hard to see who is waiting, whether help arrives, or what works; one of the clearest signals is that tribunals, in the cases they hear, almost always side with families.',
     dataAsk: [
       'A machine-readable SEND record standard shipped WITH the new statutory digital ISPs — the artefact cancelled in 2025, finished under its new name',
       'Monthly EHCP pipeline reporting per LA, joined to the health-side autism/ADHD/SLT queues',
@@ -85,7 +97,7 @@ export const STORIES: Record<string, Story> = {
     no: 8, route: '/projects/policy-engine/attendance',
     theme: 'The leading indicator',
     question: 'England built the world’s best attendance instrument. Is it working?',
-    thesis: 'Attendance is simultaneously the biggest post-pandemic schooling problem — severe absence at a record 176,000 children — and the estate’s biggest data success: 99% of schools transmitting pupil-level data daily. What is missing is the loop: no independent evaluation of the instrument, no child-level early-warning use, and half a million fines a year issued without evidence they work.',
+    thesis: 'Attendance is simultaneously the largest post-pandemic schooling problem — severe absence at a record 176,000 children — and the estate’s biggest data success: 99% of schools transmitting pupil-level data daily. What is missing is the loop: no independent evaluation of the instrument, no child-level early-warning use, and around half a million fines a year issued without a published causal evaluation of their effect.',
     thesisEli5: 'A record number of children miss more than half of school — yet attendance is the one thing the government now measures brilliantly, every school, every day. The missing piece: proof the measuring helps, and the nerve to use it child by child.',
     dataAsk: [
       'An independent causal evaluation of the daily feed, the similar-schools nudges and the fines framework — the natural experiments are already in the data',

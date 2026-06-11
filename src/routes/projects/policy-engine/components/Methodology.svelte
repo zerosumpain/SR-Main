@@ -25,6 +25,12 @@
       note: 'Decomposed into an absence component and a structural component. 0.077 months per pp of disadvantaged persistent absence comes from EPI’s finding that the +1-month post-2019 widening ≈ a +13pp rise in disadvantaged PA.',
     },
     {
+      slug: 'earlyyears',
+      title: 'Development gap at age 3 (the below-5 extension)',
+      eq: 'gap₍age3₎(t) = 3.3 + 0.035·(poverty(t) − 31) − Σ EY reductions·ramp(t, 1.5)\neyTakeUp(t)   = ey_access + 8·f(dep_send_early)·ramp(t, 2)          [disadvantaged]\neyTakeUpAll(t) = 94 + 4·dep_ey_access·ramp(t, 2)                    [near-saturated]',
+      note: 'The model previously began observation at age 5; it now carries an age-3 development gap, driven by the same early-years inputs (ey_quality, ey_access, eypp, poverty_action) with the fastest response (~1.5y) — the Heckman "front-load" logic. The 3.3-month level is an ESTIMATE: no official England months-at-3 figure exists, so it is anchored below the age-5 gap (4.7) using EPI\'s ~40%-of-the-age-16-gap-set-by-5 finding. Early-education take-up is modelled directly so the 0-5 cohort funnel and the equity gap at the first gate are live and lever-driven. The age-3 → age-5 link is not yet chained causally (a documented limitation).',
+    },
+    {
       title: 'Disadvantaged persistent absence',
       eq: 'PA_dis(t) = 29.9 + 3.25·(absence(t) − 6.63) − 8·f(dep_attendance)·ramp\nabsence(t) = 6.63 − absCut(t) + 0.04·(poverty(t) − 31)',
       note: '3.25 = paLeverage (2.5) × paDisLeverage (1.3): disadvantaged absence is more sensitive to system absence. Mentors cut up to 8pp at full coverage.',
@@ -60,7 +66,7 @@
 
   const baselines = [
     ['Disadvantage gap at 16', '19.1 months', 'EPI Annual Report 2025'],
-    ['Disadvantage gap at 11 / age 5', '10.0 / 4.7 months', 'EPI Annual Report 2025'],
+    ['Disadvantage gap at 11 / age 5 / age 3', '10.0 / 4.7 / ~3.3 months', 'EPI Annual Report 2025; age-3 an estimate'],
     ['Attainment 8 (all) / gap', '46.0 / 15.5 pts', 'DfE KS4 2024/25; White Paper Annex'],
     ['Grade 5+ English & Maths', '~45.5% (disadv. ~25.8%)', 'DfE KS4 2024/25; EEF'],
     ['KS2 reading+writing+maths', '62% (disadv. 47%)', 'DfE KS2 2024/25'],
@@ -88,6 +94,7 @@
   const assumptions = [
     'Pupil Premium is modelled as a quality-moderated offset with wide uncertainty, NOT a clean £→attainment elasticity — there is no robust published estimate (EEF; Gorard 2022).',
     'The funded-childcare expansion is treated as largely gap-neutral: it is a working-parent subsidy buying the +3-month "quantity" effect, not the larger quality effects, and reaches few disadvantaged children.',
+    'The below-age-5 extension adds a development gap at age 3 and early-education take-up. The age-3 gap level (~3.3 months) is an explicit ESTIMATE — no official England figure exists — anchored below the age-5 gap via EPI\'s finding that ~40% of the age-16 gap is set by age 5. The home learning environment (via poverty action) is the dominant modelled early driver (EPPE/EPPSE; EPI). The age-3 and age-5 gaps are modelled as parallel fast responses to the same inputs, not yet chained causally.',
     'Attainment level is modelled as driven by teacher capacity, attendance and curriculum rather than directly by £/pupil. The direct funding→attainment link is genuinely contested — weak/near-zero at current spending in some studies (Hanushek; IFS), clearly positive in quasi-experimental school-finance-reform studies (Jackson, Johnson & Persico; Lafortune et al.). The model takes the cautious reading; this is an assumption, not a settled finding.',
     'EHCP reform is double-edged: narrowing plans cuts the deficit but lowers SEND attainment and raises tribunals unless matched by mainstream investment.',
     'The DSG statutory override ends March 2028: from then, any accumulated high-needs deficit is serviced from general funds, cutting mainstream per-pupil funding and (above a threshold) flagging council insolvency — the modelled "cliff".',

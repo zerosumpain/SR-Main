@@ -79,23 +79,23 @@
         within five years</b>, at a cost of roughly <b>£125 billion a year</b>.
       </p>
       <p>
-        And yet England’s system for catching young people <i>before</i> they slip away is slow and full of holes. This page asks one narrow
-        question: if England builds the “data spine” and the one-number-per-child it has just promised, and copies what the Netherlands and
-        Estonia already do, could it watch its own NEET forecast against reality and step in early — instead of counting the casualties later?
+        England’s system for identifying young people <i>before</i> they disengage is slow and has gaps. This page asks one narrow
+        question: if England builds the “data spine” and the one-number-per-child it has just announced, and adopts the approaches the Netherlands and
+        Estonia already use, could it monitor its own NEET projection against reality and intervene early, rather than recording the outcomes later?
       </p>
     {:else}
       <p>
         More than a million young people — <b>{NEET_NOW.total.toLocaleString()}</b>, or <b>{NEET_NOW.pct}%</b> of 16–24-year-olds ({NEET_NOW.asOf}) — are
         now NEET, the highest in years and rising; about <b>{NEET_NOW.inactive.toLocaleString()}</b> are economically inactive, not even job-seeking.
-        The Milburn review warns the figure could reach <b>1 in 6 within five years</b> (~£125bn/yr). Yet England’s machinery for catching young
-        people before they slip out is structurally <b>late and patchy</b>: a 16–17 tracking process built on periodic local-authority returns, a
-        vast “Not Known” cohort, and administrative data that is linkable for research but not actionable in real time.
+        The Milburn review warns the figure could reach <b>1 in 6 within five years</b> (~£125bn/yr). England’s machinery for identifying young
+        people before they disengage is structurally <b>delayed and uneven</b>: a 16–17 tracking process built on periodic local-authority returns, a
+        large “Not Known” cohort, and administrative data that is linkable for research but not actionable in real time.
       </p>
       <p>
         This page asks a deliberately narrow question. If England builds the <a href="/projects/policy-engine/monitor">data spine and consistent
-        identifier</a> it has committed to, and pairs them with a humane, attendance-led early-warning system — the way the Netherlands and Estonia
-        already do — could it monitor its own NEET projection against reality and intervene early? The evidence says the design works. It also says,
-        honestly, that <b>identification is not engagement</b>, and that getting the ethics wrong harms real children.
+        identifier</a> it has committed to, and pairs them with an attendance-led early-warning system — the approach the Netherlands and Estonia
+        already use — could it monitor its own NEET projection against reality and intervene early? The evidence indicates the design works. It also
+        indicates that <b>identification is not engagement</b>, and that errors in the governance of such a system carry direct consequences for children.
       </p>
     {/if}
   </div>
@@ -147,8 +147,8 @@
     <h2 class="pe-h2">2 · This model already projects NEET — so watch it live</h2>
     <p class="cap">
       {eli
-        ? 'Here’s the payoff of joining the two ideas. This simulator already forecasts NEET for whatever scenario you’ve built. A real-time data spine would let you check that line against what’s actually happening — and act while it still matters. Move the levers and this updates.'
-        : 'This is where the abstract meets the concrete. The engine already models NEET as an outcome (driven, in the model, through attainment and the post-16 boundary). A live data spine + attendance feed is what would let you track this projection against reality and intervene on individuals, not just averages. The chart is your current scenario — open the levers and it moves.'}
+        ? 'This is the result of joining the two ideas. This simulator already forecasts NEET for whatever scenario you’ve built. A real-time data spine would let you compare that line against what is actually happening, and act in time. Move the levers and this updates.'
+        : 'This connects the model to the operational case. The engine already models NEET as an outcome (driven, in the model, through attainment and the post-16 boundary). A live data spine plus attendance feed is what would let you track this projection against reality and intervene on individuals, not just averages. The chart is your current scenario — open the levers and it moves.'}
     </p>
     {#if app.mounted}
       <div class="livewrap">
@@ -186,7 +186,7 @@
     <p class="cap">
       {eli
         ? 'England already scores children for NEET risk — three ways, of increasing cleverness. The strange part: nobody publishes how accurate any of it is.'
-        : 'Risk scoring is not hypothetical — it is current practice, on a ladder of sophistication. The load-bearing fact sits at the top: no deployed English NEET model has ever published its precision or recall. The accuracy of the national practice is unverifiable by design.'}
+        : 'Risk scoring is not hypothetical — it is current practice, on a ladder of sophistication. The central fact sits at the top: no deployed English NEET model has published its precision or recall. The accuracy of the national practice is therefore unverifiable from the public record.'}
     </p>
     <div class="ladder">
       {#each TOOLING_LADDER as r (r.rung)}
@@ -198,7 +198,7 @@
         </article>
       {/each}
     </div>
-    <h3 class="sub-h">{eli ? 'The horror stories that set the rules' : 'The failure gallery — each one a design rule'}</h3>
+    <h3 class="sub-h">{eli ? 'The cases that set the rules' : 'The failure gallery — each one a design rule'}</h3>
     <div class="failures">
       {#each FAILURE_GALLERY as f (f.name)}
         <article class="fail">
@@ -216,7 +216,7 @@
     <p class="cap">
       {eli
         ? 'This is the decision every early-warning system forces: flag more children and you catch more future NEETs — but you also wrongly label more, and someone has to support everyone on the list. Slide the slider and watch all three move at once.'
-        : 'The central strategic decision of any early-warning system, made tangible: the flag-rate threshold trades recall against precision against caseload, simultaneously. Built on the published DfE/NatCen/Impetus risk multipliers with their uncertainty carried through — the numbers no deployed system will show you.'}
+        : 'The central design decision of any early-warning system, made tangible: the flag-rate threshold trades recall against precision against caseload, simultaneously. Built on the published DfE/NatCen/Impetus risk multipliers with their uncertainty carried through — figures that deployed systems do not publish.'}
     </p>
     <TriageSimulator />
   </section>
@@ -306,7 +306,7 @@
     <div class="ccis-ai">
       <span class="ccis-ai-tag">⚙ Where AI actually fits</span>
       <p>{@html eli ? CCIS_AIVALUE.eli5 : CCIS_AIVALUE.research}</p>
-      <p class="ccis-ai-foot">{eli ? 'The matching trick is explained more in the AI section further down. And the catch never changes: finding a young person isn’t the same as helping one.' : 'The record-linkage mechanism (the FIND role) is detailed in §11 below; the honest caveat — a match is a status, not engagement — runs through the whole page.'}</p>
+      <p class="ccis-ai-foot">{eli ? 'The matching method is explained further in the AI section below. The constant constraint: locating a young person is not the same as re-engaging one.' : 'The record-linkage mechanism (the FIND role) is detailed in §11 below; the recurring caveat — a match is a status, not engagement — runs through the whole page.'}</p>
     </div>
 
     <div class="stats ccis-stats">
@@ -376,8 +376,8 @@
     <h2 class="pe-h2">8 · What works abroad</h2>
     <p class="cap">
       {eli
-        ? 'Other countries already do this well, and they all do roughly the same thing: give every young person one ID, link the records, and have a named local person actually chase the ones who go missing. But note the honest catch in the third chart.'
-        : 'International best practice converges on one design pattern: a unique identifier + cross-register linkage feeding a regional or municipal coordinator who proactively contacts the young person. Three charts make the case — and the third makes the honest caveat.'}
+        ? 'Other countries do this effectively, and they use broadly the same approach: give every young person one ID, link the records, and have a named local person follow up with those who lose contact. Note the constraint shown in the third chart.'
+        : 'International practice converges on one design pattern: a unique identifier plus cross-register linkage feeding a regional or municipal coordinator who proactively contacts the young person. Three charts set out the evidence — and the third sets out the caveat.'}
     </p>
 
     <div class="trio">
@@ -427,7 +427,7 @@
       </div>
     </div>
 
-    <p class="trio-note">{eli ? 'Estonia’s clever twice-a-year check cross-references nine government databases to list every town’s NEET young people — yet even it reached only about a fifth. Finland’s answer: send real people to find them.' : 'Estonia’s YGSS cross-references nine registers twice a year (a perfect data-spine pattern) — but the IBS evaluation found only ~half were contacted and ~1 in 5 reached. The lesson is unambiguous: a spine that produces a list is not a system that re-engages young people. That needs funded human outreach (Finland’s Ohjaamo) and a guaranteed offer (the EU Youth Guarantee).'}</p>
+    <p class="trio-note">{eli ? 'Estonia’s twice-a-year check cross-references nine government databases to list every town’s NEET young people — yet it reached only about a fifth. Finland’s approach: deploy outreach workers to find them.' : 'Estonia’s YGSS cross-references nine registers twice a year (a complete data-spine pattern) — but the IBS evaluation found only ~half were contacted and ~1 in 5 reached. The finding: a spine that produces a list is not, by itself, a system that re-engages young people. That requires funded human outreach (Finland’s Ohjaamo) and a guaranteed offer (the EU Youth Guarantee).'}</p>
 
     <!-- intl cards by tier -->
     {#each Object.entries(NEET_TIER_META) as [tier, meta] (tier)}
@@ -523,7 +523,7 @@
     <h3 class="sub-h">{eli ? 'Everything data and AI could do here, ranked by how proven it is' : 'The opportunity ladder — eight shapes, ranked evidence → novelty'}</h3>
     <p class="cap small">
       {eli
-        ? 'From safest bets at the top to the genuinely new idea at the bottom: stop asking only “who’s at risk?” and start asking “who would this programme actually help?”'
+        ? 'From the safest options at the top to the newest idea at the bottom: move from asking only “who’s at risk?” to asking “who would this programme actually help?”'
         : 'Each rung names what it is, the data it needs (cross-reference the estate map above), where the evidence stands, and the governance price. The frontier rung is the strategic one: risk-based targeting wastes spend on high-risk/low-responsiveness cases — uplift modelling targets by treatment effect, and the UK uniquely has the ingredients (YFF’s RCT portfolio × LEO outcomes).'}
     </p>
     <div class="opp-scroll">
@@ -568,7 +568,7 @@
     </div>
 
     <div class="aicaution">
-      <span class="aic-tag">⚠ The honest caveats</span>
+      <span class="aic-tag">⚠ The caveats</span>
       <ul>{#each AI_CAUTIONS as c (c)}<li>{c}</li>{/each}</ul>
       <p class="aic-foot">{eli ? 'The full safety rules — checking for bias, the law, and always keeping a human in charge — are in the next section.' : 'The full guardrails — bias auditing, DPIAs, the automated-decisions law and human-in-the-loop — are in the next section.'}</p>
     </div>
@@ -576,11 +576,11 @@
 
   <!-- ===================== 12 · ethics ===================== -->
   <section class="block">
-    <h2 class="pe-h2">12 · Doing it humanely</h2>
+    <h2 class="pe-h2">12 · Governing it for safety</h2>
     <p class="cap">
       {eli
-        ? 'Because this is about vulnerable young people, the risks matter as much as the benefits. Build a system that predicts who’s “at risk” and you can do real damage if you get it wrong.'
-        : 'Because this is about vulnerable young people, the risks must be stated as plainly as the benefits. A predictive early-warning system can entrench the inequity it was meant to fix — unless it is governed to “screen in” for support, with a human always in the loop.'}
+        ? 'Because this concerns vulnerable young people, the risks weigh as heavily as the benefits. A system that predicts who is “at risk” can cause harm where it errs.'
+        : 'Because this concerns vulnerable young people, the risks are stated as plainly as the benefits. A predictive early-warning system can reinforce the inequity it was intended to reduce — unless it is governed to “screen in” for support, with a human in the loop.'}
     </p>
     <EthicsGuardrails />
   </section>
@@ -600,12 +600,12 @@
     <div class="pe-prose">
       <p>
         {eli
-          ? 'This simulator already forecasts NEET. A data spine, one number per child, and the attendance feed are how you’d check that forecast against reality — and reach a specific young person early. The proof it can work is next door (Scotland) and across the Channel (the Netherlands). The warning is that finding them is the easy bit, and a flag must never become a verdict.'
-          : 'The engine already models NEET as an outcome and treats attendance as the leading indicator. A data spine, a consistent identifier and the live attendance feed are how that projection could be checked against reality and acted on for individuals. Scotland and the Netherlands prove the pattern works; Estonia proves identification is not engagement; Wisconsin proves the ethics are not optional. The model asks the question — real monitoring is how you’d answer it.'}
+          ? 'This simulator already forecasts NEET. A data spine, one number per child, and the attendance feed are the means to compare that forecast against reality and reach a specific young person early. Scotland and the Netherlands show it can work. The caveat is that locating young people is the more tractable step, and a flag should function as a prompt to check in, not a fixed judgement.'
+          : 'The engine already models NEET as an outcome and treats attendance as the leading indicator. A data spine, a consistent identifier and the live attendance feed are the means by which that projection could be checked against reality and acted on for individuals. Scotland and the Netherlands show the pattern works; Estonia shows identification is not engagement; Wisconsin shows the governance is not optional. The model poses the question — real monitoring is how it would be answered.'}
       </p>
     </div>
     <div class="closer-links">
-      <a class="pe-next" href="/projects/policy-engine/send">The costliest blind spot → Field Study №7: SEND</a>
+      <a class="pe-next" href="/projects/policy-engine/send">The costliest and least-measured subsystem → Field Study №7: SEND</a>
       <a class="pe-next ghost" href="/projects/policy-engine">Open the levers and move the NEET line →</a>
     </div>
   </section>

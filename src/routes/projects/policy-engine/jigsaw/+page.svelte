@@ -6,10 +6,16 @@
   import { app } from '../lib/appState.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import SpineSwitchboard from '../components/SpineSwitchboard.svelte';
+  import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
+  import AnalysisOnOutcome from '../components/AnalysisOnOutcome.svelte';
+  import JoinsFunnel from '../components/JoinsFunnel.svelte';
+  import CoordinationCost from '../components/CoordinationCost.svelte';
   import { STORIES } from '../lib/stories';
   import {
     JIGSAW_HERO, HOLDERS, RING_META, FAMILY_NOTE, RACI, RACI_COLS, TISSUE, TISSUE_KIND_META,
-    GRAVEYARD, JIGSAW_GAPS, VALUE_OFFER, VALUE_DONTS, type Holder, type Ring, type TissueKind,
+    GRAVEYARD, JIGSAW_GAPS, VALUE_OFFER, VALUE_DONTS,
+    PRIVACY_PRECEDENTS, PRIVACY_BALANCE,
+    type Holder, type Ring, type TissueKind,
   } from '../lib/jigsawIntel';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -51,15 +57,60 @@
 
   <!-- ===================== 1 · the number ===================== -->
   <section class="block">
-    <h2 class="pe-h2">1 · The number that frames everything</h2>
+    <h2 class="pe-h2">1 · The number, stated precisely</h2>
     <div class="hero81">
       <span class="h81-big">{JIGSAW_HERO.big}</span>
       <p class="h81-lab">{eli ? JIGSAW_HERO.labelEli5 : JIGSAW_HERO.label}</p>
+    </div>
+    <div class="precise-box">
+      <div class="pb-head">
+        <span class="pb-lab">{eli ? 'What the number does — and does not — say' : 'What the figure measures'}</span>
+        <ConfidenceBadge level="high" note="The figure is verbatim from CSPRP 2025 §3.85. High confidence in the number; it describes a serious-incident review population, not all children, and not specifically information-sharing." />
+      </div>
+      <p class="pb-txt">{eli ? JIGSAW_HERO.preciseEli5 : JIGSAW_HERO.precise}</p>
     </div>
     <p class="h81-kicker">{eli ? JIGSAW_HERO.kicker.eli5 : JIGSAW_HERO.kicker.research}</p>
     <div class="refrow">
       {#each JIGSAW_HERO.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
     </div>
+  </section>
+
+  <!-- ===================== 1b · the privacy counter-thesis ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">1b · The privacy counter-thesis — the proportionality ceiling</h2>
+    <p class="cap">
+      {eli
+        ? 'Before reading the rest of this page as “join everything up”, look at the other side. Britain has tried large child-data systems before, and the courts and the privacy regulator have set real limits. These are not fringe objections — one of them is a Supreme Court ruling.'
+        : 'The case for joining data up runs into a documented record of large child-data systems being curtailed on privacy and proportionality grounds. Presented at full weight first, then balanced neutrally: this is a legal constraint with case-law force, not a counter-opinion to be split down the middle.'}
+    </p>
+    <div class="prec-grid">
+      {#each PRIVACY_PRECEDENTS as p (p.id)}
+        <article class="prec">
+          <header class="prec-head">
+            <span class="prec-name">{p.name}</span>
+            <span class="prec-period">{p.period}</span>
+          </header>
+          <p class="prec-sum">{eli ? p.eli5 : p.summary}</p>
+          {#if !eli}<p class="prec-find">▸ {p.finding}</p>{/if}
+          <div class="refrow">
+            {#each p.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+          </div>
+        </article>
+      {/each}
+    </div>
+
+    <div class="balance">
+      <div class="bal-head">
+        <span class="bal-lab">⚖ {PRIVACY_BALANCE.title}</span>
+        <ConfidenceBadge level="contested" note="A genuine, evidenced tension between two findings — not a settled answer. The safeguarding finding is about a review population; the legal finding is a binding proportionality ceiling." />
+      </div>
+      <p>{eli ? PRIVACY_BALANCE.eli5 : PRIVACY_BALANCE.research}</p>
+      <div class="refrow">
+        {#each PRIVACY_BALANCE.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+      </div>
+    </div>
+
+    <AnalysisOnOutcome theme="data-gap" title={eli ? 'What independent analysts find about joining children’s data' : 'What the analysts find — children’s-data governance and joining'} />
   </section>
 
   <!-- ===================== 2 · the map ===================== -->
@@ -138,8 +189,8 @@
     <h2 class="pe-h2">3 · The RACI — ten information jobs, and who owns them</h2>
     <p class="cap">
       {eli
-        ? 'For each job the information system has to do: who does the work (green R), who carries the can (black A), who’s asked (blue C), who’s told (grey I). Read the red rows carefully — for some of the most important jobs, NOBODY carries the can.'
-        : 'The information jobs the system must perform, gridded against the partners. R = responsible, A = accountable, C = consulted, I = informed. The strategic reading is the red annotations: three jobs have NO accountable owner — and they are precisely where the 81% lives.'}
+        ? 'For each job the information system has to do: who does the work (green R), who is accountable for the outcome (black A), who is asked (blue C), who is told (grey I). The highlighted rows are the ones to read closely — for several of the most important jobs, no single body is accountable.'
+        : 'The information jobs the system must perform, gridded against the partners. R = responsible, A = accountable, C = consulted, I = informed. The analytical reading is the highlighted annotations: three jobs have no accountable owner — and these coincide with the co-ordination/handover gaps the CSPRP figure (§1) measures.'}
     </p>
     <div class="raci-scroll">
       <table class="raci">
@@ -164,7 +215,7 @@
     </div>
     <div class="raci-key">
       {#each Object.entries(RACI_META) as [k, m] (k)}<span class="rk"><i style="background:{m.bg};color:{m.fg}">{k}</i>{m.label}</span>{/each}
-      <span class="rk"><i class="rk-noa">⚠</i>{eli ? 'red rows: nobody carries the can' : 'highlighted rows: no accountable owner'}</span>
+      <span class="rk"><i class="rk-noa">⚠</i>{eli ? 'highlighted rows: nobody is accountable' : 'highlighted rows: no accountable owner'}</span>
     </div>
   </section>
 
@@ -174,7 +225,7 @@
     <p class="cap">
       {eli
         ? 'A whole ecosystem of mostly-small organisations writes the rules, runs the pipes and checks the evidence that let all these systems talk. Here’s the full wall: who they are, what they actually run, and how fragile each one is — then the two times Britain built this capability and deleted it.'
-        : 'The full connective-tissue landscape, grouped: the rule-writers, the live pipes and working tools, the sector organising itself, and the evidence layer. Read the fragility lines together and a pattern emerges — health funds its standards institution properly; nearly everything else runs on grant rounds, goodwill and one hosting council. And the graveyard matters: this capability has been built and dismantled twice.'}
+        : 'The full connective-tissue landscape, grouped: the rule-writers, the live pipes and working tools, the sector organising itself, and the evidence layer. The fragility lines, read together, show a consistent pattern — health funds its standards institution as a standing body; most of the rest is funded grant round to grant round, with one hosting council. The graveyard section records that this capability has been built and discontinued more than once.'}
     </p>
     {#each Object.entries(TISSUE_KIND_META) as [kind, km] (kind)}
       <div class="ti-grp">
@@ -198,6 +249,16 @@
         {#each GRAVEYARD.refs as r (r.url)}<a class="refchip" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
       </div>
     </div>
+
+    <div class="illus-wrap">
+      <h3 class="illus-h">The coordination overhead, made tangible</h3>
+      <p class="illus-cap">
+        {eli
+          ? 'A small toy to feel the shape of the problem: the more services hold a piece of one child, the more two-way links there are to keep working — and the more chance of the same work being done twice. The numbers are made up but shaped by real anchors; it does not touch the rest of the model.'
+          : 'An illustrative device for the cost of fragmentation: coordination links grow quadratically with the number of holders, and duplicated collection costs staff time. The anchors are sourced (ContactPoint exposure; ~2.5h/referral) but the rates are labelled assumptions — it is not coupled to the policy engine.'}
+      </p>
+      <CoordinationCost />
+    </div>
   </section>
 
   <!-- ===================== 5 · the gaps ===================== -->
@@ -215,6 +276,18 @@
         </div>
       {/each}
     </div>
+
+    <div class="illus-wrap">
+      <h3 class="illus-h">Children caught vs missed across the hand-offs</h3>
+      <p class="illus-cap">
+        {eli
+          ? 'A second toy: drag the “how often a hand-over works” slider and watch how many children’s signal survives every hand-over versus how many get lost. The cohort is a real (if old and disputed) estimate; the rest is a simple model, labelled as such.'
+          : 'A coverage slider over the hand-offs between holders: at a given per-hand-off join coverage, what share of an at-risk cohort’s signal survives every hand-off. The cohort anchor is the Children’s Commissioner estimate (dated, contested); the survival model is an explicit order-of-magnitude assumption, not engine-coupled.'}
+      </p>
+      <JoinsFunnel />
+      <AnalysisOnOutcome theme="data-gap" max={3}
+        title={eli ? 'What analysts say about counting the missing children' : 'What the analysts find — measuring who is missing'} />
+    </div>
   </section>
 
   <!-- ===================== 6 · the switchboard ===================== -->
@@ -222,19 +295,19 @@
     <h2 class="pe-h2">6 · The switchboard — wiring the jigsaw into the spine</h2>
     <p class="cap">
       {eli
-        ? 'Here are the joins worth building, drawn as wires. Pick one: watch where the information starts, whether it goes through the new central “data spine” or straight between services, and who it reaches. Each one says what the sharer gets back — sharing should never be a one-way street.'
-        : 'The opportunity space, made concrete: every named join drawn as a wire from the holder who has the signal, through (or deliberately around) the data spine, to the receiver whose decision it changes. Grouped by what unlocks it — one is live today, three are buildable now, four wait on the identifier, one on a policy decision. Every wire passes the anti-paternal test: it states what the source GETS BACK, not just what the centre extracts. Select a wire or a chip.'}
+        ? 'Here are the candidate joins, drawn as wires. Pick one: watch where the information starts, whether it goes through the new central “data spine” or straight between services, and who it reaches. Each one also shows what the sharer gets back, because a join where information only flows one way tends not to be used.'
+        : 'The candidate joins, drawn as wires: each runs from the holder with the signal, through (or around) the data spine, to the receiver whose decision it changes. Grouped by what unlocks each — one live today, three buildable now, four awaiting the identifier, one a policy decision. Each is annotated against a reciprocity criterion (what the source gets back, not only what the centre extracts), since one-directional flows tend to see low adoption. Select a wire or a chip.'}
     </p>
     <SpineSwitchboard />
   </section>
 
   <!-- ===================== 7 · the value offer ===================== -->
   <section class="block" id="value-offer">
-    <h2 class="pe-h2">7 · The value offer — collector to steward</h2>
+    <h2 class="pe-h2">7 · Repositioning options — collector to steward</h2>
     <p class="cap">
       {eli
-        ? 'If the department changed what kind of help it offers, here’s what that would look like — five moves, each fixing a join rather than building a database.'
-        : 'The strategic question this page exists to sharpen: what is DfE’s value offer to the system if it repositions from collector to STEWARD? Five moves — each a join, none a database — and the three don’ts the history teaches.'}
+        ? 'One way to read all of the above is to ask what kind of help the department would offer if it acted as a steward of joins rather than a collector of data. Five options follow — each fixes a join rather than building a database — set out so they can be judged, not endorsed.'
+        : 'A descriptive frame for the analysis: if DfE repositioned from collector toward steward, what would that involve? Five options follow — each a join, none a central database — each with a cost order-of-magnitude, set out as evaluable options rather than recommendations, followed by three constraints the history makes testable.'}
     </p>
     <div class="vo-moves">
       {#each VALUE_OFFER as v, i (v.move)}
@@ -249,7 +322,7 @@
       {/each}
     </div>
     <div class="donts">
-      <span class="do-lab">{eli ? 'And what not to do' : 'The don’ts — and the offer in one sentence'}</span>
+      <span class="do-lab">{eli ? 'Constraints the history makes testable' : 'Constraints — three the history makes testable'}</span>
       <p>{eli ? VALUE_DONTS.eli5 : VALUE_DONTS.research}</p>
       <a class="do-link" href="/projects/policy-engine/monitor">The same posture, tested system-wide → the subsidiarity test</a>
     </div>
@@ -268,6 +341,32 @@
   .h81-big { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(56px, 9vw, 96px); line-height: 0.9; color: #8a2d3a; }
   .h81-lab { margin: 0; flex: 1 1 320px; font-size: 15px; line-height: 1.55; color: rgba(28,22,17,0.8); }
   .h81-kicker { margin: 12px 0 0; font-size: 13.5px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 96ch; }
+
+  /* 1 · precise-framing box */
+  .precise-box { margin: 14px 0 0; border: 1px solid rgba(28,22,17,0.18); border-left: 3px solid #2f7d4f; border-radius: 10px;
+    background: rgba(47,125,79,0.05); padding: 12px 15px; max-width: 96ch; }
+  .pb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .pb-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: #2f7d4f; font-weight: 700; }
+  .pb-txt { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.82); }
+
+  /* 1b · privacy counter-thesis */
+  .prec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
+  .prec { border: 1px solid rgba(28,22,17,0.14); border-top: 3px solid #7a5aa6; border-radius: 10px;
+    background: rgba(122,90,166,0.045); padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+  .prec-head { display: flex; flex-direction: column; gap: 2px; }
+  .prec-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; line-height: 1.25; color: var(--ink, #1c1611); }
+  .prec-period { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; color: #5d4480; }
+  .prec-sum { margin: 0; font-size: 12px; line-height: 1.55; color: rgba(28,22,17,0.78); }
+  .prec-find { margin: 0; font-size: 11.5px; line-height: 1.55; color: rgba(28,22,17,0.7); }
+  .balance { border: 1.5px solid rgba(28,22,17,0.4); border-radius: 10px; background: rgba(28,22,17,0.045); padding: 13px 16px; max-width: 96ch; margin-bottom: 12px; }
+  .bal-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .bal-lab { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink, #1c1611); font-weight: 700; }
+  .balance p { margin: 0 0 8px; font-size: 13px; line-height: 1.62; color: rgba(28,22,17,0.8); }
+
+  /* illustrative-component wrappers */
+  .illus-wrap { margin-top: 22px; padding-top: 16px; border-top: 1px dashed rgba(28,22,17,0.22); }
+  .illus-h { margin: 0 0 5px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; color: var(--ink, #1c1611); }
+  .illus-cap { margin: 0 0 13px; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.68); max-width: 92ch; }
 
   /* 2 · the map */
   .map-scroll { overflow-x: auto; background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 8px; }

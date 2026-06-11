@@ -25,6 +25,7 @@ import {
 // Extra structural constants (calibrated so 2025 reproduces BASELINE exactly).
 const ABSENCE_TO_GAP_K4 = 0.077;   // months KS4 gap per pp of disadvantaged PA (vs 2025) [EPI: +1mo ≈ +13pp PA]
 const ABSENCE_TO_GAP_K2 = 0.040;   // months KS2 gap per pp disadvantaged PA
+const POVERTY_TO_AGE3 = 0.035;     // months age-3 gap per pp child poverty (vs 2025) — home learning environment, the dominant early driver
 const POVERTY_TO_RECEP = 0.040;    // months reception gap per pp child poverty (vs 2025)
 const POVERTY_TO_ABSENCE = 0.040;  // pp overall absence per pp child poverty
 const PA_DIS_BASE = 29.9;          // disadvantaged persistent absence at 2025
@@ -193,6 +194,30 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       BASELINE.gapKS2 + ABSENCE_TO_GAP_K2 * (persistentAbsenceDis - PA_DIS_BASE) - structReductionsK2,
       0.3, 16,
     );
+
+    // ---------------- DEVELOPMENT GAP AT AGE 3 (months) ----------------
+    // The earliest modelled point — the gap is observable from age 3 and ~40% of the age-16
+    // gap is set by age 5 (EPI). EY levers act here FIRST and FASTEST (~1.5y). A parallel
+    // fast-response indicator of the same early-years inputs that drive the reception gap;
+    // the model does not yet chain age-3 → age-5 causally (a documented limitation).
+    const age3Map: Record<string, Band> = {
+      ey_quality: CH.gapAge3.ey_quality, ey_access: CH.gapAge3.ey_access,
+      eypp: CH.gapAge3.eypp, poverty_action: CH.gapAge3.poverty_action,
+    };
+    const reductionsAge3 = channelSum(age3Map, ys, () => 1.5);
+    const sendEarlyAge3 = R(CH.gapAge3.send_early) * concave(depPos('send_early')) * ramp(ys, 2);
+    const gapAge3 = clamp(
+      BASELINE.gapAge3 + POVERTY_TO_AGE3 * (childPoverty - BASELINE.childPoverty) - reductionsAge3 - sendEarlyAge3,
+      0.2, 7,
+    );
+
+    // ---------------- EARLY-EDUCATION TAKE-UP (%) ----------------
+    // The 0-5 "front door": realised take-up of funded early education. The universal 3-4yo
+    // offer is near-saturated (~94%); disadvantaged take-up (the equity entitlement) tracks
+    // the ey_access lever, lifted modestly by Family-Hub outreach (send_early). The persistent
+    // all-vs-disadvantaged gap at this first gate is the early-years equity story in one number.
+    const eyTakeUp = clamp(val('ey_access') + 8 * concave(depPos('send_early')) * ramp(ys, 2), 0, 100);
+    const eyTakeUpAll = clamp(94 + 4 * depPos('ey_access') * ramp(ys, 2), 0, 100);
 
     const recepMap: Record<string, Band> = {
       ey_quality: CH.gapRecep.ey_quality, ey_access: CH.gapRecep.ey_access,
@@ -417,7 +442,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
 
     years.push({
       year, isProjection: year > BASE_YEAR,
-      gapReception, gapKS2, gapKS4,
+      gapAge3, gapReception, gapKS2, gapKS4,
+      eyTakeUp, eyTakeUpAll,
       gld, gldDis, ks2RWM, ks2RWMDis, attainment8, attainment8Dis, grade5EM, grade5EMDis,
       ehcpCount, ehcpPct, senSupportPct, highNeedsSpend, highNeedsDeficitStock: deficitStock,
       ehcpAttainment8, tribunalAppeals, insolvencyRisk,

@@ -12,38 +12,38 @@ export interface SubsidNote { act: string; research: string; eli5: string; }
 export const SUBSID_NOTES: Record<string, SubsidNote> = {
   silos: {
     act: '1',
-    research: 'The spine answers “connect centrally” — but connection and custody are separable questions. Wiring systems together does not require the centre to hold the data; that design choice is being made now, mostly by default.',
-    eli5: 'Joining systems up doesn’t have to mean Whitehall keeps all the data. Those are two different choices — and the second one is being made quietly.',
+    research: 'The spine addresses “connect centrally” — but connection and custody are separable questions. Wiring systems together does not require the centre to hold the data; as of June 2026 that design choice is unresolved and, absent a stated principle, is being settled collection by collection.',
+    eli5: 'Joining systems up does not have to mean the centre keeps all the data. Those are two separate choices — and the second one has not been settled explicitly.',
   },
   attendance: {
     act: '3',
-    research: 'Daily mandation turned every school register into a national dataset — extraction began before the DPIA was signed off, and from Nov 2025 Ofsted receives school-level feeds half-termly. Burden fell; so did local agency. The question nobody asked: could the same early-warning value have been delivered by querying data held in school systems?',
-    eli5: 'Schools now send attendance to the centre every day, automatically. Handy — but no one asked whether the centre needed to *keep* it, or just to be able to ask questions of it.',
+    research: 'Daily mandation turned every school register into a national dataset — extraction began before the DPIA was signed off, and from Nov 2025 Ofsted receives school-level feeds half-termly. Collection burden fell; local custody of the data also moved to the centre. An open design question: whether the same early-warning value could have been delivered by querying data held in school systems.',
+    eli5: 'Schools now send attendance to the centre every day, automatically. The open question is whether the centre needed to keep a copy, or only to be able to query it where it sits.',
   },
   ledger: {
     act: '6',
-    research: 'Every row in this ledger is a subsidiarity decision already taken — almost all of them toward central custody. The collections exist because national comparability and funding allocation genuinely need them; the trust history shows what happens when custody outruns purpose.',
-    eli5: 'Each of these data collections was a choice to centralise. Some were clearly right — money has to be shared out fairly. The history shows what goes wrong when the centre keeps more than it needs.',
+    research: 'Each row in this register reflects a subsidiarity decision already taken — most of them toward central custody. The collections that allocate funding or enable national comparability map to the first test below; the trust history (the events the register itself records) documents the contested cases where custody extended beyond the stated purpose.',
+    eli5: 'Each of these data collections was a choice to hold data centrally. Some align with a clear national purpose, such as allocating funding. The recorded history shows the cases where the centre held more than the stated purpose required.',
   },
   counterweight: {
     act: '7',
-    research: 'The strongest pattern in this act: the centre funds, the sector owns. Data to Insight and Supporting Families show DfE getting a national view WITHOUT national custody — local data, local tools, a centrally-supported framework. This is the non-paternal posture, demonstrated.',
-    eli5: 'These examples show the trick: the government pays for the tools, councils keep and use their own data, and everyone still gets the national picture.',
+    research: 'The recurring pattern in these examples: the centre funds, the sector holds. Data to Insight and Supporting Families show a national analytical view obtained WITHOUT national custody — local data, local tools, a centrally-supported framework. They are existing instances of the lower-custody design the test below sets out as a criterion.',
+    eli5: 'These examples show one working pattern: the government pays for the tools, councils keep and use their own data, and a national picture still results.',
   },
   ladder: {
     act: '8',
-    research: 'The ladder is the subsidiarity question made technical: each rung moves custody away from the centre while preserving the analytical view. DfE currently operates almost entirely on rung 1; health has proven rung 4 at scale. The least-extractive method that meets the purpose should be the default — today the most-extractive is.',
-    eli5: 'There are at least five ways to learn from data without taking it. Schools data uses the most grabby one almost everywhere; the NHS has proven the least grabby one works.',
+    research: 'The ladder restates the subsidiarity question in technical terms: each rung moves custody away from the centre while preserving the analytical view. The DfE estate currently operates almost entirely on rung 1; health has demonstrated rung 4 at scale. The evaluable criterion the test below applies is whether each collection uses the lowest-custody method that meets its purpose — at present most use the highest.',
+    eli5: 'There are at least five ways to learn from data without holding a copy of it. Schools data mostly uses the most extractive one; the NHS has shown the least extractive one works at scale.',
   },
   edtech: {
     act: '9',
-    research: 'The clearest application of this page’s test: central extraction of edtech data would be exactly wrong — the records should stay with vendors and schools. The centre’s legitimate tools are standards (the spine’s open APIs), procurement terms, and PURCHASED aggregate readouts — a national view assembled from data the centre never holds. The COVID Star study showed the pattern; the task is making it standing policy rather than crisis response.',
-    eli5: 'This is the easiest call on the whole page: the government shouldn’t hoover up the apps’ data. It should set the plumbing rules, use its buying power, and pay for honest national summaries — learning from the data without ever taking it.',
+    research: 'Applying the test below to edtech: against its criteria, central extraction of vendor learning data scores poorly (the purpose does not require national custody of records), while lower-custody routes — interoperability standards (the spine’s open APIs), procurement terms, and purchased aggregate readouts — score higher: a national view assembled from data the centre never holds. The COVID Star study is an instance of that pattern operating as a one-off rather than a standing arrangement.',
+    eli5: 'Run the test on the apps’ data and it points away from central collection: the national purpose can be met by setting the connection rules, using purchasing power, and buying aggregate national summaries — learning from the data without holding a copy.',
   },
   agendas: {
     act: '10',
-    research: 'Every agenda on this map increases the gravitational pull toward central linkage — the SUI, the spine, the NDL. None of them yet states a custody principle. Absent one, “join up” drifts into “collect everything”, and the 2012–2022 trust ledger repeats at larger scale.',
-    eli5: 'All these big plans pull data toward the centre. None of them says where the limit is — and without a limit, history suggests the centre keeps taking.',
+    research: 'Each agenda on this map increases the incentive toward central linkage — the consistent identifier, the spine, the NDL. As of June 2026 none publishes an explicit custody principle. The evaluable risk this leaves open: without a stated limit, “join up” and “collect” are not separated, and the 2012–2022 events recorded in the trust register could recur at larger scale.',
+    eli5: 'These plans all make central data-linking easier. None yet states where the limit is. Without a stated limit, “connecting systems” and “collecting everything” are not kept distinct — and the recorded history shows what can follow.',
   },
 };
 
@@ -98,7 +98,7 @@ export const SECTOR_LEDGER: SectorFlow[] = [
       { name: 'Safeguarded deposits (UK Data Service)', cadence: 'Framework from Apr 2026', since: '2026', note: 'A standing, auditable pathway for research-ready deposits — LEO synthetic, LSYPE2, Children of the 2020s.' },
     ],
     notShared: 'The register exists BECAUSE of what used to leave the building unlogged — see the trust ledger below.',
-    eli5: 'Researchers can study the national data in locked rooms under strict rules, and every share the department makes is now on a public list. That list exists because of past scandals.',
+    eli5: 'Researchers can study the national data in locked rooms under strict rules, and every share the department makes is now on a public list. That list exists because of the documented failings recorded in the history below.',
   },
 ];
 
@@ -133,7 +133,7 @@ export const COUNTERWEIGHTS: Counterweight[] = [
     name: 'Data to Insight', sector: 'LA children’s services', colour: '#3f7d6e',
     what: 'The sector-led national data function: hosted by East Sussex CC, governed by LA data professionals, funded by DfE/MHCLG/Ofsted/ADCS where goals align — tools free to every LA, code open on GitHub.',
     numbers: 'ChAT (the children’s services analysis tool, originally built by London LAs with Ofsted) is used by ~150 of England’s local authorities; return validators, demand-modelling and placement tools alongside.',
-    lesson: 'A national analytical view created WITHOUT national custody: the centre pays, the sector builds and owns. The strongest existing template for a non-paternal DfE posture.',
+    lesson: 'A national analytical view created WITHOUT national custody: the centre funds, the sector builds and holds. The most developed existing instance of the lower-custody design the test below describes.',
     url: 'https://www.datatoinsight.org/what-we-do',
   },
   {
@@ -154,14 +154,14 @@ export const COUNTERWEIGHTS: Counterweight[] = [
     name: 'Trust data estates & FFT Aspire', sector: 'Schools & MATs', colour: '#566a8c',
     what: 'Multi-academy trusts now run their own consolidated data estates (group MIS, Power BI), and 13,000+ schools use FFT Aspire — NPD-derived benchmarking flowing BACK to schools, the largest re-use channel of national data.',
     numbers: '13,000+ schools on FFT Aspire; trust-level MIS products are now a standard vendor category.',
-    lesson: 'The school sector has built real analytical capability of its own — central design should treat schools and trusts as analytical peers, not data sources.',
+    lesson: 'The school sector has built substantial analytical capability of its own — a fact relevant to whether central design treats schools and trusts as analytical peers or as data sources.',
     url: 'https://fft.org.uk/fft-aspire/',
   },
   {
     name: 'Scotland’s 16+ Data Hub', sector: 'National (Scotland)', colour: '#7a5aa6',
     what: 'A shared portal fed by LAs, colleges, the funding council and DWP to support post-school transitions — sharing made a legal requirement (Post-16 Education (Scotland) Act 2013), with the centre providing the plumbing and locals feeding and using it.',
     numbers: 'Cut the “destination unknown” cohort to ~6.6%; the annual participation measure runs on it.',
-    lesson: 'Where a shared view is genuinely needed (transitions), legislate the PLUMBING and the duty — not central custody of everything.',
+    lesson: 'An instance where a shared view is required (transitions) is met by legislating the connection and the duty rather than central custody of all records — one point on the custody spectrum the test below maps.',
     url: 'https://www.skillsdevelopmentscotland.co.uk/what-we-do/scotlands-careers-services/16plus-data-hub/',
   },
 ];
@@ -202,7 +202,7 @@ export const SHARING_LADDER: LadderRung[] = [
     rung: 4, name: 'Federated analytics (data never moves)', colour: '#3f7d6e', opportunity: true,
     how: 'Approved code travels to the data and only results come back — researchers never see raw records. OpenSAFELY runs 200+ NHS projects against GP records held in situ; NHS England issued pilot directions in June 2025.',
     custody: 'The data controller (school, trust, LA) — full stop',
-    inEducation: 'DOES NOT EXIST. An OpenSAFELY-for-schools would let DfE answer national questions against MIS-held data without national extraction — the single biggest unbuilt idea in this field study.',
+    inEducation: 'DOES NOT EXIST. An OpenSAFELY-for-schools would let DfE answer national questions against MIS-held data without national extraction — a prominent example of an unbuilt low-custody option for education.',
   },
   {
     rung: 5, name: 'Sector-pooled, locally owned', colour: '#2f6f97',
@@ -237,7 +237,7 @@ export const AGENDAS: Agenda[] = [
   {
     name: 'National Data Library', owner: 'DSIT', colour: '#b4632e',
     what: '£100m+ from the spending review; discovery done; five kickstarter projects announced January 2026 — energy bills, work & health, social care, SME guidance, climate.',
-    spineLink: 'None of the five kickstarters is education. Either a gap to claim or a dodge to copy — but the NDL will set the cross-government norms (TREs, federation, standards) the spine inherits.',
+    spineLink: 'None of the five kickstarters is education — readable either as an opening for education or as an omission. Either way, the NDL will set the cross-government norms (TREs, federation, standards) the spine inherits.',
   },
   {
     name: 'Blueprint for modern digital government', owner: 'DSIT (Jan 2025)', colour: '#566a8c',
@@ -259,32 +259,34 @@ export const AGENDAS: Agenda[] = [
 // ---------------------------------------------------------------------------
 // 10 · The subsidiarity test — when should the centre collect?
 // ---------------------------------------------------------------------------
+// A set of evaluable criteria (not recommendations): four questions that can be
+// applied to any proposed data flow to locate it on the central↔local custody spectrum.
 export const SUBSID_TEST: { q: string; ifYes: string; ifNo: string }[] = [
   {
     q: 'Does the purpose require national comparability or national allocation?',
-    ifYes: 'Central collection is defensible (funding formulae, statutory accountability, national statistics).',
-    ifNo: 'Default to local custody — the centre has no claim.',
+    ifYes: 'Central collection has a clear purpose-basis (funding formulae, statutory accountability, national statistics).',
+    ifNo: 'The purpose-basis for central custody is weaker; local custody meets it.',
   },
   {
     q: 'Can the purpose be met with the data staying where it is?',
-    ifYes: 'Use the ladder: federated queries, TRE access, synthetic release, sector pooling — in that order of preference.',
-    ifNo: 'Collect the minimum, time-limit it, and publish the share on the register.',
+    ifYes: 'A lower-custody rung of the ladder fits: federated queries, TRE access, synthetic release, sector pooling — in roughly that order of decreasing custody.',
+    ifNo: 'A minimal, time-limited collection, with the share published on the register, is the proportionate option.',
   },
   {
     q: 'Is the consequence attached to the data central or local?',
-    ifYes: 'If the centre acts on it (funding, intervention, inspection), the centre owes full ATRS-grade transparency about that use.',
-    ifNo: 'If the action is local (a teacher, a caseworker), build LOCAL capability to use it — the Supporting Families pattern, not the extraction pattern.',
+    ifYes: 'Where the centre acts on it (funding, intervention, inspection), ATRS-grade transparency about that use is the corresponding accountability requirement.',
+    ifNo: 'Where the action is local (a teacher, a caseworker), local capability to use it — the Supporting Families pattern — is the route that fits, rather than extraction.',
   },
   {
-    q: 'Would a parent be surprised by this use?',
-    ifYes: 'Stop. The 2012–2022 ledger is what “surprised parents” costs: boycotts, reprimands, a decade of rebuilt machinery.',
-    ifNo: 'Proceed — and say so publicly anyway.',
+    q: 'Would the data subject expect this use?',
+    ifYes: 'A use the data subject would not expect is the contested category: the 2012–2022 register records its documented cost — boycotts, regulatory reprimands, years of rebuilt machinery.',
+    ifNo: 'An expected use; publishing it remains the transparency baseline regardless.',
   },
 ];
 
 export const SUBSID_PRINCIPLES = {
-  research: 'A non-paternal posture in one paragraph: collect centrally only where national comparability or allocation genuinely requires it; otherwise fund and host sector-owned capability (the Data to Insight pattern); prefer the least-extractive rung of the ladder that meets the purpose; publish every share and every algorithm; and treat schools, trusts and LAs as analytical peers — sources of questions, not just sources of data. The white paper’s spine can still be built either way. The architecture decision IS the posture decision.',
-  eli5: 'The fair rule of thumb: the centre should only take data when the whole country genuinely needs the same numbers — like sharing out money. Everything else: pay for good local tools, let councils and schools keep their own data, use clever methods that answer questions without taking copies, and publish everything you do take. Whether the new “data spine” respects that rule is being decided right now.',
+  research: 'The lower-custody posture stated as a single criterion: central collection where national comparability or allocation requires it; otherwise funded, sector-held capability (the Data to Insight pattern); the lowest-custody rung of the ladder that meets the purpose; every share and every algorithm published; and schools, trusts and LAs treated as analytical peers — sources of questions as well as data. The white-paper spine is compatible with either posture; on this analysis, the architecture decision and the custody posture are the same decision.',
+  eli5: 'The posture as one rule of thumb: hold data centrally only where the whole country genuinely needs the same numbers — such as for allocating money. Otherwise: fund good local tools, let councils and schools keep their own data, use methods that answer questions without taking copies, and publish whatever is taken. Whether the new “data spine” follows that rule is being decided now.',
 };
 
 // ---------------------------------------------------------------------------
@@ -292,8 +294,8 @@ export const SUBSID_PRINCIPLES = {
 // (research dossier 2026-06-10: products, data captured, precedents, barriers)
 // ---------------------------------------------------------------------------
 export const EDTECH_THESIS = {
-  research: 'England already runs a de-facto national learning-measurement system: ~1.2m pupils’ reading behaviour (Renaissance), 2m+ secondary maths learners’ question-level work (Sparx), cognitive baselines in two-thirds of secondaries (GL), national writing benchmarks (No More Marking), 400k wellbeing responses a year (Edurio) and a 50%-share MIS group. It is privately owned and consolidating into US/private-equity hands, legally fenced by the processor/controller fiction, technically unjoined for want of standards and an identifier — and published as national intelligence only when a vendor’s marketing calendar or a national crisis demands it.',
-  eli5: 'The apps schools already use quietly measure more, more often, than the government ever does — every maths question answered, every book read, every detention logged. But that knowledge belongs to a handful of mostly American-owned companies, the systems don’t talk to each other, and the country only hears about it when a company fancies a press release.',
+  research: 'England has, in effect, a de-facto national learning-measurement layer in the private edtech market: ~1.2m pupils’ reading behaviour (Renaissance), 2m+ secondary maths learners’ question-level work (Sparx), cognitive baselines in two-thirds of secondaries (GL), national writing benchmarks (No More Marking), 400k wellbeing responses a year (Edurio) and a ~50%-share MIS group. It is privately owned and consolidating into US and private-equity ownership; the processor/controller split assigns control to schools who in practice cannot exercise it; the products are technically unjoined for want of common standards and an identifier; and aggregate national readouts appear only when a vendor publishes or a specific event (e.g. the COVID assessment cancellations) prompts a commission.',
+  eli5: 'The apps schools already use measure more, and more often, than the government does — every maths question answered, every book read, every behaviour point logged. But that data sits with a handful of mostly US-owned companies, the systems don’t share a common format, and national summaries appear only when a company chooses to publish or a one-off study is commissioned.',
 };
 
 export interface EdtechCategory {
@@ -328,10 +330,10 @@ export const EDTECH_ESTATE: EdtechCategory[] = [
       { name: 'Tes (ClassCharts + MyConcern)', scale: 'school counts unpublished', data: 'Arguably England’s largest live behaviour-event dataset plus a major safeguarding log — and Tes has never published a national behaviour-trend analysis from it' },
       { name: 'CPOMS (Raptor, US)', scale: '14,000+ schools at acquisition', data: 'Safeguarding incident logs — acquired by a US school-security firm in 2021 with no public-interest data conditions' },
     ],
-    signal: 'The behaviour and safeguarding weather-map nobody publishes — the dogs that didn’t bark.',
+    signal: 'A national behaviour and safeguarding picture that is held but not published.',
   },
   {
-    category: 'Engagement, wellbeing & the household edge', colour: '#7a5aa6',
+    category: 'Engagement, wellbeing & household signals', colour: '#7a5aa6',
     entries: [
       { name: 'ImpactEd (TEP)', scale: '100,000+ pupils, ~200 schools', data: 'Termly engagement tracking — already shown to predict subsequent absence; documented the “age-11 dip” (enjoyment 6.0→3.2 from Y6 to Y8)' },
       { name: 'Edurio', scale: '~400,000 responses/yr, 2,000+ schools', data: 'The largest national education survey benchmarks in England — staff, pupil and parent voice' },
@@ -358,39 +360,41 @@ export const EDTECH_PRECEDENTS: { name: string; what: string; eli5: string }[] =
     eli5: 'A small research company already proved you can spot children drifting away from school before the register shows it.',
   },
   {
-    name: 'The dogs that didn’t bark',
-    what: 'Tes has never published national behaviour trends from ClassCharts; no DfE access to Google/Microsoft usage telemetry has ever been evidenced; writing has no statutory in-year measure and the private fill-in (No More Marking) found Year 7s “22 months behind” post-COVID. The richest signals are the least visible.',
-    eli5: 'The biggest datasets — behaviour logs, Google Classroom activity — have never produced a single public national insight.',
+    name: 'The unpublished signals',
+    what: 'Tes has not published national behaviour trends from ClassCharts; no DfE access to Google/Microsoft usage telemetry has been evidenced; writing has no statutory in-year measure, and the private alternative (No More Marking) reported Year 7s “22 months behind” (its term) post-COVID. Several of the largest datasets generate no public national readout.',
+    eli5: 'Some of the biggest datasets — behaviour logs, Google Classroom activity — have not produced any public national insight.',
   },
 ];
 
 export const EDTECH_BARRIERS: { kind: string; detail: string; eli5: string }[] = [
   {
-    kind: 'Commercial enclosure',
-    detail: 'The consolidation chain: Renaissance acquired GL (2023), ParentPay acquired ESS/SIMS (2023), Raptor (US) acquired CPOMS (2021), Tes took ClassCharts (2016) and MyConcern (2023), Juniper rolled up 14 assessment products. No acquisition carried public-interest data conditions — the CMA cleared ParentPay/ESS with no data-access remedy. Fragmented per-school procurement means no national licence, therefore no national data terms.',
-    eli5: 'A few firms — mostly American-owned — have been buying up the companies that hold children’s learning data, and nobody attached any “the public gets something” strings to the deals.',
+    kind: 'Ownership consolidation',
+    detail: 'The consolidation chain: Renaissance acquired GL (2023), ParentPay acquired ESS/SIMS (2023), Raptor (US) acquired CPOMS (2021), Tes acquired ClassCharts (2016) and MyConcern (2023), Juniper consolidated 14 assessment products. No acquisition carried public-interest data conditions — the CMA cleared ParentPay/ESS with no data-access remedy. Fragmented per-school procurement means there is no national licence, and therefore no national data terms.',
+    eli5: 'A small number of firms — mostly US-owned — have acquired the companies holding children’s learning data, and the deals carried no public-access conditions.',
   },
   {
-    kind: 'Legal fictions and a trust deficit',
-    detail: 'Vendors contract as “processors” with schools as “controllers” of processing schools cannot in practice comprehend or control — schools carry the liability, vendors keep the asset. The ICO’s Children’s Code edtech audit programme and defenddigitalme’s April 2026 critique (naming the Content Store and the aggregator pipes) define the scrutiny any new flow inherits — on top of DfE’s own 2020 audit legacy.',
-    eli5: 'On paper schools are “in charge” of the data; in reality they can’t see or control what the apps do with it — but they carry the blame. Regulators and campaigners are watching closely.',
+    kind: 'The controller/processor split and a documented trust deficit',
+    detail: 'Vendors contract as “processors” with schools as “controllers” of processing that schools have limited practical capacity to inspect or control — so schools hold the legal liability while the data asset sits with vendors. The ICO’s Children’s Code edtech audit programme and defenddigitalme’s April 2026 critique (naming the Content Store and the aggregator services) set the scrutiny any new flow inherits, alongside DfE’s own 2020 audit findings.',
+    eli5: 'On paper schools are “in charge” of the data; in practice they have limited ability to see or control what the apps do with it, yet they carry the liability. Regulators and campaigners scrutinise this closely.',
   },
   {
-    kind: 'No standards, no identifier',
-    detail: 'England has no Ed-Fi/Caliper-style interoperability standard in common use; the aggregators (Wonde, Groupcall) are private toll bridges; and the UPN is legally restricted from non-educational use, so platforms key on emails and internal IDs — making cross-platform or platform-to-NPD linkage impossible by design. The data spine’s open-standards commitment is the once-a-decade chance to fix this, and its standards are unspecified as of June 2026.',
-    eli5: 'The apps can’t talk to each other and don’t share a common pupil ID — so the pieces can’t be joined even where everyone wants to. The new “data spine” could fix this, if its rules are written right.',
+    kind: 'No common standard, no shared identifier',
+    detail: 'England has no Ed-Fi/Caliper-style interoperability standard in common use; the aggregators (Wonde, Groupcall) are privately operated intermediaries; and the UPN is legally restricted from non-educational use, so platforms key on emails and internal IDs — so cross-platform or platform-to-NPD linkage is not technically possible as currently designed. The data spine’s open-standards commitment is the relevant lever; its standards are unspecified as of June 2026.',
+    eli5: 'The apps don’t share a common data format or a common pupil ID, so the pieces cannot be joined even where everyone wants them to be. The new “data spine” is the place that could change this, depending on how its rules are written.',
   },
   {
-    kind: 'Statistical honesty',
-    detail: 'Every platform footprint is self-selected (AR skews primary, Sparx secondary); usage ≠ learning (Sparx’s headline association is correlational); reach ≠ use (Oak: 72% of schools, but only 11–13% of teachers on survey); and platform-gaming is a known practitioner phenomenon with no rigorous England study. National inference requires reweighting against the school census — only the DfE/EPI Star study did it properly.',
-    eli5: 'The numbers flatter: schools choose these apps (so they’re not a fair sample), using an app isn’t the same as learning, and children game them. The data is useful — but only with honest statistics.',
+    kind: 'Statistical caveats',
+    detail: 'Every platform footprint is self-selected (AR skews primary, Sparx secondary); usage is not learning (Sparx’s headline association is correlational); reach is not use (Oak: 72% of schools, but only 11–13% of teachers on survey); and platform-gaming is a reported practitioner phenomenon with no rigorous England study. National inference requires reweighting against the school census — to date only the DfE/EPI Star study did so.',
+    eli5: 'The raw numbers can mislead: schools choose these apps (so they are not a representative sample), using an app is not the same as learning, and pupils can game them. The data is useful, but only with careful reweighting.',
   },
 ];
 
+// Options that would not require new central data collection — described as
+// what each would entail, with the existing precedent, rather than as recommendations.
 export const EDTECH_LEVERS: { name: string; what: string }[] = [
-  { name: 'A standing in-year telemetry purchase', what: 'Make the COVID Star/EPI model permanent: procure reweighted termly readouts from the big panels (Star, Sparx baselines, GL, NMM) — with WRITING, the subject with no statutory measure, the highest-value gap to fill first.' },
-  { name: 'An early-warning pilot, aggregates first', what: 'Homework-submission decay + behaviour-event drift, joined to the daily attendance feed AT SCHOOL LEVEL — the leading-indicator stack ImpactEd prototyped, designed deliberately below the individual-flagging threshold the failure gallery warns about.' },
-  { name: 'A national misconception map', what: 'Eedi’s tagged misconceptions + Sparx’s question-level analysis against Oak’s open curriculum taxonomy: which specific errors are rising, by year group and region — a thing no statutory instrument can see, and Eedi’s NeurIPS release proves shareable.' },
-  { name: 'Testbeds as evaluation infrastructure', what: 'The £23m EdTech Testbeds (1,000+ schools from Sept 2026) plus EEF’s platform trials make platforms the cheapest RCT vehicle in education. The design choice to influence NOW: standardised outcome measurement across products.' },
-  { name: 'The procurement lever — a “WKAR clause”', what: 'Through the spine’s standards and framework listing, not legislation: open export APIs as a condition of listing; school-controlled portability; and an aggregate-statistics duty on vendors above a usage threshold — if you hold half a million pupils’ data, you publish audited national aggregates annually.' },
+  { name: 'A standing in-year telemetry purchase', what: 'A permanent version of the COVID Star/EPI commission would procure reweighted termly readouts from the large panels (Star, Sparx baselines, GL, NMM). Writing — the subject with no statutory in-year measure — is the largest current gap such a purchase could address.' },
+  { name: 'An early-warning pilot, aggregates first', what: 'A school-level leading-indicator pilot would join homework-submission decay and behaviour-event drift to the daily attendance feed AT SCHOOL LEVEL — the stack ImpactEd prototyped, kept below the individual-flagging threshold the failure cases warn about.' },
+  { name: 'A national misconception map', what: 'Combining Eedi’s tagged misconceptions and Sparx’s question-level analysis against Oak’s open curriculum taxonomy would show which specific errors are rising, by year group and region — a view no statutory instrument provides, and one Eedi’s NeurIPS data release shows is shareable.' },
+  { name: 'Testbeds as evaluation infrastructure', what: 'The £23m EdTech Testbeds (1,000+ schools from Sept 2026) and EEF’s platform trials make platforms a low-cost RCT vehicle. The design choice still open is whether outcome measurement is standardised across products.' },
+  { name: 'A procurement-route “publish-aggregates” condition', what: 'Routed through the spine’s standards and framework listing rather than legislation: open export APIs as a listing condition; school-controlled portability; and an aggregate-statistics requirement on vendors above a usage threshold — i.e. vendors holding above a set number of pupils’ data publishing audited national aggregates annually. An evaluable criterion, not a stated recommendation.' },
 ];

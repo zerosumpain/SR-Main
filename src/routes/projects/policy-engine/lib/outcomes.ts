@@ -19,8 +19,12 @@ export const OUTCOMES: OutcomeMeta[] = [
     blurb: 'EPI "months of learning" between disadvantaged pupils and their peers at GCSE — the headline equity metric.' },
   { id: 'gapKS2', label: 'Disadvantage gap at 11', short: 'KS2 gap', unit: 'months', goodIfUp: false, dp: 1, group: 'equity',
     blurb: 'The gap at the end of primary school.' },
+  { id: 'gapAge3', label: 'Development gap at 3', short: 'Age-3 gap', unit: 'months', goodIfUp: false, dp: 1, group: 'equity',
+    blurb: 'The earliest modelled gap. The disadvantage gap is observable from age 3, before any school measure — an estimate (no official months-at-3 series exists).' },
   { id: 'gapReception', label: 'Disadvantage gap at 5', short: 'Age-5 gap', unit: 'months', goodIfUp: false, dp: 1, group: 'equity',
     blurb: 'The gap already present at school entry — ~40% of the age-16 gap is set this early.' },
+  { id: 'eyTakeUp', label: 'Early education — disadvantaged take-up', short: 'EY take-up', unit: '%', goodIfUp: true, dp: 0, group: 'attainment',
+    blurb: 'Share of disadvantaged under-5s in funded early education — the equity entitlement, where take-up has historically lagged the universal offer.' },
   { id: 'attainment8', label: 'Attainment 8 (all pupils)', short: 'A8 all', unit: 'score', goodIfUp: true, dp: 1, group: 'attainment',
     blurb: 'National average Attainment 8. The White Paper targets 50 ("a grade 5 across GCSEs on average").' },
   { id: 'attainment8Dis', label: 'Attainment 8 (disadvantaged)', short: 'A8 disadv.', unit: 'score', goodIfUp: true, dp: 1, group: 'attainment',
@@ -69,7 +73,8 @@ export const OUTCOMES_BY_ID: Record<string, OutcomeMeta> = Object.fromEntries(OU
 
 /** Plain-English ("ELI5") short LABELS for the scorecard / readout cards. */
 export const OUTCOME_ELI5_LABEL: Record<string, string> = {
-  gapKS4: 'Rich–poor gap at 16', gapKS2: 'Rich–poor gap at 11', gapReception: 'Rich–poor gap at 5',
+  gapKS4: 'Rich–poor gap at 16', gapKS2: 'Rich–poor gap at 11', gapReception: 'Rich–poor gap at 5', gapAge3: 'Rich–poor gap at 3',
+  eyTakeUp: 'Poorer toddlers in nursery',
   attainment8: 'Average GCSE score', attainment8Dis: 'Poorer pupils’ GCSE score', grade5EM: 'Good pass, English & maths',
   ks2RWM: 'On track at primary', gld: 'Ready for school at 5', ehcpPct: 'On a special-needs plan',
   highNeedsDeficitStock: 'Special-needs debt', ehcpAttainment8: 'Special-needs GCSE score', tribunalAppeals: 'Special-needs appeals',
@@ -84,7 +89,9 @@ export const OUTCOME_ELI5_LABEL: Record<string, string> = {
 export const OUTCOME_ELI5: Record<string, string> = {
   gapKS4: 'How far behind poorer 16-year-olds are, in months of learning. Lower is better.',
   gapKS2: 'How far behind poorer pupils are at the end of primary, in months. Lower is better.',
+  gapAge3: 'How far behind poorer three-year-olds already are, in months — before school even starts. An estimate. Lower is better.',
   gapReception: 'The gap that is already there at age 5, in months. Lower is better.',
+  eyTakeUp: 'The share of poorer under-5s actually in funded nursery/early education. Higher is better.',
   attainment8: 'The average GCSE results score. Higher is better.',
   attainment8Dis: 'The average GCSE score for poorer pupils. Higher is better.',
   grade5EM: 'The share who get a strong pass in both English and maths GCSE. Higher is better.',

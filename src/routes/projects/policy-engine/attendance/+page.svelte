@@ -1,8 +1,8 @@
 <script lang="ts">
   // Attendance — Field Study №8: the leading indicator. England's biggest
   // post-COVID schooling problem and its biggest data success, on one page —
-  // with the honest open question (has the instrument changed outcomes?) at
-  // the centre rather than the press-release answer.
+  // with the open evidence question (has the instrument changed outcomes?) at
+  // the centre rather than an attribution claim.
   import { app } from '../lib/appState.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import { STORIES } from '../lib/stories';
@@ -42,7 +42,7 @@
     <p class="cap">
       {eli
         ? 'Three ways of measuring missed school. The first two are getting better (though nowhere near back to normal). The third — children missing more than half of school — keeps climbing.'
-        : 'The same crisis on three thresholds (DfE full-year series). The composition is the story: the marginal absentee is returning; the child furthest from school is not. Every average conceals this divergence.'}
+        : 'The same problem measured on three thresholds (DfE full-year series). The composition is the finding: the marginal absentee is returning; the child furthest from school is not. The headline average conceals this divergence.'}
     </p>
     <div class="dials">
       {#each DIALS as d (d.title)}
@@ -114,14 +114,14 @@
 
   <!-- ===================== 5 · the verdict ===================== -->
   <section class="block">
-    <h2 class="pe-h2">5 · Has the instrument moved the needle? The honest answer: unproven</h2>
+    <h2 class="pe-h2">5 · Has the instrument changed outcomes? On current evidence: unproven</h2>
     <div class="verdict">
       <div class="v-col claim">
         <span class="v-t">{eli ? 'What the government says' : 'The claim'}</span>
         <p>{eli ? VERDICT.claim.eli5 : VERDICT.claim.research}</p>
       </div>
       <div class="v-col counter">
-        <span class="v-t">{eli ? 'What the evidence actually supports' : 'The ledger against attribution'}</span>
+        <span class="v-t">{eli ? 'What the evidence supports' : 'The evidence that qualifies the attribution'}</span>
         <p>{eli ? VERDICT.counter.eli5 : VERDICT.counter.research}</p>
       </div>
     </div>
@@ -188,9 +188,9 @@
     </div>
   </section>
 
-  <!-- ===================== 10 · the asks ===================== -->
+  <!-- ===================== 10 · open evidence questions ===================== -->
   <section class="block">
-    <h2 class="pe-h2">10 · What to do with the best pipe in the estate — three asks</h2>
+    <h2 class="pe-h2">10 · The highest-frequency collection in the estate — three open evidence questions</h2>
     <div class="asks">
       {#each ATT_ASKS as a, i (a.ask)}
         <div class="ask">

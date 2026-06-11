@@ -40,7 +40,10 @@ export const POP = {
 // ---------------------------------------------------------------------------
 export const BASELINE = {
   // equity (EPI months) — EPI Annual Report 2025
-  gapKS4: 19.1, gapKS2: 10.0, gapReception: 4.7,
+  // gapAge3 is the earliest modelled point: the gap is observable from age 3 and ~40% of the
+  // age-16 gap is already set by age 5 (EPI). No single official "months at 3" series exists,
+  // so 3.3 is an estimate anchored below the age-5 gap (4.7) — an assumption to test, not a fact.
+  gapAge3: 3.3, gapKS4: 19.1, gapKS2: 10.0, gapReception: 4.7,
   // attainment levels (all / disadvantaged) — DfE EES KS4/KS2 2024-25, White Paper Annex
   attainment8: 46.0, attainment8Dis: 36.7,        // gap 15.5pts → dis 36.7
   grade5EM: 45.5, grade5EMDis: 25.8,              // gap 27.3pp (≈ ÷2)
@@ -95,6 +98,7 @@ export const HISTORY: Record<string, number[]> = {
   year:            [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
   gapKS4:          [18.3, 18.2, 18.1, 18.1, 18.1, 18.2, 18.5, 18.9, 19.2, 19.1],
   gapKS2:          [9.3,  9.3,  9.2,  9.2,  9.2,  9.4,  9.7,  10.1, 10.3, 10.0],
+  gapAge3:         [3.1,  3.1,  3.2,  3.2,  3.2,  3.2,  3.3,  3.4,  3.3,  3.3],
   gapReception:    [4.5,  4.5,  4.6,  4.6,  4.6,  4.6,  4.6,  4.8,  4.6,  4.7],
   attainment8:     [46.4, 46.5, 46.6, 46.7, 46.7, 50.2, 50.9, 48.9, 45.9, 46.0],
   grade5EM:        [42.6, 42.9, 43.3, 43.4, 43.2, 49.9, 50.2, 46.2, 45.9, 45.5],
@@ -116,6 +120,8 @@ export const HISTORY: Record<string, number[]> = {
 export interface ChannelParams {
   // KS4 disadvantage-gap reductions (months) at full lever, by lever id
   gapKS4: Record<string, Band>;
+  // Age-3 development-gap reductions (months) at full lever (the earliest, fastest response)
+  gapAge3: Record<string, Band>;
   // Reception-gap reductions (months) at full lever
   gapRecep: Record<string, Band>;
   // KS2-gap reductions (months) at full lever
@@ -149,6 +155,16 @@ export const CH: ChannelParams = {
     mission_ne:       band(0.0, 0.06, 0.15),
     mission_coastal:  band(0.0, 0.10, 0.25),
     tutoring:      band(0.1, 0.4, 0.9),   // disadvantage-targeted catch-up tutoring [EEF small-group +4mo; NTP]
+  },
+  // ---- Age-3 development gap (months). The EARLIEST modelled point: EY levers act here
+  // first and fastest (the gap is observable from age 3; EPI). Effects are proportionally
+  // largest here because intervention is earliest — the Heckman "front-load" logic. ----
+  gapAge3: {
+    ey_quality:    band(0.5, 1.2, 2.2),   // quality early education has its biggest, earliest effect here [EEF EY; EPPE/EPPSE]
+    ey_access:     band(0.2, 0.7, 1.3),   // disadvantaged access at 2-3 (the equity entitlement) [Sutton Trust]
+    eypp:          band(0.1, 0.5, 1.0),   // early disadvantage premium [IFS]
+    poverty_action:band(0.1, 0.4, 0.9),   // income → home learning environment, the dominant early driver [EPI]
+    send_early:    band(0.0, 0.2, 0.5),   // Family Hubs / 2½-yr review early identification & support [Best Start; NAO]
   },
   gapRecep: {
     ey_quality:    band(0.4, 1.1, 2.0),   // largest, soonest effect at age 5 [EEF; Best Start target GLD 75%]

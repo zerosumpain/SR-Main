@@ -9,17 +9,136 @@
 // ---------------------------------------------------------------------------
 export const JIGSAW_HERO = {
   big: '81%',
-  label: 'of serious child-safeguarding incidents involved failures of co-ordination or handover between services — including information sharing — across the 330 rapid reviews analysed by the national Child Safeguarding Practice Review Panel (2023–24).',
-  labelEli5: 'In four out of five of the most serious cases where children died or were badly harmed, the services around them failed to join up what they each knew.',
+  // PRECISION: the figure measures a "lack of co-ordination or handover between services"
+  // theme — of which information-sharing failure is ONE named sub-component, not the whole.
+  // It is a finding about the 330 serious-incident rapid reviews, not about all children,
+  // and not specifically about information-sharing. Stated verbatim from CSPRP §3.85.
+  label: 'of the 330 serious-incident rapid reviews in 2023–24 showed a lack of co-ordination or handover between services — a theme the national Child Safeguarding Practice Review Panel says “often included failures in information sharing”, alongside inconsistent record-keeping, role confusion, delayed responses and fragmented services (CSPRP, 2025, §3.85).',
+  labelEli5: 'In about four out of five of the most serious cases reviewed in a year — where children died or were badly harmed — the Panel found the services around the child had not co-ordinated or handed over well between each other. Information-sharing failures were one part of that, not the whole of it.',
   kicker: {
-    research: 'The pieces almost always existed. The Panel’s 2024 national review of intra-familial sexual abuse found that in a third of cases the abuser had a KNOWN history of sexual offending — recorded, somewhere, in a system. The jigsaw fails at the joins, not the pieces. And the sector’s own caution — the RCPCH, in backing the NHS number as the new child identifier, warned that the identifier alone is insufficient without “national and cross-sector agreement on what, when and how information is shared”. Plumbing is necessary, not sufficient. (The Panel’s exact wording, para 3.85: “lack of co-ordination or handover between services featured in 81% of incidents”, with information-sharing failures a named component — and in 14% of those incidents, GOOD practice was also found. The figure measures joins, not villains.)',
-    eli5: 'The information was nearly always written down somewhere — in a third of the worst sexual-abuse cases, the abuser’s history was already known to a service. The system doesn’t fail because nobody knew; it fails because the people who knew never met. Even the doctors who support the new child ID number say the number alone won’t fix that.',
+    research: 'A precise reading matters here, because the figure is widely shortened to “81% information-sharing failures”, which over-claims. The Panel’s wording is broader: it is a co-ordination/handover theme, with information-sharing one named element within it — and the source notes that in 14% of incidents flagged with this issue, GOOD practice (effective information-sharing and multi-agency communication) was also identified. The denominator is the 330 rapid reviews (≈267 of 330), i.e. a serious-incident review population — the most serious cases, not all children. A companion theme in the same 330 — a lack of professional curiosity, the “failure to ask the second question” — features in 66%. Separately, the Panel’s 2024 review of intra-familial sexual abuse found that in around a third of cases the person who caused harm had a recorded history of sexual offending. On the identifier debate, the RCPCH (in supporting the NHS number as the child identifier) records that the identifier alone is insufficient without “national and cross-sector agreement on what, when and how information is shared” — i.e. a shared identifier is a necessary but not sufficient condition for the joins to work.',
+    eli5: 'It is worth being exact: people often shorten this to “81% had information-sharing failures”, but the Panel’s number is broader — it covers co-ordination and hand-overs in general, with information-sharing as one part. And in some of those same cases, the Panel also found things being done well. The information was often written down somewhere — in about a third of the worst sexual-abuse cases reviewed, the person’s history was already known to a service. Even the doctors who support the new child ID number say the number alone will not fix the joins.',
   },
   refs: [
-    { label: 'CSPRP Annual Report 2023–24, para 3.85', url: 'https://assets.publishing.service.gov.uk/media/67c97b1dd0fba2f1334cf300/Child_Safeguarding_Practice_Review_Panel_annual_report_2023_to_2024.pdf' },
-    { label: '“I wanted them all to notice” (2024)', url: 'https://assets.publishing.service.gov.uk/media/67446a8a81f809b32c8568d3/CSPRP_-_I_wanted_them_all_to_notice.pdf' },
+    { label: 'CSPRP Annual Report 2023–24, §3.85', url: 'https://assets.publishing.service.gov.uk/media/67c97b1dd0fba2f1334cf300/Child_Safeguarding_Practice_Review_Panel_annual_report_2023_to_2024.pdf' },
+    { label: 'NSPCC — CASPAR summary of the 2023–24 report', url: 'https://learning.nspcc.org.uk/research-resources/2025/summary-child-safeguarding-practice-review-panel-csprp-annual-report-2023-24' },
     { label: 'RCPCH — NHS number as the identifier', url: 'https://www.rcpch.ac.uk/resources/nhs-number-single-unique-identifier-children-position-statement' },
   ],
+  // A precise restatement the page can render verbatim near the big number.
+  precise: 'What the 81% measures: a “lack of co-ordination or handover between services”, which the Panel says often included information-sharing failures — but also inconsistent record-keeping, role confusion, delayed responses and fragmented services. It is a finding about the 330 serious-incident reviews (≈267 of 330), not about all children, and not specifically about information-sharing.',
+  preciseEli5: 'In plain terms: the 81% is about services not joining up in general — hand-overs, records, roles, delays — and information-sharing is one piece of that. It counts the most serious cases that were reviewed, not every child.',
+};
+
+// ---------------------------------------------------------------------------
+// 1b · The privacy counter-thesis — the proportionality ceiling, evidenced
+// ---------------------------------------------------------------------------
+// The case for "joining the data up" runs into a documented record of large
+// child-data systems being curtailed on privacy and proportionality grounds.
+// This is a legal and ethical constraint with case-law force, not a fringe
+// objection — presented here at its full weight so the balance can be stated
+// neutrally afterwards.
+
+export interface PrivacyPrecedent {
+  id: string;
+  name: string;
+  period: string;
+  summary: string;        // what it was / what happened
+  finding: string;        // the privacy/proportionality point, attributed
+  eli5: string;
+  refs: Ref[];
+}
+
+export const PRIVACY_PRECEDENTS: PrivacyPrecedent[] = [
+  {
+    id: 'contactpoint',
+    name: 'ContactPoint — the national children’s index',
+    period: 'Built 2009 · switched off 6 August 2010',
+    summary: 'Created under the Children Act 2004 after the Victoria Climbié inquiry, ContactPoint was an index of basic details and service contacts for around 11 million children in England, reaching ~150 local authorities and an estimated 330,000–390,000 authorised users. It was intended to let a practitioner see who else was working with a child. It cost ~£224m to build and ~£41m/yr to run (government figures); the Information Commissioner put lifetime cost nearer £1bn (a figure the government contested).',
+    finding: 'The incoming government switched it off in August 2010 on cost-and-civil-liberties grounds. Documented objections gave it weight beyond cost: a Foundation for Information Policy Research review commissioned by the ICO (2006) argued it did not adequately respect privacy and proportionality; a Deloitte security review reportedly concluded the system could not be made fully secure; and concerns were raised about “shielded” records for at-risk children (e.g. those fleeing abuse) being identifiable, and about function-creep risk. The Joint Committee on Human Rights flagged it as a serious interference with ECHR Article 8 that was hard to justify.',
+    eli5: 'Britain once built a list of every child — 11 million of them — so workers could see who else was helping. It cost hundreds of millions of pounds and was switched off in 2010 because of cost and privacy worries, including the fear that children hiding from an abusive parent could be found through it.',
+    refs: [
+      { label: 'ContactPoint — cost, reach, shutdown (overview)', url: 'https://en.wikipedia.org/wiki/ContactPoint' },
+      { label: 'ContactPoint switched off (Aug 2010)', url: 'https://ukhumanrightsblog.com/2010/08/06/contact-point-switched-off-but-child-welfare-concerns-remain/' },
+    ],
+  },
+  {
+    id: 'named-person',
+    name: 'The Scottish “Named Person” scheme — Christian Institute v Lord Advocate [2016] UKSC 51',
+    period: 'Legislated 2014 · UK Supreme Court ruling 28 July 2016',
+    summary: 'Part of Scotland’s Getting It Right For Every Child (GIRFEC) policy, the Children and Young People (Scotland) Act 2014 would have assigned a “named person” to every child to oversee wellbeing, with associated information-sharing provisions.',
+    finding: 'The UK Supreme Court (unanimous, five justices) held that the information-sharing provisions — not the named-person concept itself — were incompatible with ECHR Article 8 and therefore outside the legislative competence of the Scottish Parliament. The Court accepted the legitimate aim (child wellbeing) but found the data-sharing regime failed the “in accordance with the law” and proportionality tests: it was not sufficiently foreseeable or clear, risked overriding confidentiality (e.g. health data) without adequate safeguards, and gave parents no real way to know about or object to sharing. The Court’s much-quoted line — “The first thing that a totalitarian regime tries to do is to get at the children…” — was used to make the point that benign intentions do not exempt a scheme from rule-of-law limits. The statutory scheme was subsequently abandoned; the Scottish Government moved to repeal the relevant parts in 2019.',
+    eli5: 'Scotland tried to give every child a “named person” to watch over their wellbeing, with rules letting services share information about the child. In 2016 the UK’s highest court struck the information-sharing rules down: the aim was fine, but the data-sharing was too vague and gave families no way to know or object, so it broke the right to private and family life. This is the leading UK case on the limits of bulk child-data-sharing.',
+    refs: [
+      { label: 'UKSC — Christian Institute v Lord Advocate [2016] UKSC 51', url: 'https://www.supremecourt.uk/cases/uksc-2015-0216' },
+      { label: 'Clan Childlaw — case note (Art.8 incompatibility)', url: 'https://www.clanchildlaw.org/the-christian-institute-and-others-v-the-lord-advocate-2016-uksc-51/' },
+    ],
+  },
+  {
+    id: 'ico-current',
+    name: 'Current data-protection critiques of the new English duty',
+    period: '2025–26',
+    summary: 'The new English statutory information-sharing duty and single child identifier (Children’s Wellbeing and Schools Act 2026) have drawn a continuation of these objections, set out by groups including defenddigitalme and clinical bodies. The government’s position is that the new duty provides a clearer lawful basis and safeguards; the points below are the critics’ framings, recorded here at face value.',
+    finding: 'Critics point to: function-creep risk (the legislation reportedly disapplies certain confidentiality obligations, and ministers have indicated possible uses beyond safeguarding); a deterrence concern that extracting NHS-number identifiers for non-health matching could discourage vulnerable families from registering with a GP — which would reduce, not increase, early safeguarding contact; transparency gaps (pilots concede parents “will not necessarily be aware” of the processing); and an enforcement gap (no published cost-benefit against cheaper alternatives such as training, and a critique that an unpublished 2020 ICO audit of the DfE went unactioned). The underlying point is that data-protection law constrains a join only as far as it is enforced.',
+    eli5: 'The new law that lets services share children’s data and gives every child one ID number has its critics too. They worry the data could later be used for things other than safeguarding, that some families might avoid the doctor to stay off the list, that parents often won’t be told, and that the rules only work if someone actually enforces them. The government says the new law makes the legal basis clearer and adds safeguards.',
+    refs: [
+      { label: 'defenddigitalme — critique of the single-identifier duty', url: 'https://defenddigitalme.org/2025/06/14/nhs-number-to-be-national-id-mandated-in-childrens-wellbeing-and-schools-bill/' },
+      { label: 'ICO — children and the UK GDPR', url: 'https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/childrens-information/children-and-the-uk-gdpr/' },
+    ],
+  },
+];
+
+// The balance, stated neutrally — a criterion that can be APPLIED, not a recommendation.
+export const PRIVACY_BALANCE = {
+  title: 'Holding the two findings together',
+  research: 'Two evidenced findings sit in tension. On one side, the CSPRP review population shows co-ordination and hand-over failures (including information-sharing) are pervasive in the most serious cases. On the other, the legal record (Christian Institute v Lord Advocate; the ContactPoint reversal) establishes that bulk, mandatory child-data-sharing must be lawful, foreseeable and proportionate under ECHR Article 8 — a constraint with case-law force, not a preference. The two are not symmetric rhetorical positions to be split down the middle: the safeguarding finding is about a review population (the most serious cases), and the legal finding is a binding ceiling on any design that applies to all children. A way to state the trade-off as an evaluable criterion rather than a position: each increment of coverage (how much data is joined, on how many children) can be assessed for the safeguarding signal it adds AND the proportionality cost it incurs — and a design is admissible only if it is targeted, foreseeable, and bounded enough to pass the Article 8 proportionality test the courts have already applied. Targeted, purpose-narrow, push-based flows (the Operation Encompass shape) sit comfortably within that ceiling; a standing national index of all children (the ContactPoint shape) has twice been judged not to.',
+  eli5: 'Both things are true at once. Services not joining up does harm children in the worst cases. AND the courts have ruled that you cannot just join up everything about every child — it has to be targeted, clear, and proportionate, or it breaks the right to a private family life. So the test is not “share more” or “share less” but “does this particular join add enough safeguarding value to justify its privacy cost, and is it targeted enough to be lawful?” Narrow, specific alerts pass that test; a giant database of every child has twice failed it.',
+  refs: [
+    { label: 'CSPRP Annual Report 2023–24, §3.85', url: 'https://assets.publishing.service.gov.uk/media/67c97b1dd0fba2f1334cf300/Child_Safeguarding_Practice_Review_Panel_annual_report_2023_to_2024.pdf' },
+    { label: 'UKSC — Christian Institute v Lord Advocate [2016] UKSC 51', url: 'https://www.supremecourt.uk/cases/uksc-2015-0216' },
+  ] as Ref[],
+};
+
+// ---------------------------------------------------------------------------
+// 1c · Illustrative model parameters — clearly labelled, NOT measured rates
+// ---------------------------------------------------------------------------
+// Order-of-magnitude figures to ground the two illustrative interactives. Each
+// is a labelled modelling assumption, not a national rate. Where no defensible
+// figure exists, that is stated. Sourced from the research dossier (2026-06-11).
+
+export const ILLUSTRATIVE_PARAMS = {
+  // Agencies holding data on one safeguarding-involved child. No published mean exists.
+  agenciesPerChild: {
+    low: 4, high: 8,
+    note: 'A safeguarding-involved child’s data is typically held across roughly 4–8 services (e.g. GP/health, school, children’s social care, police, plus possibly health visiting, CAMHS, housing or early help). No single authoritative average is published — this is the composition of a MASH and the standard agency list, used as a modelling assumption.',
+    confidence: 'assumption' as const,
+  },
+  // Cohort order-of-magnitude figures for the "joins funnel" — dated, contested estimates.
+  cohort: {
+    // Children's Commissioner estimates (2018-19). Pre-2020, methodology-dependent.
+    invisible: 829_000,        // children "invisible" to services
+    familyRisk: 2_300_000,     // children living with a family-background risk factor
+    teensGaps: 123_000,        // teens (13-17) "falling through gaps", 2017/18 (~1 in 25)
+    note: 'The Children’s Commissioner estimated ~829,000 children “invisible” to services (of ~2.3m living with a family-background risk factor), and ~123,000 teenagers (13–17) “falling through the gaps” in 2017/18 (~1 in 25). These are dated (pre-2020) estimates and methodology-dependent — flagged as best-available but contested.',
+    confidence: 'contested' as const,
+  },
+  // Coordination-failure share (the CSPRP figure) — high confidence, but a review population.
+  coordFailureShare: {
+    pct: 81, reviews: 330,
+    note: 'In 81% of the 330 serious-incident rapid reviews in 2023–24 (≈267), the Panel found a lack of co-ordination or handover between services. High confidence in the figure — but it describes a review population (the most serious cases), not all children.',
+    confidence: 'high' as const,
+  },
+  // ContactPoint as a privacy-cost anchor — historic facts.
+  contactPoint: {
+    buildCostM: 224, runCostM: 41, recordsM: 11, usersLow: 330_000, usersHigh: 390_000, las: 150,
+    note: 'ContactPoint (2009–2010): ~£224m to build, ~£41m/yr to run, ~11m children’s records, ~330k–390k authorised users across 150 local authorities. Used as a privacy-cost / exposure-surface anchor for the coordination-cost simulator. The ICO’s ~£1bn lifetime figure was contested by the government.',
+    confidence: 'medium' as const,
+  },
+  // Per-referral duplication / "repeat your story" burden — NO clean national rate.
+  duplication: {
+    note: 'The Independent Review of Children’s Social Care (MacAlister, 2022) described families repeating their story across agencies and duplicated assessments as a systemic failure, but no clean national duplication rate is published. The duplication slider below is therefore an explicit assumption, not a measured rate. (Family Context, by Social Finance, reportedly saved ~2.5 hours per new referral by surfacing which services already know a family — an order-of-magnitude anchor for what a duplicate touch costs.)',
+    perReferralHoursSaved: 2.5,
+    confidence: 'assumption' as const,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -63,8 +182,8 @@ export const HOLDERS: Holder[] = [
     purpose: 'The only longitudinal health record that follows the child everywhere.',
     holds: 'The richest individual health history, including safeguarding codes.',
     challenge: 'Sits outside almost every multi-agency flow; GP participation in child-protection conferences is chronically thin; the record is built for clinical care, not for the safeguarding system that needs fragments of it.',
-    dfeCan: 'Nothing directly — and that is the point of this page.',
-    dfeCant: 'Touch primary-care records. The lever is NHS England’s, via the safeguarding-partner duty and record standards (PRSB).',
+    dfeCan: 'Little directly — which illustrates the wider point: DfE is one holder among many, not the controller of this record.',
+    dfeCant: 'Touch primary-care records. The lever sits with NHS England, via the safeguarding-partner duty and record standards (PRSB).',
     refs: [{ label: 'PRSB record standards', url: 'https://theprsb.org/standards/healthychildrecordstandard/' }],
   },
   {
@@ -92,7 +211,7 @@ export const HOLDERS: Holder[] = [
     holds: 'The case record — in one of three vendor systems (Liquidlogic >41% of LAs, Mosaic, Eclipse) designed around statutory returns rather than practice; 60% of social workers report weekly disruption from their own case system.',
     challenge: 'Records what Ofsted inspects and DfE collects; the recording burden crowds out the relationships the Panel says actually protect children. Loses sight of care leavers at 18 — there are no official statistics on care-leaver unemployment or homelessness.',
     dfeCan: 'Publish the dashboard and Annex A specs as open standards so sector tools (the D2I pattern) can flourish; keep the “continually reduce burdens” promise in the CSC data strategy.',
-    dfeCant: 'Procure or run the case systems — sector ownership of tooling is the one part of this market that works (ChAT, ~150 LAs).',
+    dfeCant: 'Procure or run the case systems — sector-owned tooling is the part of this market with the widest take-up (ChAT, ~150 LAs).',
     refs: [{ label: 'Rees Centre — ChAT in ~150 LAs', url: 'https://www.education.ox.ac.uk/rees-centre/news/using-data-tools-in-local-authority-childrens-services/' }, { label: 'CSC National Framework (DfE, 2023)', url: 'https://assets.publishing.service.gov.uk/media/657c538495bf650010719097/Children_s_Social_Care_National_Framework__December_2023.pdf' }],
   },
   {
@@ -134,7 +253,7 @@ export const HOLDERS: Holder[] = [
   {
     id: 'yot', name: 'Youth justice (YOT/YJB)', ring: 2,
     purpose: 'Assessment and supervision of children in the justice system.',
-    holds: 'AssetPlus — one assessment record that genuinely follows the child through the system (a rarity worth copying), feeding YJB national statistics.',
+    holds: 'AssetPlus — one assessment record that follows the child through the system (an uncommon design in this landscape), feeding YJB national statistics.',
     challenge: 'Heavy assessment burden; weak joins to education data despite school exclusion being the canonical pathway in.',
     dfeCan: 'Wire exclusion/AP data to YOT flows; the MoJ–DfE research linkage already exists — operationalise its lessons.',
     dfeCant: 'Reform AssetPlus — MoJ/YJB own it.',
@@ -171,7 +290,7 @@ export const HOLDERS: Holder[] = [
     id: 'dwp', name: 'DWP & HMRC', ring: 3,
     purpose: 'Hold the household economics: Universal Credit, benefits, Child Benefit (historically the nearest thing to a register of every child).',
     holds: 'The poverty signal — already piped to DfE weekly through the FSM Eligibility Checking Service.',
-    challenge: 'The flows are PULL (parents must apply) rather than PUSH (auto-enrolment): ~11% of FSM-eligible children — roughly 215,000 — are unregistered, unfed and unweighted in funding. Child Benefit’s register-of-children role is decaying as take-up falls.',
+    challenge: 'The flows are PULL (parents must apply) rather than PUSH (auto-enrolment): ~11% of FSM-eligible children — roughly 215,000 — are unregistered, not receiving the meals, and not counted in the disadvantage funding weighting. Child Benefit’s register-of-children role is declining as take-up falls.',
     dfeCan: 'Flip FSM to auto-enrolment using the pipe that already exists — the single most concrete welfare-data win available.',
     dfeCant: 'Access household data beyond the gateway purposes — and shouldn’t want to.',
     refs: [{ label: 'Commons Library CBP-10206 — FSM auto-registration', url: 'https://commonslibrary.parliament.uk/research-briefings/cbp-10206/' }],
@@ -189,8 +308,8 @@ export const HOLDERS: Holder[] = [
     id: 'cco', name: 'Children’s Commissioner', ring: 3,
     purpose: 'The only actor with statutory power to demand data from ANY public body (s.2F Children Act 2004).',
     holds: 'Whatever she asks for: the Attendance Audit found LAs “do not have an accurate figure of how many children there are in England”; her school survey is now a census of its own.',
-    challenge: 'The power is episodic — each audit is a one-off expedition into gaps that should be standing statistics.',
-    dfeCan: 'Treat her audits as a requirements list: each one names a join the standing system should make routine.',
+    challenge: 'The power is episodic — each audit is a one-off inquiry into gaps that are not currently covered by standing statistics.',
+    dfeCan: 'Her audits function, in effect, as a requirements list: each one identifies a join that a standing system could make routine.',
     dfeCant: 'Direct her — independence is the asset.',
     refs: [{ label: 'The Attendance Audit', url: 'https://www.childrenscommissioner.gov.uk/resource/where-are-englands-children-interim-findings-from-the-childrens-commissioners-attendance-audit/' }],
   },
@@ -208,7 +327,7 @@ export const HOLDERS: Holder[] = [
 // The eighteenth holder — the one the map can't show: the family itself.
 export const FAMILY_NOTE = {
   title: 'The eighteenth holder — the centre of the map holds none of the pieces',
-  research: 'Look at the map again: the child sits at the centre, and neither the child nor their family holds a single piece of it. A parent has no way to see their child’s distributed record — subject-access requests to each of seventeen organisations are the only mechanism, and the safeguarding file is partially exempt even from those. The components for something better already exist: health’s About Me standard (PRSB) defines person-held “what matters to me” information; the eRedbook proves parents can hold a clinical record; and every register on this page would be more accurate if the family could see and correct it. A steward that takes the anti-paternal test seriously eventually has to answer: where is the family’s copy?',
+  research: 'On the map, the child sits at the centre, and neither the child nor their family holds a single piece of the distributed record. A parent has no consolidated way to see it — subject-access requests to each of seventeen organisations are the only mechanism, and the safeguarding file is partially exempt even from those. The components for a person-held alternative already exist: health’s About Me standard (PRSB) defines person-held “what matters to me” information; the eRedbook shows parents can hold a clinical record; and every register on this page would be measurably more accurate if the family could see and correct it. A reciprocity criterion — whether the people a record is about can see and use it — is therefore one test any stewardship model can be assessed against: where is the family’s copy?',
   eli5: 'Strangest of all: the child in the middle of the map — and their parents — can’t see any of it. Seventeen organisations hold pieces of their story, and the family’s only option is writing to each one separately. The NHS already has a standard for letting people hold their own record. Nobody has built the children’s version.',
   refs: [
     { label: 'PRSB — the About Me standard', url: 'https://theprsb.org/standards/aboutme/' },
@@ -225,7 +344,7 @@ export interface RaciRow {
   job: string;
   eli5: string;
   cells: Record<string, RaciVal>;   // keyed by RACI_COLS ids
-  gap?: string;                     // the honest annotation (esp. where A is missing)
+  gap?: string;                     // the analytical annotation (esp. where A is missing)
 }
 
 export const RACI_COLS: { id: string; label: string }[] = [
@@ -273,17 +392,17 @@ export const RACI: RaciRow[] = [
   {
     job: 'Find the invisible children', eli5: 'Find the children no service can see',
     cells: { school: 'I', la: 'A', police: 'I', health: 'I', partnership: 'C', dfe: 'C', standards: '', cco: 'R' },
-    gap: 'The LA duty is new (CWS Act registers) and only covers not-in-school; kinship care (~132,800 children, visible only in the census), unregistered settings and the under-5s coverage gap remain dark. The Commissioner’s episodic audits are the de-facto search party.',
+    gap: 'The LA duty is new (CWS Act registers) and only covers not-in-school; kinship care (~132,800 children, visible only in the census), unregistered settings and the under-5s coverage gap remain unobserved by any standing collection. The Commissioner’s episodic audits are, in practice, the main mechanism for locating these children.',
   },
   {
     job: 'Identify and reach children in an emergency', eli5: 'Find every child fast when disaster strikes',
     cells: { school: 'R', la: 'R', police: 'R', health: 'R', partnership: 'C', dfe: 'I', standards: 'C', cco: '' },
-    gap: 'NO STANDING CAPABILITY. Manchester Arena: the casualty bureau failed for 4.5 hours while families searched hospitals for children. COVID: vulnerable-children lists assembled ad hoc — the scramble SAVVI’s standards exist to prevent, on £190k of grant funding.',
+    gap: 'NO STANDING CAPABILITY. The Manchester Arena Inquiry recorded that the casualty bureau was not operational for around 4.5 hours while families sought information about children in hospitals. During COVID-19, vulnerable-children lists were assembled ad hoc — the kind of reactive assembly SAVVI’s standards are designed to prevent, currently funded on a ~£190k grant.',
   },
   {
     job: 'Set the standards for all of the above', eli5: 'Write the common rules so systems can talk',
     cells: { school: '', la: 'C', police: '', health: 'R', partnership: '', dfe: 'R', standards: 'R', cco: '' },
-    gap: 'NO ACCOUNTABLE OWNER. Health has the PRSB; education/social care records have nobody. iStandUK is a programme accountable to one metropolitan borough council; SAVVI and Open Referral UK live grant to grant. The connective tissue of the children’s information system is funded like a parish newsletter.',
+    gap: 'NO ACCOUNTABLE OWNER. Health has the PRSB; education/social-care records have no equivalent body. iStandUK is a programme accountable to one metropolitan borough council; SAVVI and Open Referral UK are funded grant round to grant round. The standards layer of the children’s information system is funded at a fraction of the scale of the systems it underpins.',
   },
   {
     job: 'Count the system and its outcomes', eli5: 'Keep the national score',
@@ -411,16 +530,16 @@ export const TISSUE: Tissue[] = [
   },
   {
     name: 'Foundations (What Works Centre)', kind: 'research', status: 'DfE-commissioned WWC', colour: '#7a5aa6',
-    what: 'The What Works Centre for Children & Families (the 2023 EIF + WWCSC merger): practice guides for the Families First reforms, RCTs and evaluations in children’s social care — the “does sharing actually help” layer that should sit over every wire on the switchboard.',
+    what: 'The What Works Centre for Children & Families (the 2023 EIF + WWCSC merger): practice guides for the Families First reforms, RCTs and evaluations in children’s social care — the “does sharing actually help” evidence layer that bears on every wire on the switchboard.',
     fragility: 'Evidence synthesis and trials, not infrastructure; its findings bind nobody.',
     url: 'https://foundations.org.uk/about-us/',
   },
 ];
 
 export const GRAVEYARD = {
-  title: 'The graveyard — institutional amnesia, documented',
-  research: 'ContactPoint — the post-Climbié national index of all 11 million children, £224m to build and £41m a year to run — was switched off on 6 August 2010 on civil-liberties grounds. The Centre of Excellence for Information Sharing — ~17 staff in Leicester, funded by four Whitehall departments to work on exactly the cultural barriers the Panel still finds — closed in June 2018 when the funding stopped, leaving a legacy website. Each generation builds the information-sharing machinery, dismantles it, and then commissions a review into why information wasn’t shared. The 81% is what the amnesia costs.',
-  eli5: 'Britain has built this twice before: a national index of every child (cost £224 million, scrapped in 2010) and a whole team dedicated to helping services share information (closed in 2018 when its funding ran out). We keep deleting the answer and then holding inquiries into the question.',
+  title: 'The graveyard — capability built and discontinued, documented',
+  research: 'ContactPoint — the post-Climbié national index of all 11 million children, £224m to build and £41m a year to run — was switched off on 6 August 2010 on cost and civil-liberties grounds (the privacy precedent above sets out why). The Centre of Excellence for Information Sharing — ~17 staff in Leicester, funded by four Whitehall departments to work on the practice-culture barriers the Panel still identifies — closed in June 2018 when its funding ended, leaving a legacy website. The pattern is that information-sharing capability has been built and discontinued more than once, followed by reviews into why information was not shared — a sequence worth noting when weighing the durability of any new build.',
+  eli5: 'Britain has built versions of this twice before: a national index of every child (cost £224 million, switched off in 2010 over cost and privacy) and a team dedicated to helping services share information (closed in 2018 when its funding ended). The capability keeps being built and then discontinued — and then reviews ask why information was not shared.',
   refs: [
     { label: 'ContactPoint shutdown (Aug 2010)', url: 'https://ukhumanrightsblog.com/2010/08/06/contact-point-switched-off-but-child-welfare-concerns-remain/' },
     { label: 'Centre of Excellence — closure notice', url: 'https://informationsharing.org.uk/changes_to_the_centre/' },
@@ -443,7 +562,7 @@ export const JIGSAW_GAPS: { gap: string; detail: string; eli5: string; refs?: Re
   },
   {
     gap: 'The record breaks at every move',
-    detail: 'School moves (safeguarding files outside the CTF, no cross-vendor standard), housing moves (no TA→school notification), service moves (children’s→adults’ at 18, care leavers untracked). Mobility is the system’s blind spot — and the most at-risk children move most.',
+    detail: 'School moves (safeguarding files outside the CTF, no cross-vendor standard), housing moves (no TA→school notification), service moves (children’s→adults’ at 18, care leavers untracked). Mobility is where the system loses sight of a child most often — and the most at-risk children move most.',
     eli5: 'Every time a child moves — school, house, or into adulthood — their story gets left behind. The children in most danger move the most.',
     refs: [
       { label: 'KCSIE — transferring the CP file', url: 'https://www.gov.uk/government/publications/keeping-children-safe-in-education--2' },
@@ -451,9 +570,9 @@ export const JIGSAW_GAPS: { gap: string; detail: string; eli5: string; refs?: Re
     ],
   },
   {
-    gap: 'The consent myth is now provably cultural',
-    detail: 'The ICO has said it plainly (“you do not need consent to share a child’s data for safeguarding”), DfE’s 2024 practitioner advice says consent “should not be seen as the default lawful basis” in a child-safeguarding context, and the CWS Act 2026 now puts a duty to share in statute — yet the Panel’s 2024 review still found practitioners not understanding it. Three layers of permission have not fixed a confidence problem.',
-    eli5: 'Workers still wrongly believe they need permission to share worries about a child. The law has now said “you don’t” three times — the fear persists anyway.',
+    gap: 'The gap between the legal position and practice persists',
+    detail: 'The legal position is settled: the ICO states that consent is not needed to share a child’s data for safeguarding; DfE’s 2024 practitioner advice says consent “should not be seen as the default lawful basis” in a child-safeguarding context; and the CWS Act 2026 places a duty to share in statute. Yet the Panel’s 2024 review still found practitioners uncertain about it. The remaining gap is therefore one of practice and confidence rather than of law — three successive legal clarifications have not closed it.',
+    eli5: 'The law is clear that workers do not need permission to share worries about a child for safeguarding. But reviews still find some workers unsure. So the remaining problem is one of training and confidence, not of what the law allows.',
     refs: [
       { label: 'ICO — 10 steps to safeguarding sharing', url: 'https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-sharing/a-10-step-guide-to-sharing-information-to-safeguard-children/' },
       { label: 'DfE — information-sharing advice (2024)', url: 'https://assets.publishing.service.gov.uk/media/66320b06c084007696fca731/Info_sharing_advice_content_May_2024.pdf' },
@@ -470,9 +589,9 @@ export const JIGSAW_GAPS: { gap: string; detail: string; eli5: string; refs?: Re
     ],
   },
   {
-    gap: 'The standards layer is funded like a parish newsletter',
-    detail: 'iStandUK is accountable to one borough council; SAVVI runs on a £190k grant; Open Referral UK is volunteer-maintained. Health funds the PRSB properly; nothing equivalent exists for education or children’s social care records.',
-    eli5: 'The common rules that would let all these systems talk are kept alive by a handful of people on tiny grants — while the NHS funds its version properly.',
+    gap: 'The standards layer is funded far below the scale it underpins',
+    detail: 'iStandUK is accountable to one borough council; SAVVI runs on a £190k grant; Open Referral UK is volunteer-maintained. Health funds the PRSB as a standing body; no equivalent funded body exists for education or children’s social-care records.',
+    eli5: 'The common rules that would let all these systems talk are kept running by a small number of people on modest grants — while the NHS funds its version as a standing institution.',
     refs: [
       { label: 'iStandUK — accountable body', url: 'https://istanduk.org/about-us/' },
       { label: 'SAVVI phase 4 — the £190k', url: 'https://www.ukauthority.com/articles/savvi-vulnerability-data-project-enters-phase-four/' },
@@ -483,12 +602,14 @@ export const JIGSAW_GAPS: { gap: string; detail: string; eli5: string; refs?: Re
 // ---------------------------------------------------------------------------
 // 6 · The value offer — if DfE changed its support posture
 // ---------------------------------------------------------------------------
+// Framed as evaluable options — what each repositioning move would involve and its
+// cost order-of-magnitude — rather than as recommendations the author endorses.
 export const VALUE_OFFER: { move: string; what: string; cost: string }[] = [
-  { move: 'Set the missing standards', what: 'A cross-vendor safeguarding-record transfer standard; the MASH data specification (with Home Office/NHSE); record standards for education and social care to match the PRSB. DfE already runs standards.education.gov.uk — point it outward.', cost: 'Small — it is specification work, and the CTF precedent shows DfE can do it.' },
-  { move: 'Generalise the Encompass pattern', what: 'Push-based, deadline-bound, purpose-narrow flows for the named joins: temporary accommodation → school, A&E attendance → DSL (the Cardiff Model shows the safe form), court milestones → social care. Each is one flow, not a database.', cost: 'Per-flow specification + the identifier the CWS Act already provides.' },
-  { move: 'Fund the connective tissue properly', what: 'iStandUK, SAVVI, Open Referral UK and the D2I pattern collectively cost less than one national IT procurement. Endow the standards layer the way health endows the PRSB.', cost: 'Single-digit £m/yr — the cheapest line on any DfE budget with system-wide reach.' },
-  { move: 'Close the research/operational gap', what: 'Let ECHILD-grade matching inform frontline systems: the Wigan pilot’s match-rate lessons become a national matching service the MASH can call — identity resolution as infrastructure, not heroics.', cost: 'The hard one — but the linkage capability already exists in-house.' },
-  { move: 'Flip the welfare pipes to push', what: 'FSM auto-enrolment through the DWP/HMRC eligibility pipe that already runs weekly — the most concrete single win for both children and the accuracy of DfE’s own disadvantage data.', cost: 'Policy decision, not technology.' },
+  { move: 'Setting the missing standards', what: 'A cross-vendor safeguarding-record transfer standard; a MASH data specification (with Home Office/NHSE); record standards for education and social care comparable to the PRSB. DfE already runs standards.education.gov.uk; this would extend that function outward.', cost: 'Low — specification work, and the CTF precedent shows DfE has done comparable work before.' },
+  { move: 'Generalising the Encompass pattern', what: 'Push-based, deadline-bound, purpose-narrow flows for the named joins: temporary accommodation → school, A&E attendance → DSL (the Cardiff Model shows a low-data form), court milestones → social care. Each is a single flow, not a database.', cost: 'Per-flow specification, plus the identifier the CWS Act already provides.' },
+  { move: 'Funding the standards layer at scale', what: 'iStandUK, SAVVI, Open Referral UK and the D2I pattern collectively cost less than one national IT procurement. Placing the standards layer on standing funding comparable to the way health funds the PRSB.', cost: 'Single-digit £m/yr — a small budget line relative to its system-wide reach.' },
+  { move: 'Closing the research/operational gap', what: 'Allowing ECHILD-grade matching to inform frontline systems: the Wigan pilot’s match-rate lessons becoming a national matching service the MASH can call — identity resolution as shared infrastructure rather than per-case manual effort.', cost: 'The most demanding of the five — though the linkage capability already exists in-house.' },
+  { move: 'Reversing the welfare data flow', what: 'FSM auto-enrolment through the DWP/HMRC eligibility pipe that already runs weekly — affecting both the children registered and the accuracy of DfE’s own disadvantage data.', cost: 'A policy decision rather than a technical one.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -516,7 +637,7 @@ export interface SpineOpp {
   whatEli5: string;
   mechanism: string;       // the pattern: push / standard / matching / auto-enrolment
   gives: string;           // what the source puts in
-  getsBack: string;        // what flows back out — the anti-paternal test
+  getsBack: string;        // what flows back out — the reciprocity criterion
   blockedBy: string;       // what stops it today
   precedent: string;       // proof the shape works
   cost: '£' | '££' | '£££';
@@ -531,7 +652,7 @@ export const SPINE_OPPS: SpineOpp[] = [
     whatEli5: 'If police are called to trouble at home overnight, the school knows before the child walks in.',
     mechanism: 'Push-based, deadline-bound, purpose-narrow — and note: it never touches a national database.',
     gives: 'One incident flag, minimum detail, time-boxed.',
-    getsBack: 'A teacher who knows to be gentle today — the entire point of the flow.',
+    getsBack: 'A teacher who can respond appropriately that day — the function the flow is designed to serve.',
     blockedBy: 'Nothing. A statutory duty on all 43 forces in England and Wales since 7 November 2025 (Victims and Prisoners Act 2024) — running at ~2,000 notifications a day.',
     precedent: 'It IS the precedent — every other wire on this board copies its shape.',
     cost: '£', move: 0,
@@ -555,7 +676,7 @@ export const SPINE_OPPS: SpineOpp[] = [
     whatEli5: 'The team deciding tonight whether a child is safe gets a button that says “show me everything we hold on this exact child”.',
     mechanism: 'NHS-number-based matching (the Wigan pilot’s lessons) exposed as infrastructure — ECHILD-grade linkage moved from research to operations.',
     gives: 'PDS demographics; match-confidence scores.',
-    getsBack: 'Triage minutes back per referral, and an end to wrong-child errors — the front door’s biggest quiet risk.',
+    getsBack: 'Triage minutes back per referral, and fewer wrong-child errors — a recognised risk at the front door.',
     blockedBy: 'Identifier rollout timetable; education and social-care systems don’t yet hold the NHS number.',
     precedent: 'ECHILD matches 20m children at research grade; Wigan piloted the operational form.',
     cost: '£££', move: 4,
@@ -579,7 +700,7 @@ export const SPINE_OPPS: SpineOpp[] = [
     whatEli5: 'If a child turns up at A&E in a worrying way, someone at school finds out — with the bare minimum of medical detail.',
     mechanism: 'Coded flag only (attendance type, not clinical record); push to the DSL within days.',
     gives: 'A coded event from ECDS data hospitals already collect.',
-    getsBack: 'The school sees the crisis its attendance data will otherwise only show as absence, weeks later.',
+    getsBack: 'The school sees the event its attendance data would otherwise only register as absence, weeks later.',
     blockedBy: 'Identifier match between hospital systems and school rolls; information-governance nerve.',
     precedent: 'The Cardiff Model has shared A&E violence data with partners since the 2000s and cut violence measurably.',
     cost: '££', move: 2,
@@ -592,7 +713,7 @@ export const SPINE_OPPS: SpineOpp[] = [
     mechanism: 'Milestone events, not court documents — purpose-narrow, like everything else on this board.',
     gives: 'Five-ish event types from systems Cafcass already runs.',
     getsBack: 'Court timescales stop being invisible to the services holding the same ~80,000 children.',
-    blockedBy: 'No operational identifier join; judicial-independence sensitivities cap what can flow (documents never should).',
+    blockedBy: 'No operational identifier join; judicial-independence considerations cap what can flow (the design scope is milestone events, not court documents).',
     precedent: 'The MoJ–DfE research linkage already joins these records — years later, for analysts.',
     cost: '££', move: 2,
   },
@@ -601,9 +722,9 @@ export const SPINE_OPPS: SpineOpp[] = [
     from: ['hv'], to: ['ey'], via: 'spine', status: 'now',
     what: 'The 2–2.5-year development review flowing to the early-years setting and into reception planning — the last universal sighting before school, currently lost to education.',
     whatEli5: 'What the health visitor learned about a toddler reaches the nursery and the reception teacher, instead of sitting in a health file.',
-    mechanism: 'The PRSB Healthy Child Record standard already defines the record; the ask is a consume-side flow into DfE’s early-years estate.',
+    mechanism: 'The PRSB Healthy Child Record standard already defines the record; what is missing is a consume-side flow into DfE’s early-years estate.',
     gives: 'A structured review summary that already exists digitally (where the review happens at all).',
-    getsBack: 'Reception teachers stop starting from zero; the review itself gains a reason to be done well — coverage is the scandal (81.5% median).',
+    getsBack: 'Reception teachers stop starting from zero; the review itself gains a reason to be completed — though coverage is the binding constraint (81.5% median LA coverage of the 2–2.5-year review).',
     blockedBy: 'No education-side consumer has ever been specified; health-visiting collapse means the upstream data is patchy.',
     precedent: 'The digital red book (eRedbook) proves parents can already hold this record.',
     cost: '££', move: 2,
@@ -623,7 +744,7 @@ export const SPINE_OPPS: SpineOpp[] = [
   {
     id: 'fsm-auto', title: 'FSM auto-enrolment', titleEli5: 'Free school meals happen automatically',
     from: ['dwp'], to: ['dfe', 'school'], via: 'spine', status: 'policy',
-    what: 'Flip the existing DWP/HMRC eligibility pipe from parent-must-apply to enrolled-by-default — feeding children and correcting the disadvantage data every funding formula runs on.',
+    what: 'Reversing the existing DWP/HMRC eligibility pipe from parent-must-apply to enrolled-by-default — which would both register eligible children and correct the disadvantage data every funding formula runs on.',
     whatEli5: 'Instead of parents filling in forms, eligible children just get free meals — the computer check already exists.',
     mechanism: 'The Eligibility Checking Service already verifies entitlement in real time; auto-enrolment reverses its direction.',
     gives: 'The same benefits match DWP already serves, run proactively.',
@@ -634,7 +755,8 @@ export const SPINE_OPPS: SpineOpp[] = [
   },
 ];
 
+// Stated as constraints the history makes evaluable, not as instructions.
 export const VALUE_DONTS = {
-  research: 'And the three don’ts the history teaches: don’t build the central child database (ContactPoint was dismantled for good reasons, and the Panel itself says the identifier won’t fix culture); don’t add collections without retiring others (the RAAC questionnaire-under-duress is the symptom of registry-by-crisis); and don’t nationalise the sector’s tooling — fund it, standardise it, and leave it owned by the people who use it. The value offer, in one sentence: DfE stops being the system’s biggest collector and becomes its standards body, its identity infrastructure, and its convenor — the steward of joins it never holds.',
-  eli5: 'Three things NOT to do: don’t rebuild the giant national child database (it was scrapped for good reasons), don’t pile on new data demands without removing old ones, and don’t take over the tools councils built for themselves. The offer in one line: the department stops hoarding pieces and starts making the jigsaw fit together.',
+  research: 'Three constraints the history makes testable. First, a central child database carries a documented record of reversal: ContactPoint was dismantled on cost and proportionality grounds, the Named Person information-sharing provisions were struck down under ECHR Article 8 (Christian Institute v Lord Advocate), and the Panel notes the identifier alone will not change practice culture — so any such design must clear the proportionality test the courts have already applied. Second, adding collections without retiring others increases burden (the rapid post-RAAC questionnaire is one example of new collections being stood up reactively). Third, nationalising the sector’s tooling removes the ownership that makes it work (D2I and ChAT are sector-owned). A repositioning from collector toward steward — standards body, identity infrastructure, and convenor of joins it does not itself hold — can be evaluated against these three constraints rather than asserted.',
+  eli5: 'Three things the history warns against. Rebuilding a giant national database of every child has twice been stopped — once on cost and privacy, once by the courts. Piling on new data demands without removing old ones adds work. And taking over the tools councils built for themselves removes what makes them work. The test of a “collector-to-steward” shift is whether it respects all three.',
 };

@@ -9,6 +9,7 @@
     { href: '/projects/policy-engine/outcomes', label: 'The Briefing' },
   ];
   const STUDIES = [
+    { href: '/projects/policy-engine/early-years', label: 'Early Years' },
     { href: '/projects/policy-engine/population', label: 'Population' },
     { href: '/projects/policy-engine/regions', label: 'Regions' },
     { href: '/projects/policy-engine/global', label: 'Global' },
@@ -18,6 +19,7 @@
     { href: '/projects/policy-engine/send', label: 'SEND' },
     { href: '/projects/policy-engine/attendance', label: 'Attendance' },
   ];
+  const THEMES = { href: '/projects/policy-engine/themes', label: 'Themes' };
   const MEMO = { href: '/projects/policy-engine/memo', label: 'The Memo' };
   const METHOD = { href: '/projects/policy-engine/method', label: 'How it works' };
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
@@ -31,6 +33,7 @@
     <span class="grp-lab" aria-hidden="true">Field studies</span>
     {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
+    <a class="tab themes" class:active={active(THEMES.href)} href={THEMES.href} title="The second spine — what the studies say in common, by theme: the evidence, the contradictions and the confidence">◈ {THEMES.label}</a>
     <a class="tab memo" class:active={active(MEMO.href)} href={MEMO.href} title="The synthesis — what the field studies add up to, in one place">✎ {MEMO.label}</a>
     <a class="tab method" class:active={active(METHOD.href)} href={METHOD.href} title="The explainer — how the engine works (not part of the walk-through)">⚙ {METHOD.label}</a>
   </nav>
@@ -63,6 +66,9 @@
   .tab.memo { border-width: 1.5px; border-color: rgba(138,45,58,0.6); color: #8a2d3a; background: rgba(177,69,94,0.05); }
   .tab.memo:hover { background: rgba(177,69,94,0.12); border-color: #8a2d3a; }
   .tab.memo.active { background: #8a2d3a; color: var(--paper, #f1ead6); border-color: #8a2d3a; }
+  .tab.themes { border-width: 1.5px; border-color: rgba(63,125,110,0.6); color: #2f6155; background: rgba(63,125,110,0.06); }
+  .tab.themes:hover { background: rgba(63,125,110,0.14); border-color: #2f6155; }
+  .tab.themes.active { background: #2f6155; color: var(--paper, #f1ead6); border-color: #2f6155; }
   @media (max-width: 620px) { .nav-sep { display: none; } }
   .detail { display: inline-flex; align-items: center; gap: 7px; }
   .d-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }

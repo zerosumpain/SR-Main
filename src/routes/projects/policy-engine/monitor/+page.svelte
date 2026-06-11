@@ -7,6 +7,8 @@
   import EthicsGuardrails from '../components/EthicsGuardrails.svelte';
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import StorySection from '../components/StorySection.svelte';
+  import AnalysisOnOutcome from '../components/AnalysisOnOutcome.svelte';
+  import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
   import { STORIES } from '../lib/stories';
   import {
     SUBSID_NOTES, SECTOR_LEDGER, TRUST_LEDGER, COUNTERWEIGHTS, SHARING_LADDER, AGENDAS,
@@ -65,7 +67,7 @@
     {:else}
       <p>
         Every scenario in this Field Study rests on one assumption: that someone, somewhere, can <i>observe</i> the outcome a lever is meant to
-        move. In England’s real data estate that has historically been shaky — and a simulation is only ever as honest as the data that
+        move. In England’s real data estate that has historically been intermittent — and a simulation is only ever as reliable as the data that
         corrects it. So the question underneath the model is an infrastructure question: <b>how would the actual school system know whether a
         policy worked, fast enough to steer within a child’s school career rather than after it?</b>
       </p>
@@ -91,7 +93,7 @@
         The DfE already holds extraordinary raw material — the National Pupil Database, the school and workforce censuses, Explore Education
         Statistics, and now a daily attendance feed — but historically as <b>separate surfaces, not a connected whole</b>. The OECD’s diagnosis
         (and the Education Secretary’s own phrase): insight stays <b>“trapped in closed systems”</b>. The value of a measurement system isn’t the
-        data it stores; it’s the speed and honesty of the correction it enables.
+        data it stores; it’s the speed and accuracy of the correction it enables.
       {/if}
     </p>
     <div class="spinemap">
@@ -117,8 +119,13 @@
     <p class="offaxis">
       {eli
         ? 'The White Paper’s goal: data should “flow seamlessly, not be locked within individual systems”, so schools get quicker insight into what’s working.'
-        : 'White Paper (CP 1508-I): data should “flow seamlessly, not be locked within individual systems”, giving schools “more immediate insight about the effectiveness of interventions”. That last clause is the thesis of this page.'}
+        : 'White Paper (CP 1508-I): data should “flow seamlessly, not be locked within individual systems”, giving schools “more immediate insight about the effectiveness of interventions”. That last clause is the finding this page examines.'}
     </p>
+    <div class="conf-row">
+      <ConfidenceBadge level="contested" note="The spine is announced but unbuilt; the custody design is unresolved as of June 2026." />
+      <span class="conf-note">{eli ? 'How settled is the data-gap picture? Independent analysts broadly agree the gap is real; the fix is contested.' : 'Confidence on the data-gap finding: independent analyses broadly converge that the measurement gaps are real; the appropriate remedy (and the spine’s custody design) is contested.'}</span>
+    </div>
+    <AnalysisOnOutcome theme="data-gap" title={eli ? 'What independent analysts say about the data gaps' : 'What the analysts find — the data-gap theme'} />
     {@render subnote('silos')}
   </section>
 
@@ -134,7 +141,7 @@
     <p class="offaxis warn">
       {eli
         ? 'Reality check: the spine is a promise, not a built thing. As of mid-2026 there’s no published design, no procurement and no finish date — which also means the big choices about how it works are still open.'
-        : 'Honest status: the data spine is an announced commitment, not a live system — as of June 2026 there are no published architecture, procurement or delivery artefacts. That cuts both ways: nothing is built, so the custody design (the theme of this page) is still entirely choosable.'}
+        : 'Status: the data spine is an announced commitment, not a live system — as of June 2026 there are no published architecture, procurement or delivery artefacts. That cuts both ways: nothing is built, so the custody design (the theme of this page) is still entirely open.'}
     </p>
     {/snippet}
     {#snippet data()}
@@ -221,8 +228,8 @@
     <h2 class="pe-h2">4 · From data to decision — AI in the feedback loop</h2>
     <p class="cap">
       {eli
-        ? 'A feedback loop has two halves: spotting what’s happening, and acting on it fast enough to matter. AI is starting to help with both — but the loop only closes if you also check, honestly, whether things worked.'
-        : 'A feedback loop has two halves — detecting what’s happening, and metabolising it fast enough to act. England’s emerging AI stack touches both, from grounding models in real curriculum data to theming consultation responses ~120× faster. The loop only closes with honest evaluation — and one official piece is conspicuously missing.'}
+        ? 'A feedback loop has two halves: spotting what’s happening, and acting on it fast enough to matter. AI is starting to help with both — but the loop only closes if you also check whether things actually worked.'
+        : 'A feedback loop has two halves — detecting what’s happening, and acting on it fast enough to matter. England’s emerging AI stack touches both, from grounding models in real curriculum data to theming consultation responses ~120× faster. The loop only closes with evaluation — and one official piece (a national education-policy simulator) is absent.'}
     </p>
     <div class="loop">
       <svg viewBox="0 0 350 350" class="loop-svg" role="img" aria-label="The four arcs of a policy feedback loop: collect, analyse, evaluate, decide">
@@ -249,8 +256,8 @@
     </div>
     <p class="offaxis">
       {eli
-        ? 'One honest admission: the official government “digital twins” are for roads and energy, not schools. A research-backed policy simulator like this one is a genuine gap — which is partly why it exists (as a personal project, not an official tool).'
-        : 'One honest gap: government “digital twins” (the National Digital Twin Programme) are infrastructure-focused — there is no national education-policy simulator. This Field Study fills that gap as a personal-capacity experiment, emphatically not an official DfE tool.'}
+        ? 'One point to note: the official government “digital twins” are for roads and energy, not schools. A research-backed policy simulator like this one is a real gap — which is partly why it exists (as a personal project, not an official tool).'
+        : 'One gap to note: government “digital twins” (the National Digital Twin Programme) are infrastructure-focused — there is no national education-policy simulator. This Field Study addresses that gap as a personal-capacity experiment, and is not an official DfE tool.'}
     </p>
   </section>
 
@@ -304,7 +311,7 @@
     <h2 class="pe-h2">6 · Who shares what today — the sector ledger</h2>
     <p class="cap">
       {eli
-        ? 'Before designing anything new, the honest baseline: what each part of the system already hands to the centre, since when, and what it keeps. Plus the history of how that trust was earned, lost and partly rebuilt.'
+        ? 'Before designing anything new, the baseline: what each part of the system already hands to the centre, since when, and what it keeps. Plus the recorded history of how that trust was earned, lost and partly rebuilt.'
         : 'The current sharing settlement, sector by sector: every statutory flow, its cadence and vintage, and what deliberately stays local — followed by the trust ledger, because the published register and approval machinery exist as scar tissue from specific failures.'}
     </p>
     <div class="ledger">
@@ -343,7 +350,7 @@
     <p class="cap">
       {eli
         ? 'The alternative to “send it all to Whitehall” already exists and works. In each of these, the centre pays for tools or sets a framework — and the data stays with the people who collected it.'
-        : 'The working alternatives to central custody, by sector. The common architecture: the centre funds, convenes or legislates the plumbing; the sector builds, owns and operates. These are the receipts for a non-paternal posture.'}
+        : 'The working alternatives to central custody, by sector. The common architecture: the centre funds, convenes or legislates the connection; the sector builds, holds and operates. These are documented instances of the lower-custody posture.'}
     </p>
     <div class="cw-cards">
       {#each COUNTERWEIGHTS as c (c.name)}
@@ -429,7 +436,7 @@
       {/each}
     </div>
 
-    <h3 class="sub-h">{eli ? 'What the centre could actually do' : 'The levers — none of which require collection'}</h3>
+    <h3 class="sub-h">{eli ? 'Options that need no new collection' : 'Options that would not require new central collection'}</h3>
     <div class="et-levers">
       {#each EDTECH_LEVERS as l, i (l.name)}
         <div class="etl"><span class="etl-n">{i + 1}</span><div><span class="etl-name">{l.name}</span><span class="etl-what">{l.what}</span></div></div>
@@ -479,7 +486,7 @@
       {/each}
     </div>
     <div class="posture">
-      <span class="po-lab">{eli ? 'The non-bossy rulebook' : 'The non-paternal posture, in one paragraph'}</span>
+      <span class="po-lab">{eli ? 'The rule of thumb' : 'The lower-custody posture, as one criterion'}</span>
       <p>{eli ? SUBSID_PRINCIPLES.eli5 : SUBSID_PRINCIPLES.research}</p>
     </div>
   </section>
@@ -489,8 +496,8 @@
     <h2 class="pe-h2">12 · The hard part — support, not surveillance</h2>
     <p class="cap">
       {eli
-        ? 'The same tools that spot a struggling child early can also brand them unfairly. This isn’t hypothetical — here’s what went wrong elsewhere, and the guardrails that keep it honest.'
-        : 'The honest core of this page: the same machinery that enables a good feedback loop enables real harm, and the evidence is not hypothetical. The defensible line is the same one the simulator draws — a model, or an algorithm, is a tool for asking better questions of humans, never a verdict delivered to a child.'}
+        ? 'The same tools that spot a struggling child early can also mislabel them. This isn’t hypothetical — here’s what went wrong elsewhere, and the safeguards that address it.'
+        : 'The analytical core of this page: the same machinery that enables a good feedback loop also enables documented harm, and the evidence is not hypothetical. The line the simulator draws — a model, or an algorithm, as a tool for asking better questions of humans rather than a verdict delivered to a child — is an evaluable design criterion, not a normative claim.'}
     </p>
     <EthicsGuardrails />
   </section>
@@ -530,6 +537,8 @@
   .offaxis.warn { background: rgba(177,69,94,0.07); border-color: rgba(177,69,94,0.22); color: #7a3340; }
   .offaxis.warn b { color: #6f2230; }
   .sub-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin: 22px 0 10px; color: var(--ink, #1c1611); }
+  .conf-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 0; }
+  .conf-note { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.66); flex: 1 1 280px; }
 
   /* the recurring theme aside */
   .subsid { margin: 14px 0 0; padding: 11px 14px; border-radius: 9px; max-width: 88ch;

@@ -47,6 +47,7 @@ export interface Gate {
   proxy?: boolean; // destination: a 16-24 PERIOD rate on a DIFFERENT denominator, shown for context
 }
 export const GATES: Gate[] = [
+  { key: 'ey',   label: 'In early education', age: 'age 2–3', rateAll: 'eyTakeUpAll', rateDis: 'eyTakeUp', std: 'In funded early education (the first gate — before any attainment measure)' },
   { key: 'gld',  label: 'School-ready',      age: 'age 5',  rateAll: 'gld',      rateDis: 'gldDis',      std: 'Good Level of Development' },
   { key: 'ks2',  label: 'Secondary-ready',   age: 'age 11', rateAll: 'ks2RWM',   rateDis: 'ks2RWMDis',   std: 'KS2 reading, writing & maths expected standard' },
   { key: 'gcse', label: 'Strong GCSE pass',  age: 'age 16', rateAll: 'grade5EM', rateDis: 'grade5EMDis', std: 'Grade 5+ in GCSE English & maths' },

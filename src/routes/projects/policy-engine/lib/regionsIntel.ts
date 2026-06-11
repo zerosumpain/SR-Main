@@ -1,11 +1,11 @@
 // regionsIntel.ts — the place-based intelligence layer for the Regions field study:
 // exemplar places with evidenced impact, the London-effect decomposition, the
-// Whitehall programme-churn record, and the place-data gaps. Research dossier
+// record of successive place-based programmes, and the place-data gaps. Research dossier
 // compiled 2026-06-10; every claim carries a source URL and an evidence tier.
 // Self-contained.
 
 // ---------------------------------------------------------------------------
-// Exemplar places — who has actually moved the needle, with honest evidence tiers
+// Exemplar places — those with a measurable effect, each with its evidence tier
 // ---------------------------------------------------------------------------
 export type EvidenceTier = 'causal' | 'strong' | 'promising' | 'weak' | 'too-early';
 
@@ -25,7 +25,7 @@ export interface Exemplar {
   what: string;           // what they did
   result: string;         // the measurable result (numbers)
   lesson: string;         // the transferable lesson
-  caveat?: string;        // the honest catch
+  caveat?: string;        // the limiting caveat
   url: string;
 }
 
@@ -34,7 +34,7 @@ export const EXEMPLARS: Exemplar[] = [
     place: 'Newham (& Durham)', who: 'LA pilot with DfE evaluation', when: '2009–today', tier: 'causal',
     what: 'Universal free school meals for every primary pupil — piloted with comparator areas, then continued unilaterally as “Eat for Free” since 2011.',
     result: '~2 months’ additional progress over two years at KS1/KS2, concentrated among poorer pupils; take-up >90% vs 45% pre-scheme (DfE pilot evaluation, DFE-RR227).',
-    lesson: 'The single cleanest causal result in the whole place space came from a universal, boring entitlement with a proper evaluation design — not a multi-strand “challenge” programme.',
+    lesson: 'The clearest causal result in the place space came from a universal, low-complexity entitlement with a comparator evaluation design — not a multi-strand “challenge” programme.',
     url: 'https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/184047/DFE-RR227.pdf',
   },
   {
@@ -47,7 +47,7 @@ export const EXEMPLARS: Exemplar[] = [
   },
   {
     place: 'Hackney', who: 'The Learning Trust (outsourced LA function)', when: '2002–2012', tier: 'strong',
-    what: 'The entire education function handed to a not-for-profit with a ten-year mandate and one leader throughout, after the council was branded the country’s worst.',
+    what: 'The entire education function handed to a not-for-profit with a ten-year mandate and one leader throughout, after the council was assessed as among the country’s worst-performing.',
     result: 'English & maths GCSE measures up 27pp over 2007–11 vs 9pp nationally; by 2012, 98% of primary and 100% of secondary pupils in good/outstanding schools.',
     lesson: 'A single accountable body with a decade-long mandate — the structural opposite of programme churn.',
     caveat: 'Gentrification changed the intake over the same period; descriptive evidence only.',
@@ -72,7 +72,7 @@ export const EXEMPLARS: Exemplar[] = [
     place: 'Blackpool', who: 'Opportunity Area + Right to Succeed literacy programme', when: '2017–today', tier: 'weak',
     what: 'KS3 literacy across 7 secondaries + the PRU with assessment tracking of ~3,000 students, inside an Opportunity Area.',
     result: 'Real project-level gains (one school: nearly half a GCSE grade of reading progress in a year) — while Blackpool’s AREA statistics worsened: Progress 8 fell −0.35 → −0.93 (2016–24) and its 16-year-old disadvantage gap is England’s largest at 27.9 months (EPI).',
-    lesson: 'Programme gains and area decline coexist: pupil mobility and intake churn mean LA statistics can bury genuine cohort wins — the case for system intervention and mobility-adjusted measurement.',
+    lesson: 'Programme gains and area decline coexist: pupil mobility and intake turnover mean LA statistics can obscure genuine cohort gains — indicating a need for system intervention and mobility-adjusted measurement.',
     url: 'https://ffteducationdatalab.org.uk/2025/05/what-happened-to-opportunity-areas/',
   },
   {
@@ -92,7 +92,7 @@ export const EXEMPLARS: Exemplar[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// The London effect, decomposed — the contested core, honestly stated
+// The London effect, decomposed — the contested core, stated with its uncertainty
 // ---------------------------------------------------------------------------
 export const LONDON_EFFECT = {
   // FFT decomposition of the 2013 London GCSE-progress advantage
@@ -100,12 +100,12 @@ export const LONDON_EFFECT = {
     { key: 'context', label: 'Pupil context (ethnicity · EAL · FSM · mobility)', share: 0.67, colour: 'rgba(28,22,17,0.45)' },
     { key: 'residual', label: 'Genuine London residual (schools & system)', share: 0.33, colour: '#2f6f97' },
   ],
-  research: 'Ofsted credited the London Challenge; Burgess (2014) countered that ethnic composition explains the entire effect; FFT’s decomposition settled it at roughly two-thirds pupil context, one-third genuine residual — and the gap-narrowing for disadvantaged pupils in inner London is the part hardest to explain away. The debate is “most vs all”, not “real vs fake”.',
-  eli5: 'London’s schools got famously better. Some said brilliant programmes; some said it was really about which families live in London. The careful answer: about two-thirds was the families, a third was genuinely the schools — and poorer children gaining fastest is the bit that looks most real.',
+  research: 'Ofsted credited the London Challenge; Burgess (2014) countered that ethnic composition explains the entire effect; FFT’s decomposition placed it at roughly two-thirds pupil context, one-third school/system residual — and the gap-narrowing for disadvantaged pupils in inner London is the part least readily explained by composition. The debate is over how much of the effect is compositional, not whether any of it is real.',
+  eli5: 'London’s schools improved markedly. One account attributes this to the programmes; another to which families live in London. The careful reading: about two-thirds is attributable to pupil composition, a third to the schools and system — and poorer children gaining fastest is the part least explained by who lives there.',
 };
 
 // ---------------------------------------------------------------------------
-// The Whitehall programme record — four waves, and what owns the space now
+// The record of successive place-based programmes — four waves, and current ownership
 // ---------------------------------------------------------------------------
 export interface Programme {
   name: string;
@@ -123,13 +123,13 @@ export const PROGRAMMES: Programme[] = [
   { name: 'Opportunity Areas (12)', owner: 'DfE', start: 2017, end: 2022, budget: '~£108m', colour: '#b4632e',
     status: 'Process evaluations only; FFT’s 2025 retrospective: half improved, half declined on Progress 8.', evaluated: 'process-only' },
   { name: 'Opportunity North East', owner: 'DfE', start: 2018, end: 2021, budget: '£24m', colour: '#9a7b1f',
-    status: 'No robust outcome evaluation; criticised as a gimmick at launch.', evaluated: 'none' },
+    status: 'No robust outcome evaluation; its scale relative to the need drew scepticism at launch.', evaluated: 'none' },
   { name: 'Towns Fund / Levelling Up Fund', owner: 'MHCLG', start: 2019, end: 2025, budget: '£3.6bn + £4.8bn', colour: '#7a5aa6',
     status: 'NAO: launched with a poor understanding of what worked in previous local-growth funds; councils bid into “hundreds” of pots.', evaluated: 'none' },
   { name: 'EIAs / Priority EIAs', owner: 'DfE', start: 2022, end: 2025, budget: '£42m (PEIA local funds)', colour: '#b1455e',
     status: 'Wound down March 2025 — “no longer a priority”; guidance page withdrawn.', evaluated: 'none' },
   { name: 'Youth Guarantee trailblazers (8 areas)', owner: 'DWP + mayors', start: 2025, end: null, budget: '£45m + £45m', colour: '#566a8c',
-    status: 'Live; a national evaluation is funded this time — the exception that proves the rule.', evaluated: 'pending' },
+    status: 'Live; a national evaluation is funded this time — the exception to the pattern above.', evaluated: 'pending' },
   { name: 'Best Start Family Hubs', owner: 'DfE/DHSC', start: 2025, end: null, budget: '£500m+', colour: '#3f7d6e',
     status: 'Every LA by April 2026; 70% of hubs aimed at the 30% most-deprived neighbourhoods.', evaluated: 'pending' },
   { name: 'Plan for Neighbourhoods (75 places)', owner: 'MHCLG', start: 2026, end: null, budget: '£1.5bn / 10yrs', colour: '#7a5aa6',
@@ -139,8 +139,8 @@ export const PROGRAMMES: Programme[] = [
 ];
 
 export const CHURN_FACTS = {
-  research: 'The Institute for Government counted 28 major FE/skills acts in 30 years and 48 secretaries of state; the NAO found MHCLG launched £7bn+ of new place funds with a poor understanding of what previous ones achieved. No English place-based education programme has ever had a counterfactual outcome evaluation — and the fourth wave launches in September 2026 on the same footing.',
-  eli5: 'Governments keep launching new “fix this place” schemes before finding out whether the last one worked — four waves of them since 2003, and not one has been tested against what would have happened anyway.',
+  research: 'The Institute for Government counted 28 major FE/skills acts in 30 years and 48 secretaries of state; the NAO found MHCLG launched £7bn+ of new place funds with a limited understanding of what previous ones achieved. No English place-based education programme has had a counterfactual outcome evaluation — and the fourth wave launches in September 2026 on the same footing.',
+  eli5: 'Successive governments have launched new place-based schemes before the previous one’s outcomes were evaluated — four waves since 2003, and none has been tested against what would have happened without it.',
 };
 
 // who holds which place lever (the compact ownership readout)
@@ -184,6 +184,6 @@ export const PLACE_GAPS: { gap: string; detail: string; eli5: string }[] = [
 ];
 
 export const PLACE_TAKEAWAY = {
-  research: 'Three through-lines for a data strategist: the best-evidenced place wins were LA-led, decade-long and boring (teacher supply, universal entitlements, stable leadership); programme gains and area decline can coexist, so the measurement surface itself misleads; and the intelligence fixes are specific and buildable — counterfactual-by-design missions, mobility-adjusted accountability, a similar-LAs benchmarking tool, and place-level LEO readouts.',
-  eli5: 'What actually worked was patient and boring: good teachers, free school meals, the same leaders for a decade. The flashy area schemes were never properly tested. And the fixes are knowable: test the new schemes properly, correct the numbers for families moving, and give every council the comparison tools schools already get.',
+  research: 'Three through-lines for a data strategist: the best-evidenced place gains were LA-led, decade-long and low-complexity (teacher supply, universal entitlements, stable leadership); programme gains and area decline can coexist, so the headline measurement surface can be misleading; and the intelligence fixes are specific and buildable — counterfactual-by-design missions, mobility-adjusted accountability, a similar-LAs benchmarking tool, and place-level LEO readouts.',
+  eli5: 'The best-evidenced gains came from sustained, low-complexity measures: enough good teachers, free school meals, the same leaders for a decade. The larger area schemes were not robustly evaluated. The fixes are identifiable: evaluate new schemes against a counterfactual, adjust the numbers for families moving, and give every council the comparison tools schools already get.',
 };

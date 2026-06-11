@@ -11,6 +11,8 @@
 export type LeverId = string;
 export type OutcomeId = string;
 export type Confidence = 'high' | 'medium' | 'low' | 'assumption';
+/** Confidence taxonomy for badges — the per-lever scale plus a 'contested' state for live disagreements. */
+export type ConfidenceLevel = Confidence | 'contested';
 export type LeverGroup =
   | 'early'        // early years & childcare
   | 'disadvantage' // pupil premium, FSM, breakfast clubs, child poverty
@@ -60,9 +62,14 @@ export interface YearResult {
   isProjection: boolean; // true for years after the base year (2025)
 
   // --- Equity: the disadvantage attainment gap, in EPI "months of learning" ---
+  gapAge3: number;      // age 3 (earliest modelled point — development gap before school)
   gapReception: number; // age 5 (GLD-derived)
   gapKS2: number;       // age 11
   gapKS4: number;       // age 16 (headline)
+
+  // --- Early-education access (the 0-5 front door) ---
+  eyTakeUp: number;     // % disadvantaged under-5s in funded early education (realised take-up)
+  eyTakeUpAll: number;  // % of all under-5s in funded early education
 
   // --- Attainment levels (all pupils / disadvantaged pupils) ---
   gld: number; gldDis: number;             // % good level of development (age 5)

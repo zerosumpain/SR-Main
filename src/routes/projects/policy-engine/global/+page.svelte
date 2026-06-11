@@ -54,16 +54,16 @@
   <div class="pe-prose lede-prose">
     {#if eli}
       <p>
-        The engine rests on three debated claims: <b>that money on its own barely moves results</b>, <b>that how fairly a system treats
-        poorer children matters more than how much it spends</b>, and <b>that the levers that work are about teaching and attendance, not
-        cash</b>. Are those right — or just England’s quirks? This page checks them against the real world — ten countries, measured the same
+        The engine rests on three debated claims: <b>that spending on its own moves results only weakly</b>, <b>that how little a child’s
+        background predicts their results matters more than how much a system spends</b>, and <b>that the levers that work concern teaching
+        and attendance, not cash</b>. This page tests them against the international evidence — ten countries, measured the same
         way by the OECD’s 2022 PISA tests, with the figures fact-checked against the original OECD reports.
       </p>
       <p>
-        The countries split three ways: <b>three of the best systems on earth</b> (to see how excellence is built), <b>three big rich
-        countries like Britain</b> (the fairest comparison), and <b>three surprising ones</b> that each break a lazy assumption — plus
-        England itself. The pattern in the data points the same way: the most expensive systems are <i>not</i> the best, and countries
-        spending the same money get very different fairness. (A snapshot like this can show patterns, but can’t on its own prove what causes what.)
+        The countries split three ways: <b>three of the highest-scoring systems in the world</b> (to show how high attainment is reached),
+        <b>three big rich countries like Britain</b> (the closest comparison), and <b>three that each test a common assumption</b> — plus
+        England itself. The data points one way: the highest-spending systems are <i>not</i> the highest-scoring, and countries
+        spending the same amount show very different disadvantage gaps. (A snapshot like this can show patterns, but cannot on its own establish cause.)
       </p>
     {:else}
       <p>
@@ -179,27 +179,27 @@
 
   <!-- ============ CHART B: equity ============ -->
   <section class="block">
-    <StorySection title="2 · The same money, very different fairness">
+    <StorySection title="2 · The same money, very different disadvantage gaps">
     {#snippet prose()}
     <p class="cap">
       {#if eli}
-        This is England’s quiet strength. The bar is the <b>gap in maths between the richest and poorest quarter of pupils</b> — shorter
-        is fairer. <b>England (86) is fairer than the average</b>, and far fairer than France or Germany, who spend as much or more.
-        Ireland, next door, is the fairest of all. Being rich or top-scoring doesn’t make a system fair — Singapore is brilliant but has one
-        of the biggest gaps.
+        This is a comparative strength for England. The bar is the <b>gap in maths between the richest and poorest quarter of pupils</b> —
+        shorter is a smaller gap. <b>England (86) has a smaller gap than the average</b>, and a much smaller gap than France or Germany,
+        which spend as much or more. Ireland, next door, has the smallest gap of all. A high-income or high-scoring system does not
+        necessarily have a small gap — Singapore scores highest but has one of the widest gaps.
       {:else}
-        The advantaged−disadvantaged maths gap (top vs bottom socio-economic quartile) — the cleanest cross-country equity measure.
-        Shorter is fairer. <b>England (86) sits below the OECD average (93)</b> and is dramatically fairer than its economic peers
-        <b>France (113)</b> and <b>Germany (111)</b> at equal-or-higher spend. Note the dissociation from excellence: <b>Singapore</b>,
-        top of the world, carries one of the widest gaps — a high floor with a very high ceiling.
+        The advantaged−disadvantaged maths gap (top vs bottom socio-economic quartile) — the clearest cross-country equity measure.
+        A shorter bar is a smaller gap. <b>England (86) sits below the OECD average (93)</b> and well below its economic peers
+        <b>France (113)</b> and <b>Germany (111)</b> at equal-or-higher spend. Note the dissociation from attainment: <b>Singapore</b>,
+        highest-scoring in the world, carries one of the widest gaps — a high floor with a very high ceiling.
       {/if}
     </p>
     {/snippet}
     {#snippet data()}
     <div class="chart">
       <svg viewBox="0 0 760 {chartH(BY_EQUITY.length)}" role="img" aria-label="Ranked bar chart of the rich–poor maths gap by country">
-        <text x={12} y={26} class="hint-l">← fairer</text>
-        <text x={BX1} y={26} class="hint-r" text-anchor="end">less fair →</text>
+        <text x={12} y={26} class="hint-l">← smaller gap</text>
+        <text x={BX1} y={26} class="hint-r" text-anchor="end">wider gap →</text>
         <line x1={BX0 + ebw(OECD_AVG.escsGap)} x2={BX0 + ebw(OECD_AVG.escsGap)} y1={36} y2={chartH(BY_EQUITY.length) - 18} class="oecd" />
         <text x={BX0 + ebw(OECD_AVG.escsGap)} y={chartH(BY_EQUITY.length) - 4} class="oecd-lab" text-anchor="middle">OECD avg {OECD_AVG.escsGap}</text>
         {#each BY_EQUITY as c, i (c.code)}
@@ -223,13 +223,13 @@
       {#if eli}
         How each country’s maths score moved between the last two PISA rounds (2018 → 2022), across the pandemic. Almost everyone fell.
         <b>England’s drop (−13) is smaller than the average</b>. Japan and Singapore <b>held steady</b> in maths (the hatched bars) — that’s
-        a real achievement when most fell, but it isn’t a statistically solid <i>rise</i>. Germany and Poland fell off a cliff. Good results
-        aren’t permanent; they have to be defended.
+        a notable result when most fell, but it is not a statistically solid <i>rise</i>. Germany and Poland fell sharply. Strong results
+        are not permanent; they require sustained effort to maintain.
       {:else}
         Change in PISA maths, 2018→2022 — the pandemic shock. The OECD average fell a record 15 points. <b>England (−13) beat that
         average</b>. The hatched bars (<b>Japan +9</b>, <b>Singapore +6</b>) are <b>NOT statistically significant</b> — OECD’s own wording
         is “about the same as in 2018 in mathematics” (their real gains were in reading/science), so they held the line rather than truly
-        rose. Former poster-children <b>Germany (−25)</b> and <b>Poland (−27)</b> fell hardest — gains are reversible. (Vietnam’s trend is
+        rose. Previously high-performing <b>Germany (−25)</b> and <b>Poland (−27)</b> fell hardest — gains are reversible. (Vietnam’s trend is
         not comparable across cycles and is omitted.)
       {/if}
     </p>
@@ -288,7 +288,7 @@
               <div class="cc-badges">
                 <span class="bdg" title="PISA 2022: maths / reading / science">M {c.maths} · R {c.reading} · S {c.science}</span>
                 <span class="bdg" title="Annual spend per student, USD PPP (OECD); n/a for non-OECD">{c.spendStudent ? `$${(c.spendStudent / 1000).toFixed(1)}k/yr` : 'spend n/a'}</span>
-                <span class="bdg" title="Rich–poor maths gap (lower = fairer)">gap {c.escsGap}</span>
+                <span class="bdg" title="Rich–poor maths gap (lower = smaller gap)">gap {c.escsGap}</span>
                 {#if c.mathsTrend == null}
                   <span class="bdg trend-na" title="Maths change 2018→2022 not comparable">trend n/a</span>
                 {:else if c.trendSig === false}
@@ -316,8 +316,8 @@
     <h2 class="pe-h2">4 · The borrowing ledger — what England imported</h2>
     <p class="cap">
       {eli
-        ? 'Comparing is step one; copying is where it gets dangerous. Here’s what England actually took from the scoreboard’s winners — with an honest badge for what the evaluations found.'
-        : 'Benchmarking’s sharp end is policy borrowing. The ledger of England’s imports, each with its evaluated verdict — and the pattern is uncomfortable: the flagship import scaled for a decade before its first RCT.'}
+        ? 'Comparing is the first step; copying carries more risk. This is what England took from the higher-scoring systems — each with a badge for what the evaluations found.'
+        : 'Benchmarking’s applied end is policy borrowing. The ledger of England’s imports, each with its evaluated verdict — and the pattern to note: the flagship import scaled for a decade before its first RCT.'}
     </p>
     <div class="bw-cards">
       {#each BORROWINGS as b (b.name)}
@@ -338,11 +338,11 @@
 
   <!-- ============ 5 · the response function ============ -->
   <section class="block">
-    <h2 class="pe-h2">5 · How serious systems answer the scoreboard</h2>
+    <h2 class="pe-h2">5 · How systems respond to a result</h2>
     <p class="cap">
       {eli
-        ? 'A bad result is a test of the system that receives it. Four countries, four very different responses — and England’s own record, which is the cautionary one.'
-        : 'The response function is the real differentiator: what a system DOES with a result matters more than the result. Four named patterns — then England’s documented anti-pattern, and the checklist it implies.'}
+        ? 'A poor result tests the system that receives it. Four countries, four different responses — and England’s own record, included as the cautionary case.'
+        : 'The response function is a strong differentiator: what a system does with a result can matter more than the result. Four named patterns — then England’s documented anti-pattern, and the checklist it implies.'}
     </p>
     <div class="rs-cards">
       {#each RESPONSES as r (r.country)}
@@ -358,7 +358,7 @@
       <span class="anti-lab">⚠ {ANTIPATTERN.title}</span>
       <p>{eli ? ANTIPATTERN.eli5 : ANTIPATTERN.research} <a href={ANTIPATTERN.url} target="_blank" rel="noopener">UKSA letter ↗</a></p>
     </div>
-    <h3 class="sub-h">{eli ? 'What a grown-up response function needs' : 'The response-function checklist — England scored'}</h3>
+    <h3 class="sub-h">{eli ? 'What an effective response function needs' : 'The response-function checklist — England scored'}</h3>
     <div class="check">
       {#each RESPONSE_CHECKLIST as c (c.item)}
         <div class="ck"><span class="ck-item">✓ {c.item}</span><span class="ck-status">{c.status}</span></div>
@@ -372,7 +372,7 @@
     <p class="cap">
       {eli
         ? 'What’s coming, when — and in each case, what England should actually be watching for (hint: it’s usually not the ranking).'
-        : 'The cycle calendar, with the England angle per study. The meta-point: after 2022’s response-rate failure, sample integrity is the score that matters.'}
+        : 'The cycle calendar, with the England angle per study. The wider point: after 2022’s response-rate shortfall, sample integrity is the metric that matters most.'}
     </p>
     <div class="ro-cards">
       {#each READOUTS as r (r.study)}
@@ -408,16 +408,16 @@
           <a href="/projects/policy-engine/outcomes">See it in Attainment ↗</a>
         </li>
         <li>
-          <b>{eli ? 'Fairness matters as much as money.' : 'Equity is a stronger differentiator than spend.'}</b>
+          <b>{eli ? 'The disadvantage gap separates systems more than spending does.' : 'Equity is a stronger differentiator than spend.'}</b>
           {eli
-            ? 'Countries on the same budget get very different gaps. England is already comparatively fair; in the model, the disadvantage-targeted sliders act on that.'
-            : 'At equal spend, the rich–poor gap ranges from Ireland’s 74 to France’s 113. England’s relative fairness is comparatively strong; in the model, the gap-closing levers (attendance, early years, pupil-premium targeting) carry most of the leverage.'}
+            ? 'Countries on the same budget show very different gaps. England’s gap is comparatively small; in the model, the disadvantage-targeted sliders act on that.'
+            : 'At equal spend, the disadvantage gap ranges from Ireland’s 74 to France’s 113. England’s gap is comparatively small; in the model, the gap-closing levers (attendance, early years, pupil-premium targeting) carry most of the leverage.'}
           <a href="/projects/policy-engine">Open the levers ↗</a>
         </li>
         <li>
           <b>{eli ? 'Good results can slip.' : 'Gains are reversible.'}</b>
           {eli
-            ? 'Poland and Germany fell off a cliff. Progress isn’t permanent — which is why the model runs all the way to 2040, not just to the next election.'
+            ? 'Poland and Germany fell sharply. Progress is not permanent — which is why the model runs to 2040, well beyond a single electoral cycle.'
             : 'Poland and Germany shed 25–27 points in one cycle. The engine’s long horizon (to 2040) and uncertainty bands exist precisely because trajectories are fragile, not guaranteed.'}
           <a href="/projects/policy-engine/method#equations">How the model handles this ↗</a>
         </li>

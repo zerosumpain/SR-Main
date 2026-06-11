@@ -52,7 +52,7 @@ export const COHORTS: CohortStudy[] = [
   {
     name: 'Life Study', born: 'Planned 2014–18', size: 'Designed for ~80,000 — recruited a few hundred', kind: 'cautionary',
     what: 'The planned successor, built around a £28.5m facility award. Recruitment began February 2015 and was stopped that October; funders withdrew in early 2016.',
-    bought: 'A 20-year hole: no national birth cohort for children born 2001–2021 — austerity, smartphones and the run-up to COVID went unfollowed. The design lesson: it recruited through clinics instead of sampling from administrative registers.',
+    bought: 'A 20-year gap: no national birth cohort for children born 2001–2021 — the 2010s spending-constraint period, the rise of smartphones and the run-up to COVID went unobserved. The design lesson: it recruited through clinics instead of sampling from administrative registers.',
     url: 'https://www.nature.com/news/massive-uk-baby-study-cancelled-1.18650',
   },
   {
@@ -64,14 +64,14 @@ export const COHORTS: CohortStudy[] = [
   {
     name: 'Generation New Era', born: '2026', size: '30,000+ babies · £42.8m', kind: 'recovery',
     what: 'Announced September 2025: the first UK-wide birth cohort in 25 years. Invitations from summer 2026; first sweep this winter.',
-    bought: 'Poetically, the cohort study returns in the smallest birth years on record — the recovery of the tradition and the demographic trough arrive together.',
+    bought: 'Notably, the cohort study returns in the smallest birth years on record — the revival of the tradition and the demographic trough coincide.',
     url: 'https://www.ukri.org/news/ukri-announces-first-uk-wide-birth-cohort-study-in-25-years/',
   },
 ];
 
 export const ADMIN_COHORTS = {
-  research: 'Meanwhile the admin data quietly became the bigger cohort machine: ECHILD holds 25 consecutive whole-population birth cohorts (everyone born 1995–2020, ~20m people) with linked health, education and social-care records; LEO extends them to earnings. A per-birth-year readout — perinatal risk → school-ready at 5 → on track at 11 → GCSEs at 16 → earnings at 30 — is technically constructible today with zero new collection. Nobody publishes it. The first official same-children accountability statistic arrives in summer 2028, when reception-baseline-to-KS2 progress is published for the cohort that started school in 2021.',
-  eli5: 'The government’s own records already follow every child born since 1995 from hospital to school to payslip. You could read off each birth-year like a report card — ready at 5, on track at 11, GCSEs at 16, earning at 30. Nobody publishes that. The first official “same children, measured twice” statistic only arrives in 2028.',
+  research: 'Meanwhile the admin data became the larger cohort resource: ECHILD holds 25 consecutive whole-population birth cohorts (everyone born 1995–2020, ~20m people) with linked health, education and social-care records; LEO extends them to earnings. A per-birth-year readout — perinatal risk → school-ready at 5 → on track at 11 → GCSEs at 16 → earnings at 30 — is technically constructible today with zero new collection, but is not currently published. The first official same-children accountability statistic arrives in summer 2028, when reception-baseline-to-KS2 progress is published for the cohort that started school in 2021.',
+  eli5: 'The government’s own records already follow every child born since 1995 from hospital to school to payslip. Each birth-year could be read off in sequence — ready at 5, on track at 11, GCSEs at 16, earning at 30 — but this is not currently published. The first official “same children, measured twice” statistic arrives in 2028.',
 };
 
 // ---------------------------------------------------------------------------
@@ -85,12 +85,12 @@ export const TIDE_STATS: { big: string; label: string; eli5: string }[] = [
 ];
 
 export const TIDE_LONDON = {
-  research: 'London is the epicentre: births down 20% since 2012; eight Southwark primaries closed since 2022, Hackney closed four and is consulting on more, Lambeth planned mergers of up to sixteen — and for the first time Year 7 demand is falling FASTER than reception (−3.8% vs −2.5% to 2029/30, London Councils, Feb 2026). The decline has reached secondary.',
-  eli5: 'London shows what unmanaged shrinkage looks like: whole primary schools closing across Southwark, Hackney and Lambeth — and the wave has now reached secondary schools too.',
+  research: 'London is where the fall is most concentrated: births down 20% since 2012; eight Southwark primaries closed since 2022, Hackney closed four and is consulting on more, Lambeth planned mergers of up to sixteen — and for the first time Year 7 demand is falling faster than reception (−3.8% vs −2.5% to 2029/30, London Councils, Feb 2026). The decline has reached secondary.',
+  eli5: 'London shows the falling-rolls pattern most clearly: primary schools closing across Southwark, Hackney and Lambeth — and the decline has now reached secondary schools too.',
 };
 
 export const TIDE_DATA = {
-  research: 'The place-planning data already exists in pieces: the statutory School Capacity Survey carries every LA’s forecasts, and DfE publishes scorecards of how wrong each forecast was; the GLA runs the country’s only housing-aware projection model. Outside London, most LAs forecast with simple cohort-survival ratios. A national small-area roll forecaster — births by neighbourhood + GP registrations + migration + the housing pipeline, all existing admin data — is the obvious demographic early-warning product, and precisely what the NAO found missing.',
+  research: 'The place-planning data already exists in pieces: the statutory School Capacity Survey carries every LA’s forecasts, and DfE publishes scorecards of how far each forecast was off; the GLA runs the country’s only housing-aware projection model. Outside London, most LAs forecast with simple cohort-survival ratios. A national small-area roll forecaster — births by neighbourhood + GP registrations + migration + the housing pipeline, all existing admin data — is a demographic early-warning product the data already supports, and the one the NAO found missing.',
   eli5: 'Councils already guess their future pupil numbers, and the government even publishes how wrong the guesses were. Only London does it properly, using housing plans. A national early-warning forecast could be built from data that already exists.',
 };
 
@@ -122,7 +122,7 @@ export const COUNTING: CountingModel[] = [
   {
     name: 'New Zealand’s social investment', status: 'Agency relaunched 2024 · NZ$275m in Budget 2025', colour: '#7a5aa6',
     what: 'The IDI links tax, welfare, health, education and justice person-by-person; since 2011 actuaries have valued the forward lifetime cost of the caseload annually, and the relaunched Social Investment Agency targets early intervention where avoided-cost returns are highest — truancy and youth offending included.',
-    lesson: 'Price a child’s projected lifetime fiscal cost from linked admin data, then spend early where it changes the curve. The method this page’s economic layer gestures at, run as a standing state function.',
+    lesson: 'A child’s projected lifetime fiscal cost is priced from linked admin data, and early spending is directed where it changes the trajectory. The method this page’s economic layer references, run as a standing state function.',
     url: 'https://budget.govt.nz/budget/2025/by/dept/sia.htm',
   },
   {
@@ -134,6 +134,6 @@ export const COUNTING: CountingModel[] = [
 ];
 
 export const POP_TAKEAWAY = {
-  research: 'Three through-lines: the 80-year cohort record shows following the same children changes policy for decades (and Life Study shows what design failure costs — a 20-year hole); the demographic tide makes cohort thinking operational, because every falling-rolls decision is a bet on a birth-year; and the admin estate already contains 25 unpublished birth-cohort report cards. The first institution to publish them — per birth-year, school-ready at 5 to earnings at 30 — turns population counting into population intelligence.',
-  eli5: 'Following the same children through life is the most powerful policy tool Britain has ever built — and it nearly lost the habit. The records to do it for every child already exist. Publishing them, year-group by year-group, is the difference between counting children and understanding them.',
+  research: 'Three through-lines: the 80-year cohort record shows following the same children has shaped policy for decades (and Life Study shows the cost of a design failure — a 20-year gap); the demographic tide makes cohort thinking operational, because every falling-rolls decision rests on a birth-year projection; and the admin estate already contains 25 unpublished birth-cohort readouts. Publishing them — per birth-year, school-ready at 5 to earnings at 30 — would move population counting toward population intelligence.',
+  eli5: 'Following the same children through life has been one of Britain’s more influential policy tools — and the practice lapsed for two decades. The records to do it for every child already exist. Publishing them, year-group by year-group, is the difference between counting children and understanding their trajectories.',
 };

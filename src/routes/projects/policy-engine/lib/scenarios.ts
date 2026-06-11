@@ -35,7 +35,7 @@ export const PRESETS: Preset[] = [
   },
   {
     name: 'Best value',
-    eli5Name: 'Best bang for the buck',
+    eli5Name: 'Best value per pound',
     eli5Desc: 'Spends a set budget on whatever closes the gap the most — the computer works out the best mix for the money, and skips poor-value spending.',
     description: 'Maximises closure of the disadvantage gap within the budget you set on the Best-value slider in the Levers drawer. A greedy optimiser allocates that budget to the levers the model rates most gap-efficient — attendance, early years, RISE, poverty action, FSM — and skips ones it can’t bank on (e.g. Pupil Premium, whose £→gap link is unproven in the evidence). Re-solved live to the selected budget and horizon, and only as good as those assumptions.',
     levers: baselineLevers(),

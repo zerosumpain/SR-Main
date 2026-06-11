@@ -1,8 +1,8 @@
 // comparators.ts — the cross-country (international) comparator dataset for the "Global" tab.
 //
-// England's engine argues three things about money and fairness; this page tests them against the
-// real world. Every figure is sourced and was independently fact-checked against the primary OECD /
-// World-Bank documents (see lib/sources.ts + the Method page's "International comparators" section):
+// England's engine makes three claims about spending and equity; this page tests them against the
+// international evidence. Every figure is sourced and was independently fact-checked against the primary
+// OECD / World-Bank documents (see lib/sources.ts + the Method page's "International comparators" section):
 //   • PISA 2022 (OECD, released Dec 2023) — maths / reading / science, and the 2018→2022 maths trend.
 //   • Equity — each country's official OECD PISA 2022 country note: the share of maths-score variance
 //     explained by socio-economic background (ESCS), and the advantaged−disadvantaged (top vs bottom
@@ -40,8 +40,8 @@ export interface Country {
   spendComparable: boolean;         // annual/%GDP comparable? false for SG/VN
   spendCumulative: number | null;   // cumulative USD PPP per student, ages 6–15 — the OECD spend axis
   spendCumulativeEst?: boolean;     // cumulative figure is a reconstruction, not OECD-published (Estonia)
-  escsVariance: number;             // % of maths-score variance explained by background (lower = fairer)
-  escsGap: number;                  // advantaged − disadvantaged maths point gap (lower = fairer)
+  escsVariance: number;             // % of maths-score variance explained by background (lower = smaller equity gap)
+  escsGap: number;                  // advantaged − disadvantaged maths point gap (lower = smaller equity gap)
   resilient: number;                // % of disadvantaged pupils scoring in the top maths quartile
   gdpCap: number;                   // GDP per capita, PPP USD
   gdpCaveat?: boolean;              // GDP inflated by multinational accounting (IE, SG)
@@ -59,13 +59,13 @@ export const TIER_META: Record<Tier, { label: string; eli5: string; colour: stri
   },
   leader: {
     label: 'Education leaders', eli5: 'The best in the world', colour: '#2f7d4f',
-    blurb: 'Three of the highest-performing systems on earth — chosen to show how excellence is actually built.',
+    blurb: 'Three of the highest-performing systems in the world — selected to show how high attainment is reached.',
     eli5Blurb: 'Three of the best school systems anywhere — to see how they do it.',
   },
   peer: {
     label: 'Economic peers', eli5: 'Countries like us', colour: '#3a5fa8',
-    blurb: 'Large, wealthy G7-type economies — the natural like-for-like comparison for England.',
-    eli5Blurb: 'Big, rich countries a lot like Britain — the fairest comparison.',
+    blurb: 'Large, wealthy G7-type economies — the closest like-for-like comparison for England.',
+    eli5Blurb: 'Big, rich countries a lot like Britain — the closest comparison.',
   },
   other: {
     label: 'Interesting wildcards', eli5: 'Surprising ones', colour: '#b4632e',
@@ -96,8 +96,8 @@ export const COUNTRIES: Country[] = [
     code: 'UK', name: 'United Kingdom', flag: '🇬🇧', tier: 'anchor',
     maths: 489, reading: 494, science: 500, spendGdp: 6.2, spendStudent: 14262, spendComparable: true,
     spendCumulative: 124000, escsVariance: 11, escsGap: 86, resilient: 15, gdpCap: 60620, mathsTrend: -13, trendSig: true,
-    lesson: 'Above the OECD average on all three subjects — and quietly one of the fairer systems: background shapes results less here than in most rich countries, and more disadvantaged pupils beat the odds (15% “resilient”). England specifically scored a few points higher than the UK figure.',
-    eli5: 'Scores a bit above average on everything — and is one of the fairer systems, where being poor holds you back less than in most rich countries.',
+    lesson: 'Above the OECD average on all three subjects — and with a relatively small disadvantage gap: background predicts results less here than in most rich countries, and a higher share of disadvantaged pupils reach the top quartile (15% “resilient”). England specifically scored a few points higher than the UK figure.',
+    eli5: 'Scores a bit above average on everything — and has a relatively small rich–poor gap, where being poor predicts results less than in most rich countries.',
   },
   {
     code: 'SG', name: 'Singapore', flag: '🇸🇬', tier: 'leader',
@@ -110,43 +110,43 @@ export const COUNTRIES: Country[] = [
     code: 'JP', name: 'Japan', flag: '🇯🇵', tier: 'leader',
     maths: 536, reading: 516, science: 547, spendGdp: 4.0, spendStudent: 13323, spendComparable: true,
     spendCumulative: 101400, escsVariance: 12, escsGap: 81, resilient: 12, gdpCap: 51685, mathsTrend: 9, trendSig: false,
-    lesson: 'High and equitable on roughly average cumulative spend — and it held its maths steady through the pandemic (rising in reading and science) while most of the West fell. A clear case that strong, fair results need not track spending.',
-    eli5: 'Top marks and fair, on ordinary money — and it didn’t lose ground in maths when most countries slipped backwards.',
+    lesson: 'High attainment and a small disadvantage gap on roughly average cumulative spend — and it held its maths steady through the pandemic (rising in reading and science) while most of the West fell. A case where strong results and a small equity gap do not track spending.',
+    eli5: 'Top scores and a small rich–poor gap, on ordinary money — and it did not lose ground in maths when most countries slipped backwards.',
   },
   {
     code: 'EE', name: 'Estonia', flag: '🇪🇪', tier: 'leader',
     maths: 510, reading: 511, science: 526, spendGdp: 4.5, spendStudent: 11708, spendComparable: true,
     spendCumulative: 90000, spendCumulativeEst: true, escsVariance: 13, escsGap: 81, resilient: 10, gdpCap: 49334, mathsTrend: -13, trendSig: true,
-    lesson: 'Europe’s top performer — on some of the lowest spend here and fairer than England too. The single strongest proof that high, fair and affordable can hold together at once. (It fell with everyone else in 2022, but from a much higher base.)',
-    eli5: 'Europe’s best school system, on some of the least money, and very fair — proof you don’t need to spend the most to do well.',
+    lesson: 'Europe’s top performer — on some of the lowest spend here and with a smaller disadvantage gap than England. An illustrative case where high attainment, a small disadvantage gap and modest spend hold together at once. (It fell with the rest in 2022, but from a much higher base.)',
+    eli5: 'Europe’s highest-scoring school system, on some of the least money, and with a small rich–poor gap — an example that spending the most is not a precondition for strong results.',
   },
   {
     code: 'FR', name: 'France', flag: '🇫🇷', tier: 'peer',
     maths: 474, reading: 474, science: 487, spendGdp: 5.4, spendStudent: 14803, spendComparable: true,
     spendCumulative: 109600, escsVariance: 21, escsGap: 113, resilient: 7, gdpCap: 61322, mathsTrend: -21, trendSig: true,
-    lesson: 'Below the OECD average and the least equitable big system here: a child’s background explains 21% of their maths, and only 7% of poorer pupils reach the top quartile. A like-for-like economy doing fairness badly.',
-    eli5: 'Below average, and the least fair of the big countries — where you come from matters a lot for your results.',
+    lesson: 'Below the OECD average and the widest disadvantage gap among the big systems here: a child’s background explains 21% of their maths, and only 7% of poorer pupils reach the top quartile. A like-for-like economy with a large equity gap.',
+    eli5: 'Below average, and the widest rich–poor gap of the big countries — where you come from predicts your results strongly.',
   },
   {
     code: 'DE', name: 'Germany', flag: '🇩🇪', tier: 'peer',
     maths: 475, reading: 480, science: 492, spendGdp: 4.6, spendStudent: 17161, spendComparable: true,
     spendCumulative: 121100, escsVariance: 19, escsGap: 111, resilient: 10, gdpCap: 72300, mathsTrend: -25, trendSig: true,
-    lesson: 'Near the top of this group for cumulative spend — yet below average, badly unequal, and the second-steepest fall (−25). Sorting children into school tracks early ties results tightly to background.',
-    eli5: 'Spends near the most of anyone here, but isn’t fair and fell the most — sorting kids into different schools early locks in where they started.',
+    lesson: 'Near the top of this group for cumulative spend — yet below average, a wide disadvantage gap, and the second-steepest fall (−25). Sorting children into school tracks early ties results tightly to background.',
+    eli5: 'Spends near the most of anyone here, but has a wide rich–poor gap and fell the most — sorting children into different schools early ties results to where they started.',
   },
   {
     code: 'IT', name: 'Italy', flag: '🇮🇹', tier: 'peer',
     maths: 471, reading: 482, science: 477, spendGdp: 4.0, spendStudent: 12760, spendComparable: true,
     spendCumulative: 105800, escsVariance: 13, escsGap: 85, resilient: 11, gdpCap: 60847, mathsTrend: -16, trendSig: true,
-    lesson: 'Middling scores but relatively fair (gap 85, near England’s), and reading actually rose. Hides a vast North–South divide inside its own borders — Italy’s “regions” problem dwarfs England’s.',
-    eli5: 'Middle of the pack but fairly even, and reading is improving — though the north does far better than the south.',
+    lesson: 'Middling scores but a relatively small disadvantage gap (85, near England’s), and reading rose. Contains a large North–South divide within its own borders — Italy’s regional disparity exceeds England’s.',
+    eli5: 'Middle of the pack but a relatively even rich–poor gap, and reading is improving — though the north scores far higher than the south.',
   },
   {
     code: 'IE', name: 'Ireland', flag: '🇮🇪', tier: 'other',
     maths: 492, reading: 516, science: 504, spendGdp: 2.9, spendStudent: 13059, spendComparable: true,
     spendCumulative: 94200, escsVariance: 13, escsGap: 74, resilient: 12, gdpCap: 131175, gdpCaveat: true, mathsTrend: -8, trendSig: true,
-    lesson: 'The closest neighbour — and it outperforms England: the best reading in the EU, the smallest rich–poor gap of anyone here (74), and the gentlest decline. The most resonant “a system next door does fairness better”.',
-    eli5: 'Right next door and doing better — top reading, and the smallest rich–poor gap of anyone here.',
+    lesson: 'The closest neighbour — and it outperforms England: the highest reading in the EU, the smallest disadvantage gap of any country here (74), and the gentlest decline. A neighbouring system with a smaller equity gap than England’s.',
+    eli5: 'Right next door and scoring higher — top reading, and the smallest rich–poor gap of any country here.',
   },
   {
     code: 'PL', name: 'Poland', flag: '🇵🇱', tier: 'other',
@@ -170,7 +170,7 @@ export const byCode = (code: string) => COUNTRIES.find((c) => c.code === code)!;
 // — derived views used by the charts —
 // money-vs-outcomes: the OECD cumulative-6→15 measure exists for all 10 (Estonia estimated)
 export const SPEND_PLOT = COUNTRIES.filter((c) => c.spendCumulative != null);
-// equity: smaller gap first (fairest at the top)
+// equity: smaller disadvantage gap first (at the top)
 export const BY_EQUITY = [...COUNTRIES].sort((a, b) => a.escsGap - b.escsGap);
 // trend: biggest riser first (nulls last)
 export const BY_TREND = [...COUNTRIES].sort((a, b) => (b.mathsTrend ?? -999) - (a.mathsTrend ?? -999));

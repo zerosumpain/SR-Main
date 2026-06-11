@@ -1,9 +1,10 @@
 <script lang="ts">
   // DataEstateMap — the NEET data estate as three life-stage columns of triaged nodes
-  // (proven / underused / missing), with the age-18 dark zone drawn literally and a
-  // detail card on click. CSS-grid layout (responsive); linkage listed in the card.
+  // (proven / underused / missing), with the 18+ no-tracking-duty band marked and a
+  // detail card on click (access tier, who runs it, the limitation, what it would
+  // evidence in the engine, sources). CSS-grid layout (responsive).
   import { app } from '../lib/appState.svelte';
-  import { ESTATE, ESTATE_BY_ID, STAGE_META, TIER_META, type EstateStage } from '../lib/dataestate';
+  import { ESTATE, ESTATE_BY_ID, STAGE_META, TIER_META, ACCESS_META, type EstateStage } from '../lib/dataestate';
   import { estateSel } from '../lib/estateSel.svelte';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -29,18 +30,26 @@
     {#each Object.entries(TIER_META) as [k, t] (k)}
       <span class="lg"><i class="lg-dot {k}" style="--c:{t.colour}"></i>{eli ? t.eli5 : t.label}</span>
     {/each}
+    <span class="lg-sep" aria-hidden="true">·</span>
+    {#each Object.entries(ACCESS_META) as [k, a] (k)}
+      <span class="lg"><i class="lg-acc {k}" style="--c:{a.colour}"></i>{eli ? a.eli5 : a.label}</span>
+    {/each}
   </div>
 
   <div class="dem-grid">
     {#each STAGES as st (st)}
       <div class="col" class:dark={st === 'post18'}>
         <span class="col-h">{eli ? STAGE_META[st].eli5 : STAGE_META[st].label}</span>
-        {#if st === 'post18'}<span class="dark-lab">⚠ {eli ? 'tracking stops here' : 'the age-18 dark zone'}</span>{/if}
+        {#if st === 'post18'}<span class="dark-lab">⚠ {eli ? 'no tracking duty here' : 'no statutory tracking duty (18+)'}</span>{/if}
         {#each inStage(st) as n (n.id)}
           <button class="node {n.tier}" class:sel={selectedId === n.id} style="--c:{TIER_META[n.tier].colour}"
                   onclick={() => (selectedId = selectedId === n.id ? null : n.id)}>
             <span class="n-name">{n.name}</span>
-            <span class="n-tier">{eli ? TIER_META[n.tier].eli5 : TIER_META[n.tier].label}</span>
+            <span class="n-row">
+              <span class="n-tier">{eli ? TIER_META[n.tier].eli5 : TIER_META[n.tier].label}</span>
+              {#if n.accessTier}<i class="n-acc {n.accessTier}" style="--ac:{ACCESS_META[n.accessTier].colour}"
+                title="{eli ? ACCESS_META[n.accessTier].eli5 : ACCESS_META[n.accessTier].label}"></i>{/if}
+            </span>
           </button>
         {/each}
       </div>
@@ -52,14 +61,36 @@
       <div class="c-head">
         <span class="c-name">{selected.name}</span>
         <span class="c-tier" style="background:{TIER_META[selected.tier].colour}">{eli ? TIER_META[selected.tier].eli5 : TIER_META[selected.tier].label}</span>
+        {#if selected.accessTier}
+          <span class="c-acc" style="color:{ACCESS_META[selected.accessTier].colour}; border-color:{ACCESS_META[selected.accessTier].colour}">
+            {eli ? ACCESS_META[selected.accessTier].eli5 : ACCESS_META[selected.accessTier].label}
+          </span>
+        {/if}
       </div>
+      {#if selected.who && !eli}<p class="c-who">{selected.who}</p>{/if}
       <p class="c-blurb">{eli ? selected.blurbEli5 : selected.blurb}</p>
+      {#if selected.limitation}<p class="c-lim"><b>{eli ? 'The catch:' : 'Key limitation:'}</b> {selected.limitation}</p>{/if}
       {#if selected.gap}<p class="c-gap">▸ {selected.gap}</p>{/if}
+      {#if selected.evidences}
+        <p class="c-ev">
+          <span class="c-ev-tag">{eli ? 'What it would show in the model' : 'Evidences in the engine'}</span>
+          {selected.evidences.note}
+          {#if !eli}
+            {#if selected.evidences.levers?.length}<span class="c-ev-ids">levers: {selected.evidences.levers.join(', ')}</span>{/if}
+            {#if selected.evidences.outcomes?.length}<span class="c-ev-ids">outcomes: {selected.evidences.outcomes.join(', ')}</span>{/if}
+          {/if}
+        </p>
+      {/if}
       <div class="c-meta">
         {#if selected.latency !== '—'}<span><b>{eli ? 'How fresh:' : 'Latency:'}</b> {selected.latency}</span>{/if}
         {#if selected.access !== '—'}<span><b>{eli ? 'Who can use it:' : 'Access:'}</b> {selected.access}</span>{/if}
         {#if linkedNames(selected.id).length}<span><b>{eli ? 'Joined to:' : 'Linked today:'}</b> {linkedNames(selected.id).join(' · ')}</span>{/if}
       </div>
+      {#if selected.refs?.length}
+        <div class="c-refs">
+          {#each selected.refs as r (r.url)}<a class="c-ref" href={r.url} target="_blank" rel="noopener">{r.label} ↗</a>{/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -70,6 +101,10 @@
   .lg { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.65); }
   .lg-dot { width: 10px; height: 10px; border-radius: 3px; background: var(--c); display: inline-block; }
   .lg-dot.missing { background: transparent; border: 2px dashed var(--c); width: 7px; height: 7px; }
+  .lg-sep { color: rgba(28,22,17,0.3); }
+  .lg-acc { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
+  .lg-acc.secure { background: transparent; border: 2px solid var(--c); width: 6px; height: 6px; }
+  .lg-acc.mixed { background: linear-gradient(90deg, var(--c) 50%, transparent 50%); border: 1px solid var(--c); }
 
   .dem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 7px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.3); border: 1px solid rgba(28,22,17,0.1); }
@@ -84,15 +119,32 @@
   .node:hover { background: rgba(255,255,255,0.9); }
   .node.sel { outline: 2px solid var(--c); background: rgba(255,255,255,0.92); }
   .n-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12.5px; color: var(--ink, #1c1611); line-height: 1.25; }
+  .n-row { display: inline-flex; align-items: center; gap: 6px; }
   .n-tier { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--c); }
+  .n-acc { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); display: inline-block; flex-shrink: 0; }
+  .n-acc.secure { background: transparent; border: 1.5px solid var(--ac); width: 5px; height: 5px; }
+  .n-acc.mixed { background: linear-gradient(90deg, var(--ac) 50%, transparent 50%); border: 1px solid var(--ac); }
 
   .card { border: 1px solid rgba(28,22,17,0.16); border-left: 4px solid var(--c); border-radius: 10px; background: rgba(255,255,255,0.55); padding: 12px 15px; }
   .c-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
   .c-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink, #1c1611); }
   .c-tier { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; padding: 2px 7px; border-radius: 4px; }
+  .c-acc { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border: 1px solid; border-radius: 4px; }
+  .c-who { margin: 0 0 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.55); letter-spacing: 0.02em; }
   .c-blurb { margin: 0 0 6px; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.76); }
+  .c-lim { margin: 0 0 7px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.72); }
+  .c-lim b { color: var(--ink, #1c1611); }
   .c-gap { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: #8a2d3a; }
+  .c-ev { margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: rgba(47,111,151,0.06); border-left: 3px solid #2f6f97;
+    font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .c-ev-tag { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #2f6f97; font-weight: 600; margin-bottom: 3px; }
+  .c-ev-ids { display: inline-block; margin: 4px 6px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.55);
+    background: rgba(28,22,17,0.05); padding: 1px 6px; border-radius: 4px; }
   .c-meta { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: rgba(28,22,17,0.62); }
   .c-meta b { color: var(--ink, #1c1611); font-weight: 600; }
+  .c-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .c-ref { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: #2f6f97; text-decoration: none;
+    border: 1px solid rgba(47,111,151,0.3); border-radius: 5px; padding: 2px 7px; background: rgba(47,111,151,0.05); }
+  .c-ref:hover { border-color: #2f6f97; }
   @media (max-width: 820px) { .dem-grid { grid-template-columns: 1fr; } }
 </style>

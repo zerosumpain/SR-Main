@@ -7,14 +7,14 @@ import { OUTCOMES_BY_ID } from './outcomes';
 
 // Why each outcome moves — the dominant levers / mechanism behind its variability.
 const CAUSE: Record<string, string> = {
-  gapKS4: 'Most of the variability comes from disadvantaged absence (the single strongest lever), then child poverty, pupil premium and early-years investment — the last of which only reaches GCSE with an ~11-year lag.',
+  gapKS4: 'Most of the variability comes from disadvantaged absence (the strongest-weighted lever in the model), then child poverty, pupil premium and early-years investment — the last of which only reaches GCSE with an ~11-year lag.',
   gapKS2: 'Driven by disadvantaged absence, the reading & oracy push and early-years carry-over.',
   attainment8: 'Moves with teacher capacity (the strongest evidenced channel) and attendance, with curriculum reform adding from 2028; £/pupil has little direct effect in the model — a deliberate, contested assumption (see Method).',
   grade5EM: 'Tracks Attainment 8 — it rises with teacher quality and attendance, and the disadvantaged line is held down by the gap.',
   ks2RWM: 'Sensitive to the reading & oracy push, teacher capacity and attendance; the 2028 curriculum refresh adds later.',
   gld: 'Almost entirely an early-years story: quality investment, disadvantaged access and the Early Years Pupil Premium move it within ~2 years.',
   ehcpPct: 'Climbs on its own demand momentum; inclusive-mainstream investment and early SEND slow it, and EHCP reform diverts plans to ISPs from 2030 — though the government’s 4.7% path is disputed by the IFS.',
-  highNeedsDeficitStock: 'Explodes when high-needs funding lags EHCP demand; the March-2028 override cliff then drains mainstream funding. Inclusion, EHCP reform and funding growth bend it down.',
+  highNeedsDeficitStock: 'Rises sharply when high-needs funding lags EHCP demand; the March-2028 override expiry then draws down mainstream funding. Inclusion, EHCP reform and funding growth reduce it.',
   ehcpAttainment8: 'Improves with inclusion investment but falls if EHCP reform narrows plans without matching mainstream support — the double-edged reform.',
   persistentAbsence: 'Falls with attendance mentors and breakfast clubs and rises with child poverty; disadvantaged pupils are ~2.4× more likely to be persistently absent.',
   childPoverty: 'Driven by the child-poverty-action lever (two-child-limit removal, UC) and FSM expansion, against a rising baseline trend.',
@@ -48,7 +48,7 @@ const ELI5_CAUSE: Record<string, string> = {
   ks2RWM: 'Reading and phonics work and good teaching move it; the 2028 curriculum change adds later.',
   gld: 'It is almost entirely about early-years support before children even start school.',
   ehcpPct: 'It keeps climbing on its own; early help slows it, and the 2030 reforms divert some plans — though experts doubt the official target.',
-  highNeedsDeficitStock: 'It explodes when special-needs costs outrun the budget; in 2028 a protection rule ends and the debt starts draining school budgets.',
+  highNeedsDeficitStock: 'It rises sharply when special-needs costs outrun the budget; in 2028 a protection rule ends and the debt starts drawing down school budgets.',
   ehcpAttainment8: 'It improves with proper support, but falls if plans are cut without putting that support into mainstream schools.',
   persistentAbsence: 'Attendance mentors and breakfast clubs bring it down; poverty pushes it up.',
   childPoverty: 'It falls with anti-poverty action (like scrapping the two-child limit) and free school meals.',

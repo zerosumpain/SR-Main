@@ -14,8 +14,8 @@ export const ATT_HERO = {
   label: 'children missed at least HALF of school in 2024/25 — a record, nearly triple the 60,247 of 2018/19 (severe-absence baseline: CSJ analysis of DfE data) — and severe absence is the one headline measure still rising while overall and persistent absence improve.',
   labelEli5: 'A record 176,000 children missed more than half of all their school days last year — almost three times as many as before the pandemic. And unlike the other absence numbers, this one is still going up.',
   kicker: {
-    research: 'Here is the paradox this study exists to examine. The same system producing that record now measures attendance better than it measures anything else it does: 99% of state schools transmit pupil-level attendance to the Department every day, published fortnightly — against full-year statistics that still arrive eight months after the year ends. England built the world’s best attendance instrument and still has a deepening severe-absence problem. Whether the instrument actually moves the needle is the most important open question in the education data estate — and this page treats it as a question, not a press release.',
-    eli5: 'Strange but true: school attendance is now the thing the government measures best — every school, every day — and also one of its worst-performing numbers. This page asks the awkward question: has the brilliant measuring actually fixed anything yet?',
+    research: 'The structural feature this study examines: the same system producing that record now measures attendance at higher frequency than anything else it collects. 99% of state schools transmit pupil-level attendance to the Department every day, published fortnightly — against full-year statistics that still arrive eight months after the year ends. England has built a high-frequency attendance instrument while severe absence continues to rise. Whether the instrument has changed outcomes is an open question in the education data estate — and this page treats it as a question, with the evidence on each side set out below.',
+    eli5: 'A notable contrast: school attendance is now the thing the government measures most frequently — every school, every day — yet it is also one of the numbers moving the wrong way. This page asks the evidence question: has the detailed measuring changed outcomes yet?',
   },
   refs: [
     { label: 'DfE — pupil absence 2024/25 (full year)', url: 'https://explore-education-statistics.service.gov.uk/find-statistics/pupil-absence-in-schools-in-england/2024-25' },
@@ -109,7 +109,7 @@ export const INSTRUMENT = {
     ],
   },
   caveat: {
-    research: 'The instrument has an unresolved trust account. defenddigitalme’s challenge and ICO correspondence record that the collection began with a DPIA not signed off with the regulator, questioned 66-year retention, extraction initially every 2–4 hours, and DfE confirmation the data could support penalty notices and prosecutions. Parents have no access route to their own child’s feed. The Monitoring study’s anti-paternal test applies to the estate’s best pipe too: what does the family get back?',
+    research: 'The instrument has unresolved data-governance questions. defenddigitalme’s challenge and ICO correspondence record that the collection began with a DPIA not signed off with the regulator, questioned 66-year retention, extraction initially every 2–4 hours, and DfE confirmation the data could support penalty notices and prosecutions. Parents have no access route to their own child’s feed. The Monitoring study’s lower-custody test applies here too — its fourth question, what the data subject gets back, is the open item for the estate’s highest-frequency collection.',
     eli5: 'One catch: this daily collection was switched on with privacy questions still open — the regulator queried how long data is kept, and parents can’t see their own child’s feed. The best pipe in the system still fails the “what do you get back?” test.',
   },
   refs: [
@@ -128,8 +128,8 @@ export const VERDICT = {
     eli5: 'The government says its real-time data tools helped produce the biggest attendance improvement in ten years.',
   },
   counter: {
-    research: 'The honest ledger against attribution: (1) the recovery is internationally typical — US chronic absenteeism roughly doubled post-COVID and is recovering on a similar curve with no English-style infrastructure, so secular recovery confounds the claim; (2) the only published intervention evaluation — attendance mentors, Year 1 — was uncontrolled, with a +3 percentage-point average gain and evidence its authors call “indicative”; (3) attendance hubs ended in March 2025 without ever being robustly evaluated, their successor funded at £1.5m against the original £10m; (4) severe absence — the deepest-need measure — is still rising; and (5) the feed’s own 2025/26 in-year data shows recent weeks running 0.24pp ABOVE the equivalent week last year. No independent evaluation isolates the data infrastructure’s contribution. England built the instrument; proving the instrument works is the experiment now running.',
-    eli5: 'But: other countries improved at the same pace without the fancy data; the one evaluated support programme showed tiny gains with no comparison group; the deepest problem (children missing half of school) is still growing; and this term’s own feed shows progress stalling. Nobody independent has tested whether the data tools deserve the credit.',
+    research: 'The evidence that qualifies the attribution: (1) the recovery is internationally typical — US chronic absenteeism roughly doubled post-COVID and is recovering on a similar curve with no English-style infrastructure, so secular recovery is a confound; (2) the only published intervention evaluation — attendance mentors, Year 1 — was uncontrolled, with a +3 percentage-point average gain and evidence its authors call “indicative”; (3) attendance hubs ended in March 2025 without a robust evaluation, their successor funded at £1.5m against the original £10m; (4) severe absence — the highest-need measure — is still rising; and (5) the feed’s own 2025/26 in-year data shows recent weeks running 0.24pp ABOVE the equivalent week last year. No independent evaluation isolates the data infrastructure’s contribution. The instrument is built; whether it changes outcomes is the open question.',
+    eli5: 'But the evidence is mixed: other countries improved at the same pace without the detailed data; the one evaluated support programme showed small gains with no comparison group; the highest-need problem (children missing half of school) is still growing; and this term’s own feed shows progress stalling. No independent study has yet tested whether the data tools deserve the credit.',
   },
   refs: [
     { label: 'Attendance mentors — Year 1 evaluation (DfE)', url: 'https://assets.publishing.service.gov.uk/media/65fb20d3703c423c5158ef03/Evaluation_of_the_attendance_mentors_pilot_-_Year_1_findings.pdf' },
@@ -188,8 +188,8 @@ export const EVIDENCE_NOTE = {
 };
 
 export const SOCIAL_CONTRACT = {
-  research: 'Underneath the codes sits the drivers research: Public First’s 2023 focus-group finding that parental support for full-time schooling has “collapsed” and the school–parent social contract is “profoundly broken”; cost-of-living and term-time holiday economics; youth mental health. The honest reading is that attendance is partly a demand-side problem — which is precisely why supply-side instruments (fines, dashboards) keep underperforming expectations built for a compliance problem.',
-  eli5: 'Many parents simply stopped believing every school day matters — the pandemic broke a habit. That’s why fines and dashboards alone keep disappointing: they treat a trust problem as a rule-breaking problem.',
+  research: 'Underneath the codes sits the drivers research: Public First’s 2023 focus-group finding (its terms) that parental support for full-time schooling has “collapsed” and the school–parent social contract is “profoundly broken”; cost-of-living and term-time holiday economics; youth mental health. On this evidence, attendance has a substantial demand-side component — a possible reason supply-side instruments (fines, dashboards), designed for a compliance problem, perform below the expectations set for them.',
+  eli5: 'On this research, a share of the change is demand-side: some parents place less weight on full-time attendance than before the pandemic. That may be why fines and dashboards alone fall short — they are designed for rule-breaking, not for a shift in how families weigh school.',
   refs: [{ label: 'Public First — the broken social contract', url: 'https://www.publicfirst.co.uk/public-first-research-finds-parental-support-for-fulltime-schooling-has-collapsed.html' }] as Ref[],
 };
 
@@ -218,27 +218,29 @@ export const COMPARATORS: { name: string; what: string; eli5: string; verdict: s
 ];
 
 // ---------------------------------------------------------------------------
-// 10 · The asks
+// 10 · Open evidence questions
+// (what better instrumentation or evaluation would require — stated as evaluable
+//  criteria, not as recommendations)
 // ---------------------------------------------------------------------------
 export const ATT_ASKS: { ask: string; what: string; eli5: string }[] = [
   {
-    ask: 'Commission the independent evaluation the instrument deserves',
-    what: 'No independent causal evaluation of the daily feed, the similar-schools nudges, or the fines framework exists. The staggered rollout, the regional enforcement variation (10.3% vs 3.6%) and the half-termly benchmark cycles are natural experiments sitting in the data. England built the instrument; proving what it changes — and what fines change — should be a single commissioned programme (EEF/Foundations-grade), not a press release.',
-    eli5: 'Properly test whether the daily data and the fines actually work — the data to do it is already flowing.',
+    ask: 'Does the daily feed change attendance? No independent evaluation yet isolates it',
+    what: 'No published independent causal evaluation of the daily feed, the similar-schools comparison reports, or the fines framework exists. The staggered rollout, the regional enforcement variation (10.3% vs 3.6%) and the half-termly benchmark cycles are natural experiments present in the data; isolating what the instrument changes — and what fines change — would require a single commissioned, controlled evaluation (EEF/Foundations-grade) rather than an observational before/after.',
+    eli5: 'No one has yet independently tested whether the daily data and the fines change attendance — though the data to test it is already flowing.',
   },
   {
-    ask: 'Close the loop from school-level nudge to child-level signal',
-    what: 'The feed benchmarks schools; it does not yet flag a child whose trajectory is deteriorating in time to act — the NEET study’s design (governed, published error rates, help-only) applied to the estate’s fastest pipe. Severe absence rising while everything else improves is what an unclosed loop looks like.',
-    eli5: 'Use the daily data to notice individual children drifting — with proper safeguards — not just to rank schools.',
+    ask: 'Can a school-level signal become a child-level one? Two designs differ on this',
+    what: 'The feed benchmarks schools; it does not flag an individual child whose trajectory is deteriorating in time to act. A child-level early-warning use would require the NEET study’s governance design (published error rates, support-only routing). Severe absence rising while the other measures fall is the pattern an aggregate-only signal does not catch.',
+    eli5: 'The data currently compares schools, not individual children. Using it to notice a child drifting would need explicit safeguards — and that design choice is unresolved.',
   },
   {
-    ask: 'Settle the instrument’s trust account',
-    what: 'Sign off the DPIA position with the ICO, justify or shorten retention, publish what enforcement uses the feed may serve, and give families sight of their own child’s record. The subsidiarity test’s fourth question — what does the holder get back? — applied to the one collection every school feeds every day.',
-    eli5: 'Fix the privacy loose ends and let parents see their own child’s data — trust is what keeps the pipe open.',
+    ask: 'What does the family get back? The instrument’s trust account is unsettled',
+    what: 'Open items on the record: the DPIA position with the ICO, the justification for retention length, what enforcement uses the feed may serve, and whether families can see their own child’s record. These map onto the subsidiarity test’s fourth question — what the data subject gets back — applied to the one collection every school feeds every day.',
+    eli5: 'There are unresolved privacy questions — how long the data is kept, and whether parents can see their own child’s record. These are open, not settled.',
   },
 ];
 
 export const ATT_CLOSER = {
-  research: 'Attendance is where the whole project’s argument gets its live test. The Monitoring study says cadence is a design choice — attendance proves it. The NEET study says the predictors arrive years early — attendance IS the predictor. The Jigsaw says the joins are nobody’s job — the severely absent child is the join. And the synthesis says publish, specify and evaluate before collecting more — attendance is the one place the collection already exists, waiting for the evaluation and the child-level loop that would justify it.',
-  eli5: 'Everything this site argues comes together here: the daily attendance data is the best pipe the system has. Now it needs the two things that would make it matter — proof it works, and the courage to use it child by child, carefully.',
+  research: 'Attendance is where the project’s analytical thesis is testable. The Monitoring study finds cadence is a design choice — attendance is the worked example. The NEET study finds the predictors are observable years early — attendance is among the predictors. The Jigsaw study finds the cross-domain joins sit with no single owner — the severely absent child is one such join. The synthesis sets the criterion of publishing, specifying and evaluating before collecting more — attendance is the one place the collection already exists, with the evaluation and the child-level design as the outstanding questions.',
+  eli5: 'The site’s argument converges here: the daily attendance data is the system’s most detailed instrument. What is still missing is evidence that it changes outcomes, and a settled, safeguarded design for using it child by child.',
 };

@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The Memo — the capstone: every field study synthesised into one decision
-  // document. BLUF, the case in five findings, twelve ranked moves grouped by
-  // unlock, the missing-instruments register (Annex A), the don'ts, and the
-  // decision requested. Styled as a civil-service memo, on purpose.
+  // The Memo — the capstone: every field study drawn into one analytical summary.
+  // Headline finding, the case in five findings, the ranked improvements grouped by
+  // unlock, the missing-instruments register (Annex A), what the record cautions
+  // against, and the suggested sequencing. Styled as a civil-service memo.
   import { app } from '../lib/appState.svelte';
   import {
     MEMO_META, MEMO_CASE, MOVES, HORIZON_META, INSTRUMENTS, MEMO_DONTS, DECISIONS,
@@ -59,7 +59,7 @@
     <p class="cap">
       {eli
         ? 'Every improvement the field studies identified, in one list. Blue = possible now. Amber = waits for the new child ID. Purple = needs a money decision.'
-        : 'The complete improvement set, deduped across the field studies. Grouping is by UNLOCK, not by theme: what requires nothing new, what the CWS Act identifier enables, and what is genuinely a resource decision. Cost tiers are indicative (£ = specification/publication work · ££ = a programme · £££ = infrastructure).'}
+        : 'The complete improvement set, deduped across the field studies. Grouping is by UNLOCK, not by theme: what requires nothing new, what the CWS Act identifier enables, and what is a resource decision. Cost tiers are indicative (£ = specification/publication work · ££ = a programme · £££ = infrastructure).'}
     </p>
     {#each HORIZONS as h (h)}
       <div class="mv-grp">
