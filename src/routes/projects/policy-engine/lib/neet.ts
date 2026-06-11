@@ -383,3 +383,37 @@ export const AGE_PROFILE: { age: number; pct: number }[] = [
   { age: 16, pct: 2.8 }, { age: 17, pct: 5.2 }, { age: 18, pct: 11.5 }, { age: 19, pct: 14.0 },
   { age: 20, pct: 15.5 }, { age: 21, pct: 16.4 }, { age: 22, pct: 16.8 }, { age: 23, pct: 17.0 }, { age: 24, pct: 17.2 },
 ];
+
+// ---------------------------------------------------------------------------
+// The Milburn review ("Young People and Work", interim DIAGNOSTIC report, May 2026):
+// the five interlocking system failures and the new headline numbers. DIAGNOSIS ONLY —
+// the review makes no recommendations until the "solutions" phase, autumn 2026; the
+// directional asks live in directions.ts (tagged status:'diagnosis'). [gov.uk interim report]
+// ---------------------------------------------------------------------------
+export interface MilburnFailure { chapter: string; title: string; research: string; eli5: string; }
+
+export const MILBURN_FAILURES: MilburnFailure[] = [
+  { chapter: 'Ch.3', title: 'The youth economy',
+    research: 'The youth share of the labour market has fallen even as overall employment rose; entry-level roles are fewer and more demanding, and recruitment is "more remote, more automated and less human" — "a portal, a test, a recorded interview or an algorithm".',
+    eli5: 'There are fewer first jobs, and getting one now means passing online portals and automated tests instead of meeting a manager.' },
+  { chapter: 'Ch.5', title: 'Health — configured for treatment, not participation',
+    research: 'Health-related reasons for youth NEET rose ~70% in a decade and mental health is the primary condition for >4 in 10 disabled NEETs; the system treats illness rather than supporting a route back to work or learning.',
+    eli5: 'Health care for young people is set up to treat illness, not to help them back into work or study.' },
+  { chapter: 'Ch.4', title: 'Education & skills — the faltering foundation',
+    research: 'Too many young people leave education without the qualifications or support to make the transition to work, and disadvantage funding largely stops at 16 even though the NEET cliff is at 16–18.',
+    eli5: 'School and college do not set enough young people up for work, and the extra help stops at 16.' },
+  { chapter: 'Ch.6', title: 'A welfare state not designed for participation',
+    research: 'In 2024/25 about £1 was spent on employment support for young people for every ~£25 on benefits; the system parks young people rather than re-engaging them, and ~7 in 10 claiming a health/disability benefit are still claiming a decade later.',
+    eli5: 'The benefits system spends far more keeping young people on benefits than helping them into work.' },
+  { chapter: 'Ch.7', title: 'The architecture — a system in name, not in design',
+    research: 'Responsibility for young people is split across education, health, welfare and employers with no one owning the join — "a system in name, not in design" — so no one sees the whole young person or the £1:£25 spend split.',
+    eli5: 'No single body joins up education, benefits, health and employers, so nobody sees the whole picture.' },
+];
+
+export const MILBURN_STATS = [
+  { big: '~£125bn', label: 'estimated annual cost of ~1m young NEETs — "more than we spend on education each year"', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { big: '£1 : £25', label: 'spent on youth employment support vs on benefits (2024/25)', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { big: '6 in 10', label: 'NEETs today have never had a job — up from 4 in 10 in 2005', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { big: '+70%', label: 'rise in health-related reasons for being NEET over a decade', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+  { big: 'only Romania', label: 'had a higher youth NEET rate in Europe by 2025', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
+];

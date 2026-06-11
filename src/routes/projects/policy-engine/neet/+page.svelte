@@ -14,6 +14,9 @@
   import { selectEstateNode } from '../lib/estateSel.svelte';
   import { ESTATE_BY_ID } from '../lib/dataestate';
   import { STORIES } from '../lib/stories';
+  import { goto } from '$app/navigation';
+  import { PRESETS } from '../lib/scenarios';
+  import { DIRECTIONS, DIR_STATUS_META } from '../lib/directions';
   import {
     NEET_NOW, LA_SPREAD, LA_NOTE, LEO_NOTE, JOIN_SPOKES,
     NL_ESL, EUROSTAT_NEET, ESTONIA_FUNNEL, ABC, RONI_INPUTS,
@@ -21,9 +24,18 @@
     AI_INTRO, AI_ROLES, AI_STATS, AI_CAUTIONS,
     CCIS_INTRO, CCIS_NAMING, CCIS_ROLE, CCIS_LIMITS, CCIS_OVERHAUL, CCIS_AIVALUE, CCIS_STATS,
     TOOLING_LADDER, FAILURE_GALLERY, OPPORTUNITY_LADDER, GOVERNANCE_CHECKLIST,
+    MILBURN_FAILURES, MILBURN_STATS,
   } from '../lib/neet';
 
   const eli = $derived(app.narrative === 'eli5');
+
+  const milburnDirections = DIRECTIONS.filter((d) => d.kind === 'diagnosis-direction');
+  function loadMilburnPackage() {
+    const preset = PRESETS.find((p) => p.name === 'Milburn-aligned response');
+    if (preset) app.applyPreset(preset);
+    goto('/projects/policy-engine/outcomes');
+  }
+
   const fmtK = (n: number) =>
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}m` : `${Math.round(n / 1000)}k`;
 
@@ -99,6 +111,65 @@
       </p>
     {/if}
   </div>
+
+  <!-- ===================== The fork in the road (Milburn) ===================== -->
+  <section class="block milburn">
+    <p class="kick">The Milburn review · "Young People and Work" (interim, May 2026)</p>
+    <h2 class="pe-h2">The fork in the road — what the diagnosis says must change</h2>
+    <p class="cap">
+      {eli
+        ? 'A major government review set out WHY a million young people are NEET. It is a diagnosis, not a plan — its recommendations come in autumn 2026. Here is what it found, and the directions it points to.'
+        : 'Alan Milburn’s DWP review diagnoses why ~1m young people are NEET across five interlocking failures. It is explicitly diagnostic — Chapter 9 is "the fork in the road" — with recommendations deferred to the solutions phase (autumn 2026). Below: the diagnosis, the directions it points toward, and the response package the engine can project.'}
+    </p>
+
+    <div class="mstats">
+      {#each MILBURN_STATS as s (s.big)}
+        <a class="mstat" href={s.url} target="_blank" rel="noopener">
+          <span class="mstat-big">{s.big}</span><span class="mstat-lab">{s.label}</span>
+        </a>
+      {/each}
+    </div>
+
+    <div class="mfails">
+      {#each MILBURN_FAILURES as f (f.title)}
+        <div class="mfail">
+          <span class="mfail-ch">{f.chapter}</span>
+          <h3 class="mfail-t">{f.title}</h3>
+          <p class="mfail-b">{eli ? f.eli5 : f.research}</p>
+        </div>
+      {/each}
+    </div>
+
+    <h3 class="pe-h3">The directions the diagnosis points to</h3>
+    <p class="cap">
+      {eli
+        ? 'These are NOT the review’s recommendations (those come later) — they are the directions its diagnosis points to, each paired with what the model can simulate.'
+        : 'Directions, not recommendations: each Milburn ask is tagged as diagnosis-led and mapped to the engine’s levers, so the package below can be projected. Formal recommendations follow in autumn 2026.'}
+    </p>
+    <div class="mdirs">
+      {#each milburnDirections as d (d.id)}
+        <div class="mdir">
+          <span class="mdir-badge" style="--c:{DIR_STATUS_META[d.status].colour}">
+            {eli ? DIR_STATUS_META[d.status].eli5 : DIR_STATUS_META[d.status].label}
+          </span>
+          <h4 class="mdir-t">{d.title}</h4>
+          <p class="mdir-b">{eli ? d.whatChanges.eli5 : d.whatChanges.research}</p>
+          <p class="mdir-eff"><b>{eli ? 'In the model:' : 'Expected effect:'}</b> {eli ? d.expectedEffect.eli5 : d.expectedEffect.research}</p>
+        </div>
+      {/each}
+    </div>
+
+    <div class="mcta">
+      <button class="mcta-btn" onclick={loadMilburnPackage}>
+        {eli ? 'See what this mix does →' : 'Load the "Milburn-aligned response" package →'}
+      </button>
+      <p class="mcta-note">
+        {eli
+          ? 'Loads a ready-made mix of these policies and shows the projection. It’s a fair attempt, not the review’s plan — and the model is unsure of the size.'
+          : 'Applies a defensible participation-first package (entry-level, Youth Guarantee, apprenticeships, careers, post-16 and youth mental-health) and opens the Outcomes projection. Not the review’s recommendations; subject to the engine’s wide uncertainty (the youth levers are low-confidence).'}
+      </p>
+    </div>
+  </section>
 
   <!-- ===================== 1 · the scale ===================== -->
   <section class="block">
@@ -830,4 +901,27 @@
     .oh-new { padding-left: 0; border-left: none; border-top: 1px dashed rgba(47,125,79,0.4); padding-top: 6px; }
     .oh-new::before { content: 'Overhauled — '; font-weight: 600; color: #2f7d4f; }
   }
+
+  .milburn { border-left: 3px solid #4b5a8a; padding-left: 1.1rem; }
+  .milburn .kick { font: 600 0.72rem/1.3 var(--font-label, 'JetBrains Mono', monospace); letter-spacing: 0.04em; text-transform: uppercase; color: #4b5a8a; margin: 0 0 0.2rem; }
+  .mstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin: 0.9rem 0; }
+  .mstat { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.7rem; background: var(--card-bg, rgba(28,22,17,0.04)); border-radius: 6px; text-decoration: none; color: inherit; }
+  .mstat-big { font: 800 1.25rem/1 var(--font-display, 'Archivo Black', system-ui); color: #4b5a8a; }
+  .mstat-lab { font-size: 0.78rem; line-height: 1.3; opacity: 0.85; }
+  .mfails { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.7rem; margin: 0.9rem 0; }
+  .mfail { padding: 0.7rem 0.8rem; background: var(--card-bg, rgba(28,22,17,0.04)); border-radius: 6px; }
+  .mfail-ch { font: 600 0.7rem var(--font-label, 'JetBrains Mono', monospace); opacity: 0.6; }
+  .mfail-t { font-size: 0.95rem; margin: 0.2rem 0 0.3rem; }
+  .mfail-b { font-size: 0.82rem; line-height: 1.4; margin: 0; opacity: 0.9; }
+  .mdirs { display: grid; gap: 0.7rem; margin: 0.7rem 0; }
+  .mdir { padding: 0.7rem 0.9rem; border: 1px solid rgba(28,22,17,0.12); border-radius: 6px; }
+  .mdir-badge { display: inline-block; font: 600 0.66rem var(--font-label, 'JetBrains Mono', monospace); text-transform: uppercase; letter-spacing: 0.03em; color: var(--c); border: 1px solid var(--c); border-radius: 999px; padding: 0.1rem 0.5rem; margin-bottom: 0.35rem; }
+  .mdir-t { font-size: 0.98rem; margin: 0 0 0.3rem; }
+  .mdir-b { font-size: 0.85rem; line-height: 1.45; margin: 0 0 0.3rem; }
+  .mdir-eff { font-size: 0.8rem; line-height: 1.4; margin: 0; opacity: 0.85; }
+  .mcta { margin-top: 1rem; }
+  .mcta-btn { font: 600 0.9rem var(--font-body, system-ui); background: #4b5a8a; color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1rem; cursor: pointer; }
+  .mcta-btn:hover { filter: brightness(1.08); }
+  .mcta-note { font-size: 0.78rem; line-height: 1.4; opacity: 0.8; margin: 0.45rem 0 0; }
+  .pe-h3 { font-size: 1.05rem; margin: 1.1rem 0 0.2rem; }
 </style>
