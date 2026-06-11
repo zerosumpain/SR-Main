@@ -3,6 +3,7 @@
   import { SOURCES } from '../lib/sources';
   import { BY_MATHS, OECD_AVG, SPEND_THRESHOLD, ENGLAND_PISA, TIER_META } from '../lib/comparators';
   import CausalFlow from './CausalFlow.svelte';
+  import CalcViewer from './CalcViewer.svelte';
 
   const tierShort: Record<string, string> = { anchor: 'anchor', leader: 'leader', peer: 'peer', other: 'wildcard' };
   const compTrend = (v: number | null, sig: boolean | null) =>
@@ -129,7 +130,9 @@
   <section>
     <h3>The causal flow</h3>
     <p>How the model works, end to end: policy levers act on a small set of mediators, which drive the
-      headline outcomes. The relationships and their relative strength are calibrated from the evidence base.</p>
+      headline outcomes. The relationships and their relative strength are calibrated from the evidence base.
+      <b>This diagram is interactive</b> — click any box or arrow to read what the relationship is, the evidence
+      behind it, its live value at your current settings, and to jump to the levers that move it.</p>
     <CausalFlow />
     <pre class="spine">child poverty ─▶ home environment ─▶ age-5 gap ─▶ KS2 gap ─▶ KS4 gap   (≈40% of the age-16 gap is set by age 5)
 funding ─▶ teacher capacity ─▶ attainment level                         (direct £→outcome link contested; modelled as weak)
@@ -138,6 +141,18 @@ early SEND + inclusive mainstream ─▶ slows EHCP demand ─▶ shrinks defici
 EHCP reform ─▶ cuts deficit BUT harms SEND attainment & raises tribunals (unless matched by inclusion)
 absence + poverty + SEND ─▶ NEET pipeline ─▶ 3 NEET segments             (U cyclical · IH sticky · IO other)
 attainment ─▶ NEET (mostly the unemployed segment)                       (+ exogenous youth ill-health → IH)</pre>
+  </section>
+
+  <section id="working">
+    <h3>Show your working — live</h3>
+    <p>No black box. Pick a headline outcome and watch the engine's <b>own</b> intermediate terms build up to the
+      published number, updating as you drag the levers. Every term is computed by the model itself, so the working
+      reconciles <b>exactly</b> to the value shown everywhere else — the green check proves it. Switch to <b>Code</b>
+      to see the real <code>engine.ts</code> source behind the calculation.</p>
+    <CalcViewer />
+    <p class="caveat">The breakdown is shown at the horizon year selected in the top bar. "Structural reductions" and
+      "other channels" expand to each lever's individual contribution (with its diminishing returns and lag) — click a
+      lever to jump to its slider.</p>
   </section>
 
   <section>
@@ -152,7 +167,8 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
   <section>
     <h3>Key equations &amp; calculations</h3>
     <p>The full model is in <code>lib/engine.ts</code>; the calibrated parameters and their sources in
-      <code>lib/params.ts</code>. The core relationships:</p>
+      <code>lib/params.ts</code>. The headline ones are explorable live in <a href="#working">Show your working</a>
+      above; this is the complete static reference (including the segments and Monte-Carlo the viewer doesn't cover):</p>
     {#each equations as e}
       <div class="eqn" id={e.slug ? `eq-${e.slug}` : undefined}>
         <span class="eq-title">{e.title}</span>

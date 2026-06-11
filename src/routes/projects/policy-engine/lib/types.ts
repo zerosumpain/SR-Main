@@ -111,6 +111,39 @@ export interface SimResult {
   years: YearResult[];
   baseYear: number;
   endYear: number;
+  /** Populated only when runSim is called with { trace: <year> } — the real
+   *  intermediate calculation terms for that year, for the "show your working" viewer. */
+  trace?: Trace;
+}
+
+// ---------------------------------------------------------------------------
+// Calculation trace — the engine's own intermediate terms, exposed so the Method
+// page can show the live, faithful working behind a headline outcome (each term
+// computed BY the engine, reconciling exactly to the published value).
+// ---------------------------------------------------------------------------
+export interface TraceTerm {
+  label: string;             // human label for the term
+  symbol: string;            // symbolic form, e.g. '0.077 · (PA_dis − 29.9)'
+  value: number;             // the term's live contribution
+  leverIds?: string[];       // levers feeding this term (jump-to-slider)
+  parts?: { id: string; label: string; value: number }[]; // per-lever sub-contributions
+  note?: string;
+}
+export interface OutcomeTrace {
+  key: string;               // outcome id (matches OUTCOMES / YearResult)
+  title: string;
+  unit: string;
+  base: number;              // the baseline/anchor the terms build on
+  baseLabel: string;         // what `base` is (e.g. '2025 baseline', 'previous year')
+  terms: TraceTerm[];        // terms combined onto the base
+  result: number;            // base + Σ terms (pre-clamp)
+  engineValue: number;       // the actual value the engine published (the ✓ check)
+  clamped: boolean;          // true if a clamp moved result → engineValue
+  codeKey: string;           // key into the source-snippet map (code view)
+}
+export interface Trace {
+  year: number;
+  outcomes: Record<string, OutcomeTrace>;
 }
 
 /** A P10/P50/P90 fan for one outcome across the timeline (Monte-Carlo output). */

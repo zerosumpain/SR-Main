@@ -1,8 +1,12 @@
 <script lang="ts">
   // A bespoke SVG diagram of the model's causal flow: policy levers (drivers) →
   // mediators → outcomes, with the key annotated edges (lag, strongest lever, weak
-  // link, double-edged reform, 2028 cliff). Self-contained; matches the warm palette.
-  import { GROUP_META } from '../lib/levers';
+  // link, double-edged reform, 2028 cliff). Click any node or edge to inspect the
+  // relationship — its mechanism, evidence, live value and the levers behind it.
+  import { GROUP_META, LEVERS_BY_ID } from '../lib/levers';
+  import { OUTCOMES_BY_ID } from '../lib/outcomes';
+  import { app } from '../lib/appState.svelte';
+  import { fmt, signed } from '../lib/chartkit';
 
   type Col = 0 | 1 | 2;
   interface Node { id: string; label: string; col: Col; colour: string; }
@@ -171,12 +175,85 @@
   ];
 
   let hover = $state<string | null>(null);
+  // hover gives a quick isolate; a clicked node keeps it isolated (focus = hover, else selected node)
+  function focusId(): string | null { return hover ?? (sel?.kind === 'node' ? sel.id : null); }
   function dim(nodeId: string): boolean {
-    if (!hover) return false;
-    if (hover === nodeId) return false;
-    return !edges.some((e) => (e.from === hover && e.to === nodeId) || (e.to === hover && e.from === nodeId));
+    const f = focusId();
+    if (!f) return false;
+    if (f === nodeId) return false;
+    return !edges.some((e) => (e.from === f && e.to === nodeId) || (e.to === f && e.from === nodeId));
   }
-  function edgeActive(e: Edge): boolean { return !hover || e.from === hover || e.to === hover; }
+  function edgeActive(e: Edge): boolean { const f = focusId(); return !f || e.from === f || e.to === f; }
+
+  // ---- interactivity: click a node or edge to inspect the relationship ----
+  let sel = $state<{ kind: 'node' | 'edge'; id: string } | null>(null);
+  const eKey = (e: Edge) => e.from + '>' + e.to;
+  const nodeOf = (id: string) => nodes.find((n) => n.id === id)!;
+  const edgeOf = (key: string) => edges.find((e) => eKey(e) === key)!;
+  function pickNode(id: string) { sel = sel?.kind === 'node' && sel.id === id ? null : { kind: 'node', id }; }
+  function pickEdge(e: Edge) { const k = eKey(e); sel = sel?.kind === 'edge' && sel.id === k ? null : { kind: 'edge', id: k }; }
+  const selNode = $derived(sel?.kind === 'node' ? sel.id : null);
+  const selEdge = $derived(sel?.kind === 'edge' ? sel.id : null);
+
+  // which levers each driver box represents (for jump-to-slider + live values)
+  const NODE_LEVERS: Record<string, string[]> = {
+    d_ey: ['ey_quality', 'ey_access', 'eypp'], d_pp: ['pupil_premium', 'fsm', 'breakfast'], d_pov: ['poverty_action'],
+    d_att: ['attendance'], d_wf: ['teachers', 'teacher_pay', 'bursaries'], d_std: ['curriculum', 'reading', 'rise'],
+    d_send: ['inclusion_fund', 'send_early'], d_reform: ['ehcp_reform'], d_p16: ['post16_skills', 'youth_guarantee', 'apprenticeships'],
+    d_mh: ['mental_health'], d_fund: ['school_funding', 'high_needs'], d_pipeline: ['send_pipeline'], d_camhs: ['camhs'],
+    d_eal: ['eal_support'], d_care: ['care_support'], d_behave: ['behaviour_support'], d_place: ['place_investment', 'mission_ne', 'mission_coastal'],
+    d_tutor: ['tutoring'], d_housing: ['housing_instability'],
+  };
+  // mediator / outcome nodes → the YearResult field to show a LIVE value for
+  const NODE_FIELD: Record<string, string> = {
+    m_pov: 'childPoverty', m_abs: 'persistentAbsenceDis', m_cap: 'teacherShortfall', m_ehcp: 'ehcpPct',
+    o_gap: 'gapKS4', o_att: 'attainment8', o_send: 'highNeedsDeficitStock',
+    o_neet_u: 'neetUnemployed', o_neet_ih: 'neetInactiveHealth', o_neet_io: 'neetInactiveOther',
+  };
+  const NODE_INFO: Record<string, string> = {
+    m_pov: 'Relative child poverty (AHC). An upstream mediator — it acts on the gap mainly through the home learning environment and attendance, so its effect is lagged.',
+    m_abs: 'Disadvantaged persistent absence — the model\'s central hub. EPI attributes the entire post-2019 widening of the gap to this.',
+    m_cap: 'Teacher capacity — recruitment, retention and TAs. The channel through which money (and pay/bursaries) reaches attainment; never a direct £→outcome term.',
+    m_ehcp: 'EHCP demand & inclusion. Prevalence grows logistically; inclusion and early-SEND slow it; reform diverts to ISPs from 2030.',
+    m_pipe: 'The NEET risk-factor pipeline (DfE 2026): absence, poverty and EHCP prevalence propagate into the 16–24 stock with a ~4-year lag.',
+    o_gap: 'The headline equity metric — disadvantaged vs peers at GCSE, in EPI months of learning.',
+    o_att: 'Attainment level (Attainment 8 / KS2 / GLD), all pupils.',
+    o_send: 'The high-needs (DSG) deficit and tribunal volume — the SEND sub-system\'s stress signals.',
+    o_neet_u: 'NEET — unemployed-active segment (cyclical). Moved by work-route levers.',
+    o_neet_ih: 'NEET — inactive-health segment (sticky). Responds to mental-health/CAMHS, not job schemes.',
+    o_neet_io: 'NEET — inactive-other segment (caring / discouraged).',
+  };
+  // richer text for the key edges (others fall back to a generated description)
+  const EDGE_INFO: Record<string, string> = {
+    'm_abs>o_gap': 'The strongest single relationship in the model. A pp rise in disadvantaged persistent absence adds ~0.077 months to the KS4 gap (EPI: the post-2019 widening is entirely absence-driven).',
+    'm_cap>o_att': 'The evidenced attainment channel: teacher quality/supply ≈ 0.1–0.2 SD per SD of value-added (Chetty/Hanushek; NFER). This is why funding is routed through capacity.',
+    'd_fund>o_att': 'Deliberately WEAK: the direct £-per-pupil → attainment link is near-zero at current spending in some studies (Hanushek/IFS) and positive in finance-reform studies (Jackson et al.). The model takes the cautious reading — funding acts via teacher capacity instead.',
+    'd_pp>o_gap': 'Weak by design: there is no robust £→gap elasticity for the Pupil Premium (EEF; Gorard). Modelled as a quality-moderated offset with wide uncertainty.',
+    'd_ey>o_gap': 'Early-years investment reaches GCSE only after the cohort ages ~11 years, with partial fade-out — a large but late effect.',
+    'd_reform>o_send': 'Double-edged: EHCP reform cuts the deficit by diverting plans, but WITHOUT matching mainstream inclusion it lowers SEND attainment and raises tribunals.',
+    'd_fund>o_send': 'The 2028 cliff: when the DSG statutory override ends (March 2028), any accumulated high-needs deficit is serviced from general funds, cutting mainstream per-pupil funding.',
+    'd_p16>o_neet_u': 'Work-route levers (Youth Guarantee, apprenticeships, careers) act on the cyclical unemployed segment, cutting both inflow and persistence.',
+    'm_pipe>o_neet_ih': 'The health segment is sticky and carries an exogenous youth-ill-health drift; it responds slowly and to different levers than the unemployed segment.',
+    'm_abs>m_pipe': 'Persistent absence is the strongest NEET predictor (DfE 2026: ~3.9× relative risk), feeding the 16–24 stock with a lag.',
+  };
+  const KIND_MEANING: Record<string, string> = {
+    strong: 'A strong, well-evidenced causal channel.',
+    weak: 'A weak or lagged link — small, uncertain, or slow to arrive.',
+    risk: 'A risk / cost edge — a downside or fiscal consequence, not a benefit.',
+    normal: 'A standard modelled causal link.',
+  };
+  function liveValue(nodeId: string): { v: number; base: number; meta: any } | null {
+    const field = NODE_FIELD[nodeId];
+    if (!field) return null;
+    const row = app.viewSim.find((y) => y.year === app.horizon) ?? app.viewSim[app.viewSim.length - 1];
+    const brow = app.viewBase.find((y) => y.year === app.horizon) ?? app.viewBase[app.viewBase.length - 1];
+    return { v: (row as any)[field], base: (brow as any)[field], meta: OUTCOMES_BY_ID[field] };
+  }
+  function edgeDesc(e: Edge): string {
+    return EDGE_INFO[eKey(e)] ?? `${nodeOf(e.from).label} influences ${nodeOf(e.to).label}. ${KIND_MEANING[e.kind ?? 'normal']}`;
+  }
+  // edges connected to the selected node (for the "connected links" list)
+  const connectedEdges = $derived(selNode ? edges.filter((e) => e.from === selNode || e.to === selNode) : []);
 </script>
 
 <figure class="cf">
@@ -190,10 +267,14 @@
     <text x={COLX[0] - COLW[0] / 2} y={wdrDivY - 4} class="cf-divlab">WIDER DETERMINANTS & SERVICES ↓</text>
 
     {#each edges as e (e.from + e.to)}
-      <path d={edgePath(e)} fill="none" stroke={strokeOf(e.kind)}
-            stroke-width={e.kind === 'strong' ? 2.4 : e.kind === 'weak' ? 1.2 : 1.6}
-            stroke-dasharray={e.kind === 'weak' || e.kind === 'risk' ? '4 3' : 'none'}
-            opacity={edgeActive(e) ? 0.9 : 0.12} marker-end="url(#arrow)" />
+      {@const k = eKey(e)}
+      <g class="edge" onclick={() => pickEdge(e)} style="cursor:pointer">
+        <path d={edgePath(e)} fill="none" stroke="transparent" stroke-width="13" pointer-events="stroke" />
+        <path d={edgePath(e)} fill="none" stroke={selEdge === k ? '#1c1611' : strokeOf(e.kind)}
+              stroke-width={selEdge === k ? 3.2 : e.kind === 'strong' ? 2.4 : e.kind === 'weak' ? 1.2 : 1.6}
+              stroke-dasharray={e.kind === 'weak' || e.kind === 'risk' ? '4 3' : 'none'}
+              opacity={edgeActive(e) ? (selEdge === k ? 1 : 0.9) : 0.1} marker-end="url(#arrow)" pointer-events="none" />
+      </g>
     {/each}
     {#each edges.filter((e) => e.label) as e (e.from + e.to + 'l')}
       {@const m = edgeMid(e)}
@@ -203,10 +284,17 @@
 
     {#each nodes as n (n.id)}
       {@const p = pos[n.id]}
-      <g opacity={dim(n.id) ? 0.25 : 1} onpointerenter={() => (hover = n.id)} onpointerleave={() => (hover = null)} style="cursor:default">
+      <g class="node" opacity={dim(n.id) ? 0.22 : 1} role="button" tabindex="0"
+         onpointerenter={() => (hover = n.id)} onpointerleave={() => (hover = null)}
+         onclick={() => pickNode(n.id)}
+         onkeydown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pickNode(n.id); } }}
+         style="cursor:pointer">
+        {#if selNode === n.id}
+          <rect x={p.x - p.w / 2 - 3} y={p.y - NH / 2 - 3} width={p.w + 6} height={NH + 6} rx="9" fill="none" stroke="#1c1611" stroke-width="1" opacity="0.35" />
+        {/if}
         <rect x={p.x - p.w / 2} y={p.y - NH / 2} width={p.w} height={NH} rx="7"
               fill={n.col === 0 ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.7)'}
-              stroke={n.colour} stroke-width={n.col === 0 ? 1.5 : 1.8} />
+              stroke={selNode === n.id ? '#1c1611' : n.colour} stroke-width={selNode === n.id ? 3 : n.col === 0 ? 1.5 : 1.8} />
         {#if n.col === 0}<rect x={p.x - p.w / 2} y={p.y - NH / 2} width="4" height={NH} rx="2" fill={n.colour} />{/if}
         <text x={p.x} y={p.y + 3.5} class="nlabel" text-anchor="middle">{n.label}</text>
       </g>
@@ -219,6 +307,55 @@
     </defs>
   </svg>
   </div>
+
+  <div class="cf-insight" class:active={!!sel}>
+    {#if sel?.kind === 'node'}
+      {@const n = nodeOf(sel.id)}
+      {@const lv = liveValue(sel.id)}
+      {@const lvs = NODE_LEVERS[sel.id] ?? []}
+      <div class="ci-head">
+        <span class="ci-kind">{n.col === 0 ? 'Policy lever' : n.col === 1 ? 'Mediator' : 'Outcome'}</span>
+        <span class="ci-title">{n.label}</span>
+        <button class="ci-close" onclick={() => (sel = null)} aria-label="Close">✕</button>
+      </div>
+      {#if NODE_INFO[sel.id]}<p class="ci-desc">{NODE_INFO[sel.id]}</p>{/if}
+      {#if lv}
+        {@const d = lv.v - lv.base}
+        {@const good = (lv.meta?.goodIfUp ? d : -d)}
+        <div class="ci-live">
+          <span class="ci-live-lab">Live · {app.horizon}</span>
+          <span class="ci-live-v">{fmt(lv.v, lv.meta?.dp ?? 1)}<i>{lv.meta?.unit ?? ''}</i></span>
+          {#if Math.abs(d) > 0.005}<span class="ci-live-d" style="color:{good > 0 ? '#2f7d4f' : '#b4455e'}">{signed(d, lv.meta?.dp ?? 1)} vs status quo</span>{/if}
+        </div>
+      {/if}
+      {#if lvs.length}
+        <div class="ci-levers"><span class="ci-lev-lab">Levers behind this</span>
+          {#each lvs as id}<button class="ci-lev" onclick={() => app.focusLever(id)}>{LEVERS_BY_ID[id].label} ↗</button>{/each}
+        </div>
+      {/if}
+      {#if connectedEdges.length}
+        <div class="ci-conn"><span class="ci-lev-lab">Connected links</span>
+          {#each connectedEdges as e}<button class="ci-conn-btn" onclick={() => pickEdge(e)}>{nodeOf(e.from).label} → {nodeOf(e.to).label}</button>{/each}
+        </div>
+      {/if}
+    {:else if sel?.kind === 'edge'}
+      {@const e = edgeOf(sel.id)}
+      <div class="ci-head">
+        <span class="ci-kind kind-{e.kind ?? 'normal'}">{e.kind ?? 'normal'} link</span>
+        <span class="ci-title">{nodeOf(e.from).label} <span class="arr">→</span> {nodeOf(e.to).label}</span>
+        <button class="ci-close" onclick={() => (sel = null)} aria-label="Close">✕</button>
+      </div>
+      <p class="ci-desc">{edgeDesc(e)}</p>
+      {#if NODE_LEVERS[e.from]}
+        <div class="ci-levers"><span class="ci-lev-lab">Tune this relationship</span>
+          {#each NODE_LEVERS[e.from] as id}<button class="ci-lev" onclick={() => app.focusLever(id)}>{LEVERS_BY_ID[id].label} ↗</button>{/each}
+        </div>
+      {/if}
+    {:else}
+      <p class="ci-prompt">▸ Click any box or arrow to inspect the relationship — its mechanism, the evidence behind it, its live value, and the levers that move it.</p>
+    {/if}
+  </div>
+
   <figcaption>
     <span class="cf-legtitle">How to read the arrows</span>
     <div class="cf-legend">
@@ -232,7 +369,7 @@
         </span>
       {/each}
     </div>
-    <p class="cf-note">Driver boxes are tinted by policy-lever group. Arrows point from cause to effect. Hover any box to isolate its links.</p>
+    <p class="cf-note">Driver boxes are tinted by policy-lever group. Arrows point from cause to effect. <b>Hover</b> to isolate a box's links; <b>click</b> any box or arrow to inspect the relationship.</p>
   </figcaption>
 </figure>
 
@@ -258,4 +395,30 @@
   .lg-txt b { font-size: 11.5px; font-weight: 600; color: var(--ink, #1c1611); }
   .lg-txt i { font-style: normal; font-size: 9.5px; color: rgba(28,22,17,0.55); }
   .cf-note { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
+
+  /* ---- click-to-inspect insight panel ---- */
+  .cf-insight { margin-top: 10px; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; min-height: 52px; }
+  .cf-insight.active { border-color: rgba(28,22,17,0.3); border-left: 3px solid #b4632e; background: rgba(255,255,255,0.6); }
+  .ci-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+  .ci-kind { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: rgba(28,22,17,0.6); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+  .ci-kind.kind-strong { background: #2f7d4f; }
+  .ci-kind.kind-weak { background: #9a7b1f; }
+  .ci-kind.kind-risk { background: #b1455e; }
+  .ci-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); flex: 1; }
+  .ci-title .arr { color: rgba(28,22,17,0.4); margin: 0 2px; }
+  .ci-close { background: transparent; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+  .ci-close:hover { color: var(--ink, #1c1611); }
+  .ci-desc { margin: 0 0 7px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.82); }
+  .ci-live { display: inline-flex; align-items: baseline; gap: 9px; background: rgba(28,22,17,0.04); border-radius: 6px; padding: 4px 9px; margin-bottom: 7px; }
+  .ci-live-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
+  .ci-live-v { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink, #1c1611); }
+  .ci-live-v i { font-style: normal; font-size: 9px; opacity: 0.55; margin-left: 1px; }
+  .ci-live-d { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; }
+  .ci-levers, .ci-conn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+  .ci-lev-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); margin-right: 2px; }
+  .ci-lev { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #b4632e; background: rgba(180,99,46,0.08); border: 1px solid rgba(180,99,46,0.3); border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+  .ci-lev:hover { background: rgba(180,99,46,0.16); }
+  .ci-conn-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.7); background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.15); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
+  .ci-conn-btn:hover { background: rgba(28,22,17,0.1); }
+  .ci-prompt { margin: 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.55); }
 </style>
