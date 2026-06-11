@@ -1703,3 +1703,37 @@ export const forgeSchedules = pgTable('forge_schedules', {
 
 export type ForgeSchedule = typeof forgeSchedules.$inferSelect;
 export type NewForgeSchedule = typeof forgeSchedules.$inferInsert;
+
+// Policy-engine live-data observation layer. One authoritative row per tracked
+// indicator per official reference period: what reality actually was, alongside
+// the model's projected value for that year under BOTH the status-quo and the
+// announced-policy scenarios, plus a freshness stamp. Written by the ingest route
+// (driven by jkai cron workflows); read by the /monitor page. Mirrors the
+// openrouter_models cached-external-data precedent (raw jsonb + fetchedAt).
+export const policyIndicatorSnapshots = pgTable(
+  'policy_indicator_snapshots',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    indicatorKey: text('indicator_key').notNull(),            // 'attainment8', 'persistentAbsence', …
+    observedValue: numeric('observed_value', { precision: 14, scale: 4 }),
+    unit: text('unit').notNull(),
+    refYear: integer('ref_year').notNull(),                   // calendar year the value describes
+    refPeriodLabel: text('ref_period_label'),                 // '2024/25', 'Jan–Mar 2026'
+    source: text('source').notNull(),                         // 'DfE EES — KS4 performance'
+    sourceUrl: text('source_url'),
+    releaseDate: timestamp('release_date', { withTimezone: true }), // official publish date (EES lastPublished)
+    releaseHash: text('release_hash'),                        // content hash for cheap change-detection
+    projectedBaseline: numeric('projected_baseline', { precision: 14, scale: 4 }), // status-quo projection @ refYear
+    projectedPolicy: numeric('projected_policy', { precision: 14, scale: 4 }),      // announced-policy projection @ refYear
+    statusVsBaseline: text('status_vs_baseline').notNull().default('no-data'), // on-track | off-track | no-data
+    statusVsPolicy: text('status_vs_policy').notNull().default('no-data'),
+    provenanceNote: text('provenance_note'),                  // optional LLM-written one-liner about the release
+    raw: jsonb('raw'),                                        // full upstream payload (audit)
+    live: boolean('live').notNull().default(true),            // true = fetched, false = snapshot fallback
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('policy_indicator_snapshot_key_period_idx').on(t.indicatorKey, t.refYear)],
+);
+
+export type PolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferSelect;
+export type NewPolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferInsert;
