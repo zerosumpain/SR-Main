@@ -64,6 +64,16 @@ const SYNONYMS: Record<string, string[]> = {
   cost: ['funding', 'spending', 'value', 'cost-effectiveness'],
   curriculum: ['francis', 'standards', 'reading', 'oracy'],
   jigsaw: ['safeguarding', 'data sharing', 'multi-agency', 'csprp'],
+  // report-attributed "what should change" layer (directions.ts) — bridge the asking vocabulary
+  milburn: ['young people and work', 'neet', 'youth', 'participation', 'directions', 'fork in the road'],
+  improvements: ['directions', 'recommendations', 'asks', 'change', 'moves', 'memo'],
+  improvement: ['directions', 'recommendations', 'asks', 'change', 'moves'],
+  recommendations: ['directions', 'asks', 'proposals', 'improvements', 'milburn', 'change'],
+  recommend: ['directions', 'recommendations', 'asks', 'proposals', 'milburn'],
+  directions: ['recommendations', 'asks', 'change', 'milburn', 'participation'],
+  participation: ['milburn', 'participation by design', 'neet', 'youth guarantee', 'entry level'],
+  jobs: ['employment', 'work', 'entry level', 'apprenticeships', 'youth', 'neet'],
+  entry: ['entry level', 'jobs', 'work experience', 'apprenticeships', 'demand', 'milburn'],
 };
 
 // ---- build the BM25 index once at module load ----

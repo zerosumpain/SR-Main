@@ -30,6 +30,13 @@ describe('corpus retrieval', () => {
     expect(/early years|eyfs|gld|30 hour|two-year|disadvantage/.test(text)).toBe(true);
   });
 
+  it('surfaces the Milburn "what should change" directions for an improvements question', () => {
+    const r = retrieve('what improvements does the Milburn review recommend for youth NEET and entry-level jobs?', 10);
+    expect(r.some((c) => c.sourceKey.includes('directions.ts'))).toBe(true);
+    const text = r.map((c) => (c.title + ' ' + c.text).toLowerCase()).join(' ');
+    expect(/entry-level|participation|young people and work|youth labour market/.test(text)).toBe(true);
+  });
+
   it('finds methodology content for a calculation question', () => {
     const r = retrieve('how is attainment 8 calculated, teacher capacity not funding', 8);
     const text = r.map((c) => (c.title + ' ' + c.text).toLowerCase()).join(' ');
