@@ -45,7 +45,7 @@ describe('NEET segments', () => {
   });
 
   it('new levers carry cost', () => {
-    for (const id of ['youth_guarantee', 'careers_gatsby', 'apprenticeships', 'post16_premium']) {
+    for (const id of ['youth_guarantee', 'careers_gatsby', 'apprenticeships', 'post16_premium', 'entry_level']) {
       const sim = runSim(maxed(baselineLevers(), id));
       expect(at(sim.years, 2030).cumulativeCost).toBeGreaterThan(0);
     }

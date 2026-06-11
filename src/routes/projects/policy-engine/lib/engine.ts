@@ -574,6 +574,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       + Math.max(0, val('youth_guarantee') - 15) / 85 * COST.youthGuaranteeFullBn
       + Math.max(0, val('careers_gatsby') - 35) / 65 * COST.careersFullBn
       + Math.max(0, val('apprenticeships') - 30) / 70 * COST.apprenticeshipsFullBn
+      + Math.max(0, val('entry_level') - 25) / 75 * COST.entryLevelFullBn
       + val('post16_premium') * COST.post16PremiumPerPound
       + ageIdDelta // SEND/EHCP identification-by-age: additional ("stretch") cost vs baseline
       + Math.max(0, val('send_pipeline') - 30) / 70 * COST.sendPipelineFullBn

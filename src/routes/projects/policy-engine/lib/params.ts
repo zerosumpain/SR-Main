@@ -405,6 +405,7 @@ export const COST = {
   youthGuaranteeFullBn: 1.2,                  // £bn/yr full Youth+Jobs Guarantee (£820m/3yr + £1bn 18–24 expansion ≈ £1.2bn/yr at scale) [Commons Library CBP-10827]
   careersFullBn: 0.3,                         // £bn full Gatsby-benchmark careers infrastructure (CEC scale-up)
   apprenticeshipsFullBn: 1.0,                 // £bn full 16–24 start recovery (SME full funding + levy reform headroom)
+  entryLevelFullBn: 0.5,                      // £bn full demand-side effort (wage subsidies + work-experience funding) [ASSUMPTION — no costed programme]
   post16PremiumPerPound: 0.43e6 / 1e9,        // £bn per £1/student over ~0.43m disadvantaged 16–18s [IFS/EPI]
   readingFullBn: 0.15,                        // £bn full reading/oracy CPD programme [Reading Ambition]
   // wider determinants & services
