@@ -218,7 +218,7 @@ export const CH: ChannelParams = {
     place_investment: 3, tutoring: 1, eal_support: 2, care_support: 2, behaviour_support: 2,
     mission_ne: 5, mission_coastal: 5,
     send_pipeline: 3, camhs: 2, housing_instability: 2,
-    youth_guarantee: 2, careers_gatsby: 3, apprenticeships: 3, post16_premium: 3,
+    youth_guarantee: 2, careers_gatsby: 3, apprenticeships: 3, post16_premium: 3, entry_level: 2,
     eypp: 6, ey_quality: 7, ey_access: 6,   // early-years channels are slow
   },
 };
@@ -282,6 +282,7 @@ export const POST16 = {
   careersMax: band(0.2, 0.7, 1.4),          // pp off NEET inflow at full Gatsby coverage [CEC/Gatsby: −8% NEET likelihood, −20% in disadvantaged schools — CORRELATIONAL]
   apprenticeshipsMax: band(0.2, 0.8, 1.8),  // pp off unemployed-NEET at full 16–24 start recovery [YFF toolkit: high impact / LOW evidence security — deliberately wide]
   post16PremiumMax: band(0.1, 0.5, 1.0),    // pp off NEET (U+O) via post-16 retention [EPI 16–19 premium proposal; no causal estimate exists]
+  entryLevelMax: band(0.2, 0.7, 1.6),       // pp off UNEMPLOYED NEET at full demand-side effort [Milburn #1 diagnosis; YFF low evidence-security ⇒ wide band]
 };
 
 // ---------------------------------------------------------------------------
@@ -310,6 +311,7 @@ export const NEETSEG = {
   // re-engagement levers act on the EXISTING stock, not just inflow:
   persistCutU: band(0.05, 0.12, 0.22),   // absolute cut in unemployed persistence at full Youth/Jobs Guarantee [Youth Contract keyworker model]
   persistCutIH: band(0.03, 0.08, 0.15),  // absolute cut in health persistence at full MH+CAMHS [ASSUMPTION — no UK estimate exists]
+  entryLevelPersistCutU: band(0.02, 0.06, 0.12), // absolute cut in unemployed persistence (entry jobs let the existing stock exit) [ASSUMPTION]
 };
 
 // Upstream pipeline pressure: pp of headline NEET per unit deviation of the modelled

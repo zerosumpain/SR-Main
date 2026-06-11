@@ -473,6 +473,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       R(POST16.neetMax) * concave(depPos('post16_skills')) * ramp(ys, 2),
       R(POST16.youthGuaranteeMax) * concave(depPos('youth_guarantee')) * ramp(ys, 2),
       R(POST16.apprenticeshipsMax) * concave(depPos('apprenticeships')) * ramp(ys, 3),
+      R(POST16.entryLevelMax) * concave(depPos('entry_level')) * ramp(ys, 2),
       0.5 * R(POST16.post16PremiumMax) * concave(depPos('post16_premium')) * ramp(ys, 3),
       0.6 * R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2), // exclusion→AP→NEET pipeline
       R(IND.placeNeet) * concave(depPos('place_investment')) * ramp(ys, 2),
@@ -493,6 +494,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const neetInactiveOther = clamp(ioPressure * survive([
       0.3 * careersCut,
       0.5 * R(POST16.post16PremiumMax) * concave(depPos('post16_premium')) * ramp(ys, 3),
+      0.4 * R(POST16.entryLevelMax) * concave(depPos('entry_level')) * ramp(ys, 2),
       0.4 * R(IND.behaviourNeet) * concave(depPos('behaviour_support')) * ramp(ys, 2),
       0.5 * R(IND.careNeet) * concave(depPos('care_support')) * ramp(ys, 2),
     ], BASELINE.neetInactiveOther), 1.0, 9);
@@ -500,7 +502,7 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const neet = neetUnemployed + neetInactiveHealth + neetInactiveOther;
     if (year === traceYear) {
       const terms: TraceTerm[] = [
-        { label: 'Unemployed-active', symbol: 'cyclical segment', value: neetUnemployed, leverIds: ['youth_guarantee', 'apprenticeships', 'careers_gatsby', 'post16_skills'], note: 'Moved by work-route levers; cuts act multiplicatively (proportional hazards) so overlapping programmes saturate.' },
+        { label: 'Unemployed-active', symbol: 'cyclical segment', value: neetUnemployed, leverIds: ['youth_guarantee', 'apprenticeships', 'careers_gatsby', 'post16_skills', 'entry_level'], note: 'Moved by work-route levers (incl. the demand-side entry_level); cuts act multiplicatively (proportional hazards) so overlapping programmes saturate.' },
         { label: 'Inactive — health', symbol: 'sticky segment', value: neetInactiveHealth, leverIds: ['mental_health', 'camhs'], note: 'The Milburn "generational fault line": ~8 in 10 still NEET 2+ years on; responds to mental-health/CAMHS, not job schemes.' },
         { label: 'Inactive — other', symbol: 'caring / discouraged', value: neetInactiveOther, leverIds: ['post16_premium', 'care_support', 'behaviour_support'] },
       ];
@@ -513,7 +515,8 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     // Youth/Jobs Guarantee keyworker model cuts unemployed persistence; MH + CAMHS
     // chip the (much stickier) health persistence. [Milburn 2026: 6 in 10 never worked]
     const pU = clamp(R(NEETSEG.persist.unemployed)
-      - R(NEETSEG.persistCutU) * concave(depPos('youth_guarantee')) * ramp(ys, 2), 0.10, 0.95);
+      - R(NEETSEG.persistCutU) * concave(depPos('youth_guarantee')) * ramp(ys, 2)
+      - R(NEETSEG.entryLevelPersistCutU) * concave(depPos('entry_level')) * ramp(ys, 2), 0.10, 0.95);
     const pIH = clamp(R(NEETSEG.persist.health)
       - R(NEETSEG.persistCutIH) * concave(0.6 * depPos('mental_health') + 0.4 * depPos('camhs')) * ramp(ys, NEETSEG.healthLag), 0.30, 0.97);
     const pIO = R(NEETSEG.persist.other);

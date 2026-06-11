@@ -50,6 +50,24 @@ describe('NEET segments', () => {
       expect(at(sim.years, 2030).cumulativeCost).toBeGreaterThan(0);
     }
   });
+
+  it('entry_level acts on the unemployed segment, lightly on "other", and NOT on health', () => {
+    const base = at(runSim(baselineLevers()).years, 2035);
+    const el = at(runSim(maxed(baselineLevers(), 'entry_level')).years, 2035);
+    const dU = base.neetUnemployed - el.neetUnemployed;
+    const dIO = base.neetInactiveOther - el.neetInactiveOther;
+    const dIH = base.neetInactiveHealth - el.neetInactiveHealth;
+    expect(dU).toBeGreaterThan(0.2);                 // demand-side cuts unemployed-NEET inflow
+    expect(dIO).toBeGreaterThan(0);                  // the "Saturday job ladder" helps the discouraged a little
+    expect(dIO).toBeLessThan(dU);                    // ...but less than the unemployed segment
+    expect(Math.abs(dIH)).toBeLessThan(0.05);        // a vacancy does not fix a health condition
+  });
+
+  it('entry_level cuts unemployed persistence (long-term share falls)', () => {
+    const base = at(runSim(baselineLevers()).years, 2035);
+    const el = at(runSim(maxed(baselineLevers(), 'entry_level')).years, 2035);
+    expect(el.neetLongTerm / el.neet).toBeLessThan(base.neetLongTerm / base.neet);
+  });
 });
 
 describe('NEET persistence (long-term stock)', () => {
