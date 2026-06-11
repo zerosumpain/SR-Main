@@ -218,6 +218,29 @@ export const CONTRADICTIONS: Contradiction[] = [
     confidence: 'contested',
     themes: ['equity-not-money', 'measurement-validity'], levers: ['school_funding', 'teachers'], outcomes: ['attainment8', 'gapKS4'],
   },
+  {
+    id: 'neet-activation-health',
+    question: 'Will work-first activation move the health-driven NEET segment?',
+    short: 'Activation vs health-driven',
+    campA: {
+      label: 'Activation works',
+      who: ['DWP (Youth Guarantee / Jobs Guarantee)', 'Get Britain Working'],
+      claim: 'Most NEETs want to work (84% per Milburn); keyworker-led re-engagement, job-matching and a guaranteed offer move young people into work or training.',
+      evidence: 'The 2012–14 Youth Contract keyworker model produced ≈ +1.8pp re-engagement; the Youth Guarantee funds £820m over 2026/27–28/29 plus an 18–24 Jobs Guarantee.',
+    },
+    campB: {
+      label: 'Health-driven and sticky',
+      who: ['Milburn review (DWP)', 'Resolution Foundation'],
+      claim: 'Youth inactivity is increasingly driven by ill-health, not cyclical unemployment, so job-matching schemes do not reach the largest, growing segment — a vacancy does not fix a health condition.',
+      evidence: 'Health-related NEET reasons rose ~70% in a decade; ~8 in 10 of those entering health-related inactivity are still NEET 2+ years later; mental health is the primary condition for >4 in 10 disabled NEETs.',
+    },
+    engineAssumes: 'The cautious reading: the Youth/Jobs Guarantee and entry-level levers act on the unemployed-active (and lightly the "other") segment but have NO effect on the health segment, which responds only to mental_health/CAMHS. So a work-first-only package leaves the fastest-growing segment largely untouched.',
+    whatWouldResolve: 'A randomised or quasi-experimental evaluation of the Youth Guarantee that reports effects separately for the health-inactive segment, linked to administrative health and earnings outcomes.',
+    confidence: 'contested',
+    themes: ['early-identification', 'participation-by-design'],
+    levers: ['youth_guarantee', 'mental_health', 'camhs', 'entry_level'],
+    outcomes: ['neetInactiveHealth', 'neet'],
+  },
 ];
 
 export const CONTRADICTIONS_BY_ID: Record<string, Contradiction> = Object.fromEntries(CONTRADICTIONS.map((c) => [c.id, c]));
