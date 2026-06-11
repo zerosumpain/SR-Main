@@ -90,16 +90,13 @@
 
   <div class="topstack" bind:clientHeight={topH}>
     <header class="masthead">
-      <a class="back" href="/projects">← Field studies</a>
+      <a class="back" href="/projects" title="Back to the field studies">←&nbsp;<span class="lbl">Field studies</span></a>
       <a class="brand" href="/projects/policy-engine">Education Policy Modelling</a>
-      <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰ Levers</button>
+      <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰<span class="lbl">&nbsp;Levers</span></button>
       <span class="tagline">ENGLAND SCHOOLS · 2025–2040</span>
-      <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">? How to use</button>
+      <button class="help-btn" onclick={() => (app.showHelp = true)} title="How to use this">?<span class="lbl">&nbsp;How to use</span></button>
     </header>
 
-    {#if app.mounted && app.insolvencyYear}
-      <div class="cliff" role="alert">⚠ <b>SEND funding cliff:</b> the DSG override ends March 2028; on this path the high-needs deficit breaches insolvency by <b>{app.insolvencyYear}</b> (£{app.horizonDeficit.toFixed(0)}bn by {app.horizon}). <a href="/projects/policy-engine/outcomes">See the deficit ↗</a></div>
-    {/if}
   </div>
 
   <div class="shell" class:open={app.drawerOpen} class:peek={app.drawerMode === 'peek'} style="--topH:{topH}px">
@@ -121,7 +118,7 @@
         <ScenarioSelector />
         <p class="scene-desc">{app.scenarioDescription}</p>
         <details class="ctrl-disc">
-        <summary class="ctrl-sum">⚙ Scenario controls</summary>
+        <summary class="ctrl-sum">⚙ Controls</summary>
         <div class="controls">
           <div class="seg" role="group" aria-label="Horizon">{#each [2030, 2035, 2040] as h}<button class:on={app.horizon === h} onclick={() => app.setHorizon(h)}>{h}</button>{/each}</div>
           <select class="csel" class:on={app.region !== 'all'} bind:value={app.region} title="Re-base onto a region or the coastal cross-cut">{#each REGION_OPTIONS as o}<option value={o.code}>{o.name}</option>{/each}</select>
@@ -213,6 +210,8 @@
     .ctrl-sum::-webkit-details-marker { display: none; }
     .ctrl-disc[open] .ctrl-sum { background: var(--ink); color: var(--paper); border-color: var(--ink); }
     .ctrl-disc .controls { margin: 8px 0 2px; }
+    /* description drops to one line on its own row; selector + controls share the top row */
+    .scene-desc { order: 2; flex: 1 1 100%; min-width: 0; -webkit-line-clamp: 1; margin-top: 1px; }
   }
   .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 6px; }
   .seg button { background: transparent; border: none; color: var(--ink); padding: 4px 9px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
@@ -227,8 +226,6 @@
   .cmp-badge { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #3a5fa8; background: rgba(58,95,168,0.1); border: 1px solid rgba(58,95,168,0.3); border-radius: 5px; padding: 3px 7px; }
   .cmp-badge i { width: 8px; height: 3px; border-radius: 2px; background: #3a5fa8; }
 
-  .cliff { margin: 4px 28px 8px; padding: 7px 12px; font-size: 12px; line-height: 1.45; border-radius: 7px; background: rgba(177,69,94,0.1); color: #8a2d3a; border: 1px solid rgba(177,69,94,0.25); }
-  .cliff b { color: #6f2230; } .cliff a { color: #8a2d3a; }
 
   /* two-column app shell: the levers dock IN FLOW beside the data, so moving a slider visibly
      updates the adjacent charts. The sidebar is sticky (stays as the content scrolls); never overlays on desktop. */
@@ -290,9 +287,16 @@
   .sources-foot a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
 
   @media (max-width: 760px) {
-    .masthead { padding: 9px 14px 8px; } .scenebar { padding: 9px 14px; }
-    .cliff { margin: 4px 14px 8px; } .foot { padding: 16px 14px 22px; } .subnav { margin-left: 0; }
+    .masthead { padding: 9px 14px 8px; gap: 6px 10px; } .scenebar { padding: 9px 14px; }
+    .foot { padding: 16px 14px 22px; } .subnav { margin-left: 0; }
     :global(.pe-route) { padding: 18px 14px 8px; }
+    .tagline { display: none; }
+  }
+  @media (max-width: 600px) {
+    /* collapse the chrome buttons to icons so the masthead fits ~1 row */
+    .back .lbl, .levers-btn .lbl, .help-btn .lbl { display: none; }
+    .brand { font-size: 14.5px; }
+    .help-btn, .levers-btn { padding: 5px 9px; }
   }
 
   /* ---- Ask the model: floating launcher + slide-in dock ---- */
