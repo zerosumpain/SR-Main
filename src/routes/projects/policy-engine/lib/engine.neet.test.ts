@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { runSim } from './engine';
 import { baselineLevers, policyLevers, LEVERS_BY_ID } from './levers';
 import { BASELINE } from './params';
+import { PRESETS } from './scenarios';
 
 const at = (years: ReturnType<typeof runSim>['years'], y: number) => years.find((r) => r.year === y)!;
 const maxed = (base: Record<string, number>, id: string) => ({ ...base, [id]: LEVERS_BY_ID[id].max });
@@ -98,5 +99,15 @@ describe('NEET persistence (long-term stock)', () => {
     const base = at(runSim(baselineLevers()).years, 2035);
     const mh = at(runSim(maxed(baselineLevers(), 'mental_health')).years, 2035);
     expect(mh.neetLongTerm / mh.neet).toBeLessThan(base.neetLongTerm / base.neet);
+  });
+});
+
+describe('Milburn-aligned response preset', () => {
+  it('is registered and projects lower NEET than announced policy', () => {
+    const preset = PRESETS.find((p) => p.name === 'Milburn-aligned response');
+    expect(preset).toBeDefined();
+    const pol = at(runSim(policyLevers()).years, 2035);
+    const milburn = at(runSim(preset!.levers).years, 2035);
+    expect(milburn.neet).toBeLessThan(pol.neet);
   });
 });

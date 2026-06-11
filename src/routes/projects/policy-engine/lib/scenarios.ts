@@ -3,6 +3,7 @@
 
 import type { LeverState, Scenario, ScenarioStore } from './types';
 import { baselineLevers, policyLevers, LEVERS } from './levers';
+import { milburnPackageLevers } from './directions';
 
 const STORAGE_KEY = 'whitehall-model-v1';
 
@@ -41,6 +42,13 @@ export const PRESETS: Preset[] = [
     levers: baselineLevers(),
     optimize: true,
     budget: 5,
+  },
+  {
+    name: 'Milburn-aligned response',
+    eli5Name: 'A response to the youth-NEET crisis',
+    eli5Desc: 'Tries the mix the Milburn review\'s diagnosis points to: more entry-level jobs, guaranteed training or work, apprenticeships, careers help, post-16 support and youth mental-health care. The model is genuinely unsure how big the effect is.',
+    description: 'A defensible participation-first package the Milburn diagnosis points toward — NOT the review\'s recommendations (those follow in autumn 2026). Lifts the demand-side entry-level lever, the Youth/Jobs Guarantee, apprenticeships, careers, post-16 retention AND youth mental-health/CAMHS, hitting all three NEET segments. Subject to the engine\'s wide uncertainty: every youth lever here is low-confidence.',
+    levers: milburnPackageLevers(policyLevers()),
   },
 ];
 
