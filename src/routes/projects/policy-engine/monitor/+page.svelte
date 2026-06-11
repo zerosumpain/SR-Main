@@ -9,7 +9,11 @@
   import StorySection from '../components/StorySection.svelte';
   import AnalysisOnOutcome from '../components/AnalysisOnOutcome.svelte';
   import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
+  import TrackingDashboard from '../components/TrackingDashboard.svelte';
   import { STORIES } from '../lib/stories';
+  import type { PageData } from './$types';
+
+  let { data }: { data: PageData } = $props();
   import {
     SUBSID_NOTES, SECTOR_LEDGER, TRUST_LEDGER, COUNTERWEIGHTS, SHARING_LADDER, AGENDAS,
     SUBSID_TEST, SUBSID_PRINCIPLES,
@@ -80,6 +84,24 @@
       </p>
     {/if}
   </div>
+
+  <!-- ===================== 0 · live tracking — model vs reality ===================== -->
+  <section class="block">
+    <h2 class="pe-h2">Is reality tracking the model?</h2>
+    <p class="cap">
+      {#if eli}
+        The whole point of a model is to be checked against what actually happens. Below, every projection the simulator can be held to is
+        lined up against the real official number — and a robot quietly refreshes it whenever the government publishes new data, stamping when
+        it last changed. Green means reality is keeping up with the plan; red means it has fallen behind.
+      {:else}
+        A model that never meets reality is just a confident guess. This table closes the loop: each indicator the engine projects is paired
+        with its live official counterpart (DfE Explore Education Statistics, ONS, the World Bank), compared against <b>both</b> the status-quo and
+        announced-policy trajectories, and refreshed automatically by scheduled jkai workflows — each carrying a "data last updated" stamp drawn
+        from the source's own publication date.
+      {/if}
+    </p>
+    <TrackingDashboard tracked={data.tracked} />
+  </section>
 
   <!-- ===================== 1 · the measurement problem ===================== -->
   <section class="block">
