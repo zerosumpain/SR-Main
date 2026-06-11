@@ -3,6 +3,7 @@
   // live-scenario snapshot) and NOTHING from jkai/hermes/orchestrator. Posts to ./chat (the scoped
   // endpoint), streams the answer, and shows the sources it grounded on. Conversation is ephemeral
   // (in-page + localStorage), never written to any shared conversation store.
+  import { onMount } from 'svelte';
   import { app } from '../lib/appState.svelte';
   import { LEVERS_BY_ID } from '../lib/levers';
   import { OUTCOMES_BY_ID, SCORECARD_IDS } from '../lib/outcomes';
@@ -27,11 +28,14 @@
     'How would we know if any of this is working — what data is missing?',
   ];
 
-  $effect(() => {
-    // hydrate once on mount
-    if (messages.length === 0 && typeof localStorage !== 'undefined') {
-      try { const s = localStorage.getItem(STORE_KEY); if (s) messages = JSON.parse(s); } catch { /* ignore */ }
-    }
+  // Hydrate once, in onMount — NOT an $effect. An $effect that both READS `messages` and
+  // WRITES `messages` re-fires on its own output and, when localStorage holds "[]", loops to
+  // effect_update_depth_exceeded — which crashes the page's hydration and kills every click.
+  onMount(() => {
+    try {
+      const s = localStorage.getItem(STORE_KEY);
+      if (s) { const parsed = JSON.parse(s); if (Array.isArray(parsed) && parsed.length) messages = parsed; }
+    } catch { /* ignore */ }
   });
   function persist() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(messages.slice(-20))); } catch { /* ignore */ }
