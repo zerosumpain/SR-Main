@@ -12,10 +12,12 @@
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import SectionNav from './components/SectionNav.svelte';
   import Onboarding from './components/Onboarding.svelte';
+  import AskModel from './components/AskModel.svelte';
 
   let { children } = $props();
   const STORAGE = 'whitehall-model-levers-v1';
   let copied = $state(false);
+  let askOpen = $state(false); // the project-scoped "Ask the model" dock
   let topH = $state(0); // measured sticky-header height, so the levers sidebar docks right beneath it
 
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
@@ -147,6 +149,24 @@
     </details>
     <p class="foot-disc">Education Policy Modelling · <code>/projects/policy-engine</code> · a decision-support tool, <b>not an official forecast</b>. Evidence-backed (see the {SOURCES.length} sources and the <a href="/projects/policy-engine/method">Method</a> page), but figures are estimates. Built autonomously with Claude Code in combination with other AI models.</p>
   </footer>
+
+  <!-- Project-scoped "Ask the model" dock — present on every route, bound only to this project -->
+  {#if !askOpen}
+    <button class="ask-fab" onclick={() => (askOpen = true)} title="Ask questions of this project's data, evidence and model">
+      <span class="fab-mark">✦</span> Ask the model
+    </button>
+  {/if}
+  {#if askOpen}
+    <button class="ask-scrim" aria-label="Close" onclick={() => (askOpen = false)}></button>
+    <aside class="ask-dock" role="dialog" aria-label="Ask the model">
+      <header class="ask-dock-head">
+        <span class="adh-title">✦ Ask the model</span>
+        <span class="adh-sub">grounded in this project only</span>
+        <button class="adh-close" onclick={() => (askOpen = false)} aria-label="Close">✕</button>
+      </header>
+      <div class="ask-dock-body"><AskModel compact /></div>
+    </aside>
+  {/if}
 </div>
 
 <style>
@@ -274,4 +294,21 @@
     .cliff { margin: 4px 14px 8px; } .foot { padding: 16px 14px 22px; } .subnav { margin-left: 0; }
     :global(.pe-route) { padding: 18px 14px 8px; }
   }
+
+  /* ---- Ask the model: floating launcher + slide-in dock ---- */
+  .ask-fab { position: fixed; z-index: 60; right: 20px; bottom: 20px; display: inline-flex; align-items: center; gap: 7px;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--paper, #f1ead6); background: #3f7d6e;
+    border: none; border-radius: 24px; padding: 11px 18px; cursor: pointer; box-shadow: 0 6px 22px -8px rgba(63,125,110,0.7); }
+  .ask-fab:hover { background: #356b5e; }
+  .fab-mark { font-size: 14px; }
+  .ask-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(28,22,17,0.28); border: none; cursor: pointer; }
+  .ask-dock { position: fixed; z-index: 71; top: 0; right: 0; height: 100vh; width: min(460px, 94vw);
+    background: var(--paper, #f1ead6); border-left: 1px solid rgba(28,22,17,0.18); box-shadow: -10px 0 36px -18px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; }
+  .ask-dock-head { display: flex; align-items: baseline; gap: 9px; padding: 13px 16px 10px; border-bottom: 1px solid rgba(28,22,17,0.12); }
+  .adh-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; color: var(--ink, #1c1611); }
+  .adh-sub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
+  .adh-close { margin-left: auto; background: none; border: none; font-size: 15px; color: rgba(28,22,17,0.5); cursor: pointer; }
+  .adh-close:hover { color: var(--ink, #1c1611); }
+  .ask-dock-body { flex: 1; min-height: 0; padding: 12px 16px 14px; display: flex; flex-direction: column; }
 </style>
