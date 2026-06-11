@@ -164,7 +164,7 @@
         <span class="adh-sub">grounded in this project only</span>
         <button class="adh-close" onclick={() => (askOpen = false)} aria-label="Close">✕</button>
       </header>
-      <div class="ask-dock-body"><AskModel compact /></div>
+      <div class="ask-dock-body"><AskModel compact onClose={() => (askOpen = false)} /></div>
     </aside>
   {/if}
 </div>

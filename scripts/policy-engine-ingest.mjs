@@ -167,6 +167,32 @@ async function fetchDoc(url) {
 }
 
 // ---------------------------------------------------------------------------
+// map every project source to the in-app route where it lives, so its chip is a
+// clickable link into the project (the keystone docs already carry external URLs).
+// ---------------------------------------------------------------------------
+const BASE = '/projects/policy-engine';
+const LIB_ROUTE = {
+  'sendIntel.ts': '/send', 'jigsawIntel.ts': '/jigsaw', 'earlyYearsIntel.ts': '/early-years',
+  'monitorIntel.ts': '/monitor', 'attendanceIntel.ts': '/attendance', 'regionsIntel.ts': '/regions',
+  'populationIntel.ts': '/population', 'globalIntel.ts': '/global', 'neet.ts': '/neet',
+  'memo.ts': '/memo', 'triage.ts': '/neet', 'uplift.ts': '/neet',
+  'levers.ts': '/method', 'params.ts': '/method', 'outcomes.ts': '/method',
+  'stories.ts': '/themes', 'themes.ts': '/themes', 'evidence.ts': '/themes', 'contradictions.ts': '/themes',
+  'sources.ts': '/method', 'measurement.ts': '/monitor', 'dataestate.ts': '/monitor', 'monitoring.ts': '/monitor',
+  'summaries.ts': '/outcomes', 'scenarios.ts': '/build', 'comparators.ts': '/global', 'regions.ts': '/regions',
+  'Methodology.svelte': '/method', 'CausalFlow.svelte': '/method', 'CalcViewer.svelte': '/method',
+};
+function routeFor(rel) {
+  if (rel.endsWith('+page.svelte')) {
+    const m = rel.match(/policy-engine\/(.+)\/\+page\.svelte$/);
+    return m ? `${BASE}/${m[1]}` : BASE; // landing page → the overview
+  }
+  const key = basename(rel);
+  if (LIB_ROUTE[key]) return BASE + LIB_ROUTE[key];
+  return `${BASE}/method`; // research dossiers / specs → the methodology & calibration page
+}
+
+// ---------------------------------------------------------------------------
 // build
 // ---------------------------------------------------------------------------
 const chunks = [];
@@ -184,7 +210,9 @@ for (const [rel, title] of [...PROJECT_FILES.map((x) => [`${PE}/${x[0]}`, x[1], 
   if (!existsSync(p)) { console.warn('  skip (missing):', rel); continue; }
   let text = readFileSync(p, 'utf-8');
   if (rel.endsWith('.svelte')) text = stripSvelteStyle(text);
-  push(basename(rel), rel.includes('/docs/') ? 'research' : 'project', title, null, text);
+  // sourceKey = the full path (unique per file — fixes every +page.svelte colliding on "+page.svelte");
+  // url = the in-app route so the chip links into the relevant study/page.
+  push(rel, rel.includes('/docs/') ? 'research' : 'project', title, routeFor(rel), text);
   projOk++;
 }
 console.log(`Project corpus: ${projOk} files → ${chunks.length} chunks`);

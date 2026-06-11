@@ -11,7 +11,7 @@
   interface Source { n: number; title: string; sourceType: string; url: string | null }
   interface Msg { role: 'user' | 'assistant'; content: string; sources?: Source[] }
 
-  let { compact = false }: { compact?: boolean } = $props();
+  let { compact = false, onClose }: { compact?: boolean; onClose?: () => void } = $props();
 
   const STORE_KEY = 'pe-askmodel-v1';
   let messages = $state<Msg[]>([]);
@@ -161,7 +161,10 @@
             <span class="src-lab">Sources</span>
             {#each m.sources as s}
               {#if s.url}
-                <a class="src" data-t={s.sourceType} href={s.url} target="_blank" rel="noopener">{s.n}. {s.title} ↗</a>
+                {@const ext = s.sourceType === 'policy-doc'}
+                <a class="src" data-t={s.sourceType} href={s.url}
+                   target={ext ? '_blank' : null} rel={ext ? 'noopener' : null}
+                   onclick={() => { if (!ext) onClose?.(); }}>{s.n}. {s.title}{ext ? ' ↗' : ''}</a>
               {:else}
                 <span class="src" data-t={s.sourceType}>{s.n}. {s.title}</span>
               {/if}
