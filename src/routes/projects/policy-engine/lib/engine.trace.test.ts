@@ -7,7 +7,12 @@ import { describe, it, expect } from 'vitest';
 import { runSim } from './engine';
 import { baselineLevers, policyLevers } from './levers';
 
-const TRACED = ['gapKS4', 'gapAge3', 'attainment8', 'highNeedsDeficitStock', 'neet'];
+const TRACED = [
+  'gapKS4', 'gapKS2', 'gapReception', 'gapAge3',
+  'attainment8', 'attainment8Dis', 'grade5EM', 'ks2RWM', 'gld',
+  'persistentAbsenceDis', 'childPoverty', 'fundingPerPupil',
+  'highNeedsDeficitStock', 'neet',
+];
 
 describe('calculation trace fidelity', () => {
   const cases: Array<[string, ReturnType<typeof baselineLevers>]> = [['baseline', baselineLevers()], ['policy', policyLevers()]];

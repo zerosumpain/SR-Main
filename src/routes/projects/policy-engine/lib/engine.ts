@@ -143,12 +143,19 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const capacityNorm = clamp((capacity - 0.5) / 0.5, -1, 1.2);               // 0 at baseline, 1 when fully staffed
 
     // ---------------- CHILD POVERTY ----------------
-    const childPoverty = clamp(
-      BASELINE.childPoverty + SYS.povertyDrift * ys
-        - R(SYS.povertyActionMax) * concave(depPos('poverty_action')) * ramp(ys, 3)
-        - R(SYS.fsmPovertyCut) * concave(depPos('fsm')) * ramp(ys, 3),
-      15, 40,
-    );
+    const povDrift = SYS.povertyDrift * ys;
+    const povAction = R(SYS.povertyActionMax) * concave(depPos('poverty_action')) * ramp(ys, 3);
+    const povFsm = R(SYS.fsmPovertyCut) * concave(depPos('fsm')) * ramp(ys, 3);
+    const childPoverty = clamp(BASELINE.childPoverty + povDrift - povAction - povFsm, 15, 40);
+    if (year === traceYear) {
+      const res = BASELINE.childPoverty + povDrift - povAction - povFsm;
+      const terms: TraceTerm[] = [
+        { label: 'Baseline drift', symbol: `${SYS.povertyDrift} · ${ys} years`, value: povDrift, note: 'A modelled upward trend (two-child limit etc.) absent new action [CPAG].' },
+        { label: 'Anti-poverty action', symbol: '− povertyActionMax · f(dep) · ramp', value: -povAction, leverIds: ['poverty_action'] },
+        { label: 'Free school meals', symbol: '− fsmPovertyCut · f(dep) · ramp', value: -povFsm, leverIds: ['fsm'] },
+      ];
+      traceOut.childPoverty = { key: 'childPoverty', title: 'Child poverty', unit: '%', base: BASELINE.childPoverty, baseLabel: '2025 baseline', terms, result: res, engineValue: childPoverty, clamped: Math.abs(res - childPoverty) > 1e-6, codeKey: 'childPoverty' };
+    }
 
     // ---------------- ATTENDANCE ----------------
     const absCut = R(SYS.absenceReductionMax)
@@ -163,11 +170,21 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     // worse above baseline, better below); SEND specialist capacity lets supported pupils attend.
     const housingPA = R(IND.housingPA) * dep('housing_instability') * ramp(ys, 2);
     const pipelinePAcut = R(IND.pipelinePA) * concave(depPos('send_pipeline')) * ramp(ys, 3);
+    const paSystem = SYS.paLeverage * SYS.paDisLeverage * (absenceOverall - BASELINE.absenceOverall);
     const persistentAbsenceDis = clamp(
-      PA_DIS_BASE + SYS.paLeverage * SYS.paDisLeverage * (absenceOverall - BASELINE.absenceOverall)
-        - extraMentorDisCut + housingPA - pipelinePAcut,
+      PA_DIS_BASE + paSystem - extraMentorDisCut + housingPA - pipelinePAcut,
       8, 45,
     );
+    if (year === traceYear) {
+      const res = PA_DIS_BASE + paSystem - extraMentorDisCut + housingPA - pipelinePAcut;
+      const terms: TraceTerm[] = [
+        { label: 'System absence', symbol: `${(SYS.paLeverage * SYS.paDisLeverage).toFixed(2)} · (absence − ${BASELINE.absenceOverall})`, value: paSystem, leverIds: ['attendance', 'breakfast', 'poverty_action'], note: 'Disadvantaged absence tracks overall absence, amplified (2.5 × 1.3).' },
+        { label: 'Attendance mentors', symbol: '− mentor cut', value: -extraMentorDisCut, leverIds: ['attendance'], note: 'Up to 8pp at full mentor coverage — the single highest-leverage equity lever.' },
+        { label: 'Housing instability', symbol: '+ housingPA · dep(housing)', value: housingPA, leverIds: ['housing_instability'] },
+        { label: 'SEND specialist capacity', symbol: '− pipeline cut', value: -pipelinePAcut, leverIds: ['send_pipeline'], note: 'Supported SEND pupils attend more.' },
+      ];
+      traceOut.persistentAbsenceDis = { key: 'persistentAbsenceDis', title: 'Persistent absence (disadvantaged)', unit: '%', base: PA_DIS_BASE, baseLabel: '2025 baseline', terms, result: res, engineValue: persistentAbsenceDis, clamped: Math.abs(res - persistentAbsenceDis) > 1e-6, codeKey: 'paDis' };
+    }
     const severeAbsence = clamp(
       BASELINE.severeAbsence + SYS.severeDrift * ys
         - R(SYS.severeMentorCut) * concave(depPos('attendance')) * ramp(ys, 2)
@@ -217,14 +234,25 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       pupil_premium: CH.gapKS2.pupil_premium, poverty_action: CH.gapKS2.poverty_action,
       rise: CH.gapKS2.rise, reading: CH.gapKS2.reading,
     };
-    let structReductionsK2 = channelSum(k2Map, ys, lagOf);
+    const k2Sink: Record<string, number> | undefined = year === traceYear ? {} : undefined;
+    let structReductionsK2 = channelSum(k2Map, ys, lagOf, dep, k2Sink);
     for (const id of ['ey_quality', 'eypp'] as const) {
-      if (CH.gapKS2[id]) structReductionsK2 += R(CH.gapKS2[id]) * concave(depPos(id)) * ramp(ys, 6);
+      if (CH.gapKS2[id]) {
+        const c = R(CH.gapKS2[id]) * concave(depPos(id)) * ramp(ys, 6);
+        structReductionsK2 += c;
+        if (k2Sink) k2Sink[id] = (k2Sink[id] ?? 0) + c;
+      }
     }
-    const gapKS2 = clamp(
-      BASELINE.gapKS2 + ABSENCE_TO_GAP_K2 * (persistentAbsenceDis - PA_DIS_BASE) - structReductionsK2,
-      0.3, 16,
-    );
+    const k2Absence = ABSENCE_TO_GAP_K2 * (persistentAbsenceDis - PA_DIS_BASE);
+    const gapKS2 = clamp(BASELINE.gapKS2 + k2Absence - structReductionsK2, 0.3, 16);
+    if (year === traceYear) {
+      const res = BASELINE.gapKS2 + k2Absence - structReductionsK2;
+      const terms: TraceTerm[] = [
+        { label: 'Disadvantaged absence', symbol: `${ABSENCE_TO_GAP_K2} · (PA_dis − ${PA_DIS_BASE})`, value: k2Absence, leverIds: ['attendance', 'breakfast'] },
+        { label: 'Structural reductions', symbol: '− Σ (pupil premium, poverty action, reading, RISE, early years)', value: -structReductionsK2, parts: k2Sink ? partsOf(k2Sink) : undefined },
+      ];
+      traceOut.gapKS2 = { key: 'gapKS2', title: 'Disadvantage gap at 11', unit: 'months', base: BASELINE.gapKS2, baseLabel: '2025 baseline', terms, result: res, engineValue: gapKS2, clamped: Math.abs(res - gapKS2) > 1e-6, codeKey: 'gapKS2' };
+    }
 
     // ---------------- DEVELOPMENT GAP AT AGE 3 (months) ----------------
     // The earliest modelled point — the gap is observable from age 3 and ~40% of the age-16
@@ -265,11 +293,18 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       ey_quality: CH.gapRecep.ey_quality, ey_access: CH.gapRecep.ey_access,
       eypp: CH.gapRecep.eypp, poverty_action: CH.gapRecep.poverty_action,
     };
-    const reductionsRecep = channelSum(recepMap, ys, () => 2); // reception responds within ~2y
-    const gapReception = clamp(
-      BASELINE.gapReception + POVERTY_TO_RECEP * (childPoverty - BASELINE.childPoverty) - reductionsRecep,
-      0.3, 8,
-    );
+    const recepSink: Record<string, number> | undefined = year === traceYear ? {} : undefined;
+    const reductionsRecep = channelSum(recepMap, ys, () => 2, dep, recepSink); // reception responds within ~2y
+    const recepPov = POVERTY_TO_RECEP * (childPoverty - BASELINE.childPoverty);
+    const gapReception = clamp(BASELINE.gapReception + recepPov - reductionsRecep, 0.3, 8);
+    if (year === traceYear) {
+      const res = BASELINE.gapReception + recepPov - reductionsRecep;
+      const terms: TraceTerm[] = [
+        { label: 'Home learning environment (via poverty)', symbol: `${POVERTY_TO_RECEP} · (poverty − ${BASELINE.childPoverty})`, value: recepPov, leverIds: ['poverty_action'] },
+        { label: 'Early-years investment', symbol: '− Σ (quality, access, EYPP, poverty action)', value: -reductionsRecep, parts: recepSink ? partsOf(recepSink) : undefined, note: 'Reception responds within ~2 years — faster than the lagged KS4 effect.' },
+      ];
+      traceOut.gapReception = { key: 'gapReception', title: 'Disadvantage gap at 5', unit: 'months', base: BASELINE.gapReception, baseLabel: '2025 baseline', terms, result: res, engineValue: gapReception, clamped: Math.abs(res - gapReception) > 1e-6, codeKey: 'gapReception' };
+    }
 
     // ---------------- ATTAINMENT LEVEL (all pupils) ----------------
     const teacherAttnA8 = R(CH.levelA8.teachers) * capacityNorm * ramp(ys, 4);
@@ -295,25 +330,60 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
       ];
       traceOut.attainment8 = { key: 'attainment8', title: 'Attainment 8 (all pupils)', unit: 'score', base: BASELINE.attainment8, baseLabel: '2025 baseline', terms, result: res, engineValue: attainment8, clamped: Math.abs(res - attainment8) > 1e-6, codeKey: 'attainment8' };
     }
-    const grade5EM = clamp(BASELINE.grade5EM + 2.2 * (attainment8 - BASELINE.attainment8), 10, 95);
+    const g5Link = 2.2 * (attainment8 - BASELINE.attainment8);
+    const grade5EM = clamp(BASELINE.grade5EM + g5Link, 10, 95);
+    if (year === traceYear) {
+      const res = BASELINE.grade5EM + g5Link;
+      const terms: TraceTerm[] = [
+        { label: 'Follows Attainment 8', symbol: `2.2 · (A8 − ${BASELINE.attainment8}) = 2.2 · ${(attainment8 - BASELINE.attainment8).toFixed(2)}`, value: g5Link, leverIds: ['teachers', 'attendance', 'reading', 'curriculum'], note: 'The strong-pass rate moves ~2.2pp per Attainment-8 point — so its levers are Attainment 8\'s levers.' },
+      ];
+      traceOut.grade5EM = { key: 'grade5EM', title: 'Grade 5+ English & Maths', unit: '%', base: BASELINE.grade5EM, baseLabel: '2025 baseline', terms, result: res, engineValue: grade5EM, clamped: Math.abs(res - grade5EM) > 1e-6, codeKey: 'grade5EM' };
+    }
 
-    const k2Other =
-      R(CH.levelKS2.attendance) * concave(depPos('attendance')) * ramp(ys, 2)
-      + R(CH.levelKS2.curriculum) * concave(depPos('curriculum')) * ramp(year - 2028, 4)
-      + R(CH.levelKS2.reading) * concave(depPos('reading')) * ramp(ys, 2)
-      + R(CH.levelKS2.rise) * concave(depPos('rise')) * ramp(ys, 2);
+    const k2OtherTerms: Array<[string, number]> = [
+      ['attendance', R(CH.levelKS2.attendance) * concave(depPos('attendance')) * ramp(ys, 2)],
+      ['curriculum', R(CH.levelKS2.curriculum) * concave(depPos('curriculum')) * ramp(year - 2028, 4)],
+      ['reading', R(CH.levelKS2.reading) * concave(depPos('reading')) * ramp(ys, 2)],
+      ['rise', R(CH.levelKS2.rise) * concave(depPos('rise')) * ramp(ys, 2)],
+    ];
+    const k2Other = k2OtherTerms.reduce((s, [, v]) => s + v, 0);
     // (school_funding acts via teacher capacity, not a direct KS2 term)
     const ks2RWM = clamp(BASELINE.ks2RWM + teacherAttnK2 + k2Other, 35, 95);
+    if (year === traceYear) {
+      const res = BASELINE.ks2RWM + teacherAttnK2 + k2Other;
+      const terms: TraceTerm[] = [
+        { label: 'Teacher capacity', symbol: 'maxₜ · capacityNorm · ramp(4y)', value: teacherAttnK2, leverIds: ['teachers', 'teacher_pay', 'bursaries', 'school_funding'] },
+        { label: 'Other channels', symbol: '+ Σ (attendance, curriculum, reading, RISE)', value: k2Other, parts: k2OtherTerms.map(([id, v]) => ({ id, label: LEVERS_BY_ID[id]?.label ?? id, value: v })).filter((p) => Math.abs(p.value) > 1e-4).sort((a, b) => b.value - a.value) },
+      ];
+      traceOut.ks2RWM = { key: 'ks2RWM', title: 'KS2 reading+writing+maths', unit: '%', base: BASELINE.ks2RWM, baseLabel: '2025 baseline', terms, result: res, engineValue: ks2RWM, clamped: Math.abs(res - ks2RWM) > 1e-6, codeKey: 'ks2RWM' };
+    }
 
-    const gldDelta =
-      R(CH.levelGLD.ey_quality) * concave(depPos('ey_quality')) * ramp(ys, 3)
-      + R(CH.levelGLD.ey_access) * concave(depPos('ey_access')) * ramp(ys, 2)
-      + R(CH.levelGLD.eypp) * concave(depPos('eypp')) * ramp(ys, 3)
-      + R(CH.levelGLD.poverty_action) * concave(depPos('poverty_action')) * ramp(ys, 3);
+    const gldTerms: Array<[string, number]> = [
+      ['ey_quality', R(CH.levelGLD.ey_quality) * concave(depPos('ey_quality')) * ramp(ys, 3)],
+      ['ey_access', R(CH.levelGLD.ey_access) * concave(depPos('ey_access')) * ramp(ys, 2)],
+      ['eypp', R(CH.levelGLD.eypp) * concave(depPos('eypp')) * ramp(ys, 3)],
+      ['poverty_action', R(CH.levelGLD.poverty_action) * concave(depPos('poverty_action')) * ramp(ys, 3)],
+    ];
+    const gldDelta = gldTerms.reduce((s, [, v]) => s + v, 0);
     const gld = clamp(BASELINE.gld + gldDelta, 40, 95);
+    if (year === traceYear) {
+      const res = BASELINE.gld + gldDelta;
+      const terms: TraceTerm[] = [
+        { label: 'Early-years investment', symbol: '+ Σ (quality, access, EYPP, poverty action)', value: gldDelta, parts: gldTerms.map(([id, v]) => ({ id, label: LEVERS_BY_ID[id]?.label ?? id, value: v })).filter((p) => Math.abs(p.value) > 1e-4).sort((a, b) => b.value - a.value), note: 'GLD 68→75 (Best Start target) needs ~7pp — quality is the largest strand.' },
+      ];
+      traceOut.gld = { key: 'gld', title: 'Good Level of Development (age 5)', unit: '%', base: BASELINE.gld, baseLabel: '2025 baseline', terms, result: res, engineValue: gld, clamped: Math.abs(res - gld) > 1e-6, codeKey: 'gld' };
+    }
 
     // ---------------- disadvantaged sub-levels (derived from the stage gaps) ----------------
-    const attainment8Dis = clamp(attainment8 - GAP_TO_LEVEL.ks4A8 * gapKS4, 20, 70);
+    const a8DisPenalty = GAP_TO_LEVEL.ks4A8 * gapKS4;
+    const attainment8Dis = clamp(attainment8 - a8DisPenalty, 20, 70);
+    if (year === traceYear) {
+      const res = attainment8 - a8DisPenalty;
+      const terms: TraceTerm[] = [
+        { label: 'Disadvantage gap penalty', symbol: `− ${GAP_TO_LEVEL.ks4A8.toFixed(3)} · gapKS4 (= ${gapKS4.toFixed(1)} mo)`, value: -a8DisPenalty, leverIds: ['attendance', 'pupil_premium', 'poverty_action', 'tutoring'], note: 'Disadvantaged attainment = the all-pupil level MINUS the gap (converted to A8 points). Close the gap and this rises.' },
+      ];
+      traceOut.attainment8Dis = { key: 'attainment8Dis', title: 'Attainment 8 (disadvantaged)', unit: 'score', base: attainment8, baseLabel: 'Attainment 8 (all pupils)', terms, result: res, engineValue: attainment8Dis, clamped: Math.abs(res - attainment8Dis) > 1e-6, codeKey: 'a8Dis' };
+    }
     const grade5EMDis = clamp(grade5EM - GAP_TO_LEVEL.ks4G5 * gapKS4, 2, 95);
     const ks2RWMDis = clamp(ks2RWM - GAP_TO_LEVEL.ks2 * gapKS2, 20, 95);
     const gldDis = clamp(gld - GAP_TO_LEVEL.recep * gapReception, 25, 95);
@@ -458,10 +528,20 @@ export function runSim(levers: LeverState, opts: SimOptions = {}): SimResult {
     const overrideEnded = year >= SEND.overrideEndYear;
     const overridePenalty = overrideEnded ? 8 * Math.max(0, deficitStock - 3) : 0; // £/pupil per £bn on-book
     const insolvencyRisk = overrideEnded && deficitStock >= SEND.insolvencyDeficit;
+    const fundGrowth = BASELINE.fundingPerPupil * Math.pow(1 + val('school_funding') / 100, ys) - BASELINE.fundingPerPupil;
     const fundingPerPupil = clamp(
-      BASELINE.fundingPerPupil * Math.pow(1 + val('school_funding') / 100, ys) - sendLeak - overridePenalty,
+      BASELINE.fundingPerPupil + fundGrowth - sendLeak - overridePenalty,
       4500, 12000,
     );
+    if (year === traceYear) {
+      const res = BASELINE.fundingPerPupil + fundGrowth - sendLeak - overridePenalty;
+      const terms: TraceTerm[] = [
+        { label: 'Real-terms growth', symbol: `base · (1 + funding%)^${ys} − base`, value: fundGrowth, leverIds: ['school_funding'] },
+        { label: 'SEND cost leak', symbol: ys > 0 ? '− 50 · max(0, DSG spend − 12)' : 'n/a (base year)', value: -sendLeak, leverIds: ['high_needs', 'inclusion_fund', 'ehcp_reform'], note: 'High-needs spend above the 2025 level leaks £/pupil out of mainstream funding.' },
+        { label: 'Override cliff (from 2028)', symbol: overrideEnded ? '− 8 · max(0, deficit − 3)' : 'not yet (override holds until 2028)', value: -overridePenalty, leverIds: ['high_needs', 'ehcp_reform'], note: 'When the DSG statutory override ends (March 2028), the accumulated deficit is serviced from general funds.' },
+      ];
+      traceOut.fundingPerPupil = { key: 'fundingPerPupil', title: 'Funding per pupil', unit: '£', base: BASELINE.fundingPerPupil, baseLabel: '2025 baseline', terms, result: res, engineValue: fundingPerPupil, clamped: Math.abs(res - fundingPerPupil) > 1e-6, codeKey: 'funding' };
+    }
     const teacherShortfall = shortfall;
 
     // ---------------- COST (£bn additional vs baseline) ----------------

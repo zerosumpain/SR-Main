@@ -9,10 +9,17 @@
   import { app } from '../lib/appState.svelte';
   import { runSim } from '../lib/engine';
   import LeverSlider from './LeverSlider.svelte';
-  import { OUTCOME_ELI5_LABEL } from '../lib/outcomes';
+  import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { fmt, signed } from '../lib/chartkit';
 
-  const KEYS = ['gapKS4', 'gapAge3', 'attainment8', 'highNeedsDeficitStock', 'neet'];
+  // Grouped so the picker reads as a guided tour of the model's mechanics.
+  const GROUPS: { label: string; keys: string[] }[] = [
+    { label: 'Equity — the disadvantage gap', keys: ['gapAge3', 'gapReception', 'gapKS2', 'gapKS4'] },
+    { label: 'Attainment', keys: ['gld', 'ks2RWM', 'attainment8', 'attainment8Dis', 'grade5EM'] },
+    { label: 'System', keys: ['persistentAbsenceDis', 'childPoverty', 'fundingPerPupil'] },
+    { label: 'SEND', keys: ['highNeedsDeficitStock'] },
+    { label: 'Post-16', keys: ['neet'] },
+  ];
   let selected = $state('gapKS4');
   let view = $state<'math' | 'code'>('math');
   let openTerm = $state<number | null>(null);
@@ -31,7 +38,7 @@
   const tResult = new Tween(0, { duration: 400, easing: cubicOut });
   $effect(() => { if (ot) tResult.target = ot.engineValue; });
 
-  const label = (k: string) => (eli ? (OUTCOME_ELI5_LABEL[k] ?? k) : (trace?.outcomes[k]?.title ?? k));
+  const label = (k: string) => (eli ? (OUTCOME_ELI5_LABEL[k] ?? k) : (OUTCOMES_BY_ID[k]?.label ?? trace?.outcomes[k]?.title ?? k));
 
   // The REAL engine.ts source for each traced outcome (verbatim-faithful excerpts).
   const CODE: Record<string, string> = {
@@ -72,6 +79,47 @@ const neetUnemployed     = uPressure  * survive([...workRouteCuts], BASELINE.nee
 const neetInactiveHealth = ihPressure * survive([...mentalHealthCuts], BASELINE.neetInactiveHealth);
 const neetInactiveOther  = ioPressure * survive([...otherCuts], BASELINE.neetInactiveOther);
 const neet = neetUnemployed + neetInactiveHealth + neetInactiveOther;`,
+    gapKS2: `// lib/engine.ts — the KS2 (age 11) disadvantage gap (months)
+const k2Absence = ABSENCE_TO_GAP_K2 * (persistentAbsenceDis - PA_DIS_BASE);
+let structReductionsK2 = channelSum(k2Map, ys, lagOf);      // PP, poverty action, reading, RISE
+for (const id of ['ey_quality','eypp'])                     // EY carry-over (~6y)
+  structReductionsK2 += CH.gapKS2[id] * concave(depPos(id)) * ramp(ys, 6);
+const gapKS2 = clamp(BASELINE.gapKS2 + k2Absence - structReductionsK2, 0.3, 16);`,
+    gapReception: `// lib/engine.ts — the age-5 (reception) disadvantage gap (months)
+const recepPov       = POVERTY_TO_RECEP * (childPoverty - BASELINE.childPoverty);
+const reductionsRecep = channelSum(recepMap, ys, () => 2);  // EY quality/access/EYPP/poverty — ~2y
+const gapReception = clamp(BASELINE.gapReception + recepPov - reductionsRecep, 0.3, 8);`,
+    gld: `// lib/engine.ts — Good Level of Development at age 5 (%)
+const gldDelta =
+    CH.levelGLD.ey_quality     * concave(depPos('ey_quality'))     * ramp(ys, 3)
+  + CH.levelGLD.ey_access      * concave(depPos('ey_access'))      * ramp(ys, 2)
+  + CH.levelGLD.eypp           * concave(depPos('eypp'))           * ramp(ys, 3)
+  + CH.levelGLD.poverty_action * concave(depPos('poverty_action')) * ramp(ys, 3);
+const gld = clamp(BASELINE.gld + gldDelta, 40, 95);`,
+    ks2RWM: `// lib/engine.ts — KS2 reading+writing+maths expected standard (%)
+const teacherAttnK2 = CH.levelKS2.teachers * capacityNorm * ramp(ys, 4);  // capacity channel
+const k2Other = attendance + curriculum + reading + RISE channels;
+const ks2RWM = clamp(BASELINE.ks2RWM + teacherAttnK2 + k2Other, 35, 95);`,
+    grade5EM: `// lib/engine.ts — Grade 5+ in English & Maths (%). A linear function of Attainment 8.
+const grade5EM = clamp(BASELINE.grade5EM + 2.2 * (attainment8 - BASELINE.attainment8), 10, 95);`,
+    a8Dis: `// lib/engine.ts — disadvantaged Attainment 8 = the all-pupil level MINUS the gap.
+// GAP_TO_LEVEL.ks4A8 (A8 points per month) is derived so 2025 reproduces exactly.
+const attainment8Dis = clamp(attainment8 - GAP_TO_LEVEL.ks4A8 * gapKS4, 20, 70);`,
+    paDis: `// lib/engine.ts — disadvantaged persistent absence (%). The model's central hub.
+const paSystem = SYS.paLeverage * SYS.paDisLeverage * (absenceOverall - BASELINE.absenceOverall); // 2.5×1.3
+const persistentAbsenceDis = clamp(
+  PA_DIS_BASE + paSystem - extraMentorDisCut + housingPA - pipelinePAcut, 8, 45,
+);`,
+    childPoverty: `// lib/engine.ts — relative child poverty (% AHC). An upstream driver.
+const povDrift  = SYS.povertyDrift * ys;                                       // baseline trend
+const povAction = SYS.povertyActionMax * concave(depPos('poverty_action')) * ramp(ys, 3);
+const povFsm    = SYS.fsmPovertyCut    * concave(depPos('fsm'))            * ramp(ys, 3);
+const childPoverty = clamp(BASELINE.childPoverty + povDrift - povAction - povFsm, 15, 40);`,
+    funding: `// lib/engine.ts — mainstream funding per pupil (£). The SEND cliff bites here.
+const fundGrowth      = base * (1 + val('school_funding')/100) ** ys - base;
+const sendLeak        = ys > 0 ? 50 * Math.max(0, dsgSpend - 12.0) : 0;          // high-needs leak
+const overridePenalty = (year >= 2028) ? 8 * Math.max(0, deficitStock - 3) : 0;  // override ends 2028
+const fundingPerPupil = clamp(base + fundGrowth - sendLeak - overridePenalty, 4500, 12000);`,
   };
 </script>
 
@@ -80,7 +128,11 @@ const neet = neetUnemployed + neetInactiveHealth + neetInactiveOther;`,
     <div class="cv-pick">
       <span class="cv-lab">Show the working for</span>
       <select bind:value={selected} aria-label="Outcome to break down">
-        {#each KEYS as k}<option value={k}>{label(k)}</option>{/each}
+        {#each GROUPS as grp}
+          <optgroup label={grp.label}>
+            {#each grp.keys as k}<option value={k}>{label(k)}</option>{/each}
+          </optgroup>
+        {/each}
       </select>
       <span class="cv-yr">in {app.horizon}</span>
     </div>
