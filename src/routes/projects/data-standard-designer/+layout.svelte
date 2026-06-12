@@ -13,9 +13,10 @@
   const SECTIONS = [
     { href: '', label: 'Overview' },
     { href: 'brief', label: 'Brief' },
+    { href: 'legal', label: 'Legal basis' },
     { href: 'schema', label: 'Schema' },
     { href: 'validate', label: 'Test data' },
-    { href: 'interoperability', label: 'Interoperability' },
+    { href: 'interoperability', label: 'Interop' },
     { href: 'impact', label: 'Impact' },
     { href: 'publish', label: 'Publish' },
     { href: 'portal', label: 'Registry' },

@@ -106,8 +106,11 @@ export interface Brief {
   aboutChildren: boolean;
   /** national | regional | local-authority | institution | individual. */
   geographicCoverage: string;
-  /** Chosen lawful basis (UK GDPR Art.6 / Art.9 reference). */
+  /** Free-text lawful-basis notes (kept for detail beyond the structured picks). */
   legalBasis: string;
+  /** Selected legal-basis registry node ids (Layer A data-protection basis,
+   *  Layer B power/gateway, Layer C governance) — see lib/legalBasis.ts. */
+  legalBasisIds: string[];
   /** How hard the team wants to push interoperability. */
   interopGoal: 'low' | 'medium' | 'high';
   notes: string;

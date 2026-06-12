@@ -8,6 +8,7 @@
 import type { Brief, Field, FieldType, Sector, ProviderEntry, ConsumerEntry, FieldTemplate, StandardEntry } from './types';
 import { IDENTIFIERS, standardById } from './knowledge';
 import { codelistById } from './codelists';
+import { legalById, summariseLegalBasis, legalCompleteness } from './legalBasis';
 import {
   recommend,
   interoperabilityScore,
@@ -34,6 +35,7 @@ export function emptyBrief(): Brief {
     aboutChildren: false,
     geographicCoverage: 'England — national',
     legalBasis: '',
+    legalBasisIds: [],
     interopGoal: 'high',
     notes: '',
   };
@@ -136,6 +138,20 @@ class DesignerState {
     const has = this.brief.processingPurposes.includes(p);
     this.brief.processingPurposes = has ? this.brief.processingPurposes.filter((x) => x !== p) : [...this.brief.processingPurposes, p];
   }
+  toggleLegalBasis(id: string) {
+    if (!legalById(id)) return;
+    const has = this.brief.legalBasisIds.includes(id);
+    this.brief.legalBasisIds = has ? this.brief.legalBasisIds.filter((x) => x !== id) : [...this.brief.legalBasisIds, id];
+  }
+  // Human-readable summary of the structured legal basis, for exports.
+  legalBasisSummary = $derived(summariseLegalBasis(this.brief.legalBasisIds));
+  // A+B+C completeness of the legal basis given the data characteristics.
+  legalBasisCheck = $derived(
+    legalCompleteness(this.brief.legalBasisIds, {
+      personal: this.brief.containsPersonalData,
+      special: this.brief.containsSpecialCategory || this.brief.aboutChildren,
+    }),
+  );
 
   // ---- bulk ----
   applyRecommendedFields(templates: FieldTemplate[]) {
@@ -149,6 +165,7 @@ class DesignerState {
       // ensure every entity carries a unique key (presets ship with empty ids)
       providers: (b.providers || []).map((p) => ({ ...p, id: p.id || newFieldId() })),
       consumers: (b.consumers || []).map((c) => ({ ...c, id: c.id || newFieldId() })),
+      legalBasisIds: (Array.isArray(b.legalBasisIds) ? b.legalBasisIds : []).filter((x: string) => legalById(x)),
     };
     this.fields = (d.fields || []).map((f) => ({ ...f, id: f.id || newFieldId() }));
     if (d.version) this.version = d.version;
@@ -179,6 +196,7 @@ class DesignerState {
     next.aboutChildren = !!b.aboutChildren;
     if (b.geographicCoverage) next.geographicCoverage = String(b.geographicCoverage).slice(0, 120);
     if (b.legalBasis) next.legalBasis = String(b.legalBasis).slice(0, 300);
+    if (Array.isArray(b.legalBasisIds)) next.legalBasisIds = b.legalBasisIds.filter((x: any) => legalById(x)).slice(0, 24);
     if (['low', 'medium', 'high'].includes(b.interopGoal)) next.interopGoal = b.interopGoal;
     next.providers = (Array.isArray(b.providers) ? b.providers : []).slice(0, 10).map((p: any) => ({
       id: newFieldId(),

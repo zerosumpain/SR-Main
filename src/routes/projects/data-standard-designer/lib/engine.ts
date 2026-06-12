@@ -21,6 +21,7 @@ import type {
   IdentifierEntry,
 } from './types';
 import { CATALOG, IDENTIFIERS, standardById, identifierById } from './knowledge';
+import { legalCompleteness } from './legalBasis';
 
 // ---------------------------------------------------------------------------
 // Heuristics — map a brief to recommendations
@@ -375,16 +376,25 @@ export function assuranceScore(b: Brief, fields: Field[]): Score {
   const validatable = fields.filter((f) => f.format || f.codelist || f.constraints || f.type !== 'string');
   const hasRequired = fields.some((f) => f.required);
   const scFields = fields.filter((f) => f.specialCategory);
-  const a9 = /art(icle)?\s*9|special|condition|substantial public interest|safeguard/i.test(`${b.legalBasis} ${b.notes}`);
-  const dpiaSignalled = /dpia|impact assessment/i.test(`${b.notes} ${b.legalBasis}`);
+  const ids = b.legalBasisIds || [];
+  const check = legalCompleteness(ids, { personal, special: sensitive });
+  const dpiaSelected = ids.includes('dpia');
+  // free-text fallbacks so older briefs without structured picks aren't penalised
+  const a9text = /art(icle)?\s*9|special|condition|substantial public interest|safeguard/i.test(`${b.legalBasis} ${b.notes}`);
+  const dpiaText = /dpia|impact assessment/i.test(`${b.notes} ${b.legalBasis}`);
+  const a6met = !personal || check.hasA || !!b.legalBasis.trim();
+  const a9met = !sensitive || check.hasA9 || a9text;
+  const dpiaMet = !sensitive || dpiaSelected || dpiaText;
 
   const items: (ScoreBreakdownItem & { weight: number; raw: number })[] = [
-    mk('Lawful basis pinned', 1.5, !personal ? 1 : b.legalBasis.trim() ? 1 : 0,
-      !personal ? 'No personal data — Article 6 basis not required.' : b.legalBasis.trim() ? `Lawful basis: "${b.legalBasis.slice(0, 60)}".` : 'No lawful basis recorded for personal data.'),
-    mk('Special-category condition', 1.2, !sensitive ? 1 : a9 ? 1 : 0.2,
-      !sensitive ? 'No special-category or children\'s data flagged.' : a9 ? 'An Article 9 condition / safeguarding basis is referenced.' : 'Special-category or children\'s data without an Article 9 condition stated.'),
-    mk('DPIA for sensitive data', 1.0, !sensitive ? 1 : dpiaSignalled ? 1 : 0.3,
-      !sensitive ? 'A DPIA is not mandatory here.' : dpiaSignalled ? 'A DPIA is noted.' : 'Sensitive/children\'s data normally requires a DPIA — none noted yet.'),
+    mk('Data-protection lawful basis (Art 6)', 1.5, a6met ? 1 : 0,
+      !personal ? 'No personal data — an Article 6 basis is not required.' : check.hasA ? 'An Article 6 lawful basis is selected.' : b.legalBasis.trim() ? `Recorded as free text: "${b.legalBasis.slice(0, 60)}".` : 'No Article 6 lawful basis selected for personal data — pick one on the Legal basis tab.'),
+    mk('Legal power / gateway to share (vires)', 1.3, check.hasB ? 1 : personal ? (b.legalBasis.trim() ? 0.4 : 0) : 0.5,
+      check.hasB ? 'A statutory gateway or legal power to share is selected.' : 'No legal power/gateway selected — for a public body a lawful basis ALONE does not authorise sharing. Choose the specific power on the Legal basis tab.'),
+    mk('Special-category condition (Art 9)', 1.2, a9met ? 1 : 0.2,
+      !sensitive ? 'No special-category or children\'s data flagged.' : check.hasA9 ? 'An Article 9 / Schedule 1 condition is selected.' : a9text ? 'A condition is referenced in notes.' : 'Special-category or children\'s data without an Article 9 condition — add one (e.g. Sch 1 para 18 safeguarding).'),
+    mk('DPIA for sensitive data', 1.0, dpiaMet ? 1 : 0.3,
+      !sensitive ? 'A DPIA is not mandatory here.' : dpiaSelected ? 'A DPIA is recorded as a governance instrument.' : dpiaText ? 'A DPIA is noted.' : 'Sensitive/children\'s data normally requires a DPIA — add it under governance on the Legal basis tab.'),
     mk('Field definitions complete', 1.1, ratio(described.length, Math.max(1, fields.length)),
       `${described.length}/${fields.length} fields have a usable definition.`),
     mk('Fields are validatable', 1.0, ratio(validatable.length, Math.max(1, fields.length)),

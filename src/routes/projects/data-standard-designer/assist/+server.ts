@@ -14,6 +14,7 @@ import { requireProjectPublic } from '$lib/projects/guard';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { IDENTIFIERS, CATALOG } from '../lib/knowledge';
 import { CODELISTS } from '../lib/codelists';
+import { LEGAL_LEAVES } from '../lib/legalBasis';
 import type { RequestHandler } from './$types';
 
 const DOMAINS = ['education', 'childrens-social-care', 'child-protection', 'health', 'local-gov', 'cross-gov', 'employment', 'justice', 'housing'];
@@ -35,6 +36,7 @@ function vocab(): string {
     `identifierIds (set field.identifier to one of these to reuse a real identifier): ${IDENTIFIERS.map((i) => i.id).join(', ')}`,
     `codelistIds (set field.codelistId for enumerated fields): ${CODELISTS.map((c) => c.id).join(', ')}`,
     `standardIds (set field.sourceStandard to cite provenance): ${CATALOG.map((s) => s.id).slice(0, 60).join(', ')}`,
+    `legalBasisIds (set brief.legalBasisIds — pick a Layer-A data-protection basis, a Layer-B power/gateway, and Layer-C governance): ${LEGAL_LEAVES.map((l) => l.id).join(', ')}`,
   ].join('\n');
 }
 
@@ -45,6 +47,7 @@ const DESIGN_SHAPE = `Return STRICT JSON:
    "processingPurposes": string[], "containsPersonalData": bool,
    "containsSpecialCategory": bool, "aboutChildren": bool,
    "geographicCoverage": string, "legalBasis": string,
+   "legalBasisIds": legalBasisId[],
    "interopGoal": "low"|"medium"|"high",
    "providers": [{"label":string,"sector":string,"ownership":"public"|"private"|"voluntary"|"mixed","existingStandards":standardId[],"systemsHeld":string,"burdenSensitivity":"low"|"medium"|"high"}],
    "consumers": [{"label":string,"sector":string,"use":string}]

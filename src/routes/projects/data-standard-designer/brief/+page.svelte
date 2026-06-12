@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import { CATALOG, standardById } from '../lib/knowledge';
+  import { legalById } from '../lib/legalBasis';
   import type { Sector, ProviderSector, Ownership } from '../lib/types';
   const base = '/projects/data-standard-designer';
 
@@ -152,11 +153,28 @@
           <button class="dsd-chip" class:on={app.brief.aboutChildren} onclick={() => (app.brief.aboutChildren = !app.brief.aboutChildren)}>About children</button>
         </div>
         {#if app.brief.containsPersonalData}
-          <label style="margin-top:10px"><span class="dsd-label">Lawful basis (UK GDPR)</span>
-            <input class="dsd-input" bind:value={app.brief.legalBasis} placeholder="e.g. Art.6(1)(e) public task; Art.9(2)(g) substantial public interest" /></label>
-          {#if (app.brief.containsSpecialCategory || app.brief.aboutChildren)}
-            <p class="warnline">⚠ Special-category or children's data — a DPIA is required, and you need an Article 9 condition. Note these in the lawful basis or in Method notes.</p>
-          {/if}
+          <div class="legal-block">
+            <div class="lb-head">
+              <span class="dsd-label" style="margin:0">Legal basis to share</span>
+              <a class="dsd-btn sm" href={`${base}/legal`}>⚖ Choose from the registry →</a>
+            </div>
+            {#if app.brief.legalBasisIds.length}
+              <div class="lb-chips">
+                {#each app.brief.legalBasisIds as id}{@const n = legalById(id)}{#if n}<button class="lb-chip {n.layer}" onclick={() => app.toggleLegalBasis(id)} title="Remove">{n.citation || n.label} ✕</button>{/if}{/each}
+              </div>
+              <div class="lb-check">
+                <span class:met={app.legalBasisCheck.hasA}>A · DP basis</span>
+                {#if app.brief.containsSpecialCategory || app.brief.aboutChildren}<span class:met={app.legalBasisCheck.hasA9}>A · Art 9 condition</span>{/if}
+                <span class:met={app.legalBasisCheck.hasB}>B · power/gateway</span>
+                <span class="soft" class:met={app.legalBasisCheck.hasC}>C · governance</span>
+              </div>
+              {#if !app.legalBasisCheck.hasB}<p class="warnline">⚠ A lawful basis alone doesn't authorise a public body to share — add the specific <b>power/gateway</b> (Layer B) on the registry.</p>{/if}
+            {:else}
+              <p class="hint">No legal basis chosen yet. Open the registry to pick a data-protection basis, the specific legal power/gateway, and the governance you'll put in place.</p>
+            {/if}
+            <label style="margin-top:8px"><span class="dsd-label">Further detail (free text)</span>
+              <input class="dsd-input" bind:value={app.brief.legalBasis} placeholder="Any specifics not captured above (e.g. a local ISA reference)" /></label>
+          </div>
         {/if}
       </section>
 
@@ -264,6 +282,18 @@
   .hint, .empty { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.45; }
   .empty { font-style: italic; }
   .warnline { font-size: 12px; color: var(--warn); background: var(--warn-bg); padding: 7px 10px; border-radius: var(--radius-sharp); margin: 4px 0 0; }
+  .legal-block { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 12px; background: var(--surface-elevated); margin-top: 10px; }
+  .lb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .lb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .lb-chip { font-family: var(--font-mono); font-size: 10px; padding: 3px 7px; border-radius: var(--radius-sharp); cursor: pointer; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-secondary); }
+  .lb-chip.data-protection { border-color: var(--info-border); color: var(--info); background: var(--info-bg); }
+  .lb-chip.power { border-color: var(--accent-tint-35); color: var(--accent); background: var(--accent-tint-08); }
+  .lb-chip.governance { border-color: var(--success-border); color: var(--success); background: var(--success-bg); }
+  .lb-check { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--text-muted); margin-bottom: 6px; }
+  .lb-check span::before { content: '○ '; }
+  .lb-check span.met { color: var(--success); font-weight: 600; }
+  .lb-check span.met::before { content: '✓ '; }
+  .lb-check span.soft { opacity: 0.8; }
   .chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .add-inline { display: flex; gap: 8px; align-items: center; max-width: 420px; }
 

@@ -86,6 +86,10 @@
       <span class="ex-ic">↻</span><b>Emerging-standards registry</b>
       <p>A daily, index-driven sweep of newly published government data standards, with search, filters and visible source-coverage health.</p>
     </a>
+    <a class="extra" href={`${base}/legal`}>
+      <span class="ex-ic">⚖</span><b>Legal-basis registry</b>
+      <p>A cross-government hierarchy of the legal bases for sharing data — data-protection basis, the specific statutory power/gateway, and governance — down to the section.</p>
+    </a>
   </div>
 
   <h2 class="dsd-h2">Start from a worked example</h2>

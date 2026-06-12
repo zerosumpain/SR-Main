@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { identifierById, standardById, METHODS } from './knowledge';
 import { codelistById } from './codelists';
+import { legalById, LAYER_LABEL, type LegalLayer } from './legalBasis';
 
 export interface ExportInput {
   brief: Brief;
@@ -137,7 +138,8 @@ export function toJsonSchema(i: ExportInput): string {
     'x-standard': {
       version,
       domain: brief.domain,
-      lawfulBasis: brief.legalBasis || null,
+      legalBasis: (brief.legalBasisIds || []).map((id) => { const n = legalById(id); return n ? { id: n.id, label: n.label, citation: n.citation, layer: n.layer } : { id }; }),
+      lawfulBasisNote: brief.legalBasis || null,
       containsPersonalData: brief.containsPersonalData,
       containsSpecialCategory: brief.containsSpecialCategory,
     },
@@ -313,8 +315,20 @@ export function toMarkdownSpec(i: ExportInput): string {
   L.push(`- **Contains personal data:** ${brief.containsPersonalData ? 'Yes' : 'No'}`);
   L.push(`- **Contains special-category data:** ${brief.containsSpecialCategory ? 'Yes' : 'No'}`);
   L.push(`- **About children:** ${brief.aboutChildren ? 'Yes' : 'No'}`);
-  L.push(`- **Lawful basis:** ${brief.legalBasis || '_to be confirmed_'}`);
-  if (brief.containsSpecialCategory || brief.aboutChildren) L.push('- A Data Protection Impact Assessment (DPIA) is required before collection.');
+  const lb = (brief.legalBasisIds || []).map(legalById).filter(Boolean) as NonNullable<ReturnType<typeof legalById>>[];
+  if (lb.length) {
+    for (const layer of ['data-protection', 'power', 'governance'] as LegalLayer[]) {
+      const inLayer = lb.filter((n) => n.layer === layer);
+      if (!inLayer.length) continue;
+      L.push('');
+      L.push(`**${LAYER_LABEL[layer]}**`);
+      for (const n of inLayer) L.push(`- ${n.label}${n.citation ? ` — \`${n.citation}\`` : ''}${n.nature === 'requires' ? ' _(a duty to share)_' : n.nature === 'sets-aside-confidentiality' ? ' _(sets aside common-law confidentiality)_' : ''}`);
+    }
+  } else {
+    L.push(`- **Lawful basis:** _to be confirmed_`);
+  }
+  if (brief.legalBasis.trim()) { L.push(''); L.push(`**Further detail:** ${brief.legalBasis}`); }
+  if (brief.containsSpecialCategory || brief.aboutChildren) { L.push(''); L.push('> A Data Protection Impact Assessment (DPIA) is required before collection, and an Article 9 condition (e.g. DPA 2018 Sch 1 para 18, safeguarding) must be in place.'); }
   L.push('');
   L.push('## 4. Recommended identifiers');
   if (rec.identifiers.length) for (const id of rec.identifiers) {
