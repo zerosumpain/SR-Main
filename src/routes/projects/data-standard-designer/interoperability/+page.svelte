@@ -3,17 +3,8 @@
   import ScoreBar from '../components/ScoreBar.svelte';
   import StandardCard from '../components/StandardCard.svelte';
   import ReviewTabs from '../components/ReviewTabs.svelte';
+  import CrosswalkMap from '../components/CrosswalkMap.svelte';
   const base = '/projects/data-standard-designer';
-
-  // group crosswalk edges by the standard they connect to
-  const grouped = $derived.by(() => {
-    const m = new Map<string, { name: string; edges: typeof app.crosswalkEdges }>();
-    for (const e of app.crosswalkEdges) {
-      if (!m.has(e.standardId)) m.set(e.standardId, { name: e.standardName, edges: [] });
-      m.get(e.standardId)!.edges.push(e);
-    }
-    return [...m.values()].sort((a, b) => b.edges.length - a.edges.length);
-  });
 </script>
 
 <div class="dsd-route">
@@ -34,23 +25,8 @@
     </div>
   </div>
 
-  <h2 class="dsd-h2">Crosswalk — your fields to existing standards</h2>
-  {#if grouped.length}
-    <div class="xwalk">
-      {#each grouped as g}
-        <div class="xw-std">
-          <div class="xw-head"><b>{g.name}</b><span class="dsd-pill ok">{g.edges.length} link{g.edges.length === 1 ? '' : 's'}</span></div>
-          <ul>
-            {#each g.edges as e}
-              <li><span class="fld">{e.fieldName}</span><span class="arrow">→</span><span class="via">{e.nature.replace(/-/g, ' ')} · via {e.via}</span></li>
-            {/each}
-          </ul>
-        </div>
-      {/each}
-    </div>
-  {:else}
-    <p class="empty">No crosswalk yet. Reuse an identifier or pull a field from the library on the <a href={`${base}/schema`}>Schema</a> step, and connections will appear here.</p>
-  {/if}
+  <h2 class="dsd-h2">Crosswalk — the relationship map</h2>
+  <CrosswalkMap />
 
   <h2 class="dsd-h2">Standards to align with</h2>
   <p class="dsd-prose">Given the brief, these are the standards the engine recommends designing toward — reuse their identifiers, codelists and data items rather than reinventing.</p>

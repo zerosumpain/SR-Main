@@ -65,6 +65,8 @@ export const POST: RequestHandler = async (event) => {
   const body = (await event.request.json().catch(() => ({}))) as {
     mode?: string;
     prompt?: string;
+    query?: string;
+    registryCandidates?: any[];
     design?: unknown;
     fields?: unknown;
     answers?: { q: string; a: string }[];
@@ -73,6 +75,7 @@ export const POST: RequestHandler = async (event) => {
     body.mode === 'revise' ? 'revise'
     : body.mode === 'synth-pools' ? 'synth-pools'
     : body.mode === 'legal-advise' ? 'legal-advise'
+    : body.mode === 'find-standards' ? 'find-standards'
     : 'design';
 
   const client = getOpenAIClient();
@@ -80,6 +83,8 @@ export const POST: RequestHandler = async (event) => {
 
   let system: string;
   let user: string;
+  // Candidate set for find-standards, used to validate the model's picks.
+  let findCandidates: { refId: string }[] = [];
 
   if (mode === 'legal-advise') {
     const design = JSON.stringify(body.design ?? {}).slice(0, 8000);
@@ -90,6 +95,35 @@ export const POST: RequestHandler = async (event) => {
       cat +
       '\n\nExamine the standard. If material facts needed to choose the basis are MISSING or AMBIGUOUS (e.g. is it for direct care vs secondary analysis; identifiable vs de-identified; consent practical vs not; which statutory function is exercised; will data leave the controller), ask up to 4 sharp clarifying questions. Otherwise — or once the user has answered — recommend a best-fit basis. You may return BOTH a provisional recommendation and residual questions. Be conservative and pick the most specific applicable power. Return STRICT JSON: {"questions":[{"id":string,"question":string,"why":string,"options":[string]}],"recommendation":{"legalBasisIds":[id],"summary":string,"reasoning":[string],"caveats":[string],"confidence":"high|medium|low"}}. Include at least one Layer-A basis, an Art 9 condition where special-category/children data is involved, one Layer-B power, and the key Layer-C governance.';
     user = `STANDARD:\n${design}${answers ? `\n\nANSWERS SO FAR:\n${answers}` : ''}`;
+  } else if (mode === 'find-standards') {
+    // Find EXISTING standards relevant to a need. The model only selects/ranks
+    // from a server-built candidate set (grounded catalog + classified registry
+    // entries the client passed in) — it never decides what exists.
+    const query = String(body.query ?? '').slice(0, 300);
+    const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+    const score = (text: string) => tokens.reduce((a, t) => a + (text.toLowerCase().includes(t) ? 1 : 0), 0);
+    const catalogCands = CATALOG.map((s) => ({
+      refId: `catalog:${s.id}`,
+      source: 'catalog' as const,
+      name: s.name,
+      owner: s.owner,
+      covers: s.dataCovered || s.description || '',
+      _score: score(`${s.name} ${s.owner} ${s.dataCovered || ''} ${s.description || ''} ${s.sector}`),
+    }));
+    const topCatalog = catalogCands.filter((c) => c._score > 0).sort((a, b) => b._score - a._score).slice(0, 28);
+    const regCands = (Array.isArray(body.registryCandidates) ? body.registryCandidates : []).slice(0, 18).map((r: any) => ({
+      refId: `registry:${String(r.refId || r.url || '')}`.slice(0, 300),
+      source: 'registry' as const,
+      name: String(r.name || r.title || '').slice(0, 160),
+      owner: String(r.owner || r.publisher || '').slice(0, 120),
+      covers: String(r.covers || r.summary || '').slice(0, 200),
+    }));
+    const candidates = [...topCatalog, ...regCands];
+    findCandidates = candidates.map((c) => ({ refId: c.refId }));
+    const candList = candidates.map((c) => `${c.refId} | ${c.source} | ${c.name} | ${c.owner} | ${(c.covers || '').slice(0, 140)}`).join('\n');
+    system =
+      'You help a UK government team find EXISTING data standards relevant to a stated need. From the CANDIDATES list ONLY — never invent a standard — select the ones that genuinely fit and rank them best-first. Prefer authoritative, reusable standards (identifiers, schemas, codelists, data dictionaries) over generic guidance. Return STRICT JSON: {"standards":[{"refId":<exactly one candidate refId>,"source":"catalog"|"registry","name":string,"owner":string,"covers":string,"why":string-one-sentence-why-it-fits,"ingestable":boolean-true-when-source-is-catalog}],"note":string-short}. Include at most 8 standards. If nothing fits, return an empty list and say so in note.';
+    user = `NEED: ${query || '(none given)'}\n\nCANDIDATES (refId | source | name | owner | covers):\n${candList || '(none)'}`;
   } else if (mode === 'synth-pools') {
     const fields = JSON.stringify(body.fields ?? []).slice(0, 6000);
     system =
@@ -120,6 +154,11 @@ export const POST: RequestHandler = async (event) => {
       ...( { thinking: { type: 'disabled' } } as any),
     } as any);
     const parsed = JSON.parse(res.choices?.[0]?.message?.content ?? '{}');
+    // For find-standards, drop any pick whose refId wasn't a real candidate.
+    if (mode === 'find-standards' && parsed && Array.isArray(parsed.standards)) {
+      const valid = new Set(findCandidates.map((c) => c.refId));
+      parsed.standards = parsed.standards.filter((s: any) => valid.has(s?.refId)).slice(0, 8);
+    }
     return json(parsed);
   } catch (e: any) {
     throw error(502, `Assistant unavailable: ${(e?.message ?? 'failed').slice(0, 120)}`);
