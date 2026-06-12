@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import FieldRow from '../components/FieldRow.svelte';
+  import FieldInspector from '../components/FieldInspector.svelte';
   import { templatesForDomain } from '../lib/fieldLibrary';
   import { identifierById } from '../lib/knowledge';
   import { fieldsFromStandard, canIngest } from '../lib/ingest';
@@ -16,6 +17,7 @@
   }
 
   const library = $derived(templatesForDomain(app.brief.domain));
+  const selectedField = $derived(app.fields.find((f) => f.id === app.selectedFieldId));
   const usedNames = $derived(new Set(app.fields.map((f) => f.name)));
   const recIdentifierIds = $derived(new Set(app.rec.identifiers.map((i) => i.id)));
 
@@ -89,6 +91,9 @@
 
     <aside class="rail">
       <div class="rail-sticky">
+        {#if selectedField}
+          <FieldInspector field={selectedField} />
+        {:else}
         <div class="score-strip">
           <span class="ss-h">Live score — updates as you edit</span>
           <div class="ss-tiles">
@@ -109,6 +114,7 @@
               </button>
             {/each}
           </div>
+        {/if}
         {/if}
       </div>
     </aside>

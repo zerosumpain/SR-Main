@@ -72,7 +72,7 @@
   </div>
 
   <p class="tools-line">
-    Alongside the journey: <a href={`${base}/legal`}>⚖ Legal-basis registry</a> · <a href={`${base}/validate`}>🧪 Synthetic test data</a> · <a href={`${base}/portal`}>↻ Emerging-standards registry</a> · <a href={`${base}/method`}>Method &amp; sources</a>. You can also describe a dataset in plain English on the Brief step and let AI draft a first pass.
+    In the <b>Tools</b> menu: <a href={`${base}/portal`}>↻ Registry — find existing standards</a> · <a href={`${base}/validate`}>🧪 Test data</a> · <a href={`${base}/legal`}>⚖ Legal basis</a>. See also <a href={`${base}/method`}>About &amp; method</a>. You can also describe a dataset in plain English on the Brief step and let AI draft a first pass.
   </p>
 
   <h2 class="dsd-h2">Start from a worked example</h2>

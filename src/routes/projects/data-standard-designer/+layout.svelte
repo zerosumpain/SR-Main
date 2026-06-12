@@ -1,36 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
   import { app } from './lib/appState.svelte';
   import { PRESETS, DEFAULT_PRESET } from './lib/presets';
   import Onboarding from './components/Onboarding.svelte';
   import StandardDetail from './components/StandardDetail.svelte';
+  import Stepper from './components/Stepper.svelte';
 
   let { children } = $props();
   const STORAGE = 'dsd-state-v1';
   let presetOpen = $state(false);
+  let toolsOpen = $state(false);
   let helpOpen = $state(false);
 
-  // The journey: four numbered steps. "Review" covers interoperability + impact.
-  const PRIMARY = [
-    { href: 'brief', label: 'Brief' },
-    { href: 'schema', label: 'Schema' },
-    { href: 'interoperability', label: 'Review' },
-    { href: 'publish', label: 'Publish' },
-  ];
-  // Supporting surfaces — references & tools, deliberately lighter.
-  const SECONDARY = [
-    { href: 'legal', label: 'Legal basis' },
-    { href: 'validate', label: 'Test data' },
-    { href: 'portal', label: 'Registry' },
-    { href: 'method', label: 'Method' },
-  ];
   const base = '/projects/data-standard-designer';
-  const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
-  const activeHref = $derived(pathname === base ? '' : pathname.slice(base.length + 1).split('/')[0]);
-  // Review groups two routes under one step.
-  const isActive = (href: string) =>
-    activeHref === href || (href === 'interoperability' && activeHref === 'impact');
+  // Tools — the dip-into surfaces, behind a single menu so they don't compete
+  // with the four-step flow in the stepper.
+  const TOOLS = [
+    { href: 'portal', label: 'Registry', desc: 'Find existing standards' },
+    { href: 'validate', label: 'Test data', desc: 'Generate synthetic rows' },
+    { href: 'legal', label: 'Legal basis', desc: 'Lawful-basis registry' },
+  ];
 
   function loadPreset(id: string) {
     const p = PRESETS.find((x) => x.id === id);
@@ -66,13 +55,6 @@
       /* quota */
     }
   });
-
-  function bandColor(v: number): string {
-    if (v >= 80) return 'var(--success)';
-    if (v >= 60) return '#6a8f2d';
-    if (v >= 40) return 'var(--warn)';
-    return 'var(--error)';
-  }
 </script>
 
 <div class="dsd-page">
@@ -83,49 +65,48 @@
         <span class="mark">⌗</span> Data Standard Designer
       </a>
 
-      <div class="dsd-mode" role="group" aria-label="Audience mode">
-        <button class:on={app.mode === 'analyst'} onclick={() => app.setMode('analyst')} title="Plain-language view for business analysts">Analyst</button>
-        <button class:on={app.mode === 'architect'} onclick={() => app.setMode('architect')} title="Field-level detail for data architects">Architect</button>
-      </div>
+      <div class="dsd-top-actions">
+        <div class="dsd-menu-wrap">
+          <button class="dsd-menu-btn" onclick={() => { presetOpen = !presetOpen; toolsOpen = false; }} aria-expanded={presetOpen}>Examples ▾</button>
+          {#if presetOpen}
+            <div class="dsd-menu">
+              {#each PRESETS as p}
+                <button onclick={() => loadPreset(p.id)}>
+                  <b>{p.label}</b>
+                  <span>{p.domainLabel}</span>
+                </button>
+              {/each}
+              <button class="reset" onclick={() => { app.reset(); presetOpen = false; }}>＋ Start blank</button>
+            </div>
+          {/if}
+        </div>
 
-      {#if app.mounted && app.fields.length}
-        <a class="dsd-score-chip" href={`${base}/interoperability`} title="Overall design quality — interoperability, assurance and adoption">
-          <span class="num" style="color:{bandColor(app.overall)}">{app.overall}</span>
-          <span class="lbl">design<br />score</span>
-        </a>
-      {/if}
+        <div class="dsd-menu-wrap">
+          <button class="dsd-menu-btn" onclick={() => { toolsOpen = !toolsOpen; presetOpen = false; }} aria-expanded={toolsOpen}>Tools ▾</button>
+          {#if toolsOpen}
+            <div class="dsd-menu">
+              {#each TOOLS as t}
+                <a href={`${base}/${t.href}`} onclick={() => (toolsOpen = false)}>
+                  <b>{t.label}</b>
+                  <span>{t.desc}</span>
+                </a>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
-      <button class="dsd-help" onclick={() => (helpOpen = true)} title="How to use this">?</button>
+        <a class="dsd-about" href={`${base}/method`}>About</a>
 
-      <div class="dsd-preset">
-        <button class="dsd-preset-btn" onclick={() => (presetOpen = !presetOpen)} aria-expanded={presetOpen}>Examples ▾</button>
-        {#if presetOpen}
-          <div class="dsd-preset-menu">
-            {#each PRESETS as p}
-              <button onclick={() => loadPreset(p.id)}>
-                <b>{p.label}</b>
-                <span>{p.domainLabel}</span>
-              </button>
-            {/each}
-            <button class="reset" onclick={() => { app.reset(); presetOpen = false; }}>＋ Start blank</button>
-          </div>
-        {/if}
+        <div class="dsd-mode" role="group" aria-label="Audience mode">
+          <button class:on={app.mode === 'analyst'} onclick={() => app.setMode('analyst')} title="Plain-language view for business analysts">Analyst</button>
+          <button class:on={app.mode === 'architect'} onclick={() => app.setMode('architect')} title="Field-level detail for data architects">Architect</button>
+        </div>
+
+        <button class="dsd-help" onclick={() => (helpOpen = true)} title="How to use this">?</button>
       </div>
     </div>
 
-    <nav class="dsd-nav">
-      <div class="nav-primary">
-        {#each PRIMARY as s, i}
-          <a href={`${base}/${s.href}`} class="dsd-tab" class:active={isActive(s.href)} data-i={String(i + 1).padStart(2, '0')}>{s.label}</a>
-        {/each}
-      </div>
-      <span class="nav-div" aria-hidden="true">tools</span>
-      <div class="nav-secondary">
-        {#each SECONDARY as s}
-          <a href={`${base}/${s.href}`} class="dsd-tab ref" class:active={isActive(s.href)}>{s.label}</a>
-        {/each}
-      </div>
-    </nav>
+    <Stepper />
   </header>
 
   <Onboarding open={helpOpen} onClose={() => (helpOpen = false)} />
@@ -143,7 +124,7 @@
       legal, information-governance and Open Standards Board processes. Built by John Kelly in a personal
       capacity; it does not represent the Department for Education or any government position.
     </p>
-    <p class="path"><code>/projects/data-standard-designer</code> · grounded in DfE, NHS, ONS, local-gov, W3C and international standards · see the <a href={`${base}/method`}>Method &amp; sources</a>.</p>
+    <p class="path"><code>/projects/data-standard-designer</code> · grounded in DfE, NHS, ONS, local-gov, W3C and international standards · see <a href={`${base}/method`}>About &amp; method</a>.</p>
   </footer>
 </div>
 
@@ -159,42 +140,27 @@
   .dsd-brand .mark { color: var(--accent); font-size: 18px; }
   .dsd-brand:hover { color: var(--accent); }
 
-  .dsd-mode { margin-left: auto; display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-pill); overflow: hidden; }
+  .dsd-top-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+
+  .dsd-about { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); padding: 7px 6px; }
+  .dsd-about:hover { color: var(--accent); }
+
+  .dsd-mode { display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-pill); overflow: hidden; }
   .dsd-mode button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 14px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); }
   .dsd-mode button.on { background: var(--accent); color: #fff; }
-
-  .dsd-score-chip { display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--card-border); padding: 4px 12px 4px 10px; border-radius: var(--radius-round); }
-  .dsd-score-chip .num { font-family: var(--font-display); font-size: 24px; line-height: 1; }
-  .dsd-score-chip .lbl { font-family: var(--font-mono); font-size: 8px; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
-  .dsd-score-chip:hover { border-color: var(--accent); }
 
   .dsd-help { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
   .dsd-help:hover { border-color: var(--accent); color: var(--accent); }
 
-  .dsd-preset { position: relative; }
-  .dsd-preset-btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 12px; background: var(--text-primary); color: var(--bg); border: none; border-radius: var(--radius-round); cursor: pointer; }
-  .dsd-preset-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 260px; background: var(--surface-elevated); border: 2px solid var(--text-primary); box-shadow: var(--shadow-md); z-index: 40; display: flex; flex-direction: column; }
-  .dsd-preset-menu button { text-align: left; padding: 10px 12px; background: transparent; border: none; border-bottom: 1px solid var(--divider); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-  .dsd-preset-menu button:hover { background: var(--accent-tint-08); }
-  .dsd-preset-menu button b { font-size: 13px; color: var(--text-primary); }
-  .dsd-preset-menu button span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-  .dsd-preset-menu button.reset { color: var(--accent); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
-
-  .dsd-nav { display: flex; gap: 4px 6px; flex-wrap: wrap; align-items: center; padding: 0 18px; }
-  .nav-primary { display: flex; gap: 2px; flex-wrap: wrap; }
-  .nav-secondary { display: flex; gap: 2px; flex-wrap: wrap; }
-  .nav-div { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-ghost); padding: 0 10px; border-left: 1px solid var(--divider); align-self: center; height: 16px; line-height: 16px; }
-  .dsd-tab { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); padding: 9px 13px 10px; position: relative; display: inline-flex; gap: 6px; align-items: baseline; }
-  .dsd-tab::before { content: attr(data-i); font-size: 8px; color: var(--text-ghost); }
-  .dsd-tab:hover { color: var(--text-primary); }
-  .dsd-tab.active { color: var(--text-primary); }
-  .dsd-tab.active::after { content: ''; position: absolute; left: 13px; right: 13px; bottom: 0; height: 3px; background: var(--accent); }
-  /* reference tabs read lighter than the numbered journey steps */
-  .dsd-tab.ref { font-size: 10.5px; color: var(--text-ghost); padding: 9px 10px 10px; }
-  .dsd-tab.ref:hover { color: var(--text-secondary); }
-  .dsd-tab.ref.active { color: var(--text-primary); }
-  .dsd-tab.ref.active::after { left: 10px; right: 10px; height: 2px; }
-  @media (max-width: 640px) { .nav-div { display: none; } }
+  .dsd-menu-wrap { position: relative; }
+  .dsd-menu-btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 12px; background: var(--surface-elevated); color: var(--text-primary); border: 1.5px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; }
+  .dsd-menu-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .dsd-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 260px; background: var(--surface-elevated); border: 2px solid var(--text-primary); box-shadow: var(--shadow-md); z-index: 40; display: flex; flex-direction: column; }
+  .dsd-menu button, .dsd-menu a { text-align: left; padding: 10px 12px; background: transparent; border: none; border-bottom: 1px solid var(--divider); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+  .dsd-menu button:hover, .dsd-menu a:hover { background: var(--accent-tint-08); }
+  .dsd-menu b { font-size: 13px; color: var(--text-primary); }
+  .dsd-menu span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .dsd-menu button.reset { color: var(--accent); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
 
   .dsd-main { min-height: 60vh; }
 
@@ -208,7 +174,7 @@
 
   @media (max-width: 720px) {
     .dsd-top-row { padding: 9px 14px; }
-    .dsd-mode { margin-left: 0; }
+    .dsd-top-actions { margin-left: 0; }
   }
 
   /* ============================================================
@@ -216,6 +182,7 @@
      ============================================================ */
   :global(.dsd-route) { max-width: 1180px; margin: 0 auto; padding: 28px 24px 8px; }
   :global(.dsd-route.narrow) { max-width: 880px; }
+  :global(.dsd-route.wide) { max-width: 1320px; }
   :global(.dsd-eyebrow) { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 10px; }
   :global(.dsd-h1) { font-family: var(--font-display); font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; line-height: 0.95; font-size: clamp(30px, 5vw, 52px); margin: 0 0 14px; color: var(--text-primary); }
   :global(.dsd-h2) { font-family: var(--font-body); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin: 34px 0 12px; color: var(--text-primary); }
