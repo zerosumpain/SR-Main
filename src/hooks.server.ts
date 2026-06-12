@@ -278,6 +278,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/data-standard-designer/* (ingest + seed-workflows) are service-to-service:
+  // the daily discovery cron's http-request node has no user session. The handlers
+  // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` (open in dev if
+  // unset). GET on ingest is the read-only registry snapshot used by the portal.
+  if (pathname.startsWith('/api/data-standard-designer/')) {
+    return resolve(event);
+  }
+
   // /api/health/workflow-engine is consumed by the systemd watchdog timer
   // (curl from 127.0.0.1) — no user session, no service token. Restrict to
   // loopback to prevent it being scraped externally for run counts.

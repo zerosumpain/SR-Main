@@ -25,6 +25,40 @@
     if (v) { app.togglePurpose(v); customPurpose = ''; }
   }
 
+  // --- LLM assistant: natural-language define / revise ---
+  let aiOpen = $state(false);
+  let aiPrompt = $state('');
+  let aiBusy = $state(false);
+  let aiError = $state('');
+  const hasDesign = $derived(!!app.brief.name || app.fields.length > 0);
+  async function callAssist(mode: 'design' | 'revise') {
+    const prompt = aiPrompt.trim();
+    if (!prompt || aiBusy) return;
+    aiBusy = true;
+    aiError = '';
+    try {
+      const payload = mode === 'revise'
+        ? { mode: 'revise', prompt, design: { brief: app.brief, fields: app.fields } }
+        : { mode: 'design', prompt };
+      const res = await fetch('/projects/data-standard-designer/assist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.message || `Request failed (${res.status})`);
+      }
+      app.applyAssistantDesign(await res.json());
+      aiPrompt = '';
+      aiOpen = false;
+    } catch (e: any) {
+      aiError = e?.message || 'The assistant is unavailable right now.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
   function addStandardToProvider(pid: string, sid: string) {
     if (!sid) return;
     const p = app.brief.providers.find((x) => x.id === pid);
@@ -42,6 +76,37 @@
       <span class="dsd-eyebrow">Step 01 · The brief</span>
       <h1 class="dsd-h1" style="font-size:clamp(26px,4vw,40px)">What is this data for?</h1>
       <p class="dsd-prose">Capture the intent and the people around the data first. Everything the engine recommends flows from this.</p>
+
+      <!-- Natural-language assistant -->
+      <div class="ai-panel" class:open={aiOpen}>
+        <button class="ai-toggle" onclick={() => (aiOpen = !aiOpen)} aria-expanded={aiOpen}>
+          <span class="spark">✦</span>
+          {hasDesign ? 'Describe a change in plain English' : 'Describe the dataset — let AI draft a first pass'}
+          <span class="chev">{aiOpen ? '▾' : '▸'}</span>
+        </button>
+        {#if aiOpen}
+          <div class="ai-body">
+            <textarea
+              class="dsd-textarea"
+              rows="3"
+              bind:value={aiPrompt}
+              placeholder={hasDesign
+                ? 'e.g. "Add a field for the social worker\'s team, make NHS number mandatory, and add a monthly review date."'
+                : 'e.g. "A standard for tracking children in temporary accommodation, shared between housing teams, schools and the local authority, so we can spot kids who keep moving school."'}
+            ></textarea>
+            <div class="ai-actions">
+              {#if hasDesign}
+                <button class="dsd-btn primary sm" disabled={aiBusy || !aiPrompt.trim()} onclick={() => callAssist('revise')}>{aiBusy ? 'Working…' : '✦ Revise this design'}</button>
+                <button class="dsd-btn sm" disabled={aiBusy || !aiPrompt.trim()} onclick={() => callAssist('design')}>Draft fresh instead</button>
+              {:else}
+                <button class="dsd-btn primary sm" disabled={aiBusy || !aiPrompt.trim()} onclick={() => callAssist('design')}>{aiBusy ? 'Drafting…' : '✦ Draft the standard'}</button>
+              {/if}
+              <span class="ai-note">AI proposes a starting point — every field stays fully editable.</span>
+            </div>
+            {#if aiError}<p class="ai-error">⚠ {aiError}</p>{/if}
+          </div>
+        {/if}
+      </div>
 
       {#if app.mode === 'analyst'}
         <div class="dsd-note"><span class="tag">Analyst tip</span>You don't need to know anything about schemas here. Describe the dataset the way you'd explain it to a colleague. The engine turns this into a field-level standard on the next step.</div>
@@ -201,6 +266,15 @@
   .warnline { font-size: 12px; color: var(--warn); background: var(--warn-bg); padding: 7px 10px; border-radius: var(--radius-sharp); margin: 4px 0 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .add-inline { display: flex; gap: 8px; align-items: center; max-width: 420px; }
+
+  .ai-panel { margin: 16px 0 4px; border: 1.5px solid var(--accent); border-radius: var(--radius-round); background: var(--accent-tint-04); overflow: hidden; }
+  .ai-toggle { width: 100%; display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: transparent; border: none; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--text-primary); text-align: left; }
+  .ai-toggle .spark { color: var(--accent); font-size: 15px; }
+  .ai-toggle .chev { margin-left: auto; color: var(--text-muted); }
+  .ai-body { padding: 0 14px 14px; }
+  .ai-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .ai-note { font-size: 11px; color: var(--text-muted); }
+  .ai-error { font-size: 12px; color: var(--error); background: var(--error-bg); padding: 7px 10px; border-radius: var(--radius-sharp); margin: 8px 0 0; }
 
   .entity { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 10px; margin-bottom: 9px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-elevated); }
   .ent-row { display: flex; gap: 6px; }

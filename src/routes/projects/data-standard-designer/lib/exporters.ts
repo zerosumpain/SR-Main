@@ -15,6 +15,7 @@ import type {
   CrosswalkEdge,
 } from './types';
 import { identifierById, standardById, METHODS } from './knowledge';
+import { codelistById } from './codelists';
 
 export interface ExportInput {
   brief: Brief;
@@ -106,8 +107,16 @@ export function toJsonSchema(i: ExportInput): string {
       description: f.description || undefined,
       ...base,
     };
-    if (f.type === 'array') prop.items = { type: 'string' };
-    if (f.codelist) prop['x-codelist'] = f.codelist;
+    const cl = codelistById(f.codelistId);
+    if (cl && f.type !== 'array') {
+      prop.enum = cl.values.map((v) => v.code);
+      prop['x-codelist-values'] = cl.values;
+    }
+    if (f.type === 'array') {
+      prop.items = cl ? { type: 'string', enum: cl.values.map((v) => v.code) } : { type: 'string' };
+    }
+    if (f.codelistId) prop['x-codelist'] = cl ? `${cl.name} (${cl.source})` : f.codelist;
+    else if (f.codelist) prop['x-codelist'] = f.codelist;
     if (f.identifier) prop['x-identifier'] = f.identifier;
     if (f.sourceStandard) prop['x-source-standard'] = f.sourceStandard;
     if (f.pii) prop['x-personal-data'] = true;
@@ -150,10 +159,12 @@ export function toDataPackage(i: ExportInput): string {
     };
     const constraints: Record<string, unknown> = {};
     if (f.required) constraints.required = true;
-    if (f.type === 'enum' && f.codelist) tf['rdfType'] = undefined;
+    const cl = codelistById(f.codelistId);
+    if (cl) constraints.enum = cl.values.map((v) => v.code);
     if (Object.keys(constraints).length) tf.constraints = constraints;
     if (f.format) tf.format = /iso|8601/i.test(f.format) ? 'default' : f.format;
-    if (f.codelist) tf['dsd:codelist'] = f.codelist;
+    if (cl) tf['dsd:codelist'] = { name: cl.name, source: cl.source, values: cl.values };
+    else if (f.codelist) tf['dsd:codelist'] = f.codelist;
     if (f.identifier) tf['dsd:identifier'] = f.identifier;
     return tf;
   });
@@ -325,6 +336,11 @@ export function toMarkdownSpec(i: ExportInput): string {
     L.push(f.description || '_No definition yet._');
     if (f.constraints) L.push(`- Constraints: ${f.constraints}`);
     if (f.example) L.push(`- Example: \`${f.example}\``);
+    const cl = codelistById(f.codelistId);
+    if (cl) {
+      L.push(`- Permissible values (${cl.name}${cl.partial ? ', subset' : ''} — ${cl.source}):`);
+      for (const v of cl.values) L.push(`  - \`${v.code}\` — ${v.label}`);
+    }
   }
   L.push('');
   L.push('## 6. Format, collection and frequency');

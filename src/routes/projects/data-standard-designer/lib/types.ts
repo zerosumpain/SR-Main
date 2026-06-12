@@ -143,8 +143,10 @@ export interface Field {
   specialCategory: boolean;
   /** If this field carries a known identifier, the id in IDENTIFIERS. */
   identifier?: string;
-  /** Controlled vocabulary / codelist reference (name or URL). */
+  /** Controlled vocabulary / codelist reference (human name or URL). */
   codelist?: string;
+  /** Id into CODELISTS when the permissible values are enumerated. */
+  codelistId?: string;
   /** Format hint: ISO 8601, GSS code, a regex, etc. */
   format?: string;
   unit?: string;

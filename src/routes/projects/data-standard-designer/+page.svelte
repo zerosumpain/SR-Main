@@ -72,6 +72,22 @@
     {/each}
   </div>
 
+  <h2 class="dsd-h2">Also in the toolkit</h2>
+  <div class="extras">
+    <a class="extra" href={`${base}/brief`}>
+      <span class="ex-ic">✦</span><b>Describe it in plain English</b>
+      <p>Type what the dataset is for and let AI draft a first-pass brief and schema — then edit freely. Revise it the same way.</p>
+    </a>
+    <a class="extra" href={`${base}/validate`}>
+      <span class="ex-ic">🧪</span><b>Test with synthetic data</b>
+      <p>Generate up to 10,000 conforming rows — valid-format identifiers, real codelist values — to trial the standard before any real data exists.</p>
+    </a>
+    <a class="extra" href={`${base}/portal`}>
+      <span class="ex-ic">↻</span><b>Emerging-standards registry</b>
+      <p>A daily, index-driven sweep of newly published government data standards, with search, filters and visible source-coverage health.</p>
+    </a>
+  </div>
+
   <h2 class="dsd-h2">Start from a worked example</h2>
   <p class="dsd-prose">Each example is a real DfE-relevant scenario, pre-loaded with a brief and a starter schema. Open one and reshape it — or start blank from the <b>Examples</b> menu.</p>
   <div class="presets">
@@ -111,6 +127,13 @@
   .preset b { font-size: 16px; color: var(--text-primary); }
   .preset p { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0; flex: 1; }
   .preset .open { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+
+  .extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .extra { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 15px; background: var(--surface-elevated); transition: border-color 0.15s, transform 0.15s; }
+  .extra:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .ex-ic { font-size: 20px; color: var(--accent); display: block; }
+  .extra b { display: block; font-size: 14.5px; color: var(--text-primary); margin: 8px 0 5px; }
+  .extra p { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
 
   @media (max-width: 700px) { .modes { grid-template-columns: 1fr; } }
 </style>

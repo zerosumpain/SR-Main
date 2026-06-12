@@ -1737,3 +1737,55 @@ export const policyIndicatorSnapshots = pgTable(
 
 export type PolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferSelect;
 export type NewPolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferInsert;
+
+// --- Data Standard Designer: emerging-standards registry -------------------
+// Discovered government data standards, surfaced in the project's portal. The
+// discovery is index-driven (GOV.UK Search API etc.), deduped on canonicalId,
+// with cheap change-detection via contentHash. LLM classification only sets
+// kind/confidence/summary — never whether the row exists.
+export const standardRegistryEntries = pgTable(
+  'standard_registry_entries',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    canonicalId: text('canonical_id').notNull(), // stable key: sourceKey + upstream id/url
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    sourceKey: text('source_key').notNull(), // govuk-search | data-gov-uk | github | manual
+    sourceQuery: text('source_query'),
+    publisher: text('publisher'),
+    domain: text('domain'), // classified sector
+    docType: text('doc_type'),
+    summary: text('summary'),
+    kind: text('kind'), // data-standard | data-dictionary | metadata | api-standard | identifier | guidance | other
+    confidence: text('confidence').notNull().default('medium'), // high | medium | low
+    status: text('status').notNull().default('listed'), // listed | review | dismissed
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    contentHash: text('content_hash'),
+    raw: jsonb('raw'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('standard_registry_canonical_idx').on(t.canonicalId)],
+);
+export type StandardRegistryEntry = typeof standardRegistryEntries.$inferSelect;
+export type NewStandardRegistryEntry = typeof standardRegistryEntries.$inferInsert;
+
+// Per-source run telemetry — the coverage-health signal. A source that
+// normally returns N and suddenly returns 0 (or errors) shows up here, so a
+// silently-broken feed is visible rather than mistaken for "nothing new".
+export const standardRegistrySourceRuns = pgTable(
+  'standard_registry_source_runs',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sourceKey: text('source_key').notNull(),
+    runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
+    ok: boolean('ok').notNull().default(true),
+    itemsFound: integer('items_found').notNull().default(0),
+    itemsNew: integer('items_new').notNull().default(0),
+    totalAvailable: integer('total_available'), // upstream's reported total — coverage signal
+    error: text('error'),
+    durationMs: integer('duration_ms'),
+  },
+  (t) => [index('standard_registry_source_runs_key_idx').on(t.sourceKey, t.runAt)],
+);
+export type StandardRegistrySourceRun = typeof standardRegistrySourceRuns.$inferSelect;

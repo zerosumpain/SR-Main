@@ -2,6 +2,7 @@
   import type { Field, FieldType } from '../lib/types';
   import { app } from '../lib/appState.svelte';
   import { IDENTIFIERS, CATALOG, identifierById } from '../lib/knowledge';
+  import { CODELISTS, codelistById, codelistLabel } from '../lib/codelists';
 
   let { field, index, total }: { field: Field; index: number; total: number } = $props();
 
@@ -9,6 +10,11 @@
   let open = $state(false);
   const u = (patch: Partial<Field>) => app.updateField(field.id, patch);
   const idCaveat = $derived(field.identifier ? identifierById(field.identifier)?.caveat : undefined);
+  const codelist = $derived(codelistById(field.codelistId));
+  const enumish = $derived(field.type === 'enum' || field.type === 'array');
+  function pickCodelist(id: string) {
+    u({ codelistId: id || undefined, codelist: id ? codelistLabel(id) : field.codelist });
+  }
 </script>
 
 <div class="fr" class:req={field.required}>
@@ -58,15 +64,34 @@
             {#each CATALOG as s}<option value={s.id}>{s.name}</option>{/each}
           </select>
         </label>
-        <label>
-          <span class="dsd-label">Codelist / vocabulary</span>
-          <input class="dsd-input" value={field.codelist || ''} oninput={(e) => u({ codelist: (e.target as HTMLInputElement).value || undefined })} placeholder="e.g. SSDA903 placement codes" />
-        </label>
+        {#if enumish}
+          <label>
+            <span class="dsd-label">Enumerated codelist</span>
+            <select class="dsd-select" value={field.codelistId || ''} onchange={(e) => pickCodelist((e.target as HTMLSelectElement).value)}>
+              <option value="">— pick a codelist —</option>
+              {#each CODELISTS as c}<option value={c.id}>{c.name}{c.partial ? ' (subset)' : ''}</option>{/each}
+            </select>
+          </label>
+        {:else}
+          <label>
+            <span class="dsd-label">Codelist / vocabulary</span>
+            <input class="dsd-input" value={field.codelist || ''} oninput={(e) => u({ codelist: (e.target as HTMLInputElement).value || undefined })} placeholder="e.g. SSDA903 placement codes" />
+          </label>
+        {/if}
         <label>
           <span class="dsd-label">Format / pattern</span>
           <input class="dsd-input" value={field.format || ''} oninput={(e) => u({ format: (e.target as HTMLInputElement).value || undefined })} placeholder="e.g. ISO 8601, GSS code, regex" />
         </label>
       </div>
+      {#if codelist}
+        <div class="codevals">
+          <span class="cv-h">{codelist.values.length} permissible value{codelist.values.length === 1 ? '' : 's'} · {codelist.source}{codelist.partial ? ' (subset)' : ''}</span>
+          <div class="cv-chips">
+            {#each codelist.values.slice(0, 12) as v}<span class="cv"><code>{v.code}</code> {v.label}</span>{/each}
+            {#if codelist.values.length > 12}<span class="cv more">+{codelist.values.length - 12} more</span>{/if}
+          </div>
+        </div>
+      {/if}
       {#if idCaveat}<p class="caveat">⚠ {idCaveat}</p>{/if}
     </div>
   {/if}
@@ -96,4 +121,10 @@
   .fr-detail .d { display: block; margin-bottom: 8px; }
   .d-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 12px; }
   .caveat { font-size: 11.5px; color: var(--warn); background: var(--warn-bg); padding: 6px 9px; border-radius: var(--radius-sharp); margin: 8px 0 0; }
+  .codevals { margin-top: 9px; }
+  .cv-h { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-ghost); display: block; margin-bottom: 5px; }
+  .cv-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .cv { font-size: 11px; color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--divider); border-radius: var(--radius-sharp); padding: 2px 6px; }
+  .cv code { font-family: var(--font-mono); font-size: 10px; color: var(--accent); }
+  .cv.more { color: var(--text-ghost); font-style: italic; }
 </style>

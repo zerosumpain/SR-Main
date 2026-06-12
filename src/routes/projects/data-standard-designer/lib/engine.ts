@@ -345,7 +345,7 @@ export function interoperabilityScore(b: Brief, fields: Field[]): Score {
   const dateFields = fields.filter((f) => f.type === 'date' || f.type === 'datetime');
   const datesIso = dateFields.filter((f) => /iso|8601/i.test(f.format || ''));
   const enumFields = fields.filter((f) => f.type === 'enum' || f.type === 'array');
-  const enumCoded = enumFields.filter((f) => f.codelist);
+  const enumCoded = enumFields.filter((f) => f.codelist || f.codelistId);
   const provenanced = fields.filter((f) => f.sourceStandard);
   const edges = crosswalk(fields);
 

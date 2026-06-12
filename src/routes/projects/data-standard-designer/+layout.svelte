@@ -3,18 +3,22 @@
   import { page } from '$app/stores';
   import { app } from './lib/appState.svelte';
   import { PRESETS, DEFAULT_PRESET } from './lib/presets';
+  import Onboarding from './components/Onboarding.svelte';
 
   let { children } = $props();
   const STORAGE = 'dsd-state-v1';
   let presetOpen = $state(false);
+  let helpOpen = $state(false);
 
   const SECTIONS = [
     { href: '', label: 'Overview' },
     { href: 'brief', label: 'Brief' },
     { href: 'schema', label: 'Schema' },
+    { href: 'validate', label: 'Test data' },
     { href: 'interoperability', label: 'Interoperability' },
     { href: 'impact', label: 'Impact' },
     { href: 'publish', label: 'Publish' },
+    { href: 'portal', label: 'Registry' },
     { href: 'method', label: 'Method' },
   ];
   const base = '/projects/data-standard-designer';
@@ -42,6 +46,7 @@
       loadPreset(DEFAULT_PRESET);
     }
     app.mounted = true;
+    try { if (!localStorage.getItem('dsd-onboarded')) helpOpen = true; } catch { /* ignore */ }
   });
 
   $effect(() => {
@@ -83,6 +88,8 @@
         </a>
       {/if}
 
+      <button class="dsd-help" onclick={() => (helpOpen = true)} title="How to use this">?</button>
+
       <div class="dsd-preset">
         <button class="dsd-preset-btn" onclick={() => (presetOpen = !presetOpen)} aria-expanded={presetOpen}>Examples ▾</button>
         {#if presetOpen}
@@ -107,6 +114,8 @@
       {/each}
     </nav>
   </header>
+
+  <Onboarding open={helpOpen} onClose={() => (helpOpen = false)} />
 
   <main class="dsd-main">
     {@render children()}
@@ -144,6 +153,9 @@
   .dsd-score-chip .num { font-family: var(--font-display); font-size: 24px; line-height: 1; }
   .dsd-score-chip .lbl { font-family: var(--font-mono); font-size: 8px; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .dsd-score-chip:hover { border-color: var(--accent); }
+
+  .dsd-help { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
+  .dsd-help:hover { border-color: var(--accent); color: var(--accent); }
 
   .dsd-preset { position: relative; }
   .dsd-preset-btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 12px; background: var(--text-primary); color: var(--bg); border: none; border-radius: var(--radius-round); cursor: pointer; }

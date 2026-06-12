@@ -5,7 +5,9 @@
 // All the heavy thinking is derived, so editing a field re-scores everything
 // live — the core "play with it and see the impact" experience.
 
-import type { Brief, Field, ProviderEntry, ConsumerEntry, FieldTemplate, StandardEntry } from './types';
+import type { Brief, Field, FieldType, Sector, ProviderEntry, ConsumerEntry, FieldTemplate, StandardEntry } from './types';
+import { IDENTIFIERS, standardById } from './knowledge';
+import { codelistById } from './codelists';
 import {
   recommend,
   interoperabilityScore,
@@ -155,6 +157,62 @@ class DesignerState {
     this.brief = emptyBrief();
     this.fields = [];
     this.version = '0.1.0';
+  }
+
+  /** Apply an LLM assistant design/revision, defensively sanitised + clamped to
+   *  the engine's valid vocabulary, with fresh ids assigned. */
+  applyAssistantDesign(parsed: any) {
+    if (!parsed || typeof parsed !== 'object') return;
+    const DOMAINS: Sector[] = ['education', 'childrens-social-care', 'child-protection', 'health', 'local-gov', 'cross-gov', 'employment', 'justice', 'housing'];
+    const TYPES: FieldType[] = ['string', 'integer', 'number', 'boolean', 'date', 'datetime', 'enum', 'identifier', 'geo', 'currency', 'object', 'array'];
+    const idOk = (v: any) => (IDENTIFIERS.some((i) => i.id === v) ? v : undefined);
+    const clOk = (v: any) => (codelistById(v) ? v : undefined);
+    const stdOk = (v: any) => (standardById(v) ? v : undefined);
+    const b = parsed.brief || {};
+    const next = emptyBrief();
+    if (b.name) next.name = String(b.name).slice(0, 120);
+    if (b.purpose) next.purpose = String(b.purpose).slice(0, 1000);
+    if (DOMAINS.includes(b.domain)) next.domain = b.domain;
+    if (Array.isArray(b.processingPurposes)) next.processingPurposes = b.processingPurposes.map((x: any) => String(x)).slice(0, 12);
+    next.containsPersonalData = b.containsPersonalData !== false;
+    next.containsSpecialCategory = !!b.containsSpecialCategory;
+    next.aboutChildren = !!b.aboutChildren;
+    if (b.geographicCoverage) next.geographicCoverage = String(b.geographicCoverage).slice(0, 120);
+    if (b.legalBasis) next.legalBasis = String(b.legalBasis).slice(0, 300);
+    if (['low', 'medium', 'high'].includes(b.interopGoal)) next.interopGoal = b.interopGoal;
+    next.providers = (Array.isArray(b.providers) ? b.providers : []).slice(0, 10).map((p: any) => ({
+      id: newFieldId(),
+      label: String(p?.label || '').slice(0, 120),
+      sector: p?.sector || 'other',
+      ownership: ['public', 'private', 'voluntary', 'mixed'].includes(p?.ownership) ? p.ownership : 'public',
+      existingStandards: (Array.isArray(p?.existingStandards) ? p.existingStandards : []).map(stdOk).filter(Boolean),
+      systemsHeld: String(p?.systemsHeld || '').slice(0, 160),
+      burdenSensitivity: ['low', 'medium', 'high'].includes(p?.burdenSensitivity) ? p.burdenSensitivity : 'medium',
+    }));
+    next.consumers = (Array.isArray(b.consumers) ? b.consumers : []).slice(0, 10).map((c: any) => ({
+      id: newFieldId(),
+      label: String(c?.label || '').slice(0, 120),
+      sector: c?.sector || 'central-gov',
+      use: String(c?.use || '').slice(0, 200),
+    }));
+    this.brief = next;
+
+    const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
+    this.fields = fields.slice(0, 60).map((f: any) => ({
+      id: newFieldId(),
+      name: String(f?.name || 'field').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'field',
+      title: String(f?.title || f?.name || 'Field').slice(0, 120),
+      type: TYPES.includes(f?.type) ? f.type : 'string',
+      description: String(f?.description || '').slice(0, 500),
+      required: !!f?.required,
+      pii: !!f?.pii,
+      specialCategory: !!f?.specialCategory,
+      identifier: idOk(f?.identifier),
+      codelistId: clOk(f?.codelistId),
+      codelist: clOk(f?.codelistId) ? undefined : (f?.codelist ? String(f.codelist).slice(0, 120) : undefined),
+      sourceStandard: stdOk(f?.sourceStandard),
+      format: f?.format ? String(f.format).slice(0, 120) : undefined,
+    })) as Field[];
   }
 
   toExportInput(): ExportInput {
