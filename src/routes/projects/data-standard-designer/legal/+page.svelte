@@ -44,6 +44,18 @@
   const tree = $derived(prune(LEGAL_BASIS));
   const check = $derived(app.legalBasisCheck);
 
+  // Tree collapse: depth-1+ groups are collapsed by default (calm), expand on
+  // click; a search query force-opens everything that matches.
+  let expanded = $state<Set<string>>(new Set());
+  let allExpanded = $state(false);
+  function toggleGroup(id: string) { const s = new Set(expanded); s.has(id) ? s.delete(id) : s.add(id); expanded = s; }
+  function countLeaves(n: LegalNode): number { return n.kind ? 1 : (n.children || []).reduce((a, c) => a + countLeaves(c), 0); }
+  function groupIds(nodes: LegalNode[], depth = 0, acc: string[] = []): string[] {
+    for (const n of nodes) { if (!n.kind && depth >= 1) acc.push(n.id); if (n.children) groupIds(n.children, depth + 1, acc); }
+    return acc;
+  }
+  function toggleAll() { allExpanded = !allExpanded; expanded = allExpanded ? new Set(groupIds(LEGAL_BASIS)) : new Set(); }
+
   // --- LLM legal-basis adviser: explore the standard, ask questions, recommend ---
   let advOpen = $state(false);
   let advBusy = $state(false);
@@ -110,10 +122,21 @@
     </div>
   {:else}
     <!-- group -->
+    {@const open = depth === 0 || !!q || expanded.has(n.id)}
     <div class="group" style="margin-left:{depth * 10}px">
-      <div class="group-head"><span class="gl">{n.label}</span></div>
-      {#if n.description && depth > 0}<p class="group-desc">{n.description}</p>{/if}
-      <div class="group-kids">{#each n.children || [] as c}{@render renderNode(c, depth + 1)}{/each}</div>
+      {#if depth === 0}
+        <div class="group-head layer"><span class="gl">{n.label}</span></div>
+        {#if n.description}<p class="group-desc">{n.description}</p>{/if}
+        <div class="group-kids">{#each n.children || [] as c}{@render renderNode(c, depth + 1)}{/each}</div>
+      {:else}
+        <button class="group-head toggle" onclick={() => toggleGroup(n.id)} aria-expanded={open}>
+          <span class="caret">{open ? '▾' : '▸'}</span><span class="gl">{n.label}</span><span class="gcount">{countLeaves(n)}</span>
+        </button>
+        {#if open}
+          {#if n.description}<p class="group-desc">{n.description}</p>{/if}
+          <div class="group-kids">{#each n.children || [] as c}{@render renderNode(c, depth + 1)}{/each}</div>
+        {/if}
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -206,6 +229,7 @@
       <option value="governance">C · Governance</option>
     </select>
     <select class="dsd-select" bind:value={domainFilter}>{#each DOMAINS as d}<option value={d}>{d === 'all' ? 'All domains' : d}</option>{/each}</select>
+    <button class="dsd-btn sm" onclick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
   </div>
 
   <!-- The hierarchy -->
@@ -274,8 +298,14 @@
   .filters .dsd-select { width: auto; }
 
   .tree { display: flex; flex-direction: column; gap: 4px; }
-  .group { margin-top: 10px; }
-  .group-head .gl { font-family: var(--font-body); font-weight: 700; font-size: 15px; color: var(--text-primary); }
+  .group { margin-top: 8px; }
+  .group-head.layer { margin-top: 14px; }
+  .group-head.layer .gl { font-family: var(--font-body); font-weight: 700; font-size: 15px; color: var(--text-primary); }
+  .group-head.toggle { width: 100%; display: flex; align-items: center; gap: 8px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 8px 12px; cursor: pointer; text-align: left; }
+  .group-head.toggle:hover { border-color: var(--accent); }
+  .group-head.toggle .caret { font-size: 10px; color: var(--text-muted); width: 12px; }
+  .group-head.toggle .gl { font-family: var(--font-body); font-weight: 600; font-size: 13.5px; color: var(--text-primary); flex: 1; }
+  .group-head.toggle .gcount { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); background: var(--surface-overlay); padding: 1px 7px; border-radius: var(--radius-pill); }
   .group-desc { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 4px 0 6px; max-width: 80ch; }
   .group-kids { display: flex; flex-direction: column; gap: 5px; border-left: 2px solid var(--divider); padding-left: 10px; margin-top: 4px; }
 

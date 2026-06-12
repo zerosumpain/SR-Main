@@ -1,10 +1,10 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import FieldRow from '../components/FieldRow.svelte';
-  import ScoreBar from '../components/ScoreBar.svelte';
   import { templatesForDomain } from '../lib/fieldLibrary';
   import { identifierById } from '../lib/knowledge';
   const base = '/projects/data-standard-designer';
+  function col(v: number) { return v >= 80 ? 'var(--success)' : v >= 60 ? '#6a8f2d' : v >= 40 ? 'var(--warn)' : 'var(--error)'; }
 
   const library = $derived(templatesForDomain(app.brief.domain));
   const usedNames = $derived(new Set(app.fields.map((f) => f.name)));
@@ -65,10 +65,14 @@
 
     <aside class="rail">
       <div class="rail-sticky">
-        <div class="mini-scores">
-          <ScoreBar score={app.interop} label="Interoperability" />
-          <ScoreBar score={app.assurance} label="Assurance" />
-          <ScoreBar score={app.adoption} label="Adoption" />
+        <div class="score-strip">
+          <span class="ss-h">Live score — updates as you edit</span>
+          <div class="ss-tiles">
+            <a class="ss-tile" href={`${base}/interoperability`}><span class="v" style="color:{col(app.interop.value)}">{app.interop.value}</span><span class="l">Interop</span></a>
+            <a class="ss-tile" href={`${base}/impact`}><span class="v" style="color:{col(app.assurance.value)}">{app.assurance.value}</span><span class="l">Assurance</span></a>
+            <a class="ss-tile" href={`${base}/impact`}><span class="v" style="color:{col(app.adoption.value)}">{app.adoption.value}</span><span class="l">Adoption</span></a>
+          </div>
+          <a class="ss-open" href={`${base}/interoperability`}>Open Review for the breakdown →</a>
         </div>
 
         {#if app.rec.identifiers.some((i) => ![...usedNames].some((n) => app.fields.find((f) => f.name === n)?.identifier === i.id))}
@@ -82,8 +86,6 @@
             {/each}
           </div>
         {/if}
-
-        <a class="dsd-btn dark sm full" href={`${base}/interoperability`}>See the crosswalk →</a>
       </div>
     </aside>
   </div>
@@ -106,7 +108,14 @@
   .lib-chip .src { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); }
 
   .rail-sticky { position: sticky; top: 110px; display: flex; flex-direction: column; gap: 12px; }
-  .mini-scores { display: flex; flex-direction: column; gap: 8px; }
+  .score-strip { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 12px; background: var(--card-bg); }
+  .ss-h { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); display: block; margin-bottom: 9px; }
+  .ss-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .ss-tile { text-align: center; border: 1px solid var(--divider); border-radius: var(--radius-round); padding: 8px 4px; background: var(--surface-elevated); }
+  .ss-tile:hover { border-color: var(--accent); }
+  .ss-tile .v { font-family: var(--font-display); font-size: 24px; line-height: 1; display: block; }
+  .ss-tile .l { font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .ss-open { display: block; margin-top: 9px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
   .suggest { border: 1.5px solid var(--accent); border-radius: var(--radius-round); padding: 12px; background: var(--accent-tint-04); }
   .sg { width: 100%; text-align: left; background: transparent; border: none; border-top: 1px solid var(--divider); padding: 7px 0; cursor: pointer; font-size: 12.5px; color: var(--text-primary); }
   .sg:first-of-type { border-top: none; }

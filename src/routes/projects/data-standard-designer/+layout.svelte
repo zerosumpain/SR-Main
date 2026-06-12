@@ -10,21 +10,26 @@
   let presetOpen = $state(false);
   let helpOpen = $state(false);
 
-  const SECTIONS = [
-    { href: '', label: 'Overview' },
+  // The journey: four numbered steps. "Review" covers interoperability + impact.
+  const PRIMARY = [
     { href: 'brief', label: 'Brief' },
-    { href: 'legal', label: 'Legal basis' },
     { href: 'schema', label: 'Schema' },
-    { href: 'validate', label: 'Test data' },
-    { href: 'interoperability', label: 'Interop' },
-    { href: 'impact', label: 'Impact' },
+    { href: 'interoperability', label: 'Review' },
     { href: 'publish', label: 'Publish' },
+  ];
+  // Supporting surfaces — references & tools, deliberately lighter.
+  const SECONDARY = [
+    { href: 'legal', label: 'Legal basis' },
+    { href: 'validate', label: 'Test data' },
     { href: 'portal', label: 'Registry' },
     { href: 'method', label: 'Method' },
   ];
   const base = '/projects/data-standard-designer';
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
   const activeHref = $derived(pathname === base ? '' : pathname.slice(base.length + 1).split('/')[0]);
+  // Review groups two routes under one step.
+  const isActive = (href: string) =>
+    activeHref === href || (href === 'interoperability' && activeHref === 'impact');
 
   function loadPreset(id: string) {
     const p = PRESETS.find((x) => x.id === id);
@@ -83,7 +88,7 @@
       </div>
 
       {#if app.mounted && app.fields.length}
-        <a class="dsd-score-chip" href={`${base}/impact`} title="Overall design quality — interoperability, assurance and adoption">
+        <a class="dsd-score-chip" href={`${base}/interoperability`} title="Overall design quality — interoperability, assurance and adoption">
           <span class="num" style="color:{bandColor(app.overall)}">{app.overall}</span>
           <span class="lbl">design<br />score</span>
         </a>
@@ -108,11 +113,17 @@
     </div>
 
     <nav class="dsd-nav">
-      {#each SECTIONS as s, i}
-        <a href={s.href ? `${base}/${s.href}` : base} class="dsd-tab" class:active={activeHref === s.href} data-i={String(i).padStart(2, '0')}>
-          {s.label}
-        </a>
-      {/each}
+      <div class="nav-primary">
+        {#each PRIMARY as s, i}
+          <a href={`${base}/${s.href}`} class="dsd-tab" class:active={isActive(s.href)} data-i={String(i + 1).padStart(2, '0')}>{s.label}</a>
+        {/each}
+      </div>
+      <span class="nav-div" aria-hidden="true">tools</span>
+      <div class="nav-secondary">
+        {#each SECONDARY as s}
+          <a href={`${base}/${s.href}`} class="dsd-tab ref" class:active={isActive(s.href)}>{s.label}</a>
+        {/each}
+      </div>
     </nav>
   </header>
 
@@ -167,12 +178,21 @@
   .dsd-preset-menu button span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
   .dsd-preset-menu button.reset { color: var(--accent); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
 
-  .dsd-nav { display: flex; gap: 2px; flex-wrap: wrap; padding: 0 18px 0; }
+  .dsd-nav { display: flex; gap: 4px 6px; flex-wrap: wrap; align-items: center; padding: 0 18px; }
+  .nav-primary { display: flex; gap: 2px; flex-wrap: wrap; }
+  .nav-secondary { display: flex; gap: 2px; flex-wrap: wrap; }
+  .nav-div { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-ghost); padding: 0 10px; border-left: 1px solid var(--divider); align-self: center; height: 16px; line-height: 16px; }
   .dsd-tab { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); padding: 9px 13px 10px; position: relative; display: inline-flex; gap: 6px; align-items: baseline; }
   .dsd-tab::before { content: attr(data-i); font-size: 8px; color: var(--text-ghost); }
   .dsd-tab:hover { color: var(--text-primary); }
   .dsd-tab.active { color: var(--text-primary); }
   .dsd-tab.active::after { content: ''; position: absolute; left: 13px; right: 13px; bottom: 0; height: 3px; background: var(--accent); }
+  /* reference tabs read lighter than the numbered journey steps */
+  .dsd-tab.ref { font-size: 10.5px; color: var(--text-ghost); padding: 9px 10px 10px; }
+  .dsd-tab.ref:hover { color: var(--text-secondary); }
+  .dsd-tab.ref.active { color: var(--text-primary); }
+  .dsd-tab.ref.active::after { left: 10px; right: 10px; height: 2px; }
+  @media (max-width: 640px) { .nav-div { display: none; } }
 
   .dsd-main { min-height: 60vh; }
 

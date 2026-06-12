@@ -2,6 +2,7 @@
   import { app } from '../lib/appState.svelte';
   import ScoreBar from '../components/ScoreBar.svelte';
   import StandardCard from '../components/StandardCard.svelte';
+  import ReviewTabs from '../components/ReviewTabs.svelte';
   const base = '/projects/data-standard-designer';
 
   // group crosswalk edges by the standard they connect to
@@ -16,7 +17,7 @@
 </script>
 
 <div class="dsd-route">
-  <span class="dsd-eyebrow">Step 03 · Interoperability</span>
+  <ReviewTabs />
   <h1 class="dsd-h1" style="font-size:clamp(26px,4vw,40px)">What it connects to.</h1>
   <p class="dsd-prose">Interoperability isn't a slogan — it's whether your data can be joined to other data. This is the live crosswalk: every place your schema touches an existing standard, and the identifier or data item that makes the join possible.</p>
 
@@ -70,7 +71,7 @@
     {/each}
   </div>
 
-  <div class="dsd-cta-row"><a class="dsd-btn primary" href={`${base}/impact`}>See stakeholder impact →</a></div>
+  <div class="dsd-cta-row"><a class="dsd-btn primary" href={`${base}/impact`}>Impact &amp; assurance →</a><a class="dsd-btn" href={`${base}/publish`}>Skip to publish</a></div>
 </div>
 
 <style>

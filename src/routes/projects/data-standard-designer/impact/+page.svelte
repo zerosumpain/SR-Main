@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import ScoreBar from '../components/ScoreBar.svelte';
+  import ReviewTabs from '../components/ReviewTabs.svelte';
   const base = '/projects/data-standard-designer';
 
   const lvl = (v: string) => (v === 'high' ? 'hi' : v === 'medium' ? 'md' : 'lo');
@@ -12,7 +13,7 @@
 </script>
 
 <div class="dsd-route">
-  <span class="dsd-eyebrow">Step 04 · Impact &amp; assurance</span>
+  <ReviewTabs />
   <h1 class="dsd-h1" style="font-size:clamp(26px,4vw,40px)">Who it touches.</h1>
   <p class="dsd-prose">A standard only works if providers can supply it, consumers gain from it, data subjects are protected and it can actually be adopted. This is the impact across all four — live against your current design.</p>
 

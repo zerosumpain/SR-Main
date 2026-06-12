@@ -5,11 +5,10 @@
   const base = '/projects/data-standard-designer';
 
   const STEPS = [
-    { n: '01', t: 'Brief', d: 'Capture why the data exists, who provides and consumes it, and what it will be processed for — in plain language.' },
-    { n: '02', t: 'Schema', d: 'The engine proposes fields, identifiers and metadata from existing standards. Play with them and watch the impact.' },
-    { n: '03', t: 'Interoperability', d: 'See exactly which standards your design connects to, and how — the crosswalk that makes data flow.' },
-    { n: '04', t: 'Impact', d: 'Stakeholder burden, data availability across public and private sector, assurance and the adoption case.' },
-    { n: '05', t: 'Publish', d: 'Download the standard in machine and human formats, plus the evidence pack for why you settled on it.' },
+    { n: '01', t: 'Brief', d: 'Capture why the data exists, who provides and consumes it, what it is processed for, and the legal basis — in plain language.' },
+    { n: '02', t: 'Schema', d: 'The engine proposes fields, identifiers, codelists and metadata from existing standards. Play with them and watch the impact.' },
+    { n: '03', t: 'Review', d: 'The crosswalk to existing standards, plus stakeholder impact, data availability, assurance and the adoption case — scored live.' },
+    { n: '04', t: 'Publish', d: 'Download the standard in machine and human formats, plus the evidence pack for why you settled on it.' },
   ];
   function go(id: string) {
     const p = PRESETS.find((x) => x.id === id);
@@ -72,25 +71,9 @@
     {/each}
   </div>
 
-  <h2 class="dsd-h2">Also in the toolkit</h2>
-  <div class="extras">
-    <a class="extra" href={`${base}/brief`}>
-      <span class="ex-ic">✦</span><b>Describe it in plain English</b>
-      <p>Type what the dataset is for and let AI draft a first-pass brief and schema — then edit freely. Revise it the same way.</p>
-    </a>
-    <a class="extra" href={`${base}/validate`}>
-      <span class="ex-ic">🧪</span><b>Test with synthetic data</b>
-      <p>Generate up to 10,000 conforming rows — valid-format identifiers, real codelist values — to trial the standard before any real data exists.</p>
-    </a>
-    <a class="extra" href={`${base}/portal`}>
-      <span class="ex-ic">↻</span><b>Emerging-standards registry</b>
-      <p>A daily, index-driven sweep of newly published government data standards, with search, filters and visible source-coverage health.</p>
-    </a>
-    <a class="extra" href={`${base}/legal`}>
-      <span class="ex-ic">⚖</span><b>Legal-basis registry</b>
-      <p>A cross-government hierarchy of the legal bases for sharing data — data-protection basis, the specific statutory power/gateway, and governance — down to the section.</p>
-    </a>
-  </div>
+  <p class="tools-line">
+    Alongside the journey: <a href={`${base}/legal`}>⚖ Legal-basis registry</a> · <a href={`${base}/validate`}>🧪 Synthetic test data</a> · <a href={`${base}/portal`}>↻ Emerging-standards registry</a> · <a href={`${base}/method`}>Method &amp; sources</a>. You can also describe a dataset in plain English on the Brief step and let AI draft a first pass.
+  </p>
 
   <h2 class="dsd-h2">Start from a worked example</h2>
   <p class="dsd-prose">Each example is a real DfE-relevant scenario, pre-loaded with a brief and a starter schema. Open one and reshape it — or start blank from the <b>Examples</b> menu.</p>
@@ -132,12 +115,9 @@
   .preset p { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0; flex: 1; }
   .preset .open { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
 
-  .extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-  .extra { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 15px; background: var(--surface-elevated); transition: border-color 0.15s, transform 0.15s; }
-  .extra:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .ex-ic { font-size: 20px; color: var(--accent); display: block; }
-  .extra b { display: block; font-size: 14.5px; color: var(--text-primary); margin: 8px 0 5px; }
-  .extra p { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
+  .tools-line { font-size: 13px; line-height: 1.7; color: var(--text-secondary); max-width: 80ch; margin: 4px 0 8px; }
+  .tools-line a { color: var(--accent); white-space: nowrap; }
+  .tools-line a:hover { border-bottom: 1px solid currentColor; }
 
   @media (max-width: 700px) { .modes { grid-template-columns: 1fr; } }
 </style>
