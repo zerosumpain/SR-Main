@@ -67,8 +67,13 @@ export const POST: RequestHandler = async (event) => {
     prompt?: string;
     design?: unknown;
     fields?: unknown;
+    answers?: { q: string; a: string }[];
   };
-  const mode = body.mode === 'revise' ? 'revise' : body.mode === 'synth-pools' ? 'synth-pools' : 'design';
+  const mode =
+    body.mode === 'revise' ? 'revise'
+    : body.mode === 'synth-pools' ? 'synth-pools'
+    : body.mode === 'legal-advise' ? 'legal-advise'
+    : 'design';
 
   const client = getOpenAIClient();
   const model = getModel();
@@ -76,7 +81,16 @@ export const POST: RequestHandler = async (event) => {
   let system: string;
   let user: string;
 
-  if (mode === 'synth-pools') {
+  if (mode === 'legal-advise') {
+    const design = JSON.stringify(body.design ?? {}).slice(0, 8000);
+    const answers = (body.answers || []).slice(0, 8).map((x) => `Q: ${x.q}\nA: ${x.a}`).join('\n');
+    const cat = LEGAL_LEAVES.map((l) => `${l.id} | ${l.label} | ${l.citation ?? ''} | ${l.layer} | ${l.nature ?? ''}`).join('\n');
+    system =
+      'You are a UK information-governance adviser helping a team choose the legal basis to SHARE a dataset. A COMPLETE basis = A (UK GDPR Art 6 + an Art 9/10 condition for special-category/criminal data) + B (a SPECIFIC legal power / statutory gateway — the vires that permits or requires the sharing; a lawful basis ALONE never authorises a public body to share) + C (governance: DPIA, sharing agreement, CAG/s.251, Appropriate Policy Document).\n\nYou may ONLY use ids from this catalogue (id | label | citation | layer | nature):\n' +
+      cat +
+      '\n\nExamine the standard. If material facts needed to choose the basis are MISSING or AMBIGUOUS (e.g. is it for direct care vs secondary analysis; identifiable vs de-identified; consent practical vs not; which statutory function is exercised; will data leave the controller), ask up to 4 sharp clarifying questions. Otherwise — or once the user has answered — recommend a best-fit basis. You may return BOTH a provisional recommendation and residual questions. Be conservative and pick the most specific applicable power. Return STRICT JSON: {"questions":[{"id":string,"question":string,"why":string,"options":[string]}],"recommendation":{"legalBasisIds":[id],"summary":string,"reasoning":[string],"caveats":[string],"confidence":"high|medium|low"}}. Include at least one Layer-A basis, an Art 9 condition where special-category/children data is involved, one Layer-B power, and the key Layer-C governance.';
+    user = `STANDARD:\n${design}${answers ? `\n\nANSWERS SO FAR:\n${answers}` : ''}`;
+  } else if (mode === 'synth-pools') {
     const fields = JSON.stringify(body.fields ?? []).slice(0, 6000);
     system =
       'You produce realistic example values for synthetic test data for a UK government dataset. For each NON-identifier, NON-codelist string field, give up to 10 realistic, varied, plausible UK example values. Do NOT invent values for fields that are identifiers or have a codelist. Return STRICT JSON: {"pools": {"<field_name>": ["value", ...]}}. Keep values short and realistic; no PII of real people.';

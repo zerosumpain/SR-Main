@@ -1757,6 +1757,7 @@ export const standardRegistryEntries = pgTable(
     docType: text('doc_type'),
     summary: text('summary'),
     kind: text('kind'), // data-standard | data-dictionary | metadata | api-standard | identifier | guidance | other
+    watch: text('watch'), // id of the named watch (e.g. 'cwsa') that surfaced this entry, if any
     confidence: text('confidence').notNull().default('medium'), // high | medium | low
     status: text('status').notNull().default('listed'), // listed | review | dismissed
     publishedAt: timestamp('published_at', { withTimezone: true }),

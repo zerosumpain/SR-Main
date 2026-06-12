@@ -11,6 +11,6 @@ export const load: PageServerLoad = async ({ parent, setHeaders }) => {
     setHeaders({ 'cache-control': 'public, max-age=0, s-maxage=300' });
     return { snapshot, error: null as string | null };
   } catch (e: any) {
-    return { snapshot: { entries: [], sourceHealth: [] }, error: String(e?.message || e) };
+    return { snapshot: { entries: [], sourceHealth: [], watches: [] }, error: String(e?.message || e) };
   }
 };

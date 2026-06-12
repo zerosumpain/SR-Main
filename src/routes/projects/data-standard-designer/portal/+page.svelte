@@ -7,11 +7,13 @@
   type Entry = PageData['snapshot']['entries'][number];
   const entries = $derived((data.snapshot?.entries ?? []) as Entry[]);
   const health = $derived(data.snapshot?.sourceHealth ?? []);
+  const watches = $derived(data.snapshot?.watches ?? []);
 
   let q = $state('');
   let domain = $state('all');
   let kind = $state('all');
   let source = $state('all');
+  let watchFilter = $state('all');
   let showReview = $state(true);
 
   let refreshing = $state(false);
@@ -25,6 +27,7 @@
   const filtered = $derived(
     entries.filter((e) => {
       if (!showReview && e.status === 'review') return false;
+      if (watchFilter !== 'all' && e.watch !== watchFilter) return false;
       if (domain !== 'all' && e.domain !== domain) return false;
       if (kind !== 'all' && e.kind !== kind) return false;
       if (source !== 'all' && e.sourceKey !== source) return false;
@@ -105,6 +108,22 @@
     {#if data.error}<p class="hc-err" style="margin-top:8px">Registry storage not ready: {data.error}</p>{/if}
   </div>
 
+  <!-- Watches: focused topics the sweep tracks -->
+  {#if watches.length}
+    <div class="watches">
+      <span class="dsd-label" style="margin:0 0 8px">Watching</span>
+      <div class="watch-row">
+        {#each watches as w}
+          <button class="watch" class:on={watchFilter === w.id} onclick={() => (watchFilter = watchFilter === w.id ? 'all' : w.id)}>
+            <span class="eye">👁</span>
+            <span class="w-body"><b>{w.label}</b><span class="w-meta">{w.count} match{w.count === 1 ? '' : 'es'}{w.latest ? ` · latest ${fmtDate(w.latest)}` : ''}</span></span>
+          </button>
+        {/each}
+        {#if watchFilter !== 'all'}<button class="watch-clear" onclick={() => (watchFilter = 'all')}>clear ✕</button>{/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- Filters -->
   <div class="filters">
     <input class="dsd-input search" bind:value={q} placeholder="Search the registry…" />
@@ -123,6 +142,7 @@
           <div class="e-top">
             <span class="e-title">{e.title}</span>
             <div class="e-tags">
+              {#if e.watch}<span class="dsd-pill watch-pill">👁 watch</span>{/if}
               {#if e.kind}<span class="dsd-pill">{e.kind}</span>{/if}
               {#if e.status === 'review'}<span class="dsd-pill warn">unverified</span>{/if}
               {#if e.confidence === 'high'}<span class="dsd-pill ok">high confidence</span>{/if}
@@ -158,6 +178,17 @@
   .hc-stats b { color: var(--accent); font-family: var(--font-mono); }
   .hc-when { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); }
   .hc-err { display: block; font-size: 11px; color: var(--error); margin-top: 4px; }
+
+  .watches { margin-bottom: 14px; }
+  .watch-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .watch { display: inline-flex; align-items: center; gap: 8px; text-align: left; border: 1.5px solid var(--info-border); border-radius: var(--radius-round); padding: 8px 12px; background: var(--info-bg); cursor: pointer; }
+  .watch.on { border-color: var(--info); box-shadow: 0 0 0 2px var(--info-bg); }
+  .watch .eye { font-size: 14px; }
+  .watch .w-body { display: flex; flex-direction: column; }
+  .watch b { font-size: 12.5px; color: var(--text-primary); }
+  .watch .w-meta { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--info); }
+  .watch-clear { background: none; border: none; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; cursor: pointer; }
+  :global(.dsd-pill.watch-pill) { background: var(--info-bg); color: var(--info); }
 
   .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .search { flex: 1; min-width: 200px; max-width: 360px; }

@@ -24,8 +24,51 @@ export interface Candidate {
   docType?: string;
   publishedAt?: Date | null;
   description?: string;
+  watch?: string; // named watch that surfaced this candidate
   raw?: unknown;
 }
+
+// Named "watches" — focused query sets the daily sweep runs so specific,
+// anticipated publications are caught the moment they appear. Matches are
+// tagged and surfaced in the portal. Add more watches here as needed.
+export interface Watch {
+  id: string;
+  label: string;
+  queries: string[];
+  /** A result is only tagged with this watch if its title/description contains
+   *  one of these (lowercased) phrases — GOV.UK Search ranks loosely by recency,
+   *  so this precision filter keeps the watch from tagging unrelated items. */
+  mustMatch: string[];
+}
+export const WATCHES: Watch[] = [
+  {
+    id: 'cwsa',
+    label: "Children's Wellbeing and Schools Act — guidance & data",
+    queries: [
+      '"Children\'s Wellbeing and Schools Act"',
+      '"consistent identifier" children',
+      '"single unique identifier" children',
+      '"children not in school"',
+      'safeguarding children information sharing statutory guidance',
+      'working together to safeguard children',
+    ],
+    mustMatch: [
+      "children's wellbeing and schools",
+      'childrens wellbeing and schools',
+      'consistent identifier',
+      'single unique identifier',
+      'children not in school',
+      'safeguard children',
+      'safeguarding children',
+      'information sharing duty',
+      'multi-agency child protection',
+      'safeguarding partners',
+      "children's social care reform",
+      "children's social care reset",
+    ],
+  },
+];
+export const WATCH_LABELS: Record<string, string> = Object.fromEntries(WATCHES.map((w) => [w.id, w.label]));
 
 interface SourceResult {
   sourceKey: string;
@@ -68,13 +111,29 @@ async function govukSearch(): Promise<SourceResult> {
   let total = 0;
   let anyOk = false;
   let firstErr: string | undefined;
-  for (const q of GOVUK_QUERIES) {
-    const url = `https://www.gov.uk/api/search.json?q=${encodeURIComponent(q)}&count=25&order=-public_timestamp&fields=title,link,public_timestamp,organisations,content_store_document_type,description`;
+  // Watch queries run FIRST so their matches carry the watch tag; generic
+  // queries for the same item are then skipped (the map keeps the tagged one).
+  const queries: { q: string; watch?: string; mustMatch?: string[] }[] = [
+    ...WATCHES.flatMap((w) => w.queries.map((q) => ({ q, watch: w.id, mustMatch: w.mustMatch }))),
+    ...GOVUK_QUERIES.map((q) => ({ q })),
+  ];
+  for (const { q, watch, mustMatch } of queries) {
+    // generic discovery sorts by recency (what's NEW); watches sort by relevance
+    // (the most on-topic items for the phrase), then a precision filter.
+    const order = watch ? '' : '&order=-public_timestamp';
+    const url = `https://www.gov.uk/api/search.json?q=${encodeURIComponent(q)}&count=25${order}&fields=title,link,public_timestamp,organisations,content_store_document_type,description`;
     try {
       const data = await fetchJson(url);
-      total += Number(data?.total || 0);
+      // only the generic queries contribute to the coverage total (watch queries
+      // are narrow subsets and would distort it)
+      if (!watch) total += Number(data?.total || 0);
       anyOk = true;
       for (const r of data?.results || []) {
+        // watch precision filter: skip results that don't actually mention the topic
+        if (watch && mustMatch) {
+          const hay = `${r.title || ''} ${r.description || ''}`.toLowerCase();
+          if (!mustMatch.some((m) => hay.includes(m))) continue;
+        }
         const link = r.link?.startsWith('http') ? r.link : `https://www.gov.uk${r.link}`;
         const canonicalId = `govuk:${r.link}`;
         if (map.has(canonicalId)) continue;
@@ -85,6 +144,7 @@ async function govukSearch(): Promise<SourceResult> {
           url: link,
           sourceKey: 'govuk-search',
           sourceQuery: q,
+          watch,
           publisher: org?.title || org?.acronym,
           docType: r.content_store_document_type,
           publishedAt: r.public_timestamp ? new Date(r.public_timestamp) : null,
@@ -270,6 +330,7 @@ export async function runDiscovery(opts: { classify?: boolean; force?: boolean }
         contentHash: hashes.get(c.canonicalId),
         raw: c.raw as any,
         lastSeenAt: ranAt,
+        ...(c.watch ? { watch: c.watch } : {}), // only set (never clear) the watch tag
       };
       try {
         await db
@@ -339,6 +400,7 @@ export async function runDiscovery(opts: { classify?: boolean; force?: boolean }
 export interface RegistrySnapshot {
   entries: (typeof standardRegistryEntries.$inferSelect)[];
   sourceHealth: { sourceKey: string; runAt: string; ok: boolean; itemsFound: number; itemsNew: number; totalAvailable: number | null; error: string | null }[];
+  watches: { id: string; label: string; count: number; latest: string | null }[];
 }
 
 /** Read the registry for the portal: listed/review entries + latest run per source. */
@@ -346,7 +408,9 @@ export async function getRegistrySnapshot(): Promise<RegistrySnapshot> {
   const entries = await db
     .select()
     .from(standardRegistryEntries)
-    .where(sql`${standardRegistryEntries.status} <> 'dismissed'`)
+    // watch-tagged items always surface (the user's explicit interest), even if
+    // the classifier would otherwise dismiss them as guidance/other.
+    .where(sql`${standardRegistryEntries.status} <> 'dismissed' OR ${standardRegistryEntries.watch} IS NOT NULL`)
     .orderBy(sql`coalesce(${standardRegistryEntries.publishedAt}, ${standardRegistryEntries.firstSeenAt}) desc`)
     .limit(500);
 
@@ -366,5 +430,16 @@ export async function getRegistrySnapshot(): Promise<RegistrySnapshot> {
     error: r.error ?? null,
   }));
 
-  return { entries, sourceHealth };
+  const watches = WATCHES.map((w) => {
+    const matched = entries.filter((e) => e.watch === w.id);
+    const latest = matched
+      .map((e) => e.publishedAt || e.firstSeenAt)
+      .filter(Boolean)
+      .map((d) => (d instanceof Date ? d : new Date(d as any)).toISOString())
+      .sort()
+      .pop() || null;
+    return { id: w.id, label: w.label, count: matched.length, latest };
+  });
+
+  return { entries, sourceHealth, watches };
 }
