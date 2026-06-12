@@ -213,6 +213,7 @@ let running = false;
 let lastRunMs = 0;
 let lastSummary: DiscoverySummary | null = null;
 const MIN_INTERVAL_MS = 5 * 60 * 1000; // throttle manual refreshes; the daily cron is never affected
+const MAX_CLASSIFY_PER_RUN = 30; // bound LLM work per sweep so it never exceeds the request timeout
 
 /** Run a full discovery pass: fetch all sources, dedup, classify NEW/changed
  *  items, upsert, and record per-source telemetry. Safe to over-call — a
@@ -241,44 +242,23 @@ export async function runDiscovery(opts: { classify?: boolean; force?: boolean }
       (r as any)._durationMs = Date.now() - t0;
     }
 
-    // existing entries (canonicalId -> contentHash) for change-detection
-    const existing = await db.select({ canonicalId: standardRegistryEntries.canonicalId, contentHash: standardRegistryEntries.contentHash }).from(standardRegistryEntries);
-    const known = new Map(existing.map((e) => [e.canonicalId, e.contentHash || '']));
+    // existing entries (for change-detection + whether classification is needed)
+    const existing = await db
+      .select({ canonicalId: standardRegistryEntries.canonicalId, contentHash: standardRegistryEntries.contentHash, kind: standardRegistryEntries.kind })
+      .from(standardRegistryEntries);
+    const known = new Map(existing.map((e) => [e.canonicalId, { hash: e.contentHash || '', kind: e.kind || '' }]));
 
     const allCandidates = sourceResults.flatMap((r) => r.candidates);
-    // new or changed → need (re)classification
-    const changed: Candidate[] = [];
     const hashes = new Map<string, string>();
-    for (const c of allCandidates) {
-      const h = await hashOf(c);
-      hashes.set(c.canonicalId, h);
-      if (!known.has(c.canonicalId) || known.get(c.canonicalId) !== h) changed.push(c);
-    }
+    for (const c of allCandidates) hashes.set(c.canonicalId, await hashOf(c));
 
-    let classifications = new Map<string, Classification>();
-    let classified = 0;
-    if (opts.classify !== false && changed.length) {
-      for (const batch of chunk(changed, 12)) {
-        const m = await classifyBatch(batch);
-        for (const [k, v] of m) classifications.set(k, v);
-      }
-      classified = classifications.size;
-    }
-
-    // upsert every candidate (existence never depends on classification)
+    // PHASE 1 — upsert EVERY candidate immediately. Existence never depends on
+    // the LLM: even if classification is slow or fails, the registry is
+    // populated. New / unclassified rows are flagged 'review' until classified.
     const newByCanonical = new Set<string>();
     for (const c of allCandidates) {
-      const cls = classifications.get(c.canonicalId);
       const isNew = !known.has(c.canonicalId);
       if (isNew) newByCanonical.add(c.canonicalId);
-      // status: dismiss clearly-not-a-standard; flag low-confidence for review
-      let status = 'listed';
-      if (cls) {
-        if (!cls.isStandard) status = 'dismissed';
-        else if (cls.confidence === 'low') status = 'review';
-      } else if (isNew) {
-        status = 'review'; // unclassified new item → visible but flagged
-      }
       const base = {
         title: c.title,
         url: c.url,
@@ -290,19 +270,42 @@ export async function runDiscovery(opts: { classify?: boolean; force?: boolean }
         contentHash: hashes.get(c.canonicalId),
         raw: c.raw as any,
         lastSeenAt: ranAt,
-        ...(cls ? { kind: cls.kind, confidence: cls.confidence, domain: cls.domain, summary: cls.summary } : {}),
       };
       try {
         await db
           .insert(standardRegistryEntries)
-          .values({ canonicalId: c.canonicalId, firstSeenAt: ranAt, status, ...base })
-          .onConflictDoUpdate({
-            target: standardRegistryEntries.canonicalId,
-            // preserve a human's status override unless we're re-classifying a changed item
-            set: cls ? { ...base, status } : base,
-          });
+          .values({ canonicalId: c.canonicalId, firstSeenAt: ranAt, status: 'review', ...base })
+          // existing rows keep their status/kind/summary (incl. human overrides)
+          .onConflictDoUpdate({ target: standardRegistryEntries.canonicalId, set: base });
       } catch {
         /* skip a bad row, keep going */
+      }
+    }
+
+    // PHASE 2 — classify a BOUNDED subset that needs it (new, changed, or never
+    // classified), so each sweep stays well under the request timeout. The
+    // daily cron drains any backlog over subsequent runs.
+    let classified = 0;
+    if (opts.classify !== false) {
+      const needs = allCandidates.filter((c) => {
+        const k = known.get(c.canonicalId);
+        return !k || k.hash !== hashes.get(c.canonicalId) || !k.kind;
+      });
+      const toClassify = needs.slice(0, MAX_CLASSIFY_PER_RUN);
+      const t0 = Date.now();
+      for (const batch of chunk(toClassify, 12)) {
+        if (Date.now() - t0 > 60_000) break; // hard time budget for classification
+        const m = await classifyBatch(batch);
+        for (const [cid, cls] of m) {
+          const status = !cls.isStandard ? 'dismissed' : cls.confidence === 'low' ? 'review' : 'listed';
+          try {
+            await db
+              .update(standardRegistryEntries)
+              .set({ kind: cls.kind, confidence: cls.confidence, domain: cls.domain, summary: cls.summary, status })
+              .where(eq(standardRegistryEntries.canonicalId, cid));
+            classified++;
+          } catch { /* ignore */ }
+        }
       }
     }
 

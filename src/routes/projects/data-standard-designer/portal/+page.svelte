@@ -51,17 +51,22 @@
   async function refresh() {
     refreshing = true;
     refreshMsg = '';
+    // Cap the wait — the server keeps running even if we stop waiting, and the
+    // discovery upserts candidates before classifying, so entries appear either way.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30_000);
     try {
-      const res = await fetch('/api/data-standard-designer/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const res = await fetch('/api/data-standard-designer/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: ctrl.signal });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.message || `Failed (${res.status})`);
       refreshMsg = j?.throttled
-        ? 'Recently refreshed — showing the latest sweep (throttled to protect the sources).'
-        : `Swept ${j?.totalCandidates ?? 0} candidates across ${j?.sources?.length ?? 0} sources.`;
-      await invalidateAll();
-    } catch (e: any) {
-      refreshMsg = `Could not refresh: ${e?.message || 'error'}`;
+        ? 'Recently swept — showing the latest results (throttled to protect the sources).'
+        : `Swept ${j?.totalCandidates ?? 0} candidates across ${j?.sources?.length ?? 0} sources; ${j?.classified ?? 0} newly classified.`;
+    } catch {
+      refreshMsg = 'Sweep running in the background — new entries will appear as they are classified. Reloading…';
     } finally {
+      clearTimeout(timer);
+      await invalidateAll(); // refresh the list regardless — Phase-1 upserts land fast
       refreshing = false;
     }
   }
