@@ -20,7 +20,7 @@ import type {
   StandardEntry,
   IdentifierEntry,
 } from './types';
-import { CATALOG, IDENTIFIERS, standardById, identifierById } from './knowledge';
+import { CATALOG, IDENTIFIERS, RELATIONSHIPS, standardById, identifierById } from './knowledge';
 import { legalCompleteness } from './legalBasis';
 
 // ---------------------------------------------------------------------------
@@ -312,6 +312,87 @@ export function crosswalk(fields: Field[]): CrosswalkEdge[] {
     }
   }
   return edges;
+}
+
+// ---------------------------------------------------------------------------
+// Crosswalk graph — the relationship map: your standard at the centre, the
+// standards your fields join (inner ring), the relationships between those
+// (cross-links), and the standards one hop further out (2nd-order neighbours).
+// ---------------------------------------------------------------------------
+
+export interface CrosswalkGraph {
+  inner: { id: string; name: string; linkCount: number; vias: string[]; colorKey: string }[];
+  crossLinks: { a: string; b: string; nature: string; note?: string }[];
+  secondOrder: { id: string; name: string; throughId: string; throughName: string }[];
+}
+
+/** Stable colour-bucket (0..N) for an identifier/via key, so a given shared
+ *  identifier always paints the same spoke colour across renders. */
+export function crosswalkColorKey(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return h % 6;
+}
+
+export function crosswalkGraph(fields: Field[]): CrosswalkGraph {
+  const edges = crosswalk(fields);
+
+  // Inner ring: one node per standard your fields directly touch.
+  const innerMap = new Map<string, { id: string; name: string; vias: Set<string> }>();
+  for (const e of edges) {
+    if (!innerMap.has(e.standardId)) innerMap.set(e.standardId, { id: e.standardId, name: e.standardName, vias: new Set() });
+    innerMap.get(e.standardId)!.vias.add(e.via);
+  }
+  const inner = [...innerMap.values()]
+    .map((v) => ({
+      id: v.id,
+      name: v.name,
+      linkCount: edges.filter((e) => e.standardId === v.id).length,
+      vias: [...v.vias],
+      colorKey: [...v.vias][0] || v.id,
+    }))
+    .sort((a, b) => b.linkCount - a.linkCount)
+    .slice(0, 8);
+  const innerIds = new Set(inner.map((i) => i.id));
+
+  // Helper: every relationship neighbour of a standard (both directions + connectsTo).
+  const neighboursOf = (id: string): { to: string; nature: string; note?: string }[] => {
+    const out: { to: string; nature: string; note?: string }[] = [];
+    for (const cid of standardById(id)?.connectsTo || []) out.push({ to: cid, nature: 'connects-to' });
+    for (const r of RELATIONSHIPS) {
+      if (r.from === id) out.push({ to: r.to, nature: r.nature, note: r.note });
+      else if (r.to === id) out.push({ to: r.from, nature: r.nature, note: r.note });
+    }
+    return out;
+  };
+
+  // Cross-links: relationships where BOTH endpoints are inner standards.
+  const crossLinks: CrosswalkGraph['crossLinks'] = [];
+  const seenCL = new Set<string>();
+  for (const i of inner) {
+    for (const n of neighboursOf(i.id)) {
+      if (!innerIds.has(n.to) || n.to === i.id) continue;
+      const k = [i.id, n.to].sort().join('|');
+      if (seenCL.has(k)) continue;
+      seenCL.add(k);
+      crossLinks.push({ a: i.id, b: n.to, nature: n.nature, note: n.note });
+    }
+  }
+
+  // 2nd-order: neighbours of inner standards that are not themselves inner.
+  const secondOrder: CrosswalkGraph['secondOrder'] = [];
+  const seenSO = new Set<string>();
+  for (const i of inner) {
+    for (const n of neighboursOf(i.id)) {
+      if (innerIds.has(n.to) || n.to === i.id || seenSO.has(n.to)) continue;
+      const s = standardById(n.to);
+      if (!s) continue;
+      seenSO.add(n.to);
+      secondOrder.push({ id: n.to, name: s.name, throughId: i.id, throughName: i.name });
+    }
+  }
+
+  return { inner, crossLinks, secondOrder: secondOrder.slice(0, 6) };
 }
 
 // ---------------------------------------------------------------------------

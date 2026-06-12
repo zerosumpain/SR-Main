@@ -15,6 +15,7 @@ import {
   assuranceScore,
   adoptionScore,
   crosswalk,
+  crosswalkGraph,
   stakeholders,
   availability,
 } from './engine';
@@ -62,6 +63,8 @@ class DesignerState {
   researchCatalog = $state<StandardEntry[]>([]);
   /** The catalog standard currently open in the explorer drawer (id), if any. */
   exploreStandardId = $state<string | null>(null);
+  /** The schema field currently selected for the spec inspector (id), if any. */
+  selectedFieldId = $state<string | null>(null);
 
   // ---- derived intelligence (recomputes on every edit) ----
   rec = $derived.by(() => recommend(this.brief));
@@ -69,6 +72,7 @@ class DesignerState {
   assurance = $derived.by(() => assuranceScore(this.brief, this.fields));
   adoption = $derived.by(() => adoptionScore(this.brief, this.fields));
   crosswalkEdges = $derived.by(() => crosswalk(this.fields));
+  crosswalkNet = $derived.by(() => crosswalkGraph(this.fields));
   stakeholderRows = $derived.by(() => stakeholders(this.brief, this.fields));
   availabilityRows = $derived.by(() => availability(this.brief, this.fields));
   overall = $derived.by(() => Math.round((this.interop.value + this.assurance.value + this.adoption.value) / 3));
@@ -103,6 +107,10 @@ class DesignerState {
   }
   removeField(id: string) {
     this.fields = this.fields.filter((f) => f.id !== id);
+    if (this.selectedFieldId === id) this.selectedFieldId = null;
+  }
+  selectField(id: string | null) {
+    this.selectedFieldId = id;
   }
   moveField(id: string, dir: -1 | 1) {
     const i = this.fields.findIndex((f) => f.id === id);
