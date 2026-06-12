@@ -114,6 +114,48 @@
   </div>
 
   <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+    {#if showCard('data-standard-designer')}
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <a href="/projects/data-standard-designer" class="absolute inset-0 z-0" aria-label="Open the Data Standard Designer"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Tool
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Standards
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Data Standard Designer — Design &amp; Publish a Dataset Standard
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        A workbench for technical teams to design and publish a dataset standard, grounded in the data
+        standards government already runs — DfE, NHS, ONS, local-gov and W3C. Capture what the data is
+        for, get a schema proposed from established standards, see the live impact on interoperability,
+        assurance and adoption, then export a publication-grade standard with the evidence pack behind it.
+        Two modes: business analyst and data architect.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          interoperability · assurance · JSON Schema · DCAT-AP
+        </span>
+        {@render visToggle('data-standard-designer', '/projects/data-standard-designer', 'Data Standard Designer')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('dfe-data-estate')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
