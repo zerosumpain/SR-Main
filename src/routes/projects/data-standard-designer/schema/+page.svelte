@@ -3,8 +3,17 @@
   import FieldRow from '../components/FieldRow.svelte';
   import { templatesForDomain } from '../lib/fieldLibrary';
   import { identifierById } from '../lib/knowledge';
+  import { fieldsFromStandard, canIngest } from '../lib/ingest';
   const base = '/projects/data-standard-designer';
   function col(v: number) { return v >= 80 ? 'var(--success)' : v >= 60 ? '#6a8f2d' : v >= 40 ? 'var(--warn)' : 'var(--error)'; }
+
+  // Engine-recommended standards whose fields can be ingested here, on the schema step.
+  const recStandards = $derived(app.rec.standards.filter(canIngest).slice(0, 6));
+  let ingestMsg = $state('');
+  function ingestStd(s: (typeof recStandards)[number]) {
+    const n = app.ingestFields(fieldsFromStandard(s));
+    ingestMsg = n ? `Added ${n} field${n === 1 ? '' : 's'} from ${s.name}.` : `${s.name}'s fields are already in your schema.`;
+  }
 
   const library = $derived(templatesForDomain(app.brief.domain));
   const usedNames = $derived(new Set(app.fields.map((f) => f.name)));
@@ -61,6 +70,21 @@
           </div>
         </div>
       {/if}
+
+      {#if recStandards.length}
+        <div class="rec-standards">
+          <span class="dsd-label">Ingest from a recommended standard <span class="lib-sub">(adds its identifiers &amp; key data items as fields)</span></span>
+          {#if ingestMsg}<p class="ingest-msg">✓ {ingestMsg}</p>{/if}
+          <div class="rs-list">
+            {#each recStandards as s}
+              <div class="rs-row">
+                <button class="rs-name" onclick={() => app.openStandard(s.id)} title="Explore this standard in full">{s.name}<span class="rs-owner">{s.owner}</span></button>
+                <button class="dsd-btn sm" onclick={() => ingestStd(s)}>＋ Add fields</button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
 
     <aside class="rail">
@@ -106,6 +130,16 @@
   .lib-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .lib-chip.used { opacity: 0.5; cursor: default; }
   .lib-chip .src { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); }
+
+  .rec-standards { margin-top: 20px; border-top: 1px solid var(--divider); padding-top: 14px; }
+  .ingest-msg { font-size: 12px; color: var(--success); margin: 6px 0 8px; }
+  .rs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-top: 8px; }
+  .rs-row { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 8px 10px; background: var(--surface-elevated); }
+  .rs-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; }
+  .rs-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .rs-name:hover { color: var(--accent); }
+  .rs-owner { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); font-weight: 400; }
+  .rs-row .dsd-btn { flex-shrink: 0; }
 
   .rail-sticky { position: sticky; top: 110px; display: flex; flex-direction: column; gap: 12px; }
   .score-strip { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 12px; background: var(--card-bg); }
