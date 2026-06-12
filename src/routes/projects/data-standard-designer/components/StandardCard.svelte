@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { StandardEntry } from '../lib/types';
   import { identifierById } from '../lib/knowledge';
-  let { std, compact = false }: { std: StandardEntry; compact?: boolean } = $props();
+  import { app } from '../lib/appState.svelte';
+  let { std, compact = false, explorable = true }: { std: StandardEntry; compact?: boolean; explorable?: boolean } = $props();
+  function open() { if (explorable) app.openStandard(std.id); }
 </script>
 
-<div class="sc" class:compact>
+<div class="sc" class:compact class:clickable={explorable} onclick={open} role={explorable ? 'button' : undefined} tabindex={explorable ? 0 : undefined} onkeydown={(e) => { if (explorable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } }}>
   <div class="sc-head">
     <span class="sc-name">{std.name}</span>
     <span class="dsd-pill muted">{std.sector}</span>
@@ -18,9 +20,10 @@
     {#if std.formats?.length}<div class="m"><span class="ml">Formats</span> {std.formats.join(' · ').toUpperCase()}</div>{/if}
     {#if std.cadence}<div class="m"><span class="ml">Cadence</span> {std.cadence}</div>{/if}
   </div>
-  {#if std.urls?.length}
-    <a class="sc-link" href={std.urls[0]} target="_blank" rel="noopener">Source ↗</a>
-  {/if}
+  <div class="sc-foot">
+    {#if explorable}<span class="sc-explore">Explore →</span>{/if}
+    {#if std.urls?.length}<a class="sc-link" href={std.urls[0]} target="_blank" rel="noopener" onclick={(e) => e.stopPropagation()}>Source ↗</a>{/if}
+  </div>
 </div>
 
 <style>
@@ -33,5 +36,10 @@
   .sc-meta { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
   .sc-meta .m { font-size: 11.5px; color: var(--text-secondary); }
   .sc-meta .ml { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); margin-right: 5px; }
-  .sc-link { align-self: flex-start; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-top: 3px; }
+  .sc.clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+  .sc.clickable:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .sc.clickable:hover .sc-explore { color: var(--accent); }
+  .sc-foot { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  .sc-explore { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
+  .sc-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-left: auto; }
 </style>

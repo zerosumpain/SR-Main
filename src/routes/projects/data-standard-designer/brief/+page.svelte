@@ -21,6 +21,9 @@
   const PURPOSES = ['Operational case-working', 'Safeguarding', 'Statistical analysis', 'Service planning', 'Accountability', 'Research', 'Funding', 'Public information', 'Real-time monitoring'];
 
   let customPurpose = $state('');
+  // providers/consumers editors collapse by default to keep the form short
+  let providersOpen = $state(false);
+  let consumersOpen = $state(false);
   function addCustomPurpose() {
     const v = customPurpose.trim();
     if (v) { app.togglePurpose(v); customPurpose = ''; }
@@ -180,8 +183,21 @@
 
       <!-- Providers -->
       <section class="blk">
-        <div class="blk-head"><span class="dsd-label" style="margin:0">Information providers — upstream</span>
-          <button class="dsd-btn sm" onclick={() => app.addProvider()}>＋ Add provider</button></div>
+        <div class="blk-head">
+          <button class="blk-toggle" onclick={() => (providersOpen = !providersOpen)} aria-expanded={providersOpen}>
+            <span class="caret">{providersOpen ? '▾' : '▸'}</span>
+            <span class="dsd-label" style="margin:0">Information providers — upstream</span>
+            {#if app.brief.providers.length}<span class="blk-count">{app.brief.providers.length}</span>{/if}
+          </button>
+          <button class="dsd-btn sm" onclick={() => { providersOpen = true; app.addProvider(); }}>＋ Add provider</button>
+        </div>
+        {#if !providersOpen}
+          {#if app.brief.providers.length}
+            <div class="blk-summary">{#each app.brief.providers as p (p.id)}<button class="sum-chip" onclick={() => (providersOpen = true)}>{p.label || 'Unnamed provider'}</button>{/each}</div>
+          {:else}
+            <p class="empty">No providers yet — expand to add the organisations that will supply this data.</p>
+          {/if}
+        {:else}
         <p class="hint">Who collects or supplies the data, what sector they're in, and — crucially — any standard they already hold this data in (adoption depends on meeting them there).</p>
         {#each app.brief.providers as p (p.id)}
           <div class="entity">
@@ -208,12 +224,26 @@
           </div>
         {/each}
         {#if !app.brief.providers.length}<p class="empty">No providers yet — add the organisations that will supply this data.</p>{/if}
+        {/if}
       </section>
 
       <!-- Consumers -->
       <section class="blk">
-        <div class="blk-head"><span class="dsd-label" style="margin:0">Information consumers — downstream</span>
-          <button class="dsd-btn sm" onclick={() => app.addConsumer()}>＋ Add consumer</button></div>
+        <div class="blk-head">
+          <button class="blk-toggle" onclick={() => (consumersOpen = !consumersOpen)} aria-expanded={consumersOpen}>
+            <span class="caret">{consumersOpen ? '▾' : '▸'}</span>
+            <span class="dsd-label" style="margin:0">Information consumers — downstream</span>
+            {#if app.brief.consumers.length}<span class="blk-count">{app.brief.consumers.length}</span>{/if}
+          </button>
+          <button class="dsd-btn sm" onclick={() => { consumersOpen = true; app.addConsumer(); }}>＋ Add consumer</button>
+        </div>
+        {#if !consumersOpen}
+          {#if app.brief.consumers.length}
+            <div class="blk-summary">{#each app.brief.consumers as c (c.id)}<button class="sum-chip" onclick={() => (consumersOpen = true)}>{c.label || 'Unnamed consumer'}</button>{/each}</div>
+          {:else}
+            <p class="empty">No consumers yet — expand to add who relies on this data downstream.</p>
+          {/if}
+        {:else}
         {#each app.brief.consumers as c (c.id)}
           <div class="entity">
             <div class="ent-row">
@@ -224,6 +254,7 @@
           </div>
         {/each}
         {#if !app.brief.consumers.length}<p class="empty">No consumers yet — who relies on this data downstream?</p>{/if}
+        {/if}
       </section>
 
       <!-- Interop goal -->
@@ -278,6 +309,13 @@
   .grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
   .blk { margin: 22px 0; display: flex; flex-direction: column; gap: 10px; }
   .blk-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .blk-toggle { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; padding: 2px 0; }
+  .blk-toggle .caret { font-size: 10px; color: var(--text-muted); width: 10px; }
+  .blk-toggle:hover .dsd-label { color: var(--text-primary); }
+  .blk-count { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); background: var(--surface-overlay); padding: 1px 7px; border-radius: var(--radius-pill); }
+  .blk-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .sum-chip { font-size: 12px; padding: 4px 10px; border: 1px solid var(--card-border); border-radius: var(--radius-pill); background: var(--surface-elevated); color: var(--text-secondary); cursor: pointer; }
+  .sum-chip:hover { border-color: var(--accent); color: var(--accent); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .hint, .empty { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.45; }
   .empty { font-style: italic; }

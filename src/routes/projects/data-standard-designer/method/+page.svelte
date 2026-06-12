@@ -35,6 +35,7 @@
   </div>
 
   <h2 class="dsd-h2">Standards catalog <span class="muted-n">({CATALOG.length})</span></h2>
+  <p class="dsd-prose" style="margin-bottom:12px">Click any standard to explore it in full — its identifiers, data items, the standards it connects to, and its sources — and <b>ingest it into your design</b>: add its fields to your schema, or start a new standard from it.</p>
   <div class="filters">
     {#each SECTORS as s}<button class="dsd-chip" class:on={filter === s.v} onclick={() => (filter = s.v)}>{s.l}</button>{/each}
     <input class="dsd-input search" bind:value={q} placeholder="Search standards…" />

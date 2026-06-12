@@ -4,6 +4,7 @@
   import { app } from './lib/appState.svelte';
   import { PRESETS, DEFAULT_PRESET } from './lib/presets';
   import Onboarding from './components/Onboarding.svelte';
+  import StandardDetail from './components/StandardDetail.svelte';
 
   let { children } = $props();
   const STORAGE = 'dsd-state-v1';
@@ -128,6 +129,7 @@
   </header>
 
   <Onboarding open={helpOpen} onClose={() => (helpOpen = false)} />
+  <StandardDetail />
 
   <main class="dsd-main">
     {@render children()}

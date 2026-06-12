@@ -60,6 +60,8 @@ class DesignerState {
   mounted = $state(false);
   /** Catalog entries merged in from the research workflow (optional enrichment). */
   researchCatalog = $state<StandardEntry[]>([]);
+  /** The catalog standard currently open in the explorer drawer (id), if any. */
+  exploreStandardId = $state<string | null>(null);
 
   // ---- derived intelligence (recomputes on every edit) ----
   rec = $derived.by(() => recommend(this.brief));
@@ -156,6 +158,17 @@ class DesignerState {
   // ---- bulk ----
   applyRecommendedFields(templates: FieldTemplate[]) {
     for (const t of templates) this.addTemplate(t);
+  }
+
+  // ---- explore / ingest catalog standards ----
+  openStandard(id: string) { this.exploreStandardId = id; }
+  closeStandard() { this.exploreStandardId = null; }
+  /** Append fields (e.g. ingested from a standard), skipping duplicate machine names. */
+  ingestFields(fields: Field[]) {
+    const existing = new Set(this.fields.map((f) => f.name));
+    const add = fields.filter((f) => f.name && !existing.has(f.name)).map((f) => ({ ...f, id: f.id || newFieldId() }));
+    this.fields = [...this.fields, ...add];
+    return add.length;
   }
   loadDesign(d: { brief: Brief; fields: Field[]; version?: string }) {
     const b = d.brief || emptyBrief();
