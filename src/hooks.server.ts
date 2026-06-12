@@ -269,6 +269,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/policy-engine/* (ingest + seed-workflows) are service-to-service: the
+  // scheduled tracking workflows' http-request node has no user session. The
+  // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,
+  // so they must bypass the Auth.js gate (mirrors /api/mcp above). GET is the
+  // read-only tracked-indicator list, already public via the /monitor page.
+  if (pathname.startsWith('/api/policy-engine/')) {
+    return resolve(event);
+  }
+
   // /api/health/workflow-engine is consumed by the systemd watchdog timer
   // (curl from 127.0.0.1) — no user session, no service token. Restrict to
   // loopback to prevent it being scraped externally for run counts.
