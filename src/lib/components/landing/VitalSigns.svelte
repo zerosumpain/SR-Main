@@ -21,7 +21,6 @@
       startedAt: number | null;
       elevationGainM: number | null;
     };
-    estate: { liveSignals: number; services: number };
     generatedAt: string;
   }
 
@@ -95,7 +94,6 @@
     const b = v?.builder;
     const c = v?.canvas;
     const w = v?.walk;
-    const e = v?.estate;
     return [
       {
         label: 'JKAI',
@@ -150,16 +148,6 @@
           : 'connecting…',
         state: w ? (w.active ? 'live' : 'idle') : 'loading',
         href: '/live',
-      },
-      {
-        label: 'DATA ESTATE',
-        num: e ? e.liveSignals : null,
-        fallback: '—',
-        unit: 'LIVE SIGNALS',
-        sub: e ? `${e.services} gov services` : 'connecting…',
-        state: e ? 'static' : 'loading',
-        href: '/projects/dfe-data-estate',
-        dp: null,
       },
       {
         label: 'CANVAS',

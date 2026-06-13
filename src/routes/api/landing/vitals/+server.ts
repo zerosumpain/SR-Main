@@ -53,7 +53,6 @@ interface VitalsPayload {
     startedAt: number | null;
     elevationGainM: number | null;
   };
-  estate: { liveSignals: number; services: number };
   generatedAt: string;
 }
 
@@ -170,11 +169,6 @@ async function compute(): Promise<VitalsPayload> {
       lastRunAt: lastRunTs ? new Date(lastRunTs).toISOString() : null,
     },
     walk,
-    // Static catalogue counts — 6 live-signal sources (STAT_ORDER) and 16
-    // catalogued services in src/routes/projects/dfe-data-estate/lib/services.ts.
-    // Kept static on purpose: a true live count would fan out to ~8 slow gov-API
-    // calls, which must never run from the landing page.
-    estate: { liveSignals: 6, services: 16 },
     generatedAt: new Date().toISOString(),
   };
 }
@@ -194,7 +188,6 @@ export const GET: RequestHandler = async () => {
       builder: { stage: 'idle', active: false, shippedCount: 0, lastShippedTitle: null, lastShippedHref: null },
       canvas: { count: 0, lastRunAt: null },
       walk: { active: false, distanceKm: null, routeName: null, startedAt: null, elevationGainM: null },
-      estate: { liveSignals: 6, services: 16 },
       generatedAt: new Date().toISOString(),
     };
   }
