@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { db } from '$lib/db';
-import { jkaiBuilds, workflows, workflowRuns } from '$lib/db/schema';
+import { jkaiBuilds, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
 import { and, desc, eq, like, not, isNotNull, sql } from 'drizzle-orm';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 
@@ -117,47 +117,46 @@ function deriveBuilder(
 }
 
 async function compute(): Promise<VitalsPayload> {
-  const [latestArr, latestPubArr, shippedArr, canvasCountArr, canvasRunArr, walk] =
-    await Promise.all([
-      db
-        .select({
-          status: jkaiBuilds.status,
-          planStatus: jkaiBuilds.planStatus,
-          publishedSlug: jkaiBuilds.publishedSlug,
-        })
-        .from(jkaiBuilds)
-        .orderBy(desc(jkaiBuilds.createdAt))
-        .limit(1),
-      // "Shipped" = published to a real /projects/<slug> page. Forge/git-target
-      // builds record a PR/branch URL in publishedSlug instead of a slug, so
-      // exclude those (http…) — they aren't viewable project pages.
-      db
-        .select({ title: jkaiBuilds.title, publishedSlug: jkaiBuilds.publishedSlug })
-        .from(jkaiBuilds)
-        .where(
-          and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))),
-        )
-        .orderBy(desc(jkaiBuilds.createdAt))
-        .limit(1),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(jkaiBuilds)
-        .where(
-          and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))),
-        ),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(workflows)
-        .where(like(workflows.name, 'canvas:%')),
-      db
-        .select({ ts: sql<string | null>`max(${workflowRuns.startedAt})` })
-        .from(workflowRuns)
-        .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
-        .where(like(workflows.name, 'canvas:%')),
-      readWalk(),
-    ]);
+  const [latestArr, publishedRows, canvasCountArr, canvasRunArr, walk] = await Promise.all([
+    db
+      .select({
+        status: jkaiBuilds.status,
+        planStatus: jkaiBuilds.planStatus,
+        publishedSlug: jkaiBuilds.publishedSlug,
+      })
+      .from(jkaiBuilds)
+      .orderBy(desc(jkaiBuilds.createdAt))
+      .limit(1),
+    // "Shipped" = published to a real /projects/<slug> page that is PUBLIC.
+    // Exclude Forge/git-target builds (they store a PR/branch URL in
+    // publishedSlug, not a slug) and any project toggled private in
+    // project_visibility (absence of a row means public — see
+    // $lib/projects/visibility). Never name a private project to an anon visitor.
+    db
+      .select({
+        title: jkaiBuilds.title,
+        publishedSlug: jkaiBuilds.publishedSlug,
+        isPublic: projectVisibility.isPublic,
+      })
+      .from(jkaiBuilds)
+      .leftJoin(projectVisibility, eq(projectVisibility.projectKey, jkaiBuilds.publishedSlug))
+      .where(and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))))
+      .orderBy(desc(jkaiBuilds.createdAt)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(workflows)
+      .where(like(workflows.name, 'canvas:%')),
+    db
+      .select({ ts: sql<string | null>`max(${workflowRuns.startedAt})` })
+      .from(workflowRuns)
+      .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
+      .where(like(workflows.name, 'canvas:%')),
+    readWalk(),
+  ]);
 
-  const builder = deriveBuilder(latestArr[0], latestPubArr[0], shippedArr[0]?.n ?? 0);
+  // Public unless an explicit visibility row marks the slug private.
+  const publicPublished = publishedRows.filter((r) => r.isPublic !== false);
+  const builder = deriveBuilder(latestArr[0], publicPublished[0], publicPublished.length);
   const lastRunTs = canvasRunArr[0]?.ts ?? null;
 
   return {
