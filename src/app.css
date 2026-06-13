@@ -81,6 +81,20 @@
   --shadow-md: 4px 4px 0 rgba(26, 16, 8, 0.10);
   --shadow-lg: 0 8px 24px rgba(26, 16, 8, 0.18);
 
+  /* Motion tokens — the house tempo, previously scattered inline. Quiet and
+     short: "polish, not flourish". Route JS durations through dur() in
+     $lib/motion.ts so reduced-motion still collapses them to 0. */
+  --t-fast: 180ms;
+  --t-base: 220ms;
+  --t-slow: 360ms;
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /* Accent glow — a single lit-dot / focus treatment. Extends the live-dot
+     box-shadow so CTAs and "live" indicators read as lit, not flat. */
+  --accent-glow: 0 0 6px rgba(196, 87, 10, 0.5);
+  --accent-glow-lg: 0 0 18px rgba(196, 87, 10, 0.32);
+
   /* Grain overlay */
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
 }

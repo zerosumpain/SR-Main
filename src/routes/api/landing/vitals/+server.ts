@@ -1,0 +1,193 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { db } from '$lib/db';
+import { jkaiBuilds, workflows, workflowRuns } from '$lib/db/schema';
+import { desc, eq, like, isNotNull, sql } from 'drizzle-orm';
+import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
+
+/**
+ * Public, read-only aggregator for the landing-page "Vital Signs" tiles.
+ *
+ * Whitelisted in src/lib/auth.ts PUBLIC_PATHS so anonymous visitors can read it
+ * (the rest of /api/* returns 401 without a session). It exposes ONLY safe
+ * aggregate values — counts, a derived build stage, the already-public
+ * live-walk state, and the title/link of a build that is ALREADY published at
+ * a public /projects/<slug> URL. It deliberately never leaks in-progress build
+ * prompts/titles, conversation ids, or canvas slugs/titles.
+ *
+ * Health/BPM is NOT here — the Health tile reads the shared biome store
+ * (already public via /api/biome/state) client-side, with its 5s lerp.
+ */
+
+const LIVE_STATE_PATH = '/tmp/live-walk-state.json';
+const WALK_EXPIRE_MS = 4 * 60 * 60 * 1000; // mirror /api/live-walk EXPIRE_MS
+const CACHE_MS = 5_000; // shield the DB from many concurrent visitor polls
+
+// A build counts as "in flight" while in one of these statuses (and not yet
+// published). Mirrors the bucket() logic in $lib/builds/BuildsListV2.svelte.
+const ACTIVE_BUILD = new Set([
+  'running',
+  'queued',
+  'paused',
+  'awaiting_plan_approval',
+  'awaiting_iter_approval',
+  'pending',
+]);
+
+interface VitalsPayload {
+  jkai: { activeJobs: number };
+  builder: {
+    stage: 'planning' | 'building' | 'shipped' | 'ready' | 'failed' | 'idle';
+    active: boolean;
+    shippedCount: number;
+    lastShippedTitle: string | null;
+    lastShippedHref: string | null;
+  };
+  canvas: { count: number; lastRunAt: string | null };
+  walk: {
+    active: boolean;
+    distanceKm: number | null;
+    routeName: string | null;
+    startedAt: number | null;
+    elevationGainM: number | null;
+  };
+  estate: { liveSignals: number; services: number };
+  generatedAt: string;
+}
+
+let cache: { at: number; data: VitalsPayload } | null = null;
+
+async function readWalk(): Promise<VitalsPayload['walk']> {
+  const idle: VitalsPayload['walk'] = {
+    active: false,
+    distanceKm: null,
+    routeName: null,
+    startedAt: null,
+    elevationGainM: null,
+  };
+  try {
+    if (!existsSync(LIVE_STATE_PATH)) return idle;
+    const s = JSON.parse(await readFile(LIVE_STATE_PATH, 'utf-8'));
+    if (!s?.receivedAt || Date.now() - s.receivedAt > WALK_EXPIRE_MS) return idle;
+    if (s.status === 'finished') return idle;
+    return {
+      active: true,
+      distanceKm: typeof s.stats?.distanceKm === 'number' ? s.stats.distanceKm : null,
+      routeName: typeof s.routeName === 'string' ? s.routeName : null,
+      startedAt: typeof s.startedAt === 'number' ? s.startedAt : null,
+      elevationGainM:
+        typeof s.stats?.elevationGainM === 'number' ? Math.round(s.stats.elevationGainM) : null,
+    };
+  } catch {
+    return idle;
+  }
+}
+
+function deriveBuilder(
+  latest: { status: string; planStatus: string; publishedSlug: string | null } | undefined,
+  latestPublished: { title: string | null; publishedSlug: string | null } | undefined,
+  shippedCount: number,
+): VitalsPayload['builder'] {
+  const lastShippedTitle = latestPublished?.title ?? null;
+  const lastShippedHref = latestPublished?.publishedSlug
+    ? `/projects/${latestPublished.publishedSlug}/`
+    : null;
+
+  if (!latest) {
+    return { stage: 'idle', active: false, shippedCount, lastShippedTitle, lastShippedHref };
+  }
+
+  const active = !latest.publishedSlug && ACTIVE_BUILD.has(latest.status);
+  let stage: VitalsPayload['builder']['stage'];
+  if (active) {
+    stage = latest.status === 'running' || latest.status === 'paused' ? 'building' : 'planning';
+  } else if (latest.publishedSlug) {
+    stage = 'shipped';
+  } else if (latest.status === 'completed') {
+    stage = 'ready';
+  } else if (latest.status === 'failed') {
+    stage = 'failed';
+  } else {
+    stage = 'idle';
+  }
+  return { stage, active, shippedCount, lastShippedTitle, lastShippedHref };
+}
+
+async function compute(): Promise<VitalsPayload> {
+  const [latestArr, latestPubArr, shippedArr, canvasCountArr, canvasRunArr, walk] =
+    await Promise.all([
+      db
+        .select({
+          status: jkaiBuilds.status,
+          planStatus: jkaiBuilds.planStatus,
+          publishedSlug: jkaiBuilds.publishedSlug,
+        })
+        .from(jkaiBuilds)
+        .orderBy(desc(jkaiBuilds.createdAt))
+        .limit(1),
+      db
+        .select({ title: jkaiBuilds.title, publishedSlug: jkaiBuilds.publishedSlug })
+        .from(jkaiBuilds)
+        .where(isNotNull(jkaiBuilds.publishedSlug))
+        .orderBy(desc(jkaiBuilds.createdAt))
+        .limit(1),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(jkaiBuilds)
+        .where(isNotNull(jkaiBuilds.publishedSlug)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(workflows)
+        .where(like(workflows.name, 'canvas:%')),
+      db
+        .select({ ts: sql<string | null>`max(${workflowRuns.startedAt})` })
+        .from(workflowRuns)
+        .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
+        .where(like(workflows.name, 'canvas:%')),
+      readWalk(),
+    ]);
+
+  const builder = deriveBuilder(latestArr[0], latestPubArr[0], shippedArr[0]?.n ?? 0);
+  const lastRunTs = canvasRunArr[0]?.ts ?? null;
+
+  return {
+    jkai: { activeJobs: listRunningJobsByConversation().size },
+    builder,
+    canvas: {
+      count: canvasCountArr[0]?.n ?? 0,
+      lastRunAt: lastRunTs ? new Date(lastRunTs).toISOString() : null,
+    },
+    walk,
+    // Static catalogue counts — 6 live-signal sources (STAT_ORDER) and 16
+    // catalogued services in src/routes/projects/dfe-data-estate/lib/services.ts.
+    // Kept static on purpose: a true live count would fan out to ~8 slow gov-API
+    // calls, which must never run from the landing page.
+    estate: { liveSignals: 6, services: 16 },
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export const GET: RequestHandler = async () => {
+  if (cache && Date.now() - cache.at < CACHE_MS) {
+    return json(cache.data);
+  }
+  let data: VitalsPayload;
+  try {
+    data = await compute();
+  } catch (err) {
+    // Fail soft — the landing page must never 500 on a tile.
+    console.error('[landing/vitals] compute failed:', err);
+    data = {
+      jkai: { activeJobs: 0 },
+      builder: { stage: 'idle', active: false, shippedCount: 0, lastShippedTitle: null, lastShippedHref: null },
+      canvas: { count: 0, lastRunAt: null },
+      walk: { active: false, distanceKm: null, routeName: null, startedAt: null, elevationGainM: null },
+      estate: { liveSignals: 6, services: 16 },
+      generatedAt: new Date().toISOString(),
+    };
+  }
+  cache = { at: Date.now(), data };
+  return json(data);
+};

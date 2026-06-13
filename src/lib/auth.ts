@@ -17,6 +17,11 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
+  // Public, read-only aggregator for the landing-page "Vital Signs" tiles.
+  // Exposes only safe aggregate counts / derived build stage / already-public
+  // live-walk + published-project data — never prompts, conversation ids, or
+  // canvas slugs. See src/routes/api/landing/vitals/+server.ts.
+  '/api/landing/vitals',
   '/projects',
   '/heart',
   // Service-to-service endpoints for the stealth-scrape + interactive-VNC

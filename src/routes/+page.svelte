@@ -15,6 +15,8 @@
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
+  import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
+  import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -110,32 +112,41 @@
     </div>
   {/if}
 
-  <!-- Center — hero copy. heroTitle is streamed; render fallback copy until it
-       lands so the hero paints without waiting on the external weather fetch. -->
+  <!-- Center — hero copy (left) + live "Vital Signs" tiles (right). heroTitle is
+       streamed; render fallback copy until it lands so the hero paints without
+       waiting on the external weather fetch. The tiles sit at z-10 over the ECG
+       and stack below the copy on narrow viewports. -->
   <div class="relative z-10 flex-1 flex items-center">
-    {#await data.heroTitle}
-      <LandingHero
-        tag={heroTag}
-        primary={FALLBACK_HERO.primary}
-        ghost={FALLBACK_HERO.ghost}
-        strap={makeStrap(FALLBACK_HERO.strapTemplate)}
-        {pulse}
-        steps={data.steps}
-        {temp}
-        {condition}
-      />
-    {:then heroTitle}
-      <LandingHero
-        tag={heroTag}
-        primary={heroTitle.primary}
-        ghost={heroTitle.ghost}
-        strap={makeStrap(heroTitle.strapTemplate)}
-        {pulse}
-        steps={data.steps}
-        {temp}
-        {condition}
-      />
-    {/await}
+    <div class="hero-grid">
+      <div class="hero-copy">
+        {#await data.heroTitle}
+          <LandingHero
+            tag={heroTag}
+            primary={FALLBACK_HERO.primary}
+            ghost={FALLBACK_HERO.ghost}
+            strap={makeStrap(FALLBACK_HERO.strapTemplate)}
+            {pulse}
+            steps={data.steps}
+            {temp}
+            {condition}
+          />
+        {:then heroTitle}
+          <LandingHero
+            tag={heroTag}
+            primary={heroTitle.primary}
+            ghost={heroTitle.ghost}
+            strap={makeStrap(heroTitle.strapTemplate)}
+            {pulse}
+            steps={data.steps}
+            {temp}
+            {condition}
+          />
+        {/await}
+      </div>
+      <aside class="hero-aside">
+        <VitalSigns />
+      </aside>
+    </div>
   </div>
 
   <!-- Live walk banner -->
@@ -153,6 +164,9 @@
   </div>
 </section>
 
+<!-- MORE — terminal-index of the non-live field studies, tools and writing -->
+<FeatureIndex />
+
 <!-- FOOTER — dense, utilitarian -->
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
   <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
@@ -166,3 +180,30 @@
 </footer>
 
 <BackgroundToggle />
+
+<style>
+  /* Hero splits into copy (left) + live Vital Signs tiles (right) on wide
+     viewports, and stacks the tiles below the copy under 1024px. */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: clamp(28px, 4vw, 64px);
+    align-items: center;
+    width: 100%;
+  }
+  .hero-copy {
+    min-width: 0;
+  }
+  .hero-aside {
+    width: 100%;
+  }
+  @media (max-width: 1024px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .hero-aside {
+      max-width: 440px;
+    }
+  }
+</style>
