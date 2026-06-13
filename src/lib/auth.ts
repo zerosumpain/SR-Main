@@ -24,6 +24,11 @@ const PUBLIC_PATHS = [
   '/api/landing/vitals',
   '/projects',
   '/heart',
+  // Public leaderboard for the Terminal Descent game (/projects/terminal-descent).
+  // Anonymous read (GET scores) + write (POST session + score). No OAuth — the
+  // POST surface is bounded by single-use nonces, rate limiting and server-side
+  // score recomputation (see src/lib/space-lander/score.ts), not a cookie gate.
+  '/api/space-lander',
   // Service-to-service endpoints for the stealth-scrape + interactive-VNC
   // proxy. Auth is enforced by each handler via SCRAPER_SERVICE_TOKEN
   // (Bearer header) — not Google OAuth, because the caller is the VPS

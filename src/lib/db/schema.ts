@@ -1790,3 +1790,61 @@ export const standardRegistrySourceRuns = pgTable(
   (t) => [index('standard_registry_source_runs_key_idx').on(t.sourceKey, t.runAt)],
 );
 export type StandardRegistrySourceRun = typeof standardRegistrySourceRuns.$inferSelect;
+
+// --- Terminal Descent: spaceship-landing game leaderboard ------------------
+// A single-use session (nonce) is issued when a run starts; at touchdown the
+// client POSTs TELEMETRY (never a trusted score). The server recomputes the
+// score from telemetry + difficulty (src/lib/space-lander/score.ts), validates
+// plausibility, burns the nonce, then stores the row. Public read+write,
+// whitelisted in src/lib/auth.ts. Routes: src/routes/api/space-lander/*.
+export const spaceLanderSessions = pgTable(
+  'space_lander_sessions',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    nonce: text('nonce').notNull(),
+    difficulty: text('difficulty').notNull(),
+    seed: text('seed'),
+    ipHash: text('ip_hash'),
+    used: boolean('used').notNull().default(false),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('space_lander_sessions_expires_idx').on(t.expiresAt)],
+);
+export type SpaceLanderSession = typeof spaceLanderSessions.$inferSelect;
+
+export const spaceLanderScores = pgTable(
+  'space_lander_scores',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(), // pilot handle (sanitised, ≤6 chars)
+    score: integer('score').notNull(), // server-recomputed, authoritative
+    tier: text('tier').notNull().default('safe'), // 'bullseye' | 'safe'
+    difficulty: text('difficulty').notNull(), // 'cadet' | 'pilot' | 'ace'
+    seed: text('seed'),
+    // telemetry, native engine units (m/s, rad)
+    vy: doublePrecision('vy').notNull(),
+    vx: doublePrecision('vx').notNull(),
+    tiltRad: doublePrecision('tilt_rad').notNull(),
+    angVelMag: doublePrecision('ang_vel_mag').notNull().default(0),
+    padOffset: doublePrecision('pad_offset').notNull(),
+    fuelStart: doublePrecision('fuel_start').notNull(),
+    fuelRemaining: doublePrecision('fuel_remaining').notNull(),
+    tElapsed: doublePrecision('t_elapsed').notNull(),
+    sessionId: text('session_id'),
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    flagged: boolean('flagged').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('space_lander_scores_diff_score_idx').on(t.difficulty, t.score),
+    index('space_lander_scores_score_idx').on(t.score),
+    // One score per session — DB-level defence against nonce double-spend.
+    // sessionId is nullable; Postgres treats NULLs as distinct, so unranked
+    // (session-less) rows are unaffected.
+    uniqueIndex('space_lander_scores_session_idx').on(t.sessionId),
+  ],
+);
+export type SpaceLanderScore = typeof spaceLanderScores.$inferSelect;
+export type NewSpaceLanderScore = typeof spaceLanderScores.$inferInsert;

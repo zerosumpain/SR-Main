@@ -33,6 +33,8 @@ const MIME_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
 };
 
 function getMimeType(filePath: string): string {

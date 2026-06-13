@@ -114,6 +114,48 @@
   </div>
 
   <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+    {#if showCard('terminal-descent')}
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <a href="/projects/terminal-descent/" class="absolute inset-0 z-0" aria-label="Play Terminal Descent"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №5
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Playable · WebGL
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Terminal Descent — A Newtonian Landing Problem
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        A 3D landing game with real Newtonian physics. Gravity pulls; your single engine only
+        pushes the way the ship points — so to move, you tilt, burn, then tilt back and burn again
+        to kill the drift before you touch down. Manage fuel, thread a procedurally generated
+        hazard field, and set down gently, upright and dead-centre on the pad. Scored on touchdown,
+        fuel saved and centering, with a global leaderboard. Built autonomously from one prompt.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          Three.js · inertia · leaderboard
+        </span>
+        {@render visToggle('terminal-descent', '/projects/terminal-descent/', 'Terminal Descent')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('data-standard-designer')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
