@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { db } from '$lib/db';
 import { jkaiBuilds, workflows, workflowRuns } from '$lib/db/schema';
-import { desc, eq, like, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, like, not, isNotNull, sql } from 'drizzle-orm';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 
 /**
@@ -90,7 +90,8 @@ function deriveBuilder(
   latestPublished: { title: string | null; publishedSlug: string | null } | undefined,
   shippedCount: number,
 ): VitalsPayload['builder'] {
-  const lastShippedTitle = latestPublished?.title ?? null;
+  const rawTitle = latestPublished?.title ?? null;
+  const lastShippedTitle = rawTitle ? rawTitle.slice(0, 48) : null;
   const lastShippedHref = latestPublished?.publishedSlug
     ? `/projects/${latestPublished.publishedSlug}/`
     : null;
@@ -127,16 +128,23 @@ async function compute(): Promise<VitalsPayload> {
         .from(jkaiBuilds)
         .orderBy(desc(jkaiBuilds.createdAt))
         .limit(1),
+      // "Shipped" = published to a real /projects/<slug> page. Forge/git-target
+      // builds record a PR/branch URL in publishedSlug instead of a slug, so
+      // exclude those (http…) — they aren't viewable project pages.
       db
         .select({ title: jkaiBuilds.title, publishedSlug: jkaiBuilds.publishedSlug })
         .from(jkaiBuilds)
-        .where(isNotNull(jkaiBuilds.publishedSlug))
+        .where(
+          and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))),
+        )
         .orderBy(desc(jkaiBuilds.createdAt))
         .limit(1),
       db
         .select({ n: sql<number>`count(*)::int` })
         .from(jkaiBuilds)
-        .where(isNotNull(jkaiBuilds.publishedSlug)),
+        .where(
+          and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))),
+        ),
       db
         .select({ n: sql<number>`count(*)::int` })
         .from(workflows)
