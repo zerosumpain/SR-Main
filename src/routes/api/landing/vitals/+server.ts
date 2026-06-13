@@ -154,9 +154,12 @@ async function compute(): Promise<VitalsPayload> {
     readWalk(),
   ]);
 
-  // Public unless an explicit visibility row marks the slug private.
+  // shippedCount counts every real-slug publish (a bare number is not
+  // sensitive); but only a PUBLIC project's title/link may be surfaced — naming
+  // a private project to an anon visitor is the actual leak. Public unless an
+  // explicit visibility row marks the slug private.
   const publicPublished = publishedRows.filter((r) => r.isPublic !== false);
-  const builder = deriveBuilder(latestArr[0], publicPublished[0], publicPublished.length);
+  const builder = deriveBuilder(latestArr[0], publicPublished[0], publishedRows.length);
   const lastRunTs = canvasRunArr[0]?.ts ?? null;
 
   return {

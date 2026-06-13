@@ -117,7 +117,7 @@
             ? `${b.stage} now…`
             : b.lastShippedTitle
               ? `last: ${b.lastShippedTitle}`
-              : 'idle'
+              : 'autonomous builder'
           : 'connecting…',
         state: b ? (b.active ? 'live' : 'static') : 'loading',
         href: '/jkai/builds',
