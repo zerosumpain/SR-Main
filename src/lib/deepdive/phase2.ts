@@ -7,6 +7,7 @@ import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
 import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
+import { emitArtefact } from './desk-events';
 import { loadKeys } from './keys';
 import type { SessionConfig, SessionStats } from './types';
 
@@ -210,15 +211,31 @@ export async function runPhase2(
         const extractedConf = Math.max(0, Math.min(1, f.confidence ?? 0.5));
         const srcCredibility = src.credibilityScore ?? 0.5;
         const blendedConfidence = extractedConf * 0.7 + srcCredibility * 0.3;
-        await db.insert(facts).values({
-          sessionId,
-          sourceId: src.id,
-          content: f.content,
-          eventDate: f.event_date ? new Date(f.event_date) : null,
-          confidence: Math.max(0, Math.min(1, blendedConfidence)),
-          tags: f.tags ?? [],
-          embedding,
+        const [storedFact] = await db
+          .insert(facts)
+          .values({
+            sessionId,
+            sourceId: src.id,
+            content: f.content,
+            eventDate: f.event_date ? new Date(f.event_date) : null,
+            confidence: Math.max(0, Math.min(1, blendedConfidence)),
+            tags: f.tags ?? [],
+            embedding,
+          })
+          .returning();
+
+        // Desk: drop the fact card (stable id from .returning()).
+        emitArtefact(sessionId, 'fact', 2, {
+          id: storedFact.id,
+          sourceId: storedFact.sourceId,
+          content: storedFact.content,
+          confidence: storedFact.confidence,
+          isCounterfactual: storedFact.isCounterfactual,
+          refutesFactId: storedFact.refutesFactId,
+          tags: storedFact.tags,
+          eventDate: storedFact.eventDate ? storedFact.eventDate.toISOString() : null,
         });
+
         count++;
         stats.factsExtracted++;
       }
@@ -259,6 +276,14 @@ export async function runPhase2(
             .returning();
           entityId = created.id;
           stats.entitiesIdentified++;
+
+          // Desk: drop the entity chip (only for newly-created entities).
+          emitArtefact(sessionId, 'entity', 2, {
+            id: created.id,
+            name: created.name,
+            type: created.type,
+            description: created.description,
+          });
         }
 
         const sourceFacts = await db
@@ -342,14 +367,28 @@ export async function runPhase2(
 
           if (existingRel.length > 0) continue;
 
-          await db.insert(relationships).values({
-            sessionId,
-            fromEntityId: fromEntity.id,
-            toEntityId: toEntity.id,
-            relationshipType: rel.relationship_type,
-            sentiment: rel.sentiment || 'neutral',
-            strength: Math.max(0, Math.min(1, rel.strength ?? 0.5)),
-            sourceId: source.id,
+          const [storedRel] = await db
+            .insert(relationships)
+            .values({
+              sessionId,
+              fromEntityId: fromEntity.id,
+              toEntityId: toEntity.id,
+              relationshipType: rel.relationship_type,
+              sentiment: rel.sentiment || 'neutral',
+              strength: Math.max(0, Math.min(1, rel.strength ?? 0.5)),
+              sourceId: source.id,
+            })
+            .returning();
+
+          // Desk: relationships render as edges only (orthPath), never cards.
+          emitArtefact(sessionId, 'relationship', 2, {
+            id: storedRel.id,
+            fromEntityId: storedRel.fromEntityId,
+            toEntityId: storedRel.toEntityId,
+            relationshipType: storedRel.relationshipType,
+            sentiment: storedRel.sentiment,
+            strength: storedRel.strength,
+            sourceId: storedRel.sourceId,
           });
         }
       } catch (err) {
