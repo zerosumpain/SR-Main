@@ -397,6 +397,13 @@ export const sources = pgTable('source', {
   credibilityScore: doublePrecision('credibility_score'),
   credibilityType: text('credibility_type'),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  // --- Research Desk (canvas) additive columns ---
+  canvasX: doublePrecision('canvas_x'), // null = auto-layout
+  canvasY: doublePrecision('canvas_y'),
+  pinned: boolean('pinned').notNull().default(false),
+  deskState: text('desk_state').notNull().default('unfiled'), // 'unfiled'|'filed'|'synthesized'|'archived'
+  deskCategory: text('desk_category'),
+  synthesisRunId: text('synthesis_run_id'), // FK -> synthesis_runs.id (nullable, no DB constraint)
 });
 
 export type Source = typeof sources.$inferSelect;
@@ -415,6 +422,13 @@ export const facts = pgTable('fact', {
   embedding: vector('embedding'),
   noveltyScore: doublePrecision('novelty_score'),
   sourceAgreement: integer('source_agreement'),
+  // --- Research Desk (canvas) additive columns ---
+  canvasX: doublePrecision('canvas_x'), // null = auto-layout
+  canvasY: doublePrecision('canvas_y'),
+  pinned: boolean('pinned').notNull().default(false),
+  deskState: text('desk_state').notNull().default('unfiled'), // 'unfiled'|'filed'|'synthesized'|'archived'
+  deskCategory: text('desk_category'), // distinct from sources.category; new to facts
+  synthesisRunId: text('synthesis_run_id'), // FK -> synthesis_runs.id (nullable, no DB constraint)
 });
 
 export type Fact = typeof facts.$inferSelect;
@@ -426,6 +440,13 @@ export const entities = pgTable('entity', {
   type: text('type').notNull(),
   description: text('description'),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  // --- Research Desk (canvas) additive columns ---
+  canvasX: doublePrecision('canvas_x'), // null = auto-layout
+  canvasY: doublePrecision('canvas_y'),
+  pinned: boolean('pinned').notNull().default(false),
+  deskState: text('desk_state').notNull().default('unfiled'), // 'unfiled'|'filed'|'synthesized'|'archived'
+  deskCategory: text('desk_category'),
+  synthesisRunId: text('synthesis_run_id'), // FK -> synthesis_runs.id (nullable, no DB constraint)
 });
 
 export type Entity = typeof entities.$inferSelect;
@@ -1145,6 +1166,30 @@ export interface QuickAnswerSource {
 }
 
 export type QuickAnswer = typeof quickAnswers.$inferSelect;
+
+// ==========================================
+// Research Desk — Synthesis Runs
+// On-demand, re-runnable streamed LLM passes over the artefact pile. Each run
+// owns its own clusters/summary; it never overwrites researchSessions.report.
+// ==========================================
+
+export const synthesisRuns = pgTable('synthesis_runs', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => researchSessions.id),
+  scope: jsonb('scope').notNull().default(sql`'{}'::jsonb`),
+  status: text('status').notNull().default('running'), // running|complete|failed|cancelled
+  summary: text('summary'),
+  clusters: jsonb('clusters').notNull().default(sql`'[]'::jsonb`),
+  tokensUsed: integer('tokens_used'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export type SynthesisRun = typeof synthesisRuns.$inferSelect;
+export type NewSynthesisRun = typeof synthesisRuns.$inferInsert;
 
 // ==========================================
 // Intel explorations — per-canvas index of
