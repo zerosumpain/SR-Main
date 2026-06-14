@@ -14,7 +14,7 @@ import { eq } from 'drizzle-orm';
 /**
  * GET /api/deepdive/[id]/data
  * Returns facts, entities, sources, relationships and the report for a session.
- * Used by the embedded DeepResearchViewer canvas node.
+ * Used by the ResearchDesk hydrate-then-stream contract (desk + embedded canvas node).
  */
 export const GET: RequestHandler = async ({ params }) => {
   const [session] = await db

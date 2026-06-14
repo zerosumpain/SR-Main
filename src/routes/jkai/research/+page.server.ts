@@ -55,10 +55,7 @@ export const load: PageServerLoad = async () => {
       mode: 'deep' as const,
       durationMs: null,
       createdAt: r.createdAt.toISOString(),
-      href:
-        r.status === 'complete'
-          ? `/deepdive/${r.id}/dashboard`
-          : `/deepdive/${r.id}/progress`,
+      href: `/deepdive/${r.id}`,
     })),
   ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 

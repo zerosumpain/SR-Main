@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DeepResearchViewer from './DeepResearchViewer.svelte';
+  import ResearchDesk from './ResearchDesk.svelte';
   import OpenAsWebpageButton from '../OpenAsWebpageButton.svelte';
 
   type Source = { url: string; title: string; domain: string };
@@ -46,9 +46,9 @@
     if (!chatNode) return;
     const nodeH = chatNode.getBoundingClientRect().height;
     const hdrH = rrHeaderEl ? rrHeaderEl.getBoundingClientRect().height : 27;
-    // 36px = drv-tabs bar height in DeepResearchViewer (fixed, flex-shrink:0)
-    // For quick engine there is no tab bar.
-    const tabBarH = isDeep ? 36 : 0;
+    // The embedded ResearchDesk renders its own CommandBar (56px) inside the
+    // body box, so for deep we reserve it; the quick (text) body has no bar.
+    const tabBarH = isDeep ? 56 : 0;
     const scrollH = Math.max(60, nodeH - hdrH - tabBarH);
     rrRootEl.style.setProperty('--scroll-h', `${scrollH}px`);
   }
@@ -84,10 +84,9 @@
   const effectiveReport = $derived(report || fetchedReport);
   const effectiveSources = $derived((sources && sources.length ? sources : fetchedSources));
 
-  // For deep+complete: the full report object for DeepResearchViewer
-  const deepReportData = $derived(
-    engine === 'deep' && status === 'complete' ? fetchedDeepReport : null,
-  );
+  // For deep+complete the embedded ResearchDesk hydrates itself from
+  // /api/deepdive/[id]/data; we still fetch the report here to surface the
+  // executive summary in the fallback (no-session) body.
   const showDeepViewer = $derived(engine === 'deep' && status === 'complete' && !!sessionId);
 
   $effect(() => {
@@ -209,11 +208,11 @@
     {/if}
     {#if status === 'complete' && sessionId}
       <a
-        href="/deepdive/{sessionId}/dashboard"
+        href="/deepdive/{sessionId}"
         target="_blank"
         rel="noreferrer"
         class="open-link"
-        title="Open full dashboard"
+        title="Open the desk"
       >↗</a>
     {/if}
   </div>
@@ -226,11 +225,15 @@
   {:else if status === 'failed'}
     <div class="rr-failed">Research failed.</div>
   {:else if showDeepViewer}
-    <!-- Deep research complete: rich tabbed viewer — direct flex child, fills remaining space -->
-    <DeepResearchViewer
-      sessionId={sessionId!}
-      reportData={deepReportData}
-    />
+    <!-- Deep research complete: embedded readonly desk — fills remaining space -->
+    <div class="rr-desk">
+      <ResearchDesk
+        sessionId={sessionId!}
+        mode="deep"
+        readonly
+        embedded
+      />
+    </div>
   {:else}
     <!-- Quick research or deep without session id: simple scrollable body -->
     <div class="rr-body">
@@ -379,4 +382,16 @@
   .sources a { color: var(--accent); text-decoration: none; }
   .domain { color: var(--text-ghost); margin-left: 6px; }
   .duration { color: var(--text-ghost); font-size: 9px; text-align: right; margin-top: 4px; }
+
+  /*
+    .rr-desk — embedded readonly ResearchDesk wrapper. The desk fills its box
+    via position:absolute; inset:0 (embedded variant), so the wrapper must be a
+    sized, positioned flex child (flex:1; min-height:0; position:relative).
+  */
+  .rr-desk {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
 </style>
