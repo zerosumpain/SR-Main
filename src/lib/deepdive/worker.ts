@@ -25,6 +25,16 @@ export function getEmitter(sessionId: string): EventEmitter {
   return emitter;
 }
 
+/**
+ * Guaranteed emitter accessor for callers that may run AFTER a session's
+ * 30s post-completion cleanup has torn the emitter down (e.g. on-demand
+ * synthesis on a completed session). Re-creates the emitter if absent so
+ * the SSE stream keeps flowing; returns the existing one for live sessions.
+ */
+export function ensureEmitter(sessionId: string): EventEmitter {
+  return getEmitter(sessionId);
+}
+
 export function emit(sessionId: string, event: SSEEvent): void {
   const emitter = activeEmitters.get(sessionId);
   if (emitter) {
