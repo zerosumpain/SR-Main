@@ -98,3 +98,141 @@ describe('scatterPosition', () => {
     expect(a.x).not.toBe(b.x);
   });
 });
+
+import { organisedLayout, ORG, type LayoutArtefact, type LayoutCategory } from './layout';
+
+const cat = (id: string, title = id): LayoutCategory => ({ id, title });
+
+describe('organisedLayout', () => {
+  it('returns a position for every non-override artefact, keyed by id', () => {
+    const cats = [cat('c1'), cat('c2')];
+    const arts: LayoutArtefact[] = [
+      { id: 'f1', kind: 'fact', categoryId: 'c1' },
+      { id: 'f2', kind: 'fact', categoryId: 'c2' },
+      { id: 'e1', kind: 'entity' },
+    ];
+    const map = organisedLayout(arts, cats);
+    expect(map.size).toBe(3);
+    for (const a of arts) expect(map.has(a.id)).toBe(true);
+  });
+
+  it('groups facts under their category into distinct columns', () => {
+    const cats = [cat('c1'), cat('c2')];
+    const arts: LayoutArtefact[] = [
+      { id: 'f1', kind: 'fact', categoryId: 'c1' },
+      { id: 'f2', kind: 'fact', categoryId: 'c1' },
+      { id: 'g1', kind: 'fact', categoryId: 'c2' },
+    ];
+    const map = organisedLayout(arts, cats);
+    const f1 = map.get('f1')!;
+    const f2 = map.get('f2')!;
+    const g1 = map.get('g1')!;
+    // Same category -> same column X.
+    expect(f1.x).toBe(f2.x);
+    // Different category -> different (further right) column X.
+    expect(g1.x).toBeGreaterThan(f1.x);
+    // Stacked vertically within the column, header reserves the top slot.
+    expect(f2.y).toBeGreaterThan(f1.y);
+    expect(f1.y).toBeGreaterThan(map.get('__header_placeholder__')?.y ?? -Infinity);
+  });
+
+  it('places categories left-to-right in array order', () => {
+    const cats = [cat('first'), cat('second'), cat('third')];
+    const arts: LayoutArtefact[] = [
+      { id: 'a', kind: 'fact', categoryId: 'third' },
+      { id: 'b', kind: 'fact', categoryId: 'first' },
+      { id: 'c', kind: 'fact', categoryId: 'second' },
+    ];
+    const map = organisedLayout(arts, cats);
+    expect(map.get('b')!.x).toBeLessThan(map.get('c')!.x);
+    expect(map.get('c')!.x).toBeLessThan(map.get('a')!.x);
+  });
+
+  it('sends unmatched / undefined categories to a trailing column', () => {
+    const cats = [cat('c1')];
+    const arts: LayoutArtefact[] = [
+      { id: 'f1', kind: 'fact', categoryId: 'c1' },
+      { id: 'u1', kind: 'fact', categoryId: 'nope' },
+      { id: 'u2', kind: 'fact' },
+    ];
+    const map = organisedLayout(arts, cats);
+    // u1/u2 share the trailing uncategorised column, to the right of c1.
+    expect(map.get('u1')!.x).toBe(map.get('u2')!.x);
+    expect(map.get('u1')!.x).toBeGreaterThan(map.get('f1')!.x);
+  });
+
+  it('collects entities into the bottom rail, below all columns', () => {
+    const cats = [cat('c1')];
+    const arts: LayoutArtefact[] = [
+      { id: 'f1', kind: 'fact', categoryId: 'c1' },
+      { id: 'f2', kind: 'fact', categoryId: 'c1' },
+      { id: 'e1', kind: 'entity', categoryId: 'c1' }, // categoryId ignored for entities
+      { id: 'e2', kind: 'entity' },
+    ];
+    const map = organisedLayout(arts, cats);
+    const railY = map.get('e1')!.y;
+    expect(map.get('e2')!.y).toBe(railY); // same rail row
+    // Rail sits below the fact stack.
+    expect(railY).toBeGreaterThan(map.get('f2')!.y);
+    // Entities are laid out horizontally on the rail.
+    expect(map.get('e2')!.x).toBeGreaterThan(map.get('e1')!.x);
+  });
+
+  it('wraps the entity rail when it overflows railWidth', () => {
+    const cats = [cat('c1')];
+    const perRow = Math.floor(ORG.railWidth / ORG.entityStride);
+    const arts: LayoutArtefact[] = [];
+    for (let i = 0; i < perRow + 2; i++) arts.push({ id: `e${i}`, kind: 'entity' });
+    const map = organisedLayout(arts, cats);
+    const firstRowY = map.get('e0')!.y;
+    const wrappedY = map.get(`e${perRow}`)!.y; // first entity past the row
+    expect(wrappedY).toBeGreaterThan(firstRowY);
+    // wrapped entity restarts at the rail's left edge
+    expect(map.get(`e${perRow}`)!.x).toBe(map.get('e0')!.x);
+  });
+
+  it('respects non-null overrides verbatim (pinned cards never move)', () => {
+    const cats = [cat('c1')];
+    const arts: LayoutArtefact[] = [
+      { id: 'pinned', kind: 'fact', categoryId: 'c1', override: { x: 1234, y: 5678 } },
+      { id: 'free', kind: 'fact', categoryId: 'c1' },
+    ];
+    const map = organisedLayout(arts, cats);
+    expect(map.get('pinned')).toEqual({ x: 1234, y: 5678 });
+    // The free card still gets a computed (different) slot.
+    expect(map.get('free')).not.toEqual({ x: 1234, y: 5678 });
+  });
+
+  it('does not let an override consume a column slot', () => {
+    const cats = [cat('c1')];
+    const arts: LayoutArtefact[] = [
+      { id: 'pinned', kind: 'fact', categoryId: 'c1', override: { x: 999, y: 999 } },
+      { id: 'a', kind: 'fact', categoryId: 'c1' },
+      { id: 'b', kind: 'fact', categoryId: 'c1' },
+    ];
+    const map = organisedLayout(arts, cats);
+    // a and b take the first two non-header rows; the pinned card didn't push them down.
+    const gap = map.get('b')!.y - map.get('a')!.y;
+    expect(gap).toBe(ORG.rowStride);
+  });
+
+  it('is deterministic and grid-snapped', () => {
+    const cats = [cat('c1'), cat('c2')];
+    const arts: LayoutArtefact[] = [
+      { id: 'f1', kind: 'fact', categoryId: 'c1' },
+      { id: 'f2', kind: 'fact', categoryId: 'c2' },
+      { id: 'e1', kind: 'entity' },
+    ];
+    const a = organisedLayout(arts, cats);
+    const b = organisedLayout(arts, cats);
+    for (const id of ['f1', 'f2', 'e1']) {
+      expect(a.get(id)).toEqual(b.get(id));
+      expect(a.get(id)!.x % GRID).toBe(0);
+      expect(a.get(id)!.y % GRID).toBe(0);
+    }
+  });
+
+  it('handles an empty artefact list', () => {
+    expect(organisedLayout([], [cat('c1')]).size).toBe(0);
+  });
+});

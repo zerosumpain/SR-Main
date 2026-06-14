@@ -179,15 +179,17 @@ export function organisedLayout(
   const nextRow = new Array<number>(categories.length + 1).fill(ORG.headerRows);
 
   // Deepest column row reached, to anchor the rail below everything.
-  let maxRow = ORG.headerRows;
+  let maxRow: number = ORG.headerRows;
 
   // Rail cursor.
   let railIdx = 0;
 
   for (const a of artefacts) {
     // 1) Pinned / dragged cards win verbatim and consume no slot.
+    // Do NOT snap override coordinates — the user may have dragged to a
+    // non-grid position; we must honour it exactly (spec §3.6/§5.7).
     if (a.override) {
-      out.set(a.id, { x: snap(a.override.x), y: snap(a.override.y) });
+      out.set(a.id, { x: a.override.x, y: a.override.y });
       continue;
     }
 
