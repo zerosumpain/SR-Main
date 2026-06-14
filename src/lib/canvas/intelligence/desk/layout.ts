@@ -227,3 +227,53 @@ export function organisedLayout(
 
   return out;
 }
+
+// ——— SYNTHESIZE-mode accumulation helpers (added in Milestone 7) ———
+//
+// These power the morph/sticky/pinned motion contract (see desk/positioning.ts).
+// `organisedLayout` (above) is the authoritative packer; these helpers describe
+// the bounding box of the organised core and place NEW (post-synthesis) loose
+// arrivals AROUND that core rather than over it. All geometry derives from the
+// existing ORG constants so a single source of truth governs the layout.
+
+/** Card box used by the accumulation packer; kept in sync with ArtefactCard.svelte. */
+export const CARD_W = 220;
+export const CARD_H = 120;
+/** Width of a category column — derived from the ORG column stride. */
+export const COL_W = ORG.colStride;
+
+/** Pixel bounding box of a positions map (each entry is a CARD_W×CARD_H card). */
+export function organisedCorePxBounds(
+  positions: Map<string, Pos>,
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (positions.size === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of positions.values()) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x + CARD_W > maxX) maxX = p.x + CARD_W;
+    if (p.y + CARD_H > maxY) maxY = p.y + CARD_H;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Deterministic scatter for a NEW arrival that lands AROUND the organised core
+ * (to the right of it) rather than over it. Falls back to plain scatterPosition
+ * when the core is empty. Grid-snapped, so accumulated and hand-dragged cards
+ * share one grid.
+ */
+export function accumulationScatter(
+  id: string,
+  coreBounds: { minX: number; minY: number; maxX: number; maxY: number },
+): Pos {
+  const empty = coreBounds.maxX === 0 && coreBounds.maxY === 0
+    && coreBounds.minX === 0 && coreBounds.minY === 0;
+  if (empty) return scatterPosition(id, 99);
+  const h = hashId(id);
+  const laneW = COL_W; // a column-wide gutter to the right of the core
+  const x = coreBounds.maxX + ORG.railGap + (h % 3) * laneW;
+  const span = Math.max(CARD_H * 4, coreBounds.maxY - coreBounds.minY);
+  const y = coreBounds.minY + ((h >> 3) % span);
+  return { x: snap(x), y: snap(y) };
+}
