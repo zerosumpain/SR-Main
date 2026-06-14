@@ -1,67 +1,52 @@
-<!-- src/lib/canvas/intelligence/desk/EntityRail.svelte -->
+<!-- src/lib/canvas/intelligence/desk/EntityRail.svelte
+     Zone-backdrop and section label only — entity cards are rendered as morphing
+     ArtefactCard elements by ResearchDesk and must NOT be duplicated here. -->
 <script lang="ts">
   let {
-    entities,
-    selectedId,
-    onSelect,
+    count = 0,
+    railWidth = 1600,
   }: {
-    entities: { id: string; name: string; type: string }[];
-    selectedId: string | null;
-    onSelect: (id: string) => void;
+    /** Number of entities in the rail (for the badge). */
+    count?: number;
+    /** Width of the zone band in world px — matches ORG.railWidth. */
+    railWidth?: number;
   } = $props();
 </script>
 
-<div class="entity-rail" role="group" aria-label="Entities">
-  {#each entities as e (e.id)}
-    <button
-      type="button"
-      class="chip"
-      class:selected={selectedId === e.id}
-      data-entity-id={e.id}
-      title={e.type}
-      onclick={() => onSelect(e.id)}
-    >
-      <span class="name">{e.name}</span>
-      <span class="kind">{e.type}</span>
-    </button>
-  {/each}
+<div class="entity-rail-zone" style:width="{railWidth}px" aria-label="Entities zone" role="region">
+  <span class="rail-label">ENTITIES</span>
+  {#if count > 0}
+    <span class="rail-badge">{count}</span>
+  {/if}
 </div>
 
 <style>
-  .entity-rail {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    align-items: flex-start;
-  }
-  .chip {
-    display: inline-flex;
-    flex-direction: column;
-    gap: 2px;
-    width: 220px;
+  .entity-rail-zone {
+    /* Hairline band behind the entity cards — visual zone marker, no chips. */
+    position: relative;
+    height: 100px;
+    border: 1px solid rgba(26, 16, 8, 0.10);
+    background: rgba(26, 16, 8, 0.025);
     box-sizing: border-box;
-    text-align: left;
-    background: var(--text-primary, #1a1008);
-    color: var(--card, #faf6ee);
-    border: 1px solid rgba(26, 16, 8, 0.5);
-    border-radius: 4px;
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
-    padding: 9px 12px;
-    cursor: pointer;
-    transition: transform 120ms ease, box-shadow 120ms ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    pointer-events: none;
   }
-  .chip:hover { transform: translateY(-1px); }
-  .chip.selected { outline: 2px solid var(--accent, #c4570a); outline-offset: 2px; }
-  .name {
-    font-family: var(--font-display, 'Archivo Black', sans-serif);
-    font-size: 13px;
-    line-height: 1.1;
-  }
-  .kind {
+  .rail-label {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 10px;
-    letter-spacing: 0.05em;
+    font-size: 9px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    opacity: 0.7;
+    color: var(--text-muted, rgba(26, 16, 8, 0.45));
+    line-height: 1;
+  }
+  .rail-badge {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-muted, rgba(26, 16, 8, 0.45));
+    line-height: 1;
   }
 </style>

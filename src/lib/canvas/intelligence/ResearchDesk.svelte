@@ -126,16 +126,10 @@
     return out;
   });
 
-  // Entity rail order MUST match organisedLayout's array order (which preserves
-  // the cards' array order); for the rail component we mirror that order.
+  // First entity id, used only to anchor the rail zone's Y position.
+  // EntityRail renders a zone backdrop only — entity cards are the canonical render.
   const railEntities = $derived.by(() =>
-    store.cards
-      .filter((c) => c.kind === 'entity')
-      .map((c) => ({
-        id: c.id,
-        name: String(c.fields.name ?? '—'),
-        type: String(c.fields.type ?? 'entity'),
-      })),
+    store.cards.filter((c) => c.kind === 'entity'),
   );
 
   /**
@@ -527,7 +521,7 @@
         {#if railEntities.length}
           {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
           <div class="desk-rail-host" style:transform="translate(0px, {railY}px)">
-            <EntityRail entities={railEntities} {selectedId} onSelect={(id) => (selectedId = id)} />
+            <EntityRail count={railEntities.length} />
           </div>
         {/if}
       {/if}
