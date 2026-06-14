@@ -114,12 +114,22 @@ export function eventToCard(data: Record<string, unknown>): DeskCard {
 
 // ——— the rune store factory ———
 
+export interface DeskLog {
+  message: string;
+  timestamp: number;
+}
+
 export interface DeskStore {
   cards: ReadonlyArray<DeskCard>;
   edges: ReadonlyArray<DeskEdge>;
   clusters: ReadonlyArray<SynthesisCluster>;
   synthesisToken: string;
+  /** SSE stream connection status — NOT the session status */
   status: 'idle' | 'hydrating' | 'live' | 'error';
+  /** Session status from the worker (phase1/phase2/phase3/post_processing/complete/failed/draft) */
+  sessionStatus: string;
+  /** Activity log entries from the stream */
+  logs: ReadonlyArray<DeskLog>;
   /** Live synthesis run status (drives the ModeToggle pulse + headers/edges). */
   synthStatus: 'idle' | 'running' | 'complete' | 'failed' | 'cancelled';
   /** Categories discovered this run (id/title/summary) — column headers. */
@@ -149,6 +159,8 @@ export function createDeskStore(sessionId: string): DeskStore {
   let clusterList = $state.raw<SynthesisCluster[]>([]);
   let synthesisTokenBuf = $state('');
   let status = $state<'idle' | 'hydrating' | 'live' | 'error'>('idle');
+  let sessionStatus = $state('draft');
+  let logList = $state.raw<DeskLog[]>([]);
   // Synthesis reducer state — folds synthesis.* events into categories,
   // header→fact edges and card patches (file + categorise).
   let synth = $state.raw<SynthesisState>(initSynthesisState());
@@ -272,6 +284,14 @@ export function createDeskStore(sessionId: string): DeskStore {
         if (stage === 'failed' || stage === 'cancelled') {
           synth = { ...synth, status: stage };
         }
+      } else if (evt.type === 'status' && evt.data?.status) {
+        sessionStatus = String(evt.data.status);
+      } else if (evt.type === 'log') {
+        // emitLog formats as `${icon}  ${message}` in the top-level `message` field;
+        // timestamp is in `data.timestamp`.
+        const msg = (evt as any).message ?? evt.data?.message ?? '';
+        const ts = Number((evt as any).data?.timestamp ?? Date.now());
+        logList = [...logList.slice(-199), { message: String(msg), timestamp: ts }];
       }
     };
     es.onerror = () => {
@@ -292,6 +312,12 @@ export function createDeskStore(sessionId: string): DeskStore {
     },
     get synthesisToken() {
       return synthesisTokenBuf;
+    },
+    get sessionStatus() {
+      return sessionStatus;
+    },
+    get logs() {
+      return logList;
     },
     get synthStatus() {
       return synth.status;

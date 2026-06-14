@@ -8,4 +8,4 @@
   <title>{data.topic || 'Research desk'} · sr.</title>
 </svelte:head>
 
-<ResearchDesk sessionId={data.sessionId} topic={data.topic} />
+<ResearchDesk sessionId={data.sessionId} topic={data.topic} initialStatus={data.status} />

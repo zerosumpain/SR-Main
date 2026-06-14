@@ -2,9 +2,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ArtefactCard from './desk/ArtefactCard.svelte';
-  import ModeToggle from './desk/ModeToggle.svelte';
   import CategoryHeader from './desk/CategoryHeader.svelte';
   import EntityRail from './desk/EntityRail.svelte';
+  import CommandBar from './desk/CommandBar.svelte';
+  import LeftFeed from './desk/LeftFeed.svelte';
+  import ActivityTicker from './desk/ActivityTicker.svelte';
+  import InspectorDrawer from './desk/InspectorDrawer.svelte';
   import { createDeskStore, type DeskCard } from './desk/store.svelte';
   import {
     organisedLayout,
@@ -15,8 +18,13 @@
   } from './desk/layout';
   import { effectivePosition, type DeskMode } from './desk/positioning';
   import { persistArtefactPosition } from './desk/persist-position';
+  import { isRunning, type DeskStatus } from './desk/deskControls';
 
-  let { sessionId, topic = '' } = $props<{ sessionId: string; topic?: string }>();
+  let { sessionId, topic = '', initialStatus = 'draft' } = $props<{
+    sessionId: string;
+    topic?: string;
+    initialStatus?: string;
+  }>();
 
   // ——— store ———
   const store = createDeskStore(sessionId);
@@ -25,10 +33,73 @@
     return () => store.dispose();
   });
 
+  // ——— cockpit local state ———
+  let feedCollapsed = $state(false);
+  let inspectorOpen = $state(false);
+  let inspectorArtefact = $state<any>(null);
+  let inspectorRelated = $state<{ id: string; kind: 'source' | 'fact' | 'entity'; label: string }[]>([]);
+
+  // Artefact-type filter toggles (controlled).
+  let typeFilters = $state({ source: true, fact: true, entity: true, counterfactual: true });
+
+  // Derive current session status from the stream (seeded from page load).
+  // The store captures 'status' SSE events; we fall back to initialStatus on startup.
+  let sessionStatus = $derived.by<DeskStatus>(() => {
+    const s = store.sessionStatus !== 'draft' ? store.sessionStatus : initialStatus;
+    // Map store connection status to DeskStatus when no session status yet received.
+    const valid: DeskStatus[] = ['draft', 'phase1', 'phase2', 'phase3', 'post_processing', 'complete', 'failed'];
+    return valid.includes(s as DeskStatus) ? (s as DeskStatus) : 'draft';
+  });
+
+  // Synthesising = a synthesis run is actively streaming.
+  let synthesising = $derived(store.synthStatus === 'running');
+
+  // Sources (for LeftFeed): pull from the card map — source cards carry their fields.
+  let feedSources = $derived(
+    store.cards
+      .filter((c) => c.kind === 'source')
+      .map((c) => ({
+        id: c.id,
+        url: (c.fields.url as string) ?? '',
+        title: (c.fields.title as string | null) ?? null,
+        domain: (c.fields.domain as string) ?? '',
+        credibilityType: (c.fields.credibilityType as string | null) ?? null,
+        credibilityScore: (c.fields.credibilityScore as number | null) ?? null,
+      })),
+  );
+
+  // Synthesis run history from the clusters + synth state.
+  let synthesisRuns = $derived(
+    store.synthStatus !== 'idle'
+      ? [
+          {
+            runId: 'current',
+            status: store.synthStatus,
+            summary: store.synthSummary ? store.synthSummary.slice(0, 120) : undefined,
+            createdAt: new Date().toISOString(),
+          },
+        ]
+      : [],
+  );
+
+  // Artefact counts for CommandBar.
+  const counts = $derived.by(() => {
+    let sources = 0, facts = 0, entities = 0, counterfactuals = 0;
+    for (const c of store.cards) {
+      if (c.kind === 'source') sources++;
+      else if (c.kind === 'entity') entities++;
+      else {
+        facts++;
+        if ((c.fields.isCounterfactual as boolean)) counterfactuals++;
+      }
+    }
+    return { sources, facts, entities, links: store.edges.length, counterfactuals };
+  });
+
   // GATHER ⇄ SYNTHESIZE
   let mode = $state<DeskMode>('gather');
   let synthesizing = $state(false); // POST in flight (debounce double-clicks)
-  let everSynthesized = $state(false); // have we folded this pile at least once?
+  let everSynthesized = $state(false);
 
   function goGather() {
     mode = 'gather';
@@ -36,20 +107,16 @@
 
   async function goSynthesize() {
     mode = 'synthesize';
-    // Re-synthesize folds NEW loose cards into the existing structure.
-    // Skip the POST if a run is already streaming.
     if (synthesizing || store.synthStatus === 'running') return;
     synthesizing = true;
     try {
       const res = await fetch(`/api/deepdive/${sessionId}/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // pinnedOnly:false → consider the whole loose pile; the server resolves the fact set.
         body: JSON.stringify({ scope: { pinnedOnly: false } }),
       });
       if (res.ok) {
         everSynthesized = true;
-        // synthesis.started arrives on the stream and resets the reducer.
       } else {
         console.error('[desk] synthesize POST failed', res.status);
       }
@@ -58,6 +125,104 @@
     } finally {
       synthesizing = false;
     }
+  }
+
+  function handleMode(next: 'gather' | 'synthesize') {
+    if (next === 'synthesize') goSynthesize();
+    else goGather();
+  }
+
+  // ——— control handlers ———
+
+  // ⏭ → engine "skip" (advance phase). Engine has no true pause.
+  async function handleSkip() {
+    await fetch(`/api/deepdive/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'skip' }),
+    }).catch((err) => console.error('[desk] skip error', err));
+  }
+
+  async function handleStop() {
+    await fetch(`/api/deepdive/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop' }),
+    }).catch((err) => console.error('[desk] stop error', err));
+  }
+
+  // ⤓ deepen → open inspector on the highest-centrality entity if present.
+  function handleDeepen() {
+    const ent = store.cards.find((c: any) => c.kind === 'entity');
+    if (ent) openInspector(ent.id);
+  }
+
+  async function handleShare() {
+    const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    if (!res.ok) return;
+    const { token } = await res.json() as { token: string };
+    const url = `${location.origin}/deepdive/share/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* clipboard may be blocked; URL is still created server-side */
+    }
+  }
+
+  function handleExport(kind: 'docx' | 'narrative-docx' | 'narrative-md') {
+    const path =
+      kind === 'docx'
+        ? `/api/deepdive/${sessionId}/export/docx`
+        : kind === 'narrative-docx'
+          ? `/api/deepdive/${sessionId}/export/narrative-docx`
+          : `/api/deepdive/${sessionId}/export/narrative-md`;
+    const a = document.createElement('a');
+    a.href = path;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function handleFilter(key: 'source' | 'fact' | 'entity' | 'counterfactual', value: boolean) {
+    typeFilters = { ...typeFilters, [key]: value };
+  }
+
+  function handleSelectRun(_runId: string) {
+    mode = 'synthesize';
+  }
+
+  // Inspector open/close.
+  function openInspector(id: string) {
+    const card: any = store.cards.find((c) => c.id === id);
+    if (!card) return;
+    // Build the artefact payload with kind + id + all fields inline.
+    inspectorArtefact = { kind: card.kind, id: card.id, ...card.fields };
+    inspectorRelated = relatedFor(id);
+    inspectorOpen = true;
+  }
+
+  // Related artefacts: any card that references the selected id by known link fields.
+  function relatedFor(id: string): { id: string; kind: 'source' | 'fact' | 'entity'; label: string }[] {
+    const out: { id: string; kind: 'source' | 'fact' | 'entity'; label: string }[] = [];
+    for (const c of store.cards) {
+      if (c.id === id) continue;
+      const f = c.fields as any;
+      const linked =
+        f.refutesFactId === id ||
+        f.sourceId === id ||
+        f.fromEntityId === id ||
+        f.toEntityId === id;
+      if (linked) {
+        const kind: 'source' | 'fact' | 'entity' = c.kind === 'entity' ? 'entity' : c.kind === 'source' ? 'source' : 'fact';
+        out.push({
+          id: c.id,
+          kind,
+          label: String(f.content ?? f.name ?? f.title ?? c.id),
+        });
+      }
+    }
+    return out.slice(0, 12);
   }
 
   // ——— card geometry (uniform; entity chips a touch smaller) ———
@@ -74,11 +239,9 @@
   let dragOverrides = $state.raw<Record<string, { x: number; y: number }>>({});
 
   // Categories: live reducer categories merged with any persisted deskCategory
-  // (so a reload shows prior structure even before a new run streams).
   const categories = $derived.by<LayoutCategory[]>(() => {
     const map = new Map<string, LayoutCategory>();
     for (const c of store.synthCategories) map.set(c.id, { id: c.id, title: c.title });
-    // Cluster membership (fact_ids) is the fallback category source pre-reload.
     for (const cl of store.clusters) {
       if (!map.has(cl.id)) map.set(cl.id, { id: cl.id, title: cl.title });
     }
@@ -90,14 +253,14 @@
     return [...map.values()];
   });
 
-  // Fact → cluster membership, so cards file even before patchCard lands.
+  // Fact → cluster membership
   const factCat = $derived.by(() => {
     const m = new Map<string, string>();
     for (const cl of store.clusters) for (const fid of cl.fact_ids ?? []) m.set(fid, cl.id);
     return m;
   });
 
-  // Organised positions — always computed (sticky needs them in BOTH modes).
+  // Organised positions
   const organised = $derived.by(() => {
     const arts: LayoutArtefact[] = store.cards.map((c) => ({
       id: c.id,
@@ -108,7 +271,7 @@
   });
   const coreBounds = $derived(organisedCorePxBounds(organised));
 
-  // Per-category member counts (for the header badge).
+  // Per-category member counts
   const categoryCounts = $derived.by<Record<string, number>>(() => {
     const out: Record<string, number> = {};
     for (const c of store.cards) {
@@ -118,7 +281,7 @@
     return out;
   });
 
-  // Per-category summary, keyed by cluster id (for the header tooltip/clamp).
+  // Per-category summary
   const categorySummary = $derived.by<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const c of store.synthCategories) out[c.id] = c.summary ?? '';
@@ -126,19 +289,11 @@
     return out;
   });
 
-  // First entity id, used only to anchor the rail zone's Y position.
-  // EntityRail renders a zone backdrop only — entity cards are the canonical render.
+  // Entity rail
   const railEntities = $derived.by(() =>
     store.cards.filter((c) => c.kind === 'entity'),
   );
 
-  /**
-   * Resolve a card's on-desk position.
-   *   live drag override > effectivePosition (manual > sticky-filed > scatter)
-   * A card counts as "filed" when its deskState is synthesized/filed OR it has a
-   * known cluster membership (so it morphs to its slot the instant a cluster
-   * event lands, even before the patchCard round-trip).
-   */
   function posOf(c: DeskCard): { x: number; y: number } {
     const ov = dragOverrides[c.id];
     if (ov) return ov;
@@ -171,7 +326,7 @@
     return m;
   });
 
-  // ——— orthPath (lifted from canvas/[slug]/+page.svelte:1016-1053) ———
+  // ——— orthPath ———
   type Box = { x: number; y: number; w: number; h: number };
   function orthPath(from: Box, to: Box): string {
     const sCx = from.x + from.w / 2;
@@ -205,15 +360,13 @@
     for (const e of store.edges) {
       const a = entityById.get(e.fromEntityId);
       const b = entityById.get(e.toEntityId);
-      if (!a || !b) continue; // only draw when both entity cards exist
+      if (!a || !b) continue;
       out.push({ id: e.id, d: orthPath(a, b) });
     }
     return out;
   });
 
-  // ——— synthesized connector edges (category header → member fact) ———
-  // Resolve an anchor id to a world Box. 'cat:<id>' → the column header band;
-  // any other id → the member card via posOf.
+  // ——— synthesized connector edges ———
   function anchorRect(anchorId: string): Box | null {
     if (anchorId.startsWith('cat:')) {
       const catId = anchorId.slice(4);
@@ -239,7 +392,7 @@
     return out;
   });
 
-  // ——— pan/zoom (lifted from canvas/[slug]/+page.svelte:1868-1984) ———
+  // ——— pan/zoom ———
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3;
   let panX = $state(0);
@@ -294,7 +447,7 @@
   }
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
-    return !!el.closest('.ac, .desk-minimap, .desk-cmd, button, a, input, textarea, select');
+    return !!el.closest('.ac, .desk-minimap, button, a, input, textarea, select');
   }
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
@@ -324,7 +477,7 @@
     zoomAt(cx, cy, factor);
   }
 
-  // ——— node drag + grid-snap (lifted from :1991-2069, PATCH target swapped) ———
+  // ——— node drag + grid-snap ———
   const DRAG_THRESHOLD = 3;
   const GRID = 20;
   let selectedId = $state<string | null>(null);
@@ -375,26 +528,25 @@
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch { /* no-op */ }
     if (wasMoved && finalPos) {
-      // Persist via the M4 client helper (mirrors the canvas drag-persist).
       const { ok } = await persistArtefactPosition(sessionId, cardId, {
-        artefactType: c.kind, // 'source' | 'fact' | 'entity'
+        artefactType: c.kind,
         position: finalPos,
         pinned: true,
       });
       if (ok) {
-        // Fold the persisted position into the store, then drop the transient override.
         store.applyLocalPosition(cardId, finalPos.x, finalPos.y, true);
         const next = { ...dragOverrides };
         delete next[cardId];
         dragOverrides = next;
       }
-      // On failure: keep the override so the card doesn't snap back on a blip.
     } else {
+      // Tap (not drag) → open inspector.
       selectedId = c.id;
+      openInspector(c.id);
     }
   }
 
-  // ——— minimap (lifted from :1119-1164) ———
+  // ——— minimap ———
   const MINIMAP_BODY_W = 146;
   const MINIMAP_BODY_H = 60;
   const MINIMAP_PAD = 4;
@@ -436,195 +588,191 @@
       },
     };
   });
-
-  const counts = $derived.by(() => {
-    let sources = 0, facts = 0, entities = 0;
-    for (const c of store.cards) {
-      if (c.kind === 'source') sources++;
-      else if (c.kind === 'entity') entities++;
-      else facts++;
-    }
-    return { sources, facts, entities, links: store.edges.length };
-  });
 </script>
 
-<div class="desk-root">
-  <!-- command bar (minimal — full CommandBar is a later milestone) -->
-  <header class="desk-cmd">
-    <span class="desk-mono">sr.</span>
-    <span class="desk-topic">{topic || sessionId.slice(0, 8)}</span>
-    <div class="desk-toggle-slot">
-      <ModeToggle
-        {mode}
-        synthStatus={store.synthStatus}
-        onGather={goGather}
-        onSynthesize={goSynthesize}
-      />
-    </div>
-    <span class="desk-counts">
-      {counts.sources} src · {counts.facts} fact · {counts.entities} ent · {counts.links} link
-    </span>
-    <span class="desk-status" data-status={store.status}>● {store.status}</span>
-  </header>
+<div class="desk-shell">
+  <CommandBar
+    topic={topic || sessionId.slice(0, 8)}
+    {sessionId}
+    status={sessionStatus}
+    {mode}
+    {synthesising}
+    {counts}
+    onmode={handleMode}
+    onskip={handleSkip}
+    onstop={handleStop}
+    ondeepen={handleDeepen}
+    onshare={handleShare}
+    onexport={handleExport}
+  />
 
-  <!-- viewport -->
-  <div
-    class="desk-viewport"
-    class:panning={panStart !== null}
-    bind:this={viewportEl}
-    bind:clientWidth={viewportW}
-    bind:clientHeight={viewportH}
-    role="application"
-    aria-label="Research desk"
-    onpointerdown={onPointerDown}
-    onpointermove={onPointerMove}
-    onpointerup={onPointerUp}
-    onpointercancel={onPointerUp}
-    onwheel={onWheel}
-  >
-    <!-- world layer -->
-    <div class="desk-world" style:transform="translate({panX}px, {panY}px) scale({zoom})" style:transform-origin="0 0">
-      <!-- edges (relationships between entity cards) -->
-      <svg class="desk-edges" aria-hidden="true" overflow="visible">
-        {#each edgePaths as e (e.id)}
-          <path d={e.d} fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.45" vector-effect="non-scaling-stroke" />
-        {/each}
-        <!-- synthesized connector edges (header → fact), fade in on synthesize -->
+  <div class="desk-mid">
+    <LeftFeed
+      logs={store.logs}
+      sources={feedSources}
+      filters={typeFilters}
+      {synthesisRuns}
+      bind:collapsed={feedCollapsed}
+      onfilter={handleFilter}
+      onselectrun={handleSelectRun}
+    />
+
+    <!-- desk world -->
+    <div
+      class="desk-world-wrap"
+      class:panning={panStart !== null}
+      bind:this={viewportEl}
+      bind:clientWidth={viewportW}
+      bind:clientHeight={viewportH}
+      role="application"
+      aria-label="Research desk"
+      onpointerdown={onPointerDown}
+      onpointermove={onPointerMove}
+      onpointerup={onPointerUp}
+      onpointercancel={onPointerUp}
+      onwheel={onWheel}
+    >
+      <!-- world layer -->
+      <div class="desk-world" style:transform="translate({panX}px, {panY}px) scale({zoom})" style:transform-origin="0 0">
+        <!-- edges (relationships between entity cards) -->
+        <svg class="desk-edges" aria-hidden="true" overflow="visible">
+          {#each edgePaths as e (e.id)}
+            <path d={e.d} fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.45" vector-effect="non-scaling-stroke" />
+          {/each}
+          {#if mode === 'synthesize'}
+            {#each synthEdgePaths as e (e.id)}
+              <path
+                d={e.d}
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="1.25"
+                stroke-opacity="0.45"
+                vector-effect="non-scaling-stroke"
+                class="syn-edge"
+              />
+            {/each}
+          {/if}
+        </svg>
+
+        <!-- category headers + entity rail (SYNTHESIZE only) -->
         {#if mode === 'synthesize'}
-          {#each synthEdgePaths as e (e.id)}
-            <path
-              d={e.d}
-              fill="none"
-              stroke="var(--accent)"
-              stroke-width="1.25"
-              stroke-opacity="0.45"
-              vector-effect="non-scaling-stroke"
-              class="syn-edge"
-            />
+          {#each categories as cat, i (cat.id)}
+            <div class="desk-header-host" style:transform="translate({i * COL_W}px, 0px)">
+              <CategoryHeader
+                id={cat.id}
+                title={cat.title}
+                summary={categorySummary[cat.id] ?? ''}
+                count={categoryCounts[cat.id] ?? 0}
+              />
+            </div>
           {/each}
-        {/if}
-      </svg>
 
-      <!-- category headers + entity rail (SYNTHESIZE only) -->
-      {#if mode === 'synthesize'}
-        {#each categories as cat, i (cat.id)}
-          <div class="desk-header-host" style:transform="translate({i * COL_W}px, 0px)">
-            <CategoryHeader
-              id={cat.id}
-              title={cat.title}
-              summary={categorySummary[cat.id] ?? ''}
-              count={categoryCounts[cat.id] ?? 0}
-            />
+          {#if railEntities.length}
+            {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
+            <div class="desk-rail-host" style:transform="translate(0px, {railY}px)">
+              <EntityRail count={railEntities.length} />
+            </div>
+          {/if}
+        {/if}
+
+        <!-- cards -->
+        {#each store.cards as c (c.id)}
+          {@const p = posOf(c)}
+          <div
+            class="desk-card-host"
+            class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id]}
+            style:transform="translate({p.x}px, {p.y}px)"
+            onpointerdown={(e) => onCardPointerDown(e, c)}
+            onpointermove={onCardPointerMove}
+            onpointerup={(e) => onCardPointerUp(e, c)}
+            onpointercancel={(e) => onCardPointerUp(e, c)}
+          >
+            <ArtefactCard card={c} selected={selectedId === c.id} onselect={(id) => { selectedId = id; openInspector(id); }} />
           </div>
         {/each}
+      </div>
 
-        {#if railEntities.length}
-          {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
-          <div class="desk-rail-host" style:transform="translate(0px, {railY}px)">
-            <EntityRail count={railEntities.length} />
-          </div>
-        {/if}
-      {/if}
-
-      <!-- cards -->
-      {#each store.cards as c (c.id)}
-        {@const p = posOf(c)}
-        <div
-          class="desk-card-host"
-          class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id]}
-          style:transform="translate({p.x}px, {p.y}px)"
-          onpointerdown={(e) => onCardPointerDown(e, c)}
-          onpointermove={onCardPointerMove}
-          onpointerup={(e) => onCardPointerUp(e, c)}
-          onpointercancel={(e) => onCardPointerUp(e, c)}
-        >
-          <ArtefactCard card={c} selected={selectedId === c.id} onselect={(id) => (selectedId = id)} />
-        </div>
-      {/each}
-    </div>
-
-    <!-- minimap -->
-    <div class="desk-minimap">
-      <div class="desk-minimap-head"><span>MINIMAP</span><span>{zoomPct}%</span></div>
-      <div class="desk-minimap-body">
-        {#if minimap}
-          {#each store.cards as c (c.id + '-m')}
-            {@const p = posOf(c)}
+      <!-- minimap -->
+      <div class="desk-minimap">
+        <div class="desk-minimap-head"><span>MINIMAP</span><span>{zoomPct}%</span></div>
+        <div class="desk-minimap-body">
+          {#if minimap}
+            {#each store.cards as c (c.id + '-m')}
+              {@const p = posOf(c)}
+              <div
+                class="desk-minimap-node"
+                class:ent={c.kind === 'entity'}
+                style:left="{minimap.offsetX + (p.x - minimap.minX) * minimap.scale}px"
+                style:top="{minimap.offsetY + (p.y - minimap.minY) * minimap.scale}px"
+                style:width="{Math.max(2, cardW(c) * minimap.scale)}px"
+                style:height="{Math.max(2, cardH(c) * minimap.scale)}px"
+              ></div>
+            {/each}
             <div
-              class="desk-minimap-node"
-              class:ent={c.kind === 'entity'}
-              style:left="{minimap.offsetX + (p.x - minimap.minX) * minimap.scale}px"
-              style:top="{minimap.offsetY + (p.y - minimap.minY) * minimap.scale}px"
-              style:width="{Math.max(2, cardW(c) * minimap.scale)}px"
-              style:height="{Math.max(2, cardH(c) * minimap.scale)}px"
+              class="desk-minimap-frame"
+              style:left="{minimap.frame.x}px"
+              style:top="{minimap.frame.y}px"
+              style:width="{minimap.frame.w}px"
+              style:height="{minimap.frame.h}px"
             ></div>
-          {/each}
-          <div
-            class="desk-minimap-frame"
-            style:left="{minimap.frame.x}px"
-            style:top="{minimap.frame.y}px"
-            style:width="{minimap.frame.w}px"
-            style:height="{minimap.frame.h}px"
-          ></div>
-        {/if}
+          {/if}
+        </div>
+      </div>
+
+      <!-- zoom controls -->
+      <div class="desk-zoom">
+        <button type="button" onclick={() => zoomCentered(1.2)} aria-label="Zoom in">+</button>
+        <button type="button" onclick={() => zoomCentered(1 / 1.2)} aria-label="Zoom out">−</button>
+        <button type="button" onclick={fit} aria-label="Fit">⤢</button>
+        <button type="button" onclick={reset} aria-label="Reset">⌂</button>
       </div>
     </div>
-
-    <!-- zoom controls -->
-    <div class="desk-zoom">
-      <button type="button" onclick={() => zoomCentered(1.2)} aria-label="Zoom in">+</button>
-      <button type="button" onclick={() => zoomCentered(1 / 1.2)} aria-label="Zoom out">−</button>
-      <button type="button" onclick={fit} aria-label="Fit">⤢</button>
-      <button type="button" onclick={reset} aria-label="Reset">⌂</button>
-    </div>
   </div>
+
+  <ActivityTicker logs={store.logs} live={isRunning(sessionStatus) || synthesising} />
+
+  <InspectorDrawer
+    bind:open={inspectorOpen}
+    {sessionId}
+    artefact={inspectorArtefact}
+    related={inspectorRelated}
+    onclose={() => (inspectorOpen = false)}
+    onselect={(id) => openInspector(id)}
+  />
 </div>
 
 <style>
-  .desk-root {
+  .desk-shell {
     position: fixed;
     inset: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg);
     color: var(--text-primary);
+    overflow: hidden;
   }
-  .desk-cmd {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 8px 16px;
-    border-bottom: 1px solid rgba(26, 16, 8, 0.18);
-    background: var(--surface-elevated);
-    flex-shrink: 0;
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .desk-mono { font-family: var(--font-brand); font-weight: 500; color: var(--accent); }
-  .desk-topic { font-family: var(--font-body); font-weight: 600; font-size: 13px; }
-  .desk-toggle-slot { margin-left: auto; display: flex; align-items: center; }
-  .desk-counts { color: var(--text-muted); }
-  .desk-status { color: var(--success); letter-spacing: 0.08em; }
-  .desk-status[data-status='error'] { color: #b3261e; }
 
-  .desk-viewport {
+  .desk-mid {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+
+  .desk-world-wrap {
     position: relative;
     flex: 1;
-    min-height: 0;
+    min-width: 0;
     overflow: hidden;
     touch-action: none;
     cursor: grab;
     background:
       radial-gradient(circle, rgba(26, 16, 8, 0.06) 1px, transparent 1px) 0 0 / 32px 32px;
   }
-  .desk-viewport.panning { cursor: grabbing; }
+  .desk-world-wrap.panning { cursor: grabbing; }
   .desk-world { position: absolute; top: 0; left: 0; }
   .desk-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
   .desk-card-host { position: absolute; top: 0; left: 0; touch-action: none; will-change: transform; }
 
-  /* Morph: auto-placed cards (not pinned/dragged) ease between scatter and
-     organised slots. Pinned/dragged cards (canvasX set) skip the transition so
-     they never lag. */
   .desk-card-host.morphing {
     transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
   }
