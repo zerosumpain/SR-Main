@@ -24,7 +24,7 @@ export type SessionStatus =
   | 'failed';
 
 export interface SSEEvent {
-  type: 'log' | 'stats' | 'status' | 'error';
+  type: 'log' | 'stats' | 'status' | 'error' | 'artefact' | 'synthesis';
   message?: string;
   data?: Record<string, unknown>;
 }
