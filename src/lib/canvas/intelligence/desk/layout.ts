@@ -91,26 +91,32 @@ function bandIndex(phase: number | 'post'): number {
 /**
  * Deterministic GATHER-mode scatter for an artefact id within its phase band.
  *
- * The id hash is split into two independent 16-bit channels (x, y) so the
- * horizontal and vertical jitter are uncorrelated. The card footprint is
- * reserved inside the band, so the returned position keeps the whole card
- * within `[lo, lo + width]` horizontally and the vertical envelope vertically.
+ * Two independent hashes seed the x and y channels so positions are
+ * uncorrelated. The hash is mapped to a discrete grid-step index via modulo
+ * (avoids floating-point bias that floats/0x100000000 introduce). The card
+ * footprint is reserved inside the band so the whole card body stays within
+ * `[lo, lo + width]` horizontally and the vertical envelope vertically.
  * Output is snapped to GRID so scattered and hand-dragged cards share one grid.
  */
 export function scatterPosition(id: string, phase: number): Pos {
   const band = bandIndex(phase as number | 'post');
-  const h = hashId(id);
 
-  // Two uncorrelated 16-bit channels in [0,1).
-  const fx = (h & 0xffff) / 0x10000;
-  const fy = ((h >>> 16) & 0xffff) / 0x10000;
+  // Two independent hashes: suffix with '\x01'/'\x02' gives uncorrelated seeds
+  // for x and y, eliminating the correlation that would arise from splitting
+  // a single 32-bit hash into two 16-bit channels.
+  const hx = hashId(id + '\x01');
+  const hy = hashId(id + '\x02');
 
   const lo = BAND.originX + band * BAND.width;
   const spanX = Math.max(0, BAND.width - BAND.cardW - 2 * BAND.pad);
   const spanY = Math.max(0, BAND.height - BAND.cardH - 2 * BAND.pad);
 
-  const x = lo + BAND.pad + fx * spanX;
-  const y = BAND.originY + BAND.pad + fy * spanY;
+  // Map to discrete grid steps via modulo (no float-division bias).
+  const stepsX = Math.max(1, Math.floor(spanX / GRID));
+  const stepsY = Math.max(1, Math.floor(spanY / GRID));
+
+  const x = lo + BAND.pad + (hx % (stepsX + 1)) * GRID;
+  const y = BAND.originY + BAND.pad + (hy % (stepsY + 1)) * GRID;
 
   return { x: snap(x), y: snap(y) };
 }
