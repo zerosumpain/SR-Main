@@ -24,6 +24,10 @@ import { env } from '$env/dynamic/private';
 // Expensive endpoints — apply per-user rate limits.
 // Pattern → { capacity (burst), refillPerSecond (steady-state) }.
 const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: number }> = [
+  // Synthesis is a per-toggle streamed LLM pass — costlier than a deep run kickoff
+  // and user-triggerable in bursts. Must precede the broad /api/deepdive rule
+  // because RATE_LIMITS.find() returns the FIRST matching pattern.
+  { pattern: /^\/api\/deepdive\/[^/]+\/synthesize$/, capacity: 3, refillPerSecond: 3 / 60 }, // 3/min
   { pattern: /^\/api\/deepdive(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 }, // 5/min
   { pattern: /^\/api\/quickanswer(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 }, // 10/min
   { pattern: /^\/api\/workflows\/orchestrator(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 },
