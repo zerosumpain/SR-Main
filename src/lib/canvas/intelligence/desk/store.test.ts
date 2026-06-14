@@ -48,6 +48,14 @@ describe('mergeArtefact', () => {
     expect((m.get('s')!.fields as any).content).toBe('b');
   });
 
+  it('ignores a same-seq delta for an existing id (equal seq is dropped)', () => {
+    let m = new Map<string, DeskCard>();
+    m = mergeArtefact(m, card('e', { seq: 5, fields: { content: 'original' } }));
+    m = mergeArtefact(m, card('e', { seq: 5, fields: { content: 'replay' } }));
+    expect((m.get('e')!.fields as any).content).toBe('original');
+    expect(m.get('e')!.seq).toBe(5);
+  });
+
   it('never mutates the input map', () => {
     const base = new Map<string, DeskCard>([['k', card('k')]]);
     const snapshot = base.get('k');

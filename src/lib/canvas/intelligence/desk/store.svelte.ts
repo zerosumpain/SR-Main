@@ -240,6 +240,7 @@ export function createDeskStore(sessionId: string): DeskStore {
     },
     async start() {
       await hydrate();
+      if (status === 'error') return; // don't clobber a failed hydrate with 'live'
       subscribe();
       status = 'live';
     },
