@@ -99,6 +99,22 @@ export function flushArtefacts(sessionId: string): void {
   }
 }
 
+/**
+ * Dispose all desk-events state for a session.
+ *
+ * Cancels any pending coalescing timer, flushes remaining queued artefacts
+ * (so nothing is silently dropped), then removes the session's entries from
+ * both module Maps.  Safe to call when nothing is queued; idempotent.
+ */
+export function disposeArtefacts(sessionId: string): void {
+  // Flush first so callers don't lose in-flight artefacts.
+  flushArtefacts(sessionId);
+  // flushArtefacts already clears the timer and empties the queue; delete the
+  // now-empty queue entry and the seq counter so the Maps don't retain the key.
+  queues.delete(sessionId);
+  seqCounters.delete(sessionId);
+}
+
 // ---- test hooks ----
 /** Override the emit sink in tests; pass null to restore the real worker emit(). */
 export function __setEmitForTest(fn: EmitFn | null): void {

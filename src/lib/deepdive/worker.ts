@@ -8,6 +8,7 @@ import { runPhase2 } from './phase2';
 import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
 import { linkSessionEntitiesToGlobal } from './cross-session';
+import { disposeArtefacts } from './desk-events';
 
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();
@@ -223,6 +224,7 @@ async function runResearch(sessionId: string): Promise<void> {
       stopSignals.delete(sessionId);
       skipSignals.delete(sessionId);
       abortControllers.delete(sessionId);
+      disposeArtefacts(sessionId);
     }, 30000);
   }
 }

@@ -3,6 +3,7 @@ import {
   nextSeq,
   emitArtefact,
   flushArtefacts,
+  disposeArtefacts,
   __setEmitForTest,
   __resetForTest,
 } from './desk-events';
@@ -108,6 +109,71 @@ describe('desk-events', () => {
     it('is a no-op when the queue is empty', () => {
       flushArtefacts('s1');
       expect(captured.length).toBe(0);
+    });
+  });
+
+  describe('disposeArtefacts', () => {
+    it('flushes any pending queued artefacts before disposing (no loss)', () => {
+      emitArtefact('s1', 'source', 1, { id: 'src-1', url: 'http://a' });
+      emitArtefact('s1', 'fact', 2, { id: 'fact-1', content: 'x' });
+      // Timer has NOT fired yet — artefacts are still queued.
+      expect(captured.length).toBe(0);
+
+      disposeArtefacts('s1');
+
+      // Both artefacts must have been flushed before disposal.
+      expect(captured.length).toBe(2);
+      expect(captured.map((c) => c.event.data!.id)).toEqual(['src-1', 'fact-1']);
+    });
+
+    it('removes the session from both maps so nextSeq restarts at 1', () => {
+      emitArtefact('s1', 'fact', 2, { id: 'f1' });
+      // Advance seq to 3 so we can verify the counter is truly reset.
+      nextSeq('s1'); // 2
+      nextSeq('s1'); // 3
+
+      disposeArtefacts('s1');
+
+      // The timer is gone — advancing should not double-emit.
+      vi.advanceTimersByTime(100);
+      // Only the one artefact flushed during dispose (seq=1); nothing more.
+      expect(captured.length).toBe(1);
+
+      // After disposal the seq counter is gone; the next call restarts at 1.
+      expect(nextSeq('s1')).toBe(1);
+    });
+
+    it('is safe and idempotent when nothing is queued', () => {
+      // Pre-seed a seq counter but no queued artefact.
+      nextSeq('s1');
+      nextSeq('s1'); // now at 2
+
+      expect(() => disposeArtefacts('s1')).not.toThrow();
+      expect(() => disposeArtefacts('s1')).not.toThrow(); // second call also safe
+      expect(captured.length).toBe(0);
+
+      // Counter reset — restarts at 1.
+      expect(nextSeq('s1')).toBe(1);
+    });
+
+    it('does not affect other sessions', () => {
+      emitArtefact('s1', 'fact', 1, { id: 'a' });
+      emitArtefact('s2', 'fact', 1, { id: 'b' });
+      nextSeq('s2'); // s2 seq now at 2
+
+      disposeArtefacts('s1');
+
+      // s1 flushed, s2 still pending.
+      expect(captured.length).toBe(1);
+      expect(captured[0].event.data!.id).toBe('a');
+
+      // s2 timer fires normally.
+      vi.advanceTimersByTime(100);
+      expect(captured.length).toBe(2);
+      expect(captured[1].event.data!.id).toBe('b');
+
+      // s2 seq counter is intact.
+      expect(nextSeq('s2')).toBe(3);
     });
   });
 });
