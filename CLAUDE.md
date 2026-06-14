@@ -6,7 +6,7 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - **Deploy:** `~/strange_rambling_svelte/scripts/deploy.sh` (always run after pushing)
 - **DB:** PostgreSQL 16 + Drizzle ORM; schema changes → `npx drizzle-kit push`
 - **Auth:** Google OAuth via Auth.js
-- **LLM:** All AI calls via `$lib/vertex` (never direct API calls)
+- **LLM:** All AI calls via the gateway in `$lib/jkai/llm-client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
 
 ## Key areas
 
