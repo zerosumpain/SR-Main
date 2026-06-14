@@ -2,40 +2,48 @@
 <script lang="ts">
   let {
     mode,
-    synthStatus,
-    onGather,
-    onSynthesize,
+    synthesising = false,
+    disabled = false,
+    onmode,
   }: {
     mode: 'gather' | 'synthesize';
-    synthStatus: 'idle' | 'running' | 'complete' | 'failed' | 'cancelled';
-    onGather: () => void;
-    onSynthesize: () => void;
+    synthesising?: boolean;
+    disabled?: boolean;
+    onmode: (next: 'gather' | 'synthesize') => void;
   } = $props();
 
-  const busy = $derived(synthStatus === 'running');
+  function pick(next: 'gather' | 'synthesize') {
+    if (disabled) return;
+    if (next === mode) return;
+    onmode(next);
+  }
 </script>
 
-<div class="mode-toggle" role="group" aria-label="Desk mode">
+<div class="mode-toggle" role="radiogroup" aria-label="Desk mode" class:disabled>
   <button
     type="button"
+    role="radio"
+    aria-checked={mode === 'gather'}
     class="seg"
     class:active={mode === 'gather'}
-    aria-pressed={mode === 'gather'}
-    onclick={onGather}
+    onclick={() => pick('gather')}
+    {disabled}
   >
-    <span class="dot gather" class:pulse={mode === 'gather'}></span>
+    <span class="dot gather" class:pulse={mode === 'gather' && !synthesising}></span>
     GATHER
   </button>
   <button
     type="button"
+    role="radio"
+    aria-checked={mode === 'synthesize'}
     class="seg"
     class:active={mode === 'synthesize'}
-    class:busy
-    aria-pressed={mode === 'synthesize'}
-    onclick={onSynthesize}
+    class:busy={synthesising}
+    onclick={() => pick('synthesize')}
+    {disabled}
   >
-    <span class="dot synth" class:pulse={busy}></span>
-    {busy ? 'SYNTHESISING…' : 'SYNTHESIZE'}
+    <span class="dot synth" class:pulse={synthesising}></span>
+    {synthesising ? 'SYNTHESISING…' : 'SYNTHESIZE'}
   </button>
 </div>
 
@@ -50,6 +58,7 @@
     padding: 3px;
     box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
   }
+  .mode-toggle.disabled { opacity: 0.55; }
   .seg {
     display: inline-flex;
     align-items: center;
@@ -68,7 +77,8 @@
     transition: background 160ms ease, color 160ms ease;
     white-space: nowrap;
   }
-  .seg:hover { color: var(--text-primary, #1a1008); }
+  .seg:hover:not(:disabled) { color: var(--text-primary, #1a1008); }
+  .seg:disabled { cursor: default; }
   .seg.active {
     color: var(--text-primary, #1a1008);
     background: var(--card, #faf6ee);
