@@ -10,6 +10,7 @@
     mode,
     synthesising = false,
     counts,
+    controlsHidden = false,
     onmode,
     onskip,
     onstop,
@@ -29,6 +30,9 @@
       links: number;
       counterfactuals: number;
     };
+    /** Hide the run-control cluster (skip/stop/deepen/share-export) for the
+     *  readonly share desk and the quick desk, which have no mutating actions. */
+    controlsHidden?: boolean;
     onmode: (next: 'gather' | 'synthesize') => void;
     onskip: () => void;
     onstop: () => void;
@@ -68,6 +72,7 @@
       {/if}
     </div>
 
+    {#if !controlsHidden}
     <div class="controls">
       <button
         type="button"
@@ -110,6 +115,7 @@
         {/if}
       </div>
     </div>
+    {/if}
 
     <span class="pill pill-{pill.hue}">{pill.label}</span>
   </div>

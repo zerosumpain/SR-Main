@@ -8,7 +8,7 @@
   import LeftFeed from './desk/LeftFeed.svelte';
   import ActivityTicker from './desk/ActivityTicker.svelte';
   import InspectorDrawer from './desk/InspectorDrawer.svelte';
-  import { createDeskStore, type DeskCard } from './desk/store.svelte';
+  import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
     organisedLayout,
     organisedCorePxBounds,
@@ -20,14 +20,30 @@
   import { persistArtefactPosition } from './desk/persist-position';
   import { isRunning, type DeskStatus } from './desk/deskControls';
 
-  let { sessionId, topic = '', initialStatus = 'draft' } = $props<{
+  let {
+    sessionId,
+    mode: deskMode = 'deep',
+    readonly = false,
+    embedded = false,
+    initialTopic = '',
+    initialStatus = 'draft',
+    quickInitial = undefined,
+  } = $props<{
     sessionId: string;
-    topic?: string;
+    mode?: 'deep' | 'quick';
+    readonly?: boolean;
+    embedded?: boolean;
+    initialTopic?: string;
     initialStatus?: string;
+    quickInitial?: QuickInitial;
   }>();
 
+  // Topic shown in the command bar (kept as a derived const so the prop read
+  // is hoisted; no $effect churn).
+  const topic = $derived(initialTopic);
+
   // ——— store ———
-  const store = createDeskStore(sessionId);
+  const store = createDeskStore(sessionId, { mode: deskMode, quickInitial });
   onMount(() => {
     store.start();
     return () => store.dispose();
@@ -107,6 +123,9 @@
 
   async function goSynthesize() {
     mode = 'synthesize';
+    // Readonly desks (share view) and quick desks never trigger a synthesis run;
+    // they only re-cluster the already-streamed state locally.
+    if (readonly || deskMode === 'quick') return;
     if (synthesizing || store.synthStatus === 'running') return;
     synthesizing = true;
     try {
@@ -136,6 +155,7 @@
 
   // ⏭ → engine "skip" (advance phase). Engine has no true pause.
   async function handleSkip() {
+    if (readonly || deskMode === 'quick') return;
     await fetch(`/api/deepdive/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -144,6 +164,7 @@
   }
 
   async function handleStop() {
+    if (readonly || deskMode === 'quick') return;
     await fetch(`/api/deepdive/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -158,6 +179,7 @@
   }
 
   async function handleShare() {
+    if (readonly || deskMode === 'quick') return;
     const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
     if (!res.ok) return;
     const { token } = await res.json() as { token: string };
@@ -545,6 +567,10 @@
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch { /* no-op */ }
+    if (wasMoved && finalPos && readonly) {
+      // Readonly desk: keep the local drag override but never persist.
+      return;
+    }
     if (wasMoved && finalPos) {
       const { ok } = await persistArtefactPosition(sessionId, cardId, {
         artefactType: c.kind,
@@ -608,7 +634,7 @@
   });
 </script>
 
-<div class="desk-shell">
+<div class="desk-shell" class:embedded>
   <CommandBar
     topic={topic || sessionId.slice(0, 8)}
     {sessionId}
@@ -616,6 +642,7 @@
     {mode}
     {synthesising}
     {counts}
+    controlsHidden={readonly || deskMode === 'quick'}
     onmode={handleMode}
     onskip={handleSkip}
     onstop={handleStop}
@@ -768,6 +795,14 @@
     background: var(--bg);
     color: var(--text-primary);
     overflow: hidden;
+  }
+
+  /* Embedded (canvas-node) variant: fill the parent box instead of the viewport. */
+  .desk-shell.embedded {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
 
   .desk-mid {

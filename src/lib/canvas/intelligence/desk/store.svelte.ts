@@ -45,6 +45,26 @@ export interface SynthesisCluster {
   fact_ids: string[];
 }
 
+/** Seed payload for a quick-answer desk: a handful of sources + the streamed
+ *  answer text, handed in by the page load so the small desk renders
+ *  immediately without a /data hydrate. */
+export interface QuickInitial {
+  status: string;
+  answer: string;
+  sources: Array<Record<string, unknown>>;
+  errorMessage: string;
+  durationMs: number;
+  createdAt: string;
+}
+
+export interface DeskStoreOptions {
+  /** 'deep' (default) hydrates+streams from /api/deepdive; 'quick' seeds from
+   *  quickInitial and streams from /quickanswer/[id]/stream. */
+  mode?: 'deep' | 'quick';
+  /** Seed for quick mode. Ignored when mode !== 'quick'. */
+  quickInitial?: QuickInitial;
+}
+
 // ——— pure merge core (unit-tested) ———
 
 /** Build the initial id→card map from a hydrate batch (last write wins). */
@@ -92,6 +112,34 @@ export function rowToCard(kind: CardKind, row: Record<string, unknown>): DeskCar
     pinned: pinned ?? false,
     deskState: deskState ?? 'unfiled',
     deskCategory: deskCategory ?? null,
+  };
+}
+
+/** Map a quick-answer source (QuickAnswerSource shape) into a source DeskCard.
+ *  Quick sources have no DB id; we synthesise a stable id from the citation
+ *  index / url so reconnect dedups cleanly. */
+export function quickSourceToCard(src: Record<string, unknown>, idx: number): DeskCard {
+  const citation = (src as any).citationIndex;
+  const id = `qs-${citation ?? idx}`;
+  return {
+    id,
+    kind: 'source',
+    seq: 0,
+    phase: 1,
+    fields: {
+      url: (src as any).url ?? '',
+      title: (src as any).title ?? null,
+      domain: (src as any).domain ?? '',
+      credibilityType: (src as any).credibilityType ?? null,
+      credibilityScore: (src as any).credibilityScore ?? null,
+      snippet: (src as any).snippet ?? '',
+      citationIndex: citation ?? idx,
+    },
+    canvasX: null,
+    canvasY: null,
+    pinned: false,
+    deskState: 'unfiled',
+    deskCategory: null,
   };
 }
 
@@ -152,7 +200,12 @@ export interface DeskStore {
 
 const STREAM_FLUSH_MS = 5;
 
-export function createDeskStore(sessionId: string): DeskStore {
+export function createDeskStore(
+  sessionId: string,
+  opts: DeskStoreOptions = {},
+): DeskStore {
+  const deskMode = opts.mode ?? 'deep';
+  const quickInitial = opts.quickInitial;
   // $state.raw — whole-container replacement keeps derived recompute bounded.
   let cardMap = $state.raw(new Map<string, DeskCard>());
   let edgeMap = $state.raw(new Map<string, DeskEdge>());
@@ -300,6 +353,58 @@ export function createDeskStore(sessionId: string): DeskStore {
     };
   }
 
+  // ——— quick-answer variant: seed from quickInitial, stream from
+  //     /quickanswer/[id]/stream (token/sources/status/complete/error). ———
+  function quickHydrate() {
+    status = 'hydrating';
+    const seeded = new Map<string, DeskCard>();
+    const srcs = quickInitial?.sources ?? [];
+    for (let i = 0; i < srcs.length; i++) {
+      const c = quickSourceToCard(srcs[i], i);
+      seeded.set(c.id, c);
+    }
+    cardMap = seeded;
+    edgeMap = new Map();
+    if (quickInitial?.answer) synthesisTokenBuf = quickInitial.answer;
+    if (quickInitial?.status) sessionStatus = quickInitial.status;
+  }
+
+  function quickSubscribe() {
+    es = new EventSource(`/quickanswer/${sessionId}/stream`);
+    es.onmessage = (msg) => {
+      let evt: any;
+      try {
+        evt = JSON.parse(msg.data);
+      } catch {
+        return;
+      }
+      if (evt.type === 'token' && evt.data?.token) {
+        synthesisTokenBuf = synthesisTokenBuf + String(evt.data.token);
+      } else if (evt.type === 'sources' && Array.isArray(evt.data?.sources)) {
+        const srcs = evt.data.sources as Array<Record<string, unknown>>;
+        let next = cardMap;
+        for (let i = 0; i < srcs.length; i++) {
+          const c = quickSourceToCard(srcs[i], i);
+          next = mergeArtefact(next, c);
+        }
+        cardMap = next;
+      } else if (evt.type === 'status' && evt.data?.status) {
+        sessionStatus = String(evt.data.status);
+      } else if (evt.type === 'complete') {
+        sessionStatus = 'complete';
+        es?.close();
+      } else if (evt.type === 'error') {
+        sessionStatus = 'failed';
+      } else if (evt.type === 'log') {
+        const m = (evt as any).message ?? '';
+        logList = [...logList.slice(-199), { message: String(m), timestamp: Date.now() }];
+      }
+    };
+    es.onerror = () => {
+      // auto-reconnect; deltas re-dedup by synthetic source id.
+    };
+  }
+
   return {
     get cards() {
       return Array.from(cardMap.values());
@@ -338,6 +443,15 @@ export function createDeskStore(sessionId: string): DeskStore {
       return status;
     },
     async start() {
+      if (deskMode === 'quick') {
+        quickHydrate();
+        // Only open the live stream while the quick answer is still running;
+        // a finished answer is fully seeded from quickInitial.
+        const liveStatuses = ['pending', 'searching', 'synthesising'];
+        if (liveStatuses.includes(sessionStatus)) quickSubscribe();
+        status = 'live';
+        return;
+      }
       await hydrate();
       if (status === 'error') return; // don't clobber a failed hydrate with 'live'
       subscribe();
