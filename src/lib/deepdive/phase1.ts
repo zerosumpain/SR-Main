@@ -5,6 +5,7 @@ import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
 import { emitLog, emitStats, shouldStop, getAbortSignal, throwIfStopped } from './worker';
+import { emitArtefact } from './desk-events';
 import { classifyDomain } from './credibility';
 import { DIVERSITY_THRESHOLDS } from './types';
 import type { SessionConfig, SessionStats, SeedContext } from './types';
@@ -117,6 +118,18 @@ export async function runPhase1(
               credibilityType: credibility.type,
             })
             .returning();
+
+          // Desk: drop the source card onto the canvas (id is now stable).
+          // category resolves later via the follow-up LLM update; null at first paint.
+          emitArtefact(sessionId, 'source', 1, {
+            id: stored.id,
+            url: stored.url,
+            title: stored.title,
+            domain: stored.domain,
+            category: stored.category ?? null,
+            credibilityScore: stored.credibilityScore,
+            credibilityType: stored.credibilityType,
+          });
 
           totalSourcesStored++;
           batchSourceCount++;
