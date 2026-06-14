@@ -82,7 +82,7 @@
       }
 
       const session = await res.json();
-      goto(`/deepdive/${session.id}/progress`);
+      goto(`/deepdive/${session.id}`);
     } catch (e: any) {
       error = e.message ?? 'Network error';
     } finally {
@@ -371,9 +371,7 @@
           >
             <div class="flex items-start justify-between">
               <a
-                href={session.status === 'complete'
-                  ? `/deepdive/${session.id}/dashboard`
-                  : `/deepdive/${session.id}/progress`}
+                href={`/deepdive/${session.id}`}
                 class="flex-1 min-w-0"
               >
                 <p class="text-sm truncate" style="color: var(--text-primary);">

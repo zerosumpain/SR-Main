@@ -51,7 +51,9 @@ export interface SynthesisCluster {
 export interface QuickInitial {
   status: string;
   answer: string;
-  sources: Array<Record<string, unknown>>;
+  // Quick-answer sources (QuickAnswerSource[]); typed loosely because the
+  // page hands the raw row through and quickSourceToCard reads defensively.
+  sources: any[];
   errorMessage: string;
   durationMs: number;
   createdAt: string;
