@@ -289,9 +289,24 @@
     return out;
   });
 
+  // ——— type-filter helpers ———
+  // Map a card to the filter key it belongs to.
+  function cardFilterKey(c: DeskCard): 'source' | 'fact' | 'entity' | 'counterfactual' {
+    if (c.kind === 'entity') return 'entity';
+    if (c.kind === 'source') return 'source';
+    // fact or counterfactual
+    return (c.fields.isCounterfactual as boolean) ? 'counterfactual' : 'fact';
+  }
+
+  // Filtered card list (honoured by the desk render; counters use store.cards directly).
+  const visibleCards = $derived(store.cards.filter((c) => typeFilters[cardFilterKey(c)]));
+
+  // Set of visible card IDs for edge filtering.
+  const visibleIds = $derived(new Set(visibleCards.map((c) => c.id)));
+
   // Entity rail
   const railEntities = $derived.by(() =>
-    store.cards.filter((c) => c.kind === 'entity'),
+    visibleCards.filter((c) => c.kind === 'entity'),
   );
 
   function posOf(c: DeskCard): { x: number; y: number } {
@@ -316,9 +331,10 @@
   }
 
   // Entity-id → resolved centre, for edge docking.
+  // Only include visible entities so edges to hidden cards don't render.
   const entityById = $derived.by(() => {
     const m = new Map<string, { x: number; y: number; w: number; h: number }>();
-    for (const c of store.cards) {
+    for (const c of visibleCards) {
       if (c.kind !== 'entity') continue;
       const p = posOf(c);
       m.set(c.id, { x: p.x, y: p.y, w: cardW(c), h: cardH(c) });
@@ -374,7 +390,9 @@
       if (idx < 0) return null;
       return { x: idx * COL_W, y: 0, w: 220, h: 64 };
     }
-    const card = store.cards.find((c) => c.id === anchorId);
+    // Only produce a rect for cards that are currently visible.
+    if (!visibleIds.has(anchorId)) return null;
+    const card = visibleCards.find((c) => c.id === anchorId);
     if (!card) return null;
     const p = posOf(card);
     return { x: p.x, y: p.y, w: cardW(card), h: cardH(card) };
@@ -422,7 +440,7 @@
     zoomAt(vp.width / 2, vp.height / 2, factor);
   }
   function fit() {
-    const cards = store.cards;
+    const cards = visibleCards;
     if (!viewportEl || cards.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
     const pad = 48;
@@ -551,7 +569,7 @@
   const MINIMAP_BODY_H = 60;
   const MINIMAP_PAD = 4;
   const minimap = $derived.by(() => {
-    const cards = store.cards;
+    const cards = visibleCards;
     if (cards.length === 0 || viewportW === 0 || viewportH === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const c of cards) {
@@ -675,8 +693,8 @@
           {/if}
         {/if}
 
-        <!-- cards -->
-        {#each store.cards as c (c.id)}
+        <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
+        {#each visibleCards as c (c.id)}
           {@const p = posOf(c)}
           <div
             class="desk-card-host"
@@ -697,7 +715,7 @@
         <div class="desk-minimap-head"><span>MINIMAP</span><span>{zoomPct}%</span></div>
         <div class="desk-minimap-body">
           {#if minimap}
-            {#each store.cards as c (c.id + '-m')}
+            {#each visibleCards as c (c.id + '-m')}
               {@const p = posOf(c)}
               <div
                 class="desk-minimap-node"

@@ -64,6 +64,8 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => { if (open && e.key === 'Escape') onclose(); }} />
+
 {#if open && artefact}
   <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
   <div class="scrim" use:portal={'body'} onclick={onclose} role="presentation"></div>
