@@ -5,6 +5,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
+import { emitArtefact } from './desk-events';
 import type { SessionConfig, SessionStats, RedTeamReport } from './types';
 
 export async function runPhase3(
@@ -151,15 +152,41 @@ export async function runPhase3(
                 })
                 .returning();
 
+              // Desk: drop the red-team source card (stable id).
+              emitArtefact(sessionId, 'source', 3, {
+                id: newSource.id,
+                url: newSource.url,
+                title: newSource.title,
+                domain: newSource.domain,
+                category: newSource.category ?? null,
+                credibilityScore: newSource.credibilityScore,
+                credibilityType: newSource.credibilityType,
+              });
+
               // Store counterfactual
-              await db.insert(facts).values({
-                sessionId,
-                sourceId: newSource.id,
-                content: evaluation.counter_claim || `Counter to: ${fact.content.slice(0, 100)}`,
-                confidence: evaluation.verdict === 'contradicts' ? 0.6 : 0.4,
-                isCounterfactual: true,
-                refutesFactId: fact.id,
-                tags: ['counterfactual'],
+              const [storedCounter] = await db
+                .insert(facts)
+                .values({
+                  sessionId,
+                  sourceId: newSource.id,
+                  content: evaluation.counter_claim || `Counter to: ${fact.content.slice(0, 100)}`,
+                  confidence: evaluation.verdict === 'contradicts' ? 0.6 : 0.4,
+                  isCounterfactual: true,
+                  refutesFactId: fact.id,
+                  tags: ['counterfactual'],
+                })
+                .returning();
+
+              // Desk: challenge card — auto-links an edge to the refuted fact.
+              emitArtefact(sessionId, 'fact', 3, {
+                id: storedCounter.id,
+                sourceId: storedCounter.sourceId,
+                content: storedCounter.content,
+                confidence: storedCounter.confidence,
+                isCounterfactual: storedCounter.isCounterfactual,
+                refutesFactId: storedCounter.refutesFactId,
+                tags: storedCounter.tags,
+                eventDate: storedCounter.eventDate ? storedCounter.eventDate.toISOString() : null,
               });
 
               contradictions++;
