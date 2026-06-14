@@ -5,6 +5,15 @@
 // deltas. Cards are deduped by id; out-of-order deltas (lower seq) are dropped.
 // Collections are $state.raw and replaced wholesale on a ~5ms debounced flush.
 
+import {
+  initSynthesisState,
+  applySynthesisEvent,
+  type SynthesisEvent,
+  type SynthesisState,
+  type SynthCategory,
+  type SynthEdge,
+} from './synthesis-reducer';
+
 export type CardKind = 'source' | 'fact' | 'entity';
 
 export interface DeskCard {
@@ -111,8 +120,23 @@ export interface DeskStore {
   clusters: ReadonlyArray<SynthesisCluster>;
   synthesisToken: string;
   status: 'idle' | 'hydrating' | 'live' | 'error';
+  /** Live synthesis run status (drives the ModeToggle pulse + headers/edges). */
+  synthStatus: 'idle' | 'running' | 'complete' | 'failed' | 'cancelled';
+  /** Categories discovered this run (id/title/summary) — column headers. */
+  synthCategories: ReadonlyArray<SynthCategory>;
+  /** Header→fact connector edges drawn in SYNTHESIZE. */
+  synthEdges: ReadonlyArray<SynthEdge>;
+  /** Streamed executive-summary text for the current run. */
+  synthSummary: string;
+  /** Fact count the current run is scoped over. */
+  synthFactCount: number;
   start(): Promise<void>;
   applyLocalPosition(id: string, x: number, y: number, pinned?: boolean): void;
+  /** Merge an arbitrary partial into an existing card (wholesale $state.raw
+   *  replace). Used by the synthesis consumer to file + categorise cards live;
+   *  the server persists the same desk_state, so a later stream delta that
+   *  re-overwrites is self-healed on reload from /data. No-op if id unknown. */
+  patchCard(id: string, patch: Partial<DeskCard>): void;
   dispose(): void;
 }
 
@@ -125,6 +149,9 @@ export function createDeskStore(sessionId: string): DeskStore {
   let clusterList = $state.raw<SynthesisCluster[]>([]);
   let synthesisTokenBuf = $state('');
   let status = $state<'idle' | 'hydrating' | 'live' | 'error'>('idle');
+  // Synthesis reducer state — folds synthesis.* events into categories,
+  // header→fact edges and card patches (file + categorise).
+  let synth = $state.raw<SynthesisState>(initSynthesisState());
 
   // Plain (non-$state) handles — read inside SSE callback / flush.
   let es: EventSource | null = null;
@@ -150,6 +177,28 @@ export function createDeskStore(sessionId: string): DeskStore {
       pendingEdges.clear();
       edgeMap = next;
     }
+  }
+
+  /** Feed one synthesis.* event through the reducer and apply only the newly
+   *  produced card patches (file + categorise) to the card map. The reducer
+   *  accumulates, so we diff against the prior length. */
+  function applySynth(ev: SynthesisEvent) {
+    const prev = synth;
+    const next = applySynthesisEvent(prev, ev);
+    if (next === prev) return; // late/stale event — no change
+    // Apply the patches produced since the previous state.
+    if (next.cardPatches.length > prev.cardPatches.length) {
+      let cm = cardMap;
+      for (let i = prev.cardPatches.length; i < next.cardPatches.length; i++) {
+        const cp = next.cardPatches[i];
+        const existing = cm.get(cp.id);
+        if (!existing) continue;
+        if (cm === cardMap) cm = new Map(cardMap); // copy-on-first-write
+        cm.set(cp.id, { ...existing, ...cp.patch });
+      }
+      if (cm !== cardMap) cardMap = cm;
+    }
+    synth = next;
   }
 
   async function hydrate() {
@@ -205,6 +254,7 @@ export function createDeskStore(sessionId: string): DeskStore {
         scheduleFlush();
       } else if (evt.type === 'synthesis' && evt.data) {
         const d = evt.data;
+        // Legacy buffers (kept for clusters / synthesisToken getters).
         if (d.stage === 'progress' && typeof d.token === 'string') {
           synthesisTokenBuf = synthesisTokenBuf + d.token;
         } else if (d.stage === 'cluster' && d.cluster) {
@@ -213,6 +263,14 @@ export function createDeskStore(sessionId: string): DeskStore {
           if (Array.isArray(d.clusters)) clusterList = d.clusters as SynthesisCluster[];
         } else if (d.stage === 'started') {
           synthesisTokenBuf = '';
+        }
+        applySynth(d as SynthesisEvent);
+      } else if (evt.type === 'error' && evt.data?.stage) {
+        // synthesis failure / cancellation surfaces as an error envelope whose
+        // data carries the run stage ('failed' | 'cancelled').
+        const stage = String(evt.data.stage);
+        if (stage === 'failed' || stage === 'cancelled') {
+          synth = { ...synth, status: stage };
         }
       }
     };
@@ -235,6 +293,21 @@ export function createDeskStore(sessionId: string): DeskStore {
     get synthesisToken() {
       return synthesisTokenBuf;
     },
+    get synthStatus() {
+      return synth.status;
+    },
+    get synthCategories() {
+      return synth.categories;
+    },
+    get synthEdges() {
+      return synth.newEdges;
+    },
+    get synthSummary() {
+      return synth.streamedText || (synth.summary ?? '');
+    },
+    get synthFactCount() {
+      return synth.factCount;
+    },
     get status() {
       return status;
     },
@@ -249,6 +322,13 @@ export function createDeskStore(sessionId: string): DeskStore {
       if (!existing) return;
       const next = new Map(cardMap);
       next.set(id, { ...existing, canvasX: x, canvasY: y, pinned: pinned ?? existing.pinned });
+      cardMap = next;
+    },
+    patchCard(id, patch) {
+      const existing = cardMap.get(id);
+      if (!existing) return;
+      const next = new Map(cardMap);
+      next.set(id, { ...existing, ...patch });
       cardMap = next;
     },
     dispose() {

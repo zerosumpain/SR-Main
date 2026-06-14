@@ -2,8 +2,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ArtefactCard from './desk/ArtefactCard.svelte';
+  import ModeToggle from './desk/ModeToggle.svelte';
+  import CategoryHeader from './desk/CategoryHeader.svelte';
+  import EntityRail from './desk/EntityRail.svelte';
   import { createDeskStore, type DeskCard } from './desk/store.svelte';
-  import { scatterPosition, organisedLayout } from './desk/layout';
+  import {
+    organisedLayout,
+    organisedCorePxBounds,
+    COL_W,
+    type LayoutArtefact,
+    type LayoutCategory,
+  } from './desk/layout';
+  import { effectivePosition, type DeskMode } from './desk/positioning';
   import { persistArtefactPosition } from './desk/persist-position';
 
   let { sessionId, topic = '' } = $props<{ sessionId: string; topic?: string }>();
@@ -16,7 +26,39 @@
   });
 
   // GATHER ⇄ SYNTHESIZE
-  let mode = $state<'gather' | 'synthesize'>('gather');
+  let mode = $state<DeskMode>('gather');
+  let synthesizing = $state(false); // POST in flight (debounce double-clicks)
+  let everSynthesized = $state(false); // have we folded this pile at least once?
+
+  function goGather() {
+    mode = 'gather';
+  }
+
+  async function goSynthesize() {
+    mode = 'synthesize';
+    // Re-synthesize folds NEW loose cards into the existing structure.
+    // Skip the POST if a run is already streaming.
+    if (synthesizing || store.synthStatus === 'running') return;
+    synthesizing = true;
+    try {
+      const res = await fetch(`/api/deepdive/${sessionId}/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // pinnedOnly:false → consider the whole loose pile; the server resolves the fact set.
+        body: JSON.stringify({ scope: { pinnedOnly: false } }),
+      });
+      if (res.ok) {
+        everSynthesized = true;
+        // synthesis.started arrives on the stream and resets the reducer.
+      } else {
+        console.error('[desk] synthesize POST failed', res.status);
+      }
+    } catch (err) {
+      console.error('[desk] synthesize POST error', err);
+    } finally {
+      synthesizing = false;
+    }
+  }
 
   // ——— card geometry (uniform; entity chips a touch smaller) ———
   const CARD_W = 240;
@@ -31,31 +73,97 @@
   // Live drag overrides (id → {x,y}); applied on top of persisted/auto layout.
   let dragOverrides = $state.raw<Record<string, { x: number; y: number }>>({});
 
-  // Organised positions, recomputed when in synthesize mode.
+  // Categories: live reducer categories merged with any persisted deskCategory
+  // (so a reload shows prior structure even before a new run streams).
+  const categories = $derived.by<LayoutCategory[]>(() => {
+    const map = new Map<string, LayoutCategory>();
+    for (const c of store.synthCategories) map.set(c.id, { id: c.id, title: c.title });
+    // Cluster membership (fact_ids) is the fallback category source pre-reload.
+    for (const cl of store.clusters) {
+      if (!map.has(cl.id)) map.set(cl.id, { id: cl.id, title: cl.title });
+    }
+    for (const card of store.cards) {
+      if (card.deskCategory && !map.has(card.deskCategory)) {
+        map.set(card.deskCategory, { id: card.deskCategory, title: card.deskCategory });
+      }
+    }
+    return [...map.values()];
+  });
+
+  // Fact → cluster membership, so cards file even before patchCard lands.
+  const factCat = $derived.by(() => {
+    const m = new Map<string, string>();
+    for (const cl of store.clusters) for (const fid of cl.fact_ids ?? []) m.set(fid, cl.id);
+    return m;
+  });
+
+  // Organised positions — always computed (sticky needs them in BOTH modes).
   const organised = $derived.by(() => {
-    if (mode !== 'synthesize') return null;
-    const cats = store.clusters.map((c) => ({ id: c.id, title: c.title }));
-    // Map fact → its cluster (deskCategory or cluster.fact_ids membership).
-    const factCat = new Map<string, string>();
-    for (const cl of store.clusters) for (const fid of cl.fact_ids ?? []) factCat.set(fid, cl.id);
-    const arts = store.cards.map((c) => ({
+    const arts: LayoutArtefact[] = store.cards.map((c) => ({
       id: c.id,
       kind: c.kind,
       categoryId: c.deskCategory ?? factCat.get(c.id),
     }));
-    return organisedLayout(arts, cats);
+    return organisedLayout(arts, categories);
+  });
+  const coreBounds = $derived(organisedCorePxBounds(organised));
+
+  // Per-category member counts (for the header badge).
+  const categoryCounts = $derived.by<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    for (const c of store.cards) {
+      const cat = c.deskCategory ?? factCat.get(c.id);
+      if (cat) out[cat] = (out[cat] ?? 0) + 1;
+    }
+    return out;
   });
 
-  /** Resolve a card's on-desk position. Override > persisted > organised > scatter. */
+  // Per-category summary, keyed by cluster id (for the header tooltip/clamp).
+  const categorySummary = $derived.by<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const c of store.synthCategories) out[c.id] = c.summary ?? '';
+    for (const cl of store.clusters) if (!out[cl.id]) out[cl.id] = cl.summary ?? '';
+    return out;
+  });
+
+  // Entity rail order MUST match organisedLayout's array order (which preserves
+  // the cards' array order); for the rail component we mirror that order.
+  const railEntities = $derived.by(() =>
+    store.cards
+      .filter((c) => c.kind === 'entity')
+      .map((c) => ({
+        id: c.id,
+        name: String(c.fields.name ?? '—'),
+        type: String(c.fields.type ?? 'entity'),
+      })),
+  );
+
+  /**
+   * Resolve a card's on-desk position.
+   *   live drag override > effectivePosition (manual > sticky-filed > scatter)
+   * A card counts as "filed" when its deskState is synthesized/filed OR it has a
+   * known cluster membership (so it morphs to its slot the instant a cluster
+   * event lands, even before the patchCard round-trip).
+   */
   function posOf(c: DeskCard): { x: number; y: number } {
     const ov = dragOverrides[c.id];
     if (ov) return ov;
-    if (c.canvasX != null && c.canvasY != null) return { x: c.canvasX, y: c.canvasY };
-    if (mode === 'synthesize' && organised) {
-      const p = organised.get(c.id);
-      if (p) return p;
-    }
-    return scatterPosition(c.id, c.phase);
+    const filedByCluster = factCat.has(c.id);
+    return effectivePosition(
+      {
+        id: c.id,
+        kind: c.kind,
+        phase: c.phase,
+        canvasX: c.canvasX ?? null,
+        canvasY: c.canvasY ?? null,
+        pinned: c.pinned ?? false,
+        deskState: filedByCluster && c.deskState === 'unfiled' ? 'filed' : (c.deskState ?? 'unfiled'),
+        deskCategory: c.deskCategory ?? factCat.get(c.id) ?? null,
+      },
+      mode,
+      organised,
+      coreBounds,
+    );
   }
 
   // Entity-id → resolved centre, for edge docking.
@@ -104,6 +212,34 @@
       const a = entityById.get(e.fromEntityId);
       const b = entityById.get(e.toEntityId);
       if (!a || !b) continue; // only draw when both entity cards exist
+      out.push({ id: e.id, d: orthPath(a, b) });
+    }
+    return out;
+  });
+
+  // ——— synthesized connector edges (category header → member fact) ———
+  // Resolve an anchor id to a world Box. 'cat:<id>' → the column header band;
+  // any other id → the member card via posOf.
+  function anchorRect(anchorId: string): Box | null {
+    if (anchorId.startsWith('cat:')) {
+      const catId = anchorId.slice(4);
+      const idx = categories.findIndex((c) => c.id === catId);
+      if (idx < 0) return null;
+      return { x: idx * COL_W, y: 0, w: 220, h: 64 };
+    }
+    const card = store.cards.find((c) => c.id === anchorId);
+    if (!card) return null;
+    const p = posOf(card);
+    return { x: p.x, y: p.y, w: cardW(card), h: cardH(card) };
+  }
+
+  const synthEdgePaths = $derived.by(() => {
+    if (mode !== 'synthesize') return [];
+    const out: { id: string; d: string }[] = [];
+    for (const e of store.synthEdges) {
+      const a = anchorRect(e.fromId);
+      const b = anchorRect(e.toId);
+      if (!a || !b) continue;
       out.push({ id: e.id, d: orthPath(a, b) });
     }
     return out;
@@ -323,9 +459,13 @@
   <header class="desk-cmd">
     <span class="desk-mono">sr.</span>
     <span class="desk-topic">{topic || sessionId.slice(0, 8)}</span>
-    <div class="desk-toggle" role="group" aria-label="Desk mode">
-      <button type="button" class:active={mode === 'gather'} onclick={() => (mode = 'gather')}>GATHER</button>
-      <button type="button" class:active={mode === 'synthesize'} onclick={() => (mode = 'synthesize')}>SYNTHESIZE</button>
+    <div class="desk-toggle-slot">
+      <ModeToggle
+        {mode}
+        synthStatus={store.synthStatus}
+        onGather={goGather}
+        onSynthesize={goSynthesize}
+      />
     </div>
     <span class="desk-counts">
       {counts.sources} src · {counts.facts} fact · {counts.entities} ent · {counts.links} link
@@ -355,13 +495,49 @@
         {#each edgePaths as e (e.id)}
           <path d={e.d} fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.45" vector-effect="non-scaling-stroke" />
         {/each}
+        <!-- synthesized connector edges (header → fact), fade in on synthesize -->
+        {#if mode === 'synthesize'}
+          {#each synthEdgePaths as e (e.id)}
+            <path
+              d={e.d}
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="1.25"
+              stroke-opacity="0.45"
+              vector-effect="non-scaling-stroke"
+              class="syn-edge"
+            />
+          {/each}
+        {/if}
       </svg>
+
+      <!-- category headers + entity rail (SYNTHESIZE only) -->
+      {#if mode === 'synthesize'}
+        {#each categories as cat, i (cat.id)}
+          <div class="desk-header-host" style:transform="translate({i * COL_W}px, 0px)">
+            <CategoryHeader
+              id={cat.id}
+              title={cat.title}
+              summary={categorySummary[cat.id] ?? ''}
+              count={categoryCounts[cat.id] ?? 0}
+            />
+          </div>
+        {/each}
+
+        {#if railEntities.length}
+          {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
+          <div class="desk-rail-host" style:transform="translate(0px, {railY}px)">
+            <EntityRail entities={railEntities} {selectedId} onSelect={(id) => (selectedId = id)} />
+          </div>
+        {/if}
+      {/if}
 
       <!-- cards -->
       {#each store.cards as c (c.id)}
         {@const p = posOf(c)}
         <div
           class="desk-card-host"
+          class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id]}
           style:transform="translate({p.x}px, {p.y}px)"
           onpointerdown={(e) => onCardPointerDown(e, c)}
           onpointermove={onCardPointerMove}
@@ -432,18 +608,7 @@
   }
   .desk-mono { font-family: var(--font-brand); font-weight: 500; color: var(--accent); }
   .desk-topic { font-family: var(--font-body); font-weight: 600; font-size: 13px; }
-  .desk-toggle { display: flex; border: 1px solid rgba(26, 16, 8, 0.18); margin-left: auto; }
-  .desk-toggle button {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    padding: 5px 12px;
-    background: transparent;
-    color: var(--text-muted);
-    border: none;
-    cursor: pointer;
-  }
-  .desk-toggle button.active { background: var(--accent); color: #faf6ee; }
+  .desk-toggle-slot { margin-left: auto; display: flex; align-items: center; }
   .desk-counts { color: var(--text-muted); }
   .desk-status { color: var(--success); letter-spacing: 0.08em; }
   .desk-status[data-status='error'] { color: #b3261e; }
@@ -461,7 +626,35 @@
   .desk-viewport.panning { cursor: grabbing; }
   .desk-world { position: absolute; top: 0; left: 0; }
   .desk-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
-  .desk-card-host { position: absolute; top: 0; left: 0; touch-action: none; }
+  .desk-card-host { position: absolute; top: 0; left: 0; touch-action: none; will-change: transform; }
+
+  /* Morph: auto-placed cards (not pinned/dragged) ease between scatter and
+     organised slots. Pinned/dragged cards (canvasX set) skip the transition so
+     they never lag. */
+  .desk-card-host.morphing {
+    transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .desk-card-host.morphing { transition: none; }
+  }
+
+  .desk-header-host,
+  .desk-rail-host {
+    position: absolute;
+    top: 0;
+    left: 0;
+    will-change: transform;
+    transition: opacity 360ms ease;
+  }
+
+  .syn-edge { animation: syn-fade-in 600ms ease both; }
+  @keyframes syn-fade-in {
+    from { stroke-opacity: 0; }
+    to { stroke-opacity: 0.45; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .syn-edge { animation: none; }
+  }
 
   .desk-minimap {
     position: absolute;
