@@ -53,6 +53,32 @@ describe('isSafeFetchUrl', () => {
     expect(isSafeFetchUrl('http://[::1]/')).toBe(false);
   });
 
+  // SSRF: trailing-dot host normalization
+  it('rejects localhost. (trailing dot resolves to loopback)', () => {
+    expect(isSafeFetchUrl('http://localhost./')).toBe(false);
+  });
+
+  it('rejects 127.0.0.1. (trailing dot on loopback IPv4)', () => {
+    expect(isSafeFetchUrl('http://127.0.0.1./')).toBe(false);
+  });
+
+  // SSRF: IPv6 private ranges
+  it('rejects IPv6 ULA fc00::/7 (fc prefix)', () => {
+    expect(isSafeFetchUrl('http://[fc00::1]/')).toBe(false);
+  });
+
+  it('rejects IPv6 ULA fc00::/7 (fd prefix)', () => {
+    expect(isSafeFetchUrl('http://[fd12:3456::1]/')).toBe(false);
+  });
+
+  it('rejects IPv6 link-local fe80::/10', () => {
+    expect(isSafeFetchUrl('http://[fe80::1]/')).toBe(false);
+  });
+
+  it('accepts public IPv6 global unicast (2000::/3)', () => {
+    expect(isSafeFetchUrl('http://[2606:4700::1]/')).toBe(true);
+  });
+
   it('rejects 0.0.0.0', () => {
     expect(isSafeFetchUrl('http://0.0.0.0/')).toBe(false);
   });

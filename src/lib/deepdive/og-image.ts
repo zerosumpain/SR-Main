@@ -28,16 +28,30 @@ export function isSafeFetchUrl(raw: string): boolean {
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
 
-  const host = parsed.hostname.toLowerCase();
+  // URL.hostname returns IPv6 literals with brackets (e.g. "[::1]") in Node/browsers.
+  // For named hosts it may include a trailing dot (e.g. "localhost.") which DNS
+  // resolves identically to the non-dotted form.
+  let host = parsed.hostname.toLowerCase();
+
+  // Strip a single trailing dot — "localhost." resolves to loopback, etc.
+  if (host.endsWith('.')) host = host.slice(0, -1);
 
   if (host === 'localhost') return false;
   if (host.endsWith('.local')) return false;
-  if (host === '::1') return false;
-  if (host === '[::1]') return false;
 
-  // Strip brackets from IPv6 for the regex
-  const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-  if (bare === '::1') return false;
+  // IPv6 literals are returned with brackets by URL.hostname (e.g. "[fc00::1]").
+  // Strip brackets, then apply private-range checks.
+  if (host.startsWith('[') && host.endsWith(']')) {
+    const addr = host.slice(1, -1);
+    // Loopback
+    if (addr === '::1') return false;
+    // ULA fc00::/7 — prefixes fc and fd
+    if (addr.startsWith('fc') || addr.startsWith('fd')) return false;
+    // Link-local fe80::/10 — first 10 bits, covering fe80–febf
+    if (/^fe[89ab]/i.test(addr)) return false;
+    // All other IPv6 (global unicast 2000::/3, etc.) are permitted.
+    return true;
+  }
 
   if (PRIVATE_IP_RE.test(host)) return false;
 

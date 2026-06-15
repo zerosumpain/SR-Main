@@ -28,9 +28,9 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // and user-triggerable in bursts. Must precede the broad /api/deepdive rule
   // because RATE_LIMITS.find() returns the FIRST matching pattern.
   { pattern: /^\/api\/deepdive\/[^/]+\/synthesize$/, capacity: 3, refillPerSecond: 3 / 60 }, // 3/min
-  // source-image: outbound HTML fetch per card — higher burst OK, but cap steady-state
-  // to prevent hammering external sites. Must precede the broad /api/deepdive rule.
-  { pattern: /^\/api\/deepdive\/source-image(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // 30/min
+  // /api/deepdive/source-image is GET-only and not listed here — the rate-limiter
+  // below only fires on non-GET requests, so a GET entry would be dead code.
+  // Cost is bounded by: auth gate + 1h in-process cache + 5s fetch timeout + SSRF guard.
   { pattern: /^\/api\/deepdive(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 }, // 5/min
   { pattern: /^\/api\/quickanswer(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 }, // 10/min
   { pattern: /^\/api\/workflows\/orchestrator(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 },
