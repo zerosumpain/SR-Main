@@ -659,10 +659,34 @@
     kind: NodeKind;
     x: number;
     y: number;
+    w: number;
+    h: number;
     config: Record<string, unknown>;
   };
+
+  // Default sizes per node kind (world-px).
+  const DESK_NODE_DEFAULTS: Record<string, { w: number; h: number }> = {
+    'research-chat': { w: 320, h: 360 },
+    'research-report': { w: 360, h: 320 },
+  };
+  const RESIZE_MIN_W = 260;
+  const RESIZE_MIN_H = 180;
+  const RESIZE_MAX_W = 720;
+  const RESIZE_MAX_H = 640;
+
   let deskNodes = $state.raw<DeskNode[]>([]);
   let selectedNodeId = $state<string | null>(null);
+
+  // ——— resize handle state ———
+  // Plain let — never read from a $effect, only from pointer handlers.
+  let nodeResize: {
+    nodeId: string;
+    startClientX: number;
+    startClientY: number;
+    startW: number;
+    startH: number;
+    pointerId: number;
+  } | null = null;
 
   // ——— generic desk-node drag (research-chat, research-report, etc.) ———
   // Separate from artefact card drag (nodeDrag) so the two can't collide.
@@ -709,6 +733,47 @@
   function onDeskNodePointerUp(e: PointerEvent) {
     if (!deskNodeDrag || deskNodeDrag.pointerId !== e.pointerId) return;
     deskNodeDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch { /* no-op */ }
+  }
+
+  // ——— resize handle pointer handlers ———
+  function onResizePointerDown(e: PointerEvent, n: DeskNode) {
+    // Stop the event from triggering node-drag on the parent host.
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.button !== 0) return;
+    nodeResize = {
+      nodeId: n.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startW: n.w,
+      startH: n.h,
+      pointerId: e.pointerId,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizePointerMove(e: PointerEvent) {
+    if (!nodeResize || nodeResize.pointerId !== e.pointerId) return;
+    const dxClient = e.clientX - nodeResize.startClientX;
+    const dyClient = e.clientY - nodeResize.startClientY;
+    const dx = dxClient / zoom;
+    const dy = dyClient / zoom;
+    const newW = Math.round(
+      Math.max(RESIZE_MIN_W, Math.min(RESIZE_MAX_W, nodeResize.startW + dx)) / 20,
+    ) * 20;
+    const newH = Math.round(
+      Math.max(RESIZE_MIN_H, Math.min(RESIZE_MAX_H, nodeResize.startH + dy)) / 20,
+    ) * 20;
+    const id = nodeResize.nodeId;
+    deskNodes = deskNodes.map((nd) => nd.id === id ? { ...nd, w: newW, h: newH } : nd);
+  }
+
+  function onResizePointerUp(e: PointerEvent) {
+    if (!nodeResize || nodeResize.pointerId !== e.pointerId) return;
+    nodeResize = null;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch { /* no-op */ }
@@ -902,12 +967,15 @@
     const worldPos = palettePositionOverride ?? viewportCenterInWorld();
     const placement = resolveOverlap(worldPos);
     const id = `desknode-${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const defaults = DESK_NODE_DEFAULTS[meta.type] ?? { w: 320, h: 260 };
     const node: DeskNode = {
       id,
       type: meta.type,
       kind: mapTypeToKind(meta.type),
       x: placement.x,
       y: placement.y,
+      w: defaults.w,
+      h: defaults.h,
       config: { ...(meta.defaultConfig as Record<string, unknown>) },
     };
     deskNodes = [...deskNodes, node];
@@ -1350,13 +1418,17 @@
         <!-- client-only desk nodes (research-chat / research-report).
              M7: research-chat renders via ResearchChatNode; others keep the
              placeholder label. Generic drag is wired here so all nodes can be
-             repositioned; positions update in deskNodes $state. -->
+             repositioned; positions update in deskNodes $state.
+             Each node's w/h is stored in deskNodes and rendered via inline style;
+             a resize handle (bottom-right corner) adjusts w/h via pointer capture,
+             stopPropagation prevents triggering node-drag. -->
         {#each deskNodes as n (n.id)}
           <div
             class="desk-node-host"
             class:is-selected={selectedNodeId === n.id}
-            class:is-chat={n.kind === 'research-chat'}
             style:transform="translate({n.x}px, {n.y}px)"
+            style:width="{n.w}px"
+            style:height="{n.h}px"
             data-kind={n.kind}
             role="button"
             tabindex="0"
@@ -1387,6 +1459,16 @@
                 <span class="desk-node-hint">{n.type}</span>
               </div>
             {/if}
+            <!-- Resize handle: bottom-right corner. stopPropagation prevents node-drag. -->
+            <div
+              class="desk-node-resize"
+              role="separator"
+              aria-label="Resize node"
+              onpointerdown={(e) => onResizePointerDown(e, n)}
+              onpointermove={onResizePointerMove}
+              onpointerup={onResizePointerUp}
+              onpointercancel={onResizePointerUp}
+            ></div>
           </div>
         {/each}
       </div>
@@ -1792,17 +1874,42 @@
     overflow: hidden;
     cursor: grab;
     user-select: none;
+    /* w/h driven by inline style:width / style:height from deskNodes */
   }
-  /* Chat node needs enough height to be usable — 400×320 in world-px.
-     The node's ResearchChatNode fills the host as a flex child. */
-  .desk-node-host.is-chat {
-    width: 400px;
-    height: 320px;
-    cursor: default;
-  }
-  /* Let the header area remain a grab target even for the chat node. */
-  .desk-node-host.is-chat :global(.rc-header) {
+  /* Let the header area remain a grab target for chat/report nodes. */
+  .desk-node-host :global(.rc-header) {
     cursor: grab;
+  }
+  .desk-node-host :global(.rn-head) {
+    cursor: grab;
+  }
+
+  /* Resize handle — 10×10 px, bottom-right corner, sits above all children. */
+  .desk-node-resize {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    cursor: se-resize;
+    z-index: 10;
+    /* Subtle diagonal grip indicator */
+    background: linear-gradient(
+      135deg,
+      transparent 40%,
+      var(--card-border) 40%,
+      var(--card-border) 55%,
+      transparent 55%,
+      transparent 65%,
+      var(--card-border) 65%,
+      var(--card-border) 80%,
+      transparent 80%
+    );
+    opacity: 0.6;
+    pointer-events: all;
+  }
+  .desk-node-resize:hover {
+    opacity: 1;
   }
   .desk-node-host.is-selected {
     outline: 2px solid var(--accent);

@@ -137,7 +137,7 @@
   }
 </script>
 
-<div class="report-node" data-state={loadState}>
+<div class="report-node" data-state={loadState} role="region" aria-label="Research report">
   <header class="rn-head">
     <span class="rn-title">REPORT</span>
     {#if loadState === 'ready' && view.hasReport}
@@ -272,18 +272,21 @@
 
 <style>
   .report-node {
+    /* Fill the desk-node-host (position:absolute, display:flex, align-items:stretch).
+       Host drives width/height via inline style; we fill it, scroll internally. */
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    width: 320px;
-    max-height: 460px;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 10px 12px;
     background: var(--surface-elevated);
-    border: 1.5px solid var(--card-border);
-    border-radius: 4px;
     font-family: var(--font-mono);
     color: var(--text-primary);
+    scrollbar-width: thin;
   }
   .rn-head {
     display: flex;
