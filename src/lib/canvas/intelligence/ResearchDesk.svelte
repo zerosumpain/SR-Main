@@ -278,6 +278,14 @@
     return c.kind === 'entity' ? 72 : CARD_H;
   }
 
+  // Map a card to a workflow-canvas `data-kind` token so the 3px left bar on
+  // the card host matches the .wf-node[data-kind] color canon. Pure; no state.
+  function kindOf(c: DeskCard): 'source' | 'fact' | 'entity' | 'counterfactual' {
+    if (c.kind === 'entity') return 'entity';
+    if (c.kind === 'source') return 'source';
+    return (c.fields.isCounterfactual as boolean) ? 'counterfactual' : 'fact';
+  }
+
   // Live drag overrides (id → {x,y}); applied on top of persisted/auto layout.
   let dragOverrides = $state.raw<Record<string, { x: number; y: number }>>({});
 
@@ -881,6 +889,9 @@
       bind:clientHeight={viewportH}
       role="application"
       aria-label="Research desk"
+      style:--grid-offset-x="{panX}px"
+      style:--grid-offset-y="{panY}px"
+      style:--grid-cell="{32 * zoom}px"
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
@@ -892,7 +903,8 @@
         <!-- edges (relationships between entity cards) -->
         <svg class="desk-edges" aria-hidden="true" overflow="visible">
           {#each edgePaths as e (e.id)}
-            <path d={e.d} fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.45" vector-effect="non-scaling-stroke" />
+            <path class="edge-hit" d={e.d} stroke="transparent" stroke-width="14" fill="none" pointer-events="none" />
+            <path class="edge-stroke" d={e.d} fill="none" stroke="var(--text-ghost)" stroke-width="1.25" vector-effect="non-scaling-stroke" pointer-events="none" />
           {/each}
 
           <!-- provenance sparks: source→fact, draw-in then fade (~1.2s) -->
@@ -913,8 +925,8 @@
                 d={e.d}
                 fill="none"
                 stroke="var(--accent)"
-                stroke-width="1.25"
-                stroke-opacity="0.45"
+                stroke-width="1.5"
+                stroke-dasharray="3 3"
                 vector-effect="non-scaling-stroke"
                 class="syn-edge"
               />
@@ -977,6 +989,8 @@
           <div
             class="desk-card-host"
             class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
+            class:is-selected={selectedId === c.id}
+            data-kind={kindOf(c)}
             style:transform="translate({p.x}px, {p.y}px)"
             onpointerdown={(e) => onCardPointerDown(e, c)}
             onpointermove={onCardPointerMove}
@@ -1051,10 +1065,11 @@
         </div>
       </div>
 
-      <!-- zoom controls -->
-      <div class="desk-zoom">
-        <button type="button" onclick={() => zoomCentered(1.2)} aria-label="Zoom in">+</button>
+      <!-- zoom controls (workflow .hifi-zoomctl chrome) -->
+      <div class="desk-zoom hifi-zoomctl" role="group" aria-label="Zoom controls">
         <button type="button" onclick={() => zoomCentered(1 / 1.2)} aria-label="Zoom out">−</button>
+        <span class="zv">{zoomPct}%</span>
+        <button type="button" onclick={() => zoomCentered(1.2)} aria-label="Zoom in">+</button>
         <button type="button" onclick={fit} aria-label="Fit">⤢</button>
         <button type="button" onclick={reset} aria-label="Reset">⌂</button>
       </div>
@@ -1112,13 +1127,50 @@
     overflow: hidden;
     touch-action: none;
     cursor: grab;
-    background:
-      radial-gradient(circle, rgba(26, 16, 8, 0.06) 1px, transparent 1px) 0 0 / 32px 32px;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--divider) 1px, transparent 1px),
+      linear-gradient(90deg, var(--divider) 1px, transparent 1px);
+    background-size:
+      var(--grid-cell, 32px) var(--grid-cell, 32px),
+      var(--grid-cell, 32px) var(--grid-cell, 32px);
+    background-position:
+      var(--grid-offset-x, 0) var(--grid-offset-y, 0),
+      var(--grid-offset-x, 0) var(--grid-offset-y, 0);
   }
   .desk-world-wrap.panning { cursor: grabbing; }
   .desk-world { position: absolute; top: 0; left: 0; }
   .desk-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
-  .desk-card-host { position: absolute; top: 0; left: 0; touch-action: none; will-change: transform; }
+  .desk-edges .edge-hit { cursor: default; pointer-events: none; }
+  .desk-card-host {
+    position: absolute;
+    top: 0;
+    left: 0;
+    touch-action: none;
+    will-change: transform;
+  }
+  /* 3px left bar keyed off data-kind, matching .wf-node[data-kind]::before. */
+  .desk-card-host::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--text-ghost);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .desk-card-host[data-kind='source']::before { background: var(--text-muted); }
+  .desk-card-host[data-kind='fact']::before { background: var(--accent); }
+  .desk-card-host[data-kind='entity']::before { background: var(--text-primary); }
+  .desk-card-host[data-kind='counterfactual']::before { background: #c44; }
+  /* Selection outline, matching .wf-node.is-selected. */
+  .desk-card-host.is-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    z-index: 3;
+  }
 
   .desk-card-host.morphing {
     transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -1270,26 +1322,41 @@
   .desk-minimap-node.ent { background: var(--text-primary); opacity: 0.8; }
   .desk-minimap-frame { position: absolute; border: 1px solid var(--accent); background: rgba(196, 87, 10, 0.08); }
 
+  /* Zoom controls — workflow .hifi-zoomctl chrome, anchored bottom-left. */
   .desk-zoom {
     position: absolute;
     bottom: 12px;
     left: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
   }
-  .desk-zoom button {
-    width: 28px;
-    height: 28px;
-    font-family: var(--font-mono);
-    font-size: 14px;
+  .hifi-zoomctl {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--card-border);
     background: var(--surface-elevated);
-    color: var(--text-primary);
-    border: 1px solid rgba(26, 16, 8, 0.18);
     box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
-    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
   }
-  .desk-zoom button:hover { border-color: var(--accent); color: var(--accent); }
+  .hifi-zoomctl button {
+    background: transparent;
+    border: none;
+    padding: 5px 9px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
+  }
+  .hifi-zoomctl button + button {
+    border-left: 1px solid var(--card-border);
+  }
+  .hifi-zoomctl button:hover {
+    color: var(--accent);
+  }
+  .hifi-zoomctl .zv {
+    padding: 0 8px;
+    color: var(--text-muted);
+    border-left: 1px solid var(--card-border);
+  }
 
   /* ——— synthesis zone markers (world-space, pan/zoom with cards) ——— */
   .synthesis-zone-boundary {
