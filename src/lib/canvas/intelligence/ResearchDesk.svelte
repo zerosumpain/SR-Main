@@ -19,6 +19,7 @@
   import { effectivePosition, type DeskMode } from './desk/positioning';
   import { persistArtefactPosition } from './desk/persist-position';
   import { isRunning, type DeskStatus } from './desk/deskControls';
+  import { samePos } from './desk/samePos';
 
   let {
     sessionId,
@@ -352,13 +353,28 @@
     );
   }
 
+  // Compute each visible card's position EXACTLY ONCE per dependency change.
+  // posOf() is otherwise called ~4×N (entityById, minimap, card #each, minimap
+  // #each, edge endpoints); funnelling every read through this single map keeps
+  // the layout work O(N) per flush instead of O(N) per reader.
+  const positionById = $derived(
+    new Map<string, { x: number; y: number }>(visibleCards.map((c) => [c.id, posOf(c)])),
+  );
+
+  // Position reader for callers that may run mid-event or against a card that
+  // isn't in the visible set (anchorRect / drag handlers). Falls back to a fresh
+  // posOf() so it never returns a stale/missing value.
+  function posFor(c: DeskCard): { x: number; y: number } {
+    return positionById.get(c.id) ?? posOf(c);
+  }
+
   // Entity-id → resolved centre, for edge docking.
   // Only include visible entities so edges to hidden cards don't render.
   const entityById = $derived.by(() => {
     const m = new Map<string, { x: number; y: number; w: number; h: number }>();
     for (const c of visibleCards) {
       if (c.kind !== 'entity') continue;
-      const p = posOf(c);
+      const p = positionById.get(c.id) ?? posOf(c);
       m.set(c.id, { x: p.x, y: p.y, w: cardW(c), h: cardH(c) });
     }
     return m;
@@ -416,7 +432,7 @@
     if (!visibleIds.has(anchorId)) return null;
     const card = visibleCards.find((c) => c.id === anchorId);
     if (!card) return null;
-    const p = posOf(card);
+    const p = posFor(card);
     return { x: p.x, y: p.y, w: cardW(card), h: cardH(card) };
   }
 
@@ -466,11 +482,11 @@
     if (!viewportEl || cards.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
     const pad = 48;
-    const xs = cards.map((c) => posOf(c));
+    const xs = cards.map((c) => posFor(c));
     const minX = Math.min(...xs.map((p) => p.x)) - pad;
     const minY = Math.min(...xs.map((p) => p.y)) - pad;
-    const maxX = Math.max(...cards.map((c) => posOf(c).x + cardW(c))) + pad;
-    const maxY = Math.max(...cards.map((c) => posOf(c).y + cardH(c))) + pad;
+    const maxX = Math.max(...cards.map((c) => posFor(c).x + cardW(c))) + pad;
+    const maxY = Math.max(...cards.map((c) => posFor(c).y + cardH(c))) + pad;
     const contentW = maxX - minX;
     const contentH = maxY - minY;
     const availW = Math.max(200, vp.width - 24);
@@ -534,7 +550,7 @@
   function onCardPointerDown(e: PointerEvent, c: DeskCard) {
     if (e.button !== 0) return;
     e.stopPropagation();
-    const p = posOf(c);
+    const p = posFor(c);
     nodeDrag = {
       cardId: c.id,
       startClientX: e.clientX,
@@ -599,7 +615,7 @@
     if (cards.length === 0 || viewportW === 0 || viewportH === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const c of cards) {
-      const p = posOf(c);
+      const p = positionById.get(c.id) ?? posOf(c);
       if (p.x < minX) minX = p.x;
       if (p.y < minY) minY = p.y;
       const r = p.x + cardW(c);
@@ -631,6 +647,56 @@
         h: Math.max(2, (viewBottom - viewTop) * scale),
       },
     };
+  });
+
+  // ——— morph gating ———
+  // The 520ms `transition: transform` is only worth paying for cards that
+  // actually MOVED since the last flush (e.g. on the GATHER⇄SYNTHESIZE flip).
+  // Arming it on every non-pinned card re-pays the transition cost on every
+  // streamed-in card during GATHER, even for cards that didn't budge.
+  //
+  // This is a $derived (NOT a $effect) so `morphIds` is published in the SAME
+  // render flush as the transform change — a CSS `transition: transform` only
+  // animates when the transform changes while the transition rule is already
+  // present, so the `.morphing` class must land together with the new position,
+  // not one flush later (which would snap instead of animate).
+  //
+  // `prevPos` is a PLAIN (non-reactive) Map: the derived reads last flush's
+  // positions from it and writes this flush's back. Because it isn't $state,
+  // mutating it does NOT invalidate the derived, so there is no self-loop.
+  //
+  // `prevPositionsRef` guards against a non-idempotent re-run: a stateful
+  // derived must advance its snapshot exactly once per genuine input change.
+  // `positionById` is a fresh Map identity on every real recompute, so if we
+  // see the SAME reference again we return the cached result without touching
+  // `prevPos` (otherwise the second pass would compare positions to themselves
+  // and spuriously clear every card's morph flag).
+  const prevPos = new Map<string, { x: number; y: number }>();
+  let prevPositionsRef: Map<string, { x: number; y: number }> | null = null;
+  let lastMorphIds = new Set<string>();
+
+  const morphIds = $derived.by<Set<string>>(() => {
+    // Tracked dep: positions (which itself depends on `mode` via posOf, so the
+    // mode flip flows through). Movement is re-evaluated on any position change.
+    const positions = positionById;
+    if (positions === prevPositionsRef) return lastMorphIds;
+    prevPositionsRef = positions;
+
+    const moved = new Set<string>();
+    for (const [id, p] of positions) {
+      const before = prevPos.get(id);
+      // A brand-new card (no `before`) is treated as "not moved" by samePos,
+      // so streamed-in cards don't each arm a transition during GATHER.
+      if (!samePos(before, p)) moved.add(id);
+      prevPos.set(id, p);
+    }
+    // Drop positions for cards that are no longer visible so the map can't grow
+    // unbounded across a long session.
+    for (const id of prevPos.keys()) {
+      if (!positions.has(id)) prevPos.delete(id);
+    }
+    lastMorphIds = moved;
+    return moved;
   });
 </script>
 
@@ -722,10 +788,10 @@
 
         <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
         {#each visibleCards as c (c.id)}
-          {@const p = posOf(c)}
+          {@const p = positionById.get(c.id) ?? posOf(c)}
           <div
             class="desk-card-host"
-            class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id]}
+            class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
             style:transform="translate({p.x}px, {p.y}px)"
             onpointerdown={(e) => onCardPointerDown(e, c)}
             onpointermove={onCardPointerMove}
@@ -743,7 +809,7 @@
         <div class="desk-minimap-body">
           {#if minimap}
             {#each visibleCards as c (c.id + '-m')}
-              {@const p = posOf(c)}
+              {@const p = positionById.get(c.id) ?? posOf(c)}
               <div
                 class="desk-minimap-node"
                 class:ent={c.kind === 'entity'}
