@@ -154,11 +154,22 @@ export async function runSynthesis(
       })
       .where(eq(synthesisRuns.id, runId));
 
+    // Persist deskState + synthesisRunId for all scoped facts (bulk pass).
     if (includedIds.length > 0) {
       await db
         .update(facts)
         .set({ deskState: 'synthesized', synthesisRunId: runId })
         .where(and(eq(facts.sessionId, sessionId), inArray(facts.id, includedIds)));
+    }
+
+    // Persist deskCategory per cluster so group-by-cluster survives reload.
+    for (const cluster of clusters) {
+      if (cluster.fact_ids.length > 0) {
+        await db
+          .update(facts)
+          .set({ deskCategory: cluster.id })
+          .where(and(eq(facts.sessionId, sessionId), inArray(facts.id, cluster.fact_ids)));
+      }
     }
 
     emitSynthesis(sessionId, { runId, stage: 'done', summary, clusters, tokensUsed });
