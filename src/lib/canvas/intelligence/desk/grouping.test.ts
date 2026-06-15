@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   groupBy,
+  ISOLATED_KEY,
   type GroupDim,
   type GroupCard,
   type GroupEdge,
@@ -223,5 +224,82 @@ describe('groupBy — sentiment (relationship sentiment)', () => {
     const a = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
     const b = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
     expect([...a.memberOf.entries()]).toEqual([...b.memberOf.entries()]);
+  });
+});
+
+function mention(entityId: string, factId: string): EntityMention {
+  return { entityId, factId };
+}
+
+describe('groupBy — cooccurrence (shared-fact components)', () => {
+  it('puts two entities that share a fact into the same component', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person'), fact('f1')];
+    const mentions = [mention('e1', 'f1'), mention('e2', 'f1')];
+    const { memberOf } = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.get('e1')).toBe(memberOf.get('e2'));
+    expect(memberOf.get('e1')).toBe(memberOf.get('f1')); // the fact joins too
+  });
+
+  it('merges components transitively through a shared entity', () => {
+    // e1—f1, e1—f2  ⇒ f1 and f2 join via e1
+    const cards = [entity('e1', 'person'), fact('f1'), fact('f2')];
+    const mentions = [mention('e1', 'f1'), mention('e1', 'f2')];
+    const { memberOf } = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.get('f1')).toBe(memberOf.get('f2'));
+    expect(memberOf.get('f1')).toBe(memberOf.get('e1'));
+  });
+
+  it('keeps disjoint mention sets in separate components', () => {
+    const cards = [
+      entity('e1', 'person'), fact('f1'),
+      entity('e2', 'person'), fact('f2'),
+    ];
+    const mentions = [mention('e1', 'f1'), mention('e2', 'f2')];
+    const { memberOf } = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.get('e1')).toBe(memberOf.get('f1'));
+    expect(memberOf.get('e2')).toBe(memberOf.get('f2'));
+    expect(memberOf.get('e1')).not.toBe(memberOf.get('e2'));
+  });
+
+  it('routes a card not present in any mention to the isolated bucket', () => {
+    const cards = [entity('e1', 'person'), fact('f1'), entity('lonely', 'person')];
+    const mentions = [mention('e1', 'f1')];
+    const { memberOf, groups } = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.get('lonely')).toBe(ISOLATED_KEY);
+    expect(groups.find((g) => g.key === ISOLATED_KEY)!.count).toBe(1);
+  });
+
+  it('uses the smallest member id as the component key (order-independent)', () => {
+    const cardsA = [entity('e2', 'person'), entity('e1', 'person'), fact('f1')];
+    const cardsB = [fact('f1'), entity('e1', 'person'), entity('e2', 'person')];
+    const m = [mention('e1', 'f1'), mention('e2', 'f1')];
+    const a = groupBy('cooccurrence', cardsA, NO_EDGES, m, NO_SIM);
+    const b = groupBy('cooccurrence', cardsB, NO_EDGES, m, NO_SIM);
+    // Same component key regardless of card-array order.
+    expect(a.memberOf.get('e1')).toBe(b.memberOf.get('e1'));
+    // Key is the lexicographically-smallest id in the component.
+    const key = a.memberOf.get('e1')!;
+    expect(['e1', 'e2', 'f1'].includes(key)).toBe(true);
+    expect(key).toBe('e1'); // 'e1' < 'e2' < 'f1'
+  });
+
+  it('ignores mentions whose ids are not loaded as cards', () => {
+    // Mention references a fact not in cards; e1 still becomes its own component
+    // (a singleton, since its only partner is absent).
+    const cards = [entity('e1', 'person')];
+    const mentions = [mention('e1', 'ghost-fact')];
+    const { memberOf } = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.has('e1')).toBe(true);
+    // e1's only connection is to a non-card; it is effectively isolated.
+    expect(memberOf.get('e1')).toBe(ISOLATED_KEY);
+  });
+
+  it('is deterministic', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person'), fact('f1')];
+    const mentions = [mention('e1', 'f1'), mention('e2', 'f1')];
+    const a = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    const b = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect([...a.memberOf.entries()]).toEqual([...b.memberOf.entries()]);
+    expect(a.groups).toEqual(b.groups);
   });
 });

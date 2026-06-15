@@ -246,12 +246,84 @@ function groupBySentiment(cards: GroupCard[], edges: GroupEdge[]): GroupResult {
   return { memberOf, groups };
 }
 
-// ——— TEMPORARY STUBS (replaced in Tasks 3-4) ———
-function groupByCooccurrence(cards: GroupCard[], _mentions: EntityMention[]): GroupResult {
-  const memberOf = new Map<string, string>();
-  for (const c of cards) memberOf.set(c.id, ISOLATED_KEY);
-  return { memberOf, groups: buildGroups(memberOf, () => 'Isolated') };
+// ——— cooccurrence ———
+//
+// Bipartite graph: entityMentions link an entity to a fact. Entities/facts that
+// are connected (transitively, through shared facts/entities) form one
+// co-occurrence component. Only ids that are LOADED as cards participate; a
+// mention to an absent id is ignored. A card in no component (or whose only
+// links are to absent ids) → ISOLATED_KEY. Each component's group key is the
+// lexicographically-smallest member id, so the key is order-independent.
+
+class UnionFind {
+  private parent = new Map<string, string>();
+  add(id: string): void {
+    if (!this.parent.has(id)) this.parent.set(id, id);
+  }
+  find(id: string): string {
+    let root = id;
+    while (this.parent.get(root) !== root) root = this.parent.get(root)!;
+    // Path compression.
+    let cur = id;
+    while (this.parent.get(cur) !== root) {
+      const next = this.parent.get(cur)!;
+      this.parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  }
+  union(a: string, b: string): void {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return;
+    // Attach the lexicographically-larger root under the smaller, so find()
+    // converges toward the smallest id (deterministic component keys).
+    if (ra < rb) this.parent.set(rb, ra);
+    else this.parent.set(ra, rb);
+  }
 }
+
+function groupByCooccurrence(cards: GroupCard[], mentions: EntityMention[]): GroupResult {
+  const present = new Set(cards.map((c) => c.id));
+  const uf = new UnionFind();
+  // Only union pairs where BOTH ids are loaded cards.
+  const touched = new Set<string>();
+  for (const m of mentions) {
+    if (!present.has(m.entityId) || !present.has(m.factId)) continue;
+    uf.add(m.entityId);
+    uf.add(m.factId);
+    uf.union(m.entityId, m.factId);
+    touched.add(m.entityId);
+    touched.add(m.factId);
+  }
+
+  // Resolve component roots; the root IS the smallest id by union policy.
+  const rootOf = new Map<string, string>();
+  for (const id of touched) rootOf.set(id, uf.find(id));
+
+  // A singleton (touched only via absent partners) is effectively isolated.
+  const componentSize = new Map<string, number>();
+  for (const root of rootOf.values()) {
+    componentSize.set(root, (componentSize.get(root) ?? 0) + 1);
+  }
+
+  const memberOf = new Map<string, string>();
+  for (const c of cards) {
+    const root = rootOf.get(c.id);
+    if (root !== undefined && (componentSize.get(root) ?? 0) > 1) {
+      memberOf.set(c.id, root);
+    } else {
+      memberOf.set(c.id, ISOLATED_KEY);
+    }
+  }
+
+  const groups = buildGroups(memberOf, (key) =>
+    key === ISOLATED_KEY ? 'Isolated' : `Cluster ${key}`,
+  );
+  return { memberOf, groups };
+}
+
+// ——— TEMPORARY STUBS (replaced in Task 4) ———
 function groupBySimilarity(cards: GroupCard[], _sim: Map<string, string>): GroupResult {
   const memberOf = new Map<string, string>();
   for (const c of cards) memberOf.set(c.id, SIM_UNCLUSTERED_KEY);
