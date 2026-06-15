@@ -39,6 +39,17 @@
   // What the run would be seeded by — drives the confirm card. Null = not addressable.
   let explorePrompt = $derived(buildExplorePrompt(artefact));
 
+  // Reset explore state when the artefact identity changes (guarded to avoid
+  // proxy-churn / effect_update_depth_exceeded: only writes when id actually differs).
+  let prevArtefactId = $state<string | null>(null);
+  $effect(() => {
+    const id = artefact?.id ?? null;
+    if (id !== prevArtefactId) {
+      prevArtefactId = id;
+      resetExplore();
+    }
+  });
+
   function resetExplore() {
     explorePhase = 'idle';
     exploreErr = null;

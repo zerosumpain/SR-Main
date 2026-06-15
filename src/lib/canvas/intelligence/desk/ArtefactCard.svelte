@@ -163,7 +163,7 @@
     background: rgba(26, 16, 8, 0.1);
     display: block;
   }
-  .ac-conf i { display: block; height: 100%; background: var(--accent); }
+  .ac-conf i { display: block; height: 100%; }
   .ac-conf-label {
     font-family: var(--font-mono);
     font-size: 8px;
