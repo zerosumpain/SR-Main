@@ -13,6 +13,7 @@
   import ActivityTicker from './desk/ActivityTicker.svelte';
   import InspectorDrawer from './desk/InspectorDrawer.svelte';
   import ResearchChatNode from './desk/ResearchChatNode.svelte';
+  import ReportNode from './desk/ReportNode.svelte';
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
     organisedLayout,
@@ -323,6 +324,9 @@
 
   // Filtered card list (honoured by the desk render; counters use store.cards directly).
   const visibleCards = $derived(store.cards.filter((c) => typeFilters[cardFilterKey(c)]));
+
+  // Report node: regenerate + downloads are gated exactly like handleExport/handleShare.
+  const canRegenerate = $derived(!readonly && deskMode !== 'quick');
 
   // ——— Feature 1 liveness view state (entrance stagger + fresh-pulse) ———
   // Pure VIEW state derived from arrival metadata (the store's non-reactive side
@@ -1164,6 +1168,7 @@
             onpointerdown={(e) => onDeskNodePointerDown(e, n)}
             onpointermove={onDeskNodePointerMove}
             onpointerup={onDeskNodePointerUp}
+            onpointercancel={onDeskNodePointerUp}
           >
             {#if n.kind === 'research-chat'}
               <ResearchChatNode
@@ -1171,16 +1176,19 @@
                 nodeId={n.id}
                 {readonly}
               />
+            {:else if n.kind === 'research-report'}
+              <ReportNode
+                {sessionId}
+                cards={store.cards}
+                {sessionStatus}
+                {canRegenerate}
+                onexport={(kind) => handleExport(kind)}
+              />
             {:else}
               <span class="desk-node-bar" style:background={'#7a6cd4'}></span>
               <div class="desk-node-body">
-                {#if n.kind === 'research-report'}
-                  <span class="desk-node-label">Research Report</span>
-                  <span class="desk-node-hint">report preview · M8</span>
-                {:else}
-                  <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
-                  <span class="desk-node-hint">{n.type}</span>
-                {/if}
+                <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
+                <span class="desk-node-hint">{n.type}</span>
               </div>
             {/if}
           </div>
