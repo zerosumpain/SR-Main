@@ -86,6 +86,8 @@
     'builder-chat',
     'builder-pi',
     'build-view',
+    'research-chat',
+    'research-report',
   ]);
 
   // The 'llm' inline editor in this file has been superseded by the new
@@ -1065,6 +1067,8 @@
     stats: '#7a6cd4',
     intelligence: '#5dbea3',
     builder: '#d28a3a',
+    'research-chat': 'var(--accent)',
+    'research-report': '#7a6cd4',
   };
 
   const peerCanvases = $derived(
