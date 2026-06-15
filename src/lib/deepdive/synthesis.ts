@@ -5,6 +5,7 @@ import { ensureEmitter, emit } from './worker';
 import { nextSeq } from './desk-events';
 import { streamCompletion, jsonCompletion } from './ai';
 import { buildScopePlan, resolveFactSet, type SynthesisScope } from './synthesis-scope';
+import { reconcileClusters, type LlmCluster } from './synthesis-reconcile';
 import {
   registerSynthesisRun,
   getSynthesisSignal,
@@ -75,29 +76,38 @@ export async function runSynthesis(
       'Only restate or synthesise the facts provided. Do NOT add information, claims, or context ' +
       'that is not directly present in those facts.';
 
-    const factList = scopedFacts.map((f) => `[${f.id}] ${f.content}`).join('\n');
+    // Present facts to the LLM by 1-based bracket number, NOT by UUID. GLM-class
+    // models truncate/reformat/hallucinate long UUIDs, which silently breaks the
+    // downstream join (cluster fact_ids never match any card id → nothing files on
+    // the desk). The model returns integer indices; we map them back to real
+    // UUIDs server-side via this index→id map. (Also keeps the prompt shorter,
+    // easing the GLM reasoning-token budget on the structured call.)
+    const allIds = scopedFacts.map((f) => f.id);
+    const idByIndex = new Map<number, string>();
+    scopedFacts.forEach((f, i) => idByIndex.set(i + 1, f.id));
+    const factList = scopedFacts.map((f, i) => `[${i + 1}] ${f.content}`).join('\n');
 
-    // 1. Structured re-clustering (non-streamed). Same shape as postprocess.ts:178-184.
+    // 1. Structured re-clustering (non-streamed). The model references facts by
+    //    their bracket NUMBER; we reconcile indices → real UUIDs below.
+    //    maxTokens 8192 (≥3000) keeps the JSON from being truncated by GLM's
+    //    reasoning-token spend (repo memory: glm burns reasoning from max_tokens).
     let clusters: Cluster[] = [];
     let clusterTokens = 0;
     try {
-      const result = await jsonCompletion<{
-        clusters: { title: string; summary: string; fact_ids: string[] }[];
-      }>(
+      const result = await jsonCompletion<{ clusters: LlmCluster[] }>(
         systemPrompt,
-        `Group these facts into 4-8 coherent topic clusters. For each cluster return:\n` +
+        `Group these facts into 4-8 coherent topic clusters. Reference each fact by ` +
+          `the bracketed NUMBER shown before it (e.g. [3] → 3). For each cluster return:\n` +
           `- title: a short descriptive label\n` +
           `- summary: 2-3 sentences that ONLY restate or synthesise the facts listed below\n` +
-          `- fact_ids: list of fact IDs in this cluster\n\n` +
-          `Facts:\n${factList}\n\nRespond with JSON: { "clusters": [...] }`,
+          `- facts: array of the integer fact NUMBERS in this cluster (e.g. [1, 4, 7])\n\n` +
+          `Facts:\n${factList}\n\n` +
+          `Respond with JSON: { "clusters": [ { "title": "...", "summary": "...", "facts": [1, 2] } ] }`,
         { maxTokens: 8192, signal },
       );
-      clusters = (result.clusters ?? []).map((c, i) => ({
-        id: `${runId}-c${i}`,
-        title: c.title,
-        summary: c.summary,
-        fact_ids: Array.isArray(c.fact_ids) ? c.fact_ids : [],
-      }));
+      // Map indices → real UUIDs, drop invalid, and fall back to one all-ids
+      // cluster if the model produced nothing usable.
+      clusters = reconcileClusters(result.clusters ?? [], idByIndex, allIds, runId);
     } catch (err) {
       if (isSynthesisAborted(runId)) throw err;
       console.error('[deepdive] synthesis clustering failed:', err);
@@ -106,7 +116,7 @@ export async function runSynthesis(
           id: `${runId}-c0`,
           title: 'All Findings',
           summary: 'All scoped facts grouped together.',
-          fact_ids: scopedFacts.map((f) => f.id),
+          fact_ids: allIds,
         },
       ];
     }
@@ -132,7 +142,7 @@ export async function runSynthesis(
     const tokensUsed = clusterTokens + summaryTokens;
 
     // 3. Persist the run + flip desk_state on the included facts.
-    const includedIds = scopedFacts.map((f) => f.id);
+    const includedIds = allIds;
     await db
       .update(synthesisRuns)
       .set({
