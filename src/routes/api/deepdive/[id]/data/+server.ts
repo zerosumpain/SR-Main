@@ -30,7 +30,7 @@ export const GET: RequestHandler = async ({ params }) => {
   const report = (session.report ?? {}) as Record<string, unknown>;
   const entityCentrality = (report?.entity_centrality ?? {}) as Record<string, number>;
 
-  const [allFacts, allEntities, allSources, allRelationships] = await Promise.all([
+  const [allFacts, allEntities, allSources, allRelationships, allMentions] = await Promise.all([
     db
       .select({
         id: facts.id,
@@ -70,6 +70,14 @@ export const GET: RequestHandler = async ({ params }) => {
       })
       .from(relationships)
       .where(eq(relationships.sessionId, params.id)),
+
+    db
+      .select({
+        entityId: entityMentions.entityId,
+        factId: entityMentions.factId,
+      })
+      .from(entityMentions)
+      .where(eq(entityMentions.sessionId, params.id)),
   ]);
 
   return json({
@@ -86,5 +94,6 @@ export const GET: RequestHandler = async ({ params }) => {
     })),
     sources: allSources,
     relationships: allRelationships,
+    entityMentions: allMentions,
   });
 };
