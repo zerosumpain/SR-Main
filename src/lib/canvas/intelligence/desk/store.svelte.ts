@@ -170,6 +170,21 @@ export interface DeskLog {
   timestamp: number;
 }
 
+/** Arrival metadata for a card, stamped the first time its id enters the map.
+ *  Lives in a NON-reactive side map (does not touch the $state.raw card map or
+ *  the seq-merge), so the UI can stagger a flush's new cards and mark a card
+ *  "fresh" for a short window without churning the hot render path. */
+export interface CardArrival {
+  /** Wall-clock ms when the card first entered the map (Date.now()). */
+  firstSeenAt: number;
+  /** Monotonic global arrival index across the whole session. */
+  arrivalOrder: number;
+  /** Flush batch the card arrived in; cards sharing a batch stagger together. */
+  batch: number;
+  /** Position within its arrival batch (0-based), for the stagger delay. */
+  indexInBatch: number;
+}
+
 export interface DeskStore {
   cards: ReadonlyArray<DeskCard>;
   edges: ReadonlyArray<DeskEdge>;
@@ -191,6 +206,10 @@ export interface DeskStore {
   synthSummary: string;
   /** Fact count the current run is scoped over. */
   synthFactCount: number;
+  /** Arrival metadata reader (non-reactive side map). Returns undefined for an
+   *  id that has not yet been seen. Read inside a $derived over `cards` so it
+   *  recomputes on each flush (when new arrivals are stamped). */
+  arrivalOf(id: string): CardArrival | undefined;
   start(): Promise<void>;
   applyLocalPosition(id: string, x: number, y: number, pinned?: boolean): void;
   /** Merge an arbitrary partial into an existing card (wholesale $state.raw
@@ -231,10 +250,46 @@ export function createDeskStore(
   const pendingCards = new Map<string, DeskCard>(); // staged deltas
   const pendingEdges = new Map<string, DeskEdge>();
 
+  // ——— arrival tracking (NON-reactive side map) ———
+  // Stamped the first time a card id enters the map; never touches the
+  // $state.raw card map or the seq-merge. The UI reads this inside a $derived
+  // over `cards`, which recomputes on each flush (right after stamping).
+  const arrivalById = new Map<string, CardArrival>();
+  let arrivalOrderCounter = 0;
+  let arrivalBatchCounter = 0;
+
+  /** Stamp arrival metadata for any of `ids` not yet seen. All ids stamped in
+   *  one call share a `batch` and get sequential `indexInBatch` so the UI can
+   *  spread their entrance animation. No-op for already-seen ids (reconnect /
+   *  replay re-stamping is suppressed). Hydrate seeds use batch 0 (no stagger
+   *  for the initial snapshot — they were already there). */
+  function stampArrivals(ids: Iterable<string>, opts?: { seed?: boolean }) {
+    const now = Date.now();
+    const batch = opts?.seed ? 0 : ++arrivalBatchCounter;
+    let indexInBatch = 0;
+    for (const id of ids) {
+      if (arrivalById.has(id)) continue;
+      arrivalById.set(id, {
+        firstSeenAt: now,
+        arrivalOrder: arrivalOrderCounter++,
+        batch,
+        indexInBatch: indexInBatch++,
+      });
+    }
+  }
+
   // Flush body: wholesale $state.raw Map replacement (unchanged semantics).
   // Only WHEN it runs has changed — now driven by the coalescer below.
   function flush() {
     if (pendingCards.size > 0) {
+      // Stamp arrival metadata for genuinely-new ids BEFORE replacing the map,
+      // so a $derived over `cards` reads fresh arrival info on the same flush.
+      // Ids already in the map (or already stamped) are skipped by stampArrivals.
+      const newIds: string[] = [];
+      for (const id of pendingCards.keys()) {
+        if (!cardMap.has(id)) newIds.push(id);
+      }
+      if (newIds.length > 0) stampArrivals(newIds);
       let next = cardMap;
       for (const c of pendingCards.values()) next = mergeArtefact(next, c);
       pendingCards.clear();
@@ -291,6 +346,7 @@ export function createDeskStore(
     for (const s of body.sources ?? []) seeded.set(String(s.id), rowToCard('source', s));
     for (const f of body.facts ?? []) seeded.set(String(f.id), rowToCard('fact', f));
     for (const e of body.entities ?? []) seeded.set(String(e.id), rowToCard('entity', e));
+    stampArrivals(seeded.keys(), { seed: true });
     cardMap = seeded;
     const edges = new Map<string, DeskEdge>();
     for (const r of body.relationships ?? []) {
@@ -376,6 +432,7 @@ export function createDeskStore(
       const c = quickSourceToCard(srcs[i], i);
       seeded.set(c.id, c);
     }
+    stampArrivals(seeded.keys(), { seed: true });
     cardMap = seeded;
     edgeMap = new Map();
     if (quickInitial?.answer) synthesisTokenBuf = quickInitial.answer;
@@ -396,10 +453,13 @@ export function createDeskStore(
       } else if (evt.type === 'sources' && Array.isArray(evt.data?.sources)) {
         const srcs = evt.data.sources as Array<Record<string, unknown>>;
         let next = cardMap;
+        const newIds: string[] = [];
         for (let i = 0; i < srcs.length; i++) {
           const c = quickSourceToCard(srcs[i], i);
+          if (!cardMap.has(c.id)) newIds.push(c.id);
           next = mergeArtefact(next, c);
         }
+        if (newIds.length > 0) stampArrivals(newIds);
         cardMap = next;
       } else if (evt.type === 'status' && evt.data?.status) {
         sessionStatus = String(evt.data.status);
@@ -454,6 +514,9 @@ export function createDeskStore(
     },
     get status() {
       return status;
+    },
+    arrivalOf(id) {
+      return arrivalById.get(id);
     },
     async start() {
       if (deskMode === 'quick') {

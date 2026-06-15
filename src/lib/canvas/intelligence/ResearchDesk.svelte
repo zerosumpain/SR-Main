@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ArtefactCard from './desk/ArtefactCard.svelte';
+  import CardLiveWrapper from './desk/CardLiveWrapper.svelte';
   import CategoryHeader from './desk/CategoryHeader.svelte';
   import ThemeHeader from './desk/ThemeHeader.svelte';
   import EntityRail from './desk/EntityRail.svelte';
@@ -342,6 +343,39 @@
 
   // Filtered card list (honoured by the desk render; counters use store.cards directly).
   const visibleCards = $derived(store.cards.filter((c) => typeFilters[cardFilterKey(c)]));
+
+  // ——— Feature 1 liveness view state (entrance stagger + fresh-pulse) ———
+  // Pure VIEW state derived from arrival metadata (the store's non-reactive side
+  // map). Recomputes when `visibleCards` changes (i.e. on a flush) — event-rate,
+  // NOT frame-rate, and entirely independent of `positionById` so it never
+  // invalidates the layout memo. Breathing is a single boolean, evaluated by the
+  // wrapper from `deskRunning`; entrance/fresh are per-card here.
+  const FRESH_WINDOW_MS = 1000;
+  const STAGGER_STEP_MS = 24; // per-index delay
+  const STAGGER_CAP_MS = 120; // total spread ceiling
+  // True while the engine is actively producing → cards breathe; gated off when
+  // idle/complete so a finished desk is perfectly still.
+  const deskRunning = $derived(isRunning(sessionStatus) || synthesising);
+  const cardLive = $derived.by(() => {
+    const now = Date.now();
+    const m = new Map<string, { enterDelayMs: number; fresh: boolean }>();
+    for (const c of visibleCards) {
+      const a = store.arrivalOf(c.id);
+      if (!a) {
+        m.set(c.id, { enterDelayMs: 0, fresh: false });
+        continue;
+      }
+      m.set(c.id, {
+        // Stagger a flush's new cards across ~120ms by their batch index.
+        enterDelayMs: Math.min(a.indexInBatch * STAGGER_STEP_MS, STAGGER_CAP_MS),
+        // Fresh for ~1s after first arrival (seed-batch cards are never fresh:
+        // their firstSeenAt is hydrate time, which is already > the window by the
+        // time the user looks, and they don't pulse on reload).
+        fresh: a.batch > 0 && now - a.firstSeenAt < FRESH_WINDOW_MS,
+      });
+    }
+    return m;
+  });
 
   // Set of visible card IDs for edge filtering.
   const visibleIds = $derived(new Set(visibleCards.map((c) => c.id)));
@@ -907,6 +941,7 @@
         <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
         {#each visibleCards as c (c.id)}
           {@const p = positionById.get(c.id) ?? posOf(c)}
+          {@const live = cardLive.get(c.id)}
           <div
             class="desk-card-host"
             class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
@@ -916,12 +951,18 @@
             onpointerup={(e) => onCardPointerUp(e, c)}
             onpointercancel={(e) => onCardPointerUp(e, c)}
           >
-            <ArtefactCard
-              card={c}
-              selected={selectedId === c.id}
-              onselect={(id) => { selectedId = id; openInspector(id); }}
-              onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
-            />
+            <CardLiveWrapper
+              enterDelayMs={live?.enterDelayMs ?? 0}
+              fresh={live?.fresh ?? false}
+              breathing={deskRunning}
+            >
+              <ArtefactCard
+                card={c}
+                selected={selectedId === c.id}
+                onselect={(id) => { selectedId = id; openInspector(id); }}
+                onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
+              />
+            </CardLiveWrapper>
           </div>
         {/each}
       </div>
