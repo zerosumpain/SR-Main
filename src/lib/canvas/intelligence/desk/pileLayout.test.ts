@@ -92,30 +92,45 @@ describe('pileLayout — anchors', () => {
 });
 
 describe('pileLayout — collapsed fan', () => {
-  it('fans visible members by {dx:6, dy:8} per index (snapped)', () => {
+  it('fans members by {dx:26, dy:18} per index within a wrap column (snapped)', () => {
     const { groups, memberOf, cards } = scenario([3]);
     const m = pileLayout(groups, memberOf, cards, NONE);
     const c0 = m.get('g0-c0')!;
     const c1 = m.get('g0-c1')!;
     const c2 = m.get('g0-c2')!;
-    // Each successive visible member is offset by the fan delta (pre-snap 6/8).
-    // Assert the trend (down-right) and that the offset matches snap(i*delta).
+    // Each successive member in the same fan column is offset by the fan delta.
+    // All three fit in one fan column (fanWrapAt = 8).
     expect(c1.x).toBe(snapTo(c0.x, PILE.fanDx, 1));
     expect(c1.y).toBe(snapTo(c0.y, PILE.fanDy, 1));
     expect(c2.x).toBe(snapTo(c0.x, PILE.fanDx, 2));
     expect(c2.y).toBe(snapTo(c0.y, PILE.fanDy, 2));
   });
 
-  it('caps the visible fan: members past maxVisible stack at the cap position', () => {
-    const n = PILE.maxVisible + 3;
+  it('every member in a collapsed pile has a distinct position (no hidden cards)', () => {
+    // Use a pile larger than the old maxVisible cap (was 5) to prove no card
+    // is hidden behind another.
+    const n = PILE.fanWrapAt + 3; // spans two fan columns
     const { groups, memberOf, cards } = scenario([n]);
     const m = pileLayout(groups, memberOf, cards, NONE);
-    const capIdx = PILE.maxVisible - 1;
-    const capped = m.get(`g0-c${capIdx}`)!;
-    // Every member at or past the cap shares the cap member's position.
-    for (let i = capIdx; i < n; i++) {
-      expect(m.get(`g0-c${i}`)).toEqual(capped);
-    }
+    const positions = cards.map((c) => {
+      const p = m.get(c.id)!;
+      return `${p.x},${p.y}`;
+    });
+    // All positions must be unique — no card is fully hidden.
+    const unique = new Set(positions);
+    expect(unique.size).toBe(n);
+  });
+
+  it('wraps large piles into a second fan column instead of hiding cards', () => {
+    // Members beyond fanWrapAt start a new fan column offset by fanColStride.
+    const { groups, memberOf, cards } = scenario([PILE.fanWrapAt + 1]);
+    const m = pileLayout(groups, memberOf, cards, NONE);
+    const anchor = m.get('g0-c0')!;
+    // Member at fanWrapAt is the first card in the second fan column.
+    const wrapped = m.get(`g0-c${PILE.fanWrapAt}`)!;
+    expect(wrapped.x).toBeGreaterThanOrEqual(anchor.x + PILE.fanColStride);
+    // Y resets to the anchor row in the new column (fanRow = 0).
+    expect(wrapped.y).toBe(anchor.y);
   });
 
   it('collapsed piles from different groups never overlap card footprints', () => {

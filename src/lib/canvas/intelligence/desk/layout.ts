@@ -330,16 +330,21 @@ export const PILE = {
   cardW: CARD_W,
   cardH: CARD_H,
   /** Horizontal distance between pile anchor columns (≥ a fanned pile's width). */
-  colStride: 320,
+  colStride: 380,
   /** Vertical distance between pile anchor rows (≥ a fanned pile's height). */
-  pileRowStride: 360,
+  pileRowStride: 420,
   /** Piles per row before wrapping to the next anchor row. */
   perRow: 5,
-  /** Fan offset applied per visible member in a collapsed pile. */
-  fanDx: 6,
-  fanDy: 8,
-  /** Max members rendered in the collapsed fan; the rest stack at the cap. */
-  maxVisible: 5,
+  /** Fan offset applied per member in a collapsed pile.
+   *  At 26×18, a card is 220×120 so each member peeks out by ~26px / ~18px —
+   *  clearly visible even on a dense desk. */
+  fanDx: 26,
+  fanDy: 18,
+  /** Max fan spread (number of members before the fan wraps to a second column).
+   *  Large groups wrap rather than hiding cards — every member stays visible. */
+  fanWrapAt: 8,
+  /** Horizontal stride between fan columns when a pile is too large to fan linearly. */
+  fanColStride: 260,
   /** Vertical stride between members of an EXPANDED pile's column (row 0 = anchor). */
   rowStride: 160,
 } as const;
@@ -397,11 +402,14 @@ export function pileLayout(
           y: snap(anchor.y + i * PILE.rowStride),
         });
       } else {
-        // Collapsed fan; members past the cap stack at the cap position.
-        const fanI = Math.min(i, PILE.maxVisible - 1);
+        // Collapsed fan: every member gets a unique offset so a slice of each
+        // card is always visible. Large piles wrap into a second fan column
+        // rather than stacking any cards on top of each other.
+        const fanCol = Math.floor(i / PILE.fanWrapAt);
+        const fanRow = i % PILE.fanWrapAt;
         out.set(id, {
-          x: snap(anchor.x + fanI * PILE.fanDx),
-          y: snap(anchor.y + fanI * PILE.fanDy),
+          x: snap(anchor.x + fanCol * PILE.fanColStride + fanRow * PILE.fanDx),
+          y: snap(anchor.y + fanRow * PILE.fanDy),
         });
       }
     });

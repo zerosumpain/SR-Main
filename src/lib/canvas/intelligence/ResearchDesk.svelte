@@ -373,8 +373,8 @@
   });
 
   // Index of each card within its group (packed order = visibleCards order),
-  // used for fan z-index and the collapsed "top ~5 only" cap.
-  const COLLAPSED_VISIBLE = 5;
+  // used for fan z-index. Every member in a collapsed pile is rendered so
+  // a slice of each card is always visible.
   const cardPileInfo = $derived.by(() => {
     const idxInGroup = new Map<string, number>();
     const running = new Map<string, number>();
@@ -389,10 +389,10 @@
     for (const c of visibleCards) {
       const key = grouping.memberOf.get(c.id);
       const idx = idxInGroup.get(c.id) ?? 0;
-      const expanded = key ? expandedPiles.has(key) : true;
       // Manual/pinned cards always render (they escaped the pile).
       const manual = !!dragOverrides[c.id] || (c.canvasX != null && c.canvasY != null);
-      const render = manual || expanded || idx < COLLAPSED_VISIBLE;
+      // All fan members render — every card peeks out in the collapsed fan.
+      const render = true;
       // Top of the fan (idx 0) sits highest; deeper cards recede.
       const z = manual ? 1000 : 100 - idx;
       m.set(c.id, { idx, render, z });
