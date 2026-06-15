@@ -1061,7 +1061,13 @@
     </div>
   </div>
 
-  <ActivityTicker logs={store.logs} live={isRunning(sessionStatus) || synthesising} />
+  <ActivityTicker
+    logs={store.logs}
+    live={isRunning(sessionStatus) || synthesising}
+    feed={store.feed}
+    connectionState={store.connectionState}
+    rateBuckets={store.rateBuckets}
+  />
 
   <InspectorDrawer
     bind:open={inspectorOpen}

@@ -14,6 +14,11 @@ import {
   type SynthEdge,
 } from './synthesis-reducer';
 import { makeCoalescer } from './coalesce';
+import { formatFeedEvent, formatLogFeedEvent, type FeedEvent, type FeedTone } from './feedFormatter';
+import { incrementBucket, rollWindow, RATE_WINDOW } from './rateBuckets';
+
+// Re-export so consumers can import from a single place.
+export type { FeedEvent, FeedTone };
 
 export type CardKind = 'source' | 'fact' | 'entity';
 
@@ -224,6 +229,12 @@ export interface DeskStore {
   /** Source id whose facts are being produced right now (Feature 2). Cleared by
    *  a debounced timer ~1.5s after the last fact. null when idle. */
   analysingSourceId: string | null;
+  /** Terminal-style feed of recent artefact + log events (newest last, capped ~60). */
+  feed: ReadonlyArray<FeedEvent>;
+  /** SSE connection health (distinct from session status). */
+  connectionState: 'connecting' | 'live' | 'reconnecting' | 'idle' | 'closed';
+  /** Artefacts/sec ring buffer — RATE_WINDOW 1-second buckets, newest last. */
+  rateBuckets: ReadonlyArray<number>;
   /** Arrival metadata reader (non-reactive side map). Returns undefined for an
    *  id that has not yet been seen. Read inside a $derived over `cards` so it
    *  recomputes on each flush (when new arrivals are stamped). */
@@ -271,6 +282,30 @@ export function createDeskStore(
   // The source id whose facts are streaming right now (drives the "analysing…"
   // shimmer on that one source card). Cleared by a debounced timer.
   let analysingSourceIdState = $state<string | null>(null);
+
+  // ——— Terminal feed ———
+  // $state.raw: replaced wholesale (newest-last, capped at FEED_CAP).
+  const FEED_CAP = 60;
+  let feedList = $state.raw<FeedEvent[]>([]);
+  let feedSeq = 0;
+
+  function pushFeedEvent(tone: FeedTone, text: string) {
+    const ev: FeedEvent = { seq: feedSeq++, kind: tone, text, tone, ts: Date.now() };
+    const next = feedList.length >= FEED_CAP
+      ? [...feedList.slice(feedList.length - (FEED_CAP - 1)), ev]
+      : [...feedList, ev];
+    feedList = next;
+  }
+
+  // ——— SSE connection health ———
+  let connectionState = $state<'connecting' | 'live' | 'reconnecting' | 'idle' | 'closed'>('idle');
+
+  // ——— artefacts/sec ring buffer ———
+  // PLAIN let — never $state; never read inside a $effect.
+  // Initialised to RATE_WINDOW zero buckets (one per second slot).
+  let rateBucketList = $state.raw<number[]>(Array.from({ length: RATE_WINDOW }, () => 0));
+  // 1 Hz interval handle — PLAIN let, never $state.
+  let rateInterval: ReturnType<typeof setInterval> | null = null;
 
   const SPARK_TTL_MS = 1200; // a spark fades out after this long
   const SPARK_CAP = 12; // max concurrent sparks (oldest dropped past this)
@@ -441,7 +476,11 @@ export function createDeskStore(
   }
 
   function subscribe() {
+    connectionState = 'connecting';
     es = new EventSource(`/api/deepdive/${sessionId}/stream`);
+    es.onopen = () => {
+      connectionState = 'live';
+    };
     es.onmessage = (msg) => {
       let evt: any;
       try {
@@ -459,6 +498,9 @@ export function createDeskStore(
             relationshipType: d.relationshipType ?? null,
             sentiment: d.sentiment ?? null,
           });
+          // Feed event for relationship
+          const relFmt = formatFeedEvent('relationship', { relationshipType: d.relationshipType });
+          if (relFmt) pushFeedEvent(relFmt.tone, relFmt.text);
         } else {
           const c = eventToCard(evt.data);
           // Provenance spark + active-source: only for genuinely-NEW facts that
@@ -472,6 +514,12 @@ export function createDeskStore(
           }
           // Stage with dedup-by-id; a later delta for the same id overwrites the staged one.
           pendingCards.set(c.id, c);
+          // Feed event for the artefact; increment rate bucket.
+          const fmt = formatFeedEvent(c.kind, c.fields);
+          if (fmt) {
+            pushFeedEvent(fmt.tone, fmt.text);
+            rateBucketList = incrementBucket(rateBucketList);
+          }
         }
         scheduleFlush();
       } else if (evt.type === 'synthesis' && evt.data) {
@@ -496,18 +544,35 @@ export function createDeskStore(
         }
       } else if (evt.type === 'status' && evt.data?.status) {
         sessionStatus = String(evt.data.status);
+        // When the session reaches a terminal state, transition connection to idle.
+        const terminal = ['complete', 'failed'];
+        if (terminal.includes(String(evt.data.status))) {
+          connectionState = 'idle';
+        }
       } else if (evt.type === 'log') {
         // emitLog formats as `${icon}  ${message}` in the top-level `message` field;
         // timestamp is in `data.timestamp`.
         const msg = (evt as any).message ?? evt.data?.message ?? '';
         const ts = Number((evt as any).data?.timestamp ?? Date.now());
         logList = [...logList.slice(-199), { message: String(msg), timestamp: ts }];
+        // Also push to terminal feed.
+        const logFmt = formatLogFeedEvent(String(msg));
+        pushFeedEvent(logFmt.tone, logFmt.text);
       }
     };
     es.onerror = () => {
-      // EventSource auto-reconnects; on reconnect the next hydrate-on-mount or
-      // replayed deltas re-dedup by id. Leave status 'live'.
+      // EventSource auto-reconnects. Signal reconnecting unless the session is
+      // already in a terminal state (complete/failed → keep 'idle').
+      const terminal = ['complete', 'failed'];
+      if (!terminal.includes(sessionStatus)) {
+        connectionState = 'reconnecting';
+      }
     };
+    // Start the 1 Hz rolling window for artefacts/sec. PLAIN let handle.
+    if (rateInterval !== null) clearInterval(rateInterval);
+    rateInterval = setInterval(() => {
+      rateBucketList = rollWindow(rateBucketList);
+    }, 1000);
   }
 
   // ——— quick-answer variant: seed from quickInitial, stream from
@@ -528,7 +593,11 @@ export function createDeskStore(
   }
 
   function quickSubscribe() {
+    connectionState = 'connecting';
     es = new EventSource(`/quickanswer/${sessionId}/stream`);
+    es.onopen = () => {
+      connectionState = 'live';
+    };
     es.onmessage = (msg) => {
       let evt: any;
       try {
@@ -546,24 +615,47 @@ export function createDeskStore(
           const c = quickSourceToCard(srcs[i], i);
           if (!cardMap.has(c.id)) newIds.push(c.id);
           next = mergeArtefact(next, c);
+          // Feed + rate for quick sources.
+          const fmt = formatFeedEvent('source', c.fields);
+          if (fmt) {
+            pushFeedEvent(fmt.tone, fmt.text);
+            rateBucketList = incrementBucket(rateBucketList);
+          }
         }
         if (newIds.length > 0) stampArrivals(newIds);
         cardMap = next;
       } else if (evt.type === 'status' && evt.data?.status) {
         sessionStatus = String(evt.data.status);
+        const terminal = ['complete', 'failed'];
+        if (terminal.includes(String(evt.data.status))) {
+          connectionState = 'idle';
+        }
       } else if (evt.type === 'complete') {
         sessionStatus = 'complete';
+        connectionState = 'idle';
         es?.close();
       } else if (evt.type === 'error') {
         sessionStatus = 'failed';
+        connectionState = 'idle';
       } else if (evt.type === 'log') {
         const m = (evt as any).message ?? '';
         logList = [...logList.slice(-199), { message: String(m), timestamp: Date.now() }];
+        const logFmt = formatLogFeedEvent(String(m));
+        pushFeedEvent(logFmt.tone, logFmt.text);
       }
     };
     es.onerror = () => {
       // auto-reconnect; deltas re-dedup by synthetic source id.
+      const terminal = ['complete', 'failed'];
+      if (!terminal.includes(sessionStatus)) {
+        connectionState = 'reconnecting';
+      }
     };
+    // 1 Hz roll for quick mode too.
+    if (rateInterval !== null) clearInterval(rateInterval);
+    rateInterval = setInterval(() => {
+      rateBucketList = rollWindow(rateBucketList);
+    }, 1000);
   }
 
   return {
@@ -606,6 +698,15 @@ export function createDeskStore(
     get analysingSourceId() {
       return analysingSourceIdState;
     },
+    get feed() {
+      return feedList;
+    },
+    get connectionState() {
+      return connectionState;
+    },
+    get rateBuckets() {
+      return rateBucketList;
+    },
     get status() {
       return status;
     },
@@ -644,6 +745,12 @@ export function createDeskStore(
     dispose() {
       es?.close();
       es = null;
+      connectionState = 'closed';
+      // Clear the 1 Hz rate-bucket interval — PLAIN let, safe here.
+      if (rateInterval !== null) {
+        clearInterval(rateInterval);
+        rateInterval = null;
+      }
       // Flush any staged deltas that arrived before teardown, then cancel
       // the idle timer so no ghost flush fires after the store is dead.
       if (pendingCards.size > 0 || pendingEdges.size > 0) {
