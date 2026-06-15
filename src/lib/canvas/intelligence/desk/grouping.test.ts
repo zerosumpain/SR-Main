@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   groupBy,
   ISOLATED_KEY,
+  SIM_UNCLUSTERED_KEY,
   type GroupDim,
   type GroupCard,
   type GroupEdge,
@@ -299,6 +300,65 @@ describe('groupBy — cooccurrence (shared-fact components)', () => {
     const mentions = [mention('e1', 'f1'), mention('e2', 'f1')];
     const a = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
     const b = groupBy('cooccurrence', cards, NO_EDGES, mentions, NO_SIM);
+    expect([...a.memberOf.entries()]).toEqual([...b.memberOf.entries()]);
+    expect(a.groups).toEqual(b.groups);
+  });
+});
+
+describe('groupBy — similarity (server cluster map)', () => {
+  it('groups facts by their clusterId from the similarity map', () => {
+    const cards = [fact('f1'), fact('f2'), fact('f3')];
+    const sim = new Map<string, string>([
+      ['f1', 'sc-0'],
+      ['f2', 'sc-0'],
+      ['f3', 'sc-1'],
+    ]);
+    const { memberOf } = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
+    expect(memberOf.get('f1')).toBe('sc-0');
+    expect(memberOf.get('f2')).toBe('sc-0');
+    expect(memberOf.get('f3')).toBe('sc-1');
+    expect(memberOf.get('f1')).not.toBe(memberOf.get('f3'));
+  });
+
+  it('routes a card absent from the map into the unclustered bucket', () => {
+    const cards = [fact('f1'), fact('f2')];
+    const sim = new Map<string, string>([['f1', 'sc-0']]);
+    const { memberOf, groups } = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
+    expect(memberOf.get('f1')).toBe('sc-0');
+    expect(memberOf.get('f2')).toBe(SIM_UNCLUSTERED_KEY);
+    expect(groups.find((g) => g.key === SIM_UNCLUSTERED_KEY)!.count).toBe(1);
+  });
+
+  it('counts members per cluster correctly and orders by descending count', () => {
+    const cards = [fact('f1'), fact('f2'), fact('f3'), fact('f4')];
+    const sim = new Map<string, string>([
+      ['f1', 'sc-0'],
+      ['f2', 'sc-0'],
+      ['f3', 'sc-0'],
+      ['f4', 'sc-1'],
+    ]);
+    const { groups } = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
+    expect(groups[0].key).toBe('sc-0');
+    expect(groups[0].count).toBe(3);
+    expect(groups[1].key).toBe('sc-1');
+  });
+
+  it('with an empty map, every card is unclustered (single group)', () => {
+    const cards = [fact('f1'), fact('f2')];
+    const { memberOf, groups } = groupBy(
+      'similarity', cards, NO_EDGES, NO_MENTIONS, new Map(),
+    );
+    expect(memberOf.get('f1')).toBe(SIM_UNCLUSTERED_KEY);
+    expect(memberOf.get('f2')).toBe(SIM_UNCLUSTERED_KEY);
+    expect(groups.length).toBe(1);
+    expect(groups[0].count).toBe(2);
+  });
+
+  it('is deterministic', () => {
+    const cards = [fact('f1'), fact('f2')];
+    const sim = new Map<string, string>([['f1', 'sc-0'], ['f2', 'sc-1']]);
+    const a = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
+    const b = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
     expect([...a.memberOf.entries()]).toEqual([...b.memberOf.entries()]);
     expect(a.groups).toEqual(b.groups);
   });

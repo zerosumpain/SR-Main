@@ -323,9 +323,22 @@ function groupByCooccurrence(cards: GroupCard[], mentions: EntityMention[]): Gro
   return { memberOf, groups };
 }
 
-// ——— TEMPORARY STUBS (replaced in Task 4) ———
-function groupBySimilarity(cards: GroupCard[], _sim: Map<string, string>): GroupResult {
+// ——— similarity ———
+//
+// The server clusters endpoint returns {factId, clusterId, clusterLabel}[]; the
+// caller folds that into similarityMap (cardId → clusterId) and hands it in. A
+// card present in the map joins its cluster; a card absent → SIM_UNCLUSTERED_KEY.
+// (clusterLabel is applied at render time from the endpoint; this module only
+// sees clusterId, so labels here derive from the id.)
+
+function groupBySimilarity(cards: GroupCard[], similarityMap: Map<string, string>): GroupResult {
   const memberOf = new Map<string, string>();
-  for (const c of cards) memberOf.set(c.id, SIM_UNCLUSTERED_KEY);
-  return { memberOf, groups: buildGroups(memberOf, () => 'Unclustered') };
+  for (const c of cards) {
+    const clusterId = similarityMap.get(c.id);
+    memberOf.set(c.id, clusterId != null && clusterId.length > 0 ? clusterId : SIM_UNCLUSTERED_KEY);
+  }
+  const groups = buildGroups(memberOf, (key) =>
+    key === SIM_UNCLUSTERED_KEY ? 'Unclustered' : `Similar group ${key}`,
+  );
+  return { memberOf, groups };
 }
