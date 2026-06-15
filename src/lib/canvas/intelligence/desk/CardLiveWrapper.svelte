@@ -77,7 +77,6 @@
     /* Entrance plays ONCE on mount: opacity 0→1 + scale 0.85→1 + a tiny drop.
        animation-delay staggers a flush's new cards across ~120ms. */
     animation: card-enter 360ms cubic-bezier(0.22, 0.61, 0.36, 1) var(--enter-delay, 0ms) both;
-    will-change: transform, opacity;
   }
 
   @keyframes card-enter {
@@ -94,6 +93,11 @@
   /* Idle breathing — barely-perceptible continuous scale, only while running.
      Layered AFTER entrance so it starts cleanly once entrance has settled. */
   .desk-card-live.breathing {
+    /* Promote a compositor layer ONLY while the engine is running (breathing
+       active); released when idle/complete so hundreds of finished cards don't
+       each permanently retain a layer. Entrance/fresh are brief one-shots and
+       don't need a standing hint. */
+    will-change: transform;
     animation:
       card-enter 360ms cubic-bezier(0.22, 0.61, 0.36, 1) var(--enter-delay, 0ms) both,
       card-breathe 3.6s ease-in-out 360ms infinite;
