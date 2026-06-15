@@ -24,6 +24,19 @@ echo "==> Stamping deploy provenance into build/.deploy-sha..."
 } > build/.deploy-sha
 cat build/.deploy-sha
 
+# The build above regenerated this machine's build/ with fresh chunk hashes.
+# The always-on homeserv `strange-rambling-svelte` user service serves THIS
+# build/ for the /api/scraper/* residential proxy (used by stealth-scrape and
+# the deep-research page-summary fallback). Its in-memory manifest now points
+# at the OLD chunk hashes, so lazily-imported endpoints 500 (ERR_MODULE_NOT_FOUND)
+# until it reloads. Restart it so the homeserv proxy picks up the fresh build.
+# Guarded + best-effort: only fires on the homeserv dev box where the unit exists.
+if systemctl --user list-unit-files strange-rambling-svelte.service >/dev/null 2>&1; then
+  echo "==> Restarting homeserv scraper-proxy service (loads the fresh build/)..."
+  systemctl --user restart strange-rambling-svelte 2>/dev/null \
+    || echo "==> WARN: could not restart homeserv strange-rambling-svelte (restart it manually if scrapes 500)"
+fi
+
 echo "==> Syncing build to VPS..."
 rsync -avz --delete \
   -e "ssh -i $VPS_KEY" \
