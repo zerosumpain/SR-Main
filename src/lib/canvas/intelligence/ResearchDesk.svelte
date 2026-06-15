@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import ArtefactCard from './desk/ArtefactCard.svelte';
   import CategoryHeader from './desk/CategoryHeader.svelte';
+  import ThemeHeader from './desk/ThemeHeader.svelte';
   import EntityRail from './desk/EntityRail.svelte';
   import CommandBar from './desk/CommandBar.svelte';
   import LeftFeed from './desk/LeftFeed.svelte';
@@ -21,6 +22,7 @@
     type LayoutCategory,
   } from './desk/layout';
   import { effectivePosition, type DeskMode } from './desk/positioning';
+  import { themeLayout, themeHeaders, type ThemeArtefact } from './desk/themes';
   import { persistArtefactPosition } from './desk/persist-position';
   import { isRunning, type DeskStatus } from './desk/deskControls';
   import { samePos } from './desk/samePos';
@@ -122,6 +124,17 @@
   let mode = $state<DeskMode>('gather');
   let synthesizing = $state(false); // POST in flight (debounce double-clicks)
   let everSynthesized = $state(false);
+
+  // ——— Arrange by theme ———
+  // 'off'  → cards follow the active mode (gather scatter / synthesize organised).
+  // 'once' → a one-shot snapshot: cards present at click time animate into theme
+  //          groups; later arrivals fall through to normal positions.
+  // 'live' → cards are continuously kept arranged by theme as new ones arrive.
+  // (Derivations that read visibleCards/dragOverrides live further down, after
+  //  those are declared.)
+  let arrange = $state<'off' | 'once' | 'live'>('off');
+  // The frozen one-shot layout. $state.raw — replaced wholesale, never mutated.
+  let themeSnapshot = $state.raw<Map<string, { x: number; y: number }>>(new Map());
 
   function goGather() {
     mode = 'gather';
@@ -338,9 +351,81 @@
     visibleCards.filter((c) => c.kind === 'entity'),
   );
 
+  // ——— Arrange by theme: derivations (state declared above) ———
+  // Cards eligible for theme arrangement: visible AND not pinned/manually placed.
+  // (Pinned/dragged cards keep their manual spot regardless of arrange mode.)
+  const arrangeableCards = $derived(
+    visibleCards.filter(
+      (c) => !c.pinned && c.canvasX == null && c.canvasY == null && !dragOverrides[c.id],
+    ),
+  );
+
+  // LIVE theme layout — recomputed reactively from the current arrangeable set so
+  // new arrivals join their theme group immediately. Only computed while live to
+  // avoid paying for it when arrange is off/once.
+  const liveThemeLayout = $derived.by<Map<string, { x: number; y: number }>>(() => {
+    if (arrange !== 'live') return new Map();
+    const arts: ThemeArtefact[] = arrangeableCards.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      fields: c.fields,
+    }));
+    return themeLayout(arts);
+  });
+
+  // Theme cluster headers for the active arrangement (once|live). Empty when off.
+  const activeThemeHeaders = $derived.by(() => {
+    if (arrange === 'off') return [];
+    const source =
+      arrange === 'live'
+        ? arrangeableCards
+        : // 'once': describe the snapshot's membership so headers match the frozen
+          // layout (only cards captured at click time).
+          visibleCards.filter((c) => themeSnapshot.has(c.id));
+    const arts: ThemeArtefact[] = source.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      fields: c.fields,
+    }));
+    return themeHeaders(arts);
+  });
+
+  // One-shot: freeze the current arrangeable cards into a theme layout.
+  function arrangeByThemeOnce() {
+    const arts: ThemeArtefact[] = arrangeableCards.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      fields: c.fields,
+    }));
+    themeSnapshot = themeLayout(arts);
+    arrange = 'once';
+  }
+
+  // Continuous toggle: live ⇄ off.
+  function toggleKeepArranged() {
+    arrange = arrange === 'live' ? 'off' : 'live';
+  }
+
   function posOf(c: DeskCard): { x: number; y: number } {
+    // 1. Manual position ALWAYS wins, even with arrange active: an in-flight
+    //    drag override, or a pinned / user-dragged card (non-null canvasX/Y).
     const ov = dragOverrides[c.id];
     if (ov) return ov;
+    const hasManualPos = c.canvasX != null && c.canvasY != null;
+    if (hasManualPos) {
+      return { x: c.canvasX as number, y: c.canvasY as number };
+    }
+    // 2. Theme arrangement overrides the gather/synthesize layout for cards it
+    //    covers. LIVE recomputes reactively; ONCE uses the frozen snapshot and
+    //    lets later (un-snapshotted) arrivals fall through to normal positions.
+    if (arrange === 'live') {
+      const tp = liveThemeLayout.get(c.id);
+      if (tp) return tp;
+    } else if (arrange === 'once') {
+      const tp = themeSnapshot.get(c.id);
+      if (tp) return tp;
+    }
+    // 3. Fall through to the existing gather/synthesize layout.
     const filedByCluster = factCat.has(c.id);
     return effectivePosition(
       {
@@ -810,6 +895,15 @@
           {/if}
         {/if}
 
+        <!-- theme cluster headers (ARRANGE-BY-THEME only; once|live) -->
+        {#if arrange !== 'off'}
+          {#each activeThemeHeaders as th (th.key)}
+            <div class="desk-theme-host" style:transform="translate({th.pos.x}px, {th.pos.y}px)">
+              <ThemeHeader label={th.label} count={th.count} />
+            </div>
+          {/each}
+        {/if}
+
         <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
         {#each visibleCards as c (c.id)}
           {@const p = positionById.get(c.id) ?? posOf(c)}
@@ -830,6 +924,30 @@
             />
           </div>
         {/each}
+      </div>
+
+      <!-- arrange-by-theme toolbar (screen-fixed, top-left of the canvas) -->
+      <div class="desk-arrange" role="group" aria-label="Arrange by theme">
+        <button
+          type="button"
+          class="arr-btn"
+          class:active={arrange === 'once'}
+          title="Arrange the current cards into theme groups (one-shot)"
+          aria-pressed={arrange === 'once'}
+          disabled={arrange === 'live'}
+          onclick={arrangeByThemeOnce}
+        >&#9637; Arrange by theme</button>
+        <button
+          type="button"
+          class="arr-toggle"
+          class:on={arrange === 'live'}
+          title="Keep cards continuously arranged by theme as new ones arrive"
+          aria-pressed={arrange === 'live'}
+          onclick={toggleKeepArranged}
+        >
+          <span class="arr-knob" aria-hidden="true"></span>
+          <span class="arr-label">keep arranged</span>
+        </button>
       </div>
 
       <!-- minimap -->
@@ -937,6 +1055,84 @@
     will-change: transform;
     transition: opacity 360ms ease;
   }
+
+  /* Theme cluster headers — world-space, never intercept pan/drag. */
+  .desk-theme-host {
+    position: absolute;
+    top: 0;
+    left: 0;
+    will-change: transform;
+    pointer-events: none;
+    transition: opacity 360ms ease;
+  }
+
+  /* ——— arrange-by-theme toolbar (screen-fixed) ——— */
+  .desk-arrange {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 5;
+  }
+  .arr-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 6px 10px;
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid rgba(26, 16, 8, 0.18);
+    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .arr-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .arr-btn.active { border-color: var(--accent); color: var(--accent); }
+  .arr-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .arr-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 5px 10px 5px 6px;
+    background: var(--surface-elevated);
+    color: var(--text-muted);
+    border: 1px solid rgba(26, 16, 8, 0.18);
+    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .arr-toggle:hover { border-color: var(--accent); }
+  .arr-toggle.on { color: var(--accent); border-color: var(--accent); }
+  .arr-knob {
+    width: 22px;
+    height: 12px;
+    border-radius: 7px;
+    background: rgba(26, 16, 8, 0.22);
+    position: relative;
+    flex: 0 0 auto;
+    transition: background 0.15s ease;
+  }
+  .arr-knob::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--surface-elevated, #faf6ee);
+    transition: transform 0.15s ease;
+  }
+  .arr-toggle.on .arr-knob { background: var(--accent); }
+  .arr-toggle.on .arr-knob::after { transform: translateX(10px); }
 
   .syn-edge { animation: syn-fade-in 600ms ease both; }
   @keyframes syn-fade-in {
