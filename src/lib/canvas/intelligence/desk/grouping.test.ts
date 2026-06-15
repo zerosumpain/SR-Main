@@ -363,3 +363,69 @@ describe('groupBy — similarity (server cluster map)', () => {
     expect(a.groups).toEqual(b.groups);
   });
 });
+
+describe('groupBy — topic dimensions propagate facts to sources/entities', () => {
+  it('cluster: a source joins the cluster of the facts it produced', () => {
+    const cards = [
+      withCat(fact('f1', { sourceId: 's1' }), 'cat-a'),
+      withCat(fact('f2', { sourceId: 's1' }), 'cat-a'),
+      src('s1'),
+    ];
+    const { memberOf } = groupBy('cluster', cards, NO_EDGES, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('s1')).toBe('cat-a');
+  });
+
+  it('cluster: a source with a clear plurality joins the majority cluster', () => {
+    const cards = [
+      withCat(fact('f1', { sourceId: 's1' }), 'cat-a'),
+      withCat(fact('f2', { sourceId: 's1' }), 'cat-a'),
+      withCat(fact('f3', { sourceId: 's1' }), 'cat-b'),
+      src('s1'),
+    ];
+    const { memberOf } = groupBy('cluster', cards, NO_EDGES, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('s1')).toBe('cat-a'); // 2 vs 1
+  });
+
+  it('cluster: an entity joins the cluster of the facts that mention it', () => {
+    const cards = [withCat(fact('f1'), 'cat-a'), entity('e1', 'person')];
+    const mentions = [mention('e1', 'f1')];
+    const { memberOf } = groupBy('cluster', cards, NO_EDGES, mentions, NO_SIM);
+    expect(memberOf.get('e1')).toBe('cat-a');
+  });
+
+  it('cluster: a source with no linked clustered facts stays uncategorised', () => {
+    const cards = [withCat(fact('f1', { sourceId: 's1' }), null), src('s2')];
+    const { memberOf } = groupBy('cluster', cards, NO_EDGES, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('s2')).toBe('__uncategorised__');
+  });
+
+  it('cluster: a source\'s OWN deskCategory wins over the fact-plurality vote', () => {
+    const cards = [
+      withCat(fact('f1', { sourceId: 's1' }), 'cat-a'),
+      withCat(src('s1'), 'cat-b'), // manually placed into cat-b
+    ];
+    const { memberOf } = groupBy('cluster', cards, NO_EDGES, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('s1')).toBe('cat-b'); // manual placement wins, not cat-a
+  });
+
+  it('similarity: sources and entities ride along to their facts pile', () => {
+    const cards = [
+      fact('f1', { sourceId: 's1' }),
+      fact('f2', { sourceId: 's1' }),
+      src('s1'),
+      entity('e1', 'org'),
+    ];
+    const sim = new Map<string, string>([['f1', 'Funding cuts'], ['f2', 'Funding cuts']]);
+    const mentions = [mention('e1', 'f1')];
+    const { memberOf } = groupBy('similarity', cards, NO_EDGES, mentions, sim);
+    expect(memberOf.get('s1')).toBe('Funding cuts');
+    expect(memberOf.get('e1')).toBe('Funding cuts');
+  });
+
+  it('similarity: an unlinked source remains unclustered', () => {
+    const cards = [fact('f1'), src('s9')];
+    const sim = new Map<string, string>([['f1', 'Funding cuts']]);
+    const { memberOf } = groupBy('similarity', cards, NO_EDGES, NO_MENTIONS, sim);
+    expect(memberOf.get('s9')).toBe(SIM_UNCLUSTERED_KEY);
+  });
+});

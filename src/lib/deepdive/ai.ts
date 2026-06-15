@@ -1,8 +1,18 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { APIUserAbortError, APIConnectionTimeoutError } from 'openai';
 import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel, getFallbackModel, hasOpenRouter } from './keys';
 
-const ZAI_NONSTREAM_TIMEOUT_MS = 30_000;
-const ZAI_STREAM_IDLE_TIMEOUT_MS = 30_000;
+// z.ai's glm-5-turbo / glm-5.1 spend a lot of reasoning time: a medium 2k-token
+// completion measures ~25s end-to-end, and a large clustering prompt (up to 200
+// facts) routinely exceeds 30s. A 30s ceiling therefore aborted nearly every
+// real deepdive call (synthesis clustering + the report executive summary),
+// surfacing as APIUserAbortError "every time". These are background / streamed
+// operations, so a generous ceiling is acceptable; genuinely-stuck calls fall
+// back to OpenRouter below (see isOurTimeoutAbort).
+const ZAI_NONSTREAM_TIMEOUT_MS = 90_000;
+// Idle gap between streamed tokens. Reasoning models can take >30s to emit the
+// FIRST token, so allow 45s before the watchdog fires.
+const ZAI_STREAM_IDLE_TIMEOUT_MS = 45_000;
 
 function combineSignals(external: AbortSignal | undefined, timeoutMs: number): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -53,6 +63,37 @@ export function isRateLimitError(err: any): boolean {
 }
 
 /**
+ * True for any abort/timeout error.
+ *
+ * The OpenAI SDK throws `APIUserAbortError` when an AbortSignal fires and
+ * `APIConnectionTimeoutError` on its own timeout. CRITICAL: the SDK's error
+ * classes inherit `Error.prototype.name` ("Error") — they do NOT set `.name` to
+ * their class name — so an `err.name === 'APIUserAbortError'` check NEVER matches
+ * a real SDK abort. Match by `instanceof` (and constructor name / message as a
+ * belt-and-suspenders) instead. The native `.name` strings are kept for the
+ * raw-`fetch` paths (e.g. fetch-page-text) and openRouterChat's own timeout.
+ */
+function isAbortError(err: any): boolean {
+  if (err instanceof APIUserAbortError || err instanceof APIConnectionTimeoutError) return true;
+  if (err?.constructor?.name === 'APIUserAbortError' || err?.constructor?.name === 'APIConnectionTimeoutError') return true;
+  if (err?.message === 'Request was aborted.') return true;
+  const name = err?.name;
+  return name === 'AbortError' || name === 'APIUserAbortError' || name === 'TimeoutError';
+}
+
+/**
+ * True when an abort came from OUR own timeout (z.ai was too slow), as opposed
+ * to the CALLER cancelling via their signal. When the caller's signal is already
+ * aborted we must NOT fall back — the work was cancelled on purpose. Otherwise an
+ * abort means our ZAI_*_TIMEOUT_MS watchdog fired, so OpenRouter is a valid
+ * fallback (haiku is fast and reliable for these summary/cluster calls).
+ */
+function isOurTimeoutAbort(err: any, externalSignal: AbortSignal | undefined): boolean {
+  if (externalSignal?.aborted) return false;
+  return isAbortError(err);
+}
+
+/**
  * Internal helper: make a single (non-streaming) chat call on the OpenRouter client.
  * Used by chatCompletion and jsonCompletion fallback paths.
  */
@@ -86,7 +127,10 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3)
     try {
       return await fn();
     } catch (err: any) {
-      if (err?.name === 'AbortError') throw err;
+      // Never retry an abort/timeout: a caller-cancellation must propagate, and
+      // our own timeout-abort should drop straight to the OpenRouter fallback in
+      // the caller rather than burning 3× the (now 90s) timeout retrying z.ai.
+      if (isAbortError(err)) throw err;
       const isRateLimit = err?.status === 429;
       const isLastAttempt = attempt === maxRetries;
 
@@ -128,9 +172,10 @@ export async function chatCompletion(
     );
     return response.choices[0]?.message?.content ?? '';
   } catch (err: any) {
-    if (isRateLimitError(err) && hasOpenRouter()) {
+    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && hasOpenRouter()) {
       const fallbackModel = getFallbackModel();
-      console.log(`[deepdive] chatCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
+      console.log(`[deepdive] chatCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
       return openRouterChat(messages, { temperature, maxTokens, signal: options?.signal });
     }
     throw err;
@@ -184,9 +229,10 @@ export async function jsonCompletion<T>(
     );
     return parseJsonText<T>(response.choices[0]?.message?.content ?? '{}');
   } catch (err: any) {
-    if (isRateLimitError(err) && hasOpenRouter()) {
+    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && hasOpenRouter()) {
       const fallbackModel = getFallbackModel();
-      console.log(`[deepdive] jsonCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
+      console.log(`[deepdive] jsonCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
       // json: true signals openRouterChat to omit response_format (Anthropic models don't support it)
       const text = await openRouterChat(messages, { temperature, maxTokens, signal: options?.signal, json: true });
       return parseJsonText<T>(text || '{}');
@@ -282,20 +328,32 @@ export async function streamCompletion(
     else externalSignal.addEventListener('abort', () => externalAc.abort(externalSignal.reason), { once: true });
   }
 
+  // Track whether ANY token reached the caller. The fallback re-streams from
+  // scratch, so it is only safe BEFORE the first token — otherwise the client
+  // would receive duplicated/garbled output. (For z.ai's slow-reasoning case the
+  // abort almost always fires before the first token; this just makes it safe.)
+  let emittedAny = false;
+  const onToken = options?.onToken
+    ? (t: string) => { emittedAny = true; options.onToken!(t); }
+    : undefined;
+
   try {
     return await runStream(client, model, messages, {
       temperature,
       maxTokens,
       signal: externalAc.signal,
-      onToken: options?.onToken,
+      onToken,
       disableThinking: options?.disableThinking,
     });
   } catch (err: any) {
     // Only fall back on the INITIAL create error (before any tokens); never mid-stream.
     // Also skip fallback if the caller already explicitly chose a model (useOpenRouter path).
-    if (!useOpenRouter && isRateLimitError(err) && hasOpenRouter()) {
+    // A z.ai idle-timeout abort (our watchdog, not a caller cancellation) is
+    // fallback-eligible just like a rate-limit.
+    if (!useOpenRouter && !emittedAny && (isRateLimitError(err) || isOurTimeoutAbort(err, externalSignal)) && hasOpenRouter()) {
       const fallbackModel = getFallbackModel();
-      console.log(`[deepdive] streamCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
+      console.log(`[deepdive] streamCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
       const fallbackAc = new AbortController();
       if (externalSignal) {
         if (externalSignal.aborted) fallbackAc.abort(externalSignal.reason);
@@ -305,7 +363,7 @@ export async function streamCompletion(
         temperature,
         maxTokens,
         signal: fallbackAc.signal,
-        onToken: options?.onToken,
+        onToken,
         disableThinking: options?.disableThinking,
       });
     }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
+import { APIUserAbortError } from 'openai';
 import { isRateLimitError, chatCompletion, jsonCompletion, streamCompletion } from './ai';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,15 @@ function makeOrSuccess(content: string) {
 
 function rate429() {
   return Object.assign(new Error('Rate limit exceeded'), { status: 429 });
+}
+
+/**
+ * The exact error the OpenAI SDK throws when our AbortSignal.timeout watchdog
+ * fires. NOTE: its `.name` is the inherited "Error" (the SDK never overrides it)
+ * — this is precisely why isAbortError must match by instanceof, not by name.
+ */
+function abortErr() {
+  return new APIUserAbortError();
 }
 
 /**
@@ -166,6 +176,34 @@ describe('chatCompletion', () => {
     if (!result.ok) expect(result.e.status).toBe(429);
     expect(mockOrCreate).not.toHaveBeenCalled();
   });
+
+  it('falls back to OpenRouter on a z.ai timeout-abort, calling z.ai exactly ONCE (no retry)', async () => {
+    mockZaiCreate.mockRejectedValue(abortErr());
+    mockOrCreate.mockResolvedValueOnce(makeOrSuccess('from openrouter'));
+
+    const promise = chatCompletion('sys', 'user');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe('from openrouter');
+    // An abort must NOT be retried (would otherwise burn 4× the 90s timeout).
+    expect(mockZaiCreate).toHaveBeenCalledTimes(1);
+    expect(mockOrCreate).toHaveBeenCalledOnce();
+  });
+
+  it('does NOT fall back when the CALLER aborts (signal already aborted) — rethrows', async () => {
+    mockZaiCreate.mockRejectedValue(abortErr());
+    const ac = new AbortController();
+    ac.abort();
+
+    const promise = chatCompletion('sys', 'user', { signal: ac.signal });
+    const settled = promise.then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
+    await vi.runAllTimersAsync();
+    const result = await settled;
+
+    expect(result.ok).toBe(false);
+    expect(mockOrCreate).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -214,6 +252,19 @@ describe('jsonCompletion', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.e.message).toBe('bad gateway');
     expect(mockOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('falls back to OpenRouter on a z.ai timeout-abort (once, no retry)', async () => {
+    mockZaiCreate.mockRejectedValue(abortErr());
+    mockOrCreate.mockResolvedValueOnce(makeOrSuccess('{"k":"v"}'));
+
+    const promise = jsonCompletion<{ k: string }>('sys', 'user');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toEqual({ k: 'v' });
+    expect(mockZaiCreate).toHaveBeenCalledTimes(1);
+    expect(mockOrCreate).toHaveBeenCalledOnce();
   });
 });
 
@@ -267,6 +318,18 @@ describe('streamCompletion', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.e.message).toBe('upstream down');
     expect(mockOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('falls back to OpenRouter stream on a z.ai timeout-abort before any token', async () => {
+    mockZaiCreate.mockRejectedValueOnce(abortErr());
+    mockOrCreate.mockResolvedValueOnce(makeStream([{ delta: 'recovered' }]));
+
+    const promise = streamCompletion('sys', 'user');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.text).toBe('recovered');
+    expect(mockOrCreate).toHaveBeenCalledOnce();
   });
 
   it('does NOT apply fallback when caller explicitly chose an OpenRouter model', async () => {

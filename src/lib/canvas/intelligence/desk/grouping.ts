@@ -115,12 +115,105 @@ function buildGroups(
 
 // ——— per-dimension memberOf builders ———
 
-function groupByCluster(cards: GroupCard[]): GroupResult {
+/**
+ * The two TOPIC dimensions (cluster, similarity) cluster FACTS. Sources and
+ * entities have no intrinsic topic of their own — they belong with the facts
+ * they relate to. Without this, every source + entity collapses into one giant
+ * fallback pile (the symptom: "many cards aren't moving when I group by").
+ *
+ * A source joins the cluster of the facts it produced (`fields.sourceId`); an
+ * entity joins the cluster of the facts that mention it (`entityMentions`).
+ * Membership is a plurality vote over linked facts, ignoring the fallback
+ * bucket, so a source/entity stays in the fallback ONLY when none of its facts
+ * are clustered (or it has no linked facts at all). Facts keep their own key.
+ *
+ * @param factKeyOf      factId → that fact's group key (already resolved).
+ * @param fallbackKey    the dimension's unclustered/uncategorised bucket key.
+ * @param ownKeyOf       OPTIONAL non-fact cardId → its own explicit group key.
+ *                       Used by the cluster dim so a source/entity the user
+ *                       manually dropped into a category keeps that category
+ *                       (it wins over the fact-plurality vote). Omitted for
+ *                       similarity, where a card's deskCategory is not a
+ *                       similarity label.
+ */
+function propagateFactKeys(
+  cards: GroupCard[],
+  factKeyOf: Map<string, string>,
+  mentions: EntityMention[],
+  fallbackKey: string,
+  ownKeyOf?: Map<string, string>,
+): Map<string, string> {
   const memberOf = new Map<string, string>();
+
+  // Facts: keep their own resolved key.
+  for (const c of cards) {
+    if (c.kind === 'fact') memberOf.set(c.id, factKeyOf.get(c.id) ?? fallbackKey);
+  }
+
+  // source id → fact ids it produced (via fact.fields.sourceId).
+  const factsBySource = new Map<string, string[]>();
+  for (const c of cards) {
+    if (c.kind !== 'fact') continue;
+    const sid = typeof c.fields?.sourceId === 'string' ? (c.fields.sourceId as string) : '';
+    if (!sid) continue;
+    let arr = factsBySource.get(sid);
+    if (!arr) { arr = []; factsBySource.set(sid, arr); }
+    arr.push(c.id);
+  }
+
+  // entity id → fact ids that mention it.
+  const factsByEntity = new Map<string, string[]>();
+  for (const m of mentions) {
+    let arr = factsByEntity.get(m.entityId);
+    if (!arr) { arr = []; factsByEntity.set(m.entityId, arr); }
+    arr.push(m.factId);
+  }
+
+  // Plurality vote over the linked facts' keys; ties broken by ascending key.
+  const vote = (factIds: string[] | undefined): string => {
+    if (!factIds || factIds.length === 0) return fallbackKey;
+    const counts = new Map<string, number>();
+    for (const fid of factIds) {
+      const k = factKeyOf.get(fid);
+      if (!k || k === fallbackKey) continue;
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    let best = fallbackKey;
+    let bestN = 0;
+    for (const [k, n] of counts) {
+      if (n > bestN || (n === bestN && k < best)) { best = k; bestN = n; }
+    }
+    return best;
+  };
+
+  for (const c of cards) {
+    if (c.kind === 'fact') continue; // already set above
+    // A source/entity with its OWN explicit key keeps it (manual placement wins).
+    const own = ownKeyOf?.get(c.id);
+    if (own) { memberOf.set(c.id, own); continue; }
+    if (c.kind === 'source') memberOf.set(c.id, vote(factsBySource.get(c.id)));
+    else if (c.kind === 'entity') memberOf.set(c.id, vote(factsByEntity.get(c.id)));
+    else memberOf.set(c.id, fallbackKey); // any other kind
+  }
+
+  return memberOf;
+}
+
+function groupByCluster(cards: GroupCard[], mentions: EntityMention[]): GroupResult {
+  const factKeyOf = new Map<string, string>();
+  // A source/entity may carry its OWN deskCategory (user dragged it into a pile);
+  // that explicit placement wins over the fact-plurality vote.
+  const ownKeyOf = new Map<string, string>();
   for (const c of cards) {
     const cat = c.deskCategory;
-    memberOf.set(c.id, cat != null && cat.length > 0 ? cat : UNCATEGORISED_KEY);
+    const hasCat = cat != null && cat.length > 0;
+    if (c.kind === 'fact') {
+      factKeyOf.set(c.id, hasCat ? cat : UNCATEGORISED_KEY);
+    } else if (hasCat) {
+      ownKeyOf.set(c.id, cat);
+    }
   }
+  const memberOf = propagateFactKeys(cards, factKeyOf, mentions, UNCATEGORISED_KEY, ownKeyOf);
   const groups = buildGroups(memberOf, (key) =>
     key === UNCATEGORISED_KEY ? 'Uncategorised' : key,
   );
@@ -172,7 +265,7 @@ export function groupBy(
 ): GroupResult {
   switch (dim) {
     case 'cluster':
-      return groupByCluster(cards);
+      return groupByCluster(cards, mentions);
     case 'theme':
       return groupByTheme(cards);
     case 'entityType':
@@ -182,7 +275,7 @@ export function groupBy(
     case 'cooccurrence':
       return groupByCooccurrence(cards, mentions);
     case 'similarity':
-      return groupBySimilarity(cards, similarityMap);
+      return groupBySimilarity(cards, similarityMap, mentions);
     default: {
       // Exhaustiveness guard — every GroupDim must be handled above.
       const _never: never = dim;
@@ -331,14 +424,23 @@ function groupByCooccurrence(cards: GroupCard[], mentions: EntityMention[]): Gro
 // (the highest-confidence member's truncated content), so the label string
 // doubles as the stable group key. A card absent from the map → SIM_UNCLUSTERED_KEY.
 
-function groupBySimilarity(cards: GroupCard[], similarityMap: Map<string, string>): GroupResult {
-  const memberOf = new Map<string, string>();
+function groupBySimilarity(
+  cards: GroupCard[],
+  similarityMap: Map<string, string>,
+  mentions: EntityMention[],
+): GroupResult {
+  // similarityMap only covers FACTS (factId → clusterLabel). Resolve each fact's
+  // key, then propagate to the sources/entities that relate to those facts so
+  // they ride along to the same pile rather than collapsing into one big
+  // "Unclustered" heap. The map value IS the label (highest-confidence member's
+  // truncated content), so the key string doubles as the display label.
+  const factKeyOf = new Map<string, string>();
   for (const c of cards) {
+    if (c.kind !== 'fact') continue;
     const clusterLabel = similarityMap.get(c.id);
-    memberOf.set(c.id, clusterLabel != null && clusterLabel.length > 0 ? clusterLabel : SIM_UNCLUSTERED_KEY);
+    factKeyOf.set(c.id, clusterLabel != null && clusterLabel.length > 0 ? clusterLabel : SIM_UNCLUSTERED_KEY);
   }
-  // The map value IS the label — use it directly. Fall back to 'Unclustered' for
-  // cards not in the map, and use the key itself (the label string) for cluster groups.
+  const memberOf = propagateFactKeys(cards, factKeyOf, mentions, SIM_UNCLUSTERED_KEY);
   const groups = buildGroups(memberOf, (key) =>
     key === SIM_UNCLUSTERED_KEY ? 'Unclustered' : key,
   );

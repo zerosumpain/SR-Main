@@ -21,6 +21,7 @@
     SYNTHESIS_ZONE_ORIGIN,
     SYNTHESIS_ZONE_GAP,
     BAND,
+    hashId,
     type Pos,
   } from './desk/layout';
   import { effectivePosition, type DeskMode } from './desk/positioning';
@@ -107,6 +108,15 @@
   // Expanded pile keys. A pile is collapsed (fanned stack) unless its group key
   // is in this set; expanding spreads members into a column (animated via morphIds).
   let expandedPiles = $state.raw<Set<string>>(new Set());
+
+  // ——— Auto-arrange ———
+  // ON (default): the desk continuously re-flows into piles as cards stream in
+  // and whenever the grouping changes — positions are derived live.
+  // OFF: positions freeze where they are (`frozenPos`); the user arranges on
+  // demand with "Arrange now" and can drag cards freely (drags stick).
+  let autoArrange = $state(true);
+  // Frozen positions used only while autoArrange is OFF (cardId → world pos).
+  let frozenPos = $state.raw<Map<string, Pos>>(new Map());
 
   // Resolved similarity clusters: factId -> clusterId. Fetched lazily, once per
   // fact-count, only while groupDim === 'similarity'.
@@ -256,6 +266,48 @@
     expandedPiles = next;
   }
 
+  // Toggle continuous auto-arrange. Turning it OFF snapshots the current rendered
+  // positions so nothing jumps; turning it back ON releases the freeze and the
+  // desk re-flows into its piles (animated via morphIds).
+  function setAutoArrange(on: boolean) {
+    if (on) {
+      autoArrange = true;
+      frozenPos = new Map();
+    } else {
+      // Snapshot BEFORE flipping the flag (posOf still returns live pile positions).
+      frozenPos = new Map(positionById);
+      autoArrange = false;
+    }
+  }
+
+  // One-shot tidy: snap every visible card to its current pile slot and keep that
+  // as the frozen layout. Clears transient drags so the arrange is clean. When
+  // auto-arrange is ON this is redundant (the desk already tracks piles live), so
+  // the control is disabled in that state.
+  function arrangeNow() {
+    const snap = new Map<string, Pos>();
+    for (const c of visibleCards) {
+      const p = pilePositions.get(c.id) ?? posOf(c);
+      snap.set(c.id, p);
+    }
+    manualPos = new Map();
+    dragOverrides = {};
+    frozenPos = snap;
+  }
+
+  // ——— strewn-desk card tilt ———
+  // A small, STABLE per-card rotation (seeded by id) so cards look hand-strewn
+  // rather than grid-aligned. Stable across flushes ⇒ the morph transition only
+  // animates the translate, never the rotation. Locked cards render upright — a
+  // clear "filed/pinned" affordance (and lock drops the .morphing class, so the
+  // straighten is an intentional, one-off snap on the user's action).
+  const TILT_MAX_DEG = 3.2;
+  const TILT_STEPS = 14;
+  function cardTilt(id: string): number {
+    const h = hashId(id + '\x07') % (2 * TILT_STEPS + 1);
+    return ((h - TILT_STEPS) / TILT_STEPS) * TILT_MAX_DEG;
+  }
+
   // Inspector open/close.
   function openInspector(id: string, opts?: { summarize?: boolean }) {
     const card: any = store.cards.find((c) => c.id === id);
@@ -396,7 +448,9 @@
       const a = anchors.get(g.key);
       if (!a || seen.has(g.key)) continue;
       seen.add(g.key);
-      out.push({ key: g.key, label: g.label, count: g.count, pos: a });
+      // For the cluster dim the group key is the cluster UUID; show its title.
+      const label = groupDim === 'cluster' ? (clusterTitleOf.get(g.key) ?? g.label) : g.label;
+      out.push({ key: g.key, label, count: g.count, pos: a });
     }
     return out;
   });
@@ -440,6 +494,15 @@
     for (const c of store.synthCategories) out[c.id] = c.summary ?? '';
     for (const cl of store.clusters) if (!out[cl.id]) out[cl.id] = cl.summary ?? '';
     return out;
+  });
+
+  // cluster id → human title (so cluster-dim pile headers show the synthesis
+  // title, not the raw cluster UUID that doubles as the group key).
+  const clusterTitleOf = $derived.by<Map<string, string>>(() => {
+    const m = new Map<string, string>();
+    for (const c of store.synthCategories) if (c.title) m.set(c.id, c.title);
+    for (const cl of store.clusters) if (cl.title && !m.has(cl.id)) m.set(cl.id, cl.title);
+    return m;
   });
 
   // ——— type-filter helpers ———
@@ -509,13 +572,19 @@
     if (c.pinned === true && c.canvasX != null && c.canvasY != null) {
       return { x: c.canvasX as number, y: c.canvasY as number };
     }
-    // 3. Transient manual drag (client-only; cleared on regroup).
+    // 3. Auto-arrange OFF — hold the frozen position. New cards (absent from the
+    //    snapshot) fall through to their pile slot so they still appear placed.
+    if (!autoArrange) {
+      const frozen = frozenPos.get(c.id);
+      if (frozen) return frozen;
+    }
+    // 4. Transient manual drag (client-only; cleared on regroup).
     const manual = manualPos.get(c.id);
     if (manual) return manual;
-    // 4. Pile position from the active grouping (collapsed fan or expanded column).
+    // 5. Pile position from the active grouping (collapsed fan or expanded column).
     const pile = pilePositions.get(c.id);
     if (pile) return pile;
-    // 5. Fallback (a card not covered by the packer): deterministic GATHER scatter.
+    // 6. Fallback (a card not covered by the packer): deterministic GATHER scatter.
     const filedByCluster = factCat.has(c.id);
     return effectivePosition(
       {
@@ -1130,8 +1199,15 @@
           next2.set(cardId, finalPos);
           manualPos = next2;
         }
+      } else if (!autoArrange) {
+        // Auto-arrange OFF: the desk is a free workspace — the drag STICKS into
+        // the frozen layout (no regroup will move it).
+        const next2 = new Map(frozenPos);
+        next2.set(cardId, finalPos);
+        frozenPos = next2;
       } else {
-        // UNLOCKED card: transient only — stays here until next regroup.
+        // UNLOCKED card, auto-arrange ON: transient only — stays here until the
+        // next regroup, then rejoins its pile.
         const next2 = new Map(manualPos);
         next2.set(cardId, finalPos);
         manualPos = next2;
@@ -1187,7 +1263,7 @@
   });
 
   // ——— morph gating ———
-  // The 520ms `transition: transform` is only worth paying for cards that
+  // The 720ms `transition: transform` is only worth paying for cards that
   // actually MOVED since the last flush (e.g. on the GATHER⇄SYNTHESIZE flip).
   // Arming it on every non-pinned card re-pays the transition cost on every
   // streamed-in card during GATHER, even for cards that didn't budge.
@@ -1383,6 +1459,7 @@
           {@const p = positionById.get(c.id) ?? posOf(c)}
           {@const live = cardLive.get(c.id)}
           {@const pile = cardPileInfo.get(c.id)}
+          {@const tilt = c.pinned === true ? 0 : cardTilt(c.id)}
           {#if pile?.render ?? true}
             <div
               class="desk-card-host"
@@ -1390,7 +1467,7 @@
               class:is-selected={selectedId === c.id}
               class:is-locked={c.pinned === true}
               data-kind={kindOf(c)}
-              style:transform="translate({p.x}px, {p.y}px)"
+              style:transform="translate({p.x}px, {p.y}px) rotate({tilt}deg)"
               style:z-index={pile?.z ?? 1}
               onpointerdown={(e) => onCardPointerDown(e, c)}
               onpointermove={onCardPointerMove}
@@ -1480,6 +1557,9 @@
         onfilter={handleFilter}
         groupBy={groupDim}
         ongroupby={(d) => { groupDim = d; }}
+        {autoArrange}
+        onautoarrange={setAutoArrange}
+        onarrangenow={arrangeNow}
       />
 
       <!-- minimap -->
@@ -1690,7 +1770,8 @@
   }
 
   .desk-card-host.morphing {
-    transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    /* Smooth, slightly slower morph between layouts (ease-in-out). */
+    transition: transform 720ms cubic-bezier(0.4, 0.0, 0.2, 1);
   }
   @media (prefers-reduced-motion: reduce) {
     .desk-card-host.morphing { transition: none; }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pileLayout, PILE, GRID, type Pos } from './layout';
+import { pileLayout, pileFootprint, PILE, GRID, type Pos } from './layout';
 import type { Group, GroupCard } from './grouping';
 
 // ——— fixtures ———
@@ -55,13 +55,29 @@ describe('pileLayout — anchors', () => {
     const a0 = m.get('g0-c0')!;
     const a1 = m.get('g1-c0')!;
     const a2 = m.get('g2-c0')!;
-    // Left→right: strictly increasing X, same row Y.
+    // Left→right: strictly increasing X, same row Y (within the per-pile anchor
+    // jitter + one grid step of wobble).
+    const tol = 2 * PILE.anchorJitter + GRID;
     expect(a1.x).toBeGreaterThan(a0.x);
     expect(a2.x).toBeGreaterThan(a1.x);
-    expect(a0.y).toBe(a1.y);
-    expect(a1.y).toBe(a2.y);
-    // Horizontal stride ≥ the pile footprint so collapsed piles don't overlap.
-    expect(a1.x - a0.x).toBeGreaterThanOrEqual(PILE.colStride);
+    expect(Math.abs(a0.y - a1.y)).toBeLessThanOrEqual(tol);
+    expect(Math.abs(a1.y - a2.y)).toBeLessThanOrEqual(tol);
+    // Anchors flow by the actual footprint width, so the stride is ≥ this pile's
+    // footprint (minus worst-case jitter) — i.e. footprints never overlap.
+    const footW = pileFootprint(2, false).w;
+    expect(a1.x - a0.x).toBeGreaterThanOrEqual(footW - tol);
+  });
+
+  it('a large multi-fan-column pile does not overlap its right neighbour', () => {
+    // A 20-member pile fans into ⌈20/8⌉ = 3 columns (~922px wide) — far wider than
+    // the nominal colStride. The width-aware flow must still clear the next pile.
+    const { groups, memberOf, cards } = scenario([20, 4]);
+    const m = pileLayout(groups, memberOf, cards, NONE);
+    const big = cards.filter((c) => memberOf.get(c.id) === 'g0').map((c) => m.get(c.id)!);
+    const nbr = cards.filter((c) => memberOf.get(c.id) === 'g1').map((c) => m.get(c.id)!);
+    const bigRight = Math.max(...big.map((p) => p.x + PILE.cardW));
+    const nbrLeft = Math.min(...nbr.map((p) => p.x));
+    expect(nbrLeft).toBeGreaterThanOrEqual(bigRight); // no horizontal overlap
   });
 
   it('wraps pile anchors to a new row past PILE.perRow', () => {
@@ -71,7 +87,8 @@ describe('pileLayout — anchors', () => {
     const first = m.get('g0-c0')!;
     const wrapped = m.get(`g${PILE.perRow}-c0`)!; // first pile on row 2
     expect(wrapped.y).toBeGreaterThan(first.y);
-    expect(wrapped.x).toBe(first.x); // restarts at the left edge
+    // Restarts near the left edge (within the per-pile anchor jitter).
+    expect(Math.abs(wrapped.x - first.x)).toBeLessThanOrEqual(2 * PILE.anchorJitter + GRID);
   });
 
   it('snaps every position to the grid', () => {

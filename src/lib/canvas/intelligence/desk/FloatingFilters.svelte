@@ -19,12 +19,18 @@
     onfilter,
     groupBy = 'similarity',
     ongroupby = (_d: GroupDim) => {},
+    autoArrange = true,
+    onautoarrange = (_v: boolean) => {},
+    onarrangenow = () => {},
   }: {
     filters: { source: boolean; fact: boolean; entity: boolean; counterfactual: boolean };
     counts: { sources: number; facts: number; entities: number; counterfactuals: number };
     onfilter: (key: FilterKey, value: boolean) => void;
     groupBy?: GroupDim;
     ongroupby?: (dim: GroupDim) => void;
+    autoArrange?: boolean;
+    onautoarrange?: (value: boolean) => void;
+    onarrangenow?: () => void;
   } = $props();
 
   const filterDefs: { key: FilterKey; label: string; swatch: string; countKey: keyof typeof counts }[] = [
@@ -81,6 +87,33 @@
         <option value={d.value} title={d.hint}>{d.label}</option>
       {/each}
     </select>
+  </div>
+
+  <!-- Auto-arrange: continuous reflow toggle + one-shot tidy. -->
+  <div class="ff-group" role="group" aria-label="Arrange">
+    <span class="ff-group-label">ARRANGE</span>
+    <label class="ff-arrange-row" class:off={!autoArrange}>
+      <input
+        type="checkbox"
+        checked={autoArrange}
+        onchange={(e) => onautoarrange((e.currentTarget as HTMLInputElement).checked)}
+      />
+      <span class="ff-label">Auto-arrange</span>
+    </label>
+    <button
+      type="button"
+      class="ff-arrange-btn"
+      disabled={autoArrange}
+      title={autoArrange
+        ? 'Auto-arrange is on — the desk tidies itself as research streams in'
+        : 'Snap every card into its pile now'}
+      onclick={onarrangenow}
+    >
+      Arrange now
+    </button>
+    <span class="ff-arrange-hint">
+      {autoArrange ? 'Tidies live as research streams in.' : 'Frozen — drag freely; tap to tidy.'}
+    </span>
   </div>
 </div>
 
@@ -161,5 +194,45 @@
     border-color: var(--accent);
     color: var(--accent);
     outline: none;
+  }
+
+  .ff-arrange-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .ff-arrange-row.off { color: var(--text-ghost); }
+  .ff-arrange-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 5px 8px;
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
+    cursor: pointer;
+    text-align: left;
+  }
+  .ff-arrange-btn:hover:not(:disabled),
+  .ff-arrange-btn:focus-visible:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    outline: none;
+  }
+  .ff-arrange-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+  }
+  .ff-arrange-hint {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.3;
+    color: var(--text-ghost);
   }
 </style>

@@ -55,6 +55,17 @@ export function hashId(id: string): number {
 }
 
 /**
+ * Deterministic signed jitter in the closed range [-range, +range] from a string
+ * seed (reuses hashId). Returns 0 when range ≤ 0. Stable across processes/reloads
+ * so a jittered desk is layout-stable (no Date/Math.random).
+ */
+export function jitter(seed: string, range: number): number {
+  if (range <= 0) return 0;
+  const span = 2 * range + 1;
+  return (hashId(seed) % span) - range;
+}
+
+/**
  * Phase band geometry for GATHER scatter. Bands run left→right across the
  * desk; each phase owns one band. Card footprint (cardW/cardH) is reserved
  * inside every band so the *body* of a card never crosses a band boundary,
@@ -329,13 +340,21 @@ export const PILE = {
   /** Card box — kept in sync with the desk card footprint. */
   cardW: CARD_W,
   cardH: CARD_H,
-  /** Horizontal distance between pile anchor columns.
-   *  Must be ≥ max fanned pile width: (fanWrapAt-1)*fanDx + cardW = 7*26 + 220 = 402 px.
-   *  Set to 420 so an 8-member fan (right edge ≈ 402 px) doesn't bleed into the
-   *  adjacent pile's card body. */
-  colStride: 420,
-  /** Vertical distance between pile anchor rows (≥ a fanned pile's height). */
-  pileRowStride: 420,
+  /** Nominal pile-column width, used only to budget a row before it wraps
+   *  (perRow × colStride). Anchors are NOT placed on a fixed colStride grid — they
+   *  flow left→right by each pile's ACTUAL footprint width (see pileFootprint), so
+   *  a wide multi-fan-column pile can never overlap its neighbour. */
+  colStride: 460,
+  /** Minimum vertical distance between pile anchor rows (rows actually advance by
+   *  the tallest pile in the row, but never less than this). */
+  pileRowStride: 460,
+  /** Gap (px) left between one pile's footprint and the next, both horizontally
+   *  (between anchors in a row) and vertically (between rows). */
+  pileGap: 90,
+  /** Max signed offset (px) applied to each pile's anchor, seeded by group key, so
+   *  the piles read as a hand-strewn desk rather than a rigid grid. Smaller than
+   *  pileGap so a jittered pile can never bleed into its neighbour. */
+  anchorJitter: 22,
   /** Piles per row before wrapping to the next anchor row. */
   perRow: 5,
   /** Fan offset applied per member in a collapsed pile.
@@ -351,6 +370,28 @@ export const PILE = {
   /** Vertical stride between members of an EXPANDED pile's column (row 0 = anchor). */
   rowStride: 160,
 } as const;
+
+/**
+ * Pixel footprint (width × height) of a pile with `n` members, in its collapsed
+ * fan or expanded column form. The width is what the anchor packer advances by,
+ * so a wide pile never overlaps its neighbour.
+ *
+ * Collapsed fan: members wrap into ceil(n / fanWrapAt) columns; the widest
+ * column has min(n, fanWrapAt) members. Width spans the rightmost card edge;
+ * height spans the tallest column.
+ * Expanded: a single vertical column, cardW wide, n cards tall.
+ */
+export function pileFootprint(n: number, expanded: boolean): { w: number; h: number } {
+  const count = Math.max(1, n);
+  if (expanded) {
+    return { w: PILE.cardW, h: (count - 1) * PILE.rowStride + PILE.cardH };
+  }
+  const fanCols = Math.ceil(count / PILE.fanWrapAt);
+  const widestColRows = Math.min(count, PILE.fanWrapAt);
+  const w = (fanCols - 1) * PILE.fanColStride + (widestColRows - 1) * PILE.fanDx + PILE.cardW;
+  const h = (widestColRows - 1) * PILE.fanDy + PILE.cardH;
+  return { w, h };
+}
 
 /**
  * Place every grouped card into a pile.
@@ -369,28 +410,56 @@ export function pileLayout(
   cards: GroupCard[],
   expanded: Set<string>,
 ): Map<string, Pos> {
-  // Anchor (top-left of the i=0 member) for each group, in groups[] order.
-  const anchorOf = new Map<string, Pos>();
-  groups.forEach((g, gi) => {
-    const col = gi % PILE.perRow;
-    const row = Math.floor(gi / PILE.perRow);
-    anchorOf.set(g.key, {
-      x: snap(PILE.originX + col * PILE.colStride),
-      y: snap(PILE.originY + row * PILE.pileRowStride),
-    });
-  });
-
   // Bucket member cards per group, preserving input order (stable stacking).
   const membersByGroup = new Map<string, string[]>();
+  const groupKeys = new Set(groups.map((g) => g.key));
   for (const c of cards) {
     const key = memberOf.get(c.id);
-    if (key === undefined || !anchorOf.has(key)) continue; // orphan — skip
+    if (key === undefined || !groupKeys.has(key)) continue; // orphan — skip
     let arr = membersByGroup.get(key);
     if (!arr) {
       arr = [];
       membersByGroup.set(key, arr);
     }
     arr.push(c.id);
+  }
+
+  // Anchor (top-left of the i=0 member) for each group. Piles FLOW left→right by
+  // their actual footprint width (so a wide multi-fan-column pile never overlaps
+  // its neighbour), wrapping to a new row after PILE.perRow piles OR when the row
+  // would exceed its width budget. Each row advances vertically by the tallest
+  // pile in the previous row. A small per-pile wobble (seeded by group key) keeps
+  // it from reading as a rigid grid.
+  const anchorOf = new Map<string, Pos>();
+  const rowBudget = PILE.perRow * PILE.colStride;
+  let cursorX = PILE.originX;
+  let rowTop = PILE.originY;
+  let rowMaxH = 0;
+  let placedInRow = 0;
+  for (const g of groups) {
+    const n = membersByGroup.get(g.key)?.length ?? 0;
+    if (n === 0) continue;
+    // Pack by the COLLAPSED footprint regardless of expand state, so expanding a
+    // pile only spreads its own cards downward — it never reshuffles the anchors
+    // of neighbouring piles (an expanded pile overflows into the space below it).
+    const fp = pileFootprint(n, false);
+    // Wrap to a new row past perRow piles, or if this pile would overflow the row
+    // budget — but always place at least one pile per row.
+    if (placedInRow > 0 && (placedInRow >= PILE.perRow || cursorX + fp.w > PILE.originX + rowBudget)) {
+      cursorX = PILE.originX;
+      // Advance by the tallest pile in the row (+ gap), but never less than the
+      // nominal row stride so rows keep a consistent rhythm.
+      rowTop += Math.max(rowMaxH + PILE.pileGap, PILE.pileRowStride);
+      rowMaxH = 0;
+      placedInRow = 0;
+    }
+    anchorOf.set(g.key, {
+      x: snap(cursorX + jitter(g.key + '\x01', PILE.anchorJitter)),
+      y: snap(rowTop + jitter(g.key + '\x02', PILE.anchorJitter)),
+    });
+    cursorX += fp.w + PILE.pileGap;
+    if (fp.h > rowMaxH) rowMaxH = fp.h;
+    placedInRow++;
   }
 
   const out = new Map<string, Pos>();
@@ -407,7 +476,10 @@ export function pileLayout(
       } else {
         // Collapsed fan: every member gets a unique offset so a slice of each
         // card is always visible. Large piles wrap into a second fan column
-        // rather than stacking any cards on top of each other.
+        // rather than stacking any cards on top of each other. The fan stays a
+        // clean linear offset (NO per-card positional jitter) so the
+        // "no hidden cards" guarantee holds exactly; the strewn-desk feel comes
+        // from the per-pile anchor wobble above + the per-card tilt in the view.
         const fanCol = Math.floor(i / PILE.fanWrapAt);
         const fanRow = i % PILE.fanWrapAt;
         out.set(id, {
