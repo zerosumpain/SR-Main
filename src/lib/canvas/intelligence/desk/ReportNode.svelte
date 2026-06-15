@@ -1,5 +1,6 @@
 <!-- src/lib/canvas/intelligence/desk/ReportNode.svelte -->
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { buildReportView, type DeskCardLite, type ReportView } from './report-view';
   import { type DeskStatus } from './deskControls';
   import type { ResearchReport } from '$lib/deepdive/types';
@@ -22,17 +23,30 @@
   let loadState = $state<LoadState>('loading');
   let report = $state.raw<ResearchReport | null>(null);
   let regenerating = $state(false);
-  // Snapshot of sessionStatus at the moment regenerate fires, so the $effect can
-  // detect a *transition* into 'complete' (not a node mounted while already complete).
-  let prevStatus = $state<DeskStatus>(sessionStatus);
 
   // Pure view-model: recomputes when the report json or the joined cards change.
   const view = $derived<ReportView>(buildReportView(report, cards));
 
+  // Plain (non-$state) handles — never read inside a $effect.
+  let loadController: AbortController | null = null;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function stopPoll() {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
   async function load() {
+    // Abort any previous in-flight load.
+    loadController?.abort();
+    loadController = new AbortController();
+    const signal = loadController.signal;
+
     loadState = 'loading';
     try {
-      const res = await fetch(`/api/deepdive/${sessionId}/report`);
+      const res = await fetch(`/api/deepdive/${sessionId}/report`, { signal });
       if (!res.ok) {
         loadState = 'error';
         return;
@@ -41,6 +55,7 @@
       report = body.report ?? null;
       loadState = 'ready';
     } catch (err) {
+      if ((err as { name?: string }).name === 'AbortError') return;
       console.error('[report-node] load error', err);
       loadState = 'error';
     }
@@ -48,36 +63,70 @@
 
   async function regenerate() {
     if (!canRegenerate || regenerating) return;
+
+    // Snapshot the current report for change detection.
+    const before = JSON.stringify(report);
+
     regenerating = true;
-    prevStatus = sessionStatus;
+
     try {
-      // Fire-and-forget: the endpoint returns 202 and runs runPostProcessing
-      // in the background. We poll for completion via sessionStatus (below).
       await fetch(`/api/deepdive/${sessionId}/report/regenerate`, { method: 'POST' });
     } catch (err) {
       console.error('[report-node] regenerate error', err);
       regenerating = false;
+      return;
     }
-  }
 
-  // When a regenerate is in flight and the worker SSE status transitions INTO
-  // 'complete', refetch the now-fresh report and clear the regenerating flag.
-  $effect(() => {
-    const status = sessionStatus;
-    const wasRegenerating = regenerating;
-    const previous = prevStatus;
-    // untracked bookkeeping is fine: we only act on a rising edge into complete.
-    if (status !== previous) {
-      if (wasRegenerating && status === 'complete') {
-        regenerating = false;
-        load();
+    // Poll GET /report every 4s until the content changes (or ~90s cap).
+    const MAX_POLLS = 22;
+    let polls = 0;
+
+    stopPoll(); // Guard against overlapping polls.
+
+    async function poll() {
+      polls += 1;
+      const isCap = polls >= MAX_POLLS;
+
+      try {
+        const res = await fetch(`/api/deepdive/${sessionId}/report`);
+        if (res.ok) {
+          const body = (await res.json()) as { report: ResearchReport | null };
+          const fetched = body.report ?? null;
+          if (fetched !== null && JSON.stringify(fetched) !== before) {
+            // Report changed — update and stop.
+            report = fetched;
+            regenerating = false;
+            stopPoll();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[report-node] poll error', err);
       }
-      prevStatus = status;
+
+      if (isCap) {
+        // Best-effort: accept whatever is there and stop.
+        console.warn('[report-node] poll cap reached — clearing spinner');
+        regenerating = false;
+        stopPoll();
+        // One final load to make sure the UI reflects the latest state.
+        load();
+        return;
+      }
+
+      pollTimer = setTimeout(poll, 4_000);
     }
-  });
+
+    pollTimer = setTimeout(poll, 4_000);
+  }
 
   $effect(() => {
     load();
+  });
+
+  onDestroy(() => {
+    loadController?.abort();
+    stopPoll();
   });
 
   // ——— expand / collapse the whole preview body ———
