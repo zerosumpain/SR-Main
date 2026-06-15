@@ -9,7 +9,7 @@ import {
   relationships,
   entityMentions,
 } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 /**
  * GET /api/deepdive/[id]/data
@@ -77,7 +77,7 @@ export const GET: RequestHandler = async ({ params }) => {
         factId: entityMentions.factId,
       })
       .from(entityMentions)
-      .where(eq(entityMentions.sessionId, params.id)),
+      .where(sql`${entityMentions.factId} IN (SELECT id FROM fact WHERE session_id = ${params.id})`),
   ]);
 
   return json({

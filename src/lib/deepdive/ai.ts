@@ -219,7 +219,9 @@ async function runStream(
   resetIdleTimer();
 
   try {
-    const stream = await client.chat.completions.create(
+    // The `thinking` field is z.ai-proprietary; cast to any to bypass SDK types,
+    // then re-cast the result as the streaming type so the for-await loop is typed.
+    const stream = (await (client.chat.completions.create as any)(
       {
         model,
         messages,
@@ -227,9 +229,9 @@ async function runStream(
         max_tokens: opts.maxTokens,
         stream: true,
         ...(opts.disableThinking ? { thinking: { type: 'disabled' } } : {}),
-      } as any,
+      },
       { signal: idleAc.signal as any },
-    );
+    )) as AsyncIterable<import('openai/resources').ChatCompletionChunk>;
 
     let text = '';
     let tokensUsed = 0;

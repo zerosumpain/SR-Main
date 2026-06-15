@@ -19,7 +19,7 @@ vi.mock('$lib/db/schema', () => ({
   entityMentions: { __t: 'entityMentions', entityId: {}, factId: {}, sessionId: {} },
 }));
 
-vi.mock('drizzle-orm', () => ({ eq: (..._a: any[]) => ({}) }));
+vi.mock('drizzle-orm', () => ({ eq: (..._a: any[]) => ({}), sql: (_s: TemplateStringsArray, ..._v: any[]) => ({}) }));
 
 vi.mock('$lib/db', () => {
   function rowsFor(table: any) {

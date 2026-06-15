@@ -462,3 +462,131 @@ export async function generateNarrativeReport(
     filename: `narrative-${slug}-${dateStr}.docx`,
   };
 }
+
+export async function generateReportMarkdown(sessionId: string): Promise<string> {
+  const [session] = await db
+    .select()
+    .from(researchSessions)
+    .where(eq(researchSessions.id, sessionId));
+
+  if (!session) throw new Error('Session not found');
+
+  const report = session.report as ResearchReport | null;
+  if (!report) throw new Error('Report not yet generated');
+
+  const allFacts = await db.select().from(facts).where(eq(facts.sessionId, sessionId));
+  const allEntities = await db.select().from(entities).where(eq(entities.sessionId, sessionId));
+  const allSources = await db.select().from(sources).where(eq(sources.sessionId, sessionId));
+
+  const factMap = new Map(allFacts.map((f) => [f.id, f]));
+  const sourceMap = new Map(allSources.map((s) => [s.id, s]));
+  const entityCentrality = report.entity_centrality ?? {};
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const nonCfFacts = allFacts.filter((f) => !f.isCounterfactual);
+
+  const lines: string[] = [];
+  lines.push(`# ${session.topic}`);
+  lines.push('');
+  lines.push('*Deep Dive Research Report*');
+  lines.push(`*Generated ${dateStr} — Facts: ${nonCfFacts.length} | Entities: ${allEntities.length} | Sources: ${allSources.length}*`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Executive summary
+  lines.push('## Executive Summary');
+  lines.push('');
+  for (const para of (report.executive_summary || '').split('\n\n')) {
+    if (para.trim()) {
+      lines.push(para.trim());
+      lines.push('');
+    }
+  }
+
+  // Topic clusters
+  for (const cluster of report.clusters ?? []) {
+    lines.push(`## ${cluster.title}`);
+    lines.push('');
+    if (cluster.summary) {
+      lines.push(cluster.summary);
+      lines.push('');
+    }
+    lines.push('### Key Findings');
+    lines.push('');
+    for (const factId of cluster.fact_ids ?? []) {
+      const fact = factMap.get(factId);
+      if (!fact) continue;
+      const src = fact.sourceId ? sourceMap.get(fact.sourceId) : undefined;
+      const cite = src ? ` ([${src.title ?? src.domain ?? 'source'}](${src.url}))` : '';
+      lines.push(`- ${fact.content} *(confidence: ${fact.confidence.toFixed(2)})*${cite}`);
+    }
+    lines.push('');
+  }
+
+  // Key entities (top 50 by centrality)
+  const sortedEntities = [...allEntities].sort(
+    (a, b) => (entityCentrality[b.id] ?? 0) - (entityCentrality[a.id] ?? 0),
+  );
+  if (sortedEntities.length > 0) {
+    lines.push('## Key Entities');
+    lines.push('');
+    lines.push('| Name | Type | Centrality |');
+    lines.push('| --- | --- | --- |');
+    for (const e of sortedEntities.slice(0, 50)) {
+      lines.push(`| ${e.name} | ${e.type} | ${(entityCentrality[e.id] ?? 0).toFixed(2)} |`);
+    }
+    lines.push('');
+  }
+
+  // Knowledge gaps
+  if (report.knowledge_gaps && report.knowledge_gaps.length > 0) {
+    lines.push('## Knowledge Gaps');
+    lines.push('');
+    for (const g of report.knowledge_gaps) {
+      lines.push(`- **[${g.severity}]** (${g.type}) ${g.gap}`);
+    }
+    lines.push('');
+  }
+
+  // Hypotheses
+  if (report.hypotheses && report.hypotheses.length > 0) {
+    lines.push('## Hypotheses');
+    lines.push('');
+    for (const h of report.hypotheses) {
+      lines.push(`- ${h.hypothesis} *(testability: ${h.testability})*`);
+    }
+    lines.push('');
+  }
+
+  // Follow-up suggestions
+  if (report.suggested_followups && report.suggested_followups.length > 0) {
+    lines.push('## Suggested Follow-ups');
+    lines.push('');
+    for (const f of report.suggested_followups) {
+      lines.push(`- **${f.question}** — ${f.context}`);
+    }
+    lines.push('');
+  }
+
+  // Source diversity
+  if (report.source_diversity) {
+    const sd = report.source_diversity;
+    lines.push('## Source Diversity');
+    lines.push('');
+    lines.push(`- Distinct domains: ${sd.total_domains}`);
+    lines.push(`- Concentration index: ${sd.concentration_index}`);
+    lines.push('');
+  }
+
+  // Sources
+  if (allSources.length > 0) {
+    lines.push('## Sources');
+    lines.push('');
+    allSources.forEach((s, i) => {
+      lines.push(`${i + 1}. [${s.title ?? 'Untitled'}](${s.url}) — ${s.domain ?? 'unknown'} (Phase ${s.phase})`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
