@@ -16,6 +16,8 @@ export type NodeKind =
   | 'intelligence'
   | 'webpage'
   | 'builder'
+  | 'research-chat'
+  | 'research-report'
   | 'postit'
   | 'annotation';
 export type NodeStatus = 'idle' | 'running' | 'ok' | 'failed';
@@ -393,6 +395,30 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     handles: {
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
+    },
+  },
+  {
+    type: 'research-chat',
+    label: 'Research Chat',
+    kind: 'research-chat',
+    group: 'Intelligence',
+    description: 'Chat grounded in this research session — answers cite the session\'s facts and sources.',
+    defaultConfig: { size: { w: 380, h: 460 } },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
+    },
+  },
+  {
+    type: 'research-report',
+    label: 'Research Report',
+    kind: 'research-report',
+    group: 'Intelligence',
+    description: 'Expandable report preview for this session, with regenerate + docx/markdown export.',
+    defaultConfig: { size: { w: 420, h: 520 } },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'research-result', 'intel-session'] }],
+      outputs: [{ id: 'out', kinds: ['text'] }],
     },
   },
 
@@ -997,6 +1023,8 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'text-parser' || type === 'validator') return 'parse';
   if (type === 'intel-write' || type === 'intel-query' || type === 'deep-dive') return 'intel';
   if (type === 'intelligence' || type === 'research-result') return 'intelligence';
+  if (type === 'research-chat') return 'research-chat';
+  if (type === 'research-report') return 'research-report';
   if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
   if (type === 'webpage') return 'webpage';
