@@ -9,6 +9,7 @@ import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
 import { loadKeys } from './keys';
+import { pLimit, getLlmConcurrencyLimit } from './concurrency';
 import type { SessionConfig, SessionStats } from './types';
 
 function normalise(text: string): string {
@@ -73,6 +74,13 @@ export async function runPhase2(
   const depth = config.analysisDepth ?? 'standard';
   const goals = (session.goals ?? []) as string[];
 
+  // Concurrency limiter: cap how many sources are processed in parallel to
+  // avoid saturating z.ai with bursts of simultaneous LLM calls.
+  // Each source fires up to 3 LLM calls (facts, NER, relationships).
+  // Default 3 → ≤9 in-flight LLM calls at any time. Override via
+  // DEEPDIVE_LLM_CONCURRENCY env var.
+  const concurrencyLimit = pLimit(getLlmConcurrencyLimit());
+
   const systemPrompt = `You are a research analyst. Topic: "${session.topic}"\nGoals: ${goals.join('; ')}`;
 
   // Get all phase 1 sources
@@ -97,7 +105,9 @@ export async function runPhase2(
     if (isTimeUp()) break;
 
     const batch = allSources.slice(i, i + 8);
-    const batchPromises = batch.map((source) => processSource(source));
+    // Wrap each processSource call with the concurrency limiter so at most
+    // DEEPDIVE_LLM_CONCURRENCY sources are analysed simultaneously.
+    const batchPromises = batch.map((source) => concurrencyLimit(() => processSource(source)));
 
     const results = await Promise.allSettled(batchPromises);
     for (const result of results) {
