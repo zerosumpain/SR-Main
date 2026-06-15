@@ -11,6 +11,7 @@ export interface DeepDiveKeys {
   zaiModel?: string;
   tavilyApiKey?: string;
   openrouterApiKey?: string;
+  openrouterFallbackModel?: string;
   embeddingModel?: string;
   elevenlabsApiKey?: string;
 }
@@ -34,6 +35,7 @@ export function loadKeys(): DeepDiveKeys {
     zaiModel: fileKeys.zaiModel ?? env.ZAI_MODEL,
     tavilyApiKey: fileKeys.tavilyApiKey ?? env.TAVILY_API_KEY,
     openrouterApiKey: fileKeys.openrouterApiKey ?? env.OPENROUTER_API_KEY,
+    openrouterFallbackModel: fileKeys.openrouterFallbackModel ?? env.OPENROUTER_FALLBACK_MODEL,
     embeddingModel: fileKeys.embeddingModel ?? env.EMBEDDING_MODEL,
     elevenlabsApiKey: fileKeys.elevenlabsApiKey ?? env.ELEVENLABS_API_KEY,
   };
@@ -78,6 +80,16 @@ export function getOpenRouterClient(): OpenAI {
 export function getEmbeddingModel(): string {
   const keys = loadKeys();
   return keys.embeddingModel || 'openai/text-embedding-3-small';
+}
+
+/** Returns the OpenRouter model to use as a rate-limit fallback for z.ai calls. */
+export function getFallbackModel(): string {
+  return loadKeys().openrouterFallbackModel || 'anthropic/claude-3-5-haiku';
+}
+
+/** True when an OpenRouter API key is configured (fallback is available). */
+export function hasOpenRouter(): boolean {
+  return !!loadKeys().openrouterApiKey;
 }
 
 export function getKeysStatus(): {
