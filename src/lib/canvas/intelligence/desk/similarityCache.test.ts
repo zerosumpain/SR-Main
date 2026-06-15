@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createSimilarityCache } from './similarityCache';
 
 function fakeFetch(payload: unknown, status = 200) {
-  return vi.fn(async () =>
+  return vi.fn(async (_input: RequestInfo | URL) =>
     ({ ok: status < 400, status, json: async () => payload }) as unknown as Response,
   );
 }
@@ -21,7 +21,7 @@ describe('createSimilarityCache', () => {
     expect(map.get('f1')).toBe('c0');
     expect(map.get('f3')).toBe('c1');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect((fetchImpl.mock.calls[0][0] as string)).toContain('/api/deepdive/sess1/clusters?by=similarity');
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('/api/deepdive/sess1/clusters?by=similarity');
   });
 
   it('caches by fact-count: same count → no refetch, new count → refetch', async () => {

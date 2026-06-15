@@ -1,6 +1,6 @@
 <!-- src/lib/canvas/intelligence/ResearchDesk.svelte -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import { byType as byNodeType, mapTypeToKind, type NodeKind } from '$lib/canvas/adapter';
   import ArtefactCard from './desk/ArtefactCard.svelte';
@@ -16,18 +16,17 @@
   import ReportNode from './desk/ReportNode.svelte';
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
-    organisedLayout,
-    organisedCorePxBounds,
+    pileLayout,
     COL_W,
     ORG,
     SYNTHESIS_ZONE_ORIGIN,
     SYNTHESIS_ZONE_GAP,
     BAND,
-    type LayoutArtefact,
-    type LayoutCategory,
+    type Pos,
   } from './desk/layout';
   import { effectivePosition, type DeskMode } from './desk/positioning';
-  import { themeLayout, themeHeaders, type ThemeArtefact } from './desk/themes';
+  import { groupBy as computeGroups, type GroupDim } from './desk/grouping';
+  import { createSimilarityCache } from './desk/similarityCache';
   import { persistArtefactPosition } from './desk/persist-position';
   import { isRunning, type DeskStatus } from './desk/deskControls';
   import { samePos } from './desk/samePos';
@@ -101,16 +100,41 @@
   let synthesizing = $state(false); // POST in flight (debounce double-clicks)
   let everSynthesized = $state(false);
 
-  // ——— Arrange by theme ———
-  // 'off'  → cards follow the active mode (gather scatter / synthesize organised).
-  // 'once' → a one-shot snapshot: cards present at click time animate into theme
-  //          groups; later arrivals fall through to normal positions.
-  // 'live' → cards are continuously kept arranged by theme as new ones arrive.
-  // (Derivations that read visibleCards/dragOverrides live further down, after
-  //  those are declared.)
-  let arrange = $state<'off' | 'once' | 'live'>('off');
-  // The frozen one-shot layout. $state.raw — replaced wholesale, never mutated.
-  let themeSnapshot = $state.raw<Map<string, { x: number; y: number }>>(new Map());
+  // ——— Group-by (pile) state ———
+  // The active grouping dimension. Defaults to 'similarity' on first synthesize
+  // (set in goSynthesize); 'cluster' is the resting value before synthesis.
+  let groupDim = $state<GroupDim>('cluster');
+
+  // Expanded pile keys. A pile is collapsed (fanned stack) unless its group key
+  // is in this set; expanding spreads members into a column (animated via morphIds).
+  let expandedPiles = $state.raw<Set<string>>(new Set());
+
+  // Resolved similarity clusters: factId -> clusterId. Fetched lazily, once per
+  // fact-count, only while groupDim === 'similarity'.
+  const similarityCache = createSimilarityCache(sessionId);
+  let similarityMap = $state.raw<Map<string, string>>(new Map());
+
+  // Lazily load similarity clusters when that dimension is active. Keyed on the
+  // current fact count (store.synthFactCount when set, else the live fact tally)
+  // so a changed fact set triggers a single refetch. The cache dedupes/coalesces.
+  const factCountForSim = $derived.by(() => {
+    const sc = store.synthFactCount;
+    if (sc && sc > 0) return sc;
+    let n = 0;
+    for (const c of store.cards) if (c.kind === 'fact') n++;
+    return n;
+  });
+  $effect(() => {
+    const dim = groupDim;
+    const count = factCountForSim;
+    if (dim !== 'similarity') return;
+    let cancelled = false;
+    similarityCache.get(count).then((m) => {
+      if (cancelled) return;
+      untrack(() => { similarityMap = m; });
+    });
+    return () => { cancelled = true; };
+  });
 
   function goGather() {
     mode = 'gather';
@@ -130,6 +154,7 @@
         body: JSON.stringify({ scope: { pinnedOnly: false } }),
       });
       if (res.ok) {
+        if (!everSynthesized) groupDim = 'similarity';
         everSynthesized = true;
       } else {
         console.error('[desk] synthesize POST failed', res.status);
@@ -263,8 +288,8 @@
   let dragOverrides = $state.raw<Record<string, { x: number; y: number }>>({});
 
   // Categories: live reducer categories merged with any persisted deskCategory
-  const categories = $derived.by<LayoutCategory[]>(() => {
-    const map = new Map<string, LayoutCategory>();
+  const categories = $derived.by<{ id: string; title: string }[]>(() => {
+    const map = new Map<string, { id: string; title: string }>();
     for (const c of store.synthCategories) map.set(c.id, { id: c.id, title: c.title });
     for (const cl of store.clusters) {
       if (!map.has(cl.id)) map.set(cl.id, { id: cl.id, title: cl.title });
@@ -284,23 +309,56 @@
     return m;
   });
 
-  // Organised positions
-  const organised = $derived.by(() => {
-    const arts: LayoutArtefact[] = store.cards.map((c) => ({
+  // ——— grouping → pile positions ———
+  // memberOf: cardId -> groupKey; groups: ordered {key,label,count}.
+  // Pure: a single O(N) pass per flush, funnelled into positionById below.
+  const grouping = $derived.by(() => {
+    const cards = visibleCards.map((c) => ({
       id: c.id,
       kind: c.kind,
-      categoryId: c.deskCategory ?? factCat.get(c.id),
+      deskCategory: c.deskCategory ?? factCat.get(c.id) ?? null,
+      fields: c.fields,
     }));
-    return organisedLayout(arts, categories);
+    const edges = store.edges.map((e) => ({
+      id: e.id,
+      fromEntityId: e.fromEntityId,
+      toEntityId: e.toEntityId,
+      sentiment: e.sentiment ?? null,
+    }));
+    const mentions = store.entityMentions.map((m) => ({
+      entityId: m.entityId,
+      factId: m.factId,
+    }));
+    return computeGroups(groupDim, cards, edges, mentions, similarityMap);
   });
-  const coreBounds = $derived(organisedCorePxBounds(organised));
 
-  // Per-category member counts
-  const categoryCounts = $derived.by<Record<string, number>>(() => {
-    const out: Record<string, number> = {};
-    for (const c of store.cards) {
-      const cat = c.deskCategory ?? factCat.get(c.id);
-      if (cat) out[cat] = (out[cat] ?? 0) + 1;
+  // Pile anchor + fanned-stack / expanded-column positions for EVERY visible
+  // card. Replaces organisedLayout + themeLayout — one packer, one map.
+  const pilePositions = $derived.by<Map<string, Pos>>(() => {
+    const cards = visibleCards.map((c) => ({ id: c.id, kind: c.kind }));
+    return pileLayout(grouping.groups, grouping.memberOf, cards, expandedPiles);
+  });
+
+  // Per-group anchor (top-left of the first member's pile) for header hosts.
+  // Derived from pilePositions so labels sit exactly over their stack.
+  const pileHeaders = $derived.by(() => {
+    const out: { key: string; label: string; count: number; pos: Pos }[] = [];
+    const seen = new Set<string>();
+    // Walk groups in their packed order; the anchor is the min-x,min-y of members.
+    const anchors = new Map<string, Pos>();
+    for (const c of visibleCards) {
+      const key = grouping.memberOf.get(c.id);
+      if (!key) continue;
+      const p = pilePositions.get(c.id);
+      if (!p) continue;
+      const a = anchors.get(key);
+      if (!a || p.y < a.y || (p.y === a.y && p.x < a.x)) anchors.set(key, p);
+    }
+    for (const g of grouping.groups) {
+      const a = anchors.get(g.key);
+      if (!a || seen.has(g.key)) continue;
+      seen.add(g.key);
+      out.push({ key: g.key, label: g.label, count: g.count, pos: a });
     }
     return out;
   });
@@ -369,81 +427,18 @@
     visibleCards.filter((c) => c.kind === 'entity'),
   );
 
-  // ——— Arrange by theme: derivations (state declared above) ———
-  // Cards eligible for theme arrangement: visible AND not pinned/manually placed.
-  // (Pinned/dragged cards keep their manual spot regardless of arrange mode.)
-  const arrangeableCards = $derived(
-    visibleCards.filter(
-      (c) => !c.pinned && c.canvasX == null && c.canvasY == null && !dragOverrides[c.id],
-    ),
-  );
-
-  // LIVE theme layout — recomputed reactively from the current arrangeable set so
-  // new arrivals join their theme group immediately. Only computed while live to
-  // avoid paying for it when arrange is off/once.
-  const liveThemeLayout = $derived.by<Map<string, { x: number; y: number }>>(() => {
-    if (arrange !== 'live') return new Map();
-    const arts: ThemeArtefact[] = arrangeableCards.map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      fields: c.fields,
-    }));
-    return themeLayout(arts);
-  });
-
-  // Theme cluster headers for the active arrangement (once|live). Empty when off.
-  const activeThemeHeaders = $derived.by(() => {
-    if (arrange === 'off') return [];
-    const source =
-      arrange === 'live'
-        ? arrangeableCards
-        : // 'once': describe the snapshot's membership so headers match the frozen
-          // layout (only cards captured at click time).
-          visibleCards.filter((c) => themeSnapshot.has(c.id));
-    const arts: ThemeArtefact[] = source.map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      fields: c.fields,
-    }));
-    return themeHeaders(arts);
-  });
-
-  // One-shot: freeze the current arrangeable cards into a theme layout.
-  function arrangeByThemeOnce() {
-    const arts: ThemeArtefact[] = arrangeableCards.map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      fields: c.fields,
-    }));
-    themeSnapshot = themeLayout(arts);
-    arrange = 'once';
-  }
-
-  // Continuous toggle: live ⇄ off.
-  function toggleKeepArranged() {
-    arrange = arrange === 'live' ? 'off' : 'live';
-  }
-
   function posOf(c: DeskCard): { x: number; y: number } {
-    // 1. Manual position ALWAYS wins, even with arrange active: an in-flight
-    //    drag override, or a pinned / user-dragged card (non-null canvasX/Y).
+    // 1. Manual position ALWAYS wins — in-flight drag override, or a pinned /
+    //    user-dragged card (non-null canvasX/Y).
     const ov = dragOverrides[c.id];
     if (ov) return ov;
-    const hasManualPos = c.canvasX != null && c.canvasY != null;
-    if (hasManualPos) {
+    if (c.canvasX != null && c.canvasY != null) {
       return { x: c.canvasX as number, y: c.canvasY as number };
     }
-    // 2. Theme arrangement overrides the gather/synthesize layout for cards it
-    //    covers. LIVE recomputes reactively; ONCE uses the frozen snapshot and
-    //    lets later (un-snapshotted) arrivals fall through to normal positions.
-    if (arrange === 'live') {
-      const tp = liveThemeLayout.get(c.id);
-      if (tp) return tp;
-    } else if (arrange === 'once') {
-      const tp = themeSnapshot.get(c.id);
-      if (tp) return tp;
-    }
-    // 3. Fall through to the existing gather/synthesize layout.
+    // 2. Pile position from the active grouping (collapsed fan or expanded column).
+    const pile = pilePositions.get(c.id);
+    if (pile) return pile;
+    // 3. Fallback (a card not covered by the packer): deterministic GATHER scatter.
     const filedByCluster = factCat.has(c.id);
     return effectivePosition(
       {
@@ -457,8 +452,8 @@
         deskCategory: c.deskCategory ?? factCat.get(c.id) ?? null,
       },
       mode,
-      organised,
-      coreBounds,
+      new Map(),
+      { minX: 0, minY: 0, maxX: 0, maxY: 0 },
     );
   }
 
@@ -533,9 +528,9 @@
   function anchorRect(anchorId: string): Box | null {
     if (anchorId.startsWith('cat:')) {
       const catId = anchorId.slice(4);
-      const idx = categories.findIndex((c) => c.id === catId);
-      if (idx < 0) return null;
-      return { x: ORG.originX + idx * COL_W, y: ORG.originY, w: 220, h: 64 };
+      const h = pileHeaders.find((ph) => ph.key === catId);
+      if (!h) return null;
+      return { x: h.pos.x, y: h.pos.y - 64, w: 220, h: 64 };
     }
     // Only produce a rect for cards that are currently visible.
     if (!visibleIds.has(anchorId)) return null;
@@ -1099,26 +1094,17 @@
                 id={cat.id}
                 title={cat.title}
                 summary={categorySummary[cat.id] ?? ''}
-                count={categoryCounts[cat.id] ?? 0}
+                count={grouping.groups.find((g) => g.key === cat.id)?.count ?? 0}
               />
             </div>
           {/each}
 
           {#if railEntities.length}
-            {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
+            {@const railY = pilePositions.get(railEntities[0].id)?.y ?? 0}
             <div class="desk-rail-host" style:transform="translate({ORG.originX}px, {railY}px)">
               <EntityRail count={railEntities.length} />
             </div>
           {/if}
-        {/if}
-
-        <!-- theme cluster headers (ARRANGE-BY-THEME only; once|live) -->
-        {#if arrange !== 'off'}
-          {#each activeThemeHeaders as th (th.key)}
-            <div class="desk-theme-host" style:transform="translate({th.pos.x}px, {th.pos.y}px)">
-              <ThemeHeader label={th.label} count={th.count} />
-            </div>
-          {/each}
         {/if}
 
         <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
