@@ -41,6 +41,10 @@ export const GET: RequestHandler = async ({ params }) => {
         refutesFactId: facts.refutesFactId,
         sourceId: facts.sourceId,
         tags: facts.tags,
+        canvasX: facts.canvasX,
+        canvasY: facts.canvasY,
+        pinned: facts.pinned,
+        deskState: facts.deskState,
         deskCategory: facts.deskCategory,
         synthesisRunId: facts.synthesisRunId,
       })
@@ -58,6 +62,11 @@ export const GET: RequestHandler = async ({ params }) => {
         category: sources.category,
         credibilityScore: sources.credibilityScore,
         credibilityType: sources.credibilityType,
+        canvasX: sources.canvasX,
+        canvasY: sources.canvasY,
+        pinned: sources.pinned,
+        deskState: sources.deskState,
+        deskCategory: sources.deskCategory,
       })
       .from(sources)
       .where(eq(sources.sessionId, params.id)),
