@@ -19,9 +19,15 @@
     canvasNodes: { type: string }[];
     onPick: (type: string) => void;
     onClose: () => void;
+    /**
+     * Optional allow-list of node `type`s. When provided, the palette only
+     * offers these types (used by the Research Desk to scope to the research
+     * node set). When omitted, all non-Annotation types are offered.
+     */
+    restrictTypes?: string[];
   };
 
-  let { open, anchor, mode, canvasNodes, onPick, onClose }: Props = $props();
+  let { open, anchor, mode, canvasNodes, onPick, onClose, restrictTypes }: Props = $props();
 
   let query = $state('');
   let activeIndex = $state(0);
@@ -32,6 +38,8 @@
       // Annotation primitives (post-it, annotation box) live on the canvas
       // toolbar, not in the DAG palette — they're inert decoration, not nodes.
       .filter((t) => t.group !== 'Annotations')
+      // Optional allow-list (Research Desk scopes to its research node set).
+      .filter((t) => !restrictTypes || restrictTypes.includes(t.type))
       .map((t) => ({
         type: t.type,
         handles: t.handles,

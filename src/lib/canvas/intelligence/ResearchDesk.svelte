@@ -966,6 +966,19 @@
       onpointerup={onPointerUp}
       onpointercancel={onPointerUp}
       onwheel={onWheel}
+      oncontextmenu={(e) => {
+        if (readonly || deskMode === 'quick') return;
+        const target = e.target as HTMLElement;
+        // Don't hijack right-clicks landing on a card or an existing desk node.
+        if (target.closest('.desk-card-host, .desk-node-host')) return;
+        e.preventDefault();
+        const world = screenToWorld(e.clientX, e.clientY);
+        openPalette({
+          anchor: { x: e.clientX, y: e.clientY },
+          mode: { kind: 'workflow-ranked' },
+          worldPosition: world,
+        });
+      }}
     >
       <!-- world layer -->
       <div class="desk-world" style:transform="translate({panX}px, {panY}px) scale({zoom})" style:transform-origin="0 0">
@@ -1081,6 +1094,34 @@
             </CardLiveWrapper>
           </div>
         {/each}
+
+        <!-- client-only desk nodes (research-chat / research-report) — placeholder
+             frames in M6; full renderers branch here in M7/M8. -->
+        {#each deskNodes as n (n.id)}
+          <div
+            class="desk-node-host"
+            class:is-selected={selectedNodeId === n.id}
+            style:transform="translate({n.x}px, {n.y}px)"
+            data-kind={n.kind}
+            role="button"
+            tabindex="0"
+            onpointerdown={(e) => { e.stopPropagation(); selectedNodeId = n.id; }}
+          >
+            <span class="desk-node-bar" style:background={n.kind === 'research-chat' ? 'var(--accent)' : '#7a6cd4'}></span>
+            <div class="desk-node-body">
+              {#if n.kind === 'research-chat'}
+                <span class="desk-node-label">Research Chat</span>
+                <span class="desk-node-hint">grounded chat · M7</span>
+              {:else if n.kind === 'research-report'}
+                <span class="desk-node-label">Research Report</span>
+                <span class="desk-node-hint">report preview · M8</span>
+              {:else}
+                <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
+                <span class="desk-node-hint">{n.type}</span>
+              {/if}
+            </div>
+          </div>
+        {/each}
       </div>
 
       <!-- view-locked floating filter box (sibling of the transformed world) -->
@@ -1145,6 +1186,16 @@
     onselect={(id) => openInspector(id)}
   />
 </div>
+
+<NodePalette
+  open={paletteOpen}
+  anchor={paletteAnchor}
+  mode={paletteMode}
+  canvasNodes={palettePickTypes}
+  restrictTypes={DESK_PALETTE_TYPES}
+  onPick={onPalettePick}
+  onClose={closePalette}
+/>
 
 <style>
   .desk-shell {
@@ -1369,5 +1420,48 @@
     will-change: transform;
     pointer-events: none;
     user-select: none;
+  }
+
+  .desk-node-host {
+    position: absolute;
+    top: 0;
+    left: 0;
+    min-width: 180px;
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-elevated);
+    border: 1.5px solid var(--card-border);
+    border-radius: 2px;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+  }
+  .desk-node-host.is-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+  }
+  .desk-node-bar {
+    width: 3px;
+    flex: 0 0 3px;
+  }
+  .desk-node-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+  .desk-node-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+  }
+  .desk-node-hint {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
   }
 </style>
