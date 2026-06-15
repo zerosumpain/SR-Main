@@ -674,6 +674,26 @@
     } catch { /* no-op */ }
   }
 
+  // ——— desk node context menu (right-click → Delete) ———
+  let nodeContextMenu = $state<{ nodeId: string; screenX: number; screenY: number } | null>(null);
+
+  function openNodeContextMenu(e: MouseEvent, n: DeskNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedNodeId = n.id;
+    nodeContextMenu = { nodeId: n.id, screenX: e.clientX, screenY: e.clientY };
+  }
+
+  function closeNodeContextMenu() {
+    nodeContextMenu = null;
+  }
+
+  function deleteNode(id: string) {
+    deskNodes = deskNodes.filter((n) => n.id !== id);
+    if (selectedNodeId === id) selectedNodeId = null;
+    closeNodeContextMenu();
+  }
+
   // Which node types the desk palette offers — scoped to the research set, not
   // the full workflow palette.
   const DESK_PALETTE_TYPES = [
@@ -822,6 +842,20 @@
     panY = 0;
     zoom = 1;
   }
+  // Delete/Backspace removes the currently-selected desk node.
+  // Guard: only fires when the active element is NOT an input/textarea so we
+  // don't eat keystrokes inside the research-chat node's text input.
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+    if (!selectedNodeId) return;
+    // Only delete desk nodes, not artefact cards.
+    if (!deskNodes.some((n) => n.id === selectedNodeId)) return;
+    e.preventDefault();
+    deleteNode(selectedNodeId);
+  }
+
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     return !!el.closest('.ac, .desk-minimap, button, a, input, textarea, select');
@@ -1021,7 +1055,7 @@
   });
 </script>
 
-<div class="desk-shell" class:embedded>
+<div class="desk-shell" class:embedded onkeydown={onKeyDown}>
   <CommandBar
     topic={topic || sessionId.slice(0, 8)}
     {sessionId}
@@ -1214,6 +1248,7 @@
             onpointermove={onDeskNodePointerMove}
             onpointerup={onDeskNodePointerUp}
             onpointercancel={onDeskNodePointerUp}
+            oncontextmenu={(e) => openNodeContextMenu(e, n)}
           >
             {#if n.kind === 'research-chat'}
               <ResearchChatNode
@@ -1303,6 +1338,29 @@
     onclose={() => (inspectorOpen = false)}
     onselect={(id) => openInspector(id)}
   />
+
+  <!-- Desk node context menu — rendered fixed so it escapes the world transform. -->
+  {#if nodeContextMenu}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="desk-node-ctx-backdrop"
+      onclick={closeNodeContextMenu}
+    ></div>
+    <div
+      class="desk-node-ctx"
+      style:left="{nodeContextMenu.screenX}px"
+      style:top="{nodeContextMenu.screenY}px"
+      role="menu"
+    >
+      <button
+        type="button"
+        class="desk-node-ctx-item desk-node-ctx-delete"
+        role="menuitem"
+        onclick={() => deleteNode(nodeContextMenu!.nodeId)}
+      >Delete</button>
+    </div>
+  {/if}
 </div>
 
 <NodePalette
@@ -1610,5 +1668,45 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
+  }
+
+  /* ——— desk node right-click context menu ——— */
+  .desk-node-ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: transparent;
+    cursor: default;
+  }
+  .desk-node-ctx {
+    position: fixed;
+    z-index: 9001;
+    background: var(--surface-elevated);
+    border: 1.5px solid var(--card-border);
+    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.12);
+    min-width: 120px;
+    padding: 2px 0;
+  }
+  .desk-node-ctx-item {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    background: transparent;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-primary);
+  }
+  .desk-node-ctx-item:hover {
+    background: var(--card-bg);
+  }
+  .desk-node-ctx-delete {
+    color: #c44;
+  }
+  .desk-node-ctx-delete:hover {
+    background: rgba(204, 68, 68, 0.08);
   }
 </style>
