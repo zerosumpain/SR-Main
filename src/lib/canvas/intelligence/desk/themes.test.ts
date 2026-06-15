@@ -5,10 +5,11 @@ import {
   themeHeaders,
   THEMES,
   THEME,
+  THEME_ZONE_ORIGIN,
   type ThemeArtefact,
   type ThemeKey,
 } from './themes';
-import { GRID } from './layout';
+import { GRID, BAND } from './layout';
 
 function src(id: string, domain?: string): ThemeArtefact {
   return { id, kind: 'source', fields: domain !== undefined ? { domain } : {} };
@@ -177,6 +178,26 @@ describe('themeLayout', () => {
     const m = themeLayout(cards);
     const xs = [...m.values()].map((p) => p.x);
     expect(Math.min(...xs)).toBe(THEME.originX);
+  });
+
+  it('lays out in its own zone, spatially distinct from the GATHER scatter region', () => {
+    // THEME.originX/originY anchor at THEME_ZONE_ORIGIN, which sits to the RIGHT
+    // of the 3 scatter bands — so arranged clusters never share the scatter's
+    // coordinate space (which starts at 0,0).
+    expect(THEME.originX).toBe(THEME_ZONE_ORIGIN.x);
+    expect(THEME.originY).toBe(THEME_ZONE_ORIGIN.y);
+    const scatterRightEdge = BAND.originX + 3 * BAND.width;
+    expect(THEME_ZONE_ORIGIN.x).toBeGreaterThan(scatterRightEdge);
+
+    // Every laid-out card lands at or past the zone origin (right of the scatter).
+    const m = themeLayout([fact('f1'), src('s1', 'example.com')]);
+    for (const p of m.values()) {
+      expect(p.x).toBeGreaterThanOrEqual(THEME_ZONE_ORIGIN.x);
+    }
+  });
+
+  it('uses a card height aligned with the real card box (132)', () => {
+    expect(THEME.cardH).toBe(132);
   });
 
   it('handles an empty input', () => {

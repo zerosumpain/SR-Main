@@ -8,7 +8,23 @@
 // no Date/Math.random: themeOf + themeLayout are pure functions of their inputs
 // so reloads and SSE reconnects are layout-stable.
 
-import { snap, GRID, type Pos } from './layout';
+import { snap, GRID, BAND, type Pos } from './layout';
+
+/**
+ * Top-left world-space origin of the THEME-ARRANGE zone (grid-snapped).
+ *
+ * Analogous to SYNTHESIS_ZONE_ORIGIN in ./layout: theme-arrange clusters lay
+ * out in their OWN spatially-distinct region rather than sharing the GATHER
+ * scatter's coordinate space (which starts at 0,0). Placing the theme zone to
+ * the RIGHT of the scatter bands (3 × BAND.width) with a generous gutter keeps
+ * arranged clusters visually separate from raw scatter, so the "Arrange by
+ * theme" view reads as a deliberate zone shift rather than an in-place reshuffle.
+ */
+export const THEME_ZONE_GAP = 320;
+export const THEME_ZONE_ORIGIN: Pos = {
+  x: snap(BAND.originX + 3 * BAND.width + THEME_ZONE_GAP),
+  y: snap(BAND.originY),
+};
 
 /** Canonical theme keys an artefact can be grouped under. */
 export type ThemeKey =
@@ -112,11 +128,13 @@ export function themeOf(card: ThemeArtefact): ThemeKey {
 // its full card grid plus a gutter so two themes never overlap.
 
 export const THEME = {
-  originX: 0,
-  originY: 0,
-  /** Card box (kept in sync with ArtefactCard.svelte / layout.CARD_W/H). */
+  /** Theme-arrange clusters anchor at THEME_ZONE_ORIGIN, a region distinct from
+   *  the GATHER scatter (which starts at 0,0) — see THEME_ZONE_ORIGIN above. */
+  originX: THEME_ZONE_ORIGIN.x,
+  originY: THEME_ZONE_ORIGIN.y,
+  /** Card box (kept in sync with ArtefactCard.svelte CARD_H = 132). */
   cardW: 240,
-  cardH: 140,
+  cardH: 132,
   /** Cards laid in a column within a theme before wrapping to the next column. */
   rowsPerCol: 6,
   /** Horizontal stride between card columns inside a theme block. */
