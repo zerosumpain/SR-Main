@@ -305,3 +305,107 @@ export function accumulationScatter(
   const y = coreBounds.minY + ((h >> 3) % span);
   return { x: snap(x), y: snap(y) };
 }
+
+// ——— PILE LAYOUT (Milestone 4) ———
+//
+// A grid of overlapping "piles". Each group from grouping.ts becomes one pile,
+// packed left→right (wrapping past PILE.perRow). A COLLAPSED pile is a fanned
+// stack: member i sits at anchor + i*{fanDx, fanDy} (snapped), capped at
+// maxVisible so members past the cap stack at the cap position (hidden behind
+// the visible fan; the desk renders a "+N" badge for them). An EXPANDED pile
+// spreads its members into a vertical column at the anchor (rowStride apart, no
+// cap). Pure + deterministic + grid-snapped. Manual/pinned overrides are NOT
+// applied here — posOf re-asserts those after this layout (priority unchanged).
+//
+// Imports are local to keep layout.ts free of a hard dependency cycle: grouping
+// imports themes (not layout), so layout may type-only import grouping safely.
+
+import type { Group, GroupCard } from './grouping';
+
+export const PILE = {
+  /** Top-left origin of the pile grid (reuses the synthesis zone origin). */
+  originX: SYNTHESIS_ZONE_ORIGIN.x,
+  originY: SYNTHESIS_ZONE_ORIGIN.y,
+  /** Card box — kept in sync with the desk card footprint. */
+  cardW: CARD_W,
+  cardH: CARD_H,
+  /** Horizontal distance between pile anchor columns (≥ a fanned pile's width). */
+  colStride: 320,
+  /** Vertical distance between pile anchor rows (≥ a fanned pile's height). */
+  pileRowStride: 360,
+  /** Piles per row before wrapping to the next anchor row. */
+  perRow: 5,
+  /** Fan offset applied per visible member in a collapsed pile. */
+  fanDx: 6,
+  fanDy: 8,
+  /** Max members rendered in the collapsed fan; the rest stack at the cap. */
+  maxVisible: 5,
+  /** Vertical stride between members of an EXPANDED pile's column (row 0 = anchor). */
+  rowStride: 160,
+} as const;
+
+/**
+ * Place every grouped card into a pile.
+ *
+ * @param groups       Ordered groups (drives left→right anchor packing).
+ * @param memberOf     cardId → groupKey (from grouping.ts).
+ * @param cards        All desk cards; only those whose memberOf key is a known
+ *                     group get a position (orphans are skipped).
+ * @param expanded     Set of group keys currently expanded (spread to a column);
+ *                     groups not in the set render as a collapsed fan.
+ * @returns            Map<cardId, Pos>, grid-snapped, deterministic.
+ */
+export function pileLayout(
+  groups: Group[],
+  memberOf: Map<string, string>,
+  cards: GroupCard[],
+  expanded: Set<string>,
+): Map<string, Pos> {
+  // Anchor (top-left of the i=0 member) for each group, in groups[] order.
+  const anchorOf = new Map<string, Pos>();
+  groups.forEach((g, gi) => {
+    const col = gi % PILE.perRow;
+    const row = Math.floor(gi / PILE.perRow);
+    anchorOf.set(g.key, {
+      x: snap(PILE.originX + col * PILE.colStride),
+      y: snap(PILE.originY + row * PILE.pileRowStride),
+    });
+  });
+
+  // Bucket member cards per group, preserving input order (stable stacking).
+  const membersByGroup = new Map<string, string[]>();
+  for (const c of cards) {
+    const key = memberOf.get(c.id);
+    if (key === undefined || !anchorOf.has(key)) continue; // orphan — skip
+    let arr = membersByGroup.get(key);
+    if (!arr) {
+      arr = [];
+      membersByGroup.set(key, arr);
+    }
+    arr.push(c.id);
+  }
+
+  const out = new Map<string, Pos>();
+  for (const [key, anchor] of anchorOf) {
+    const members = membersByGroup.get(key) ?? [];
+    const isExpanded = expanded.has(key);
+    members.forEach((id, i) => {
+      if (isExpanded) {
+        // Vertical column at the anchor — every member a distinct slot.
+        out.set(id, {
+          x: snap(anchor.x),
+          y: snap(anchor.y + i * PILE.rowStride),
+        });
+      } else {
+        // Collapsed fan; members past the cap stack at the cap position.
+        const fanI = Math.min(i, PILE.maxVisible - 1);
+        out.set(id, {
+          x: snap(anchor.x + fanI * PILE.fanDx),
+          y: snap(anchor.y + fanI * PILE.fanDy),
+        });
+      }
+    });
+  }
+
+  return out;
+}
