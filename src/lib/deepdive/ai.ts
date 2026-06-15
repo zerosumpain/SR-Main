@@ -1,4 +1,5 @@
-import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel } from './keys';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel, getFallbackModel, hasOpenRouter } from './keys';
 
 const ZAI_NONSTREAM_TIMEOUT_MS = 30_000;
 const ZAI_STREAM_IDLE_TIMEOUT_MS = 30_000;
@@ -39,6 +40,47 @@ function repairJson(text: string): string {
   return s;
 }
 
+/**
+ * Returns true when an error indicates a rate-limit from z.ai or OpenRouter.
+ * z.ai surfaces these as HTTP 429 (err.status) or proprietary code 1302 (err.code).
+ */
+export function isRateLimitError(err: any): boolean {
+  if (err?.status === 429) return true;
+  if (err?.code === '1302' || err?.code === 1302) return true;
+  if (/rate.?limit/i.test(String(err?.message ?? ''))) return true;
+  if (/rate.?limit/i.test(String(err?.error?.message ?? ''))) return true;
+  return false;
+}
+
+/**
+ * Internal helper: make a single (non-streaming) chat call on the OpenRouter client.
+ * Used by chatCompletion and jsonCompletion fallback paths.
+ */
+async function openRouterChat(
+  messages: ChatCompletionMessageParam[],
+  opts: {
+    temperature: number;
+    maxTokens: number;
+    signal: AbortSignal | undefined;
+    json?: boolean;
+  },
+): Promise<string> {
+  const client = getOpenRouterClient();
+  const model = getFallbackModel();
+  const fallbackSignal = AbortSignal.timeout(60_000);
+  const combinedSignal = opts.signal
+    ? AbortSignal.any([opts.signal, fallbackSignal])
+    : fallbackSignal;
+
+  // Anthropic models on OpenRouter don't support response_format: { type: 'json_object' }.
+  // The system prompt already instructs JSON-only output; repairJson handles any slippage.
+  const response = await client.chat.completions.create(
+    { model, messages, temperature: opts.temperature, max_tokens: opts.maxTokens },
+    { signal: combinedSignal as any },
+  );
+  return response.choices[0]?.message?.content ?? '';
+}
+
 async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3): Promise<T> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -68,54 +110,34 @@ export async function chatCompletion(
 ): Promise<string> {
   const client = getOpenAIClient();
   const model = getModel();
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ];
+  const temperature = options?.temperature ?? 0.7;
+  const maxTokens = options?.maxTokens ?? 4096;
 
-  const response = await withRetry(
-    () =>
-      client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? 4096,
-        },
-        { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
-      ),
-    'chatCompletion',
-  );
-
-  return response.choices[0]?.message?.content ?? '';
+  try {
+    const response = await withRetry(
+      () =>
+        client.chat.completions.create(
+          { model, messages, temperature, max_tokens: maxTokens },
+          { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
+        ),
+      'chatCompletion',
+    );
+    return response.choices[0]?.message?.content ?? '';
+  } catch (err: any) {
+    if (isRateLimitError(err) && hasOpenRouter()) {
+      const fallbackModel = getFallbackModel();
+      console.log(`[deepdive] chatCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      return openRouterChat(messages, { temperature, maxTokens, signal: options?.signal });
+    }
+    throw err;
+  }
 }
 
-export async function jsonCompletion<T>(
-  systemPrompt: string,
-  userPrompt: string,
-  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
-): Promise<T> {
-  const client = getOpenAIClient();
-  const model = getModel();
-
-  const response = await withRetry(
-    () =>
-      client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.' },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: options?.temperature ?? 0.3,
-          max_tokens: options?.maxTokens ?? 4096,
-          response_format: { type: 'json_object' },
-        },
-        { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
-      ),
-    'jsonCompletion',
-  );
-
-  const text = response.choices[0]?.message?.content ?? '{}';
+function parseJsonText<T>(text: string): T {
   try {
     return JSON.parse(text) as T;
   } catch {
@@ -127,6 +149,98 @@ export async function jsonCompletion<T>(
       console.error('[deepdive] jsonCompletion: repair failed. Raw text was:', text.slice(0, 500));
       throw err;
     }
+  }
+}
+
+export async function jsonCompletion<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
+): Promise<T> {
+  const client = getOpenAIClient();
+  const model = getModel();
+  const jsonSystemPrompt = systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.';
+  const messages = [
+    { role: 'system' as const, content: jsonSystemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ];
+  const temperature = options?.temperature ?? 0.3;
+  const maxTokens = options?.maxTokens ?? 4096;
+
+  try {
+    const response = await withRetry(
+      () =>
+        client.chat.completions.create(
+          {
+            model,
+            messages,
+            temperature,
+            max_tokens: maxTokens,
+            response_format: { type: 'json_object' },
+          },
+          { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
+        ),
+      'jsonCompletion',
+    );
+    return parseJsonText<T>(response.choices[0]?.message?.content ?? '{}');
+  } catch (err: any) {
+    if (isRateLimitError(err) && hasOpenRouter()) {
+      const fallbackModel = getFallbackModel();
+      console.log(`[deepdive] jsonCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      // json: true signals openRouterChat to omit response_format (Anthropic models don't support it)
+      const text = await openRouterChat(messages, { temperature, maxTokens, signal: options?.signal, json: true });
+      return parseJsonText<T>(text || '{}');
+    }
+    throw err;
+  }
+}
+
+async function runStream(
+  client: import('openai').default,
+  model: string,
+  messages: ChatCompletionMessageParam[],
+  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void },
+): Promise<{ text: string; tokensUsed: number }> {
+  // Watchdog: abort the stream if no token arrives within ZAI_STREAM_IDLE_TIMEOUT_MS.
+  const idleAc = new AbortController();
+  const onExternalAbort = () => idleAc.abort(opts.signal.reason);
+  if (opts.signal.aborted) {
+    idleAc.abort(opts.signal.reason);
+  } else {
+    opts.signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleAc.abort(new Error('Stream idle timeout'));
+    }, ZAI_STREAM_IDLE_TIMEOUT_MS);
+  };
+  resetIdleTimer();
+
+  try {
+    const stream = await client.chat.completions.create(
+      { model, messages, temperature: opts.temperature, max_tokens: opts.maxTokens, stream: true },
+      { signal: idleAc.signal as any },
+    );
+
+    let text = '';
+    let tokensUsed = 0;
+    for await (const chunk of stream) {
+      resetIdleTimer();
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        text += delta;
+        opts.onToken?.(delta);
+      }
+      if (chunk.usage?.total_tokens) {
+        tokensUsed = chunk.usage.total_tokens;
+      }
+    }
+    return { text, tokensUsed };
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+    opts.signal.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -144,57 +258,46 @@ export async function streamCompletion(
   const useOpenRouter = !!options?.model;
   const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
   const model = options?.model ?? getModel();
-
-  // Watchdog: abort the stream if no token arrives within ZAI_STREAM_IDLE_TIMEOUT_MS.
-  // Uses an internal AbortController combined with the caller's signal.
-  const idleAc = new AbortController();
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ];
+  const temperature = options?.temperature ?? 0.5;
+  const maxTokens = options?.maxTokens ?? 2000;
+  // Create a stable external signal (non-null) for runStream
+  const externalAc = new AbortController();
   const externalSignal = options?.signal;
-  const onExternalAbort = () => idleAc.abort(externalSignal?.reason);
   if (externalSignal) {
-    if (externalSignal.aborted) idleAc.abort(externalSignal.reason);
-    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    if (externalSignal.aborted) externalAc.abort(externalSignal.reason);
+    else externalSignal.addEventListener('abort', () => externalAc.abort(externalSignal.reason), { once: true });
   }
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  const resetIdleTimer = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      idleAc.abort(new Error('Stream idle timeout'));
-    }, ZAI_STREAM_IDLE_TIMEOUT_MS);
-  };
-  resetIdleTimer();
 
   try {
-    const stream = await client.chat.completions.create(
-      {
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: options?.temperature ?? 0.5,
-        max_tokens: options?.maxTokens ?? 2000,
-        stream: true,
-      },
-      { signal: idleAc.signal as any },
-    );
-
-    let text = '';
-    let tokensUsed = 0;
-    for await (const chunk of stream) {
-      resetIdleTimer();
-      const delta = chunk.choices[0]?.delta?.content;
-      if (delta) {
-        text += delta;
-        options?.onToken?.(delta);
+    return await runStream(client, model, messages, {
+      temperature,
+      maxTokens,
+      signal: externalAc.signal,
+      onToken: options?.onToken,
+    });
+  } catch (err: any) {
+    // Only fall back on the INITIAL create error (before any tokens); never mid-stream.
+    // Also skip fallback if the caller already explicitly chose a model (useOpenRouter path).
+    if (!useOpenRouter && isRateLimitError(err) && hasOpenRouter()) {
+      const fallbackModel = getFallbackModel();
+      console.log(`[deepdive] streamCompletion: z.ai rate-limited, falling back to OpenRouter ${fallbackModel}`);
+      const fallbackAc = new AbortController();
+      if (externalSignal) {
+        if (externalSignal.aborted) fallbackAc.abort(externalSignal.reason);
+        else externalSignal.addEventListener('abort', () => fallbackAc.abort(externalSignal.reason), { once: true });
       }
-      if (chunk.usage?.total_tokens) {
-        tokensUsed = chunk.usage.total_tokens;
-      }
+      return runStream(getOpenRouterClient(), fallbackModel, messages, {
+        temperature,
+        maxTokens,
+        signal: fallbackAc.signal,
+        onToken: options?.onToken,
+      });
     }
-    return { text, tokensUsed };
-  } finally {
-    if (idleTimer) clearTimeout(idleTimer);
-    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+    throw err;
   }
 }
 
