@@ -169,3 +169,59 @@ describe('groupBy — entityType', () => {
     expect(groups.length).toBe(1);
   });
 });
+
+describe('groupBy — sentiment (relationship sentiment)', () => {
+  it('buckets an entity by the sentiment of the relationship it participates in', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person')];
+    const edges = [edge('r1', 'e1', 'e2', 'positive')];
+    const { memberOf } = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('e1')).toBe(memberOf.get('e2'));
+    expect(memberOf.get('e1')).toContain('positive');
+  });
+
+  it('separates entities by differing relationship sentiment', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person'), entity('e3', 'person')];
+    const edges = [edge('r1', 'e1', 'e2', 'positive'), edge('r2', 'e3', 'e2', 'negative')];
+    const { memberOf } = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    // e2 is in BOTH a positive and a negative relationship → mixed
+    expect(memberOf.get('e2')).toContain('mixed');
+    expect(memberOf.get('e1')).toContain('positive');
+    expect(memberOf.get('e3')).toContain('negative');
+    expect(memberOf.get('e1')).not.toBe(memberOf.get('e3'));
+  });
+
+  it('places a card touched by no relationship into the no-sentiment bucket', () => {
+    const cards = [entity('lonely', 'person'), fact('f1')];
+    const edges = [edge('r1', 'a', 'b', 'positive')]; // touches neither card
+    const { memberOf, groups } = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('lonely')).toBe(memberOf.get('f1'));
+    const g = groups.find((x) => x.key === memberOf.get('lonely'))!;
+    expect(g.count).toBe(2);
+    expect(g.label.toLowerCase()).toContain('no sentiment');
+  });
+
+  it('treats a null/blank relationship sentiment as "neutral"', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person')];
+    const edges = [edge('r1', 'e1', 'e2', null)];
+    const { memberOf } = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    expect(memberOf.get('e1')).toContain('neutral');
+  });
+
+  it('normalises sentiment casing (POSITIVE == positive)', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person'), entity('e3', 'person')];
+    const edges = [edge('r1', 'e1', 'e2', 'POSITIVE'), edge('r2', 'e3', 'e2', 'positive')];
+    const { memberOf } = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    // e1 (POSITIVE) and e3 (positive) share the positive sentiment, both via e2;
+    // e2 sees only positive → not mixed.
+    expect(memberOf.get('e2')).toContain('positive');
+    expect(memberOf.get('e2')).not.toContain('mixed');
+  });
+
+  it('is deterministic for the same inputs', () => {
+    const cards = [entity('e1', 'person'), entity('e2', 'person')];
+    const edges = [edge('r1', 'e1', 'e2', 'positive')];
+    const a = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    const b = groupBy('sentiment', cards, edges, NO_MENTIONS, NO_SIM);
+    expect([...a.memberOf.entries()]).toEqual([...b.memberOf.entries()]);
+  });
+});

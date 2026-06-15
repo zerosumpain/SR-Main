@@ -191,12 +191,62 @@ export function groupBy(
   }
 }
 
-// ——— TEMPORARY STUBS (replaced in Tasks 2-4) ———
-function groupBySentiment(cards: GroupCard[], _edges: GroupEdge[]): GroupResult {
-  const memberOf = new Map<string, string>();
-  for (const c of cards) memberOf.set(c.id, NO_SENTIMENT_KEY);
-  return { memberOf, groups: buildGroups(memberOf, () => 'No sentiment') };
+// ——— sentiment ———
+//
+// Relationships carry the only sentiment we store (per entity-pair). A card is
+// bucketed by the sentiment(s) of the relationships it participates in:
+//   - an ENTITY participates via from/toEntityId
+//   - a card touched by relationships of ONE sentiment → that sentiment bucket
+//   - a card touched by relationships of DIFFERING sentiments → "mixed"
+//   - a card touched by NO relationship → NO_SENTIMENT_KEY
+// null/blank relationship sentiment is normalised to "neutral".
+
+const SENTIMENT_PREFIX = 'sentiment:';
+const MIXED_SENTIMENT = `${SENTIMENT_PREFIX}mixed`;
+
+function normaliseSentiment(s: unknown): string {
+  const v = typeof s === 'string' ? s.toLowerCase().trim() : '';
+  return v.length === 0 ? 'neutral' : v;
 }
+
+function groupBySentiment(cards: GroupCard[], edges: GroupEdge[]): GroupResult {
+  // Collect the set of distinct sentiments each card id participates in.
+  const seen = new Map<string, Set<string>>();
+  const note = (id: string, sentiment: string) => {
+    let s = seen.get(id);
+    if (!s) {
+      s = new Set<string>();
+      seen.set(id, s);
+    }
+    s.add(sentiment);
+  };
+  for (const e of edges) {
+    const sentiment = normaliseSentiment(e.sentiment);
+    note(e.fromEntityId, sentiment);
+    note(e.toEntityId, sentiment);
+  }
+
+  const memberOf = new Map<string, string>();
+  for (const c of cards) {
+    const s = seen.get(c.id);
+    if (!s || s.size === 0) {
+      memberOf.set(c.id, NO_SENTIMENT_KEY);
+    } else if (s.size === 1) {
+      memberOf.set(c.id, SENTIMENT_PREFIX + [...s][0]);
+    } else {
+      memberOf.set(c.id, MIXED_SENTIMENT);
+    }
+  }
+
+  const groups = buildGroups(memberOf, (key) => {
+    if (key === NO_SENTIMENT_KEY) return 'No sentiment';
+    if (key === MIXED_SENTIMENT) return 'Mixed sentiment';
+    return titleCase(key.slice(SENTIMENT_PREFIX.length)) + ' (relationship)';
+  });
+  return { memberOf, groups };
+}
+
+// ——— TEMPORARY STUBS (replaced in Tasks 3-4) ———
 function groupByCooccurrence(cards: GroupCard[], _mentions: EntityMention[]): GroupResult {
   const memberOf = new Map<string, string>();
   for (const c of cards) memberOf.set(c.id, ISOLATED_KEY);
