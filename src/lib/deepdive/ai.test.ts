@@ -283,4 +283,42 @@ describe('streamCompletion', () => {
     // Called once (the explicit model call), never a second time as fallback
     expect(mockOrCreate).toHaveBeenCalledOnce();
   });
+
+  it('passes thinking:{type:disabled} to the z.ai create when disableThinking is true', async () => {
+    mockZaiCreate.mockResolvedValueOnce(makeStream([{ delta: 'ok', usage: 3 }]));
+
+    const promise = streamCompletion('sys', 'user', { disableThinking: true });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    const [body] = mockZaiCreate.mock.calls[0];
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.stream).toBe(true);
+  });
+
+  it('omits the thinking field entirely when disableThinking is not set', async () => {
+    mockZaiCreate.mockResolvedValueOnce(makeStream([{ delta: 'ok' }]));
+
+    const promise = streamCompletion('sys', 'user');
+    await vi.runAllTimersAsync();
+    await promise;
+
+    const [body] = mockZaiCreate.mock.calls[0];
+    expect(body).not.toHaveProperty('thinking');
+  });
+
+  it('still falls back to OpenRouter on 429 with disableThinking set, and forwards thinking to the fallback create', async () => {
+    mockZaiCreate.mockRejectedValueOnce(rate429());
+    mockOrCreate.mockResolvedValueOnce(makeStream([{ delta: 'fallback' }]));
+
+    const promise = streamCompletion('sys', 'user', { disableThinking: true });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.text).toBe('fallback');
+    expect(mockOrCreate).toHaveBeenCalledOnce();
+    const [body] = mockOrCreate.mock.calls[0];
+    expect(body.model).toBe('anthropic/claude-3-5-haiku');
+    expect(body.thinking).toEqual({ type: 'disabled' });
+  });
 });

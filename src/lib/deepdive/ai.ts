@@ -199,7 +199,7 @@ async function runStream(
   client: import('openai').default,
   model: string,
   messages: ChatCompletionMessageParam[],
-  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void },
+  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void; disableThinking?: boolean },
 ): Promise<{ text: string; tokensUsed: number }> {
   // Watchdog: abort the stream if no token arrives within ZAI_STREAM_IDLE_TIMEOUT_MS.
   const idleAc = new AbortController();
@@ -220,7 +220,14 @@ async function runStream(
 
   try {
     const stream = await client.chat.completions.create(
-      { model, messages, temperature: opts.temperature, max_tokens: opts.maxTokens, stream: true },
+      {
+        model,
+        messages,
+        temperature: opts.temperature,
+        max_tokens: opts.maxTokens,
+        stream: true,
+        ...(opts.disableThinking ? { thinking: { type: 'disabled' } } : {}),
+      } as any,
       { signal: idleAc.signal as any },
     );
 
@@ -253,6 +260,7 @@ export async function streamCompletion(
     signal?: AbortSignal;
     model?: string;
     onToken?: (token: string) => void;
+    disableThinking?: boolean;
   },
 ): Promise<{ text: string; tokensUsed: number }> {
   const useOpenRouter = !!options?.model;
@@ -278,6 +286,7 @@ export async function streamCompletion(
       maxTokens,
       signal: externalAc.signal,
       onToken: options?.onToken,
+      disableThinking: options?.disableThinking,
     });
   } catch (err: any) {
     // Only fall back on the INITIAL create error (before any tokens); never mid-stream.
@@ -295,6 +304,7 @@ export async function streamCompletion(
         maxTokens,
         signal: fallbackAc.signal,
         onToken: options?.onToken,
+        disableThinking: options?.disableThinking,
       });
     }
     throw err;
