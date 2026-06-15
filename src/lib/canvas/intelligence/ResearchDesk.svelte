@@ -695,12 +695,11 @@
   }
 
   // Which node types the desk palette offers — scoped to the research set, not
-  // the full workflow palette.
+  // the full workflow palette. 'intelligence' and 'research-result' are excluded
+  // as they render as do-nothing placeholders on the desk.
   const DESK_PALETTE_TYPES = [
     'research-chat',
     'research-report',
-    'intelligence',
-    'research-result',
   ];
 
   // ——— pan/zoom ———
