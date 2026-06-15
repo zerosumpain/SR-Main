@@ -61,6 +61,8 @@ import BuildViewPanel from './BuildViewPanel.svelte';
 import BasicConfigForm from './BasicConfigForm.svelte';
 import GenericJsonPanel from './GenericJsonPanel.svelte';
 import AppleCalendarPanel from './AppleCalendarPanel.svelte';
+import ResearchChatPanel from './ResearchChatPanel.svelte';
+import ResearchReportPanel from './ResearchReportPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
 
 export type PanelProps = {
@@ -147,6 +149,8 @@ const specialized: Record<string, Component<PanelProps>> = {
   'builder-pi': BuilderPiPanel as unknown as Component<PanelProps>,
   'build-view': BuildViewPanel as unknown as Component<PanelProps>,
   'apple-calendar': AppleCalendarPanel as unknown as Component<PanelProps>,
+  'research-chat': ResearchChatPanel as unknown as Component<PanelProps>,
+  'research-report': ResearchReportPanel as unknown as Component<PanelProps>,
 };
 
 /**
