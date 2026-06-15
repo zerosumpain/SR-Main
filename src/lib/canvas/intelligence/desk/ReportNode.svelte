@@ -4,6 +4,8 @@
   import { buildReportView, type DeskCardLite, type ReportView } from './report-view';
   import { type DeskStatus } from './deskControls';
   import type { ResearchReport } from '$lib/deepdive/types';
+  import { parseSseFrames, applyFrame, type ChatMessage, type ChatSource } from './chatStream';
+  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
 
   let {
     sessionId,
@@ -39,7 +41,6 @@
   }
 
   async function load() {
-    // Abort any previous in-flight load.
     loadController?.abort();
     loadController = new AbortController();
     const signal = loadController.signal;
@@ -64,9 +65,7 @@
   async function regenerate() {
     if (!canRegenerate || regenerating) return;
 
-    // Snapshot the current report for change detection.
     const before = JSON.stringify(report);
-
     regenerating = true;
 
     try {
@@ -77,11 +76,10 @@
       return;
     }
 
-    // Poll GET /report every 4s until the content changes (or ~90s cap).
     const MAX_POLLS = 22;
     let polls = 0;
 
-    stopPoll(); // Guard against overlapping polls.
+    stopPoll();
 
     async function poll() {
       polls += 1;
@@ -93,7 +91,6 @@
           const body = (await res.json()) as { report: ResearchReport | null };
           const fetched = body.report ?? null;
           if (fetched !== null && JSON.stringify(fetched) !== before) {
-            // Report changed — update and stop.
             report = fetched;
             regenerating = false;
             stopPoll();
@@ -105,11 +102,9 @@
       }
 
       if (isCap) {
-        // Best-effort: accept whatever is there and stop.
         console.warn('[report-node] poll cap reached — clearing spinner');
         regenerating = false;
         stopPoll();
-        // One final load to make sure the UI reflects the latest state.
         load();
         return;
       }
@@ -127,13 +122,136 @@
   onDestroy(() => {
     loadController?.abort();
     stopPoll();
+    abortCustom();
   });
 
-  // ——— expand / collapse the whole preview body ———
+  // ——— expand / collapse the auto-report preview body ———
   let expanded = $state(false);
 
   function pct(n: number): string {
     return `${Math.round(n * 100)}%`;
+  }
+
+  // ——— Brief-driven custom report generation ———
+  type GenState = 'idle' | 'streaming' | 'done' | 'error';
+  let brief = $state('');
+  let genState = $state<GenState>('idle');
+  let customMarkdown = $state('');
+  let customSources = $state<ChatSource[]>([]);
+  let genError = $state('');
+
+  // Plain let — never read inside a $effect.
+  let customReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let customAbort: AbortController | null = null;
+
+  function abortCustom() {
+    customAbort?.abort();
+    customAbort = null;
+    try { customReader?.cancel(); } catch { /* ignore */ }
+    customReader = null;
+  }
+
+  async function generateCustomReport() {
+    const briefTrimmed = brief.trim();
+    if (!briefTrimmed || genState === 'streaming') return;
+
+    abortCustom();
+    customMarkdown = '';
+    customSources = [];
+    genError = '';
+    genState = 'streaming';
+
+    customAbort = new AbortController();
+    const signal = customAbort.signal;
+
+    let res: Response;
+    try {
+      res = await fetch(`/api/deepdive/${sessionId}/report/custom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: briefTrimmed }),
+        signal,
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') { genState = 'idle'; return; }
+      genState = 'error';
+      genError = 'Network error — could not reach the server.';
+      return;
+    }
+
+    if (!res.ok) {
+      genState = 'error';
+      genError = res.status === 404
+        ? 'Session not found.'
+        : res.status === 400
+        ? 'Brief is required.'
+        : `Server error (${res.status}).`;
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) { genState = 'error'; genError = 'No response body.'; return; }
+    customReader = reader;
+
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    // Build a mutable ChatMessage stub that applyFrame mutates in place.
+    // We reflect changes back into $state vars so Svelte updates.
+    const stub: ChatMessage = { role: 'assistant', content: '' };
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const { frames, rest } = parseSseFrames(buf);
+        buf = rest;
+
+        for (const frame of frames) {
+          if (frame.type === 'done') {
+            genState = 'done';
+            break;
+          }
+          applyFrame(stub, frame);
+          // Reflect into $state so the template re-renders.
+          customMarkdown = stub.content;
+          if (frame.type === 'sources') {
+            customSources = stub.sources ?? [];
+          }
+        }
+        if (genState === 'done') break;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') { genState = 'idle'; return; }
+      console.error('[report-node] stream read error', err);
+      genState = 'error';
+      genError = 'Stream interrupted.';
+      return;
+    } finally {
+      customReader = null;
+    }
+
+    if (genState === 'streaming') genState = 'done';
+  }
+
+  function downloadCustomMd() {
+    if (!customMarkdown) return;
+    const blob = new Blob([customMarkdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${sessionId.slice(0, 8)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetCustom() {
+    abortCustom();
+    customMarkdown = '';
+    customSources = [];
+    genError = '';
+    genState = 'idle';
   }
 </script>
 
@@ -150,112 +268,196 @@
     {/if}
   </header>
 
+  <!-- ═══════════════════════════════════════════════════
+       BRIEF-DRIVEN CUSTOM REPORT
+  ═══════════════════════════════════════════════════ -->
+  <section class="rn-brief-section">
+    <h4 class="rn-sec-h">Custom report</h4>
+    <div class="rn-brief-row">
+      <textarea
+        class="rn-brief-input"
+        rows={3}
+        placeholder="Describe what you want the report to cover…"
+        bind:value={brief}
+        disabled={genState === 'streaming'}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            generateCustomReport();
+          }
+        }}
+      ></textarea>
+      <div class="rn-brief-btns">
+        <button
+          type="button"
+          class="rn-btn rn-accent"
+          disabled={genState === 'streaming' || !brief.trim()}
+          onclick={generateCustomReport}
+        >
+          {genState === 'streaming' ? 'Generating…' : 'Generate report'}
+        </button>
+        {#if genState === 'done' || genState === 'error'}
+          <button type="button" class="rn-btn" onclick={resetCustom}>Reset</button>
+        {/if}
+      </div>
+    </div>
+    <p class="rn-hint">Tip: Ctrl+Enter / ⌘+Enter to generate</p>
+
+    {#if genState === 'error'}
+      <p class="rn-muted rn-error">{genError}</p>
+    {/if}
+
+    {#if customMarkdown}
+      <!-- Streaming / completed markdown output -->
+      <div class="rn-custom-output">
+        {#if customSources.length}
+          <div class="rn-source-chips">
+            {#each customSources as src (src.n)}
+              {#if src.url}
+                <a
+                  class="rn-src-chip"
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={src.url}
+                >[{src.n}] {src.title || src.domain || src.url}</a>
+              {:else}
+                <span class="rn-src-chip">[{src.n}] {src.title || src.domain || 'source'}</span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        <div class="rn-md-wrap">
+          <ChatMarkdown content={customMarkdown} role="assistant" />
+          {#if genState === 'streaming'}
+            <span class="rn-cursor" aria-hidden="true">▋</span>
+          {/if}
+        </div>
+
+        {#if genState === 'done'}
+          <div class="rn-dl-row">
+            <button type="button" class="rn-btn rn-accent" onclick={downloadCustomMd}>
+              Download .md
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════
+       AUTO REPORT PREVIEW (existing)
+  ═══════════════════════════════════════════════════ -->
   {#if loadState === 'loading'}
     <p class="rn-muted">Loading report&hellip;</p>
   {:else if loadState === 'error'}
     <p class="rn-muted rn-error">Could not load report.</p>
     <button type="button" class="rn-btn" onclick={load}>Retry</button>
   {:else if !view.hasReport}
-    <p class="rn-muted">Report not generated.</p>
+    <p class="rn-muted">Auto-report not yet generated.</p>
     {#if canRegenerate}
       <button type="button" class="rn-btn rn-accent" disabled={regenerating} onclick={regenerate}>
         {regenerating ? 'regenerating…' : 'Regenerate'}
       </button>
     {/if}
   {:else}
-    <!-- executive summary -->
-    <section class="rn-exec">
-      <p class:rn-clamp={!expanded}>{view.executiveSummary}</p>
-    </section>
+    <section class="rn-sec">
+      <h4 class="rn-sec-h">Auto report</h4>
+      <!-- executive summary -->
+      <section class="rn-exec">
+        <p class:rn-clamp={!expanded}>{view.executiveSummary}</p>
+      </section>
 
-    {#if expanded}
-      <!-- clusters -->
-      {#if view.clusters.length}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Clusters</h4>
-          {#each view.clusters as cl (cl.title)}
-            <details class="rn-cluster">
-              <summary>
-                <span class="rn-cl-title">{cl.title}</span>
-                <span class="rn-cl-count">{cl.factCount}</span>
-              </summary>
-              {#if cl.summary}<p class="rn-cl-summary">{cl.summary}</p>{/if}
-              <ul class="rn-fact-list">
-                {#each cl.facts as f (f.id)}
-                  <li>{f.content}</li>
-                {/each}
-              </ul>
-            </details>
-          {/each}
-        </section>
-      {/if}
-
-      <!-- knowledge gaps -->
-      {#if view.knowledgeGaps.length}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Knowledge gaps</h4>
-          <div class="rn-chips">
-            {#each view.knowledgeGaps as g (g.gap)}
-              <span class="rn-chip" style:--chip={g.color} title={`${g.type} · ${g.severity}`}>{g.gap}</span>
+      {#if expanded}
+        <!-- clusters -->
+        {#if view.clusters.length}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Clusters</h4>
+            {#each view.clusters as cl (cl.title)}
+              <details class="rn-cluster">
+                <summary>
+                  <span class="rn-cl-title">{cl.title}</span>
+                  <span class="rn-cl-count">{cl.factCount}</span>
+                </summary>
+                {#if cl.summary}<p class="rn-cl-summary">{cl.summary}</p>{/if}
+                <ul class="rn-fact-list">
+                  {#each cl.facts as f (f.id)}
+                    <li>{f.content}</li>
+                  {/each}
+                </ul>
+              </details>
             {/each}
-          </div>
-        </section>
-      {/if}
+          </section>
+        {/if}
 
-      <!-- hypotheses -->
-      {#if view.hypotheses.length}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Hypotheses</h4>
-          {#each view.hypotheses as h (h.hypothesis)}
-            <div class="rn-hyp">
-              <p class="rn-hyp-text">{h.hypothesis}</p>
-              <span class="rn-hyp-meta">testability: {h.testability}</span>
-              {#if h.supporting.length}
-                <p class="rn-hyp-line"><b>+</b> {h.supporting.map((f) => f.content).join(' · ')}</p>
-              {/if}
-              {#if h.tension.length}
-                <p class="rn-hyp-line rn-tension"><b>&ndash;</b> {h.tension.map((f) => f.content).join(' · ')}</p>
-              {/if}
+        <!-- knowledge gaps -->
+        {#if view.knowledgeGaps.length}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Knowledge gaps</h4>
+            <div class="rn-chips">
+              {#each view.knowledgeGaps as g (g.gap)}
+                <span class="rn-chip" style:--chip={g.color} title={`${g.type} · ${g.severity}`}>{g.gap}</span>
+              {/each}
             </div>
-          {/each}
-        </section>
-      {/if}
+          </section>
+        {/if}
 
-      <!-- suggested follow-ups -->
-      {#if view.followups.length}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Suggested follow-ups</h4>
-          <ul class="rn-fu-list">
-            {#each view.followups as fu (fu.question)}
-              <li><span class="rn-fu-q">{fu.question}</span><span class="rn-fu-c">{fu.context}</span></li>
+        <!-- hypotheses -->
+        {#if view.hypotheses.length}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Hypotheses</h4>
+            {#each view.hypotheses as h (h.hypothesis)}
+              <div class="rn-hyp">
+                <p class="rn-hyp-text">{h.hypothesis}</p>
+                <span class="rn-hyp-meta">testability: {h.testability}</span>
+                {#if h.supporting.length}
+                  <p class="rn-hyp-line"><b>+</b> {h.supporting.map((f) => f.content).join(' · ')}</p>
+                {/if}
+                {#if h.tension.length}
+                  <p class="rn-hyp-line rn-tension"><b>&ndash;</b> {h.tension.map((f) => f.content).join(' · ')}</p>
+                {/if}
+              </div>
             {/each}
-          </ul>
-        </section>
-      {/if}
+          </section>
+        {/if}
 
-      <!-- top entities -->
-      {#if view.topEntities.length}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Key players</h4>
-          <div class="rn-chips">
-            {#each view.topEntities as e (e.id)}
-              <span class="rn-ent">{e.name} <i>{pct(e.centrality)}</i></span>
-            {/each}
-          </div>
-        </section>
-      {/if}
+        <!-- suggested follow-ups -->
+        {#if view.followups.length}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Suggested follow-ups</h4>
+            <ul class="rn-fu-list">
+              {#each view.followups as fu (fu.question)}
+                <li><span class="rn-fu-q">{fu.question}</span><span class="rn-fu-c">{fu.context}</span></li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
 
-      <!-- source diversity -->
-      {#if view.sourceDiversity}
-        <section class="rn-sec">
-          <h4 class="rn-sec-h">Source diversity</h4>
-          <p class="rn-muted">
-            {view.sourceDiversity.total_domains} domains &middot;
-            concentration {pct(view.sourceDiversity.concentration_index)}
-          </p>
-        </section>
+        <!-- top entities -->
+        {#if view.topEntities.length}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Key players</h4>
+            <div class="rn-chips">
+              {#each view.topEntities as e (e.id)}
+                <span class="rn-ent">{e.name} <i>{pct(e.centrality)}</i></span>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        <!-- source diversity -->
+        {#if view.sourceDiversity}
+          <section class="rn-sec">
+            <h4 class="rn-sec-h">Source diversity</h4>
+            <p class="rn-muted">
+              {view.sourceDiversity.total_domains} domains &middot;
+              concentration {pct(view.sourceDiversity.concentration_index)}
+            </p>
+          </section>
+        {/if}
       {/if}
-    {/if}
+    </section>
 
     <!-- actions -->
     <footer class="rn-actions">
@@ -440,5 +642,96 @@
     gap: 6px;
     border-top: 1px solid var(--divider);
     padding-top: 6px;
+  }
+
+  /* ——— Brief-driven report section ——— */
+  .rn-brief-section {
+    border-top: 1px solid var(--divider);
+    padding-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .rn-brief-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .rn-brief-input {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.45;
+    background: var(--bg-section, #111);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    border-radius: 3px;
+    padding: 6px 8px;
+    resize: vertical;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+  }
+  .rn-brief-input:focus {
+    border-color: var(--accent);
+  }
+  .rn-brief-input:disabled {
+    opacity: 0.6;
+  }
+  .rn-brief-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .rn-hint {
+    font-size: 10px;
+    color: var(--divider);
+    margin: 0;
+  }
+  .rn-custom-output {
+    border: 1px solid var(--card-border);
+    border-radius: 3px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .rn-source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .rn-src-chip {
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid var(--card-border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  a.rn-src-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .rn-md-wrap {
+    /* The ChatMarkdown component scrolls on its own content. */
+    overflow-x: hidden;
+    word-break: break-word;
+  }
+  .rn-cursor {
+    display: inline-block;
+    width: 0.55em;
+    animation: rn-blink 0.85s step-start infinite;
+    color: var(--accent);
+    line-height: 1;
+  }
+  @keyframes rn-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .rn-dl-row {
+    display: flex;
+    gap: 5px;
+    padding-top: 4px;
+    border-top: 1px solid var(--divider);
   }
 </style>

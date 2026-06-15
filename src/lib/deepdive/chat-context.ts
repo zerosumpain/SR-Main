@@ -163,6 +163,42 @@ export function numberSources(
   return { passages, sources };
 }
 
+export const REPORT_SYSTEM = `You are an expert research analyst producing a structured report for a Research Desk session. Write ONLY from the CONTEXT supplied below — the session overview and the retrieved fact passages. Do not introduce outside knowledge.
+
+RULES:
+1. Structure the report with clear markdown headings and sections appropriate to the brief.
+2. Ground every factual claim in the OVERVIEW or the PASSAGES. Cite sources inline using [n] markers wherever you draw on a passage.
+3. Where the research does not cover an aspect of the brief, note this explicitly (e.g. "The session's research does not address X").
+4. Be analytical, precise and concise. Distinguish established findings from uncertain or contested claims.
+5. Conclude with a short "Source Coverage" note listing which [n] sources were most informative.
+Never fabricate statistics, sources, or quotes.`;
+
+/**
+ * Assemble the system + user prompts for a brief-driven custom report.
+ * Pure and network-free — all data is pre-fetched by the endpoint.
+ */
+export function buildReportPrompt(
+  topic: string,
+  brief: string,
+  overview: string,
+  passages: string,
+): { system: string; user: string } {
+  const passageBlock = passages.trim()
+    ? `\n\nRETRIEVED PASSAGES (relevant facts from this session — cite with [n]):\n\n${passages}`
+    : '\n\nRETRIEVED PASSAGES: (no closely-matching passages found — rely on the overview)';
+
+  const user = `SESSION TOPIC: ${topic}
+
+REPORT BRIEF: ${brief}
+
+SESSION OVERVIEW:
+${overview}${passageBlock}
+
+Produce a structured markdown report that directly addresses the REPORT BRIEF above. Use the session research as your sole evidence base, cite [n] markers, and note any gaps in coverage.`;
+
+  return { system: REPORT_SYSTEM, user };
+}
+
 /** Assemble the system + user prompts. History is capped to the last MAX_HISTORY_TURNS turns. */
 export function buildChatPrompt(
   topic: string,
