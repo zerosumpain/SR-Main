@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashId, scatterPosition, GRID, BAND, PHASE_TO_BAND } from './layout';
+import { hashId, scatterPosition, GRID, BAND, PHASE_TO_BAND, organisedLayout, ORG, SYNTHESIS_ZONE_GAP, SYNTHESIS_ZONE_ORIGIN, type LayoutArtefact, type LayoutCategory } from './layout';
 
 describe('hashId', () => {
   it('is deterministic for the same input', () => {
@@ -99,7 +99,7 @@ describe('scatterPosition', () => {
   });
 });
 
-import { organisedLayout, ORG, type LayoutArtefact, type LayoutCategory } from './layout';
+// All symbols imported at the top of the file.
 
 const cat = (id: string, title = id): LayoutCategory => ({ id, title });
 
@@ -234,5 +234,40 @@ describe('organisedLayout', () => {
 
   it('handles an empty artefact list', () => {
     expect(organisedLayout([], [cat('c1')]).size).toBe(0);
+  });
+
+  // ——— synthesis zone spatial separation ———
+
+  it('synthesis zone origin is below the scatter region with the required gap', () => {
+    const scatterMaxY = BAND.originY + BAND.height; // 1600
+    expect(SYNTHESIS_ZONE_ORIGIN.y).toBeGreaterThanOrEqual(scatterMaxY + SYNTHESIS_ZONE_GAP);
+  });
+
+  it('organised positions do NOT overlap the scatter region (minY ≥ scatterMaxY + gap)', () => {
+    // A realistic layout: 3 categories × 4 facts + 3 entities.
+    const cats = [cat('c1'), cat('c2'), cat('c3')];
+    const arts: LayoutArtefact[] = [];
+    for (let i = 0; i < 4; i++) arts.push({ id: `f1-${i}`, kind: 'fact', categoryId: 'c1' });
+    for (let i = 0; i < 4; i++) arts.push({ id: `f2-${i}`, kind: 'fact', categoryId: 'c2' });
+    for (let i = 0; i < 4; i++) arts.push({ id: `f3-${i}`, kind: 'fact', categoryId: 'c3' });
+    for (let i = 0; i < 3; i++) arts.push({ id: `e-${i}`, kind: 'entity' });
+    const map = organisedLayout(arts, cats);
+
+    const scatterMaxY = BAND.originY + BAND.height; // 1600
+    const scatterMaxX = BAND.originX + (Math.max(...Object.values({ 0: 0, 1: 1, 2: 2 })) + 1) * BAND.width; // 2160
+
+    let minOrganisedY = Infinity;
+    for (const pos of map.values()) {
+      if (pos.y < minOrganisedY) minOrganisedY = pos.y;
+    }
+    // The synthesis zone must start below scatter + gap, not just at scatter boundary.
+    expect(minOrganisedY).toBeGreaterThanOrEqual(scatterMaxY + SYNTHESIS_ZONE_GAP);
+    // Sanity: the zone's X origin must also be within the scatter width (starts at 0).
+    expect(ORG.originX).toBeGreaterThanOrEqual(0);
+    expect(ORG.originX).toBeLessThanOrEqual(scatterMaxX);
+  });
+
+  it('ORG.originY matches SYNTHESIS_ZONE_ORIGIN.y', () => {
+    expect(ORG.originY).toBe(SYNTHESIS_ZONE_ORIGIN.y);
   });
 });

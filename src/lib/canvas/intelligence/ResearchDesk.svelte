@@ -13,6 +13,10 @@
     organisedLayout,
     organisedCorePxBounds,
     COL_W,
+    ORG,
+    SYNTHESIS_ZONE_ORIGIN,
+    SYNTHESIS_ZONE_GAP,
+    BAND,
     type LayoutArtefact,
     type LayoutCategory,
   } from './desk/layout';
@@ -426,7 +430,7 @@
       const catId = anchorId.slice(4);
       const idx = categories.findIndex((c) => c.id === catId);
       if (idx < 0) return null;
-      return { x: idx * COL_W, y: 0, w: 220, h: 64 };
+      return { x: ORG.originX + idx * COL_W, y: ORG.originY, w: 220, h: 64 };
     }
     // Only produce a rect for cards that are currently visible.
     if (!visibleIds.has(anchorId)) return null;
@@ -767,8 +771,26 @@
 
         <!-- category headers + entity rail (SYNTHESIZE only) -->
         {#if mode === 'synthesize'}
+          <!-- synthesis zone boundary: hairline bracket + label, sits in world-space -->
+          {#if categories.length > 0}
+            {@const zoneX = SYNTHESIS_ZONE_ORIGIN.x - 24}
+            {@const zoneY = SYNTHESIS_ZONE_ORIGIN.y - 36}
+            <div
+              class="synthesis-zone-boundary"
+              style:transform="translate({zoneX}px, {zoneY}px)"
+              aria-hidden="true"
+            >
+              <span class="synthesis-zone-label">&#9635; SYNTHESIS &middot; organised intelligence</span>
+            </div>
+            <div
+              class="synthesis-zone-rule"
+              style:transform="translate({BAND.originX}px, {SYNTHESIS_ZONE_ORIGIN.y - SYNTHESIS_ZONE_GAP / 2}px)"
+              aria-hidden="true"
+            ></div>
+          {/if}
+
           {#each categories as cat, i (cat.id)}
-            <div class="desk-header-host" style:transform="translate({i * COL_W}px, 0px)">
+            <div class="desk-header-host" style:transform="translate({ORG.originX + i * COL_W}px, {ORG.originY}px)">
               <CategoryHeader
                 id={cat.id}
                 title={cat.title}
@@ -780,7 +802,7 @@
 
           {#if railEntities.length}
             {@const railY = organised.get(railEntities[0].id)?.y ?? 0}
-            <div class="desk-rail-host" style:transform="translate(0px, {railY}px)">
+            <div class="desk-rail-host" style:transform="translate({ORG.originX}px, {railY}px)">
               <EntityRail count={railEntities.length} />
             </div>
           {/if}
@@ -962,4 +984,40 @@
     cursor: pointer;
   }
   .desk-zoom button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ——— synthesis zone markers (world-space, pan/zoom with cards) ——— */
+  .synthesis-zone-boundary {
+    position: absolute;
+    top: 0;
+    left: 0;
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+  }
+  .synthesis-zone-label {
+    display: block;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted, rgba(26, 16, 8, 0.45));
+    white-space: nowrap;
+    padding: 2px 6px;
+    border-left: 2px solid var(--accent, #c4570a);
+    border-top: 1px solid rgba(26, 16, 8, 0.18);
+    background: transparent;
+  }
+
+  /* Hairline divider spanning the scatter width, midway through the gap */
+  .synthesis-zone-rule {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2160px; /* 3 × BAND.width */
+    height: 0;
+    border-top: 1px dashed rgba(26, 16, 8, 0.18);
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+  }
 </style>

@@ -122,13 +122,41 @@ export function scatterPosition(id: string, phase: number): Pos {
 }
 
 /**
+ * The SYNTHESIZE clean zone sits BELOW the scatter region with a generous gap
+ * so that organised clusters never overlap raw research scatter cards.
+ *
+ * Scatter occupies Y = [BAND.originY … BAND.originY + BAND.height)
+ *                     = [0 … 1600)
+ * The synthesis zone starts at Y = 1600 + SYNTHESIS_ZONE_GAP = 1600 + 280 = 1880
+ * (grid-snapped).  All organised layout coordinates are offsets from
+ * (ORG.originX, ORG.originY), so moving those two values relocates the whole zone.
+ *
+ * The zone also spreads across the full scatter width (3 × BAND.width = 2160 px)
+ * so category columns have room to breathe.
+ */
+
+/** Vertical gap between the bottom of the scatter envelope and the top of the
+ *  synthesis zone (world-space pixels). Must be large enough to read as a
+ *  deliberate separation at any zoom level. */
+export const SYNTHESIS_ZONE_GAP = 280;
+
+/** Top-left world-space origin of the synthesis zone (grid-snapped). */
+export const SYNTHESIS_ZONE_ORIGIN: Pos = {
+  x: snap(BAND.originX),
+  y: snap(BAND.originY + BAND.height + SYNTHESIS_ZONE_GAP),
+};
+
+/**
  * Organised (SYNTHESIZE) layout geometry. Category columns run left→right;
  * facts/sources stack under a reserved header slot inside each column; entities
  * collect into a bottom rail that wraps. All values are GRID-aligned.
+ *
+ * originX / originY are derived from SYNTHESIS_ZONE_ORIGIN so the organised
+ * zone always sits below the scatter region with a clear spatial separation.
  */
 export const ORG = {
-  originX: 0,
-  originY: 0,
+  originX: SYNTHESIS_ZONE_ORIGIN.x,
+  originY: SYNTHESIS_ZONE_ORIGIN.y,
   colStride: 320, // horizontal distance between column left edges
   rowStride: 180, // vertical distance between stacked cards in a column
   headerRows: 1, // rows reserved at the top of a column for the CategoryHeader
