@@ -41,17 +41,13 @@ export function portal(node: HTMLElement, target: PortalTarget = 'body') {
   return {
     update(next: PortalTarget) { applyTarget(next); },
     destroy() {
-      // Restore to original parent so Svelte can unmount cleanly (it expects
-      // to find the node where it created it).
-      if (originalParent && originalParent.isConnected && node.parentNode !== originalParent) {
-        originalParent.appendChild(node);
-      } else if (node.parentNode && node.parentNode !== originalParent) {
-        // Client-side navigation tore the page down: the original parent is
-        // gone, so the portaled node is orphaned in the target (e.g. <body>) —
-        // an invisible full-viewport scrim that freezes the page after BACK.
-        // Remove it directly.
-        node.remove();
-      }
+      // The component is unmounting. The portaled node must be removed from the
+      // DOM wherever it currently lives (target/body). Never re-parent to
+      // originalParent: for consumers that wrap the portal in an internal {#if}
+      // (InspectorDrawer, MobileBottomSheet), originalParent stays connected on
+      // close and re-appending would re-show the overlay — that is the bug this
+      // fixes. node.remove() is a safe no-op when parentNode is already null.
+      node.remove();
     },
   };
 }
