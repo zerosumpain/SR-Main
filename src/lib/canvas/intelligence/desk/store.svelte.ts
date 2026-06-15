@@ -13,6 +13,7 @@ import {
   type SynthCategory,
   type SynthEdge,
 } from './synthesis-reducer';
+import { makeCoalescer } from './coalesce';
 
 export type CardKind = 'source' | 'fact' | 'entity';
 
@@ -200,7 +201,12 @@ export interface DeskStore {
   dispose(): void;
 }
 
-const STREAM_FLUSH_MS = 5;
+// Trailing debounce + max-wait for SSE delta batching.
+// idleMs: flush after 16ms of quiet (≈ 1 frame of silence).
+// maxMs:  force a flush every 120ms regardless — keeps latency bounded
+//         during a heavy streaming run without burning ~200 flushes/sec.
+const COALESCE_IDLE_MS = 16;
+const COALESCE_MAX_MS = 120;
 
 export function createDeskStore(
   sessionId: string,
@@ -222,16 +228,12 @@ export function createDeskStore(
 
   // Plain (non-$state) handles — read inside SSE callback / flush.
   let es: EventSource | null = null;
-  let flushHandle: ReturnType<typeof setTimeout> | null = null;
   const pendingCards = new Map<string, DeskCard>(); // staged deltas
   const pendingEdges = new Map<string, DeskEdge>();
 
-  function scheduleFlush() {
-    if (flushHandle === null) flushHandle = setTimeout(flush, STREAM_FLUSH_MS);
-  }
-
+  // Flush body: wholesale $state.raw Map replacement (unchanged semantics).
+  // Only WHEN it runs has changed — now driven by the coalescer below.
   function flush() {
-    flushHandle = null;
     if (pendingCards.size > 0) {
       let next = cardMap;
       for (const c of pendingCards.values()) next = mergeArtefact(next, c);
@@ -244,6 +246,15 @@ export function createDeskStore(
       pendingEdges.clear();
       edgeMap = next;
     }
+  }
+
+  // Coalescer: trailing debounce (~16ms idle) with hard max-wait (~120ms).
+  // Replaces the fixed 5ms leading-edge timer that fired ~200×/sec under load.
+  // Timer handles inside makeCoalescer are plain `let` (not $state) — safe.
+  const coalescer = makeCoalescer({ idleMs: COALESCE_IDLE_MS, maxMs: COALESCE_MAX_MS }, flush);
+
+  function scheduleFlush() {
+    coalescer.schedule();
   }
 
   /** Feed one synthesis.* event through the reducer and apply only the newly
@@ -476,9 +487,12 @@ export function createDeskStore(
     dispose() {
       es?.close();
       es = null;
-      if (flushHandle !== null) {
-        clearTimeout(flushHandle);
-        flushHandle = null;
+      // Flush any staged deltas that arrived before teardown, then cancel
+      // the idle timer so no ghost flush fires after the store is dead.
+      if (pendingCards.size > 0 || pendingEdges.size > 0) {
+        coalescer.flushNow(); // commits staged state, cancels pending timers
+      } else {
+        coalescer.cancel(); // nothing to commit — just cancel
       }
     },
   };
