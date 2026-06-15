@@ -1,7 +1,9 @@
 <!-- src/lib/canvas/intelligence/desk/CommandBar.svelte -->
 <script lang="ts">
   import ModeToggle from './ModeToggle.svelte';
+  import PhaseStepper from './PhaseStepper.svelte';
   import { statusPill, controlState, type DeskStatus } from './deskControls';
+  import { nextPhaseLabel } from './phases';
 
   let {
     topic,
@@ -43,6 +45,10 @@
 
   let pill = $derived(statusPill(status, synthesising));
   let ctl = $derived(controlState(status, synthesising));
+  let skipTarget = $derived(nextPhaseLabel(status));
+  let skipTitle = $derived(
+    skipTarget ? `Skip to ${skipTarget}` : 'Skip current phase'
+  );
 
   let exportOpen = $state(false);
   function chooseExport(kind: 'docx' | 'narrative-docx' | 'narrative-md') {
@@ -72,13 +78,16 @@
       {/if}
     </div>
 
+    <PhaseStepper {status} />
+
     {#if !controlsHidden}
     <div class="controls">
       <button
         type="button"
         class="ctl"
-        title="Skip current phase"
-        disabled={!ctl.canPause}
+        title={skipTitle}
+        aria-label={skipTitle}
+        disabled={!ctl.canPause || !skipTarget}
         onclick={onskip}
       >⏭</button>
       <button
