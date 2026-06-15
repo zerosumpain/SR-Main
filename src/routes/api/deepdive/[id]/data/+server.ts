@@ -41,6 +41,8 @@ export const GET: RequestHandler = async ({ params }) => {
         refutesFactId: facts.refutesFactId,
         sourceId: facts.sourceId,
         tags: facts.tags,
+        deskCategory: facts.deskCategory,
+        synthesisRunId: facts.synthesisRunId,
       })
       .from(facts)
       .where(eq(facts.sessionId, params.id)),
