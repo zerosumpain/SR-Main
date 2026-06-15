@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks } from '$lib/db/schema';
+import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks, synthesisRuns } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
 
@@ -73,37 +73,54 @@ export const DELETE: RequestHandler = async ({ params }) => {
     return json({ error: 'Session not found' }, { status: 404 });
   }
 
-  // Cascade delete in correct order
-  // 0. narrative items and global entity links
-  await db.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));
-  await db.delete(globalEntityLinks).where(eq(globalEntityLinks.sessionId, params.id));
+  await db.transaction(async (tx) => {
+    // 0. Null out parentSessionId on any child (explore-further) sessions so
+    //    they are not orphaned. parentSessionId has no FK constraint in schema
+    //    so this is purely data hygiene, not required for the DELETE to succeed.
+    await tx
+      .update(researchSessions)
+      .set({ parentSessionId: null })
+      .where(eq(researchSessions.parentSessionId, params.id));
 
-  // 1. entity_mentions (references entities and facts)
-  const sessionEntities = await db
-    .select({ id: entities.id })
-    .from(entities)
-    .where(eq(entities.sessionId, params.id));
+    // 1. narrative items (references session + facts)
+    await tx.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));
 
-  if (sessionEntities.length > 0) {
+    // 2. global entity links (references session + session-scoped entities)
+    await tx.delete(globalEntityLinks).where(eq(globalEntityLinks.sessionId, params.id));
+
+    // 3. entity_mentions (references entities.id + facts.id — must go before both)
+    const sessionEntities = await tx
+      .select({ id: entities.id })
+      .from(entities)
+      .where(eq(entities.sessionId, params.id));
+
     for (const e of sessionEntities) {
-      await db.delete(entityMentions).where(eq(entityMentions.entityId, e.id));
+      await tx.delete(entityMentions).where(eq(entityMentions.entityId, e.id));
     }
-  }
 
-  // 2. relationships
-  await db.delete(relationships).where(eq(relationships.sessionId, params.id));
+    // 4. relationships (references entities + facts + sources, all session-scoped)
+    await tx.delete(relationships).where(eq(relationships.sessionId, params.id));
 
-  // 3. entities
-  await db.delete(entities).where(eq(entities.sessionId, params.id));
+    // 5. entities
+    await tx.delete(entities).where(eq(entities.sessionId, params.id));
 
-  // 4. facts
-  await db.delete(facts).where(eq(facts.sessionId, params.id));
+    // 6. facts (self-ref refutesFactId has no onDelete — null it first to
+    //    avoid FK violations on the self-referencing column within the batch)
+    await tx
+      .update(facts)
+      .set({ refutesFactId: null })
+      .where(eq(facts.sessionId, params.id));
+    await tx.delete(facts).where(eq(facts.sessionId, params.id));
 
-  // 5. sources
-  await db.delete(sources).where(eq(sources.sessionId, params.id));
+    // 7. synthesis runs (references session)
+    await tx.delete(synthesisRuns).where(eq(synthesisRuns.sessionId, params.id));
 
-  // 6. session
-  await db.delete(researchSessions).where(eq(researchSessions.id, params.id));
+    // 8. sources (references session)
+    await tx.delete(sources).where(eq(sources.sessionId, params.id));
 
-  return json({ message: 'Deleted' });
+    // 9. session row
+    await tx.delete(researchSessions).where(eq(researchSessions.id, params.id));
+  });
+
+  return new Response(null, { status: 204 });
 };

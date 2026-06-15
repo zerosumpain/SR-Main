@@ -35,3 +35,16 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
   return json({ error: 'Unknown action' }, { status: 400 });
 };
+
+export const DELETE: RequestHandler = async ({ params }) => {
+  const [row] = await db
+    .select({ id: quickAnswers.id })
+    .from(quickAnswers)
+    .where(eq(quickAnswers.id, params.id))
+    .limit(1);
+  if (!row) return json({ error: 'Quick answer not found' }, { status: 404 });
+
+  // quickAnswers has no child tables — safe to delete directly.
+  await db.delete(quickAnswers).where(eq(quickAnswers.id, params.id));
+  return new Response(null, { status: 204 });
+};

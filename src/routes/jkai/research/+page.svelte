@@ -6,10 +6,15 @@
   let { data }: { data: PageData } = $props();
 
   type Mode = 'quick' | 'deep';
+  type Run = typeof data.runs[number];
+
   let mode = $state<Mode>('deep');
   let topic = $state('');
   let starting = $state(false);
   let error = $state<string | null>(null);
+  let runs = $state<Run[]>(data.runs);
+  // Per-row: id -> 'confirming' | 'deleting'
+  let deleteState = $state<Record<string, 'confirming' | 'deleting'>>({});
 
   async function start() {
     const t = topic.trim();
@@ -43,6 +48,48 @@
       error = e?.message ?? 'Network error';
     } finally {
       starting = false;
+    }
+  }
+
+  function startConfirm(e: MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteState = { ...deleteState, [id]: 'confirming' };
+  }
+
+  function cancelConfirm(e: MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = { ...deleteState };
+    delete next[id];
+    deleteState = next;
+  }
+
+  async function confirmDelete(e: MouseEvent, run: Run) {
+    e.preventDefault();
+    e.stopPropagation();
+    const { id, mode: runMode } = run;
+    deleteState = { ...deleteState, [id]: 'deleting' };
+
+    // Optimistic removal
+    const prev = runs;
+    runs = runs.filter((r) => r.id !== id);
+
+    const endpoint = runMode === 'quick' ? `/api/quickanswer/${id}` : `/api/deepdive/${id}`;
+    try {
+      const res = await fetch(endpoint, { method: 'DELETE' });
+      if (!res.ok) {
+        // Revert
+        runs = prev;
+        error = `Delete failed (${res.status})`;
+      }
+    } catch (err: any) {
+      runs = prev;
+      error = err?.message ?? 'Network error during delete';
+    } finally {
+      const next = { ...deleteState };
+      delete next[id];
+      deleteState = next;
     }
   }
 
@@ -106,16 +153,45 @@
   <section class="recent">
     <div class="recent-hd">
       <span class="sr-label-tight">Recent runs</span>
-      <span class="recent-meta">{data.runs.length} {data.runs.length === 1 ? 'run' : 'runs'}</span>
+      <span class="recent-meta">{runs.length} {runs.length === 1 ? 'run' : 'runs'}</span>
     </div>
 
-    {#if data.runs.length === 0}
+    {#if runs.length === 0}
       <div class="empty">No research runs yet. Ask something above.</div>
     {:else}
       <div class="run-grid">
-        {#each data.runs as r (r.mode + ':' + r.id)}
+        {#each runs as r (r.mode + ':' + r.id)}
+          {@const ds = deleteState[r.id]}
           <a class="run-card" href={r.href}>
-            <span class="run-mode {r.mode}">{r.mode}</span>
+            <div class="run-card-top">
+              <span class="run-mode {r.mode}">{r.mode}</span>
+              {#if ds === 'confirming'}
+                <span class="del-confirm-row" role="group" aria-label="Confirm delete">
+                  <button
+                    type="button"
+                    class="del-btn del-confirm"
+                    onclick={(e) => confirmDelete(e, r)}
+                    aria-label="Confirm delete"
+                  >✓ delete</button>
+                  <button
+                    type="button"
+                    class="del-btn del-cancel"
+                    onclick={(e) => cancelConfirm(e, r.id)}
+                    aria-label="Cancel delete"
+                  >✗</button>
+                </span>
+              {:else if ds === 'deleting'}
+                <span class="del-spinner" aria-label="Deleting…">…</span>
+              {:else}
+                <button
+                  type="button"
+                  class="del-btn del-trash"
+                  onclick={(e) => startConfirm(e, r.id)}
+                  aria-label="Delete this run"
+                  title="Delete run"
+                >✕</button>
+              {/if}
+            </div>
             <div class="run-topic">{r.topic}</div>
             <div class="run-meta">
               <span style:color={statusColor(r.status)}>{r.status}</span>
@@ -181,9 +257,23 @@
     color: var(--text-primary); text-decoration: none; transition: transform 80ms ease;
   }
   .run-card:hover { transform: translate(-1px, -1px); }
+  .run-card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; }
   .run-mode { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; padding: 2px 6px; border: 1px solid rgba(26, 16, 8, 0.18); color: var(--text-muted); }
   .run-mode.quick { color: var(--accent); border-color: var(--accent); }
   .run-mode.deep { color: var(--bg); background: var(--text-primary); border-color: var(--text-primary); }
+  .del-btn {
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+    border: none; background: transparent; cursor: pointer; padding: 2px 4px; line-height: 1;
+  }
+  .del-trash { color: var(--text-ghost); opacity: 0; transition: opacity 100ms; }
+  .run-card:hover .del-trash { opacity: 1; }
+  .del-trash:hover { color: var(--error, #c44); }
+  .del-confirm-row { display: flex; align-items: center; gap: 2px; }
+  .del-confirm { color: var(--error, #c44); border: 1px solid var(--error, #c44); padding: 2px 6px; }
+  .del-confirm:hover { background: var(--error, #c44); color: #fff; }
+  .del-cancel { color: var(--text-muted); border: 1px solid rgba(26, 16, 8, 0.18); padding: 2px 5px; }
+  .del-cancel:hover { color: var(--text-primary); }
+  .del-spinner { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
   .run-topic { font-size: 13px; font-weight: 500; margin: 0.55rem 0 0.35rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .run-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
   .run-meta .dot { color: var(--text-ghost); }
