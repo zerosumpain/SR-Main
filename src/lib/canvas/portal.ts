@@ -45,6 +45,12 @@ export function portal(node: HTMLElement, target: PortalTarget = 'body') {
       // to find the node where it created it).
       if (originalParent && originalParent.isConnected && node.parentNode !== originalParent) {
         originalParent.appendChild(node);
+      } else if (node.parentNode && node.parentNode !== originalParent) {
+        // Client-side navigation tore the page down: the original parent is
+        // gone, so the portaled node is orphaned in the target (e.g. <body>) —
+        // an invisible full-viewport scrim that freezes the page after BACK.
+        // Remove it directly.
+        node.remove();
       }
     },
   };
