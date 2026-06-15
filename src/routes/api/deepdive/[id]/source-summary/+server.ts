@@ -130,7 +130,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
   // ── LLM call ─────────────────────────────────────────────────────────────
   let summary: string;
   try {
-    summary = await chatCompletion(system, user, { maxTokens: 256, temperature: 0.4 });
+    // maxTokens must be generous: the default model is glm-5.1, which spends
+    // reasoning tokens out of max_tokens — a small cap (e.g. 256) gets entirely
+    // consumed by reasoning and returns EMPTY content ("No summary could be
+    // generated"). ≥3000 leaves room for reasoning + the short summary.
+    summary = await chatCompletion(system, user, { maxTokens: 3072, temperature: 0.4 });
     summary = summary.trim();
     if (!summary) {
       summary = 'No summary could be generated for this source.';
