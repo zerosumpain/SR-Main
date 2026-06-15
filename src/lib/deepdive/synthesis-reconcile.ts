@@ -92,5 +92,19 @@ export function reconcileClusters(
     ];
   }
 
+  // Full-coverage pass: collect any fact uuid that wasn't assigned to any cluster
+  // and append an explicit "Other" bucket so nothing is left uncategorised after
+  // the LLM skips or forgets some facts.
+  const assigned = new Set<string>(out.flatMap((c) => c.fact_ids));
+  const leftovers = allIds.filter((id) => !assigned.has(id));
+  if (leftovers.length > 0) {
+    out.push({
+      id: `${runId}-c${out.length}`,
+      title: 'Other',
+      summary: 'Facts not assigned to a specific theme by the synthesis model.',
+      fact_ids: leftovers,
+    });
+  }
+
   return out;
 }
