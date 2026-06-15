@@ -1,6 +1,8 @@
 <!-- src/lib/canvas/intelligence/ResearchDesk.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
+  import { byType as byNodeType, mapTypeToKind, type NodeKind } from '$lib/canvas/adapter';
   import ArtefactCard from './desk/ArtefactCard.svelte';
   import CardLiveWrapper from './desk/CardLiveWrapper.svelte';
   import CategoryHeader from './desk/CategoryHeader.svelte';
@@ -567,6 +569,31 @@
   // The single source card actively producing facts right now (Feature 2).
   const analysingSourceId = $derived(store.analysingSourceId);
 
+  // ——— client-only desk nodes (research-chat / research-report) ———
+  // The Research Desk is session-scoped, NOT workflow-id-backed, so these nodes
+  // are ephemeral $state — created on right-click, never persisted to the
+  // workflow_nodes table (no /api/workflows/<id>/nodes POST). Positions live in
+  // world-space alongside the artefact cards.
+  type DeskNode = {
+    id: string;
+    type: string; // adapter node type, e.g. 'research-chat'
+    kind: NodeKind;
+    x: number;
+    y: number;
+    config: Record<string, unknown>;
+  };
+  let deskNodes = $state.raw<DeskNode[]>([]);
+  let selectedNodeId = $state<string | null>(null);
+
+  // Which node types the desk palette offers — scoped to the research set, not
+  // the full workflow palette.
+  const DESK_PALETTE_TYPES = [
+    'research-chat',
+    'research-report',
+    'intelligence',
+    'research-result',
+  ];
+
   // ——— pan/zoom ———
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3;
@@ -596,6 +623,92 @@
     if (!vp) return;
     zoomAt(vp.width / 2, vp.height / 2, factor);
   }
+
+  // ——— lifted from the workflow canvas (screen↔world + overlap avoidance) ———
+  const DESK_NODE_W = 200;
+  const DESK_NODE_H = 120;
+
+  function screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    if (!viewportEl) return { x: 0, y: 0 };
+    const vp = viewportEl.getBoundingClientRect();
+    return {
+      x: (clientX - vp.left - panX) / zoom,
+      y: (clientY - vp.top - panY) / zoom,
+    };
+  }
+
+  function viewportCenterInWorld(): { x: number; y: number } {
+    if (!viewportEl) return { x: 320, y: 120 };
+    const vp = viewportEl.getBoundingClientRect();
+    const cx = (vp.width / 2 - panX) / zoom;
+    const cy = (vp.height / 2 - panY) / zoom;
+    const x = Math.round((cx - DESK_NODE_W / 2) / 20) * 20;
+    const y = Math.round((cy - DESK_NODE_H / 2) / 20) * 20;
+    return { x, y };
+  }
+
+  // Nudge a new node off any existing node so they don't stack exactly.
+  function resolveOverlap(p: { x: number; y: number }): { x: number; y: number } {
+    let { x, y } = p;
+    const limit = 20;
+    for (let i = 0; i < limit; i++) {
+      const clashes = deskNodes.some((n) => Math.hypot(n.x - x, n.y - y) < 40);
+      if (!clashes) return { x, y };
+      x += 24;
+      y += 24;
+    }
+    return { x, y };
+  }
+
+  // ——— node palette (right-click → add node) ———
+  // Lifted from src/routes/jkai/canvas/[slug]/+page.svelte, but the server
+  // addNode (POST /api/workflows/<id>/nodes) and edge POST are REMOVED: desk
+  // nodes are client-only ephemeral $state (decision §2.1).
+  let paletteOpen = $state(false);
+  let paletteAnchor = $state<{ x: number; y: number } | 'center'>('center');
+  let paletteMode = $state<PaletteMode>({ kind: 'workflow-ranked' });
+  let palettePositionOverride = $state<{ x: number; y: number } | null>(null);
+
+  function openPalette(opts: {
+    anchor: { x: number; y: number } | 'center';
+    mode: PaletteMode;
+    worldPosition?: { x: number; y: number } | null;
+  }) {
+    if (readonly || deskMode === 'quick') return;
+    paletteAnchor = opts.anchor;
+    paletteMode = opts.mode;
+    palettePositionOverride = opts.worldPosition ?? null;
+    paletteOpen = true;
+  }
+  function closePalette() {
+    paletteOpen = false;
+    palettePositionOverride = null;
+  }
+
+  function onPalettePick(type: string) {
+    const meta = byNodeType(type);
+    if (!meta) {
+      closePalette();
+      return;
+    }
+    const worldPos = palettePositionOverride ?? viewportCenterInWorld();
+    const placement = resolveOverlap(worldPos);
+    const id = `desknode-${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const node: DeskNode = {
+      id,
+      type: meta.type,
+      kind: mapTypeToKind(meta.type),
+      x: placement.x,
+      y: placement.y,
+      config: { ...(meta.defaultConfig as Record<string, unknown>) },
+    };
+    deskNodes = [...deskNodes, node];
+    selectedNodeId = id;
+    closePalette();
+  }
+
+  // The candidate list NodePalette consumes — scoped to the research set above.
+  const palettePickTypes = $derived(DESK_PALETTE_TYPES.map((t) => ({ type: t })));
   function fit() {
     const cards = visibleCards;
     if (!viewportEl || cards.length === 0) return;
