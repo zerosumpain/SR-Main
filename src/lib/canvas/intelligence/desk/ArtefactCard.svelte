@@ -3,12 +3,23 @@
   import type { DeskCard } from './store.svelte';
   import { confidenceColor, confidenceLabel, credibilityBadge } from '$lib/deepdive/display';
 
-  let { card, selected = false, onselect, onsummarize } = $props<{
+  let {
+    card,
+    selected = false,
+    onselect,
+    onsummarize,
+    analysing = false,
+  } = $props<{
     card: DeskCard;
     selected?: boolean;
     onselect: (id: string) => void;
     /** Called on double-click of a source card. Single-click onselect still fires. */
     onsummarize?: (id: string) => void;
+    /** True for the one SOURCE card whose facts are being produced right now
+     *  (Feature 2). Drives a subtle "analysing…" badge + shimmer on THIS inner
+     *  element (box-shadow/colour only — no transform, so it never conflicts
+     *  with the hover micro-transform or the host's position/morph transform). */
+    analysing?: boolean;
   }>();
 
   const f = $derived(card.fields as Record<string, any>);
@@ -94,6 +105,7 @@
   class="ac"
   class:unfiled
   class:selected
+  class:ac-analysing={analysing}
   data-variant={variant}
   onclick={(e) => {
     e.stopPropagation();
@@ -150,6 +162,12 @@
 
   {#if unfiled}
     <span class="ac-unfiled-tag">● UNFILED</span>
+  {/if}
+
+  {#if analysing}
+    <span class="ac-analysing-tag" aria-hidden="true">
+      <i class="ac-analysing-dot"></i>analysing&hellip;
+    </span>
   {/if}
 </button>
 
@@ -299,6 +317,49 @@
     color: var(--accent);
   }
   .ac[data-variant='entity'] .ac-unfiled-tag { color: var(--accent); }
+
+  /* ---------------------------------------------------------------------------
+   * Active-source "analysing…" (Feature 2)
+   * The SOURCE card whose facts are being produced right now gets a subtle warm
+   * accent ring (box-shadow, NOT transform) + a mono badge. Pure colour/shadow,
+   * so it never conflicts with the hover micro-transform or the host transform.
+   * --------------------------------------------------------------------------- */
+  .ac.ac-analysing {
+    border-color: var(--accent);
+    animation: ac-analysing-ring 1.4s ease-in-out infinite;
+  }
+  @keyframes ac-analysing-ring {
+    0%,
+    100% { box-shadow: var(--brutal), 0 0 0 0 rgba(196, 87, 10, 0); }
+    50%  { box-shadow: var(--brutal), 0 0 0 3px rgba(196, 87, 10, 0.22); }
+  }
+  .ac-analysing-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .ac-analysing-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: ac-analysing-blink 1s steps(2, jump-none) infinite;
+  }
+  @keyframes ac-analysing-blink {
+    0%,
+    100% { opacity: 1; }
+    50%  { opacity: 0.25; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ac.ac-analysing { animation: none; box-shadow: var(--brutal), 0 0 0 2px rgba(196, 87, 10, 0.22); }
+    .ac-analysing-dot { animation: none; }
+  }
 
   /* ---------------------------------------------------------------------------
    * Source preview thumbnail

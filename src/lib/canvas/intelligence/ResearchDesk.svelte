@@ -573,6 +573,25 @@
     return out;
   });
 
+  // ——— provenance sparks (Feature 2) ———
+  // Transient source→fact lines. Endpoints resolve through anchorRect (same
+  // idiom as edges/synthEdges) so they ride the same positionById memo; a spark
+  // whose source or fact card isn't currently visible is simply skipped. The
+  // store caps + expires the sparks list, so this stays bounded.
+  const sparkPaths = $derived.by(() => {
+    const out: { id: string; d: string }[] = [];
+    for (const s of store.sparks) {
+      const a = anchorRect(s.fromId);
+      const b = anchorRect(s.toId);
+      if (!a || !b) continue;
+      out.push({ id: s.id, d: orthPath(a, b) });
+    }
+    return out;
+  });
+
+  // The single source card actively producing facts right now (Feature 2).
+  const analysingSourceId = $derived(store.analysingSourceId);
+
   // ——— pan/zoom ———
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3;
@@ -875,6 +894,19 @@
           {#each edgePaths as e (e.id)}
             <path d={e.d} fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.45" vector-effect="non-scaling-stroke" />
           {/each}
+
+          <!-- provenance sparks: source→fact, draw-in then fade (~1.2s) -->
+          {#each sparkPaths as s (s.id)}
+            <path
+              d={s.d}
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2"
+              pathLength="1"
+              vector-effect="non-scaling-stroke"
+              class="prov-spark"
+            />
+          {/each}
           {#if mode === 'synthesize'}
             {#each synthEdgePaths as e (e.id)}
               <path
@@ -959,6 +991,7 @@
               <ArtefactCard
                 card={c}
                 selected={selectedId === c.id}
+                analysing={c.kind === 'source' && analysingSourceId === c.id}
                 onselect={(id) => { selectedId = id; openInspector(id); }}
                 onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
               />
@@ -1182,6 +1215,28 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .syn-edge { animation: none; }
+  }
+
+  /* Provenance spark (Feature 2): draw the line in (dashoffset 1→0, pathLength
+     normalised to 1), hold briefly, then fade. The store removes the node after
+     ~1.2s, so the animation runs once and the element disappears. */
+  .prov-spark {
+    stroke-dasharray: 1;
+    animation: prov-spark 1200ms ease-out both;
+  }
+  @keyframes prov-spark {
+    0% { stroke-dashoffset: 1; stroke-opacity: 0.9; }
+    40% { stroke-dashoffset: 0; stroke-opacity: 0.9; }
+    70% { stroke-dashoffset: 0; stroke-opacity: 0.6; }
+    100% { stroke-dashoffset: 0; stroke-opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* No draw-in motion; just a brief static-then-fade so it's still legible. */
+    .prov-spark { stroke-dasharray: none; animation: prov-spark-fade 1200ms linear both; }
+  }
+  @keyframes prov-spark-fade {
+    0%, 60% { stroke-opacity: 0.7; }
+    100% { stroke-opacity: 0; }
   }
 
   .desk-minimap {

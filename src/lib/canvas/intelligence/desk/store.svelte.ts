@@ -39,6 +39,19 @@ export interface DeskEdge {
   sentiment?: string | null;
 }
 
+/** A transient provenance spark: an animated line drawn from a SOURCE card to a
+ *  newly-produced FACT card, then faded out (~1.2s). Lives in a $state.raw list
+ *  updated on SSE fact events (event-rate, NOT frame-rate); each spark is
+ *  removed by its own plain-`let` setTimeout (no global ticking clock). */
+export interface DeskSpark {
+  /** Unique key for the #each block (sparks may repeat the same from/to pair). */
+  id: string;
+  /** Source card id the fact was derived from. */
+  fromId: string;
+  /** New fact card id. */
+  toId: string;
+}
+
 export interface SynthesisCluster {
   id: string;
   title: string;
@@ -206,6 +219,11 @@ export interface DeskStore {
   synthSummary: string;
   /** Fact count the current run is scoped over. */
   synthFactCount: number;
+  /** Transient provenance sparks (source→fact) for the SVG layer (Feature 2). */
+  sparks: ReadonlyArray<DeskSpark>;
+  /** Source id whose facts are being produced right now (Feature 2). Cleared by
+   *  a debounced timer ~1.5s after the last fact. null when idle. */
+  analysingSourceId: string | null;
   /** Arrival metadata reader (non-reactive side map). Returns undefined for an
    *  id that has not yet been seen. Read inside a $derived over `cards` so it
    *  recomputes on each flush (when new arrivals are stamped). */
@@ -244,6 +262,67 @@ export function createDeskStore(
   // Synthesis reducer state — folds synthesis.* events into categories,
   // header→fact edges and card patches (file + categorise).
   let synth = $state.raw<SynthesisState>(initSynthesisState());
+
+  // ——— Feature 2: provenance sparks + active-source ———
+  // Transient source→fact sparks. $state.raw — replaced wholesale on each
+  // event-rate update (never mutated in place). Capped so a fast run can't
+  // accumulate hundreds of concurrent lines.
+  let sparkList = $state.raw<DeskSpark[]>([]);
+  // The source id whose facts are streaming right now (drives the "analysing…"
+  // shimmer on that one source card). Cleared by a debounced timer.
+  let analysingSourceIdState = $state<string | null>(null);
+
+  const SPARK_TTL_MS = 1200; // a spark fades out after this long
+  const SPARK_CAP = 12; // max concurrent sparks (oldest dropped past this)
+  const ANALYSING_DEBOUNCE_MS = 1500; // clear analysing this long after last fact
+
+  // Per-spark removal timers — PLAIN map (never $state); cleared on destroy.
+  const sparkTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let sparkSeq = 0;
+  // Debounced clear of analysingSourceId — PLAIN let (never $state).
+  let analysingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Apply a freshly-arrived FACT artefact's provenance: if it carries a
+   *  sourceId AND that source card exists (in the live map OR staged), add a
+   *  transient spark and mark the source as actively analysing. Called from the
+   *  SSE handler at event-rate. */
+  function applyFactProvenance(factId: string, sourceId: unknown) {
+    if (typeof sourceId !== 'string' || sourceId.length === 0) return;
+    // Source must exist on the desk (live or staged) to anchor the spark.
+    const sourceExists =
+      cardMap.get(sourceId)?.kind === 'source' ||
+      pendingCards.get(sourceId)?.kind === 'source';
+    if (!sourceExists) return;
+
+    // Mark the source as actively analysing; (re)arm the debounced clear.
+    analysingSourceIdState = sourceId;
+    if (analysingTimer !== null) clearTimeout(analysingTimer);
+    analysingTimer = setTimeout(() => {
+      analysingSourceIdState = null;
+      analysingTimer = null;
+    }, ANALYSING_DEBOUNCE_MS);
+
+    // Add a capped, self-expiring spark.
+    const id = `spark-${sparkSeq++}`;
+    let next = [...sparkList, { id, fromId: sourceId, toId: factId }];
+    // Cap: drop the oldest sparks (and cancel their timers) past SPARK_CAP.
+    while (next.length > SPARK_CAP) {
+      const dropped = next.shift()!;
+      const t = sparkTimers.get(dropped.id);
+      if (t !== undefined) {
+        clearTimeout(t);
+        sparkTimers.delete(dropped.id);
+      }
+    }
+    sparkList = next;
+    sparkTimers.set(
+      id,
+      setTimeout(() => {
+        sparkList = sparkList.filter((s) => s.id !== id);
+        sparkTimers.delete(id);
+      }, SPARK_TTL_MS),
+    );
+  }
 
   // Plain (non-$state) handles — read inside SSE callback / flush.
   let es: EventSource | null = null;
@@ -382,6 +461,15 @@ export function createDeskStore(
           });
         } else {
           const c = eventToCard(evt.data);
+          // Provenance spark + active-source: only for genuinely-NEW facts that
+          // carry a sourceId (a re-delta of an existing fact shouldn't re-spark).
+          if (
+            c.kind === 'fact' &&
+            !cardMap.has(c.id) &&
+            !pendingCards.has(c.id)
+          ) {
+            applyFactProvenance(c.id, (evt.data as any).sourceId);
+          }
           // Stage with dedup-by-id; a later delta for the same id overwrites the staged one.
           pendingCards.set(c.id, c);
         }
@@ -512,6 +600,12 @@ export function createDeskStore(
     get synthFactCount() {
       return synth.factCount;
     },
+    get sparks() {
+      return sparkList;
+    },
+    get analysingSourceId() {
+      return analysingSourceIdState;
+    },
     get status() {
       return status;
     },
@@ -556,6 +650,13 @@ export function createDeskStore(
         coalescer.flushNow(); // commits staged state, cancels pending timers
       } else {
         coalescer.cancel(); // nothing to commit — just cancel
+      }
+      // Cancel all transient-spark + analysing timers so none fire post-teardown.
+      for (const t of sparkTimers.values()) clearTimeout(t);
+      sparkTimers.clear();
+      if (analysingTimer !== null) {
+        clearTimeout(analysingTimer);
+        analysingTimer = null;
       }
     },
   };
