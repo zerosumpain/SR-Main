@@ -100,9 +100,9 @@
   let everSynthesized = $state(false);
 
   // ——— Group-by (pile) state ———
-  // The active grouping dimension. Defaults to 'similarity' on first synthesize
-  // (set in goSynthesize); 'cluster' is the resting value before synthesis.
-  let groupDim = $state<GroupDim>('cluster');
+  // The active grouping dimension. Defaults to 'similarity' so before synthesize
+  // the desk shows real embedding-similarity piles (not the empty 'cluster' dimension).
+  let groupDim = $state<GroupDim>('similarity');
 
   // Expanded pile keys. A pile is collapsed (fanned stack) unless its group key
   // is in this set; expanding spreads members into a column (animated via morphIds).
@@ -135,6 +135,18 @@
     return () => { cancelled = true; };
   });
 
+  // Clear transient manual positions whenever the grouping dimension changes so
+  // dragged-but-not-locked cards rejoin their new piles. A plain let tracks the
+  // previous dim value; the $effect guard prevents self-fire on init.
+  let prevGroupDim: GroupDim | null = null;
+  $effect(() => {
+    const dim = groupDim;
+    if (prevGroupDim !== null && prevGroupDim !== dim) {
+      untrack(() => { manualPos = new Map(); });
+    }
+    prevGroupDim = dim;
+  });
+
   function goGather() {
     mode = 'gather';
   }
@@ -145,6 +157,8 @@
     // they only re-cluster the already-streamed state locally.
     if (readonly || deskMode === 'quick') return;
     if (synthesizing || store.synthStatus === 'running') return;
+    // Clear transient drag positions — cards rejoin their new piles after a synthesize.
+    manualPos = new Map();
     synthesizing = true;
     try {
       const res = await fetch(`/api/deepdive/${sessionId}/synthesize`, {
@@ -153,6 +167,7 @@
         body: JSON.stringify({ scope: { pinnedOnly: false } }),
       });
       if (res.ok) {
+        // Keep similarity as the post-synthesize default.
         if (!everSynthesized) groupDim = 'similarity';
         everSynthesized = true;
       } else {
@@ -296,6 +311,20 @@
   // Live drag overrides (id → {x,y}); applied on top of persisted/auto layout.
   let dragOverrides = $state.raw<Record<string, { x: number; y: number }>>({});
 
+  // Transient post-drag positions (client-only, NOT persisted). Set on drag-end
+  // for unlocked cards; cleared on regroup (groupDim change or synthesize start).
+  let manualPos = $state.raw<Map<string, { x: number; y: number }>>(new Map());
+
+  // Card right-click context menu state.
+  let cardContextMenu = $state<{
+    cardId: string;
+    cardKind: 'source' | 'fact' | 'entity';
+    pinned: boolean;
+    currentPos: { x: number; y: number };
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+
   // Categories: live reducer categories merged with any persisted deskCategory
   const categories = $derived.by<{ id: string; title: string }[]>(() => {
     const map = new Map<string, { id: string; title: string }>();
@@ -389,8 +418,13 @@
     for (const c of visibleCards) {
       const key = grouping.memberOf.get(c.id);
       const idx = idxInGroup.get(c.id) ?? 0;
-      // Manual/pinned cards always render (they escaped the pile).
-      const manual = !!dragOverrides[c.id] || (c.canvasX != null && c.canvasY != null);
+      // Manual/locked/transient cards sit above their pile.
+      // A card is "escaped" if: in-flight drag override, explicitly locked (pinned===true),
+      // or has a transient manual position set post-drag.
+      const manual =
+        !!dragOverrides[c.id] ||
+        (c.pinned === true && c.canvasX != null && c.canvasY != null) ||
+        manualPos.has(c.id);
       // All fan members render — every card peeks out in the collapsed fan.
       const render = true;
       // Top of the fan (idx 0) sits highest; deeper cards recede.
@@ -465,17 +499,23 @@
   );
 
   function posOf(c: DeskCard): { x: number; y: number } {
-    // 1. Manual position ALWAYS wins — in-flight drag override, or a pinned /
-    //    user-dragged card (non-null canvasX/Y).
+    // 1. In-flight drag override (pointer is still down).
     const ov = dragOverrides[c.id];
     if (ov) return ov;
-    if (c.canvasX != null && c.canvasY != null) {
+    // 2. Locked (pinned===true) — use the persisted canvasX/Y. Stale canvasX/Y
+    //    from old unlocked drags are intentionally ignored here (they get cleared
+    //    on unlock via PATCH pinned:false; until then an unlocked card with stale
+    //    canvasX/Y is NOT treated as locked — only pinned===true gates this).
+    if (c.pinned === true && c.canvasX != null && c.canvasY != null) {
       return { x: c.canvasX as number, y: c.canvasY as number };
     }
-    // 2. Pile position from the active grouping (collapsed fan or expanded column).
+    // 3. Transient manual drag (client-only; cleared on regroup).
+    const manual = manualPos.get(c.id);
+    if (manual) return manual;
+    // 4. Pile position from the active grouping (collapsed fan or expanded column).
     const pile = pilePositions.get(c.id);
     if (pile) return pile;
-    // 3. Fallback (a card not covered by the packer): deterministic GATHER scatter.
+    // 5. Fallback (a card not covered by the packer): deterministic GATHER scatter.
     const filedByCluster = factCat.has(c.id);
     return effectivePosition(
       {
@@ -692,6 +732,66 @@
     deskNodes = deskNodes.filter((n) => n.id !== id);
     if (selectedNodeId === id) selectedNodeId = null;
     closeNodeContextMenu();
+  }
+
+  // ——— card context menu (right-click → Lock/Unlock) ———
+  function openCardContextMenu(e: MouseEvent, c: DeskCard) {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentPos = positionById.get(c.id) ?? posOf(c);
+    const kind: 'source' | 'fact' | 'entity' = c.kind === 'entity' ? 'entity' : c.kind === 'source' ? 'source' : 'fact';
+    cardContextMenu = {
+      cardId: c.id,
+      cardKind: kind,
+      pinned: c.pinned === true,
+      currentPos,
+      screenX: e.clientX,
+      screenY: e.clientY,
+    };
+  }
+
+  function closeCardContextMenu() {
+    cardContextMenu = null;
+  }
+
+  async function lockCard(cardId: string) {
+    const entry = cardContextMenu;
+    closeCardContextMenu();
+    if (!entry) return;
+    const pos = entry.currentPos;
+    const { ok } = await persistArtefactPosition(sessionId, cardId, {
+      artefactType: entry.cardKind,
+      position: pos,
+      pinned: true,
+    });
+    if (ok) {
+      store.applyLocalPosition(cardId, pos.x, pos.y, true);
+      // If there was a transient position, remove it now that it's persisted+locked.
+      if (manualPos.has(cardId)) {
+        const next = new Map(manualPos);
+        next.delete(cardId);
+        manualPos = next;
+      }
+    }
+  }
+
+  async function unlockCard(cardId: string) {
+    const entry = cardContextMenu;
+    closeCardContextMenu();
+    if (!entry) return;
+    // PATCH pinned:false — the card rejoins grouping since posOf keys on pinned===true.
+    // We send the current position so the server round-trip is valid (position required).
+    const pos = entry.currentPos;
+    const { ok } = await persistArtefactPosition(sessionId, cardId, {
+      artefactType: entry.cardKind,
+      position: pos,
+      pinned: false,
+    });
+    if (ok) {
+      // Reflect unlock locally: pinned=false, keep canvasX/Y on the row but posOf
+      // will ignore them (not pinned===true).
+      store.applyLocalPosition(cardId, pos.x, pos.y, false);
+    }
   }
 
   // Which node types the desk palette offers — scoped to the research set, not
@@ -942,16 +1042,31 @@
       return;
     }
     if (wasMoved && finalPos) {
-      const { ok } = await persistArtefactPosition(sessionId, cardId, {
-        artefactType: c.kind,
-        position: finalPos,
-        pinned: true,
-      });
-      if (ok) {
-        store.applyLocalPosition(cardId, finalPos.x, finalPos.y, true);
-        const next = { ...dragOverrides };
-        delete next[cardId];
-        dragOverrides = next;
+      // Remove the in-flight drag override regardless of path below.
+      const next = { ...dragOverrides };
+      delete next[cardId];
+      dragOverrides = next;
+
+      if (c.pinned === true) {
+        // LOCKED card: drag moves it and it stays locked — persist the new position.
+        const { ok } = await persistArtefactPosition(sessionId, cardId, {
+          artefactType: c.kind,
+          position: finalPos,
+          pinned: true,
+        });
+        if (ok) {
+          store.applyLocalPosition(cardId, finalPos.x, finalPos.y, true);
+        } else {
+          // Persist failed — keep as transient fallback so card doesn't snap back.
+          const next2 = new Map(manualPos);
+          next2.set(cardId, finalPos);
+          manualPos = next2;
+        }
+      } else {
+        // UNLOCKED card: transient only — stays here until next regroup.
+        const next2 = new Map(manualPos);
+        next2.set(cardId, finalPos);
+        manualPos = next2;
       }
     } else {
       // Tap (not drag) → open inspector.
@@ -1203,8 +1318,9 @@
           {#if pile?.render ?? true}
             <div
               class="desk-card-host"
-              class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
+              class:morphing={c.pinned !== true && !manualPos.has(c.id) && !dragOverrides[c.id] && morphIds.has(c.id)}
               class:is-selected={selectedId === c.id}
+              class:is-locked={c.pinned === true}
               data-kind={kindOf(c)}
               style:transform="translate({p.x}px, {p.y}px)"
               style:z-index={pile?.z ?? 1}
@@ -1212,6 +1328,7 @@
               onpointermove={onCardPointerMove}
               onpointerup={(e) => onCardPointerUp(e, c)}
               onpointercancel={(e) => onCardPointerUp(e, c)}
+              oncontextmenu={(e) => { if (readonly || deskMode === 'quick') return; openCardContextMenu(e, c); }}
             >
               <CardLiveWrapper
                 enterDelayMs={live?.enterDelayMs ?? 0}
@@ -1360,6 +1477,38 @@
       >Delete</button>
     </div>
   {/if}
+
+  <!-- Card context menu — Lock/Unlock position. Rendered fixed to escape world transform. -->
+  {#if cardContextMenu}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="desk-node-ctx-backdrop"
+      onclick={closeCardContextMenu}
+    ></div>
+    <div
+      class="desk-node-ctx"
+      style:left="{cardContextMenu.screenX}px"
+      style:top="{cardContextMenu.screenY}px"
+      role="menu"
+    >
+      {#if cardContextMenu.pinned}
+        <button
+          type="button"
+          class="desk-node-ctx-item"
+          role="menuitem"
+          onclick={() => unlockCard(cardContextMenu!.cardId)}
+        >Unlock position</button>
+      {:else}
+        <button
+          type="button"
+          class="desk-node-ctx-item"
+          role="menuitem"
+          onclick={() => lockCard(cardContextMenu!.cardId)}
+        >Lock position</button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <NodePalette
@@ -1441,6 +1590,21 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     z-index: 3;
+  }
+
+  /* Locked card: subtle top-right lock indicator so user knows it's pinned. */
+  .desk-card-host.is-locked::after {
+    content: '⚑';
+    position: absolute;
+    top: -10px;
+    right: 2px;
+    font-size: 9px;
+    color: var(--accent);
+    pointer-events: none;
+    font-family: var(--font-mono);
+    letter-spacing: 0;
+    line-height: 1;
+    opacity: 0.8;
   }
 
   .desk-card-host.morphing {
