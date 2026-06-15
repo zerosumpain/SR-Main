@@ -35,11 +35,12 @@
   let focusNote = $state('');
 
   // ——— Page summary (source cards only) ———
-  // Client-side per-source cache: sourceId → summary text.
+  // Client-side per-source cache: sourceId → { summary, method }.
   // Plain Map (not $state) — not reactive, just a lookup table updated from async handlers.
-  const summaryClientCache = new Map<string, string>();
+  const summaryClientCache = new Map<string, { summary: string; method: string }>();
 
   let summaryText = $state<string | null>(null);
+  let summaryMethod = $state<string | null>(null);
   let summaryLoading = $state(false);
   let summaryError = $state<string | null>(null);
   // Plain let — AbortController must NOT be $state (Svelte 5 proxy footgun).
@@ -65,6 +66,7 @@
       summaryAc?.abort();
       summaryAc = null;
       summaryText = null;
+      summaryMethod = null;
       summaryLoading = false;
       summaryError = null;
     }
@@ -96,7 +98,8 @@
     // Client-side cache hit — instant re-open.
     const hit = summaryClientCache.get(sourceId);
     if (hit !== undefined) {
-      summaryText = hit;
+      summaryText = hit.summary;
+      summaryMethod = hit.method;
       summaryLoading = false;
       summaryError = null;
       return;
@@ -109,6 +112,7 @@
 
     summaryLoading = true;
     summaryText = null;
+    summaryMethod = null;
     summaryError = null;
 
     try {
@@ -123,10 +127,11 @@
         const e = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(e.error ?? `Request failed (${res.status})`);
       }
-      const data = await res.json() as { summary: string };
+      const data = await res.json() as { summary: string; method?: string };
       if (signal.aborted) return;
       summaryText = data.summary ?? '';
-      summaryClientCache.set(sourceId, summaryText);
+      summaryMethod = data.method ?? null;
+      summaryClientCache.set(sourceId, { summary: summaryText, method: summaryMethod ?? 'none' });
     } catch (err: unknown) {
       if (signal.aborted) return;
       summaryError = err instanceof Error ? err.message : 'Summary failed';
@@ -230,6 +235,13 @@
               <p class="d-summary-error">{summaryError}</p>
             {:else if summaryText !== null}
               <p class="d-summary-text">{summaryText}</p>
+              {#if summaryMethod && summaryMethod !== 'none'}
+                <p class="d-summary-source">
+                  {summaryMethod === 'tavily' ? 'via tavily' : summaryMethod === 'residential' ? 'via residential' : ''}
+                </p>
+              {:else if summaryMethod === 'none'}
+                <p class="d-summary-source">from gathered notes</p>
+              {/if}
               <button
                 type="button"
                 class="d-summary-refresh"
@@ -506,6 +518,14 @@
     font-size: 11px;
     color: var(--error);
     margin: 0;
+  }
+  .d-summary-source {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    margin: 0 0 6px;
+    text-transform: lowercase;
   }
   .d-summary-refresh {
     font-family: var(--font-mono);

@@ -3,8 +3,11 @@
 // POST /api/deepdive/[id]/source-summary
 // Body: { sourceId: string }
 //
-// Returns: { summary: string } — a 2-4 sentence "what this page says"
-// built from already-gathered facts + source title/snippet (no live fetch).
+// Returns: { summary: string, method: 'tavily'|'residential'|'none', cached?: true }
+//   method — how the summary was built:
+//     'tavily'      — live page text fetched via Tavily Extract
+//     'residential' — live page text fetched via homeserv residential Chromium
+//     'none'        — fell back to stored facts/snippet (original behaviour)
 //
 // In-memory cache keyed `${sessionId}:${sourceId}` with a 30-min TTL.
 
@@ -14,13 +17,16 @@ import { db } from '$lib/db';
 import { researchSessions, sources, facts } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { chatCompletion } from '$lib/deepdive/ai';
-import { buildSourceSummaryPrompt } from '$lib/deepdive/source-summary-prompt';
+import { buildSourceSummaryPrompt, buildPageTextSummaryPrompt } from '$lib/deepdive/source-summary-prompt';
+import { fetchPageText } from '$lib/deepdive/fetch-page-text';
+import type { FetchPageTextMethod } from '$lib/deepdive/fetch-page-text';
 
 // ——— in-memory cache ———
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 interface CacheEntry {
   summary: string;
+  method: FetchPageTextMethod;
   expiresAt: number;
 }
 
@@ -30,19 +36,20 @@ function cacheKey(sessionId: string, sourceId: string): string {
   return `${sessionId}:${sourceId}`;
 }
 
-function getCached(sessionId: string, sourceId: string): string | null {
+function getCached(sessionId: string, sourceId: string): CacheEntry | null {
   const entry = summaryCache.get(cacheKey(sessionId, sourceId));
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) {
     summaryCache.delete(cacheKey(sessionId, sourceId));
     return null;
   }
-  return entry.summary;
+  return entry;
 }
 
-function setCached(sessionId: string, sourceId: string, summary: string): void {
+function setCached(sessionId: string, sourceId: string, summary: string, method: FetchPageTextMethod): void {
   summaryCache.set(cacheKey(sessionId, sourceId), {
     summary,
+    method,
     expiresAt: Date.now() + CACHE_TTL_MS,
   });
 }
@@ -77,7 +84,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   // Cache hit?
   const cached = getCached(sessionId, sourceId);
   if (cached) {
-    return json({ summary: cached, cached: true });
+    return json({ summary: cached.summary, method: cached.method, cached: true });
   }
 
   // Load the source row (must belong to this session)
@@ -97,16 +104,30 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ error: 'Source not found in this session' }, { status: 404 });
   }
 
-  // Load facts for this source (content only, up to 30 to keep prompts bounded)
-  const sourceFacts = await db
-    .select({ id: facts.id, content: facts.content })
-    .from(facts)
-    .where(and(eq(facts.sourceId, sourceId), eq(facts.sessionId, sessionId)))
-    .limit(30);
+  // ── Fetch live page text (primary path) ──────────────────────────────────
+  // Use the caller's request signal so the fetch is cancelled if the client
+  // disconnects, but only for Tavily — the residential path has its own hard
+  // 30s timeout inside fetchPageText.
+  const pageTextResult = await fetchPageText(source.url, { signal: request.signal });
 
-  // Build prompt and call LLM
-  const { system, user } = buildSourceSummaryPrompt(source, sourceFacts);
+  // ── Build prompt ─────────────────────────────────────────────────────────
+  let system: string;
+  let user: string;
 
+  if (pageTextResult.method !== 'none') {
+    // Good live text — summarise the real page content
+    ({ system, user } = buildPageTextSummaryPrompt(source, pageTextResult.text));
+  } else {
+    // No live text — fall back to stored facts + snippet (original behaviour)
+    const sourceFacts = await db
+      .select({ id: facts.id, content: facts.content })
+      .from(facts)
+      .where(and(eq(facts.sourceId, sourceId), eq(facts.sessionId, sessionId)))
+      .limit(30);
+    ({ system, user } = buildSourceSummaryPrompt(source, sourceFacts));
+  }
+
+  // ── LLM call ─────────────────────────────────────────────────────────────
   let summary: string;
   try {
     summary = await chatCompletion(system, user, { maxTokens: 256, temperature: 0.4 });
@@ -119,7 +140,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ error: 'Summary generation failed' }, { status: 502 });
   }
 
-  // Cache + return
-  setCached(sessionId, sourceId, summary);
-  return json({ summary });
+  // Cache + return (cache includes the method so cache hits keep it consistent)
+  const method = pageTextResult.method;
+  setCached(sessionId, sourceId, summary, method);
+  return json({ summary, method });
 };
