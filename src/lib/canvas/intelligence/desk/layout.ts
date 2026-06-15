@@ -329,8 +329,11 @@ export const PILE = {
   /** Card box — kept in sync with the desk card footprint. */
   cardW: CARD_W,
   cardH: CARD_H,
-  /** Horizontal distance between pile anchor columns (≥ a fanned pile's width). */
-  colStride: 380,
+  /** Horizontal distance between pile anchor columns.
+   *  Must be ≥ max fanned pile width: (fanWrapAt-1)*fanDx + cardW = 7*26 + 220 = 402 px.
+   *  Set to 420 so an 8-member fan (right edge ≈ 402 px) doesn't bleed into the
+   *  adjacent pile's card body. */
+  colStride: 420,
   /** Vertical distance between pile anchor rows (≥ a fanned pile's height). */
   pileRowStride: 420,
   /** Piles per row before wrapping to the next anchor row. */

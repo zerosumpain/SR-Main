@@ -8,18 +8,23 @@ function fakeFetch(payload: unknown, status = 200) {
 }
 
 describe('createSimilarityCache', () => {
-  it('fetches once and maps factId -> clusterId', async () => {
+  it('fetches once and maps factId -> clusterLabel (for meaningful group labels)', async () => {
+    // The map stores clusterLabel as the value (not clusterId) so that
+    // groupBySimilarity can surface meaningful topic labels in the pile headers.
+    // All members of the same cluster share the same clusterLabel, so they
+    // still group together; the label string doubles as the stable group key.
     const fetchImpl = fakeFetch({
       clusters: [
-        { factId: 'f1', clusterId: 'c0', clusterLabel: 'A' },
-        { factId: 'f2', clusterId: 'c0', clusterLabel: 'A' },
-        { factId: 'f3', clusterId: 'c1', clusterLabel: 'B' },
+        { factId: 'f1', clusterId: 'c0', clusterLabel: 'Topic about economics' },
+        { factId: 'f2', clusterId: 'c0', clusterLabel: 'Topic about economics' },
+        { factId: 'f3', clusterId: 'c1', clusterLabel: 'Topic about education' },
       ],
     });
     const cache = createSimilarityCache('sess1', fetchImpl as unknown as typeof fetch);
     const map = await cache.get(3);
-    expect(map.get('f1')).toBe('c0');
-    expect(map.get('f3')).toBe('c1');
+    expect(map.get('f1')).toBe('Topic about economics');
+    expect(map.get('f2')).toBe('Topic about economics'); // same cluster → same label
+    expect(map.get('f3')).toBe('Topic about education');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(String(fetchImpl.mock.calls[0][0])).toContain('/api/deepdive/sess1/clusters?by=similarity');
   });

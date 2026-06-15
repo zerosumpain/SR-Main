@@ -326,19 +326,21 @@ function groupByCooccurrence(cards: GroupCard[], mentions: EntityMention[]): Gro
 // ——— similarity ———
 //
 // The server clusters endpoint returns {factId, clusterId, clusterLabel}[]; the
-// caller folds that into similarityMap (cardId → clusterId) and hands it in. A
-// card present in the map joins its cluster; a card absent → SIM_UNCLUSTERED_KEY.
-// (clusterLabel is applied at render time from the endpoint; this module only
-// sees clusterId, so labels here derive from the id.)
+// caller (similarityCache) folds that into similarityMap (cardId → clusterLabel)
+// and hands it in. All members of the same cluster share the same clusterLabel
+// (the highest-confidence member's truncated content), so the label string
+// doubles as the stable group key. A card absent from the map → SIM_UNCLUSTERED_KEY.
 
 function groupBySimilarity(cards: GroupCard[], similarityMap: Map<string, string>): GroupResult {
   const memberOf = new Map<string, string>();
   for (const c of cards) {
-    const clusterId = similarityMap.get(c.id);
-    memberOf.set(c.id, clusterId != null && clusterId.length > 0 ? clusterId : SIM_UNCLUSTERED_KEY);
+    const clusterLabel = similarityMap.get(c.id);
+    memberOf.set(c.id, clusterLabel != null && clusterLabel.length > 0 ? clusterLabel : SIM_UNCLUSTERED_KEY);
   }
+  // The map value IS the label — use it directly. Fall back to 'Unclustered' for
+  // cards not in the map, and use the key itself (the label string) for cluster groups.
   const groups = buildGroups(memberOf, (key) =>
-    key === SIM_UNCLUSTERED_KEY ? 'Unclustered' : `Similar group ${key}`,
+    key === SIM_UNCLUSTERED_KEY ? 'Unclustered' : key,
   );
   return { memberOf, groups };
 }

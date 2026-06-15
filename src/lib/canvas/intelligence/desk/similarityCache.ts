@@ -37,7 +37,12 @@ export function createSimilarityCache(
       if (!res.ok) return map; // empty, not cached (see get())
       const body = (await res.json()) as { clusters?: SimilarityClusterRow[] };
       for (const row of body.clusters ?? []) {
-        map.set(String(row.factId), String(row.clusterId));
+        // Store clusterLabel as the map value so groupBySimilarity can surface
+        // meaningful topic labels rather than opaque ids like "c0". All members
+        // of the same cluster share the same clusterLabel (derived from the
+        // highest-confidence member in greedyCluster), so they still group
+        // together; the label string doubles as the stable group key.
+        map.set(String(row.factId), String(row.clusterLabel));
       }
       resolved.set(factCount, map); // cache only on success
       return map;
