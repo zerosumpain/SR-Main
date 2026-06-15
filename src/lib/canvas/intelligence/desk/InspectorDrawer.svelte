@@ -15,6 +15,7 @@
     sessionId,
     artefact,
     related = [],
+    summarize = false,
     onclose,
     onselect,
   }: {
@@ -22,6 +23,8 @@
     sessionId: string;
     artefact: Artefact | null;
     related?: RelatedRef[];
+    /** When true (set by double-click), auto-trigger the page summary fetch. */
+    summarize?: boolean;
     onclose: () => void;
     onselect: (id: string) => void;
   } = $props();
@@ -30,6 +33,17 @@
   let explorePhase = $state<'idle' | 'confirm' | 'starting'>('idle');
   let exploreErr = $state<string | null>(null);
   let focusNote = $state('');
+
+  // ——— Page summary (source cards only) ———
+  // Client-side per-source cache: sourceId → summary text.
+  // Plain Map (not $state) — not reactive, just a lookup table updated from async handlers.
+  const summaryClientCache = new Map<string, string>();
+
+  let summaryText = $state<string | null>(null);
+  let summaryLoading = $state(false);
+  let summaryError = $state<string | null>(null);
+  // Plain let — AbortController must NOT be $state (Svelte 5 proxy footgun).
+  let summaryAc: AbortController | null = null;
 
   // explore type for the /explore endpoint: only fact|entity are addressable by itemId here
   let exploreType = $derived<ExploreType | null>(
@@ -47,6 +61,28 @@
     if (id !== prevArtefactId) {
       prevArtefactId = id;
       resetExplore();
+      // Reset summary state on artefact change.
+      summaryAc?.abort();
+      summaryAc = null;
+      summaryText = null;
+      summaryLoading = false;
+      summaryError = null;
+    }
+  });
+
+  // Auto-trigger summary when opened via double-click (summarize flag set).
+  // Keyed on (artefact id + summarize) — fires once when both are true,
+  // cleans up via AbortController (plain let, not $state).
+  let prevSummarizeKey = $state<string>('');
+  $effect(() => {
+    const id = artefact?.id ?? null;
+    const kind = artefact?.kind ?? null;
+    const key = `${id ?? ''}:${summarize}`;
+    if (key === prevSummarizeKey) return;
+    prevSummarizeKey = key;
+
+    if (id && kind === 'source' && summarize) {
+      fetchSummary(id);
     }
   });
 
@@ -54,6 +90,52 @@
     explorePhase = 'idle';
     exploreErr = null;
     focusNote = '';
+  }
+
+  async function fetchSummary(sourceId: string) {
+    // Client-side cache hit — instant re-open.
+    const hit = summaryClientCache.get(sourceId);
+    if (hit !== undefined) {
+      summaryText = hit;
+      summaryLoading = false;
+      summaryError = null;
+      return;
+    }
+
+    // Abort any in-flight request for a previous source.
+    summaryAc?.abort();
+    summaryAc = new AbortController();
+    const signal = summaryAc.signal;
+
+    summaryLoading = true;
+    summaryText = null;
+    summaryError = null;
+
+    try {
+      const res = await fetch(`/api/deepdive/${sessionId}/source-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId }),
+        signal,
+      });
+      if (signal.aborted) return;
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(e.error ?? `Request failed (${res.status})`);
+      }
+      const data = await res.json() as { summary: string };
+      if (signal.aborted) return;
+      summaryText = data.summary ?? '';
+      summaryClientCache.set(sourceId, summaryText);
+    } catch (err: unknown) {
+      if (signal.aborted) return;
+      summaryError = err instanceof Error ? err.message : 'Summary failed';
+    } finally {
+      if (!signal.aborted) {
+        summaryLoading = false;
+        summaryAc = null;
+      }
+    }
   }
 
   async function startExplore() {
@@ -121,6 +203,44 @@
               </dd>
             </div>
           </dl>
+
+          <!-- PAGE SUMMARY section — source artefacts only -->
+          <section class="d-sec d-summary-sec">
+            <div class="d-summary-head-row">
+              <h3>PAGE SUMMARY</h3>
+              {#if !summaryLoading && summaryText === null && summaryError === null}
+                <button
+                  type="button"
+                  class="d-summary-trigger"
+                  onclick={() => fetchSummary(artefact.id)}
+                  title="Double-click the card or click here to summarise this page"
+                >Summarise page</button>
+              {/if}
+              {#if summaryLoading}
+                <span class="d-summary-trigger-hint">generating…</span>
+              {/if}
+            </div>
+
+            {#if summaryLoading}
+              <!-- Skeleton -->
+              <div class="d-summary-skeleton" aria-label="Generating summary…">
+                <span></span><span></span><span></span>
+              </div>
+            {:else if summaryError}
+              <p class="d-summary-error">{summaryError}</p>
+            {:else if summaryText !== null}
+              <p class="d-summary-text">{summaryText}</p>
+              <button
+                type="button"
+                class="d-summary-refresh"
+                onclick={() => {
+                  summaryClientCache.delete(artefact.id);
+                  fetchSummary(artefact.id);
+                }}
+                title="Regenerate summary"
+              >↺ regenerate</button>
+            {/if}
+          </section>
 
         {:else if artefact.kind === 'fact'}
           {@const cc = confidenceColor(Number(artefact.confidence))}
@@ -305,4 +425,98 @@
     box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
   }
   .d-start:hover { background: var(--accent-hover); }
+
+  /* ——— Page summary section (source artefacts only) ——— */
+  .d-summary-sec { margin-top: 22px; }
+  .d-summary-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .d-summary-head-row h3 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    margin: 0;
+  }
+  .d-summary-trigger {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    border: 1px solid var(--accent-tint-35);
+    background: transparent;
+    padding: 2px 7px;
+    border-radius: var(--radius-sharp);
+    cursor: pointer;
+    transition: background 0.14s ease;
+  }
+  .d-summary-trigger:hover { background: var(--accent-tint-35); }
+  .d-summary-trigger-hint {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+  }
+
+  /* Animated skeleton: 3 lines of varying width */
+  .d-summary-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .d-summary-skeleton span {
+    display: block;
+    height: 11px;
+    background: linear-gradient(
+      90deg,
+      rgba(26, 16, 8, 0.06) 25%,
+      rgba(26, 16, 8, 0.13) 50%,
+      rgba(26, 16, 8, 0.06) 75%
+    );
+    background-size: 200% 100%;
+    animation: d-summary-shimmer 1.4s ease infinite;
+    border-radius: 2px;
+  }
+  .d-summary-skeleton span:nth-child(1) { width: 100%; }
+  .d-summary-skeleton span:nth-child(2) { width: 88%; }
+  .d-summary-skeleton span:nth-child(3) { width: 72%; }
+  @keyframes d-summary-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .d-summary-skeleton span { animation: none; }
+  }
+
+  .d-summary-text {
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    border-left: 2px solid var(--accent-tint-35);
+    padding-left: 10px;
+  }
+  .d-summary-error {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--error);
+    margin: 0;
+  }
+  .d-summary-refresh {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: block;
+  }
+  .d-summary-refresh:hover { color: var(--text-muted); }
 </style>

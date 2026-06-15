@@ -3,10 +3,12 @@
   import type { DeskCard } from './store.svelte';
   import { confidenceColor, confidenceLabel, credibilityBadge } from '$lib/deepdive/display';
 
-  let { card, selected = false, onselect } = $props<{
+  let { card, selected = false, onselect, onsummarize } = $props<{
     card: DeskCard;
     selected?: boolean;
     onselect: (id: string) => void;
+    /** Called on double-click of a source card. Single-click onselect still fires. */
+    onsummarize?: (id: string) => void;
   }>();
 
   const f = $derived(card.fields as Record<string, any>);
@@ -96,6 +98,11 @@
   onclick={(e) => {
     e.stopPropagation();
     onselect(card.id);
+  }}
+  ondblclick={(e) => {
+    if (card.kind !== 'source') return;
+    e.stopPropagation();
+    onsummarize?.(card.id);
   }}
 >
   {#if variant === 'entity'}

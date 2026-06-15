@@ -59,6 +59,7 @@
   let inspectorOpen = $state(false);
   let inspectorArtefact = $state<any>(null);
   let inspectorRelated = $state<{ id: string; kind: 'source' | 'fact' | 'entity'; label: string }[]>([]);
+  let inspectorSummarize = $state(false);
 
   // Artefact-type filter toggles (controlled).
   let typeFilters = $state({ source: true, fact: true, entity: true, counterfactual: true });
@@ -220,12 +221,13 @@
   }
 
   // Inspector open/close.
-  function openInspector(id: string) {
+  function openInspector(id: string, opts?: { summarize?: boolean }) {
     const card: any = store.cards.find((c) => c.id === id);
     if (!card) return;
     // Build the artefact payload with kind + id + all fields inline.
     inspectorArtefact = { kind: card.kind, id: card.id, ...card.fields };
     inspectorRelated = relatedFor(id);
+    inspectorSummarize = !!(opts?.summarize && card.kind === 'source');
     inspectorOpen = true;
   }
 
@@ -820,7 +822,12 @@
             onpointerup={(e) => onCardPointerUp(e, c)}
             onpointercancel={(e) => onCardPointerUp(e, c)}
           >
-            <ArtefactCard card={c} selected={selectedId === c.id} onselect={(id) => { selectedId = id; openInspector(id); }} />
+            <ArtefactCard
+              card={c}
+              selected={selectedId === c.id}
+              onselect={(id) => { selectedId = id; openInspector(id); }}
+              onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
+            />
           </div>
         {/each}
       </div>
@@ -869,6 +876,7 @@
     {sessionId}
     artefact={inspectorArtefact}
     related={inspectorRelated}
+    summarize={inspectorSummarize}
     onclose={() => (inspectorOpen = false)}
     onselect={(id) => openInspector(id)}
   />
