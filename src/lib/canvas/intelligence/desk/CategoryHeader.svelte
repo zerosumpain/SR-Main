@@ -47,6 +47,7 @@
     font-family: var(--font-display, 'Archivo Black', sans-serif);
     font-size: 13px;
     line-height: 1.15;
+    letter-spacing: -0.01em;
     color: var(--text-primary, #1a1008);
   }
   .count {
@@ -55,16 +56,22 @@
     color: var(--accent, #c4570a);
     flex: 0 0 auto;
   }
+  /* The cluster description — "the nature of this cluster". Kept readable
+     (up to ~4 lines) and capped in height so a long summary can't overflow
+     into the cluster's cards below. */
   .summary {
-    margin: 6px 0 0;
+    margin: 7px 0 0;
     font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--text-muted, rgba(26, 16, 8, 0.65));
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--text-secondary, rgba(26, 16, 8, 0.78));
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    /* ~4 lines at 11.5px/1.4 ≈ 64px — a hard cap that survives browsers
+       without line-clamp support. */
+    max-height: 66px;
   }
 </style>
