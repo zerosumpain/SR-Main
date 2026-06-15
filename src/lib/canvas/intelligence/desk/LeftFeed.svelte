@@ -1,6 +1,7 @@
 <!-- src/lib/canvas/intelligence/desk/LeftFeed.svelte -->
 <script lang="ts">
   import { tickerLine, type TickerLog } from './tickerText';
+  import { credibilityBadge } from '$lib/deepdive/display';
 
   interface FeedSource {
     id: string;
@@ -128,7 +129,10 @@
               <a href={s.url} target="_blank" rel="noopener noreferrer" class="source" title={s.url}>
                 <span class="src-domain">{s.domain}</span>
                 <span class="src-title">{s.title ?? s.url}</span>
-                {#if s.credibilityType}<span class="src-cred">{s.credibilityType}</span>{/if}
+                {#if s.credibilityType}
+                  {@const cb = credibilityBadge(s.credibilityType)}
+                  <span class="src-cred" style:color={cb.color} style:border-color={cb.color}>{cb.label}</span>
+                {/if}
               </a>
             </li>
           {/each}
@@ -255,7 +259,16 @@
   .source { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; text-decoration: none; border-bottom: 1px solid var(--bg-section); }
   .src-domain { font-family: var(--font-mono); font-size: 10px; color: var(--accent); }
   .src-title { font-family: var(--font-body); font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .src-cred { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
+  .src-cred {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    margin-top: 2px;
+  }
   .source:hover .src-title { color: var(--accent); }
 
   .log li { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); padding: 3px 0; line-height: 1.4; }

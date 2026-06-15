@@ -1,6 +1,7 @@
 <!-- src/lib/canvas/intelligence/desk/ArtefactCard.svelte -->
 <script lang="ts">
   import type { DeskCard } from './store.svelte';
+  import { confidenceColor, confidenceLabel, credibilityBadge } from '$lib/deepdive/display';
 
   let { card, selected = false, onselect } = $props<{
     card: DeskCard;
@@ -17,13 +18,20 @@
     isEntity ? 'entity' : isChallenge ? 'challenge' : card.kind, // 'source' | 'fact'
   );
 
-  // confidence 0..1 → percentage for the accent bar
+  // confidence 0..1 → percentage for the accent bar + colour/label canon
   const confidencePct = $derived(
     typeof f.confidence === 'number' ? Math.round(Math.max(0, Math.min(1, f.confidence)) * 100) : null,
   );
+  const confColor = $derived(
+    typeof f.confidence === 'number' ? confidenceColor(f.confidence) : null,
+  );
+  const confLabel = $derived(
+    typeof f.confidence === 'number' ? confidenceLabel(f.confidence) : null,
+  );
 
-  const credLabel = $derived(
-    f.credibilityType ? String(f.credibilityType) : f.credibilityScore != null ? `cred ${f.credibilityScore}` : '',
+  // Source credibility → tested badge canon (label + literal colour).
+  const credBadge = $derived(
+    card.kind === 'source' ? credibilityBadge(f.credibilityType as string | null | undefined) : null,
   );
 </script>
 
@@ -47,20 +55,22 @@
     <span class="ac-title">{f.title ?? f.url ?? '—'}</span>
     <span class="ac-meta">
       <span class="ac-domain">{f.domain ?? ''}</span>
-      {#if credLabel}<span class="ac-cred">{credLabel}</span>{/if}
+      {#if credBadge}<span class="ac-cred" style:color={credBadge.color} style:border-color={credBadge.color}>{credBadge.label}</span>{/if}
     </span>
   {:else if variant === 'challenge'}
     <span class="ac-tab">CHALLENGE</span>
     <span class="ac-content">{f.content ?? '—'}</span>
     {#if confidencePct !== null}
-      <span class="ac-conf"><i style:width="{confidencePct}%"></i></span>
+      <span class="ac-conf"><i style:width="{confidencePct}%" style:background={confColor}></i></span>
+      <span class="ac-conf-label" style:color={confColor}>{confLabel} · {confidencePct}%</span>
     {/if}
   {:else}
     <!-- fact -->
     <span class="ac-label">FACT</span>
     <span class="ac-content">{f.content ?? '—'}</span>
     {#if confidencePct !== null}
-      <span class="ac-conf"><i style:width="{confidencePct}%"></i></span>
+      <span class="ac-conf"><i style:width="{confidencePct}%" style:background={confColor}></i></span>
+      <span class="ac-conf-label" style:color={confColor}>{confLabel} · {confidencePct}%</span>
     {/if}
   {/if}
 
@@ -137,7 +147,14 @@
     color: var(--text-ghost);
   }
   .ac-domain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ac-cred { color: var(--accent); flex-shrink: 0; }
+  .ac-cred {
+    flex-shrink: 0;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+  }
 
   /* confidence bar */
   .ac-conf {
@@ -147,6 +164,12 @@
     display: block;
   }
   .ac-conf i { display: block; height: 100%; background: var(--accent); }
+  .ac-conf-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    align-self: flex-start;
+  }
 
   /* challenge variant — red tab + tint */
   .ac[data-variant='challenge'] {
