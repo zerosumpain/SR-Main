@@ -12,6 +12,7 @@
   import FloatingFilters from './desk/FloatingFilters.svelte';
   import ActivityTicker from './desk/ActivityTicker.svelte';
   import InspectorDrawer from './desk/InspectorDrawer.svelte';
+  import ResearchChatNode from './desk/ResearchChatNode.svelte';
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
     organisedLayout,
@@ -585,6 +586,56 @@
   let deskNodes = $state.raw<DeskNode[]>([]);
   let selectedNodeId = $state<string | null>(null);
 
+  // ——— generic desk-node drag (research-chat, research-report, etc.) ———
+  // Separate from artefact card drag (nodeDrag) so the two can't collide.
+  let deskNodeDrag = $state<{
+    nodeId: string;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    pointerId: number;
+  } | null>(null);
+
+  function onDeskNodePointerDown(e: PointerEvent, n: DeskNode) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    selectedNodeId = n.id;
+    deskNodeDrag = {
+      nodeId: n.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: n.x,
+      startY: n.y,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onDeskNodePointerMove(e: PointerEvent) {
+    if (!deskNodeDrag || deskNodeDrag.pointerId !== e.pointerId) return;
+    const dxClient = e.clientX - deskNodeDrag.startClientX;
+    const dyClient = e.clientY - deskNodeDrag.startClientY;
+    if (!deskNodeDrag.moved && Math.hypot(dxClient, dyClient) < 3) return;
+    deskNodeDrag.moved = true;
+    const dx = dxClient / zoom;
+    const dy = dyClient / zoom;
+    const nx = Math.round((deskNodeDrag.startX + dx) / 20) * 20;
+    const ny = Math.round((deskNodeDrag.startY + dy) / 20) * 20;
+    const id = deskNodeDrag.nodeId;
+    deskNodes = deskNodes.map((nd) => nd.id === id ? { ...nd, x: nx, y: ny } : nd);
+  }
+
+  function onDeskNodePointerUp(e: PointerEvent) {
+    if (!deskNodeDrag || deskNodeDrag.pointerId !== e.pointerId) return;
+    deskNodeDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch { /* no-op */ }
+  }
+
   // Which node types the desk palette offers — scoped to the research set, not
   // the full workflow palette.
   const DESK_PALETTE_TYPES = [
@@ -1095,31 +1146,41 @@
           </div>
         {/each}
 
-        <!-- client-only desk nodes (research-chat / research-report) — placeholder
-             frames in M6; full renderers branch here in M7/M8. -->
+        <!-- client-only desk nodes (research-chat / research-report).
+             M7: research-chat renders via ResearchChatNode; others keep the
+             placeholder label. Generic drag is wired here so all nodes can be
+             repositioned; positions update in deskNodes $state. -->
         {#each deskNodes as n (n.id)}
           <div
             class="desk-node-host"
             class:is-selected={selectedNodeId === n.id}
+            class:is-chat={n.kind === 'research-chat'}
             style:transform="translate({n.x}px, {n.y}px)"
             data-kind={n.kind}
             role="button"
             tabindex="0"
-            onpointerdown={(e) => { e.stopPropagation(); selectedNodeId = n.id; }}
+            onpointerdown={(e) => onDeskNodePointerDown(e, n)}
+            onpointermove={onDeskNodePointerMove}
+            onpointerup={onDeskNodePointerUp}
           >
-            <span class="desk-node-bar" style:background={n.kind === 'research-chat' ? 'var(--accent)' : '#7a6cd4'}></span>
-            <div class="desk-node-body">
-              {#if n.kind === 'research-chat'}
-                <span class="desk-node-label">Research Chat</span>
-                <span class="desk-node-hint">grounded chat · M7</span>
-              {:else if n.kind === 'research-report'}
-                <span class="desk-node-label">Research Report</span>
-                <span class="desk-node-hint">report preview · M8</span>
-              {:else}
-                <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
-                <span class="desk-node-hint">{n.type}</span>
-              {/if}
-            </div>
+            {#if n.kind === 'research-chat'}
+              <ResearchChatNode
+                sessionId={n.config?.sessionId != null ? String(n.config.sessionId) : sessionId}
+                nodeId={n.id}
+                {readonly}
+              />
+            {:else}
+              <span class="desk-node-bar" style:background={'#7a6cd4'}></span>
+              <div class="desk-node-body">
+                {#if n.kind === 'research-report'}
+                  <span class="desk-node-label">Research Report</span>
+                  <span class="desk-node-hint">report preview · M8</span>
+                {:else}
+                  <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
+                  <span class="desk-node-hint">{n.type}</span>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -1435,6 +1496,17 @@
     overflow: hidden;
     cursor: grab;
     user-select: none;
+  }
+  /* Chat node needs enough height to be usable — 400×320 in world-px.
+     The node's ResearchChatNode fills the host as a flex child. */
+  .desk-node-host.is-chat {
+    width: 400px;
+    height: 320px;
+    cursor: default;
+  }
+  /* Let the header area remain a grab target even for the chat node. */
+  .desk-node-host.is-chat :global(.rc-header) {
+    cursor: grab;
   }
   .desk-node-host.is-selected {
     outline: 2px solid var(--accent);
