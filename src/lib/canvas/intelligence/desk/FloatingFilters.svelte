@@ -9,16 +9,22 @@
   GroupDim selector slot (wired in M9).
 -->
 <script lang="ts">
+  import type { GroupDim } from './grouping';
+
   type FilterKey = 'source' | 'fact' | 'entity' | 'counterfactual';
 
   let {
     filters,
     counts,
     onfilter,
+    groupBy = 'similarity',
+    ongroupby = (_d: GroupDim) => {},
   }: {
     filters: { source: boolean; fact: boolean; entity: boolean; counterfactual: boolean };
     counts: { sources: number; facts: number; entities: number; counterfactuals: number };
     onfilter: (key: FilterKey, value: boolean) => void;
+    groupBy?: GroupDim;
+    ongroupby?: (dim: GroupDim) => void;
   } = $props();
 
   const filterDefs: { key: FilterKey; label: string; swatch: string; countKey: keyof typeof counts }[] = [
@@ -27,6 +33,20 @@
     { key: 'entity', label: 'Entities', swatch: 'ent', countKey: 'entities' },
     { key: 'counterfactual', label: 'Challenges', swatch: 'chal', countKey: 'counterfactuals' },
   ];
+
+  const GROUP_DIMS: { value: GroupDim; label: string; hint: string }[] = [
+    { value: 'similarity', label: 'Similarity', hint: 'Piles of semantically-related facts' },
+    { value: 'cluster', label: 'Cluster', hint: 'Synthesis topic clusters' },
+    { value: 'theme', label: 'Theme', hint: 'By artefact kind (sites / facts / people…)' },
+    { value: 'entityType', label: 'Entity type', hint: 'Group entities by their type' },
+    { value: 'sentiment', label: 'Sentiment', hint: 'By relationship sentiment' },
+    { value: 'cooccurrence', label: 'Co-occurrence', hint: 'Entities & facts sharing a fact' },
+  ];
+
+  function onDimChange(e: Event) {
+    const v = (e.currentTarget as HTMLSelectElement).value as GroupDim;
+    ongroupby(v);
+  }
 </script>
 
 <div class="floating-filters" role="group" aria-label="Desk filters">
@@ -48,15 +68,20 @@
     </div>
   </section>
 
-  <!-- GroupDim selector placeholder — wired in M9. Kept disabled so the
-       layout/position is locked in now and the wiring is a drop-in later. -->
-  <section class="ff-sec ff-groupby">
-    <h3>GROUP BY</h3>
-    <select class="ff-select" disabled aria-label="Group by dimension (coming soon)">
-      <option>Similarity</option>
+  <!-- GroupDim selector (M9): controlled; parent owns groupBy state. -->
+  <div class="ff-group" role="group" aria-label="Group by">
+    <span class="ff-group-label">GROUP BY</span>
+    <select
+      class="ff-select"
+      aria-label="Group artefacts by dimension"
+      value={groupBy}
+      onchange={onDimChange}
+    >
+      {#each GROUP_DIMS as d (d.value)}
+        <option value={d.value} title={d.hint}>{d.label}</option>
+      {/each}
     </select>
-    <span class="ff-soon">soon</span>
-  </section>
+  </div>
 </div>
 
 <style>
@@ -106,24 +131,35 @@
     color: var(--text-muted);
   }
 
-  .ff-groupby { display: flex; flex-direction: column; gap: 6px; }
-  .ff-groupby h3 { margin: 0; }
+  .ff-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--divider);
+  }
+  .ff-group-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--text-muted, rgba(26, 16, 8, 0.55));
+  }
   .ff-select {
     font-family: var(--font-mono);
     font-size: 11px;
-    padding: 4px 8px;
-    background: var(--bg);
+    letter-spacing: 0.02em;
+    padding: 5px 8px;
+    background: var(--surface-elevated);
+    color: var(--text-primary);
     border: 1px solid var(--card-border);
-    color: var(--text-muted);
-    cursor: not-allowed;
-    width: 100%;
+    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
+    cursor: pointer;
   }
-  .ff-soon {
-    align-self: flex-start;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-ghost);
+  .ff-select:hover,
+  .ff-select:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+    outline: none;
   }
 </style>
