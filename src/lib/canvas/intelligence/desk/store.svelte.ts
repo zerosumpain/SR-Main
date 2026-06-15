@@ -206,6 +206,9 @@ export interface CardArrival {
 export interface DeskStore {
   cards: ReadonlyArray<DeskCard>;
   edges: ReadonlyArray<DeskEdge>;
+  /** Entity→fact mentions for the co-occurrence grouping dimension.
+   *  Hydrated from /data; never streamed (co-occurrence regroups on flush). */
+  entityMentions: ReadonlyArray<{ entityId: string; factId: string }>;
   clusters: ReadonlyArray<SynthesisCluster>;
   synthesisToken: string;
   /** SSE stream connection status — NOT the session status */
@@ -265,6 +268,7 @@ export function createDeskStore(
   // $state.raw — whole-container replacement keeps derived recompute bounded.
   let cardMap = $state.raw(new Map<string, DeskCard>());
   let edgeMap = $state.raw(new Map<string, DeskEdge>());
+  let mentionList = $state.raw<{ entityId: string; factId: string }[]>([]);
   let clusterList = $state.raw<SynthesisCluster[]>([]);
   let synthesisTokenBuf = $state('');
   let status = $state<'idle' | 'hydrating' | 'live' | 'error'>('idle');
@@ -473,6 +477,10 @@ export function createDeskStore(
       });
     }
     edgeMap = edges;
+    mentionList = ((body.entityMentions ?? []) as Array<{ entityId: unknown; factId: unknown }>).map((m) => ({
+      entityId: String(m.entityId),
+      factId: String(m.factId),
+    }));
   }
 
   function subscribe() {
@@ -664,6 +672,9 @@ export function createDeskStore(
     },
     get edges() {
       return Array.from(edgeMap.values());
+    },
+    get entityMentions() {
+      return mentionList;
     },
     get clusters() {
       return clusterList;

@@ -1,6 +1,6 @@
 // src/lib/canvas/intelligence/desk/store.test.ts
 import { describe, it, expect } from 'vitest';
-import { mergeArtefact, dedupHydrate, type DeskCard } from './store.svelte';
+import { mergeArtefact, dedupHydrate, createDeskStore, type DeskCard } from './store.svelte';
 
 function card(id: string, extra: Partial<DeskCard> = {}): DeskCard {
   return { id, kind: 'fact', seq: 0, phase: 1, fields: {}, ...extra };
@@ -61,5 +61,14 @@ describe('mergeArtefact', () => {
     const snapshot = base.get('k');
     mergeArtefact(base, card('k', { seq: 9 }));
     expect(base.get('k')).toBe(snapshot); // original untouched
+  });
+});
+
+describe('createDeskStore', () => {
+  it('exposes entityMentions, empty before hydrate', () => {
+    const s = createDeskStore('sess-em-test', { mode: 'deep' });
+    expect(Array.isArray(s.entityMentions)).toBe(true);
+    expect(s.entityMentions.length).toBe(0);
+    s.dispose();
   });
 });
