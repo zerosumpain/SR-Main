@@ -33,6 +33,58 @@
   const credBadge = $derived(
     card.kind === 'source' ? credibilityBadge(f.credibilityType as string | null | undefined) : null,
   );
+
+  // ---------------------------------------------------------------------------
+  // Source preview image — lazy-fetched, graceful, no layout jump.
+  // AbortController is plain `let` (NOT $state) to avoid Svelte 5 proxy churn.
+  // ---------------------------------------------------------------------------
+  let previewImage: string | null = $state(null);
+  let previewType: 'og' | 'favicon' | null = $state(null);
+  let previewLoading = $state(false);
+  let previewFailed = $state(false);
+
+  // Plain let — must NOT be $state (see CLAUDE.md Svelte 5 footguns).
+  let previewAc: AbortController | null = null;
+
+  $effect(() => {
+    // Only fetch for source cards with a URL.
+    const sourceUrl: string | undefined = card.kind === 'source' ? (f.url as string) : undefined;
+    if (!sourceUrl) return;
+
+    // Abort any in-flight request for a previous URL.
+    previewAc?.abort();
+    previewAc = new AbortController();
+    const signal = previewAc.signal;
+
+    previewLoading = true;
+    previewFailed = false;
+    previewImage = null;
+    previewType = null;
+
+    const endpoint = `/api/deepdive/source-image?url=${encodeURIComponent(sourceUrl)}`;
+
+    fetch(endpoint, { signal })
+      .then((r) => r.json())
+      .then((data: { image?: string; type?: 'og' | 'favicon' }) => {
+        if (signal.aborted) return;
+        if (data.image) {
+          previewImage = data.image;
+          previewType = data.type ?? null;
+        }
+        previewLoading = false;
+      })
+      .catch(() => {
+        if (!signal.aborted) {
+          previewFailed = true;
+          previewLoading = false;
+        }
+      });
+
+    return () => {
+      previewAc?.abort();
+      previewAc = null;
+    };
+  });
 </script>
 
 <button
@@ -51,6 +103,21 @@
     <span class="ac-entity-name">{f.name ?? '—'}</span>
     {#if f.description}<span class="ac-entity-desc">{f.description}</span>{/if}
   {:else if variant === 'source'}
+    <!-- Preview thumbnail (og or favicon) at the top -->
+    {#if previewLoading && !previewFailed}
+      <div class="ac-thumb-skeleton" aria-hidden="true"></div>
+    {:else if previewImage && !previewFailed}
+      <div class="ac-thumb" class:ac-thumb--favicon={previewType === 'favicon'}>
+        <img
+          src={previewImage}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onerror={() => { previewFailed = true; }}
+        />
+      </div>
+    {/if}
+
     <span class="ac-label">SOURCE</span>
     <span class="ac-title">{f.title ?? f.url ?? '—'}</span>
     <span class="ac-meta">
@@ -225,4 +292,61 @@
     color: var(--accent);
   }
   .ac[data-variant='entity'] .ac-unfiled-tag { color: var(--accent); }
+
+  /* ---------------------------------------------------------------------------
+   * Source preview thumbnail
+   * --------------------------------------------------------------------------- */
+
+  /* Skeleton placeholder — fixed height prevents layout jump while loading. */
+  .ac-thumb-skeleton {
+    width: 100%;
+    height: 80px;
+    background: linear-gradient(
+      90deg,
+      rgba(26, 16, 8, 0.06) 25%,
+      rgba(26, 16, 8, 0.12) 50%,
+      rgba(26, 16, 8, 0.06) 75%
+    );
+    background-size: 200% 100%;
+    animation: ac-shimmer 1.4s ease infinite;
+    border-radius: 2px;
+    margin-bottom: 2px;
+  }
+
+  @keyframes ac-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* OG image — full width, fixed height, object-fit cover. */
+  .ac-thumb {
+    width: 100%;
+    height: 80px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 2px;
+    background: rgba(26, 16, 8, 0.05);
+  }
+
+  .ac-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Favicon variant — small centred icon on a tinted block, not stretched. */
+  .ac-thumb--favicon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 16, 8, 0.07);
+    height: 40px;
+  }
+
+  .ac-thumb--favicon img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
 </style>
