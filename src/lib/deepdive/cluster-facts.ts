@@ -6,15 +6,20 @@
  * builds a symmetric `isSimilar(a, b)` predicate (an adjacency derived from the
  * `1 - (e <=> e) > threshold` query) and passes it in.
  *
- * Algorithm (single greedy pass, first-seen order):
- *   - For each item, find the FIRST existing cluster containing a member that
- *     is similar to the item. Join that cluster (no re-balancing).
- *   - Otherwise start a new cluster.
- * This yields transitive merges along chains while staying O(N * clusters)
- * and deterministic for a fixed input order.
+ * Algorithm (representative-linkage, single greedy pass, first-seen order):
+ *   - For each item, find the FIRST existing cluster whose REPRESENTATIVE
+ *     (its first member, i.e. the item that started the cluster) is similar
+ *     to the incoming item. Join that cluster.
+ *   - Otherwise start a new cluster with this item as its representative.
+ *
+ * Using the representative instead of any-member prevents single-linkage
+ * chaining: a chain A~B~C where A≁C will NOT collapse into one cluster,
+ * because C only checks the representative (A) of the existing cluster, not
+ * the later-added member B.
  *
  * Cluster ids are `c0`, `c1`, ... in first-created order.
- * Cluster label = truncated content of the highest-confidence member.
+ * Cluster label = a short topic phrase derived from the highest-confidence
+ * member's content (truncated to DEFAULT_LABEL_LEN at a word boundary).
  */
 
 export interface ClusterItem {
@@ -48,6 +53,8 @@ export function truncateLabel(content: string, maxLen = DEFAULT_LABEL_LEN): stri
 
 interface WorkingCluster {
 	id: string;
+	/** The first member ever added — serves as the cluster representative. */
+	representative: ClusterItem;
 	members: ClusterItem[];
 }
 
@@ -60,10 +67,13 @@ export function greedyCluster(
 	let nextId = 0;
 
 	for (const item of items) {
-		// Greedy: join the first cluster with any member similar to this item.
+		// Representative-linkage: compare incoming item to each cluster's
+		// REPRESENTATIVE (its first member) only — not to all members.
+		// This prevents single-linkage chaining where A~B and B~C would
+		// incorrectly collapse A and C (A≁C) into one cluster.
 		let joined: WorkingCluster | undefined;
 		for (const cluster of clusters) {
-			if (cluster.members.some((m) => isSimilar(item.id, m.id))) {
+			if (isSimilar(item.id, cluster.representative.id)) {
 				joined = cluster;
 				break;
 			}
@@ -71,7 +81,7 @@ export function greedyCluster(
 		if (joined) {
 			joined.members.push(item);
 		} else {
-			clusters.push({ id: `c${nextId++}`, members: [item] });
+			clusters.push({ id: `c${nextId++}`, representative: item, members: [item] });
 		}
 	}
 
