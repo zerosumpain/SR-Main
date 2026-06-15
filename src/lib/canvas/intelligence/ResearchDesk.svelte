@@ -7,7 +7,7 @@
   import ThemeHeader from './desk/ThemeHeader.svelte';
   import EntityRail from './desk/EntityRail.svelte';
   import CommandBar from './desk/CommandBar.svelte';
-  import LeftFeed from './desk/LeftFeed.svelte';
+  import FloatingFilters from './desk/FloatingFilters.svelte';
   import ActivityTicker from './desk/ActivityTicker.svelte';
   import InspectorDrawer from './desk/InspectorDrawer.svelte';
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
@@ -58,7 +58,6 @@
   });
 
   // ——— cockpit local state ———
-  let feedCollapsed = $state(false);
   let inspectorOpen = $state(false);
   let inspectorArtefact = $state<any>(null);
   let inspectorRelated = $state<{ id: string; kind: 'source' | 'fact' | 'entity'; label: string }[]>([]);
@@ -78,34 +77,6 @@
 
   // Synthesising = a synthesis run is actively streaming.
   let synthesising = $derived(store.synthStatus === 'running');
-
-  // Sources (for LeftFeed): pull from the card map — source cards carry their fields.
-  let feedSources = $derived(
-    store.cards
-      .filter((c) => c.kind === 'source')
-      .map((c) => ({
-        id: c.id,
-        url: (c.fields.url as string) ?? '',
-        title: (c.fields.title as string | null) ?? null,
-        domain: (c.fields.domain as string) ?? '',
-        credibilityType: (c.fields.credibilityType as string | null) ?? null,
-        credibilityScore: (c.fields.credibilityScore as number | null) ?? null,
-      })),
-  );
-
-  // Synthesis run history from the clusters + synth state.
-  let synthesisRuns = $derived(
-    store.synthStatus !== 'idle'
-      ? [
-          {
-            runId: 'current',
-            status: store.synthStatus,
-            summary: store.synthSummary ? store.synthSummary.slice(0, 120) : undefined,
-            createdAt: new Date().toISOString(),
-          },
-        ]
-      : [],
-  );
 
   // Artefact counts for CommandBar.
   const counts = $derived.by(() => {
@@ -228,10 +199,6 @@
 
   function handleFilter(key: 'source' | 'fact' | 'entity' | 'counterfactual', value: boolean) {
     typeFilters = { ...typeFilters, [key]: value };
-  }
-
-  function handleSelectRun(_runId: string) {
-    mode = 'synthesize';
   }
 
   // Inspector open/close.
@@ -869,17 +836,6 @@
     onexport={handleExport}
   />
 
-  <div class="desk-mid">
-    <LeftFeed
-      logs={store.logs}
-      sources={feedSources}
-      filters={typeFilters}
-      {synthesisRuns}
-      bind:collapsed={feedCollapsed}
-      onfilter={handleFilter}
-      onselectrun={handleSelectRun}
-    />
-
     <!-- desk world -->
     <div
       class="desk-world-wrap"
@@ -1014,29 +970,12 @@
         {/each}
       </div>
 
-      <!-- arrange-by-theme toolbar (screen-fixed, top-left of the canvas) -->
-      <div class="desk-arrange" role="group" aria-label="Arrange by theme">
-        <button
-          type="button"
-          class="arr-btn"
-          class:active={arrange === 'once'}
-          title="Arrange the current cards into theme groups (one-shot)"
-          aria-pressed={arrange === 'once'}
-          disabled={arrange === 'live'}
-          onclick={arrangeByThemeOnce}
-        >&#9637; Arrange by theme</button>
-        <button
-          type="button"
-          class="arr-toggle"
-          class:on={arrange === 'live'}
-          title="Keep cards continuously arranged by theme as new ones arrive"
-          aria-pressed={arrange === 'live'}
-          onclick={toggleKeepArranged}
-        >
-          <span class="arr-knob" aria-hidden="true"></span>
-          <span class="arr-label">keep arranged</span>
-        </button>
-      </div>
+      <!-- view-locked floating filter box (sibling of the transformed world) -->
+      <FloatingFilters
+        filters={typeFilters}
+        {counts}
+        onfilter={handleFilter}
+      />
 
       <!-- minimap -->
       <div class="desk-minimap">
@@ -1074,7 +1013,6 @@
         <button type="button" onclick={reset} aria-label="Reset">⌂</button>
       </div>
     </div>
-  </div>
 
   <ActivityTicker
     logs={store.logs}
@@ -1112,12 +1050,6 @@
     inset: 0;
     width: 100%;
     height: 100%;
-  }
-
-  .desk-mid {
-    flex: 1;
-    display: flex;
-    min-height: 0;
   }
 
   .desk-world-wrap {
@@ -1197,74 +1129,6 @@
     pointer-events: none;
     transition: opacity 360ms ease;
   }
-
-  /* ——— arrange-by-theme toolbar (screen-fixed) ——— */
-  .desk-arrange {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    z-index: 5;
-  }
-  .arr-btn {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.02em;
-    padding: 6px 10px;
-    background: var(--surface-elevated);
-    color: var(--text-primary);
-    border: 1px solid rgba(26, 16, 8, 0.18);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: border-color 0.15s ease, color 0.15s ease;
-  }
-  .arr-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .arr-btn.active { border-color: var(--accent); color: var(--accent); }
-  .arr-btn:disabled { opacity: 0.4; cursor: default; }
-
-  .arr-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.02em;
-    padding: 5px 10px 5px 6px;
-    background: var(--surface-elevated);
-    color: var(--text-muted);
-    border: 1px solid rgba(26, 16, 8, 0.18);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: border-color 0.15s ease, color 0.15s ease;
-  }
-  .arr-toggle:hover { border-color: var(--accent); }
-  .arr-toggle.on { color: var(--accent); border-color: var(--accent); }
-  .arr-knob {
-    width: 22px;
-    height: 12px;
-    border-radius: 7px;
-    background: rgba(26, 16, 8, 0.22);
-    position: relative;
-    flex: 0 0 auto;
-    transition: background 0.15s ease;
-  }
-  .arr-knob::after {
-    content: '';
-    position: absolute;
-    top: 1px;
-    left: 1px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--surface-elevated, #faf6ee);
-    transition: transform 0.15s ease;
-  }
-  .arr-toggle.on .arr-knob { background: var(--accent); }
-  .arr-toggle.on .arr-knob::after { transform: translateX(10px); }
 
   .syn-edge { animation: syn-fade-in 600ms ease both; }
   @keyframes syn-fade-in {
