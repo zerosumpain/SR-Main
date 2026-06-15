@@ -17,7 +17,6 @@
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
     pileLayout,
-    COL_W,
     ORG,
     SYNTHESIS_ZONE_ORIGIN,
     SYNTHESIS_ZONE_GAP,
@@ -232,6 +231,16 @@
     typeFilters = { ...typeFilters, [key]: value };
   }
 
+  // Toggle a pile open/closed. $state.raw Set replaced wholesale so the change
+  // re-derives pilePositions → flows through posOf → positionById → morphIds,
+  // animating the spread/restack with no extra transition wiring.
+  function togglePile(key: string) {
+    const next = new Set(expandedPiles);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    expandedPiles = next;
+  }
+
   // Inspector open/close.
   function openInspector(id: string, opts?: { summarize?: boolean }) {
     const card: any = store.cards.find((c) => c.id === id);
@@ -361,6 +370,34 @@
       out.push({ key: g.key, label: g.label, count: g.count, pos: a });
     }
     return out;
+  });
+
+  // Index of each card within its group (packed order = visibleCards order),
+  // used for fan z-index and the collapsed "top ~5 only" cap.
+  const COLLAPSED_VISIBLE = 5;
+  const cardPileInfo = $derived.by(() => {
+    const idxInGroup = new Map<string, number>();
+    const running = new Map<string, number>();
+    for (const c of visibleCards) {
+      const key = grouping.memberOf.get(c.id);
+      if (!key) { idxInGroup.set(c.id, 0); continue; }
+      const i = running.get(key) ?? 0;
+      idxInGroup.set(c.id, i);
+      running.set(key, i + 1);
+    }
+    const m = new Map<string, { idx: number; render: boolean; z: number }>();
+    for (const c of visibleCards) {
+      const key = grouping.memberOf.get(c.id);
+      const idx = idxInGroup.get(c.id) ?? 0;
+      const expanded = key ? expandedPiles.has(key) : true;
+      // Manual/pinned cards always render (they escaped the pile).
+      const manual = !!dragOverrides[c.id] || (c.canvasX != null && c.canvasY != null);
+      const render = manual || expanded || idx < COLLAPSED_VISIBLE;
+      // Top of the fan (idx 0) sits highest; deeper cards recede.
+      const z = manual ? 1000 : 100 - idx;
+      m.set(c.id, { idx, render, z });
+    }
+    return m;
   });
 
   // Per-category summary
@@ -1088,17 +1125,6 @@
             ></div>
           {/if}
 
-          {#each categories as cat, i (cat.id)}
-            <div class="desk-header-host" style:transform="translate({ORG.originX + i * COL_W}px, {ORG.originY}px)">
-              <CategoryHeader
-                id={cat.id}
-                title={cat.title}
-                summary={categorySummary[cat.id] ?? ''}
-                count={grouping.groups.find((g) => g.key === cat.id)?.count ?? 0}
-              />
-            </div>
-          {/each}
-
           {#if railEntities.length}
             {@const railY = pilePositions.get(railEntities[0].id)?.y ?? 0}
             <div class="desk-rail-host" style:transform="translate({ORG.originX}px, {railY}px)">
@@ -1107,35 +1133,68 @@
           {/if}
         {/if}
 
+        <!-- pile headers: one per group, anchored over its stack; click to expand/collapse -->
+        {#each pileHeaders as ph (ph.key)}
+          <div
+            class="desk-pile-host"
+            class:expanded={expandedPiles.has(ph.key)}
+            style:transform="translate({ph.pos.x}px, {ph.pos.y - 72}px)"
+          >
+            <button
+              type="button"
+              class="pile-toggle"
+              aria-expanded={expandedPiles.has(ph.key)}
+              title={expandedPiles.has(ph.key) ? 'Collapse pile' : 'Expand pile'}
+              onclick={() => togglePile(ph.key)}
+            >
+              {#if groupDim === 'cluster'}
+                <CategoryHeader
+                  id={ph.key}
+                  title={ph.label}
+                  summary={categorySummary[ph.key] ?? ''}
+                  count={ph.count}
+                />
+              {:else}
+                <ThemeHeader label={ph.label} count={ph.count} />
+              {/if}
+              <span class="pile-chevron" aria-hidden="true">{expandedPiles.has(ph.key) ? '▾' : '▸'}</span>
+            </button>
+          </div>
+        {/each}
+
         <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
         {#each visibleCards as c (c.id)}
           {@const p = positionById.get(c.id) ?? posOf(c)}
           {@const live = cardLive.get(c.id)}
-          <div
-            class="desk-card-host"
-            class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
-            class:is-selected={selectedId === c.id}
-            data-kind={kindOf(c)}
-            style:transform="translate({p.x}px, {p.y}px)"
-            onpointerdown={(e) => onCardPointerDown(e, c)}
-            onpointermove={onCardPointerMove}
-            onpointerup={(e) => onCardPointerUp(e, c)}
-            onpointercancel={(e) => onCardPointerUp(e, c)}
-          >
-            <CardLiveWrapper
-              enterDelayMs={live?.enterDelayMs ?? 0}
-              fresh={live?.fresh ?? false}
-              breathing={deskRunning}
+          {@const pile = cardPileInfo.get(c.id)}
+          {#if pile?.render ?? true}
+            <div
+              class="desk-card-host"
+              class:morphing={!c.pinned && c.canvasX == null && !dragOverrides[c.id] && morphIds.has(c.id)}
+              class:is-selected={selectedId === c.id}
+              data-kind={kindOf(c)}
+              style:transform="translate({p.x}px, {p.y}px)"
+              style:z-index={pile?.z ?? 1}
+              onpointerdown={(e) => onCardPointerDown(e, c)}
+              onpointermove={onCardPointerMove}
+              onpointerup={(e) => onCardPointerUp(e, c)}
+              onpointercancel={(e) => onCardPointerUp(e, c)}
             >
-              <ArtefactCard
-                card={c}
-                selected={selectedId === c.id}
-                analysing={c.kind === 'source' && analysingSourceId === c.id}
-                onselect={(id) => { selectedId = id; openInspector(id); }}
-                onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
-              />
-            </CardLiveWrapper>
-          </div>
+              <CardLiveWrapper
+                enterDelayMs={live?.enterDelayMs ?? 0}
+                fresh={live?.fresh ?? false}
+                breathing={deskRunning}
+              >
+                <ArtefactCard
+                  card={c}
+                  selected={selectedId === c.id}
+                  analysing={c.kind === 'source' && analysingSourceId === c.id}
+                  onselect={(id) => { selectedId = id; openInspector(id); }}
+                  onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
+                />
+              </CardLiveWrapper>
+            </div>
+          {/if}
         {/each}
 
         <!-- client-only desk nodes (research-chat / research-report).
@@ -1186,6 +1245,8 @@
         filters={typeFilters}
         {counts}
         onfilter={handleFilter}
+        groupBy={groupDim}
+        ongroupby={(d) => { groupDim = d; }}
       />
 
       <!-- minimap -->
@@ -1332,7 +1393,6 @@
     .desk-card-host.morphing { transition: none; }
   }
 
-  .desk-header-host,
   .desk-rail-host {
     position: absolute;
     top: 0;
@@ -1341,14 +1401,33 @@
     transition: opacity 360ms ease;
   }
 
-  /* Theme cluster headers — world-space, never intercept pan/drag. */
-  .desk-theme-host {
+  /* Pile headers — world-space label + count badge over each group's stack;
+     clickable to expand/collapse. */
+  .desk-pile-host {
     position: absolute;
     top: 0;
     left: 0;
     will-change: transform;
-    pointer-events: none;
+    z-index: 200; /* headers above fanned cards, below dragged (1000) */
     transition: opacity 360ms ease;
+  }
+  .pile-toggle {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 4px;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .pile-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pile-chevron {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    line-height: 1;
+    margin-top: 2px;
   }
 
   .syn-edge { animation: syn-fade-in 600ms ease both; }
