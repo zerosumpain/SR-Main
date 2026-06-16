@@ -198,6 +198,49 @@
     </div>
     {/if}
 
+    {#if showCard('dfe-data-strategy')}
+    <div
+      class="group relative p-6 rounded-xl border transition-colors"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <a href="/projects/dfe-data-strategy" class="absolute inset-0 z-0" aria-label="Open Keystone"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Tool
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Data strategy
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Keystone — A DfE Data-Strategy Workbench
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        Understand the pressures on the Department for Education's use of data — from across government, from
+        its own policy agenda, and from a vast partner system — and shape a strategy that can deliver against
+        them. A research-grounded landscape of pressures, frameworks and the data-sharing legal stack, plus a
+        private workbench: set your posture and investment levers, and a transparent engine scores coverage,
+        maturity and the tensions you create. Upload your own strategy docs to synthesise them in. Companion to
+        the Policy Engine.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          pressures · trade-offs · maturity · cited
+        </span>
+        {@render visToggle('dfe-data-strategy', '/projects/dfe-data-strategy', 'Keystone')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('dfe-data-estate')}
     <div
       class="group relative p-6 rounded-xl border transition-colors"
