@@ -12,6 +12,7 @@
     { href: `${BASE}/frameworks`, label: 'Frameworks' },
     { href: `${BASE}/legislation`, label: 'Legislation' },
     { href: `${BASE}/dfe`, label: 'DfE in context' },
+    { href: `${BASE}/sector`, label: 'Sector voices' },
   ];
   const POLICYB = { href: `${BASE}/policy-builder`, label: 'Policy builder' };
   const WORKBENCH = [

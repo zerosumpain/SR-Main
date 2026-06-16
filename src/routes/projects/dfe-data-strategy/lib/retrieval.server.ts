@@ -9,6 +9,7 @@ import { LEGISLATION, LEGAL_LAYER_META } from './legislation';
 import { MATURITY_DIMENSIONS } from './maturity';
 import { CAPABILITY_AREAS } from './capabilities';
 import { POSTURE_AXES } from './postures';
+import { SECTOR_VOICES, SECTOR_THEMES } from './sectorVoices';
 
 export interface Chunk {
   id: string;
@@ -87,6 +88,25 @@ function buildCorpus(): Chunk[] {
       url: null,
       text: `${t.title}. ${t.blurb} A theme every mature data strategy should cover.`,
     });
+  for (const t of SECTOR_THEMES)
+    c.push({
+      id: `svt-${t.id}`,
+      sourceKey: 'sector-theme',
+      sourceType: 'overview',
+      title: `Sector debate: ${t.title}`,
+      url: '/projects/dfe-data-strategy/sector',
+      text: `${t.title}. ${t.summary}`,
+    });
+  for (const v of SECTOR_VOICES)
+    c.push({
+      id: `svv-${v.id}`,
+      sourceKey: `sector:${v.group}`,
+      sourceType: 'overview',
+      title: `Sector voice — ${v.who} (${v.stance})`,
+      url: v.sourceUrl ?? '/projects/dfe-data-strategy/sector',
+      text: `${v.who} (${v.group}, ${v.stance}): ${v.point}`,
+    });
+
   // overview chunks
   c.push({
     id: 'ov-tool',
