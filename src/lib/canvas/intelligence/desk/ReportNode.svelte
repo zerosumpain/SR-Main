@@ -96,7 +96,10 @@
       return;
     }
 
-    const MAX_POLLS = 22;
+    // ~150s ceiling: runPostProcessing runs ~6 sequential LLM calls + a per-fact
+    // novelty loop and, on a slow gateway (90s per-call timeout), can run well
+    // past 90s. The cap must comfortably exceed that so it doesn't give up mid-run.
+    const MAX_POLLS = 38;
     let polls = 0;
 
     stopPoll();
@@ -110,7 +113,11 @@
         if (res.ok) {
           const body = (await res.json()) as { report: ResearchReport | null };
           const fetched = body.report ?? null;
-          if (fetched !== null && JSON.stringify(fetched) !== before) {
+          // Resolve only on a CHANGED **and healthy** report — a re-failed
+          // regeneration also "changes" (non-deterministic clusters/sections) but
+          // still carries the sentinel summary, so keep polling until the cap.
+          const healthy = !!fetched && !/generation failed/i.test(fetched.executive_summary ?? '');
+          if (fetched !== null && JSON.stringify(fetched) !== before && healthy) {
             report = fetched;
             regenerating = false;
             stopPoll();
@@ -374,11 +381,11 @@
   {:else if loadState === 'error'}
     <p class="rn-muted rn-error">Could not load report.</p>
     <button type="button" class="rn-btn" onclick={load}>Retry</button>
-  {:else if !view.hasReport || reportFailed}
+  {:else if !view.hasReport}
     {#if regenerating}
       <p class="rn-muted">Generating report&hellip; this can take up to a minute.</p>
     {:else}
-      <p class="rn-muted">{reportFailed ? 'The previous report didn’t complete.' : 'Auto-report not yet generated.'}</p>
+      <p class="rn-muted">Auto-report not yet generated.</p>
       {#if canRegenerate}
         <button type="button" class="rn-btn rn-accent" onclick={regenerate}>Generate report</button>
       {/if}
@@ -386,9 +393,21 @@
   {:else}
     <section class="rn-sec">
       <h4 class="rn-sec-h">Auto report</h4>
-      <!-- executive summary -->
+      <!-- executive summary (or an inline banner if only the summary failed —
+           the rest of the report below is still shown) -->
       <section class="rn-exec">
-        <p class:rn-clamp={!expanded}>{view.executiveSummary}</p>
+        {#if reportFailed}
+          {#if regenerating}
+            <p class="rn-muted">Regenerating the executive summary&hellip;</p>
+          {:else}
+            <p class="rn-muted rn-error">The executive summary didn’t complete.</p>
+            {#if canRegenerate}
+              <button type="button" class="rn-btn rn-accent" onclick={regenerate}>Regenerate</button>
+            {/if}
+          {/if}
+        {:else}
+          <p class:rn-clamp={!expanded}>{view.executiveSummary}</p>
+        {/if}
       </section>
 
       {#if expanded}

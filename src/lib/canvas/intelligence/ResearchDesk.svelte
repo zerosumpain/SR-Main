@@ -166,13 +166,19 @@
   });
 
   // Clear transient manual positions whenever the grouping dimension changes so
-  // dragged-but-not-locked cards rejoin their new piles. A plain let tracks the
-  // previous dim value; the $effect guard prevents self-fire on init.
+  // dragged-but-not-locked cards rejoin their new piles. Also drop any group
+  // focus: the focused key belongs to the OLD dimension and won't resolve under
+  // the new one. A plain let tracks the previous dim value; the $effect guard
+  // prevents self-fire on init. Writes are untracked (no self-loop).
   let prevGroupDim: GroupDim | null = null;
   $effect(() => {
     const dim = groupDim;
     if (prevGroupDim !== null && prevGroupDim !== dim) {
-      untrack(() => { manualPos = new Map(); });
+      untrack(() => {
+        manualPos = new Map();
+        focusedGroup = null;
+        focusAnchor = null;
+      });
     }
     prevGroupDim = dim;
   });
@@ -367,17 +373,31 @@
     const groups: RelGroup[] = [];
 
     if (card.kind === 'entity') {
-      // Relationships to other entities (edges carry type + sentiment).
-      const rels: RelItem[] = [];
+      // Relationships to other entities. AGGREGATE parallel edges (the same
+      // pair can have several relationship types/sentiments) into ONE row per
+      // other entity, so ids stay unique (no duplicate inspector keys) and the
+      // notes read together. Self-loops (from===to===id) are skipped.
+      const relByOther = new Map<string, { dir: string; notes: Set<string> }>();
       for (const e of store.edges) {
         let otherId: string | null = null;
         let dir = '';
         if (e.fromEntityId === id) { otherId = e.toEntityId; dir = '→'; }
         else if (e.toEntityId === id) { otherId = e.fromEntityId; dir = '←'; }
-        if (!otherId) continue;
+        if (!otherId || otherId === id) continue;
+        let agg = relByOther.get(otherId);
+        if (!agg) { agg = { dir, notes: new Set() }; relByOther.set(otherId, agg); }
+        const note = [e.relationshipType, e.sentiment].filter(Boolean).join(' ');
+        if (note) agg.notes.add(note);
+      }
+      const rels: RelItem[] = [];
+      for (const [otherId, agg] of relByOther) {
         const other = byId.get(otherId);
-        const note = [e.relationshipType, e.sentiment].filter(Boolean).join(' · ');
-        rels.push({ id: otherId, kind: 'entity', label: `${dir} ${other ? nameOf(other) : otherId}`, note: note || undefined });
+        rels.push({
+          id: otherId,
+          kind: 'entity',
+          label: `${agg.dir} ${other ? nameOf(other) : otherId}`,
+          note: agg.notes.size ? [...agg.notes].join(' · ') : undefined,
+        });
       }
       if (rels.length) groups.push({ heading: 'Relationships', items: rels });
 
@@ -559,6 +579,13 @@
     return spreadLayout(focusMemberIds, focusAnchor);
   });
   const focusedIds = $derived(new Set(focusMemberIds));
+  // Focus is only "active" (and therefore dimming the rest of the desk) when the
+  // spread actually resolves. If a focused group is emptied — by search, a
+  // group-dimension change, or a type filter — focusSpread becomes null and the
+  // desk must NOT stay dimmed/non-interactive (it would otherwise be a dead
+  // canvas recoverable only by Esc). focusedGroup is left set so the spread
+  // reappears if the filter is relaxed.
+  const focusActive = $derived(focusSpread !== null);
 
   // Index of each card within its group (packed order = visibleCards order),
   // used for fan z-index. Every member in a collapsed pile is rendered so
@@ -1570,7 +1597,7 @@
           {@const hpos = isFocused && focusSpread ? focusSpread.heading : { x: ph.pos.x, y: ph.pos.y - 72 }}
           <div
             class="desk-pile-host"
-            class:dimmed-heading={focusedGroup !== null && !isFocused}
+            class:dimmed-heading={focusActive && !isFocused}
             style:transform="translate({hpos.x}px, {hpos.y}px)"
             style:z-index={isFocused ? 3200 : 200}
           >
@@ -1596,7 +1623,7 @@
               class:morphing={c.pinned !== true && !manualPos.has(c.id) && !dragOverrides[c.id] && morphIds.has(c.id)}
               class:is-selected={selectedId === c.id}
               class:is-locked={c.pinned === true}
-              class:dimmed={focusedGroup !== null && !focusedIds.has(c.id)}
+              class:dimmed={focusActive && !focusedIds.has(c.id)}
               data-kind={kindOf(c)}
               style:transform="translate({p.x}px, {p.y}px) rotate({focusedIds.has(c.id) ? 0 : tilt}deg)"
               style:z-index={focusedIds.has(c.id) ? 3000 + (pile?.idx ?? 0) : (pile?.z ?? 1)}

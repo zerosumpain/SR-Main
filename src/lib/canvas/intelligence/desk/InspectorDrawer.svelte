@@ -278,7 +278,7 @@
             <section class="d-sec">
               <h3>{g.heading.toUpperCase()}</h3>
               <ul class="d-related">
-                {#each g.items as r (g.heading + r.id + r.label)}
+                {#each g.items as r, i (g.heading + '#' + i + '#' + r.id)}
                   <li>
                     <button type="button" class="d-rel" onclick={() => onselect(r.id)}>
                       <span class="d-rel-kind d-kind-{r.kind}">{kindLabel(r.kind)}</span>
