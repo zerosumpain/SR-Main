@@ -13,6 +13,7 @@
     { href: `${BASE}/legislation`, label: 'Legislation' },
     { href: `${BASE}/dfe`, label: 'DfE in context' },
   ];
+  const POLICYB = { href: `${BASE}/policy-builder`, label: 'Policy builder' };
   const WORKBENCH = [
     { href: `${BASE}/workbench`, label: 'Workbench' },
     { href: `${BASE}/workbench/upload`, label: 'Upload' },
@@ -25,10 +26,11 @@
   const MENU_GROUPS = $derived([
     { label: '', items: BRIEFING },
     { label: 'Field studies', items: STUDIES },
+    { label: 'Build', items: [POLICYB] },
     ...(authed ? [{ label: 'Workbench (private)', items: WORKBENCH }] : []),
     { label: 'Reference', items: [METHOD] },
   ]);
-  const ALL = $derived([...BRIEFING, ...STUDIES, ...(authed ? WORKBENCH : []), METHOD]);
+  const ALL = $derived([...BRIEFING, ...STUDIES, POLICYB, ...(authed ? WORKBENCH : []), METHOD]);
   const current = $derived(ALL.find((n) => active(n.href))?.label ?? 'Sections');
   let menuOpen = $state(false);
 </script>
@@ -39,6 +41,8 @@
     <span class="nav-sep" aria-hidden="true"></span>
     <span class="grp-lab" aria-hidden="true">Field studies</span>
     {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
+    <span class="nav-sep" aria-hidden="true"></span>
+    <a class="tab pb" class:active={active(POLICYB.href)} href={POLICYB.href} title="Write headline policies and get a grounded appraisal">✎ {POLICYB.label}</a>
     {#if authed}
       <span class="nav-sep" aria-hidden="true"></span>
       <span class="grp-lab" aria-hidden="true">Private</span>
@@ -88,6 +92,9 @@
   .tab.wb { border-width: 1.5px; border-color: rgba(63,125,110,0.6); color: #2f6155; background: rgba(63,125,110,0.06); }
   .tab.wb:hover { background: rgba(63,125,110,0.14); border-color: #2f6155; }
   .tab.wb.active { background: #2f6155; color: var(--paper, #f1ead6); border-color: #2f6155; }
+  .tab.pb { border-width: 1.5px; border-color: rgba(138,45,58,0.6); color: #8a2d3a; background: rgba(138,45,58,0.05); }
+  .tab.pb:hover { background: rgba(138,45,58,0.12); border-color: #8a2d3a; }
+  .tab.pb.active { background: #8a2d3a; color: var(--paper, #f1ead6); border-color: #8a2d3a; }
   .tab.method { border-style: dashed; background: transparent; color: var(--ink-soft, rgba(28,22,17,0.6)); }
   .tab.method:hover { background: rgba(28,22,17,0.05); color: var(--ink, #1c1611); }
   .tab.method.active { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); border-style: solid; }

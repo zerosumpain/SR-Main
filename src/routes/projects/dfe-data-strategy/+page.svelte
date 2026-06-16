@@ -36,6 +36,7 @@
     {/if}
     <a class="pe-next ghost" href="/projects/dfe-data-strategy/landscape">See the pressures landscape →</a>
     <a class="pe-next ghost" href="/projects/dfe-data-strategy/strategies">Which strategies should shape it? →</a>
+    <a class="pe-next ghost" href="/projects/dfe-data-strategy/policy-builder">Build &amp; pressure-test a policy →</a>
   </div>
 
   <div class="origins">
