@@ -5,6 +5,9 @@ import { isNotNull } from 'drizzle-orm';
 // The hardcoded "Field Study" cards on /projects, keyed by their URL segment
 // (the part after /projects/). AI-built projects are keyed by their publishedSlug.
 export const STATIC_PROJECT_KEYS = [
+  'terminal-descent',
+  'data-standard-designer',
+  'dfe-data-strategy',
   'dfe-data-estate',
   'policy-engine',
   'whitehall',

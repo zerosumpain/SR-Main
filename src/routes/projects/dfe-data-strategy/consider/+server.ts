@@ -120,9 +120,10 @@ ${buildStrategyContext()}`;
               { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
             ],
             temperature: 0.3,
-            max_tokens: 2600,
+            max_tokens: 6000,
             stream: true,
             thinking: { type: 'disabled' },
+            response_format: { type: 'json_object' },
           } as any,
           { signal: AbortSignal.timeout(110_000) as any },
         );
