@@ -35,6 +35,7 @@
       <a class="pe-next" href="/projects/dfe-data-strategy/workbench">Open the workbench →</a>
     {/if}
     <a class="pe-next ghost" href="/projects/dfe-data-strategy/landscape">See the pressures landscape →</a>
+    <a class="pe-next ghost" href="/projects/dfe-data-strategy/strategies">Which strategies should shape it? →</a>
   </div>
 
   <div class="origins">

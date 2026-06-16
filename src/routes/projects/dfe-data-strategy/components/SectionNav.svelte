@@ -8,6 +8,7 @@
   const BRIEFING = [{ href: BASE, label: 'Briefing' }];
   const STUDIES = [
     { href: `${BASE}/landscape`, label: 'Landscape' },
+    { href: `${BASE}/strategies`, label: 'Influence map' },
     { href: `${BASE}/frameworks`, label: 'Frameworks' },
     { href: `${BASE}/legislation`, label: 'Legislation' },
     { href: `${BASE}/dfe`, label: 'DfE in context' },
