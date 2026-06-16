@@ -1,7 +1,11 @@
 // consider/+server.ts — the Consideration Builder. Public + rate-limited (the user's policy
-// statements are their own; not persisted server-side). Takes a headline policy and reviews
-// ALL of this project's strategic material + the Policy Engine data brief, returning pros,
-// cons, tensions, tradeoffs, stakeholders and considerations with references to the evidence.
+// statements are their own; not persisted server-side). Reviews ALL of this project's strategic
+// material + the Policy Engine data brief and returns pros, cons, tensions, tradeoffs,
+// stakeholders and considerations with references to the evidence.
+//
+// STREAMS via SSE: the appraisal takes ~20-40s; a non-streaming response produces no bytes for
+// that whole time and the edge proxy 502s it. We flush a byte immediately, keep the connection
+// warm with the model's token stream, then emit a single validated `result` event.
 
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
@@ -42,6 +46,28 @@ const stake = (x: any) =>
     .filter((s: any) => s.name)
     .slice(0, 8);
 
+function validate(parsed: any) {
+  const refs = parsed?.references ?? {};
+  return {
+    summary: String(parsed?.summary ?? '').slice(0, 800),
+    pros: consider(parsed?.pros),
+    cons: consider(parsed?.cons),
+    tensions: (Array.isArray(parsed?.tensions) ? parsed.tensions : [])
+      .map((t: any) => ({ point: String(t?.point ?? t ?? '').slice(0, 300), severity: ['high', 'medium', 'low'].includes(t?.severity) ? t.severity : 'medium' }))
+      .filter((t: any) => t.point)
+      .slice(0, 6),
+    tradeoffs: consider(parsed?.tradeoffs),
+    considerations: consider(parsed?.considerations),
+    stakeholders: { impacted: stake(parsed?.stakeholders?.impacted), interested: stake(parsed?.stakeholders?.interested) },
+    references: {
+      pressures: (Array.isArray(refs.pressures) ? refs.pressures : []).filter((id: any) => VALID_REFS.pressures.has(id)).slice(0, 10),
+      strategies: (Array.isArray(refs.strategies) ? refs.strategies : []).filter((id: any) => VALID_REFS.strategies.has(id)).slice(0, 10),
+      legislation: (Array.isArray(refs.legislation) ? refs.legislation : []).filter((id: any) => VALID_REFS.legislation.has(id)).slice(0, 10),
+    },
+    watchouts: (Array.isArray(parsed?.watchouts) ? parsed.watchouts : []).map((w: any) => String(w).slice(0, 200)).slice(0, 5),
+  };
+}
+
 export const POST: RequestHandler = async (event) => {
   await requireProjectPublic('dfe-data-strategy', event);
   const ip = event.getClientAddress?.() ?? 'unknown';
@@ -74,46 +100,52 @@ Rules:
 STRATEGY CONTEXT:
 ${buildStrategyContext()}`;
 
-  let parsed: any;
-  try {
-    const client = getOpenAIClient();
-    const completion = await client.chat.completions.create(
-      {
-        model: getModel(),
-        messages: [
-          { role: 'system', content: sys },
-          { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
-        ],
-        temperature: 0.3,
-        max_tokens: 1800,
-        thinking: { type: 'disabled' },
-      } as any,
-      { signal: AbortSignal.timeout(75_000) as any },
-    );
-    parsed = parseJson(completion.choices?.[0]?.message?.content ?? '{}');
-  } catch (e: any) {
-    throw error(502, `Consideration builder failed: ${(e?.message ?? 'model error').slice(0, 120)}`);
-  }
-
-  const refs = parsed?.references ?? {};
-  const out = {
-    summary: String(parsed?.summary ?? '').slice(0, 800),
-    pros: consider(parsed?.pros),
-    cons: consider(parsed?.cons),
-    tensions: (Array.isArray(parsed?.tensions) ? parsed.tensions : [])
-      .map((t: any) => ({ point: String(t?.point ?? t ?? '').slice(0, 300), severity: ['high', 'medium', 'low'].includes(t?.severity) ? t.severity : 'medium' }))
-      .filter((t: any) => t.point)
-      .slice(0, 6),
-    tradeoffs: consider(parsed?.tradeoffs),
-    considerations: consider(parsed?.considerations),
-    stakeholders: { impacted: stake(parsed?.stakeholders?.impacted), interested: stake(parsed?.stakeholders?.interested) },
-    references: {
-      pressures: (Array.isArray(refs.pressures) ? refs.pressures : []).filter((id: any) => VALID_REFS.pressures.has(id)).slice(0, 10),
-      strategies: (Array.isArray(refs.strategies) ? refs.strategies : []).filter((id: any) => VALID_REFS.strategies.has(id)).slice(0, 10),
-      legislation: (Array.isArray(refs.legislation) ? refs.legislation : []).filter((id: any) => VALID_REFS.legislation.has(id)).slice(0, 10),
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
+      };
+      // flush a byte immediately so the edge proxy sees the response start
+      try { controller.enqueue(encoder.encode(': keystone\n\n')); } catch { /* noop */ }
+      send({ type: 'status', message: 'Weighing this against the strategic material…' });
+      let acc = '';
+      try {
+        const client = getOpenAIClient();
+        const completion = await client.chat.completions.create(
+          {
+            model: getModel(),
+            messages: [
+              { role: 'system', content: sys },
+              { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
+            ],
+            temperature: 0.3,
+            max_tokens: 2600,
+            stream: true,
+            thinking: { type: 'disabled' },
+          } as any,
+          { signal: AbortSignal.timeout(110_000) as any },
+        );
+        for await (const chunk of completion as any) {
+          const delta = chunk?.choices?.[0]?.delta?.content;
+          if (delta) { acc += delta; send({ type: 'tick' }); } // tick keeps the stream warm
+        }
+        const out = validate(parseJson(acc));
+        send({ type: 'result', data: out });
+      } catch (e: any) {
+        send({ type: 'error', message: (e?.message ?? 'generation failed').slice(0, 160) });
+      } finally {
+        try { controller.close(); } catch { /* already closed */ }
+      }
     },
-    watchouts: (Array.isArray(parsed?.watchouts) ? parsed.watchouts : []).map((w: any) => String(w).slice(0, 200)).slice(0, 5),
-  };
+  });
 
-  return new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 };

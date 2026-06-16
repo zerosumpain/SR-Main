@@ -51,15 +51,36 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: policies[i].title, statement: policies[i].statement }),
       });
-      if (!res.ok) {
-        const msg = (await res.text().catch(() => '')) || `HTTP ${res.status}`;
-        policies[i] = { ...policies[i], status: 'error', error: msg.slice(0, 160) };
-      } else {
-        const considerations = await res.json();
-        policies[i] = { ...policies[i], status: 'done', considerations };
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      // consume the SSE stream; the server emits a single { type:'result' } when done
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let result: any = null;
+      let errMsg: string | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() ?? '';
+        for (const part of parts) {
+          const line = part.split('\n').find((l) => l.startsWith('data: '));
+          if (!line) continue;
+          try {
+            const obj = JSON.parse(line.slice(6));
+            if (obj.type === 'result') result = obj.data;
+            else if (obj.type === 'error') errMsg = obj.message;
+          } catch { /* ignore non-json (heartbeats) */ }
+        }
       }
+      const cur = policies.findIndex((p) => p.id === id);
+      if (cur < 0) return;
+      if (result) policies[cur] = { ...policies[cur], status: 'done', considerations: result };
+      else policies[cur] = { ...policies[cur], status: 'error', error: errMsg ?? 'No appraisal returned — try again.' };
     } catch (e: any) {
-      policies[i] = { ...policies[i], status: 'error', error: e?.message ?? 'request failed' };
+      const cur = policies.findIndex((p) => p.id === id);
+      if (cur >= 0) policies[cur] = { ...policies[cur], status: 'error', error: e?.message ?? 'request failed' };
     }
     policies = [...policies];
   }
