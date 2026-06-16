@@ -5,8 +5,8 @@
   import { byType as byNodeType, mapTypeToKind, type NodeKind } from '$lib/canvas/adapter';
   import ArtefactCard from './desk/ArtefactCard.svelte';
   import CardLiveWrapper from './desk/CardLiveWrapper.svelte';
-  import CategoryHeader from './desk/CategoryHeader.svelte';
-  import ThemeHeader from './desk/ThemeHeader.svelte';
+  import GroupHeaderCard from './desk/GroupHeaderCard.svelte';
+  import { spreadLayout } from './desk/spread';
   import EntityRail from './desk/EntityRail.svelte';
   import CommandBar from './desk/CommandBar.svelte';
   import FloatingFilters from './desk/FloatingFilters.svelte';
@@ -61,9 +61,15 @@
   });
 
   // ——— cockpit local state ———
+  // Grouped relationships shown in the inspector (relationships / appears-in-facts
+  // / source / entities / challenges, depending on the selected card's kind).
+  type RelKind = 'source' | 'fact' | 'entity';
+  interface RelItem { id: string; kind: RelKind; label: string; note?: string }
+  interface RelGroup { heading: string; items: RelItem[] }
+
   let inspectorOpen = $state(false);
   let inspectorArtefact = $state<any>(null);
-  let inspectorRelated = $state<{ id: string; kind: 'source' | 'fact' | 'entity'; label: string }[]>([]);
+  let inspectorRelated = $state<RelGroup[]>([]);
   let inspectorSummarize = $state(false);
 
   // Artefact-type filter toggles (controlled).
@@ -105,9 +111,23 @@
   // the desk shows real embedding-similarity piles (not the empty 'cluster' dimension).
   let groupDim = $state<GroupDim>('similarity');
 
-  // Expanded pile keys. A pile is collapsed (fanned stack) unless its group key
-  // is in this set; expanding spreads members into a column (animated via morphIds).
-  let expandedPiles = $state.raw<Set<string>>(new Set());
+  // Piles are always rendered as collapsed fans now; in-place column expansion was
+  // superseded by the click-a-heading → spread-to-explore focus interaction. Kept
+  // as an (always-empty) arg to pileLayout so its signature is unchanged.
+  const expandedPiles: Set<string> = new Set();
+
+  // ——— Group focus (click a heading → spread its cards to explore) ———
+  // The group key currently spread into open space, or null. `focusAnchor` is the
+  // world-space viewport centre captured at click time so the spread stays put
+  // while the user pans/zooms.
+  let focusedGroup = $state<string | null>(null);
+  let focusAnchor = $state.raw<Pos | null>(null);
+
+  // ——— Search (floating-filter box) ———
+  // Live substring filter over card title/description/content; only active once
+  // the query reaches 3 characters (shorter queries match nothing-out).
+  let searchQuery = $state('');
+  const SEARCH_MIN = 3;
 
   // ——— Auto-arrange ———
   // ON (default): the desk continuously re-flows into piles as cards stream in
@@ -259,11 +279,24 @@
   // Toggle a pile open/closed. $state.raw Set replaced wholesale so the change
   // re-derives pilePositions → flows through posOf → positionById → morphIds,
   // animating the spread/restack with no extra transition wiring.
-  function togglePile(key: string) {
-    const next = new Set(expandedPiles);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    expandedPiles = next;
+  // Raw world-space centre of the current viewport (no node offset).
+  function viewportCenterWorld(): Pos {
+    if (!viewportEl) return { x: 600, y: 600 };
+    const vp = viewportEl.getBoundingClientRect();
+    return { x: (vp.width / 2 - panX) / zoom, y: (vp.height / 2 - panY) / zoom };
+  }
+
+  // Clicking a group heading spreads that group's cards into open space around
+  // the viewport centre (captured now so it's stable while panning). Clicking the
+  // same heading again — or Esc / the heading's ✕ — collapses back to the piles.
+  function focusGroup(key: string) {
+    if (focusedGroup === key) { clearFocus(); return; }
+    focusAnchor = viewportCenterWorld();
+    focusedGroup = key;
+  }
+  function clearFocus() {
+    focusedGroup = null;
+    focusAnchor = null;
   }
 
   // Toggle continuous auto-arrange. Turning it OFF snapshots the current rendered
@@ -319,27 +352,84 @@
     inspectorOpen = true;
   }
 
-  // Related artefacts: any card that references the selected id by known link fields.
-  function relatedFor(id: string): { id: string; kind: 'source' | 'fact' | 'entity'; label: string }[] {
-    const out: { id: string; kind: 'source' | 'fact' | 'entity'; label: string }[] = [];
-    for (const c of store.cards) {
-      if (c.id === id) continue;
-      const f = c.fields as any;
-      const linked =
-        f.refutesFactId === id ||
-        f.sourceId === id ||
-        f.fromEntityId === id ||
-        f.toEntityId === id;
-      if (linked) {
-        const kind: 'source' | 'fact' | 'entity' = c.kind === 'entity' ? 'entity' : c.kind === 'source' ? 'source' : 'fact';
-        out.push({
-          id: c.id,
-          kind,
-          label: String(f.content ?? f.name ?? f.title ?? c.id),
-        });
+  // Related artefacts, organised into labelled groups so the inspector can show
+  // an entity's relationships, the facts it appears in, a fact's source/entities,
+  // a source's facts, etc. Uses relationships (edges) + entity↔fact mentions +
+  // fact→source links.
+  function relatedFor(id: string): RelGroup[] {
+    const card = store.cards.find((c) => c.id === id);
+    if (!card) return [];
+    const byId = new Map(store.cards.map((c) => [c.id, c]));
+    const f = (c: DeskCard) => c.fields as any;
+    const nameOf = (c: DeskCard) => String(f(c).name ?? f(c).title ?? f(c).content ?? c.id);
+    const relKind = (c: DeskCard): RelKind =>
+      c.kind === 'entity' ? 'entity' : c.kind === 'source' ? 'source' : 'fact';
+    const groups: RelGroup[] = [];
+
+    if (card.kind === 'entity') {
+      // Relationships to other entities (edges carry type + sentiment).
+      const rels: RelItem[] = [];
+      for (const e of store.edges) {
+        let otherId: string | null = null;
+        let dir = '';
+        if (e.fromEntityId === id) { otherId = e.toEntityId; dir = '→'; }
+        else if (e.toEntityId === id) { otherId = e.fromEntityId; dir = '←'; }
+        if (!otherId) continue;
+        const other = byId.get(otherId);
+        const note = [e.relationshipType, e.sentiment].filter(Boolean).join(' · ');
+        rels.push({ id: otherId, kind: 'entity', label: `${dir} ${other ? nameOf(other) : otherId}`, note: note || undefined });
       }
+      if (rels.length) groups.push({ heading: 'Relationships', items: rels });
+
+      // Facts that mention / are about this entity.
+      const factItems: RelItem[] = [];
+      const seen = new Set<string>();
+      for (const m of store.entityMentions) {
+        if (m.entityId !== id || seen.has(m.factId)) continue;
+        seen.add(m.factId);
+        const fc = byId.get(m.factId);
+        if (fc) factItems.push({ id: fc.id, kind: relKind(fc), label: nameOf(fc) });
+      }
+      if (factItems.length) groups.push({ heading: 'Appears in facts', items: factItems });
+    } else if (card.kind === 'fact') {
+      // The source this fact came from.
+      const sid = f(card).sourceId;
+      if (typeof sid === 'string') {
+        const sc = byId.get(sid);
+        if (sc) groups.push({ heading: 'Source', items: [{ id: sc.id, kind: 'source', label: nameOf(sc) }] });
+      }
+      // Entities mentioned in this fact.
+      const entItems: RelItem[] = [];
+      const seenE = new Set<string>();
+      for (const m of store.entityMentions) {
+        if (m.factId !== id || seenE.has(m.entityId)) continue;
+        seenE.add(m.entityId);
+        const ec = byId.get(m.entityId);
+        if (ec) entItems.push({ id: ec.id, kind: 'entity', label: nameOf(ec) });
+      }
+      if (entItems.length) groups.push({ heading: 'Entities', items: entItems });
+      // Counterfactual links (challenges).
+      const challenges: RelItem[] = [];
+      for (const c of store.cards) {
+        if (f(c).refutesFactId === id) challenges.push({ id: c.id, kind: 'fact', label: nameOf(c), note: 'challenges this' });
+      }
+      const myRefute = f(card).refutesFactId;
+      if (typeof myRefute === 'string') {
+        const rc = byId.get(myRefute);
+        if (rc) challenges.push({ id: rc.id, kind: 'fact', label: nameOf(rc), note: 'this challenges' });
+      }
+      if (challenges.length) groups.push({ heading: 'Challenges', items: challenges });
+    } else if (card.kind === 'source') {
+      // Facts extracted from this source.
+      const factItems: RelItem[] = [];
+      for (const c of store.cards) {
+        if (c.kind === 'fact' && f(c).sourceId === id) factItems.push({ id: c.id, kind: relKind(c), label: nameOf(c) });
+      }
+      if (factItems.length) groups.push({ heading: 'Facts from this source', items: factItems });
     }
-    return out.slice(0, 12);
+
+    for (const g of groups) g.items = g.items.slice(0, 20);
+    return groups;
   }
 
   // ——— card geometry (uniform; entity chips a touch smaller) ———
@@ -455,6 +545,21 @@
     return out;
   });
 
+  // ——— group focus / spread ———
+  // Member ids of the focused group (in visibleCards order), the spread layout
+  // (member positions + heading position), and a quick lookup set.
+  const focusMemberIds = $derived.by<string[]>(() => {
+    if (!focusedGroup) return [];
+    return visibleCards
+      .filter((c) => grouping.memberOf.get(c.id) === focusedGroup)
+      .map((c) => c.id);
+  });
+  const focusSpread = $derived.by(() => {
+    if (!focusedGroup || !focusAnchor || focusMemberIds.length === 0) return null;
+    return spreadLayout(focusMemberIds, focusAnchor);
+  });
+  const focusedIds = $derived(new Set(focusMemberIds));
+
   // Index of each card within its group (packed order = visibleCards order),
   // used for fan z-index. Every member in a collapsed pile is rendered so
   // a slice of each card is always visible.
@@ -514,8 +619,29 @@
     return (c.fields.isCounterfactual as boolean) ? 'counterfactual' : 'fact';
   }
 
-  // Filtered card list (honoured by the desk render; counters use store.cards directly).
-  const visibleCards = $derived(store.cards.filter((c) => typeFilters[cardFilterKey(c)]));
+  // Lowercased, concatenated searchable text for a card (title / name / content /
+  // snippet / description / domain). Used by the floating-filter search.
+  function cardSearchText(c: DeskCard): string {
+    const f = c.fields as any;
+    return [f.content, f.name, f.title, f.snippet, f.description, f.domain, f.type, f.url]
+      .filter((v) => typeof v === 'string')
+      .join(' ')
+      .toLowerCase();
+  }
+
+  // Active search needle (only once ≥ SEARCH_MIN chars; trimmed + lowercased).
+  const searchNeedle = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return q.length >= SEARCH_MIN ? q : '';
+  });
+
+  // Filtered card list: type filters AND (when active) the search needle.
+  // Honoured by the desk render; counters use store.cards directly.
+  const visibleCards = $derived(
+    store.cards.filter(
+      (c) => typeFilters[cardFilterKey(c)] && (!searchNeedle || cardSearchText(c).includes(searchNeedle)),
+    ),
+  );
 
   // Report node: regenerate + downloads are gated exactly like handleExport/handleShare.
   const canRegenerate = $derived(!readonly && deskMode !== 'quick');
@@ -565,6 +691,13 @@
     // 1. In-flight drag override (pointer is still down).
     const ov = dragOverrides[c.id];
     if (ov) return ov;
+    // 1b. Group focus — a member of the focused group spreads into open space.
+    //     Wins over locking/piles so the whole group is co-visible to explore;
+    //     positions revert when focus clears.
+    if (focusSpread) {
+      const fp = focusSpread.positions.get(c.id);
+      if (fp) return fp;
+    }
     // 2. Locked (pinned===true) — use the persisted canvasX/Y. Stale canvasX/Y
     //    from old unlocked drags are intentionally ignored here (they get cleared
     //    on unlock via PATCH pinned:false; until then an unlocked card with stale
@@ -1082,6 +1215,11 @@
   // Guard: only fires when the active element is NOT an input/textarea so we
   // don't eat keystrokes inside the research-chat node's text input.
   function onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && focusedGroup) {
+      e.preventDefault();
+      clearFocus();
+      return;
+    }
     if (e.key !== 'Delete' && e.key !== 'Backspace') return;
     const active = document.activeElement;
     if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
@@ -1425,32 +1563,24 @@
           {/if}
         {/if}
 
-        <!-- pile headers: one per group, anchored over its stack; click to expand/collapse -->
+        <!-- pile headers: one unified card per group; click to spread the group
+             into open space (focus) and click again / Esc to collapse back. -->
         {#each pileHeaders as ph (ph.key)}
+          {@const isFocused = focusedGroup === ph.key}
+          {@const hpos = isFocused && focusSpread ? focusSpread.heading : { x: ph.pos.x, y: ph.pos.y - 72 }}
           <div
             class="desk-pile-host"
-            class:expanded={expandedPiles.has(ph.key)}
-            style:transform="translate({ph.pos.x}px, {ph.pos.y - 72}px)"
+            class:dimmed-heading={focusedGroup !== null && !isFocused}
+            style:transform="translate({hpos.x}px, {hpos.y}px)"
+            style:z-index={isFocused ? 3200 : 200}
           >
-            <button
-              type="button"
-              class="pile-toggle"
-              aria-expanded={expandedPiles.has(ph.key)}
-              title={expandedPiles.has(ph.key) ? 'Collapse pile' : 'Expand pile'}
-              onclick={() => togglePile(ph.key)}
-            >
-              {#if groupDim === 'cluster'}
-                <CategoryHeader
-                  id={ph.key}
-                  title={ph.label}
-                  summary={categorySummary[ph.key] ?? ''}
-                  count={ph.count}
-                />
-              {:else}
-                <ThemeHeader label={ph.label} count={ph.count} />
-              {/if}
-              <span class="pile-chevron" aria-hidden="true">{expandedPiles.has(ph.key) ? '▾' : '▸'}</span>
-            </button>
+            <GroupHeaderCard
+              title={ph.label}
+              count={ph.count}
+              summary={groupDim === 'cluster' ? (categorySummary[ph.key] ?? '') : ''}
+              focused={isFocused}
+              onclick={() => focusGroup(ph.key)}
+            />
           </div>
         {/each}
 
@@ -1466,9 +1596,10 @@
               class:morphing={c.pinned !== true && !manualPos.has(c.id) && !dragOverrides[c.id] && morphIds.has(c.id)}
               class:is-selected={selectedId === c.id}
               class:is-locked={c.pinned === true}
+              class:dimmed={focusedGroup !== null && !focusedIds.has(c.id)}
               data-kind={kindOf(c)}
-              style:transform="translate({p.x}px, {p.y}px) rotate({tilt}deg)"
-              style:z-index={pile?.z ?? 1}
+              style:transform="translate({p.x}px, {p.y}px) rotate({focusedIds.has(c.id) ? 0 : tilt}deg)"
+              style:z-index={focusedIds.has(c.id) ? 3000 + (pile?.idx ?? 0) : (pile?.z ?? 1)}
               onpointerdown={(e) => onCardPointerDown(e, c)}
               onpointermove={onCardPointerMove}
               onpointerup={(e) => onCardPointerUp(e, c)}
@@ -1560,6 +1691,8 @@
         {autoArrange}
         onautoarrange={setAutoArrange}
         onarrangenow={arrangeNow}
+        search={searchQuery}
+        onsearch={(q) => { searchQuery = q; }}
       />
 
       <!-- minimap -->
@@ -1611,7 +1744,7 @@
     bind:open={inspectorOpen}
     {sessionId}
     artefact={inspectorArtefact}
-    related={inspectorRelated}
+    relatedGroups={inspectorRelated}
     summarize={inspectorSummarize}
     onclose={() => (inspectorOpen = false)}
     onselect={(id) => openInspector(id)}
@@ -1785,33 +1918,27 @@
     transition: opacity 360ms ease;
   }
 
-  /* Pile headers — world-space label + count badge over each group's stack;
-     clickable to expand/collapse. */
+  /* Pile headers — one unified GroupHeaderCard per group; click to spread/focus.
+     Transitions transform so a header glides to/from the spread position. */
   .desk-pile-host {
     position: absolute;
     top: 0;
     left: 0;
     will-change: transform;
     z-index: 200; /* headers above fanned cards, below dragged (1000) */
-    transition: opacity 360ms ease;
+    transition: transform 720ms cubic-bezier(0.4, 0.0, 0.2, 1), opacity 360ms ease;
   }
-  .pile-toggle {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 4px;
-    background: transparent;
-    border: 0;
-    padding: 0;
-    cursor: pointer;
-    text-align: left;
+  @media (prefers-reduced-motion: reduce) {
+    .desk-pile-host { transition: opacity 360ms ease; }
   }
-  .pile-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .pile-chevron {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent);
-    line-height: 1;
-    margin-top: 2px;
+
+  /* Group-focus dimming: everything not in the focused group recedes so the
+     spread-out group stands out and is the only thing you can interact with. */
+  .desk-card-host.dimmed,
+  .desk-pile-host.dimmed-heading {
+    opacity: 0.16;
+    pointer-events: none;
+    transition: opacity 280ms ease;
   }
 
   .syn-edge { animation: syn-fade-in 600ms ease both; }

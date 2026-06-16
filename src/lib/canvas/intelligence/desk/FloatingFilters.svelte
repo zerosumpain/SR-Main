@@ -22,6 +22,8 @@
     autoArrange = true,
     onautoarrange = (_v: boolean) => {},
     onarrangenow = () => {},
+    search = '',
+    onsearch = (_q: string) => {},
   }: {
     filters: { source: boolean; fact: boolean; entity: boolean; counterfactual: boolean };
     counts: { sources: number; facts: number; entities: number; counterfactuals: number };
@@ -31,6 +33,8 @@
     autoArrange?: boolean;
     onautoarrange?: (value: boolean) => void;
     onarrangenow?: () => void;
+    search?: string;
+    onsearch?: (query: string) => void;
   } = $props();
 
   const filterDefs: { key: FilterKey; label: string; swatch: string; countKey: keyof typeof counts }[] = [
@@ -56,6 +60,23 @@
 </script>
 
 <div class="floating-filters" role="group" aria-label="Desk filters">
+  <section class="ff-sec ff-search-sec">
+    <h3>SEARCH</h3>
+    <div class="ff-search-wrap">
+      <input
+        type="search"
+        class="ff-search"
+        placeholder="Filter cards…"
+        aria-label="Search cards by title or description"
+        value={search}
+        oninput={(e) => onsearch((e.currentTarget as HTMLInputElement).value)}
+      />
+      {#if search.trim().length > 0 && search.trim().length < 3}
+        <span class="ff-search-hint">type {3 - search.trim().length} more…</span>
+      {/if}
+    </div>
+  </section>
+
   <section class="ff-sec">
     <h3>FILTERS</h3>
     <div class="ff-filters">
@@ -141,6 +162,23 @@
     color: var(--text-ghost);
     margin: 0 0 8px;
   }
+  .ff-search-sec { border-bottom: 1px solid var(--divider); padding-bottom: 10px; }
+  .ff-search-wrap { display: flex; flex-direction: column; gap: 3px; }
+  .ff-search {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 5px 8px;
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: 0;
+    outline: none;
+  }
+  .ff-search:focus { border-color: var(--accent); }
+  .ff-search::placeholder { color: var(--text-ghost); }
+  .ff-search-hint { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
   .ff-filters { display: flex; flex-direction: column; gap: 6px; }
   .ff-row {
     display: flex;

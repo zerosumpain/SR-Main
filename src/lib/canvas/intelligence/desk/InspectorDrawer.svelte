@@ -6,7 +6,8 @@
   import { buildExplorePrompt, buildExplorePayload, type ExploreType } from './explore';
 
   type ArtefactKind = 'source' | 'fact' | 'entity';
-  interface RelatedRef { id: string; kind: ArtefactKind; label: string; }
+  interface RelatedRef { id: string; kind: ArtefactKind; label: string; note?: string }
+  interface RelatedGroup { heading: string; items: RelatedRef[] }
   // Loose shape — fields depend on kind (see SHARED CONTRACT).
   type Artefact = { kind: ArtefactKind; id: string } & Record<string, unknown>;
 
@@ -14,7 +15,7 @@
     open = $bindable(false),
     sessionId,
     artefact,
-    related = [],
+    relatedGroups = [],
     summarize = false,
     onclose,
     onselect,
@@ -22,7 +23,7 @@
     open?: boolean;
     sessionId: string;
     artefact: Artefact | null;
-    related?: RelatedRef[];
+    relatedGroups?: RelatedGroup[];
     /** When true (set by double-click), auto-trigger the page summary fetch. */
     summarize?: boolean;
     onclose: () => void;
@@ -272,21 +273,24 @@
           {#if artefact.description}<p class="d-desc">{artefact.description as string}</p>{/if}
         {/if}
 
-        {#if related.length}
-          <section class="d-sec">
-            <h3>RELATED</h3>
-            <ul class="d-related">
-              {#each related as r (r.id)}
-                <li>
-                  <button type="button" class="d-rel" onclick={() => onselect(r.id)}>
-                    <span class="d-rel-kind d-kind-{r.kind}">{kindLabel(r.kind)}</span>
-                    <span class="d-rel-label">{r.label}</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          </section>
-        {/if}
+        {#each relatedGroups as g (g.heading)}
+          {#if g.items.length}
+            <section class="d-sec">
+              <h3>{g.heading.toUpperCase()}</h3>
+              <ul class="d-related">
+                {#each g.items as r (g.heading + r.id + r.label)}
+                  <li>
+                    <button type="button" class="d-rel" onclick={() => onselect(r.id)}>
+                      <span class="d-rel-kind d-kind-{r.kind}">{kindLabel(r.kind)}</span>
+                      <span class="d-rel-label">{r.label}</span>
+                      {#if r.note}<span class="d-rel-note">{r.note}</span>{/if}
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          {/if}
+        {/each}
       </div>
 
       <footer class="d-foot">
@@ -398,7 +402,8 @@
   .d-rel { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 6px 8px; margin-bottom: 6px; cursor: pointer; }
   .d-rel:hover { border-color: var(--accent); }
   .d-rel-kind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; padding: 1px 5px; border-radius: var(--radius-sharp); border: 1px solid var(--card-border); color: var(--text-muted); }
-  .d-rel-label { font-family: var(--font-body); font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-rel-label { flex: 1; min-width: 0; font-family: var(--font-body); font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-rel-note { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); white-space: nowrap; }
 
   .d-foot { padding: 12px 14px; border-top: 1px solid var(--card-border); }
   .d-err { font-family: var(--font-mono); font-size: 11px; color: var(--error); margin: 0 0 8px; }

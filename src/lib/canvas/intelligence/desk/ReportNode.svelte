@@ -29,6 +29,24 @@
   // Pure view-model: recomputes when the report json or the joined cards change.
   const view = $derived<ReportView>(buildReportView(report, cards));
 
+  // A stored report whose executive summary is the failure sentinel (left behind
+  // when the LLM gateway timed out before the fix). We treat it as "no usable
+  // report" and self-heal by regenerating once.
+  const reportFailed = $derived(
+    !!report && /generation failed/i.test((report.executive_summary ?? '')),
+  );
+  // Guard so self-heal fires at most once per node mount.
+  let healAttempted = false;
+  function maybeSelfHeal() {
+    if (healAttempted || !canRegenerate || regenerating) return;
+    const r = report;
+    const needsHeal = !r || !r.executive_summary?.trim() || /generation failed/i.test(r.executive_summary);
+    if (needsHeal) {
+      healAttempted = true;
+      regenerate();
+    }
+  }
+
   // Plain (non-$state) handles — never read inside a $effect.
   let loadController: AbortController | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -55,6 +73,8 @@
       const body = (await res.json()) as { report: ResearchReport | null };
       report = body.report ?? null;
       loadState = 'ready';
+      // Auto-regenerate once if the stored report is missing or previously failed.
+      maybeSelfHeal();
     } catch (err) {
       if ((err as { name?: string }).name === 'AbortError') return;
       console.error('[report-node] load error', err);
@@ -354,12 +374,14 @@
   {:else if loadState === 'error'}
     <p class="rn-muted rn-error">Could not load report.</p>
     <button type="button" class="rn-btn" onclick={load}>Retry</button>
-  {:else if !view.hasReport}
-    <p class="rn-muted">Auto-report not yet generated.</p>
-    {#if canRegenerate}
-      <button type="button" class="rn-btn rn-accent" disabled={regenerating} onclick={regenerate}>
-        {regenerating ? 'regenerating…' : 'Regenerate'}
-      </button>
+  {:else if !view.hasReport || reportFailed}
+    {#if regenerating}
+      <p class="rn-muted">Generating report&hellip; this can take up to a minute.</p>
+    {:else}
+      <p class="rn-muted">{reportFailed ? 'The previous report didn’t complete.' : 'Auto-report not yet generated.'}</p>
+      {#if canRegenerate}
+        <button type="button" class="rn-btn rn-accent" onclick={regenerate}>Generate report</button>
+      {/if}
     {/if}
   {:else}
     <section class="rn-sec">
