@@ -1,6 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplateStrict } from './template';
-import { resolveLLMClient } from './llm-helpers';
+import { resilientChatCompletion, resilientChatStream } from '$lib/llm/workflow-gateway';
 
 export { llmCallDef } from './llm-call.def';
 
@@ -20,8 +20,11 @@ export const llmCallExecutor: NodeExecutor = {
     }
     const temperature = (config.temperature as number) ?? 0.7;
     const maxTokens = (config.maxTokens as number) ?? 2048;
-
-    const { client, model } = await resolveLLMClient(config.model as string | undefined);
+    const configuredModel = config.model as string | undefined;
+    const messages = [
+      ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+      { role: 'user' as const, content: userPrompt },
+    ];
 
     // If this run originated from a canvas chat send, the /chat endpoint
     // threads `_chatNodeId` through initialInput. Emit token deltas as
@@ -33,54 +36,40 @@ export const llmCallExecutor: NodeExecutor = {
     let content = '';
     let promptTokens = 0;
     let completionTokens = 0;
+    let usedModel = configuredModel ?? 'default';
 
     if (chatNodeId) {
-      const stream = await client.chat.completions.create({
-        model,
-        messages: [
-          ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-          { role: 'user' as const, content: userPrompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-        stream: true,
-        stream_options: { include_usage: true },
-      });
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content;
-        if (typeof delta === 'string' && delta.length > 0) {
-          content += delta;
-          context.emit({
-            type: 'log',
-            runId: context.runId,
-            nodeId,
-            data: {
-              kind: 'chat_stream',
-              chatNodeId,
-              event: { type: 'token', delta },
-            },
-            timestamp: new Date().toISOString(),
-          });
-        }
-        const u = chunk.usage;
-        if (u) {
-          promptTokens = u.prompt_tokens ?? promptTokens;
-          completionTokens = u.completion_tokens ?? completionTokens;
-        }
-      }
+      // Streamed: resilient (concurrency + idle-timeout + z.ai→OpenRouter
+      // fallback before the first token). Token deltas stream to the chat pane.
+      const r = await resilientChatStream(
+        configuredModel,
+        { messages, temperature, max_tokens: maxTokens },
+        {
+          signal: context.abortSignal,
+          onToken: (delta) => {
+            context.emit({
+              type: 'log',
+              runId: context.runId,
+              nodeId,
+              data: { kind: 'chat_stream', chatNodeId, event: { type: 'token', delta } },
+              timestamp: new Date().toISOString(),
+            });
+          },
+        },
+      );
+      content = r.content;
+      promptTokens = r.promptTokens;
+      completionTokens = r.completionTokens;
     } else {
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-          { role: 'user' as const, content: userPrompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      });
+      const response = await resilientChatCompletion(
+        configuredModel,
+        { messages, temperature, max_tokens: maxTokens },
+        { signal: context.abortSignal },
+      );
       content = response.choices[0]?.message?.content ?? '';
       promptTokens = response.usage?.prompt_tokens ?? 0;
       completionTokens = response.usage?.completion_tokens ?? 0;
+      usedModel = response.model || usedModel;
     }
 
     return {
@@ -89,7 +78,7 @@ export const llmCallExecutor: NodeExecutor = {
         usage: { promptTokens, completionTokens },
       },
       metadata: {
-        model,
+        model: usedModel,
         promptTokens,
         completionTokens,
       },

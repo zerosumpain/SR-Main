@@ -42,13 +42,13 @@ function looksForeign(m: string): boolean {
  */
 export async function resolveLLMClient(
   configuredModel: string | undefined,
-): Promise<{ client: OpenAI; model: string }> {
+): Promise<{ client: OpenAI; model: string; provider: 'zai' | 'openrouter' }> {
   const m = (configuredModel ?? '').trim();
 
   // Use admin default (full provider + modelId) when empty or sentinel.
   if (!m || m === 'default' || m === 'jkai-default') {
     const ctx = await resolveDefaultModel('chat');
-    return getLLMClient(ctx);
+    return { ...(await getLLMClient(ctx)), provider: ctx.provider };
   }
 
   // OpenRouter-formatted model IDs always have a '/' (e.g. openai/gpt-4o).
@@ -57,7 +57,7 @@ export async function resolveLLMClient(
   // legacy getOpenRouterClient() only saw keys.json/env, which made
   // admin-UI-only configs silently fail with "OpenRouter API key not configured".
   if (m.includes('/')) {
-    return getLLMClient({ provider: 'openrouter', modelId: m });
+    return { ...(await getLLMClient({ provider: 'openrouter', modelId: m })), provider: 'openrouter' };
   }
 
   // Bare id that clearly belongs to a foreign provider — don't pipe it
@@ -69,10 +69,10 @@ export async function resolveLLMClient(
       `Fix: prefix with the provider (e.g. "openai/${m}") or leave the field blank.`,
     );
     const ctx = await resolveDefaultModel('chat');
-    return getLLMClient(ctx);
+    return { ...(await getLLMClient(ctx)), provider: ctx.provider };
   }
 
   // Bare model ID → admin default's provider, with this modelId.
   const ctx = await resolveDefaultModel('chat');
-  return getLLMClient({ provider: ctx.provider, modelId: m });
+  return { ...(await getLLMClient({ provider: ctx.provider, modelId: m })), provider: ctx.provider };
 }

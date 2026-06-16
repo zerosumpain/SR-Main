@@ -38,8 +38,10 @@
       // Annotation primitives (post-it, annotation box) live on the canvas
       // toolbar, not in the DAG palette — they're inert decoration, not nodes.
       .filter((t) => t.group !== 'Annotations')
-      // Optional allow-list (Research Desk scopes to its research node set).
-      .filter((t) => !restrictTypes || restrictTypes.includes(t.type))
+      // With an allow-list (Research Desk) show exactly those types — including
+      // desk-only ones. Without one (workflow canvas) exclude desk-only types:
+      // they have no workflow executor, so the builder shouldn't offer them.
+      .filter((t) => (restrictTypes ? restrictTypes.includes(t.type) : !t.deskOnly))
       .map((t) => ({
         type: t.type,
         handles: t.handles,

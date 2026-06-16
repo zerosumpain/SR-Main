@@ -1,11 +1,11 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
-import { resolveLLMClient } from './llm-helpers';
+import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 
 export { llmRouterDef } from './llm-router.def';
 
 export const llmRouterExecutor: NodeExecutor = {
   type: 'llm-router',
-  async execute(input, config, _context): Promise<NodeResult> {
+  async execute(input, config, context): Promise<NodeResult> {
     const routesStr = (config.routes as string) || '[]';
     let routes: { handle: string; description: string }[];
     try {
@@ -18,17 +18,18 @@ export const llmRouterExecutor: NodeExecutor = {
     const routeList = routes.map((r, i) => `${i + 1}. "${r.handle}" — ${r.description}`).join('\n');
     const systemPrompt = `You are a routing engine. Given input data and routes, respond with ONLY the handle name of the best matching route. No explanation, no quotes.\n\nAvailable routes:\n${routeList}`;
 
-    const { client, model } = await resolveLLMClient(config.model as string | undefined);
-
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: JSON.stringify(input, null, 2) },
-      ],
-      temperature: 0.1,
-      max_tokens: 50,
-    });
+    const response = await resilientChatCompletion(
+      config.model as string | undefined,
+      {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: JSON.stringify(input, null, 2) },
+        ],
+        temperature: 0.1,
+        max_tokens: 50,
+      },
+      { signal: context.abortSignal },
+    );
 
     const selected = (response.choices[0]?.message?.content ?? '').trim();
     const matchedRoute = routes.find((r) => r.handle === selected);
@@ -36,7 +37,7 @@ export const llmRouterExecutor: NodeExecutor = {
 
     return {
       output: { ...input, selectedRoute: handle },
-      metadata: { _selectedHandle: handle, model },
+      metadata: { _selectedHandle: handle, model: response.model },
       rowCount: 1,
     };
   },

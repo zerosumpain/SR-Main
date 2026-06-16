@@ -1,6 +1,14 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { APIUserAbortError, APIConnectionTimeoutError } from 'openai';
 import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel, getFallbackModel, hasOpenRouter } from './keys';
+import {
+  isRateLimitError,
+  isOurTimeoutAbort,
+  combineSignals,
+  withRetry,
+} from '$lib/llm/resilience';
+
+// Re-export so existing importers of these from $lib/deepdive/ai keep working.
+export { isRateLimitError };
 
 // z.ai's glm-5-turbo / glm-5.1 spend a lot of reasoning time: a medium 2k-token
 // completion measures ~25s end-to-end, and a large clustering prompt (up to 200
@@ -13,12 +21,6 @@ const ZAI_NONSTREAM_TIMEOUT_MS = 90_000;
 // Idle gap between streamed tokens. Reasoning models can take >30s to emit the
 // FIRST token, so allow 45s before the watchdog fires.
 const ZAI_STREAM_IDLE_TIMEOUT_MS = 45_000;
-
-function combineSignals(external: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  if (!external) return timeout;
-  return AbortSignal.any([external, timeout]);
-}
 
 /** Attempt to close truncated JSON by balancing brackets/braces and removing trailing partial tokens */
 function repairJson(text: string): string {
@@ -51,49 +53,6 @@ function repairJson(text: string): string {
 }
 
 /**
- * Returns true when an error indicates a rate-limit from z.ai or OpenRouter.
- * z.ai surfaces these as HTTP 429 (err.status) or proprietary code 1302 (err.code).
- */
-export function isRateLimitError(err: any): boolean {
-  if (err?.status === 429) return true;
-  if (err?.code === '1302' || err?.code === 1302) return true;
-  if (/rate.?limit/i.test(String(err?.message ?? ''))) return true;
-  if (/rate.?limit/i.test(String(err?.error?.message ?? ''))) return true;
-  return false;
-}
-
-/**
- * True for any abort/timeout error.
- *
- * The OpenAI SDK throws `APIUserAbortError` when an AbortSignal fires and
- * `APIConnectionTimeoutError` on its own timeout. CRITICAL: the SDK's error
- * classes inherit `Error.prototype.name` ("Error") — they do NOT set `.name` to
- * their class name — so an `err.name === 'APIUserAbortError'` check NEVER matches
- * a real SDK abort. Match by `instanceof` (and constructor name / message as a
- * belt-and-suspenders) instead. The native `.name` strings are kept for the
- * raw-`fetch` paths (e.g. fetch-page-text) and openRouterChat's own timeout.
- */
-function isAbortError(err: any): boolean {
-  if (err instanceof APIUserAbortError || err instanceof APIConnectionTimeoutError) return true;
-  if (err?.constructor?.name === 'APIUserAbortError' || err?.constructor?.name === 'APIConnectionTimeoutError') return true;
-  if (err?.message === 'Request was aborted.') return true;
-  const name = err?.name;
-  return name === 'AbortError' || name === 'APIUserAbortError' || name === 'TimeoutError';
-}
-
-/**
- * True when an abort came from OUR own timeout (z.ai was too slow), as opposed
- * to the CALLER cancelling via their signal. When the caller's signal is already
- * aborted we must NOT fall back — the work was cancelled on purpose. Otherwise an
- * abort means our ZAI_*_TIMEOUT_MS watchdog fired, so OpenRouter is a valid
- * fallback (haiku is fast and reliable for these summary/cluster calls).
- */
-function isOurTimeoutAbort(err: any, externalSignal: AbortSignal | undefined): boolean {
-  if (externalSignal?.aborted) return false;
-  return isAbortError(err);
-}
-
-/**
  * Internal helper: make a single (non-streaming) chat call on the OpenRouter client.
  * Used by chatCompletion and jsonCompletion fallback paths.
  */
@@ -120,31 +79,6 @@ async function openRouterChat(
     { signal: combinedSignal as any },
   );
   return response.choices[0]?.message?.content ?? '';
-}
-
-async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3): Promise<T> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err: any) {
-      // Never retry an abort/timeout: a caller-cancellation must propagate, and
-      // our own timeout-abort should drop straight to the OpenRouter fallback in
-      // the caller rather than burning 3× the (now 90s) timeout retrying z.ai.
-      if (isAbortError(err)) throw err;
-      const isRateLimit = err?.status === 429;
-      const isLastAttempt = attempt === maxRetries;
-
-      if (isLastAttempt) throw err;
-
-      const delay = isRateLimit
-        ? Math.min(2000 * Math.pow(2, attempt), 30000) // 2s, 4s, 8s for rate limits
-        : 2000;
-
-      console.error(`[deepdive] ${label} failed (attempt ${attempt + 1}/${maxRetries + 1}${isRateLimit ? ', rate limited' : ''}), retrying in ${delay}ms`);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  throw new Error('Unreachable');
 }
 
 export async function chatCompletion(

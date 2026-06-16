@@ -75,6 +75,15 @@ export type NodeTypeOption = {
   defaultConfig: Record<string, unknown>;
   handles: NodeHandles;
   defaultWeight?: number;
+  /**
+   * Desk-only node types: live interactive nodes the Research Desk renders, but
+   * which have NO workflow executor and no live renderer on the workflow canvas.
+   * They are kept in the shared registry (the desk looks them up via byType +
+   * scopes its own palette to them via restrictTypes), but are excluded from the
+   * workflow-canvas "+ node" picker so the builder doesn't offer research nodes
+   * that can't actually run in a workflow.
+   */
+  deskOnly?: boolean;
 };
 
 export const CANVAS_NODE_GROUPS = [
@@ -408,6 +417,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
     },
+    deskOnly: true, // live node on the Research Desk; no workflow executor
   },
   {
     type: 'research-report',
@@ -420,6 +430,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'research-result', 'intel-session'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
     },
+    deskOnly: true, // live node on the Research Desk; no workflow executor
   },
 
   // ————————————————————————— Intel & Web
