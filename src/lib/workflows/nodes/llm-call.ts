@@ -60,6 +60,7 @@ export const llmCallExecutor: NodeExecutor = {
       content = r.content;
       promptTokens = r.promptTokens;
       completionTokens = r.completionTokens;
+      usedModel = r.model || usedModel;
     } else {
       const response = await resilientChatCompletion(
         configuredModel,

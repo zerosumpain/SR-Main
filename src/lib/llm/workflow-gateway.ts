@@ -101,6 +101,8 @@ export interface StreamResult {
   content: string;
   promptTokens: number;
   completionTokens: number;
+  /** The model actually used (resolved id, or the fallback model after fallover). */
+  model: string;
 }
 
 /** One streamed completion with an idle watchdog (aborts if no token arrives
@@ -146,7 +148,7 @@ async function runStream(
         completionTokens = u.completion_tokens ?? completionTokens;
       }
     }
-    return { content, promptTokens, completionTokens };
+    return { content, promptTokens, completionTokens, model };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
     if (ext) ext.removeEventListener('abort', onExt);
