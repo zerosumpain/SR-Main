@@ -39,17 +39,23 @@ interface Candidate {
   raw?: unknown;
 }
 
-const GOVUK_QUERIES = [
-  'children data sharing',
-  'consistent identifier children',
-  'data strategy education',
-  'artificial intelligence public sector data',
-  'national data library',
-  'pupil data protection',
-  'multi-agency safeguarding data',
-  'data use and access act',
-  'children social care data',
-  'school data collection',
+// Precision matters more than recall: broad recency-ordered queries return loads
+// of unrelated new gov news. So: (1) DfE/DSIT org-filtered + "data" (newest first
+// — high precision), then (2) tight quoted-phrase queries across all of gov.
+const ORG_DFE = 'department-for-education';
+const ORG_DSIT = 'department-for-science-innovation-and-technology';
+const GOVUK_SEARCHES: { q?: string; org?: string }[] = [
+  { q: 'data', org: ORG_DFE },
+  { q: 'children data', org: ORG_DFE },
+  { q: 'data', org: ORG_DSIT },
+  { q: '"consistent identifier"' },
+  { q: '"single unique identifier" children' },
+  { q: '"national pupil database"' },
+  { q: '"data (use and access) act"' },
+  { q: '"national data library"' },
+  { q: '"data sharing" children' },
+  { q: '"children\'s social care" data' },
+  { q: '"artificial intelligence" education data' },
 ];
 
 async function fetchGovuk(): Promise<{ candidates: Candidate[]; total: number | null; ok: boolean; error?: string }> {
@@ -57,8 +63,15 @@ async function fetchGovuk(): Promise<{ candidates: Candidate[]; total: number | 
   let total = 0;
   let anyOk = false;
   let firstErr: string | undefined;
-  for (const q of GOVUK_QUERIES) {
-    const url = `https://www.gov.uk/api/search.json?q=${encodeURIComponent(q)}&count=15&order=-public_timestamp&fields=title,link,public_timestamp,organisations,content_store_document_type,description`;
+  for (const s of GOVUK_SEARCHES) {
+    const params = new URLSearchParams();
+    if (s.q) params.set('q', s.q);
+    if (s.org) params.set('filter_organisations', s.org);
+    params.set('count', '15');
+    params.set('order', '-public_timestamp');
+    params.set('fields', 'title,link,public_timestamp,organisations,content_store_document_type,description');
+    const url = `https://www.gov.uk/api/search.json?${params.toString()}`;
+    const q = s.q ?? (s.org ?? '');
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 15000);
@@ -172,7 +185,7 @@ let running = false;
 let lastRunMs = 0;
 let lastSummary: IntelRunSummary | null = null;
 const MIN_INTERVAL_MS = 5 * 60 * 1000;
-const MAX_CLASSIFY = 12;
+const MAX_CLASSIFY = 16;
 
 export async function runIntel(opts: { classify?: boolean; force?: boolean } = {}): Promise<IntelRunSummary> {
   if (running) return lastSummary ?? { ranAt: new Date().toISOString(), found: 0, new: 0, classified: 0, totalAvailable: null, ok: true };
@@ -253,6 +266,16 @@ export interface IntelSnapshot {
 }
 
 export async function getIntelSnapshot(): Promise<IntelSnapshot> {
+  try {
+    return await readSnapshot();
+  } catch {
+    // table not yet migrated (e.g. the homeserv dev DB) or transient DB error —
+    // the radar page should render empty, never 500.
+    return { items: [], lastRun: null };
+  }
+}
+
+async function readSnapshot(): Promise<IntelSnapshot> {
   const rows = await db
     .select()
     .from(keystoneIntel)
