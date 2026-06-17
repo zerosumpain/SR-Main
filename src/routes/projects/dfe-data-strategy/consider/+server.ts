@@ -12,6 +12,7 @@ import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { buildStrategyContext, STAKEHOLDERS, VALID_REFS } from '../lib/policy';
+import { coerceJson } from '../lib/jsonsafe';
 
 const HITS = new Map<string, number[]>();
 const WINDOW_MS = 60_000;
@@ -22,16 +23,6 @@ function rateLimited(ip: string): boolean {
   arr.push(now);
   HITS.set(ip, arr);
   return arr.length > MAX_PER_WINDOW;
-}
-
-function parseJson(s: string): any {
-  let t = (s ?? '').trim();
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) t = fence[1].trim();
-  const a = t.indexOf('{');
-  const b = t.lastIndexOf('}');
-  if (a >= 0 && b > a) t = t.slice(a, b + 1);
-  return JSON.parse(t);
 }
 
 const consider = (x: any) =>
@@ -109,17 +100,17 @@ ${buildStrategyContext()}`;
       // flush a byte immediately so the edge proxy sees the response start
       try { controller.enqueue(encoder.encode(': keystone\n\n')); } catch { /* noop */ }
       send({ type: 'status', message: 'Weighing this against the strategic material…' });
-      let acc = '';
-      try {
+      const messages = [
+        { role: 'system', content: sys },
+        { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
+      ];
+      const generate = async (): Promise<string> => {
         const client = getOpenAIClient();
         const completion = await client.chat.completions.create(
           {
             model: getModel(),
-            messages: [
-              { role: 'system', content: sys },
-              { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
-            ],
-            temperature: 0.3,
+            messages,
+            temperature: 0.2,
             max_tokens: 6000,
             stream: true,
             thinking: { type: 'disabled' },
@@ -127,12 +118,23 @@ ${buildStrategyContext()}`;
           } as any,
           { signal: AbortSignal.timeout(110_000) as any },
         );
+        let acc = '';
         for await (const chunk of completion as any) {
           const delta = chunk?.choices?.[0]?.delta?.content;
           if (delta) { acc += delta; send({ type: 'tick' }); } // tick keeps the stream warm
         }
-        const out = validate(parseJson(acc));
-        send({ type: 'result', data: out });
+        return acc;
+      };
+      try {
+        // coerceJson salvages truncated / slightly-malformed JSON; retry once if even that fails.
+        let parsed: any;
+        try {
+          parsed = coerceJson(await generate());
+        } catch {
+          send({ type: 'status', message: 'Tidying the appraisal…' });
+          parsed = coerceJson(await generate());
+        }
+        send({ type: 'result', data: validate(parsed) });
       } catch (e: any) {
         send({ type: 'error', message: (e?.message ?? 'generation failed').slice(0, 160) });
       } finally {
