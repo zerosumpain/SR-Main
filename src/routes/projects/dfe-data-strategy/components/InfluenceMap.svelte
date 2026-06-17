@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { STRATEGIES, TIER_META, KIND_META, type StrategyItem } from '../lib/strategies';
+  import { STRATEGIES, TIER_META, KIND_META, voicesForStrategy, type StrategyItem } from '../lib/strategies';
+  import { STANCE_META } from '../lib/sectorVoices';
   import { app } from '../lib/appState.svelte';
 
   let hovered = $state<string | null>(null);
@@ -76,6 +77,19 @@
       <h4 class="d-name">{hov.name}</h4>
       <p class="d-take">{hov.take}</p>
       <p class="d-why"><b>For DfE:</b> {hov.whyDfE}</p>
+      {#each [voicesForStrategy(hov.id, 3)] as voices}
+        {#if voices.length}
+          <div class="d-voices">
+            <span class="dv-l">What the sector says</span>
+            {#each voices as v}
+              <div class="dv">
+                <span class="dv-dot" style="background:{STANCE_META[v.stance].color}"></span>
+                <span class="dv-txt"><b>{v.who}.</b> {v.point}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/each}
       <div class="d-foot">
         <span class="d-status">{hov.status}</span>
         <button class="d-draft" onclick={() => app.openSuggest({ kind: 'strategy', id: hov.id, label: hov.short })}>✎ Draft policies</button>
@@ -109,6 +123,12 @@
   .d-take { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink); font-style: italic; }
   .d-why { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
   .d-why b { color: var(--ink); }
+  .d-voices { margin: 0 0 4px; padding-top: 8px; border-top: 1px dotted rgba(28,22,17,0.18); }
+  .dv-l { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.45); margin-bottom: 4px; }
+  .dv { display: flex; gap: 6px; margin-bottom: 5px; }
+  .dv-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .dv-txt { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.7); }
+  .dv-txt b { color: var(--ink); }
   .d-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
   .d-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
   .d-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.35); border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }

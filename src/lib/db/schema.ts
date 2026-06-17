@@ -1836,6 +1836,50 @@ export const standardRegistrySourceRuns = pgTable(
 );
 export type StandardRegistrySourceRun = typeof standardRegistrySourceRuns.$inferSelect;
 
+// --- Keystone (DfE data-strategy workbench): intelligence radar -------------
+// A daily sweep fetches new gov publications/news/policy (GOV.UK Search), then
+// the LLM classifies each item AGAINST the strategy: how it influences which
+// strategies/pressures, and any considerations / misalignments. Index-driven +
+// deduped on canonicalId; classification enriches, never gates existence.
+export const keystoneIntel = pgTable(
+  'keystone_intel',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    canonicalId: text('canonical_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    source: text('source').notNull(), // govuk-search | ...
+    sourceQuery: text('source_query'),
+    publisher: text('publisher'),
+    docType: text('doc_type'),
+    summary: text('summary'),
+    relevance: integer('relevance').notNull().default(0), // 0–5 relevance to the strategy
+    influences: jsonb('influences'), // [{ kind:'strategy'|'pressure', id, how, direction }]
+    considerations: jsonb('considerations'), // string[]
+    misalignments: jsonb('misalignments'), // [{ point, severity }]
+    status: text('status').notNull().default('new'), // new | classified | dismissed
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    contentHash: text('content_hash'),
+    raw: jsonb('raw'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('keystone_intel_canonical_idx').on(t.canonicalId)],
+);
+export type KeystoneIntel = typeof keystoneIntel.$inferSelect;
+
+export const keystoneIntelRuns = pgTable('keystone_intel_runs', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
+  ok: boolean('ok').notNull().default(true),
+  itemsFound: integer('items_found').notNull().default(0),
+  itemsNew: integer('items_new').notNull().default(0),
+  classified: integer('classified').notNull().default(0),
+  error: text('error'),
+  durationMs: integer('duration_ms'),
+});
+export type KeystoneIntelRun = typeof keystoneIntelRuns.$inferSelect;
+
 // --- Terminal Descent: spaceship-landing game leaderboard ------------------
 // A single-use session (nonce) is issued when a run starts; at touchdown the
 // client POSTs TELEMETRY (never a trusted score). The server recomputes the

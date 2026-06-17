@@ -293,6 +293,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/dfe-data-strategy/* (intel sweep + seed-workflows) are service-to-service:
+  // the daily intelligence cron's http-request node has no user session. The handlers
+  // self-authenticate via `Authorization: Bearer KEYSTONE_INTEL_SECRET` (open in dev if
+  // unset). GET on intel is the read-only radar snapshot.
+  if (pathname.startsWith('/api/dfe-data-strategy/')) {
+    return resolve(event);
+  }
+
   // /api/health/workflow-engine is consumed by the systemd watchdog timer
   // (curl from 127.0.0.1) — no user session, no service token. Restrict to
   // loopback to prevent it being scraped externally for run counts.

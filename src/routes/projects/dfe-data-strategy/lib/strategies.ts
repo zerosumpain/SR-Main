@@ -5,6 +5,8 @@
 // and given an editorial verdict (tier) + a punchy take. Scores are reasoned editorial
 // judgements, grounded in the keystone-research sources; they are positions, not measurements.
 
+import { SECTOR_VOICES, type SectorVoice } from './sectorVoices';
+
 export type StrategyKind = 'statute' | 'mandate' | 'gov-strategy' | 'gov-framework' | 'programme' | 'corporate';
 export type Tier = 'shape' | 'borrow' | 'watch' | 'context';
 
@@ -216,3 +218,42 @@ export const STRATEGIES_BY_TIER: Record<Tier, StrategyItem[]> = {
 };
 
 export const TIER_ORDER: Tier[] = ['shape', 'borrow', 'watch', 'context'];
+
+// --- sector-voices evidence: which voices speak to each strategy -----------
+// Keyword match against the sector-voices corpus (who + point), so the influence
+// map shows what the sector is actually saying about each item — and adjusts the
+// reader's confidence in its placement. Robust to data changes (no fragile ids).
+const STRAT_MATCH: Record<string, string[]> = {
+  cwsa: ['identifier', 'nhs number', 'safeguard', 'consistent identifier', 'single unique', 'children not in school', 'information sharing', 'information-sharing'],
+  ndl: ['national data library', 'data library', 'digital backbone', 'blueprint', 'modern digital government', 'ndl'],
+  duaa: ['data (use and access)', 'duaa', 'lawful basis', 'recognised legitimate', 'data protection reform'],
+  dea: ['digital economy act', 'secure research service', 'accredited research'],
+  dma: ['maturity'],
+  gdq: ['data quality', 'quality of data', 'poor data', 'fragmented'],
+  ethics: ['privacy', 'surveillance', 'defend digital me', 'liberty', 'open rights', 'consent', 'trust', 'chilling', 'transparency', 'intrusion'],
+  atrs: ['algorithm', 'transparency recording', 'atrs'],
+  'ai-opp': ['artificial intelligence', 'ai-ready', 'ai opportunities', 'train ai', ' ai '],
+  npd: ['national pupil database', 'npd', 'echild', 'pupil data'],
+  mesh: ['federated', 'data mesh', 'domain ownership', 'autonomous'],
+  dama: ['governance', 'operating model', 'accountability'],
+  nds: ['national data strategy'],
+  ids: ['integrated data service', 'secure research service'],
+  'data-asset-policy': ['data asset', 'asset register', 'metadata', 'catalogue'],
+  'cddo-roadmap': ['data marketplace', 'api catalogue', 'data standards authority', 'roadmap for digital'],
+  'foi-eir': ['freedom of information'],
+};
+
+/** Sector voices that speak to a strategy, with stance diversity, capped. */
+export function voicesForStrategy(id: string, max = 3): SectorVoice[] {
+  const kws = STRAT_MATCH[id];
+  if (!kws) return [];
+  const hits = SECTOR_VOICES.filter((v) => {
+    const h = `${v.who} ${v.point}`.toLowerCase();
+    return kws.some((k) => h.includes(k));
+  });
+  const out: SectorVoice[] = [];
+  const seenStance = new Set<string>();
+  for (const v of hits) { if (out.length >= max) break; if (!seenStance.has(v.stance)) { out.push(v); seenStance.add(v.stance); } }
+  for (const v of hits) { if (out.length >= max) break; if (!out.includes(v)) out.push(v); }
+  return out;
+}
