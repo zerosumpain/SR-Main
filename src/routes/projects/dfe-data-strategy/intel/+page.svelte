@@ -3,6 +3,7 @@
   let { data }: { data: PageData } = $props();
 
   const items = $derived(data.snapshot?.items ?? []);
+  const watches = $derived(data.snapshot?.watches ?? []);
   const lastRun = $derived(data.snapshot?.lastRun ?? null);
 
   let sweeping = $state(false);
@@ -58,6 +59,19 @@
   </div>
   {#if note}<p class="note">{note}</p>{/if}
 
+  {#if watches.length}
+    <div class="watching">
+      <span class="w-lab">Watching</span>
+      <div class="w-chips">
+        {#each watches as w}
+          <span class="w-chip" class:hot={w.count > 0} title={w.count ? `${w.count} item(s); latest ${fmtDate(w.latest)}` : 'No hits yet — always surfaced when one lands'}>
+            {w.label}<b>{w.count}</b>
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   {#if items.length === 0}
     <div class="empty">
       <p>No classified intelligence yet. The radar sweeps daily at 06:40 UTC{#if data.authed} — or run it now with the button above{/if}. New items are read against the strategy and surfaced here when they’re relevant.</p>
@@ -70,7 +84,7 @@
             <span class="rel" title="Relevance to the strategy" style="--n:{it.relevance}">{'●'.repeat(it.relevance)}<span class="ghost">{'●'.repeat(5 - it.relevance)}</span></span>
             <a class="c-title" href={it.url} target="_blank" rel="noopener">{it.title}</a>
           </div>
-          <div class="c-meta">{[it.publisher, it.docType, fmtDate(it.publishedAt)].filter(Boolean).join(' · ')}</div>
+          <div class="c-meta">{[it.publisher, it.docType, fmtDate(it.publishedAt)].filter(Boolean).join(' · ')}{#if it.watch} · <span class="c-watch">◉ watch: {it.watchLabel}</span>{/if}</div>
           {#if it.summary}<p class="c-sum">{it.summary}</p>{/if}
 
           {#if it.influences.length}
@@ -117,6 +131,13 @@
   .sweep { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 6px 11px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.6); border-radius: 7px; cursor: pointer; color: var(--ink); }
   .sweep:disabled { opacity: 0.6; }
   .note { margin: 8px 0 0; font-size: 12px; color: #2f6155; }
+  .watching { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .w-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a2d3a; }
+  .w-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .w-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(28,22,17,0.6); background: rgba(28,22,17,0.04); border: 1px solid rgba(28,22,17,0.14); border-radius: 6px; padding: 3px 8px; }
+  .w-chip.hot { color: #8a2d3a; background: rgba(138,45,58,0.06); border-color: rgba(138,45,58,0.3); }
+  .w-chip b { font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  .c-watch { color: #8a2d3a; }
   .empty { margin: 20px 0; padding: 18px; border: 1px dashed rgba(28,22,17,0.2); border-radius: 12px; background: rgba(255,255,255,0.3); }
   .empty p { margin: 0; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.65); max-width: 72ch; }
   .feed { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; }

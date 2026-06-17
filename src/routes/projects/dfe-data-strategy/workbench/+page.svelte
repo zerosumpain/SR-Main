@@ -5,6 +5,8 @@
   import { CAPABILITY_BY_ID, CAPABILITY_IDS } from '../lib/capabilities';
   import { PRESSURES_BY_ID } from '../lib/pressures';
   import { MATURITY_DIMENSIONS } from '../lib/maturity';
+  import { LEGISLATION_BY_ID } from '../lib/legislation';
+  import { SOURCES } from '../lib/sources';
   import AlignmentView from '../components/AlignmentView.svelte';
   import CoverageBars from '../components/CoverageBars.svelte';
   import TensionList from '../components/TensionList.svelte';
@@ -43,10 +45,34 @@
       lines.push(`- ${d.name}: now ${app.state.maturityCurrent[d.id] ?? 2} → target ${app.state.maturityTarget[d.id] ?? 4} (projected ${(a.maturityProjected[d.id] ?? 0).toFixed(1)})`);
     }
     lines.push(`\n## Least-covered pressures\n`);
-    [...Object.entries(a.coverage)].sort((x, y) => x[1] - y[1]).slice(0, 6).forEach(([id, c]) => {
+    const leastCovered = [...Object.entries(a.coverage)].sort((x, y) => x[1] - y[1]).slice(0, 6);
+    leastCovered.forEach(([id, c]) => {
       lines.push(`- ${PRESSURES_BY_ID[id]?.title ?? id}: ${pct(c)} covered`);
     });
-    lines.push(`\n---\n_Keystone · /projects/dfe-data-strategy_`);
+
+    // ---- evidence pack: the citations behind the brief ----
+    lines.push(`\n## Evidence pack\n`);
+    lines.push(`_Every figure above derives from the pressures, frameworks and legal stack below; all are research-backed and cited._\n`);
+    if (a.legalImplicated.length) {
+      lines.push(`\n### Legislation implicated by this posture`);
+      for (const lid of a.legalImplicated) {
+        const l = LEGISLATION_BY_ID[lid];
+        if (l) lines.push(`- **${l.name}**${l.citation ? ` (${l.citation})` : ''} — ${l.relevance}${l.sourceUrl ? ` [${l.sourceUrl}]` : ''}`);
+      }
+    }
+    // pressures cited: the focus pressures + the least-covered, with their sources
+    const citedPressures = [...new Set([...a.focus.filter((f) => f.kind === 'pressure').map((f) => f.id), ...leastCovered.map(([id]) => id)])];
+    if (citedPressures.length) {
+      lines.push(`\n### Pressures referenced (with sources)`);
+      for (const pid of citedPressures) {
+        const p = PRESSURES_BY_ID[pid];
+        if (p) lines.push(`- **${p.title}** (${p.origin}, severity ${p.severity}/5) — ${p.sourceName ?? 'source'}${p.sourceUrl ? `: ${p.sourceUrl}` : ''}${p.policyEngineRef ? ` · ${p.policyEngineRef.label}` : ''}`);
+      }
+    }
+    lines.push(`\n### Grounding sources (${SOURCES.length})`);
+    for (const s of SOURCES) lines.push(`- ${s.org} — ${s.what}: ${s.url}`);
+
+    lines.push(`\n---\n_Keystone · /projects/dfe-data-strategy · a decision-support tool, not an official forecast. Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}._`);
     return lines.join('\n');
   }
 

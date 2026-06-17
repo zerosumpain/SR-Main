@@ -1,6 +1,9 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import EstateStrip from '../components/EstateStrip.svelte';
   import { app } from '../lib/appState.svelte';
+  import type { PageData } from './$types';
+  let { data }: { data: PageData } = $props();
   const eli = $derived(app.narrative === 'eli5');
 
   const PARTNERS = [
@@ -52,13 +55,9 @@
     {/each}
   </div>
 
-  <div class="estate-cta">
-    <div>
-      <h3>The live estate</h3>
-      <p>{eli ? 'A map of the actual data services DfE runs in public, with live data from them.' : 'The public-facing services DfE already runs to share and aggregate data — GIAS, Explore Education Statistics, the teacher-training APIs and more — mapped, with live API widgets.'}</p>
-    </div>
-    <a class="pe-next" href="/projects/dfe-data-estate">Open The Data Estate →</a>
-  </div>
+  <h2 class="pe-h2">The live estate</h2>
+  <p class="pe-prose intro">{eli ? 'The actual data services DfE runs in public — with live numbers pulled from them right now.' : 'The strategy isn’t abstract — it sits on a real, running estate. These are the public-facing DfE data services, with figures pulled live from their APIs this minute (snapshot fallback if an upstream is slow).'}</p>
+  <EstateStrip estate={data.estate} />
 </div>
 
 <style>

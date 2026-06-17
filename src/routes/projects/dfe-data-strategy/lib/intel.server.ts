@@ -36,8 +36,40 @@ interface Candidate {
   docType?: string;
   publishedAt?: Date | null;
   description?: string;
+  watch?: string;
   raw?: unknown;
 }
+
+// Named WATCHES — focused topics the sweep ALWAYS surfaces, even if the per-item classifier
+// would score them low (a high-signal publication mustn't slip through). A precision filter
+// (mustMatch) stops a watch tagging loosely-related items. Mirrors data-standard-designer.
+export interface IntelWatch {
+  id: string;
+  label: string;
+  queries: string[];
+  mustMatch: string[];
+}
+export const WATCHES: IntelWatch[] = [
+  {
+    id: 'cwsa',
+    label: 'Children’s Wellbeing & Schools Act — identifier & sharing',
+    queries: ['"Children\'s Wellbeing and Schools Act"', '"consistent identifier" children', '"single unique identifier" children', 'children information sharing statutory guidance'],
+    mustMatch: ["children's wellbeing and schools", 'childrens wellbeing and schools', 'consistent identifier', 'single unique identifier', 'information sharing', 'safeguard'],
+  },
+  {
+    id: 'ndl',
+    label: 'National Data Library & Modern Digital Government',
+    queries: ['"National Data Library"', '"modern digital government"', 'national data library DSIT'],
+    mustMatch: ['national data library', 'modern digital government', 'digital backbone'],
+  },
+  {
+    id: 'data-law',
+    label: 'Data law & access (DUAA, sharing, smart data)',
+    queries: ['"Data (Use and Access) Act"', 'data protection reform government', 'smart data scheme'],
+    mustMatch: ['data (use and access)', 'duaa', 'data protection', 'smart data', 'digital verification'],
+  },
+];
+export const WATCH_LABELS: Record<string, string> = Object.fromEntries(WATCHES.map((w) => [w.id, w.label]));
 
 // Precision matters more than recall: broad recency-ordered queries return loads
 // of unrelated new gov news. So: (1) DfE/DSIT org-filtered + "data" (newest first
@@ -63,12 +95,19 @@ async function fetchGovuk(): Promise<{ candidates: Candidate[]; total: number | 
   let total = 0;
   let anyOk = false;
   let firstErr: string | undefined;
-  for (const s of GOVUK_SEARCHES) {
+  // Query plan: WATCHES first (relevance order + precision filter, tagged) so a watched item
+  // keeps its tag; then the precise org/phrase queries (recency order). Only the latter feed
+  // the coverage total (watch queries are narrow subsets and would distort it).
+  const plan: { q?: string; org?: string; watch?: string; mustMatch?: string[]; recency: boolean }[] = [
+    ...WATCHES.flatMap((w) => w.queries.map((q) => ({ q, watch: w.id, mustMatch: w.mustMatch, recency: false }))),
+    ...GOVUK_SEARCHES.map((s) => ({ ...s, recency: true })),
+  ];
+  for (const s of plan) {
     const params = new URLSearchParams();
     if (s.q) params.set('q', s.q);
     if (s.org) params.set('filter_organisations', s.org);
     params.set('count', '15');
-    params.set('order', '-public_timestamp');
+    if (s.recency) params.set('order', '-public_timestamp');
     params.set('fields', 'title,link,public_timestamp,organisations,content_store_document_type,description');
     const url = `https://www.gov.uk/api/search.json?${params.toString()}`;
     const q = s.q ?? (s.org ?? '');
@@ -79,9 +118,14 @@ async function fetchGovuk(): Promise<{ candidates: Candidate[]; total: number | 
       clearTimeout(t);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      total += Number(data?.total || 0);
+      if (s.recency) total += Number(data?.total || 0);
       anyOk = true;
       for (const r of data?.results || []) {
+        // watch precision filter: skip results that don't actually mention the topic
+        if (s.watch && s.mustMatch) {
+          const hay = `${r.title || ''} ${r.description || ''}`.toLowerCase();
+          if (!s.mustMatch.some((m) => hay.includes(m))) continue;
+        }
         const link = r.link?.startsWith('http') ? r.link : `https://www.gov.uk${r.link}`;
         const canonicalId = `govuk:${r.link}`;
         if (map.has(canonicalId)) continue;
@@ -95,6 +139,7 @@ async function fetchGovuk(): Promise<{ candidates: Candidate[]; total: number | 
           docType: r.content_store_document_type,
           publishedAt: r.public_timestamp ? new Date(r.public_timestamp) : null,
           description: r.description ? String(r.description).slice(0, 500) : undefined,
+          watch: s.watch,
           raw: r,
         });
       }
@@ -207,25 +252,28 @@ export async function runIntel(opts: { classify?: boolean; force?: boolean } = {
         title: c.title, url: c.url, source: 'govuk-search', sourceQuery: c.sourceQuery,
         publisher: c.publisher, docType: c.docType, publishedAt: c.publishedAt ?? null,
         contentHash: hashOf(c), raw: c.raw as any, lastSeenAt: ranAt,
+        ...(c.watch ? { watch: c.watch } : {}), // only ever SET a watch tag, never clear it
       };
       try {
-        await db.insert(keystoneIntel).values({ canonicalId: c.canonicalId, firstSeenAt: ranAt, status: 'new', ...base })
+        // watched items surface immediately (status 'classified') even before the classifier runs
+        await db.insert(keystoneIntel).values({ canonicalId: c.canonicalId, firstSeenAt: ranAt, status: c.watch ? 'classified' : 'new', ...base })
           .onConflictDoUpdate({ target: keystoneIntel.canonicalId, set: base });
       } catch { /* skip bad row */ }
     }
 
-    // classify a bounded subset that needs it (new or never-classified)
+    // classify a bounded subset that needs it (new or never-classified) — watched items first
     let classified = 0;
     if (opts.classify !== false) {
       const needs = src.candidates.filter((c) => {
         const k = known.get(c.canonicalId);
         return !k || k.status === 'new' || k.hash !== hashOf(c);
-      }).slice(0, MAX_CLASSIFY);
+      }).sort((a, b) => (b.watch ? 1 : 0) - (a.watch ? 1 : 0)).slice(0, MAX_CLASSIFY);
       for (const c of needs) {
         if (Date.now() - t0 > 95_000) break; // time budget
         const cls = await classify(c);
         if (!cls) continue;
-        const status = cls.relevance >= 2 ? 'classified' : 'dismissed';
+        // a watched item always surfaces, regardless of the classifier's relevance score
+        const status = cls.relevance >= 2 || c.watch ? 'classified' : 'dismissed';
         try {
           await db.update(keystoneIntel).set({
             relevance: cls.relevance, summary: cls.summary, influences: cls.influences as any,
@@ -258,10 +306,13 @@ export interface IntelItem {
   considerations: string[];
   misalignments: { point: string; severity: string }[];
   publishedAt: string | null;
+  watch: string | null;
+  watchLabel: string | null;
 }
 
 export interface IntelSnapshot {
   items: IntelItem[];
+  watches: { id: string; label: string; count: number; latest: string | null }[];
   lastRun: { runAt: string; ok: boolean; itemsFound: number; itemsNew: number; classified: number; error: string | null } | null;
 }
 
@@ -271,7 +322,7 @@ export async function getIntelSnapshot(): Promise<IntelSnapshot> {
   } catch {
     // table not yet migrated (e.g. the homeserv dev DB) or transient DB error —
     // the radar page should render empty, never 500.
-    return { items: [], lastRun: null };
+    return { items: [], watches: [], lastRun: null };
   }
 }
 
@@ -297,11 +348,19 @@ async function readSnapshot(): Promise<IntelSnapshot> {
     considerations: (r.considerations as any[]) ?? [],
     misalignments: (r.misalignments as any[]) ?? [],
     publishedAt: r.publishedAt ? (r.publishedAt instanceof Date ? r.publishedAt.toISOString() : String(r.publishedAt)) : null,
+    watch: r.watch ?? null,
+    watchLabel: r.watch ? WATCH_LABELS[r.watch] ?? r.watch : null,
   }));
+  const watches = WATCHES.map((w) => {
+    const matched = items.filter((i) => i.watch === w.id);
+    const latest = matched.map((i) => i.publishedAt).filter(Boolean).sort().pop() || null;
+    return { id: w.id, label: w.label, count: matched.length, latest };
+  });
   const runRows = await db.select().from(keystoneIntelRuns).orderBy(sql`${keystoneIntelRuns.runAt} desc`).limit(1);
   const lr = runRows[0];
   return {
     items,
+    watches,
     lastRun: lr ? { runAt: lr.runAt instanceof Date ? lr.runAt.toISOString() : String(lr.runAt), ok: lr.ok, itemsFound: lr.itemsFound, itemsNew: lr.itemsNew, classified: lr.classified, error: lr.error } : null,
   };
 }

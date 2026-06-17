@@ -1853,6 +1853,7 @@ export const keystoneIntel = pgTable(
     publisher: text('publisher'),
     docType: text('doc_type'),
     summary: text('summary'),
+    watch: text('watch'), // id of a named watch (e.g. 'cwsa') that surfaced this item, if any
     relevance: integer('relevance').notNull().default(0), // 0–5 relevance to the strategy
     influences: jsonb('influences'), // [{ kind:'strategy'|'pressure', id, how, direction }]
     considerations: jsonb('considerations'), // string[]
