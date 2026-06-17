@@ -10,11 +10,13 @@ import { MATURITY_DIMENSIONS } from './maturity';
 import { CAPABILITY_AREAS } from './capabilities';
 import { POSTURE_AXES } from './postures';
 import { SECTOR_VOICES, SECTOR_THEMES } from './sectorVoices';
+import { STRATEGIES, TIER_META } from './strategies';
+import { POLICY_ENGINE_BRIEF } from './policy';
 
 export interface Chunk {
   id: string;
   sourceKey: string;
-  sourceType: 'pressure' | 'framework' | 'legislation' | 'maturity' | 'capability' | 'posture' | 'overview';
+  sourceType: 'pressure' | 'framework' | 'legislation' | 'maturity' | 'capability' | 'posture' | 'strategy' | 'overview';
   title: string;
   url: string | null;
   text: string;
@@ -106,6 +108,27 @@ function buildCorpus(): Chunk[] {
       url: v.sourceUrl ?? '/projects/dfe-data-strategy/sector',
       text: `${v.who} (${v.group}, ${v.stance}): ${v.point}`,
     });
+
+  // the influence-map catalogue — every strategy/statute/programme with its verdict
+  for (const s of STRATEGIES)
+    c.push({
+      id: `st-${s.id}`,
+      sourceKey: `strategy:${s.tier}`,
+      sourceType: 'strategy',
+      title: `Strategy: ${s.name} — verdict: ${TIER_META[s.tier].label}`,
+      url: s.sourceUrl ?? '/projects/dfe-data-strategy/strategies',
+      text: `${s.name} (${s.kind}, status: ${s.status}). Influence-map verdict: ${TIER_META[s.tier].label} — ${TIER_META[s.tier].kicker}. ${s.take} Why it matters to DfE: ${s.whyDfE} (relevance ${Math.round(s.relevance * 100)}%, leverage ${Math.round(s.leverage * 100)}%).`,
+    });
+
+  // the Policy Engine's data conclusions (the deep-integration source)
+  c.push({
+    id: 'ov-policy-engine-brief',
+    sourceKey: 'overview',
+    sourceType: 'overview',
+    title: 'Policy Engine — data conclusions (full brief)',
+    url: '/projects/policy-engine/monitor',
+    text: POLICY_ENGINE_BRIEF,
+  });
 
   // overview chunks
   c.push({
