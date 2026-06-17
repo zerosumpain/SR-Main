@@ -12,6 +12,7 @@ import { POSTURE_AXES } from './postures';
 import { SECTOR_VOICES, SECTOR_THEMES } from './sectorVoices';
 import { STRATEGIES, TIER_META } from './strategies';
 import { POLICY_ENGINE_BRIEF } from './policy';
+import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/deepdive/keys';
 
 export interface Chunk {
   id: string;
@@ -229,9 +230,8 @@ function expand(tokens: string[]): Map<string, number> {
   return bag;
 }
 
-export function retrieve(query: string, k = 10): Retrieved[] {
+function bm25(query: string): Map<number, number> {
   const bag = expand(tokenize(query));
-  if (bag.size === 0) return [];
   const scores = new Map<number, number>();
   for (const [term, w] of bag) {
     const plist = postings.get(term);
@@ -244,7 +244,77 @@ export function retrieve(query: string, k = 10): Retrieved[] {
       scores.set(d, (scores.get(d) ?? 0) + s);
     }
   }
-  const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+  return scores;
+}
+
+// ---- semantic layer: a cheap OpenRouter embedding model (openai/text-embedding-3-small).
+// The corpus is embedded once (lazily, cached in memory); each query is embedded on demand.
+// Fully graceful — any embedding failure falls back to BM25-only so retrieval never breaks. ----
+let CORPUS_VECS: number[][] | null = null;
+let embedDisabled = false;
+let embedInit: Promise<void> | null = null;
+
+async function embedTexts(texts: string[]): Promise<number[][] | null> {
+  try {
+    const client = getOpenRouterClient();
+    const model = getEmbeddingModel();
+    const out: number[][] = [];
+    for (let i = 0; i < texts.length; i += 96) {
+      const res = await client.embeddings.create({ model, input: texts.slice(i, i + 96).map((t) => t.slice(0, 6000)) });
+      for (const d of [...res.data].sort((a: any, b: any) => a.index - b.index)) out.push(d.embedding as number[]);
+    }
+    return out.length === texts.length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureCorpusVecs(): Promise<void> {
+  if (CORPUS_VECS || embedDisabled) return;
+  if (!embedInit) {
+    embedInit = (async () => {
+      if (!hasOpenRouter()) { embedDisabled = true; return; }
+      const v = await embedTexts(CHUNKS.map((c) => `${c.title}. ${c.text}`));
+      if (v) CORPUS_VECS = v;
+      else embedDisabled = true;
+    })();
+  }
+  await embedInit;
+}
+
+function cosine(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
+/** Hybrid retrieval: BM25 + embedding cosine, blended, with a per-source diversity cap.
+ *  Async (the query is embedded on demand); falls back to BM25-only if embeddings are off. */
+export async function retrieve(query: string, k = 10): Promise<Retrieved[]> {
+  const bm = bm25(query);
+  await ensureCorpusVecs();
+
+  let cosArr: number[] | null = null;
+  if (CORPUS_VECS) {
+    const qv = (await embedTexts([query]))?.[0] ?? null;
+    if (qv) {
+      const raw = CORPUS_VECS.map((v) => cosine(qv, v));
+      const mn = Math.min(...raw), span = Math.max(...raw) - mn || 1;
+      cosArr = raw.map((c) => (c - mn) / span);
+    }
+  }
+  if (!cosArr && bm.size === 0) return [];
+
+  const maxB = Math.max(1e-9, ...(bm.size ? [...bm.values()] : [0]));
+  const final = new Map<number, number>();
+  const considered = cosArr ? CHUNKS.map((_, i) => i) : [...bm.keys()];
+  for (const d of considered) {
+    const b = (bm.get(d) ?? 0) / maxB;
+    final.set(d, cosArr ? 0.5 * b + 0.5 * cosArr[d] : b);
+  }
+
+  const ranked = [...final.entries()].sort((a, b) => b[1] - a[1]);
   const perSource = new Map<string, number>();
   const out: Retrieved[] = [];
   for (const [d, score] of ranked) {
@@ -258,4 +328,9 @@ export function retrieve(query: string, k = 10): Retrieved[] {
   return out;
 }
 
-export const INDEX_META = { chunkCount: CHUNKS.length };
+export const INDEX_META = {
+  chunkCount: CHUNKS.length,
+  get embeddingsActive() {
+    return !!CORPUS_VECS;
+  },
+};

@@ -11,7 +11,8 @@ import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
-import { buildStrategyContext, STAKEHOLDERS, VALID_REFS } from '../lib/policy';
+import { referenceIndex, STAKEHOLDERS, VALID_REFS } from '../lib/policy';
+import { retrieve } from '../lib/retrieval.server';
 import { coerceJson } from '../lib/jsonsafe';
 
 const HITS = new Map<string, number[]>();
@@ -40,6 +41,7 @@ const stake = (x: any) =>
 function validate(parsed: any) {
   const refs = parsed?.references ?? {};
   return {
+    headline: String(parsed?.headline ?? '').slice(0, 240),
     summary: String(parsed?.summary ?? '').slice(0, 800),
     pros: consider(parsed?.pros),
     cons: consider(parsed?.cons),
@@ -56,6 +58,7 @@ function validate(parsed: any) {
       legislation: (Array.isArray(refs.legislation) ? refs.legislation : []).filter((id: any) => VALID_REFS.legislation.has(id)).slice(0, 10),
     },
     watchouts: (Array.isArray(parsed?.watchouts) ? parsed.watchouts : []).map((w: any) => String(w).slice(0, 200)).slice(0, 5),
+    evidence: [] as { title: string; url: string | null }[],
   };
 }
 
@@ -69,10 +72,28 @@ export const POST: RequestHandler = async (event) => {
   const statement = String(body?.statement ?? '').slice(0, 2000).trim();
   if (!statement) throw error(400, 'Write a policy statement first.');
 
-  const sys = `You are the Consideration Builder for Keystone, a DfE data-strategy workbench. A user proposes a HEADLINE POLICY for the data strategy. Using ONLY the STRATEGY CONTEXT below (the pressures, the strategy influence map, the legal stack, the frameworks, the maturity model, sector voices, and the Policy Engine's data conclusions), produce a rigorous, balanced appraisal.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
+      };
+      try { controller.enqueue(encoder.encode(': keystone\n\n')); } catch { /* noop */ }
+      try {
+        // 1. RAG — retrieve the most relevant evidence for this policy (the evidential trail,
+        //    shown to the user). Hybrid BM25 + embeddings.
+        send({ type: 'status', step: 'retrieve', message: 'Researching the corpus for relevant evidence…' });
+        const chunks = await retrieve(`${title}\n${statement}`, 12);
+        const evidence = chunks.map((c) => ({ title: c.title, url: c.url }));
+        send({ type: 'evidence', sources: evidence });
+        send({ type: 'status', step: 'weigh', message: `Weighing the policy against ${evidence.length} sources…` });
+
+        // 2. Appraise, grounded in the retrieved evidence; the index is only for citing ids.
+        const sys = `You are the Consideration Builder for Keystone, a DfE data-strategy workbench. A user proposes a HEADLINE POLICY. Ground a rigorous, balanced appraisal in the RETRIEVED EVIDENCE below; use the REFERENCE INDEX only to cite ids.
 
 Return STRICT JSON only — no prose, no fences — exactly:
-{"summary": string (2-3 sentences),
+{"headline": string (ONE punchy verdict sentence, <=160 chars),
+ "summary": string (2-3 sentences),
  "pros": [{"point": string, "detail": string}],
  "cons": [{"point": string, "detail": string}],
  "tensions": [{"point": string, "severity": "high"|"medium"|"low"}],
@@ -83,58 +104,42 @@ Return STRICT JSON only — no prose, no fences — exactly:
  "watchouts": [string]}
 
 Rules:
-- Ground every point in the context. Tensions should name genuine conflicts (e.g. open-by-default vs the duty of confidence; centralising against a federated MAT/LA reality; sharing ahead of governance; AI ambition ahead of data quality).
-- references: list ONLY ids that appear in the context and that you actually drew on.
+- Ground every point in the RETRIEVED EVIDENCE. Tensions must name genuine conflicts (e.g. open-by-default vs the duty of confidence; centralising vs the federated MAT/LA reality; sharing ahead of governance; AI ahead of data quality).
+- references: cite ONLY ids from the REFERENCE INDEX that you actually drew on.
+- headline: one decisive sentence a lead could read in isolation.
 - For stakeholders, prefer these names where they fit (free text allowed): ${STAKEHOLDERS.join('; ')}.
 - Be specific to DfE and children's data. 3-6 items per list. Neutral, expert tone.
 
-STRATEGY CONTEXT:
-${buildStrategyContext()}`;
+REFERENCE INDEX (valid ids to cite):
+${referenceIndex()}
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj: unknown) => {
-        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
-      };
-      // flush a byte immediately so the edge proxy sees the response start
-      try { controller.enqueue(encoder.encode(': keystone\n\n')); } catch { /* noop */ }
-      send({ type: 'status', message: 'Weighing this against the strategic material…' });
-      const messages = [
-        { role: 'system', content: sys },
-        { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
-      ];
-      const generate = async (): Promise<string> => {
-        const client = getOpenAIClient();
-        const completion = await client.chat.completions.create(
-          {
-            model: getModel(),
-            messages,
-            temperature: 0.2,
-            max_tokens: 6000,
-            stream: true,
-            thinking: { type: 'disabled' },
-            response_format: { type: 'json_object' },
-          } as any,
-          { signal: AbortSignal.timeout(110_000) as any },
-        );
-        let acc = '';
-        for await (const chunk of completion as any) {
-          const delta = chunk?.choices?.[0]?.delta?.content;
-          if (delta) { acc += delta; send({ type: 'tick' }); } // tick keeps the stream warm
-        }
-        return acc;
-      };
-      try {
-        // coerceJson salvages truncated / slightly-malformed JSON; retry once if even that fails.
+RETRIEVED EVIDENCE (most relevant corpus material for THIS policy — ground here):
+${chunks.map((c, i) => `[${i + 1}] ${c.title}${c.url ? ` (${c.url})` : ''}\n${c.text.slice(0, 800)}`).join('\n\n')}`;
+
+        const messages = [
+          { role: 'system', content: sys },
+          { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
+        ];
+        const generate = async (): Promise<string> => {
+          const client = getOpenAIClient();
+          const completion = await client.chat.completions.create(
+            { model: getModel(), messages, temperature: 0.2, max_tokens: 6000, stream: true, thinking: { type: 'disabled' }, response_format: { type: 'json_object' } } as any,
+            { signal: AbortSignal.timeout(110_000) as any },
+          );
+          let acc = '';
+          for await (const chunk of completion as any) {
+            const delta = chunk?.choices?.[0]?.delta?.content;
+            if (delta) { acc += delta; send({ type: 'tick' }); }
+          }
+          return acc;
+        };
+
         let parsed: any;
-        try {
-          parsed = coerceJson(await generate());
-        } catch {
-          send({ type: 'status', message: 'Tidying the appraisal…' });
-          parsed = coerceJson(await generate());
-        }
-        send({ type: 'result', data: validate(parsed) });
+        try { parsed = coerceJson(await generate()); }
+        catch { send({ type: 'status', step: 'weigh', message: 'Tidying the appraisal…' }); parsed = coerceJson(await generate()); }
+        const out = validate(parsed);
+        out.evidence = evidence;
+        send({ type: 'result', data: out });
       } catch (e: any) {
         send({ type: 'error', message: (e?.message ?? 'generation failed').slice(0, 160) });
       } finally {

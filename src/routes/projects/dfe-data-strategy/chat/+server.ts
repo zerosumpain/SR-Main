@@ -50,7 +50,7 @@ export const POST: RequestHandler = async (event) => {
     ? body.history.slice(-6).map((m: any) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '').slice(0, 2000) }))
     : [];
 
-  const chunks = retrieve(question, 10);
+  const chunks = await retrieve(question, 10);
   const sources = chunks.map((c, i) => ({ n: i + 1, title: c.title, url: c.url }));
 
   const historyBlock = history.length

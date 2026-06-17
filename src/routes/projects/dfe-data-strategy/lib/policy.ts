@@ -26,7 +26,16 @@ export interface Tension {
   severity?: 'high' | 'medium' | 'low';
 }
 
+export interface EvidenceRef {
+  title: string;
+  url: string | null;
+}
+
 export interface Considerations {
+  /** A single succinct verdict sentence shown up-front (detail expands below). */
+  headline?: string;
+  /** The RAG sources the appraisal was grounded in (the evidential trail). */
+  evidence?: EvidenceRef[];
   summary: string;
   pros: Consideration[];
   cons: Consideration[];
@@ -109,6 +118,16 @@ export function targetBrief(kind: string, id: string, label: string): string {
     return p ? `PRESSURE (${p.origin}): ${p.title}. ${p.description} It demands: ${p.demands.join(', ')}.` : `PRESSURE: ${label}`;
   }
   return `STAKEHOLDER GROUP: ${label}. Suggest policies that address what this group needs from, or fears about, DfE's data strategy.`;
+}
+
+/** Compact id→name index so the model can cite any pressure/strategy/law even when it
+ *  isn't in the retrieved evidence. Kept small; the substance comes from the RAG. */
+export function referenceIndex(): string {
+  return [
+    'PRESSURES (id — title): ' + PRESSURES.map((p) => `${p.id} — ${p.title}`).join('; '),
+    'STRATEGIES (id — name): ' + STRATEGIES.map((s) => `${s.id} — ${s.name}`).join('; '),
+    'LEGISLATION (id — name): ' + LEGISLATION.map((l) => `${l.id} — ${l.name}`).join('; '),
+  ].join('\n');
 }
 
 /** Valid reference ids for validating the model's output. */

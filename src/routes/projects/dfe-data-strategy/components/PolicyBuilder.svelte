@@ -5,6 +5,8 @@
   let title = $state('');
   let statement = $state('');
   let inFlight = false; // plain guard: keeps the build queue single-file without effect loops
+  // live "researching" trail per policy while it's being appraised
+  let live = $state<Record<string, { msg: string; sources: { title: string; url: string | null }[] }>>({});
 
   const EXAMPLES = [
     'Every child should have a single consistent identifier used across education, social care and health.',
@@ -59,6 +61,8 @@
             const o = JSON.parse(line.slice(6));
             if (o.type === 'result') result = o.data;
             else if (o.type === 'error') errMsg = o.message;
+            else if (o.type === 'status') live = { ...live, [id]: { msg: o.message, sources: live[id]?.sources ?? [] } };
+            else if (o.type === 'evidence') live = { ...live, [id]: { msg: live[id]?.msg ?? '', sources: o.sources ?? [] } };
           } catch { /* heartbeat */ }
         }
       }
@@ -68,9 +72,13 @@
     // release the queue BEFORE the final state write, so the write re-triggers the
     // effect and the next pending draft (if any) starts immediately.
     inFlight = false;
+    const { [id]: _drop, ...rest } = live;
+    live = rest;
     if (result) app.setPolicy(id, { status: 'done', considerations: result, error: undefined });
     else app.setPolicy(id, { status: 'error', error: errMsg ?? 'No appraisal returned — try again.' });
   }
+
+  const cleanTitle = (t: string) => t.replace(/^(Strategy|Pressure|Framework|Law|Sector voice|Sector debate|Maturity dimension|Capability|Posture):\s*/i, '');
 </script>
 
 <div class="pb">
@@ -114,7 +122,20 @@
           </div>
         </div>
         {#if p.status === 'error'}<p class="p-err">⚠ {p.error}</p>{/if}
-        {#if (p.status === 'analysing' || p.status === 'draft') && !p.considerations}<div class="p-skel">Weighing this against the strategic material…</div>{/if}
+        {#if (p.status === 'analysing' || p.status === 'draft') && !p.considerations}
+          <div class="p-process">
+            <div class="proc-msg"><span class="spin">◍</span> {live[p.id]?.msg ?? 'Queued…'}</div>
+            {#if live[p.id]?.sources?.length}
+              <div class="proc-ev">
+                <span class="pe-lab">Researching across {live[p.id].sources.length} sources</span>
+                <div class="pe-chips">
+                  {#each live[p.id].sources.slice(0, 9) as s}<span class="pe-chip">{cleanTitle(s.title)}</span>{/each}
+                  {#if live[p.id].sources.length > 9}<span class="pe-chip more">+{live[p.id].sources.length - 9}</span>{/if}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
         {#if p.considerations}<ConsiderationCard c={p.considerations} />{/if}
       </article>
     {/each}
@@ -149,5 +170,14 @@
   .rebuild.err { color: #b1455e; border-color: rgba(177,69,94,0.4); }
   .del { background: none; border: none; color: rgba(28,22,17,0.4); cursor: pointer; font-size: 13px; }
   .p-err { margin: 0 0 8px; font-size: 12px; color: #b1455e; }
-  .p-skel { font-size: 12.5px; color: rgba(28,22,17,0.55); font-style: italic; padding: 8px 0; }
+  .p-process { padding: 6px 0; }
+  .proc-msg { font-size: 12.5px; color: rgba(28,22,17,0.66); }
+  .spin { display: inline-block; color: #2f6155; animation: spin 1.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .proc-ev { margin-top: 8px; }
+  .pe-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
+  .pe-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .pe-chip { font-size: 10px; background: rgba(63,125,110,0.08); border: 1px solid rgba(63,125,110,0.22); color: #2f6155; border-radius: 5px; padding: 2px 6px; }
+  .pe-chip.more { background: rgba(28,22,17,0.05); border-color: rgba(28,22,17,0.15); color: rgba(28,22,17,0.55); }
 </style>
