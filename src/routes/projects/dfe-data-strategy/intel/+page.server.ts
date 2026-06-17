@@ -3,12 +3,9 @@ import { requireProjectPublic } from '$lib/projects/guard';
 import { getIntelSnapshot } from '../lib/intel.server';
 
 export const load: PageServerLoad = async (event) => {
-  const { authedPrivate, viaShare } = await requireProjectPublic('dfe-data-strategy', event);
-  const noStore = authedPrivate || viaShare;
-  event.setHeaders({
-    'cache-control': noStore ? 'private, no-store' : 'public, max-age=0, s-maxage=600',
-    ...(noStore ? { 'x-robots-tag': 'noindex' } : {}),
-  });
+  // NB: don't set cache-control here — the project +layout.server.ts already sets it,
+  // and SvelteKit throws "header is already set" if a child load sets it again.
+  const { authedPrivate } = await requireProjectPublic('dfe-data-strategy', event);
   const snapshot = await getIntelSnapshot();
   return { snapshot, authed: authedPrivate };
 };
