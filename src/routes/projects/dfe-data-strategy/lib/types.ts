@@ -85,6 +85,10 @@ export interface Framework {
   summary: string;
   keyElements: string[];
   sourceUrl?: string;
+  /** How load-bearing for a DfE data strategy. */
+  role?: 'foundational' | 'core' | 'specialist';
+  /** 0–1 positioning weight (foundational ≈ 1, specialist ≈ 0.4). */
+  weight?: number;
 }
 
 export interface SourceRef {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import FrameworkGrid from '../components/FrameworkGrid.svelte';
+  import FrameworkMap from '../components/FrameworkMap.svelte';
   import { STRATEGY_THEMES } from '../lib/frameworks';
 </script>
 
@@ -15,6 +16,14 @@
     asks={['The government frameworks DfE is held to', 'The industry canon it can borrow from', 'The recurring themes any mature strategy covers']}
     askLabel="What this page maps"
   />
+
+  <section class="viz">
+    <div class="viz-head">
+      <h2 class="pe-h2">Foundational, or specialist?</h2>
+      <p class="pe-prose">These frameworks are not equals. A handful are <b>foundational</b> — they should shape the strategy from page one; others are <b>specialist</b> tools to reach for when a narrow need arises. Positioned by how load-bearing each is for DfE, and split into UK-government and corporate.</p>
+    </div>
+    <FrameworkMap />
+  </section>
 
   <h2 class="pe-h2">The themes that should already exist</h2>
   <p class="pe-prose theme-intro">Strip away the labels and the same nine themes recur across every credible data strategy. Use them as a checklist: a strategy that is silent on any of them has a gap.</p>
@@ -33,6 +42,9 @@
 
 <style>
   .theme-intro { max-width: 78ch; }
+  .viz { margin: 8px 0 26px; }
+  .viz-head { max-width: 80ch; margin-bottom: 12px; }
+  .viz-head .pe-h2 { margin-bottom: 4px; }
   .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 6px; }
   .theme { border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; }
   .t-title { display: block; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }

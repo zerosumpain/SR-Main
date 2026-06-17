@@ -171,6 +171,27 @@ export const FRAMEWORKS: Framework[] = [
   },
 ];
 
+// How load-bearing each framework is for a DfE data strategy — foundational ones
+// shape everything; specialist ones are reached for when their narrow need arises.
+const ROLE: Record<string, { role: 'foundational' | 'core' | 'specialist'; weight: number }> = {
+  'modern-digital-government': { role: 'foundational', weight: 0.95 },
+  'dama-dmbok': { role: 'foundational', weight: 0.95 },
+  'dma-government': { role: 'foundational', weight: 0.92 },
+  'gov-data-quality': { role: 'foundational', weight: 0.88 },
+  'data-ethics-framework': { role: 'foundational', weight: 0.86 },
+  'ai-opportunities': { role: 'core', weight: 0.72 },
+  'data-mesh': { role: 'core', weight: 0.68 },
+  'national-data-strategy': { role: 'core', weight: 0.6 },
+  dcam: { role: 'specialist', weight: 0.5 },
+  atrs: { role: 'specialist', weight: 0.46 },
+  'cddo-roadmap': { role: 'specialist', weight: 0.42 },
+  cdmc: { role: 'specialist', weight: 0.4 },
+};
+for (const f of FRAMEWORKS) {
+  const r = ROLE[f.id];
+  if (r) { f.role = r.role; f.weight = r.weight; }
+}
+
 export const FRAMEWORKS_BY_TYPE = {
   'uk-gov': FRAMEWORKS.filter((f) => f.type === 'uk-gov'),
   corporate: FRAMEWORKS.filter((f) => f.type === 'corporate'),

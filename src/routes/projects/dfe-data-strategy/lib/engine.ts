@@ -11,9 +11,9 @@
 
 import { clamp, saturate } from './format';
 import { PARAMS } from './params';
-import { CAPABILITY_IDS } from './capabilities';
+import { CAPABILITY_IDS, CAPABILITY_BY_ID } from './capabilities';
 import { POSTURE_AXES } from './postures';
-import { PRESSURES } from './pressures';
+import { PRESSURES, PRESSURES_BY_ID } from './pressures';
 import { MATURITY_DIMENSIONS } from './maturity';
 import type {
   AlignmentResult,
@@ -111,92 +111,160 @@ type Ctx = {
 function p(state: StrategyState, id: string): number {
   return clamp(state.postures[id] ?? 0, -1, 1);
 }
+const ptitle = (id: string) => PRESSURES_BY_ID[id]?.title ?? id;
+const capShort = (id: string) => CAPABILITY_BY_ID[id]?.short ?? id;
+/** Severity-≥4 pressures (from `ids`) whose coverage is below `under`. */
+function exposed(c: Ctx, ids: string[], under = 0.55): string[] {
+  return ids.filter((id) => PRESSURES_BY_ID[id] && PRESSURES_BY_ID[id].severity >= 4 && (c.coverage[id] ?? 0) < under);
+}
 
 const TENSION_RULES: Array<(c: Ctx) => Tension | null> = [
-  // Centralising against a federated reality.
+  // 1. The operating model points two ways at once (posture vs posture).
   (c) =>
-    p(c.state, 'operating-model') < -0.4 && c.coverageByOrigin.partners < 0.5
+    p(c.state, 'operating-model') < -0.35 && p(c.state, 'delivery') > 0.35
+      ? {
+          id: 'incoherent-operating-model',
+          title: 'Your operating model contradicts itself',
+          severity: 'high',
+          explanation:
+            'You are centralising onto a single platform AND delegating delivery to partners at the same time. Centralising concentrates control; partner-led delivery disperses it — as set, the strategy reads as two strategies stapled together.',
+          resolution:
+            'Decide whether DfE owns the platform (centralise + deliver in-house) or convenes a federated system (federate + partner-led), then make the other levers serve that choice.',
+          triggers: ['operating-model = Centralise', 'delivery = Partner-led'],
+        }
+      : null,
+
+  // 2. Centralising against the real, federated estate (posture vs named pressures).
+  (c) => {
+    const hit = exposed(c, ['la-data-sharing', 'mat-fragmentation', 'agency-coordination']);
+    return p(c.state, 'operating-model') < -0.4 && hit.length >= 2
       ? {
           id: 'centralise-vs-federation',
-          title: 'Centralising against a federated reality',
+          title: 'Centralising collides with a federated estate',
           severity: 'high',
-          explanation:
-            'You are leaning hard toward a single central model, yet the partner pressures (LAs, MATs, agencies) are poorly covered. Education data is held across thousands of autonomous bodies — a purely central model collides with that.',
-          resolution:
-            'Either invest in partner data-sharing & interoperability to make centralisation viable, or soften toward a federated/standards-led model that meets partners where they are.',
-          triggers: ['operating-model = Centralise', 'partner coverage < 50%'],
+          explanation: `A single central model runs straight into ${hit.map(ptitle).join(' and ')}. DfE doesn’t own most of this data — 150+ local authorities and thousands of autonomous trusts do — so "centralise" without the partner-sharing to back it leaves these stranded.`,
+          resolution: 'Either fund partner data-sharing & interoperability so centralisation is reachable, or move toward a federated, standards-led model.',
+          triggers: ['operating-model = Centralise', ...hit.map((id) => `${ptitle(id)} under-covered`)],
         }
-      : null,
-  // Open-by-default without the trust foundations.
-  (c) =>
-    p(c.state, 'openness') < -0.35 && (c.cap.ethics ?? 0) < 0.5
+      : null;
+  },
+
+  // 3. Open-by-default vs the duty of confidence on children's/health data (posture vs law).
+  (c) => {
+    const conf = ['consistent-child-identifier', 'data-spine', 'health-social-care-link'].filter((id) => PRESSURES_BY_ID[id]);
+    return p(c.state, 'openness') < -0.3 && conf.length
       ? {
-          id: 'open-without-trust',
-          title: 'Open-by-default without the trust foundations',
+          id: 'open-vs-confidentiality',
+          title: 'Open-by-default runs into the duty of confidence',
           severity: 'high',
-          explanation:
-            'An open-by-default posture is set while ethics, trust & transparency are under-resourced. With children’s data this risks public trust, lawful-basis gaps and confidentiality breaches.',
-          resolution:
-            'Raise investment in ethics, trust & transparency (DPIAs, transparency via ATRS, safeguarding) before defaulting to open, or move the posture toward secure-by-default.',
-          triggers: ['openness = Open by default', 'ethics capability < 0.5'],
-          legalRefs: ['uk-gdpr', 'common-law-confidentiality', 'dpa-2018'],
+          explanation: `An open-by-default posture collides with ${conf.slice(0, 2).map(ptitle).join(' and ')}: children’s, safeguarding and health data carry a common-law duty of confidence that a UK GDPR lawful basis does not, by itself, satisfy — and the sector’s privacy voices treat over-sharing of children’s data as a red line.`,
+          resolution: 'Default to secure-by-default for personal/safeguarding data and reserve "open" for non-personal reference data; pair any sharing with DPIAs and a named gateway.',
+          triggers: ['openness = Open by default', 'children’s / health data in scope'],
+          legalRefs: ['common-law-confidentiality', 'uk-gdpr', 'dpa-2018'],
+        }
+      : null;
+  },
+
+  // 4. Letting standards emerge defers exactly what the identifier needs up front.
+  (c) =>
+    p(c.state, 'standards-pace') > 0.4 && PRESSURES_BY_ID['consistent-child-identifier']
+      ? {
+          id: 'iterate-vs-identifier',
+          title: 'Deferring the standards the identifier depends on',
+          severity: 'high',
+          explanation: `An "iterate / let standards emerge" posture defers the common identifiers and interoperability that ${ptitle('consistent-child-identifier')} (Children’s Wellbeing and Schools Act) needs UP FRONT — you can’t join a child’s records across services on standards you haven’t agreed yet.`,
+          resolution: 'Standardise the identifier, key entities and sharing interfaces now, even if everything else iterates.',
+          triggers: ['standards-pace = Iterate', 'consistent child identifier is a top pressure'],
+          legalRefs: ['cwsa-2025'],
         }
       : null,
-  // Expanding sharing faster than governance.
+
+  // 5. AI-first while quality is weak or public trust exposed.
+  (c) =>
+    p(c.state, 'ambition') > 0.4 && ((c.cap.quality ?? 0) < 0.55 || (c.coverage['public-trust'] ?? 1) < 0.5)
+      ? {
+          id: 'ai-ahead-of-foundations',
+          title: 'AI ambition ahead of the foundations',
+          severity: 'high',
+          explanation: `Chasing AI/use value while data quality is weak${(c.coverage['public-trust'] ?? 1) < 0.5 ? ` and ${ptitle('public-trust')} is under-covered` : ''} risks models built on poor data — and DfE has already been reprimanded by the ICO once over pupil data. AI on shaky foundations fails in public.`,
+          resolution: 'Rebalance toward data quality, governance and ethics so the use-cases stand on solid, trusted ground.',
+          triggers: ['ambition = AI / use first', 'quality weak or public trust exposed'],
+        }
+      : null,
+
+  // 6. Scaling sharing ahead of the governance + gateway that make it lawful.
   (c) =>
     (c.cap.sharing ?? 0) > 0.55 && ((c.cap.governance ?? 0) < 0.5 || (c.cap.ethics ?? 0) < 0.5)
       ? {
           id: 'sharing-ahead-of-governance',
-          title: 'Expanding data-sharing faster than governance',
+          title: 'Scaling data-sharing ahead of its governance',
           severity: 'medium',
           explanation:
-            'Partner data-sharing is well-resourced but governance and/or ethics lag behind. Cross-organisation sharing without a clear legal gateway, DPIAs and accountability is where data-sharing programmes fail.',
-          resolution:
-            'Pair the sharing investment with governance & ethics: a named legal gateway (e.g. DEA 2017), DPIAs, sharing agreements and clear accountability.',
-          triggers: ['sharing capability high', 'governance/ethics capability low'],
+            'Partner data-sharing is well-resourced but governance and/or ethics lag behind. Cross-organisation sharing without a named legal gateway (DEA 2017), DPIAs and clear accountability is exactly where data-sharing programmes are found unlawful.',
+          resolution: 'Pair the sharing investment with governance & ethics: a statutory gateway, DPIAs, sharing agreements and a named SRO.',
+          triggers: ['sharing capability high', 'governance / ethics low'],
           legalRefs: ['dea-2017', 'uk-gdpr', 'dpa-2018'],
         }
       : null,
-  // AI ambition ahead of foundations.
+
+  // 7. Federating without standards is just fragmentation.
   (c) =>
-    p(c.state, 'ambition') > 0.4 && (c.cap.quality ?? 0) < 0.5
+    p(c.state, 'operating-model') > 0.4 && (c.cap.interoperability ?? 0) < 0.5
       ? {
-          id: 'ai-ahead-of-foundations',
-          title: 'AI / use ambition ahead of the data foundations',
-          severity: 'high',
-          explanation:
-            'You are chasing use-cases and AI value while data quality is weak. Models and analytics built on poor data foundations mislead — and erode trust when they fail.',
-          resolution:
-            'Rebalance toward foundations: lift data quality and interoperability so the use-cases stand on solid ground.',
-          triggers: ['ambition = AI / use first', 'quality capability < 0.5'],
-        }
-      : null,
-  // Standardising faster than capacity.
-  (c) =>
-    p(c.state, 'standards-pace') < -0.4 && (c.cap.skills ?? 0) < 0.45
-      ? {
-          id: 'standards-without-capacity',
-          title: 'Standardising faster than the capacity to deliver',
+          id: 'federate-without-standards',
+          title: 'Federation without standards is fragmentation',
           severity: 'medium',
-          explanation:
-            'A standardise-now posture demands real delivery capacity (a data profession, stewards, change effort). With skills under-resourced, standards become shelfware.',
-          resolution: 'Increase the skills & capacity allocation, or sequence the standards work more gradually.',
-          triggers: ['standards-pace = Standardise now', 'skills capability < 0.45'],
+          explanation: `Pushing ownership out to domains while interoperability & standards are under-funded doesn’t federate the estate — it fragments it. ${ptitle('mat-fragmentation')} gets worse, not better, when everyone keeps data to their own conventions.`,
+          resolution: 'Federation only works on shared standards — fund interoperability (identifiers, APIs, reference data) before devolving ownership.',
+          triggers: ['operating-model = Federate', 'interoperability capability < 0.5'],
         }
       : null,
-  // Buying capability while internal skills wither.
+
+  // 8. Buying capability while internal skills wither.
   (c) =>
     p(c.state, 'build-buy') > 0.5 && (c.cap.skills ?? 0) < 0.45
       ? {
           id: 'buy-erodes-skills',
-          title: 'Buying capability while internal skills wither',
+          title: 'Buying capability while skills wither',
           severity: 'low',
           explanation:
-            'A strong buy/SaaS posture with little investment in internal skills risks vendor lock-in and a hollowed-out data profession that cannot hold suppliers to account.',
-          resolution: 'Keep enough internal capability to specify, integrate and govern what you buy.',
+            'A strong buy/SaaS posture with little investment in skills risks vendor lock-in and a data profession too thin to specify, integrate and hold suppliers to account — and EdTech/MIS suppliers already hold much of the sector’s data.',
+          resolution: 'Keep enough internal capability to govern what you buy.',
           triggers: ['build-buy = Buy / SaaS', 'skills capability < 0.45'],
         }
       : null,
+
+  // 9. Standardising faster than the capacity to deliver it.
+  (c) =>
+    p(c.state, 'standards-pace') < -0.4 && (c.cap.skills ?? 0) < 0.45
+      ? {
+          id: 'standards-without-capacity',
+          title: 'Standardising faster than you can deliver',
+          severity: 'medium',
+          explanation:
+            'A standardise-now posture demands real delivery capacity — a data profession, stewards, change effort. With skills under-resourced, the standards become shelfware nobody adopts.',
+          resolution: 'Raise the skills allocation, or sequence the standards work to match the capacity you have.',
+          triggers: ['standards-pace = Standardise now', 'skills capability < 0.45'],
+        }
+      : null,
+
+  // 10. A top-severity (5/5) pressure left barely addressed.
+  (c) => {
+    const worst = PRESSURES.filter((pr) => pr.severity === 5)
+      .map((pr) => ({ pr, cov: c.coverage[pr.id] ?? 0 }))
+      .filter((x) => x.cov < 0.4)
+      .sort((a, b) => a.cov - b.cov)[0];
+    return worst
+      ? {
+          id: `neglected-${worst.pr.id}`,
+          title: `A top pressure is barely addressed: ${worst.pr.title}`,
+          severity: 'medium',
+          explanation: `${worst.pr.title} is severity 5/5 but only ${Math.round(worst.cov * 100)}% covered — the current allocation starves the capabilities it needs (${worst.pr.demands.map(capShort).join(', ')}).`,
+          resolution: `Shift effort toward ${worst.pr.demands.slice(0, 2).map(capShort).join(' and ')} to move this.`,
+          triggers: [`${worst.pr.title} = severity 5`, `coverage ${Math.round(worst.cov * 100)}%`],
+        }
+      : null;
+  },
   // Maturity ambition not funded.
   (c) => {
     let gap = 0;
