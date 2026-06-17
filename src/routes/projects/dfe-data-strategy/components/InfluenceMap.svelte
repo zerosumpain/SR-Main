@@ -1,7 +1,9 @@
 <script lang="ts">
   import { STRATEGIES, TIER_META, KIND_META, type StrategyItem } from '../lib/strategies';
+  import { app } from '../lib/appState.svelte';
 
   let hovered = $state<string | null>(null);
+  let selected = $state<string | null>(null); // click-to-pin (so the detail button is reachable)
 
   // plot geometry
   const W = 860, H = 580;
@@ -10,8 +12,9 @@
   const py = (lev: number) => T + (1 - lev) * (H - T - B);
   const DIV_X = 0.66, DIV_Y = 0.64; // visual quadrant split
 
-  const ordered = $derived([...STRATEGIES].sort((a, b) => (a.id === hovered ? 1 : b.id === hovered ? -1 : 0)));
-  const hov = $derived(STRATEGIES.find((s) => s.id === hovered) ?? null);
+  const activeId = $derived(hovered ?? selected);
+  const ordered = $derived([...STRATEGIES].sort((a, b) => (a.id === activeId ? 1 : b.id === activeId ? -1 : 0)));
+  const hov = $derived(STRATEGIES.find((s) => s.id === activeId) ?? null);
   const r = (s: StrategyItem) => 6 + s.leverage * 6;
 </script>
 
@@ -42,7 +45,7 @@
     {#each ordered as s (s.id)}
       {@const cx = px(s.relevance)}
       {@const cy = py(s.leverage)}
-      {@const active = hovered === s.id}
+      {@const active = activeId === s.id}
       {@const labelLeft = s.relevance > 0.74}
       <g
         class="node"
@@ -54,6 +57,8 @@
         onmouseleave={() => (hovered = null)}
         onfocus={() => (hovered = s.id)}
         onblur={() => (hovered = null)}
+        onclick={() => (selected = selected === s.id ? null : s.id)}
+        onkeydown={(e) => { if (e.key === 'Enter') selected = selected === s.id ? null : s.id; }}
       >
         <circle {cx} {cy} r={active ? r(s) + 3 : r(s)} fill={TIER_META[s.tier].color} fill-opacity={active ? 0.95 : 0.78} stroke="#f1ead6" stroke-width="1.5" />
         {#if s.tier === 'shape' || active}
@@ -71,9 +76,12 @@
       <h4 class="d-name">{hov.name}</h4>
       <p class="d-take">{hov.take}</p>
       <p class="d-why"><b>For DfE:</b> {hov.whyDfE}</p>
-      <span class="d-status">{hov.status}</span>
+      <div class="d-foot">
+        <span class="d-status">{hov.status}</span>
+        <button class="d-draft" onclick={() => app.openSuggest({ kind: 'strategy', id: hov.id, label: hov.short })}>✎ Draft policies</button>
+      </div>
     {:else}
-      <span class="d-hint">Hover a point for the verdict. Position = relevance to DfE (→) × how much it should shape the strategy (↑). Colour = verdict.</span>
+      <span class="d-hint">Hover a point for the verdict; <b>click to pin it</b>, then draft policies. Position = relevance to DfE (→) × how much it should shape the strategy (↑). Colour = verdict.</span>
     {/if}
   </div>
 
@@ -101,7 +109,10 @@
   .d-take { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink); font-style: italic; }
   .d-why { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
   .d-why b { color: var(--ink); }
+  .d-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
   .d-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
+  .d-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.35); border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+  .d-draft:hover { background: rgba(138,45,58,0.14); }
   .d-hint { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.55); }
   .im-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; }
   .lg { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.6); }

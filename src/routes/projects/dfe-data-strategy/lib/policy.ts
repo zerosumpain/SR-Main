@@ -98,6 +98,19 @@ export function buildStrategyContext(): string {
   return parts.join('\n');
 }
 
+/** A short brief for the specific item a "draft policies" suggester was opened for. */
+export function targetBrief(kind: string, id: string, label: string): string {
+  if (kind === 'strategy') {
+    const s = STRATEGIES.find((x) => x.id === id);
+    return s ? `STRATEGY: ${s.name} (verdict: ${s.tier}). "${s.take}" Why it matters to DfE: ${s.whyDfE}` : `STRATEGY: ${label}`;
+  }
+  if (kind === 'pressure') {
+    const p = PRESSURES.find((x) => x.id === id);
+    return p ? `PRESSURE (${p.origin}): ${p.title}. ${p.description} It demands: ${p.demands.join(', ')}.` : `PRESSURE: ${label}`;
+  }
+  return `STAKEHOLDER GROUP: ${label}. Suggest policies that address what this group needs from, or fears about, DfE's data strategy.`;
+}
+
 /** Valid reference ids for validating the model's output. */
 export const VALID_REFS = {
   pressures: new Set(PRESSURES.map((p) => p.id)),

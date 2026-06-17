@@ -34,6 +34,7 @@
             <ConfidenceBadge level={p.confidence} small />
             {#if p.policyEngineRef}<a class="pe" href={p.policyEngineRef.href}>↪ {p.policyEngineRef.label}</a>{/if}
             {#if p.sourceUrl}<a class="src" href={p.sourceUrl} target="_blank" rel="noopener" title={p.sourceName}>source ↗</a>{/if}
+            <button class="draft" onclick={() => app.openSuggest({ kind: 'pressure', id: p.id, label: p.title })} title="Draft data-strategy policies in response to this pressure">✎ Draft policies</button>
           </div>
         </div>
       {/each}
@@ -59,5 +60,7 @@
   .pc-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .pe { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #8a2d3a; text-decoration: none; border-bottom: 1px dashed currentColor; }
   .src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .draft { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.3); border-radius: 5px; padding: 3px 7px; cursor: pointer; margin-left: auto; white-space: nowrap; }
+  .draft:hover { background: rgba(138,45,58,0.14); }
   @media (max-width: 900px) { .pm { grid-template-columns: 1fr; } }
 </style>

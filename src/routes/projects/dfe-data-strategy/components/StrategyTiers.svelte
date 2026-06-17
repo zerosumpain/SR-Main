@@ -1,5 +1,6 @@
 <script lang="ts">
   import { STRATEGIES_BY_TIER, TIER_META, TIER_ORDER, KIND_META } from '../lib/strategies';
+  import { app } from '../lib/appState.svelte';
 </script>
 
 <div class="st">
@@ -22,7 +23,10 @@
             <h4 class="c-name">{s.name}</h4>
             <p class="c-take">“{s.take}”</p>
             <p class="c-why">{s.whyDfE}</p>
-            <a class="c-src" href={s.sourceUrl} target="_blank" rel="noopener">Source ↗</a>
+            <div class="c-foot">
+              <a class="c-src" href={s.sourceUrl} target="_blank" rel="noopener">Source ↗</a>
+              <button class="c-draft" onclick={() => app.openSuggest({ kind: 'strategy', id: s.id, label: s.short })} title="Draft data-strategy policies in response to this">✎ Draft policies</button>
+            </div>
           </article>
         {/each}
       </div>
@@ -46,5 +50,8 @@
   .c-name { margin: 0 0 7px; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.2; }
   .c-take { margin: 0 0 8px; font-size: 14px; line-height: 1.45; color: var(--ink); font-style: italic; font-weight: 500; }
   .c-why { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.68); flex: 1; }
-  .c-src { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; align-self: flex-start; }
+  .c-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+  .c-src { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .c-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.3); border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+  .c-draft:hover { background: rgba(138,45,58,0.14); }
 </style>

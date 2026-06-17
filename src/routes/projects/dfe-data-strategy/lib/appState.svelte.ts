@@ -15,6 +15,14 @@ import {
   stateFromPreset,
 } from './scenarios';
 import type { Origin, StrategyState } from './types';
+import type { PolicyDraft } from './policy';
+
+/** What a "draft policies" suggester was opened for. */
+export interface SuggestTarget {
+  kind: 'strategy' | 'pressure' | 'stakeholder';
+  id: string;
+  label: string;
+}
 
 /** The synthesis of an uploaded Office artefact (returned by /synth). */
 export interface UploadSynthesis {
@@ -39,6 +47,34 @@ class AppState {
 
   // ---- uploaded artefacts (workbench session only; never indexed) ----
   uploads = $state<UploadSynthesis[]>([]);
+
+  // ---- policy builder (shared so the influence map / landscape can add to it) ----
+  policies = $state<PolicyDraft[]>([]);
+  suggestTarget = $state<SuggestTarget | null>(null);
+  private _pc = 0;
+  openSuggest(t: SuggestTarget) {
+    this.suggestTarget = t;
+  }
+  closeSuggest() {
+    this.suggestTarget = null;
+  }
+  /** Add a draft policy (from the composer or a suggester); returns its id. */
+  addPolicyDraft(title: string, statement: string): string {
+    this._pc += 1;
+    const id = `p${this._pc}-${statement.replace(/\W+/g, '').slice(0, 8)}`;
+    this.policies = [{ id, title: title.trim() || statement.slice(0, 60), statement: statement.trim(), status: 'draft', at: this._pc }, ...this.policies];
+    return id;
+  }
+  removePolicy(id: string) {
+    this.policies = this.policies.filter((p) => p.id !== id);
+  }
+  setPolicy(id: string, patch: Partial<PolicyDraft>) {
+    const i = this.policies.findIndex((p) => p.id === id);
+    if (i >= 0) {
+      this.policies[i] = { ...this.policies[i], ...patch };
+      this.policies = [...this.policies];
+    }
+  }
 
   // ---- UI state ----
   narrative = $state<'research' | 'eli5'>('research');

@@ -1,13 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import type { PolicyDraft } from '../lib/policy';
+  import { app } from '../lib/appState.svelte';
   import ConsiderationCard from './ConsiderationCard.svelte';
 
-  const KEY = 'keystone-policies-v1';
-  let policies = $state<PolicyDraft[]>([]);
   let title = $state('');
   let statement = $state('');
-  let mounted = $state(false);
+  let inFlight = false; // plain guard: keeps the build queue single-file without effect loops
 
   const EXAMPLES = [
     'Every child should have a single consistent identifier used across education, social care and health.',
@@ -17,47 +14,38 @@
     'All AI tools used in DfE decisions about children must be published on the ATRS before go-live.',
   ];
 
-  onMount(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) policies = JSON.parse(raw);
-    } catch { /* ignore */ }
-    mounted = true;
-  });
+  // Auto-build queue: whenever a draft is waiting and nothing is in flight, build it.
+  // Chains through multiple drafts (e.g. several added from a suggester) one at a time.
   $effect(() => {
-    if (mounted) {
-      try { localStorage.setItem(KEY, JSON.stringify(policies)); } catch { /* quota */ }
-    }
+    const pending = app.policies.find((p) => p.status === 'draft');
+    if (pending && !inFlight) void runBuild(pending.id);
   });
 
   function addPolicy() {
     const s = statement.trim();
     if (!s) return;
-    const p: PolicyDraft = { id: `p${Date.now()}-${Math.round(Math.random() * 1e4)}`, title: title.trim() || s.slice(0, 60), statement: s, status: 'draft', at: Date.now() };
-    policies = [p, ...policies];
+    app.addPolicyDraft(title, s); // status 'draft' → queue picks it up
     title = '';
     statement = '';
-    build(p.id);
   }
 
-  async function build(id: string) {
-    const i = policies.findIndex((p) => p.id === id);
-    if (i < 0) return;
-    policies[i] = { ...policies[i], status: 'analysing', error: undefined };
-    policies = [...policies];
+  async function runBuild(id: string) {
+    const p = app.policies.find((x) => x.id === id);
+    if (!p) return;
+    inFlight = true;
+    app.setPolicy(id, { status: 'analysing', error: undefined });
+    let result: any = null;
+    let errMsg: string | null = null;
     try {
       const res = await fetch('/projects/dfe-data-strategy/consider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: policies[i].title, statement: policies[i].statement }),
+        body: JSON.stringify({ title: p.title, statement: p.statement }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-      // consume the SSE stream; the server emits a single { type:'result' } when done
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = '';
-      let result: any = null;
-      let errMsg: string | null = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -68,25 +56,20 @@
           const line = part.split('\n').find((l) => l.startsWith('data: '));
           if (!line) continue;
           try {
-            const obj = JSON.parse(line.slice(6));
-            if (obj.type === 'result') result = obj.data;
-            else if (obj.type === 'error') errMsg = obj.message;
-          } catch { /* ignore non-json (heartbeats) */ }
+            const o = JSON.parse(line.slice(6));
+            if (o.type === 'result') result = o.data;
+            else if (o.type === 'error') errMsg = o.message;
+          } catch { /* heartbeat */ }
         }
       }
-      const cur = policies.findIndex((p) => p.id === id);
-      if (cur < 0) return;
-      if (result) policies[cur] = { ...policies[cur], status: 'done', considerations: result };
-      else policies[cur] = { ...policies[cur], status: 'error', error: errMsg ?? 'No appraisal returned — try again.' };
     } catch (e: any) {
-      const cur = policies.findIndex((p) => p.id === id);
-      if (cur >= 0) policies[cur] = { ...policies[cur], status: 'error', error: e?.message ?? 'request failed' };
+      errMsg = e?.message ?? 'request failed';
     }
-    policies = [...policies];
-  }
-
-  function remove(id: string) {
-    policies = policies.filter((p) => p.id !== id);
+    // release the queue BEFORE the final state write, so the write re-triggers the
+    // effect and the next pending draft (if any) starts immediately.
+    inFlight = false;
+    if (result) app.setPolicy(id, { status: 'done', considerations: result, error: undefined });
+    else app.setPolicy(id, { status: 'error', error: errMsg ?? 'No appraisal returned — try again.' });
   }
 </script>
 
@@ -109,12 +92,12 @@
     </div>
   </div>
 
-  {#if policies.length === 0}
-    <p class="empty">No policies yet. Write a headline factor above — the consideration builder will weigh it against the pressures, the strategy landscape, the legal stack and the Policy Engine.</p>
+  {#if app.policies.length === 0}
+    <p class="empty">No policies yet. Write a headline factor above — or open the <a href="/projects/dfe-data-strategy/strategies">Influence Map</a> / <a href="/projects/dfe-data-strategy/landscape">Landscape</a> and click <b>Draft policies</b> on any card. The consideration builder weighs each against the pressures, the strategy landscape, the legal stack, the sector’s voices and the Policy Engine.</p>
   {/if}
 
   <div class="list">
-    {#each policies as p (p.id)}
+    {#each app.policies as p (p.id)}
       <article class="policy">
         <div class="p-head">
           <div class="p-title">
@@ -123,14 +106,15 @@
           </div>
           <div class="p-controls">
             {#if p.status === 'analysing'}<span class="badge an">Analysing…</span>
-            {:else if p.status === 'done'}<button class="rebuild" onclick={() => build(p.id)} title="Re-run the appraisal">↻</button>
-            {:else if p.status === 'error'}<button class="rebuild err" onclick={() => build(p.id)} title="Retry">Retry</button>
-            {:else}<button class="rebuild" onclick={() => build(p.id)}>Build</button>{/if}
-            <button class="del" onclick={() => remove(p.id)} aria-label="Delete">✕</button>
+            {:else if p.status === 'draft'}<span class="badge q">Queued…</span>
+            {:else if p.status === 'done'}<button class="rebuild" onclick={() => app.setPolicy(p.id, { status: 'draft' })} title="Re-run the appraisal">↻</button>
+            {:else if p.status === 'error'}<button class="rebuild err" onclick={() => app.setPolicy(p.id, { status: 'draft' })} title="Retry">Retry</button>
+            {/if}
+            <button class="del" onclick={() => app.removePolicy(p.id)} aria-label="Delete">✕</button>
           </div>
         </div>
         {#if p.status === 'error'}<p class="p-err">⚠ {p.error}</p>{/if}
-        {#if p.status === 'analysing' && !p.considerations}<div class="p-skel">Weighing this against the strategic material…</div>{/if}
+        {#if (p.status === 'analysing' || p.status === 'draft') && !p.considerations}<div class="p-skel">Weighing this against the strategic material…</div>{/if}
         {#if p.considerations}<ConsiderationCard c={p.considerations} />{/if}
       </article>
     {/each}
@@ -151,7 +135,8 @@
   .ex-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; color: rgba(28,22,17,0.5); }
   .ex { font-size: 11px; color: #2f6155; background: rgba(63,125,110,0.07); border: 1px solid rgba(63,125,110,0.25); border-radius: 6px; padding: 4px 8px; cursor: pointer; text-align: left; }
   .ex:hover { background: rgba(63,125,110,0.15); }
-  .empty { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.6); max-width: 72ch; }
+  .empty { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.6); max-width: 74ch; }
+  .empty a { color: #2f6f97; }
   .list { display: flex; flex-direction: column; gap: 14px; }
   .policy { border: 1px solid rgba(28,22,17,0.12); border-radius: 12px; background: rgba(255,255,255,0.38); padding: 15px 17px; }
   .p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -159,6 +144,7 @@
   .p-stmt { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.66); }
   .p-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .badge.an { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; color: #9a7b1f; background: rgba(154,123,31,0.12); padding: 4px 8px; border-radius: 5px; }
+  .badge.q { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; color: rgba(28,22,17,0.5); background: rgba(28,22,17,0.07); padding: 4px 8px; border-radius: 5px; }
   .rebuild { font-family: 'JetBrains Mono', monospace; font-size: 11px; border: 1px solid rgba(28,22,17,0.22); background: rgba(255,255,255,0.6); border-radius: 6px; padding: 4px 9px; cursor: pointer; color: var(--ink); }
   .rebuild.err { color: #b1455e; border-color: rgba(177,69,94,0.4); }
   .del { background: none; border: none; color: rgba(28,22,17,0.4); cursor: pointer; font-size: 13px; }

@@ -11,6 +11,7 @@
   import PeekRail from './components/PeekRail.svelte';
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import AskModel from './components/AskModel.svelte';
+  import PolicySuggester from './components/PolicySuggester.svelte';
 
   let { children, data } = $props();
   const STORAGE = 'keystone-state-v1';
@@ -42,6 +43,10 @@
     }
     app.saved = loadSaved();
     try {
+      const raw = localStorage.getItem('keystone-policies-v1');
+      if (raw) app.policies = JSON.parse(raw);
+    } catch { /* ignore */ }
+    try {
       const n = localStorage.getItem('keystone-narrative');
       if (n === 'research' || n === 'eli5') app.narrative = n;
       const dm = localStorage.getItem('keystone-drawer');
@@ -55,6 +60,7 @@
   $effect(() => { if (app.mounted && !app.drawerUserSet) app.drawerMode = isWorkbench ? 'peek' : 'closed'; });
   $effect(() => { if (app.mounted && app.drawerUserSet) { try { localStorage.setItem('keystone-drawer', app.drawerMode); } catch { /* ignore */ } } });
   $effect(() => { if (app.mounted) persistSaved(app.saved); });
+  $effect(() => { if (app.mounted) { try { localStorage.setItem('keystone-policies-v1', JSON.stringify(app.policies)); } catch { /* quota */ } } });
 
   function setUrl(url: string) { try { replaceState(url, {}); } catch { try { history.replaceState(history.state, '', url); } catch { /* ignore */ } } }
   $effect(() => {
@@ -157,6 +163,8 @@
       <div class="ask-dock-body"><AskModel compact onClose={() => (askOpen = false)} /></div>
     </aside>
   {/if}
+
+  <PolicySuggester />
 </div>
 
 <style>
