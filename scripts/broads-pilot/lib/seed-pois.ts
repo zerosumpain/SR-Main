@@ -64,3 +64,41 @@ export const SWIM: SimplePoi[] = [
   { id: 'swim-salhouse', name: 'Salhouse Broad shallows', lat: 52.6905, lng: 1.4318, description: 'Shallow, sandy-edged broad sometimes used for paddling and a dip from the moorings — check for blue-green algae warnings and keep well clear of the navigation channel.' },
   { id: 'swim-rockland-broad', name: 'Rockland Broad (wild dip)', lat: 52.5872, lng: 1.4760, description: 'A quiet broad off the Yare where confident wild-swimmers occasionally dip away from the channel — cold, weedy and algae-prone, so at your own risk and never near boats.' },
 ];
+
+// Waterside FUEL berths — boatyards / hire bases / yacht stations / marinas that
+// sell diesel, petrol and/or gas to passing boats. OSM barely tags marine fuel
+// for the Broads, so these are curated from boating sources (Broads Authority,
+// Dilham Boating Club fuel list, operator sites) with coordinates verified
+// against OpenStreetMap. Populated by scripts/broads-pilot/wf-fuel.js.
+export interface SeedFuel { id: string; name: string; lat: number; lng: number; description: string; opening_hours?: string | null }
+export const FUEL: SeedFuel[] = [
+  // River Ant
+  { id: 'fuel-stalham-richardsons', name: 'Richardson’s, Stalham', lat: 52.76631, lng: 1.51882, description: 'Diesel at the Richardsons hire base on the River Ant at Stalham — the main northern fuelling point, with gas and pump-out. Call ahead for hours.' },
+  { id: 'fuel-sutton-staithe', name: 'Sutton Staithe Boatyard', lat: 52.7584, lng: 1.52968, description: 'Boatyard diesel and Calor gas on the River Ant at Sutton Staithe, just off Stalham Dyke.' },
+  { id: 'fuel-ludham-bridge', name: 'Ludham Bridge Boatyard', lat: 52.69902, lng: 1.50984, description: 'Diesel, petrol and gas at Ludham Bridge on the River Ant — a handy refuel by the low-bridge moorings.' },
+  { id: 'fuel-coxs-barton-turf', name: 'Cox’s Boatyard, Barton Turf', lat: 52.74788, lng: 1.49284, description: 'Boatyard diesel on the River Ant at Barton Turf, by the entrance to Barton Broad.' },
+  // River Bure
+  { id: 'fuel-barnes-brinkcraft', name: 'Barnes Brinkcraft, Wroxham', lat: 52.71117, lng: 1.41003, description: 'Diesel and gas at this Wroxham boatyard on the River Bure, above the bridge.' },
+  { id: 'fuel-nbd-wroxham', name: 'Norfolk Broads Direct (Faircraft Loynes), Wroxham', lat: 52.7113, lng: 1.4079, description: 'Diesel at the Norfolk Broads Direct / Faircraft Loynes yard by Wroxham Bridge on the River Bure.' },
+  { id: 'fuel-southgates-horning', name: 'Southgates Boatyard, Horning', lat: 52.70281, lng: 1.46388, description: 'Boatyard diesel on the River Bure at Horning.' },
+  { id: 'fuel-bridgecraft-acle', name: 'Bridgecraft, Acle', lat: 52.64887, lng: 1.56673, description: 'Diesel at the boatyard above Acle Bridge on the River Bure.' },
+  { id: 'fuel-gt-yarmouth-ys', name: 'Great Yarmouth Yacht Station', lat: 52.61493, lng: 1.72305, description: 'Diesel at the yacht station on the River Bure at Great Yarmouth — the last fuel before Breydon Water.' },
+  // River Thurne
+  { id: 'fuel-herbert-woods', name: 'Herbert Woods, Potter Heigham', lat: 52.70964, lng: 1.57977, description: 'Diesel and gas at the large Herbert Woods yard on the River Thurne at Potter Heigham.' },
+  { id: 'fuel-martham-boats', name: 'Martham Boats', lat: 52.71501, lng: 1.60918, description: 'Diesel and petrol at Martham Boatbuilders on the River Thurne — one of the few petrol berths afloat.' },
+  { id: 'fuel-whispering-reeds', name: 'Whispering Reeds, Hickling', lat: 52.74707, lng: 1.56956, description: 'Boatyard diesel at Hickling, off the River Thurne by Hickling Broad.' },
+  // River Yare
+  { id: 'fuel-broom-brundall', name: 'Broom Boats, Brundall', lat: 52.6196, lng: 1.43795, description: 'Diesel and petrol at Broom’s riverside fuel and pump-out station on the River Yare at Brundall.' },
+  { id: 'fuel-brundall-bay', name: 'Brundall Bay Marina', lat: 52.61445, lng: 1.43865, description: 'Diesel, petrol and gas at Brundall Bay Marina on the River Yare.' },
+  { id: 'fuel-reedham-marina', name: 'Reedham Marina (Sanderson Marine)', lat: 52.55721, lng: 1.57818, description: 'Boatyard diesel at Reedham on the River Yare, near the swing bridge and chain ferry.' },
+  { id: 'fuel-norwich-ys', name: 'Norwich Yacht Station', lat: 52.62972, lng: 1.30711, description: 'Diesel at the Broads Authority yacht station on the Yare/Wensum in Norwich — head of navigation; limited, check ahead.' },
+  // River Chet
+  { id: 'fuel-loddon-chet', name: 'Loddon / Chedgrave (Chet boatyards)', lat: 52.53789, lng: 1.48239, description: 'Diesel at the Loddon and Chedgrave boatyards (Pacific & Maffett Cruisers) at the head of the River Chet.' },
+  // River Waveney + southern broads
+  { id: 'fuel-waveney-river-centre', name: 'Waveney River Centre, Burgh St Peter', lat: 52.48205, lng: 1.66844, description: 'Diesel, petrol and gas at the Waveney River Centre at Burgh St Peter — a rare petrol berth on the southern Waveney.' },
+  { id: 'fuel-hipperson-beccles', name: 'H. E. Hipperson, Beccles', lat: 52.46543, lng: 1.5605, description: 'Diesel and petrol at Hipperson’s boatyard on the River Waveney at Beccles.' },
+  { id: 'fuel-burgh-castle', name: 'Burgh Castle Marina (Goodchild Marine)', lat: 52.5769, lng: 1.64993, description: 'Diesel at Burgh Castle Marina on the River Waveney near Breydon Water.' },
+  { id: 'fuel-st-olaves', name: 'St Olaves Marina', lat: 52.53478, lng: 1.6189, description: 'Boatyard diesel on the River Waveney at St Olaves, by the bridge.' },
+  { id: 'fuel-somerleyton', name: 'Somerleyton Marina', lat: 52.51406, lng: 1.64919, description: 'Diesel at Somerleyton Marina on the River Waveney.' },
+  { id: 'fuel-oulton-broad', name: 'Oulton Broad', lat: 52.47404, lng: 1.70922, description: 'Diesel and petrol at Oulton Broad (yacht station and day-boat yards) on the southern Waveney.' },
+];

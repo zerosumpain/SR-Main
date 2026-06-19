@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { overpass, BROADS_BBOX, type OsmElement } from './lib/overpass.ts';
 import { haversine } from './lib/geo.ts';
-import { PUB_OVERLAY, WALKS, FISHING, SWIM } from './lib/seed-pois.ts';
+import { PUB_OVERLAY, WALKS, FISHING, SWIM, FUEL } from './lib/seed-pois.ts';
 
 type LatLng = [number, number];
 const DIR = join(process.cwd(), 'static', 'broads-pilot');
@@ -115,6 +115,11 @@ async function main() {
     pois.push({ id: f.id, name: f.name, kind: 'fishing', lat: f.lat, lng: f.lng, dog_friendly: true, food: false, description: f.description, opening_hours: null, place_id: null, tripadvisor_url: deepTripadvisor(f.name), google_url: deepGoogle(f.name, f.lat, f.lng), source: 'curated' });
   for (const s of SWIM)
     pois.push({ id: s.id, name: s.name, kind: 'swim', lat: s.lat, lng: s.lng, dog_friendly: true, food: false, description: s.description, opening_hours: null, place_id: null, tripadvisor_url: deepTripadvisor(s.name), google_url: deepGoogle(s.name, s.lat, s.lng), source: 'curated' });
+  // Waterside fuel berths (boatyards/yacht stations that sell diesel/petrol/gas
+  // afloat). OSM barely tags marine fuel for the Broads, so these are curated +
+  // OSM-coordinate-verified (see lib/seed-pois.ts).
+  for (const f of FUEL)
+    pois.push({ id: f.id, name: f.name, kind: 'fuel', lat: f.lat, lng: f.lng, dog_friendly: null, food: false, description: f.description, opening_hours: f.opening_hours ?? null, place_id: null, tripadvisor_url: deepTripadvisor(f.name), google_url: deepGoogle(f.name, f.lat, f.lng), source: 'curated' });
 
   // Precompute mooring → nearby POIs (within 1 km, sorted by distance).
   const adjacency: Record<string, { poi_id: string; dist_m: number; on_foot: boolean }[]> = {};
