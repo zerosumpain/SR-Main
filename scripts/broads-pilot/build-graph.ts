@@ -149,10 +149,7 @@ async function main() {
   const mainNodesAll = compNodeIds(mainRoot);
   for (const [r, l] of ranked) {
     if (r === mainRoot) continue;
-    if (!hasCore(r) || l < 2000) {
-      console.log(`  drop ${(l / 1000).toFixed(1)}km (rivers: ${[...(compRivers.get(r) || [])].slice(0, 3).join('/')})`);
-      continue;
-    }
+    // nearest hop from this fragment to the main network
     let best: { a: string; b: string; d: number } | null = null;
     for (const a of compNodeIds(r)) {
       const na = nodes.get(a)!;
@@ -162,11 +159,17 @@ async function main() {
         if (!best || d < best.d) best = { a, b, d };
       }
     }
-    if (best && best.d <= 2500) {
+    const rivers = [...(compRivers.get(r) || [])].slice(0, 3).join('/');
+    // Keep if: a near-touching fragment (≤80 m gap = an OSM topology break, e.g.
+    // the Stalham/Sutton navigable dykes), OR a core Broads river within a short
+    // confluence hop. Everything else (the distant Suffolk Blyth, etc.) is dropped.
+    const topologyGap = !!best && best.d <= 80;
+    const coreConfluence = hasCore(r) && l >= 2000 && !!best && best.d <= 2500;
+    if (topologyGap || coreConfluence) {
       keep.add(r);
-      bridges.push(best);
+      bridges.push(best!);
     } else {
-      console.log(`  drop ${(l / 1000).toFixed(1)}km (nearest hop ${best ? best.d.toFixed(0) : '∞'}m too far)`);
+      console.log(`  drop ${(l / 1000).toFixed(1)}km (${rivers}; hop ${best ? best.d.toFixed(0) : '∞'}m)`);
     }
   }
 
@@ -249,6 +252,34 @@ async function main() {
     broadsAdded++;
   }
   console.log(`  added ${broadsAdded} navigable broad destinations`);
+
+  // Manual connectors for navigable staithes whose access dyke is missing or
+  // disconnected in OSM — notably Stalham, the main Richardsons hire base (the
+  // most common trip origin). The connector approximates the access dyke.
+  const STAITHES = [
+    { id: 'staithe-stalham', name: 'Stalham Staithe', lat: 52.7772, lng: 1.5072, limit: 4 },
+    { id: 'staithe-sutton', name: 'Sutton Staithe', lat: 52.7745, lng: 1.5235, limit: 4 },
+  ];
+  const baseNodeIds = [...nodes.keys()].filter((k) => !k.startsWith('broad-') && !k.startsWith('staithe-'));
+  let staithesAdded = 0;
+  for (const s of STAITHES) {
+    let best: { id: string; d: number } | null = null;
+    for (const k of baseNodeIds) {
+      const n = nodes.get(k)!;
+      const d = haversine(s.lat, s.lng, n.lat, n.lng);
+      if (!best || d < best.d) best = { id: k, d };
+    }
+    if (!best || best.d > 3000) continue;
+    nodes.set(s.id, { id: s.id, lat: s.lat, lng: s.lng });
+    keptEdges.push({
+      id: `e${edgeSeq++}`, from: best.id, to: s.id, length_m: Math.round(best.d),
+      limit_mph: s.limit, river: s.name,
+      geometry: [[nodes.get(best.id)!.lat, nodes.get(best.id)!.lng], [s.lat, s.lng]],
+      way_id: -3, restriction_ids: [],
+    });
+    staithesAdded++;
+  }
+  console.log(`  added ${staithesAdded} staithe connectors`);
 
   // Tag the Breydon Water crossing (the tidal Northern↔Southern bottleneck) so
   // the planner can raise the slack-water advisory. Open-water bbox at Yarmouth.
