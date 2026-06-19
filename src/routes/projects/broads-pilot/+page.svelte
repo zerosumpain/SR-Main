@@ -18,7 +18,11 @@
   import RestrictionCallout from './components/RestrictionCallout.svelte';
   import GuideChat from './components/GuideChat.svelte';
   import Logbook from './components/Logbook.svelte';
+  import SearchBar from './components/SearchBar.svelte';
+  import RouteLegend from './components/RouteLegend.svelte';
   import { logbook } from './lib/logbook.svelte';
+  import type { SearchEntry } from './lib/search';
+  import type { Selection } from './lib/appState.svelte';
 
   let mapComp = $state<ReturnType<typeof BroadsMap> | null>(null);
   let sheetSnap = $state<'peek' | 'half' | 'full'>('peek');
@@ -45,6 +49,16 @@
   // FABs ride up with the mobile sheet (desktop overrides to a fixed bottom).
   const fabBottomPx = $derived(app.cruiseActive ? 168 : Math.min(app.sheetPx + 14, 520));
 
+  // show the route-line key whenever a route (single or multi-stop) is drawn
+  const hasRoute = $derived(!!app.route?.edges.length || app.itineraryLegs.some((l) => l.edges.length > 0));
+
+  // a search pick: open the feature's detail drawer and fly the map to it
+  // (flyTo also frees the home-base lock).
+  function handleSearchPick(e: SearchEntry) {
+    app.select({ kind: e.kind, id: e.id } as Selection);
+    mapComp?.flyTo(e.lat, e.lng, 14);
+  }
+
   onMount(async () => {
     sheetSnap = window.matchMedia('(max-width: 759px)').matches ? 'peek' : 'half';
     logbook.load();
@@ -54,6 +68,9 @@
     else {
       try { const saved = JSON.parse(localStorage.getItem('broads-pilot') || 'null'); if (saved) app.restore(saved); } catch { /* ignore */ }
     }
+    // fall back to the Stalham home base only if nothing was restored — done here
+    // (one synchronous pass) so the locked map pins once on the final origin.
+    app.ensureDefaultOrigin();
   });
 
   $effect(() => {
@@ -85,7 +102,11 @@
     if (!navigator.geolocation) return;
     geoBusy = true;
     navigator.geolocation.getCurrentPosition(
-      (pos) => { app.setOrigin(pos.coords.latitude, pos.coords.longitude, 'My location'); geoBusy = false; },
+      (pos) => {
+        app.setOrigin(pos.coords.latitude, pos.coords.longitude, 'My location');
+        mapComp?.flyTo(pos.coords.latitude, pos.coords.longitude, 14); // centre on it (also unlocks)
+        geoBusy = false;
+      },
       () => { geoBusy = false; alert('Could not get your location. Tap the map to set your start instead.'); },
       { enableHighAccuracy: true, timeout: 8000 },
     );
@@ -136,6 +157,31 @@
 
 <div class="bp-planner">
   <BroadsMap bind:this={mapComp} />
+
+  <!-- top-left: feature search + home-base lock (lock hidden in live mode,
+       where follow-the-boat owns the camera) -->
+  <div class="bp-topleft">
+    <SearchBar onPick={handleSearchPick} />
+    {#if !app.cruiseActive}
+      <button
+        class="bp-lock"
+        class:locked={app.mapLocked}
+        onclick={() => app.toggleLock()}
+        aria-pressed={app.mapLocked}
+        title={app.mapLocked
+          ? `Map pinned on ${app.origin?.label ?? 'home'} — tap to roam freely`
+          : `Map free to roam — tap to re-pin on ${app.origin?.label ?? 'home'}`}
+      >
+        <span class="bp-lock-ic" aria-hidden="true">{app.mapLocked ? '🔒' : '🔓'}</span>
+        <span class="bp-lock-lbl">{app.mapLocked ? 'Locked' : 'Free'}</span>
+      </button>
+    {/if}
+  </div>
+
+  <!-- route line key (colour = travel-time band, dash = speed limit) -->
+  {#if hasRoute && !app.loading}
+    <div class="bp-legend-wrap"><RouteLegend /></div>
+  {/if}
 
   <!-- map options (layers + theme) behind one button, both breakpoints -->
   <div class="bp-mapbtn-wrap">
@@ -255,6 +301,17 @@
 <style>
   .bp-planner { position: absolute; inset: 0; overflow: hidden; }
   .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
+
+  /* top-left: search box + home-base lock toggle. Kept below the 600-level
+     FABs/map-options so the search click-away backdrop never blocks them. */
+  .bp-topleft { position: absolute; top: 0.6rem; left: 0.6rem; z-index: 550; display: flex; align-items: flex-start; gap: 0.4rem; width: min(23rem, calc(100vw - 1.2rem)); }
+  .bp-topleft :global(.bp-search) { flex: 1; min-width: 0; }
+  .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+  .bp-lock.locked { border-color: var(--accent); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 12%, var(--surface-elevated)); }
+  .bp-lock-ic { font-size: 0.9rem; }
+
+  /* route key — top-centre on desktop, just below the search bar on mobile */
+  .bp-legend-wrap { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 560; }
   .bp-error { color: var(--error, #c62828); }
 
   /* map options button + popover (top-right) */
@@ -316,5 +373,8 @@
   }
   @media (max-width: 759px) {
     .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: 0.7rem 0.7rem 0 0; z-index: 800; }
+    /* search + lock span the top; the route key drops just beneath them */
+    .bp-topleft { left: 0.5rem; right: 0.5rem; top: 0.5rem; width: auto; }
+    .bp-legend-wrap { top: 3.6rem; left: 0.5rem; right: 0.5rem; transform: none; display: flex; justify-content: center; }
   }
 </style>

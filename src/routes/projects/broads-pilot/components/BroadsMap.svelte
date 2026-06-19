@@ -2,7 +2,13 @@
   import { onMount } from 'svelte';
   import { app } from '../lib/appState.svelte';
   import { bridgeVerdict, edgeVerdict } from '../lib/passability';
-  import type { Verdict } from '../lib/types';
+  import { styleRoute, bandColor, speedDash, PASSED_COLOR } from '../lib/route-style';
+  import type { Verdict, LatLng } from '../lib/types';
+
+  // Home view: the Richardsons hire base at Stalham — the default start and the
+  // point the locked map pins to. Matches the `staithe-stalham` origin node.
+  const HOME: [number, number] = [52.7772, 1.5072];
+  const HOME_ZOOM = 13;
 
   let mapEl: HTMLDivElement;
   // Leaflet handles kept as plain refs (NOT $state) to avoid effect-update loops.
@@ -38,7 +44,7 @@
   onMount(() => {
     L = (window as any).L;
     if (!L || !mapEl) return;
-    map = L.map(mapEl, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView([52.68, 1.46], 11);
+    map = L.map(mapEl, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView(HOME, HOME_ZOOM);
     // keep the +/- control clear of the docked sheet: bottom-left on desktop,
     // top-left on mobile (where the sheet is a bottom sheet).
     const mq = window.matchMedia('(min-width: 760px)');
@@ -51,14 +57,32 @@
     nauticalBase = L.tileLayer(OSM, { maxZoom: 18, attribution: ATTR });
     seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, opacity: 0.9 });
     schematicTiles = L.tileLayer(OSM, { maxZoom: 18, opacity: 0.12, className: 'bp-schematic-tiles', attribution: ATTR });
-    for (const k of [...BASE, 'route', 'user']) groups[k] = L.layerGroup().addTo(map);
+    // 'route' = static casing + markers; 'routeLive' = the coloured/dashed centre
+    // lines (redrawn on each GPS fix while cruising, so markers don't flicker).
+    for (const k of [...BASE, 'route', 'routeLive', 'user']) groups[k] = L.layerGroup().addTo(map);
     map.on('click', (e: any) => {
       if (suppressOriginClick) { suppressOriginClick = false; return; }
+      if (app.mapLocked) return; // pinned on home — no stray start pins
       app.setOrigin(e.latlng.lat, e.latlng.lng, 'Dropped pin');
     });
     initialized = true;
     applyTheme();
+    applyLock();
   });
+
+  // Lock = pin the camera on the start and freeze pan/gesture-zoom (the +/-
+  // buttons still work, zooming about the centred home). Unlock re-enables all.
+  function applyLock() {
+    if (!map) return;
+    const handlers = ['dragging', 'scrollWheelZoom', 'doubleClickZoom', 'boxZoom', 'keyboard', 'touchZoom', 'tap'];
+    if (app.mapLocked) {
+      const o = app.origin;
+      if (o) map.setView([o.lat, o.lng], Math.max(map.getZoom() ?? HOME_ZOOM, HOME_ZOOM), { animate: true });
+      for (const h of handlers) map[h]?.disable?.();
+    } else {
+      for (const h of handlers) map[h]?.enable?.();
+    }
+  }
 
   function applyTheme() {
     if (!map) return;
@@ -201,21 +225,50 @@
         .addTo(groups.origin);
   }
 
-  // Draw just the planned route (cheap; updates as the destination changes).
-  function drawLegEdges(legs: { edges: { geometry: [number, number][] }[] }[]) {
-    for (const leg of legs) for (const e of leg.edges)
-      L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.5, lineCap: 'round' }).addTo(groups.route);
-    for (const leg of legs) for (const e of leg.edges)
-      L.polyline(e.geometry, { color: '#ffcf4a', weight: 3.4, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
+  // The legs currently on the map: a multi-stop itinerary takes precedence over
+  // a single ad-hoc destination route.
+  function currentLegs(): { edges: any[] }[] {
+    if (app.itinerary.length && app.itineraryLegs.length) return app.itineraryLegs;
+    return app.route?.edges.length ? [app.route] : [];
   }
 
+  // dark casing — static (doesn't depend on time/position), into groups.route.
+  function drawCasing(legs: { edges: any[] }[]) {
+    for (const leg of legs) for (const e of leg.edges)
+      L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.5, lineCap: 'round' }).addTo(groups.route);
+  }
+
+  // coloured + dashed centre line into groups.routeLive: COLOUR = cumulative
+  // travel-time band (isochrone), DASH = posted speed limit. While cruising the
+  // clock zeroes at the live position and already-cruised edges render grey.
+  function drawCenterlines(legs: { edges: any[] }[], from: LatLng | null) {
+    for (const s of styleRoute(legs, { from })) {
+      const color = s.passed ? PASSED_COLOR : bandColor(s.midT);
+      L.polyline(s.edge.geometry, {
+        color, weight: 4, opacity: s.passed ? 0.5 : 0.98, lineCap: 'round', lineJoin: 'round',
+        dashArray: speedDash(s.edge.limit_mph),
+      }).addTo(groups.routeLive);
+    }
+  }
+
+  function warnMarker(lat: number, lng: number, cls: 'red' | 'amber', label: string) {
+    const big = cls === 'red';
+    L.marker([lat, lng], {
+      icon: L.divIcon({ className: 'bp-warn', html: `<div class="bp-warn-pin ${cls}">!</div>`, iconSize: big ? [26, 26] : [24, 24], iconAnchor: big ? [13, 13] : [12, 12] }),
+      zIndexOffset: big ? 2200 : 2100, interactive: false,
+    }).bindTooltip(label, { permanent: true, direction: 'top', offset: [0, big ? -14 : -13], className: `bp-warn-tip ${cls}` }).addTo(groups.route);
+  }
+
+  // Static route layer: casing + stop/destination/hazard markers. Deliberately
+  // does NOT read userPosition, so a GPS fix doesn't tear these down (only the
+  // centre lines, in their own effect, react to position).
   function renderRoute() {
     if (!initialized) return;
     groups.route.clearLayers();
 
     // A multi-stop itinerary (e.g. from the AI planner) takes precedence.
     if (app.itinerary.length && app.itineraryLegs.length) {
-      drawLegEdges(app.itineraryLegs);
+      drawCasing(app.itineraryLegs);
       app.itinerary.forEach((nid, i) => {
         const n = app.data?.graph.nodes.find((x) => x.id === nid);
         if (!n) return;
@@ -224,26 +277,29 @@
           zIndexOffset: 1800, interactive: false,
         }).bindTooltip(`${i + 1}. ${app.nodeLabel(nid)}`, { permanent: true, direction: 'top', offset: [0, -12], className: 'bp-dest-tip' }).addTo(groups.route);
       });
+      // Hazard markers across every leg (the line colour no longer encodes
+      // passability) — deduped so a shared bridge isn't stacked.
+      const seen = new Set<string>();
+      for (const leg of app.itineraryLegs) {
+        if (leg.blockedAt && !seen.has('b:' + leg.blockedAt.id)) { seen.add('b:' + leg.blockedAt.id); warnMarker(leg.blockedAt.lat, leg.blockedAt.lng, 'red', `Blocked: ${leg.blockedAt.name}`); }
+        for (const { bridge, verdict } of leg.bridges) {
+          if (verdict !== 'marginal' || seen.has('m:' + bridge.id)) continue;
+          seen.add('m:' + bridge.id);
+          warnMarker(bridge.lat, bridge.lng, 'amber', `Tight: ${bridge.name}`);
+        }
+      }
       return;
     }
 
     // Otherwise a single ad-hoc destination route.
     const r = app.route;
-    // Contextual hazard: a bridge that BLOCKS this route gets a red "!" marker.
-    if (r?.blockedAt) {
-      const b = r.blockedAt;
-      L.marker([b.lat, b.lng], { icon: L.divIcon({ className: 'bp-warn', html: '<div class="bp-warn-pin red">!</div>', iconSize: [26, 26], iconAnchor: [13, 13] }), zIndexOffset: 2200, interactive: false })
-        .bindTooltip(`Blocked: ${b.name}`, { permanent: true, direction: 'top', offset: [0, -14], className: 'bp-warn-tip red' }).addTo(groups.route);
-    }
+    if (r?.blockedAt) warnMarker(r.blockedAt.lat, r.blockedAt.lng, 'red', `Blocked: ${r.blockedAt.name}`);
     if (!r?.edges.length) return;
-    drawLegEdges([r]);
-    // Tight (marginal) bridges: recolour their segment amber + amber "!" marker.
-    for (const { bridge, verdict } of r.bridges) {
-      if (verdict !== 'marginal') continue;
-      for (const e of r.edges) if (e.restriction_ids?.includes(bridge.id)) L.polyline(e.geometry, { color: '#e69500', weight: 5.5, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
-      L.marker([bridge.lat, bridge.lng], { icon: L.divIcon({ className: 'bp-warn', html: '<div class="bp-warn-pin amber">!</div>', iconSize: [24, 24], iconAnchor: [12, 12] }), zIndexOffset: 2100, interactive: false })
-        .bindTooltip(`Tight: ${bridge.name}`, { permanent: true, direction: 'top', offset: [0, -13], className: 'bp-warn-tip amber' }).addTo(groups.route);
-    }
+    drawCasing([r]);
+    // Tight (marginal) bridges: an amber "!" marker. (The line colour now encodes
+    // travel time, so the hazard lives on the marker, not a segment recolour.)
+    for (const { bridge, verdict } of r.bridges)
+      if (verdict === 'marginal') warnMarker(bridge.lat, bridge.lng, 'amber', `Tight: ${bridge.name}`);
     const dnId = app.destinationNode;
     const dn = dnId ? app.data?.graph.nodes.find((n) => n.id === dnId) : null;
     if (dn)
@@ -255,11 +311,26 @@
         .addTo(groups.route);
   }
 
+  // The coloured/dashed centre lines: own group + effect so they re-render on a
+  // GPS fix (live isochrone) without churning the static casing/markers/tooltips.
+  function renderCenterlines() {
+    if (!initialized) return;
+    groups.routeLive.clearLayers();
+    const from: LatLng | null = app.cruiseActive && app.userPosition ? [app.userPosition.lat, app.userPosition.lng] : null;
+    drawCenterlines(currentLegs(), from);
+  }
+
   // effects: applyTheme only on theme change (no tile flicker on layer toggles);
   // renderBase tracks its own reads (incl. theme); renderRoute tracks the route.
   $effect(() => { app.mapTheme; if (initialized) applyTheme(); });
   $effect(() => { if (initialized) renderBase(); });
+  // static route layer (casing + markers): tracks route/itinerary, NOT position.
   $effect(() => { if (initialized) renderRoute(); });
+  // live centre lines: tracks the route AND the live position, so a GPS fix
+  // recolours only this layer (no marker/tooltip flicker).
+  $effect(() => { app.cruiseActive; app.userPosition; if (initialized) renderCenterlines(); });
+  // re-pin / free the camera when the lock (or the start it pins to) changes.
+  $effect(() => { app.mapLocked; app.origin; if (initialized) applyLock(); });
 
   // live "you are here" marker + optional follow (own group, off the base render
   // path so a GPS fix doesn't redraw the whole network).
@@ -278,8 +349,10 @@
     if (app.followUser && app.cruiseActive) map.panTo([u.lat, u.lng], { animate: true, duration: 0.7 });
   });
 
-  export function flyTo(lat: number, lng: number, zoom = 13) { map?.flyTo([lat, lng], zoom); }
-  export function fitTo(points: [number, number][]) { if (map && points.length) map.fitBounds(points as any, { padding: [55, 55], maxZoom: 13 }); }
+  // Programmatic camera moves (search pick, AI itinerary, "my location") free
+  // the lock first, so the move isn't immediately yanked back to home.
+  export function flyTo(lat: number, lng: number, zoom = 13) { if (app.mapLocked) app.unlockMap(); map?.flyTo([lat, lng], zoom); }
+  export function fitTo(points: [number, number][]) { if (app.mapLocked) app.unlockMap(); if (map && points.length) map.fitBounds(points as any, { padding: [55, 55], maxZoom: 13 }); }
 </script>
 
 <div class="bp-map" bind:this={mapEl}></div>
@@ -331,4 +404,9 @@
   @media (prefers-reduced-motion: reduce) { :global(.bp-start-ring) { animation: none; opacity: 0.55; } }
   :global(.leaflet-container) { font-family: var(--font-mono, monospace); background: #ece3d2; }
   :global(.leaflet-tooltip) { font-family: var(--font-mono, monospace); font-size: 11px; }
+  /* On mobile the +/- control sits top-left, where the search bar lives — push
+     it clear of the bar so the two don't overlap. */
+  @media (max-width: 759px) {
+    :global(.leaflet-top.leaflet-left) { margin-top: 3.4rem; }
+  }
 </style>
