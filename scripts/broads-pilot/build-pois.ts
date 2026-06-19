@@ -107,7 +107,7 @@ async function main() {
   for (const w of WALKS) {
     pois.push({
       id: w.id, name: w.name, kind: 'walk', lat: w.lat, lng: w.lng,
-      dog_friendly: w.dog_friendly, food: false, description: w.description, opening_hours: null, place_id: null,
+      dog_friendly: w.dog_friendly, food: false, description: w.description, length_mi: w.length_mi, opening_hours: null, place_id: null,
       tripadvisor_url: deepTripadvisor(w.name), google_url: deepGoogle(w.name, w.lat, w.lng), source: 'curated',
     });
   }

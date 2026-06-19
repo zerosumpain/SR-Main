@@ -112,6 +112,7 @@ export interface Poi {
   dog_friendly?: boolean | null;
   food?: boolean;
   description: string;
+  length_mi?: number | null; // for walks: route length in miles
   opening_hours?: string | null;
   place_id?: string | null;
   tripadvisor_url?: string | null;

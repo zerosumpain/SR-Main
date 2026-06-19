@@ -53,7 +53,7 @@
                 <button class="act" onclick={() => app.select({ kind: 'poi', id: a.poiId })} title="Open details">
                   <span class="ic">{KIND_ICON[a.kind] ?? '•'}</span>
                   <span class="act-body">
-                    <span class="act-name">{a.name}{a.dog ? ' · 🐾' : ''}{a.dist_m != null ? ` · ${fmtDist(a.dist_m, app.units)} walk` : ''}</span>
+                    <span class="act-name">{a.name}{a.dog ? ' · 🐾' : ''}{a.kind === 'walk' && a.length_mi ? ` · ${a.length_mi} mi route` : ''}{a.dist_m != null ? ` · ${fmtDist(a.dist_m, app.units)} away` : ''}</span>
                     <span class="act-what">{a.what}</span>
                     {#if a.opening_hours}<span class="act-hours">Hours: {a.opening_hours}</span>{/if}
                   </span>

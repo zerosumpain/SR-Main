@@ -122,11 +122,14 @@ export const POST: RequestHandler = async ({ request }) => {
   const catalog = candidates.map(({ m, time_s, dist_m, near }) => {
     const facils = Object.entries(m.facilities).filter(([, v]) => v).map(([k]) => k).join(', ') || 'bankside only';
     const charge = m.rate.unit === 'free' || (m.rate.amount === 0 && m.rate.unit !== 'metre_night') ? 'free' : `£${m.rate.amount}/${m.rate.unit.replace('_', ' ')}`;
-    const pts = near.map((x) => `    - ${x.poi.id} | ${x.poi.name} (${x.poi.kind}${x.poi.dog_friendly ? ', dog-ok' : ''}${x.poi.food ? ', food' : ''}) ~${x.dist_m}m: ${x.poi.description.slice(0, 90)}`).join('\n');
+    const pts = near.map((x) => {
+      const lenTag = x.poi.kind === 'walk' && x.poi.length_mi ? `, ${x.poi.length_mi}mi` : '';
+      return `    - ${x.poi.id} | ${x.poi.name} (${x.poi.kind}${lenTag}${x.poi.dog_friendly ? ', dog-ok' : ''}${x.poi.food ? ', food' : ''}) ~${x.dist_m}m: ${x.poi.description.slice(0, 100)}`;
+    }).join('\n');
     return `* ${m.id} | ${m.name} [${TIER_LABEL[m.tier]}, ${charge}, ${facils}] — ${Math.round(time_s / 60)} min / ${(dist_m / 1609).toFixed(1)} mi from start\n${pts || '    - (no notable POIs catalogued nearby)'}`;
   }).join('\n');
 
-  const system = `You are a friendly, expert Norfolk Broads cruising concierge planning a boating itinerary. You ONLY choose stops from the provided REACHABLE moorings (each is already confirmed passable for this boat). Match the skipper's objectives. Keep total cruising time within their budget. The day(s) end MOORED at the final stop — you do NOT return to base. Be specific and warm but concise. For each stop explain WHY it fits their goals, and reference the specific nearby POIs (by id) that satisfy each objective. Prefer a sensible geographic progression (don't zig-zag).`;
+  const system = `You are a friendly, expert Norfolk Broads cruising concierge planning a boating itinerary. You ONLY choose stops from the provided REACHABLE moorings (each is already confirmed passable for this boat). Match the skipper's objectives. Keep total cruising time within their budget. The day(s) end MOORED at the final stop — you do NOT return to base. Be specific and warm but concise. For each stop explain WHY it fits their goals, and reference the specific nearby POIs (by id) that satisfy each objective. Prefer a sensible geographic progression (don't zig-zag). If they want a LONG or family walk, pick a walk of 5+ miles (walk lengths are shown like "6mi"); for a gentle stroll pick a shorter one.`;
 
   const user = `SKIPPER'S OBJECTIVES:
 - Boat: ${boat.name} (air draft ${boat.air_draft_m} m, sleeps ${boat.sleeps})
@@ -181,7 +184,7 @@ Return JSON exactly:
       fromNode = m.node_id!;
     }
     const acts = (Array.isArray(s.activities) ? s.activities : [])
-      .map((a: any) => { const p = poiById.get(a?.poiId); return p ? { poiId: p.id, name: p.name, kind: p.kind, dog: p.dog_friendly ?? null, dist_m: (d.mooringPois[m.id] ?? []).find((x) => x.poi_id === p.id)?.dist_m ?? null, what: String(a.what ?? '').slice(0, 240), opening_hours: p.opening_hours ?? null } : null; })
+      .map((a: any) => { const p = poiById.get(a?.poiId); return p ? { poiId: p.id, name: p.name, kind: p.kind, dog: p.dog_friendly ?? null, dist_m: (d.mooringPois[m.id] ?? []).find((x) => x.poi_id === p.id)?.dist_m ?? null, length_mi: p.length_mi ?? null, what: String(a.what ?? '').slice(0, 240), opening_hours: p.opening_hours ?? null } : null; })
       .filter(Boolean);
     const facilities = Object.entries(m.facilities).filter(([, v]) => v).map(([k]) => k);
     return {

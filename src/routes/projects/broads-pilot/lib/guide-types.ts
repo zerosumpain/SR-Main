@@ -5,6 +5,7 @@ export interface PlanActivity {
   kind: string;
   dog: boolean | null;
   dist_m: number | null;
+  length_mi: number | null;
   what: string;
   opening_hours: string | null;
 }
