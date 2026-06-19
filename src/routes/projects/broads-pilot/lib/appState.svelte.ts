@@ -1,7 +1,7 @@
 // Central rune-store for the Broads Pilot planner. Holds the loaded datasets,
 // the user's boat/origin/itinerary, map + layer UI state, and derives the route,
 // reachability and daylight budget from the engine. Instantiated once.
-import type { Datasets, Boat, Mooring, Poi, RouteLeg, PoiKind, LatLng } from './types';
+import type { Datasets, Boat, Mooring, Poi, RouteLeg, PoiKind, LatLng, GraphEdge } from './types';
 import { loadDatasets } from './data';
 import { buildAdjacency, nearestNode } from './graph';
 import { route as computeRoute, reachable as computeReachable } from './router';
@@ -36,7 +36,7 @@ export class AppState {
   itinerary = $state<string[]>([]); // ordered node ids (moorings/broads/staithes)
 
   selected = $state<Selection>(null);
-  layers = $state({ restrictions: true, moorings: true, pubs: true, walks: true, attractions: false });
+  layers = $state({ restrictions: true, moorings: true, pubs: true, walks: true, attractions: false, speed: false, services: false });
   dogOnly = $state(false);
   showRangeRings = $state(false);
   mapTheme = $state<'warm' | 'nautical' | 'schematic'>('warm');
@@ -122,6 +122,21 @@ export class AppState {
   moving = $derived(this.speedMph >= 1.3); // ~1.3 mph — under way, not just GPS jitter
   cruising = $derived(this.cruiseActive && this.onBroads && this.moving);
 
+  // Nearest navigable edge to the live position (≤120 m) → its speed limit. Used
+  // for the live "you're in an X mph zone" readout. Only computed while on the
+  // Broads to keep the per-fix cost down.
+  currentEdge = $derived.by((): GraphEdge | null => {
+    const u = this.userPosition;
+    if (!u || !this.data || !this.onBroads) return null;
+    const e = this.nearestEdge(u.lat, u.lng, 120);
+    return e?.edge ?? null;
+  });
+  currentLimitMph = $derived(this.currentEdge?.limit_mph ?? null);
+  // Over the posted limit (with a 0.8 mph GPS-noise tolerance), and actually under way.
+  overLimit = $derived(
+    this.currentLimitMph != null && this.moving && this.speedMph > this.currentLimitMph + 0.8,
+  );
+
   // The one mode that drives the single info sheet (explore → route → trip → live).
   mode = $derived<'live' | 'trip' | 'route' | 'explore'>(
     this.cruiseActive ? 'live'
@@ -190,6 +205,20 @@ export class AppState {
 
   select(sel: Selection) { this.selected = sel; }
   closeSelection() { this.selected = null; }
+
+  /** Nearest navigable edge to a point, within `maxDist` metres (null if none). */
+  nearestEdge(lat: number, lng: number, maxDist = 150): { edge: GraphEdge; dist_m: number } | null {
+    if (!this.data) return null;
+    const p: LatLng = [lat, lng];
+    let best: GraphEdge | null = null;
+    let bd = maxDist;
+    for (const e of this.data.graph.edges)
+      for (let i = 1; i < e.geometry.length; i++) {
+        const d = distToSegment(p, e.geometry[i - 1], e.geometry[i]);
+        if (d < bd) { bd = d; best = e; if (d < 8) return { edge: e, dist_m: d }; }
+      }
+    return best ? { edge: best, dist_m: bd } : null;
+  }
 
   /** Min distance (m) from a point to the navigable channel (early-exits when close). */
   distToNetwork(lat: number, lng: number): number {

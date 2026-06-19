@@ -6,6 +6,7 @@
   // panel so it can float over the map.
   import { app } from '../lib/appState.svelte';
   import { fmtRate, fmtDist } from '../lib/format';
+  import { getRating, type Rating } from '../lib/ratings';
   import type { Mooring, MooringTier, Poi, PoiKind } from '../lib/types';
 
   const TIER_LABEL: Record<MooringTier, string> = {
@@ -61,6 +62,23 @@
     rows.sort((a, b) => a.dist_m - b.dist_m);
     return rows.slice(0, 10);
   });
+
+  // Live Google rating (pub moorings / marinas / yacht stations usually have one;
+  // fails soft → hidden). Refetched whenever the selected mooring changes.
+  let rating = $state<Rating | null>(null);
+  $effect(() => {
+    const cur = m;
+    rating = null;
+    if (!cur) return;
+    let cancelled = false;
+    getRating({ name: cur.name, lat: cur.lat, lng: cur.lng }).then((r) => { if (!cancelled) rating = r; });
+    return () => { cancelled = true; };
+  });
+  function stars(r: number): string {
+    const full = Math.floor(r);
+    const half = r - full >= 0.5;
+    return '★'.repeat(full) + (half ? '⯪' : '') + '☆'.repeat(5 - full - (half ? 1 : 0));
+  }
 </script>
 
 {#if m}
@@ -77,6 +95,15 @@
       <span class="charge">{fmtRate(m.rate, m.waived_with_meal)}</span>
       <span class="verified">verified {m.last_verified}</span>
     </div>
+
+    {#if rating?.available && rating.rating != null}
+      <div class="rating">
+        <span class="stars" aria-hidden="true">{stars(rating.rating)}</span>
+        <span class="rating-num">{rating.rating.toFixed(1)}</span>
+        {#if rating.count != null}<span class="rating-count">({rating.count.toLocaleString()})</span>{/if}
+        {#if rating.highlight}<span class="rating-quote">“{rating.highlight}”</span>{/if}
+      </div>
+    {/if}
 
     <div class="facilities">
       <span class="kicker kicker-muted">Facilities</span>
@@ -183,6 +210,12 @@
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
+
+  .rating { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; }
+  .rating .stars { color: var(--accent); font-size: 0.92rem; letter-spacing: 0.04em; }
+  .rating-num { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--text-primary); }
+  .rating-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); }
+  .rating-quote { flex-basis: 100%; font-family: var(--font-body); font-size: 0.78rem; font-style: italic; color: var(--text-secondary); line-height: 1.4; }
 
   .facilities { display: flex; flex-direction: column; gap: 0.4rem; }
   .fac-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }

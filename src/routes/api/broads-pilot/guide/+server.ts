@@ -84,7 +84,10 @@ export const POST: RequestHandler = async ({ request }) => {
   const activities: string[] = Array.isArray(objectives?.activities) ? objectives.activities : [];
   const freeText: string = (objectives?.freeText ?? followUp ?? '').toString().slice(0, 300);
   const durationHours: number | null = objectives?.durationHours ?? null;
-  const days: number = Math.max(1, Math.min(7, objectives?.days ?? 1));
+  const days: number = Math.max(1, Math.min(10, objectives?.days ?? 1));
+  const multiDay = days > 1;
+  const nights = Math.max(1, days - 1);
+  const perDayHours = multiDay ? (durationHours ?? 4) : (durationHours ?? 6);
 
   // objective POI kinds
   const objKinds = new Set<string>();
@@ -92,8 +95,9 @@ export const POST: RequestHandler = async ({ request }) => {
   const ft = freeText.toLowerCase();
   for (const [word, kinds] of Object.entries(ACTIVITY_KINDS)) if (ft.includes(word)) kinds.forEach((k) => objKinds.add(k));
 
-  // reachability for this boat from the origin
-  const budgetS = (durationHours ? durationHours * 3600 * 1.25 : daylightHours(new Date(), 52.62, 1.5) * 3600);
+  // reachability for this boat. Multi-day reaches the whole network (sequenced
+  // over days); single-day caps at the day's budget.
+  const budgetS = multiDay ? 12 * 3600 : (durationHours ? durationHours * 3600 * 1.25 : daylightHours(new Date(), 52.62, 1.5) * 3600);
   const reach = computeReachable(d.graph, d.restrictions, boat, origin.id, budgetS);
 
   // candidate moorings (reachable), nearest first, with relevant nearby POIs
@@ -102,7 +106,7 @@ export const POST: RequestHandler = async ({ request }) => {
     .filter((m) => m.node_id && reach.has(m.node_id) && m.node_id !== origin.id)
     .map((m) => ({ m, r: reach.get(m.node_id!)! }))
     .sort((a, b) => a.r.time_s - b.r.time_s)
-    .slice(0, 18)
+    .slice(0, multiDay ? 30 : 18)
     .map(({ m, r }) => {
       const near = (d.mooringPois[m.id] ?? [])
         .map((x) => ({ poi: poiById.get(x.poi_id)!, dist_m: x.dist_m }))
@@ -129,7 +133,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return `* ${m.id} | ${m.name} [${TIER_LABEL[m.tier]}, ${charge}, ${facils}] — ${Math.round(time_s / 60)} min / ${(dist_m / 1609).toFixed(1)} mi from start\n${pts || '    - (no notable POIs catalogued nearby)'}`;
   }).join('\n');
 
-  const system = `You are a friendly, expert Norfolk Broads cruising concierge planning a boating itinerary. You ONLY choose stops from the provided REACHABLE moorings (each is already confirmed passable for this boat). Match the skipper's objectives. Keep total cruising time within their budget. The day(s) end MOORED at the final stop — you do NOT return to base. Be specific and warm but concise. For each stop explain WHY it fits their goals, and reference the specific nearby POIs (by id) that satisfy each objective. Prefer a sensible geographic progression (don't zig-zag). If they want a LONG or family walk, pick a walk of 5+ miles (walk lengths are shown like "6mi"); for a gentle stroll pick a shorter one.`;
+  const system = `You are a friendly, expert Norfolk Broads cruising concierge planning a boating itinerary. You ONLY choose stops from the provided REACHABLE moorings (each is already confirmed passable for this boat). Match the skipper's objectives. Keep each day's cruising within the daily budget. A single-day trip ends moored at the final stop; a MULTI-DAY trip is a ROUND TRIP that returns to base on the final day. Be specific and warm but concise. For each stop explain WHY it fits their goals, and reference the specific nearby POIs (by id) that satisfy each objective. Prefer a sensible geographic progression (don't zig-zag). If they want a LONG or family walk, pick a walk of 5+ miles (walk lengths are shown like "6mi"); for a gentle stroll pick a shorter one.`;
 
   const user = `SKIPPER'S OBJECTIVES:
 - Boat: ${boat.name} (air draft ${boat.air_draft_m} m, sleeps ${boat.sleeps})
@@ -140,21 +144,25 @@ export const POST: RequestHandler = async ({ request }) => {
 ${weather ? `- Weather now at the start: ${weather.tempC}°C, ${weather.description}, wind ${weather.windMph} mph ${weather.windDir}${weather.precip > 0 ? ', some rain' : ''}` : ''}
 ${previousPlan ? `\nThis REVISES a previous plan. Previous stops: ${(previousPlan.stops ?? []).map((s: any) => s.name).join(' → ')}. Apply the skipper's change: "${followUp}".` : ''}
 
-REACHABLE MOORINGS (choose ${days > 1 ? `${days + 1}-${days + 3}` : '1-4'} as ordered stops; ids in [brackets] for POIs):
+${multiDay
+  ? `PLAN A ${days}-DAY ROUND TRIP from base. Choose ONE overnight mooring per night (${nights} nights), in a sensible loop, each leg about ${perDayHours} h cruising from the previous, so you can cruise back to base on the final morning — don't wander so far you can't get back in time. Tag each stop with its night number ("day": 1..${nights}).`
+  : `Choose 1-4 ordered stops for the day (you stay moored at the last one).`}
+
+REACHABLE MOORINGS (ids in [brackets] for POIs):
 ${catalog}
 
 Return JSON exactly:
 {
-  "summary": "2-3 sentence friendly overview of the plan and why it suits them${weather ? ', mentioning the weather if relevant' : ''}",
+  "summary": "2-3 sentence friendly overview of the ${multiDay ? `${days}-day trip` : 'day'} and why it suits them${weather ? ', mentioning the weather if relevant' : ''}",
   "stops": [
-    { "mooringId": "<one of the mooring ids above>", "why": "why this stop fits their goals", "activities": [ { "poiId": "<a POI id near this mooring>", "what": "what to do there and why it matches an objective" } ] }
+    { "mooringId": "<one of the mooring ids above>", ${multiDay ? `"day": <night number 1..${nights}>, ` : ''}"why": "why this stop fits their goals", "activities": [ { "poiId": "<a POI id near this mooring>", "what": "what to do there and why it matches an objective" } ] }
   ],
   "tips": ["1-3 short practical tips (tide/weather/timing/dog/charges)"]
 }`;
 
   let llm: any;
   try {
-    llm = await jsonCompletion<{ summary: string; stops: { mooringId: string; why: string; activities: { poiId: string; what: string }[] }[]; tips: string[] }>(system, user, { temperature: 0.6, maxTokens: 3500 });
+    llm = await jsonCompletion<{ summary: string; stops: { mooringId: string; day?: number; why: string; activities: { poiId: string; what: string }[] }[]; tips: string[] }>(system, user, { temperature: 0.6, maxTokens: multiDay ? 4500 : 3500 });
   } catch (e: any) {
     return json({ error: 'The planner is busy — please try again. ' + (e?.message ?? '') }, { status: 503 });
   }
@@ -162,46 +170,60 @@ Return JSON exactly:
   // ---- validate + enrich with REAL legs + compliance ----
   const candById = new Map(candidates.map((c) => [c.m.id, c]));
   const rawStops: any[] = Array.isArray(llm?.stops) ? llm.stops : [];
-  const chosen = rawStops.map((s) => candById.get(s?.mooringId)).filter(Boolean);
-  if (!chosen.length) return json({ error: 'No suitable stops found within your time budget — try a longer trip or different goals.' }, { status: 200 });
+  const valid = rawStops.map((s) => ({ s, c: candById.get(s?.mooringId) })).filter((x) => !!x.c);
+  if (!valid.length) return json({ error: 'No suitable stops found within your time budget — try a longer trip or different goals.' }, { status: 200 });
+  const ordered = multiDay ? [...valid].sort((a, b) => ((a.s.day ?? 1) - (b.s.day ?? 1))) : valid;
+  const daylight = daylightHours(new Date(), 52.62, 1.5);
+  const originLabel = origin.id === 'staithe-stalham' ? 'Stalham (base)' : 'base';
 
   let fromNode = origin.id;
-  let totalTime = 0, totalDist = 0, totalFuel = 0;
-  let anyBreydon = false;
+  let totalTime = 0, totalDist = 0, totalFuel = 0, anyBreydon = false;
   const warnings: string[] = [];
-  const stops = rawStops.map((s) => {
-    const c = candById.get(s.mooringId);
-    if (!c) return null;
-    const m = c.m;
-    const leg = computeRoute(d.graph, d.restrictions, boat, fromNode, m.node_id!);
-    let legOut = null as any;
-    if (leg.edges.length) {
-      const fuel = routeFuel(leg);
-      const marginal = leg.bridges.filter((b) => b.verdict === 'marginal').map((b) => b.bridge.name);
-      legOut = { distance_m: leg.distance_m, time_s: leg.time_s, fuel_l: +fuel.litres.toFixed(1), fuel_cost: +fuel.cost.toFixed(2), crossesBreydon: leg.crossesBreydon, marginalBridges: marginal };
-      totalTime += leg.time_s; totalDist += leg.distance_m; totalFuel += fuel.litres;
-      if (leg.crossesBreydon) anyBreydon = true;
-      fromNode = m.node_id!;
-    }
+  const dayOver = new Set<number>();
+  const legFor = (toNode: string) => {
+    const leg = computeRoute(d.graph, d.restrictions, boat, fromNode, toNode);
+    if (!leg.edges.length) return { leg, out: null as any };
+    const fuel = routeFuel(leg);
+    totalTime += leg.time_s; totalDist += leg.distance_m; totalFuel += fuel.litres;
+    if (leg.crossesBreydon) anyBreydon = true;
+    fromNode = toNode;
+    return { leg, out: { distance_m: leg.distance_m, time_s: leg.time_s, fuel_l: +fuel.litres.toFixed(1), fuel_cost: +fuel.cost.toFixed(2), crossesBreydon: leg.crossesBreydon, marginalBridges: leg.bridges.filter((bb) => bb.verdict === 'marginal').map((bb) => bb.bridge.name) } };
+  };
+
+  const stops: any[] = ordered.map(({ s, c }, i) => {
+    const m = c!.m;
+    const { leg, out } = legFor(m.node_id!);
+    const day = multiDay ? Math.max(1, Math.min(nights, s.day ?? i + 1)) : 1;
+    if (multiDay && out && leg.time_s > daylight * 3600) dayOver.add(day);
     const acts = (Array.isArray(s.activities) ? s.activities : [])
       .map((a: any) => { const p = poiById.get(a?.poiId); return p ? { poiId: p.id, name: p.name, kind: p.kind, dog: p.dog_friendly ?? null, dist_m: (d.mooringPois[m.id] ?? []).find((x) => x.poi_id === p.id)?.dist_m ?? null, length_mi: p.length_mi ?? null, what: String(a.what ?? '').slice(0, 240), opening_hours: p.opening_hours ?? null } : null; })
       .filter(Boolean);
     const facilities = Object.entries(m.facilities).filter(([, v]) => v).map(([k]) => k);
     return {
-      mooringId: m.id, name: m.name, lat: m.lat, lng: m.lng, nodeId: m.node_id,
-      tier: TIER_LABEL[m.tier], why: String(s.why ?? '').slice(0, 320), activities: acts,
-      leg: legOut,
+      mooringId: m.id, name: m.name, lat: m.lat, lng: m.lng, nodeId: m.node_id, day, isReturn: false,
+      tier: TIER_LABEL[m.tier], why: String(s.why ?? '').slice(0, 320), activities: acts, leg: out,
       mooring: {
         charge: m.rate.unit === 'free' || (m.rate.amount === 0 && m.rate.unit !== 'metre_night') ? 'Free (24h)' : `£${m.rate.amount}/${m.rate.unit.replace('_', ' ')}${m.waived_with_meal ? ' (often waived with a meal)' : ''}`,
         facilities, shorePower: m.facilities.shore_power, capacityCaveat: m.capacity_caveat, lastVerified: m.last_verified,
       },
     };
-  }).filter(Boolean);
+  });
+
+  // multi-day: cruise back to base on the final day
+  if (multiDay && fromNode !== origin.id) {
+    const { out } = legFor(origin.id);
+    stops.push({
+      mooringId: '__return__', name: `Return to ${originLabel}`, lat: origin.lat, lng: origin.lng, nodeId: origin.id, day: days, isReturn: true,
+      tier: 'Home base', why: 'Cruise back so the boat is at base in good time on the final morning.', activities: [], leg: out,
+      mooring: { charge: '—', facilities: [], shorePower: false, capacityCaveat: false, lastVerified: '' },
+    });
+    if (!out) warnings.push("The return to base couldn't be routed automatically — double-check the last leg.");
+  }
 
   // compliance warnings
-  const daylight = daylightHours(new Date(), 52.62, 1.5);
-  if (totalTime > daylight * 3600) warnings.push(`This is more than today's daylight (~${daylight.toFixed(1)} h) — hire boats can't cruise after dark, so split it across days and moor overnight.`);
-  if (durationHours && totalTime > durationHours * 3600 * 1.15) warnings.push(`Total cruising is ~${(totalTime / 3600).toFixed(1)} h, a bit over your ${durationHours} h budget.`);
+  if (!multiDay && totalTime > daylight * 3600) warnings.push(`This is more than today's daylight (~${daylight.toFixed(1)} h) — split it across days and moor overnight.`);
+  if (multiDay && dayOver.size) warnings.push(`Day ${[...dayOver].sort((a, b) => a - b).join(', ')} has more cruising than fits a day's daylight (~${daylight.toFixed(1)} h) — ease the route or add a night.`);
+  if (durationHours && !multiDay && totalTime > durationHours * 3600 * 1.15) warnings.push(`Total cruising is ~${(totalTime / 3600).toFixed(1)} h, a bit over your ${durationHours} h budget.`);
   if (anyBreydon) warnings.push(breydonAdvice());
   if (weather && weather.windMph >= 16) warnings.push(`It's breezy (${weather.windMph} mph ${weather.windDir}) — open water like Breydon, Hickling and Barton Broad will be choppy; sheltered rivers are more comfortable.`);
   if (weather && weather.precip > 0.2) warnings.push('Rain about — pack waterproofs and plan an indoor pub or two.');
@@ -211,7 +233,7 @@ Return JSON exactly:
       summary: String(llm.summary ?? '').slice(0, 600),
       tips: (Array.isArray(llm.tips) ? llm.tips : []).slice(0, 4).map((t: any) => String(t).slice(0, 200)),
       weather,
-      stops,
+      stops, days,
       totals: { distance_m: Math.round(totalDist), time_s: Math.round(totalTime), fuel_l: +totalFuel.toFixed(1) },
       warnings,
       boat: { name: boat.name, air_draft_m: boat.air_draft_m },

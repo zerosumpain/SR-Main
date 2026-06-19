@@ -16,6 +16,8 @@ export interface PlanStop {
   lng: number;
   nodeId: string;
   tier: string;
+  day: number;
+  isReturn?: boolean;
   why: string;
   activities: PlanActivity[];
   leg: {
@@ -30,6 +32,7 @@ export interface PlanStop {
 }
 export interface Plan {
   summary: string;
+  days?: number;
   tips: string[];
   weather: { tempC: number; windMph: number; windDir: string; description: string; precip: number; isDay: boolean } | null;
   stops: PlanStop[];

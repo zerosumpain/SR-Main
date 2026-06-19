@@ -11,11 +11,16 @@
     { key: 'pubs', label: 'Pubs' },
     { key: 'walks', label: 'Walks' },
     { key: 'attractions', label: 'Attractions' },
+    { key: 'services', label: 'Services' },
+    { key: 'speed', label: 'Speed limits' },
   ];
 
   function toggle(key: LayerKey) {
     app.layers = { ...app.layers, [key]: !app.layers[key] };
   }
+
+  // Only advertise fuel in the Services hint when we actually have fuel points.
+  const hasFuel = $derived((app.data?.pois ?? []).some((p) => p.kind === 'fuel'));
 </script>
 
 <section class="layers" aria-label="Map layers">
@@ -40,6 +45,19 @@
       Dog-friendly only
     </button>
   </div>
+
+  {#if app.layers.speed}
+    <div class="legend" aria-label="Speed limit key">
+      <span class="legend-label">Speed limit</span>
+      <span class="key"><i style="background:#c62828"></i>3</span>
+      <span class="key"><i style="background:#e69500"></i>4</span>
+      <span class="key"><i style="background:#7cb342"></i>5</span>
+      <span class="key"><i style="background:#2e7d32"></i>6+ mph</span>
+    </div>
+  {/if}
+  {#if app.layers.services}
+    <p class="hint">{#if hasFuel}<strong>⛽</strong> fuel · {/if}<strong>P</strong> pump-out · <strong>W</strong> water · <strong>⚡</strong> shore power</p>
+  {/if}
 </section>
 
 <style>
@@ -87,4 +105,10 @@
     color: #fff;
     border-color: var(--accent);
   }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+  .legend-label, .hint { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .key { display: inline-flex; align-items: center; gap: 0.25rem; font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-secondary); }
+  .key i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+  .hint { margin: 0; line-height: 1.5; }
+  .hint strong { color: var(--text-secondary); }
 </style>

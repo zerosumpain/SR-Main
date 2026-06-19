@@ -4,6 +4,7 @@
   // banners of the notable things coming up (moorings, pubs, dog walks,
   // attractions), nearest first. Tap one to open its details.
   import { app } from '../lib/appState.svelte';
+  import { logbook } from '../lib/logbook.svelte';
   import { fmtDist } from '../lib/format';
 
   const KIND_ICON: Record<string, string> = { mooring: '⚓', pub: '🍺', walk: '🐾', attraction: '★', shop: '🛒', fuel: '⛽' };
@@ -21,8 +22,20 @@
         {:else if !app.moving}Moored · {app.speedMph.toFixed(1)} mph — start moving to see what's nearby
         {:else}Cruising · {app.speedMph.toFixed(1)} mph{/if}
       </span>
+      {#if logbook.recording}<span class="rec" title="Recording this cruise to your logbook">● REC</span>{/if}
       <button class="stop" onclick={() => app.stopCruise()}>Stop</button>
     </div>
+
+    {#if app.cruising && app.currentLimitMph != null}
+      <div class="zone" class:over={app.overLimit}>
+        <span class="zone-limit">⚓ {app.currentLimitMph} mph zone</span>
+        {#if app.overLimit}
+          <span class="zone-msg warn">Ease off — you're doing {app.speedMph.toFixed(1)}</span>
+        {:else}
+          <span class="zone-msg">Doing {app.speedMph.toFixed(1)} — you're fine</span>
+        {/if}
+      </div>
+    {/if}
 
     {#if app.cruising}
       {#if app.nearby.length}
@@ -70,6 +83,14 @@
     border-radius: 0.35rem; padding: 0.3rem 0.55rem; min-height: 34px; cursor: pointer;
   }
   .stop:hover { color: var(--text-primary); border-color: var(--accent); }
+  .rec { flex: 0 0 auto; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; color: #c62828; }
+
+  /* live speed-limit readout for the stretch you're on */
+  .zone { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--card-border); background: var(--card-bg); }
+  .zone.over { background: color-mix(in srgb, #c62828 12%, var(--surface-elevated)); }
+  .zone-limit { font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; color: var(--text-primary); }
+  .zone-msg { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
+  .zone-msg.warn { color: #c62828; font-weight: 700; }
 
   .near { padding: 0.5rem 0.6rem 0.6rem; }
   .near-label { display: block; font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.4rem; }

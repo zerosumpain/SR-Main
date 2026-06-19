@@ -17,6 +17,8 @@
   import PoiCard from './components/PoiCard.svelte';
   import RestrictionCallout from './components/RestrictionCallout.svelte';
   import GuideChat from './components/GuideChat.svelte';
+  import Logbook from './components/Logbook.svelte';
+  import { logbook } from './lib/logbook.svelte';
 
   let mapComp = $state<ReturnType<typeof BroadsMap> | null>(null);
   let sheetSnap = $state<'peek' | 'half' | 'full'>('peek');
@@ -24,6 +26,7 @@
   let boatSheetOpen = $state(false);
   let startMenuOpen = $state(false);
   let guideOpen = $state(false);
+  let logbookOpen = $state(false);
   let geoBusy = $state(false);
   let watchId: number | null = null;
   let firstFix = true;
@@ -44,6 +47,7 @@
 
   onMount(async () => {
     sheetSnap = window.matchMedia('(max-width: 759px)').matches ? 'peek' : 'half';
+    logbook.load();
     await app.load();
     const url = new URL(window.location.href);
     if ([...url.searchParams.keys()].length) decodePlan(app, url.searchParams);
@@ -65,9 +69,15 @@
     if ((app.mode === 'route' || app.mode === 'trip') && sheetSnap === 'peek' && window.matchMedia('(max-width: 759px)').matches) sheetSnap = 'half';
   });
 
-  // ensure the GPS watch is cleared whenever cruise stops (incl. via the banner)
+  // ensure the GPS watch is cleared (and the logbook finalised) whenever cruise
+  // stops — including via the banner's Stop button, which calls app.stopCruise()
+  // directly. logbook.stop() is idempotent (guarded on recording), so this is
+  // safe alongside the explicit call in stopWatch().
   $effect(() => {
-    if (!app.cruiseActive && watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if (!app.cruiseActive) {
+      if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      if (logbook.recording) logbook.stop();
+    }
   });
 
   function useMyLocation() {
@@ -85,15 +95,24 @@
     if (app.cruiseActive) { stopWatch(); return; }
     if (!navigator.geolocation) { app.geoError = 'Geolocation is not available on this device.'; app.cruiseActive = true; return; }
     app.startCruise();
+    logbook.start(app.boat);
     firstFix = true;
     watchId = navigator.geolocation.watchPosition(
-      (pos) => { app.geoError = null; app.setUserPosition(pos.coords); if (firstFix) { mapComp?.flyTo(pos.coords.latitude, pos.coords.longitude, 14); firstFix = false; } },
+      (pos) => {
+        app.geoError = null;
+        app.setUserPosition(pos.coords);
+        // use the app's best speed (device-reported, else derived from deltas) so
+        // the logbook's top speed matches the live readout.
+        logbook.addPoint(pos.coords.latitude, pos.coords.longitude, app.userPosition?.speed ?? pos.coords.speed ?? null);
+        if (firstFix) { mapComp?.flyTo(pos.coords.latitude, pos.coords.longitude, 14); firstFix = false; }
+      },
       (err) => { app.geoError = err.code === 1 ? 'Location permission denied — enable it to go live.' : 'Waiting for GPS signal…'; },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 },
     );
   }
   function stopWatch() {
     if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    logbook.stop();
     app.stopCruise();
   }
   onDestroy(stopWatch);
@@ -121,6 +140,9 @@
   <!-- map options (layers + theme) behind one button, both breakpoints -->
   <div class="bp-mapbtn-wrap">
     <button class="bp-mapbtn" onclick={() => (mapOptionsOpen = !mapOptionsOpen)} aria-expanded={mapOptionsOpen} aria-label="Map options">⚙ Map</button>
+    <button class="bp-mapbtn" class:rec={logbook.recording} onclick={() => (logbookOpen = true)} aria-label="Open cruise logbook">
+      {#if logbook.recording}<span class="rec-dot"></span>{/if}📖 Log{#if logbook.entries.length}<span class="log-count">{logbook.entries.length}</span>{/if}
+    </button>
     {#if mapOptionsOpen}
       <div class="bp-mapopts">
         <ThemeToggle />
@@ -209,6 +231,9 @@
   <!-- AI day planner -->
   {#if guideOpen}<GuideChat onClose={() => (guideOpen = false)} onApply={applyGuidePlan} />{/if}
 
+  <!-- cruise logbook -->
+  {#if logbookOpen}<Logbook onClose={() => (logbookOpen = false)} />{/if}
+
   <!-- first-run onboarding -->
   {#if !app.loading && !app.onboarded}
     <div class="bp-onboard">
@@ -234,7 +259,11 @@
 
   /* map options button + popover (top-right) */
   .bp-mapbtn-wrap { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 600; display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
-  .bp-mapbtn { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); }
+  .bp-mapbtn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); }
+  .bp-mapbtn.rec { border-color: #c62828; }
+  .bp-mapbtn .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #c62828; animation: bp-rec 1.3s ease-out infinite; }
+  @keyframes bp-rec { 0% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.5); } 100% { box-shadow: 0 0 0 6px rgba(198, 40, 40, 0); } }
+  .bp-mapbtn .log-count { background: var(--accent); color: #fff; border-radius: 999px; font-size: 0.58rem; padding: 0.05rem 0.35rem; min-width: 1.1rem; text-align: center; }
   .bp-mapopts { display: flex; flex-direction: column; gap: 0.5rem; width: min(88vw, 22rem); }
 
   /* FAB stack (bottom-right, thumb zone) */

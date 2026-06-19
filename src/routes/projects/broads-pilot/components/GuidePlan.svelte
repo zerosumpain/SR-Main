@@ -4,9 +4,17 @@
   // and mooring compliance), totals, compliance warnings and tips.
   import { app } from '../lib/appState.svelte';
   import { fmtDist, fmtTime } from '../lib/format';
-  import type { Plan } from '../lib/guide-types';
+  import type { Plan, PlanStop } from '../lib/guide-types';
 
   let { plan, onApply }: { plan: Plan; onApply: () => void } = $props();
+
+  const isMulti = $derived(!!plan.days && plan.days > 1 && plan.stops.some((s) => s.day));
+  const dayList = $derived(isMulti ? [...new Set(plan.stops.map((s) => s.day))].sort((a, b) => a - b) : []);
+  const dayStops = (day: number) => plan.stops.filter((s) => s.day === day);
+  const dayTotals = (day: number) => {
+    const ss = dayStops(day);
+    return { t: ss.reduce((a, s) => a + (s.leg?.time_s ?? 0), 0), d: ss.reduce((a, s) => a + (s.leg?.distance_m ?? 0), 0) };
+  };
 
   const KIND_ICON: Record<string, string> = { mooring: '⚓', pub: '🍺', walk: '🐾', attraction: '★', shop: '🛒', fishing: '🎣', swim: '🏊', fuel: '⛽' };
   const FACIL_LABEL: Record<string, string> = { water: 'Water', shore_power: 'Shore power', pump_out: 'Pump-out', toilets: 'Toilets', showers: 'Showers', refuse: 'Refuse' };
@@ -27,43 +35,43 @@
     </div>
   {/if}
 
-  <ol class="stops">
-    {#each plan.stops as s, i (s.mooringId)}
-      <li class="stop">
-        <div class="stop-head">
-          <span class="num">{i + 1}</span>
-          <div class="stop-title">
-            <span class="name">{s.name}</span>
-            <span class="tier">{s.tier}</span>
-          </div>
-          {#if s.leg}
-            <span class="leg">{fmtTime(s.leg.time_s)} · {fmtDist(s.leg.distance_m, app.units)} · {s.leg.fuel_l} L</span>
-          {/if}
+  {#snippet stopItem(s: PlanStop, badge: string)}
+    <li class="stop">
+      <div class="stop-head">
+        <span class="num" class:home={s.isReturn}>{badge}</span>
+        <div class="stop-title">
+          <span class="name">{s.name}</span>
+          <span class="tier">{s.tier}</span>
         </div>
-
-        {#if s.leg?.crossesBreydon}<p class="flag tidal">⚓ This leg crosses Breydon Water — time it for slack water (~1 h after low water at Yarmouth).</p>{/if}
-        {#if s.leg?.marginalBridges?.length}<p class="flag amber">▲ Tight clearance at {s.leg.marginalBridges.join(', ')} — check the gauge board.</p>{/if}
-
-        <p class="why">{s.why}</p>
-
-        {#if s.activities.length}
-          <ul class="acts">
-            {#each s.activities as a (a.poiId)}
-              <li>
-                <button class="act" onclick={() => app.select({ kind: 'poi', id: a.poiId })} title="Open details">
-                  <span class="ic">{KIND_ICON[a.kind] ?? '•'}</span>
-                  <span class="act-body">
-                    <span class="act-name">{a.name}{a.dog ? ' · 🐾' : ''}{a.kind === 'walk' && a.length_mi ? ` · ${a.length_mi} mi route` : ''}{a.dist_m != null ? ` · ${fmtDist(a.dist_m, app.units)} away` : ''}</span>
-                    <span class="act-what">{a.what}</span>
-                    {#if a.opening_hours}<span class="act-hours">Hours: {a.opening_hours}</span>{/if}
-                  </span>
-                  <span class="chev">›</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
+        {#if s.leg}
+          <span class="leg">{fmtTime(s.leg.time_s)} · {fmtDist(s.leg.distance_m, app.units)} · {s.leg.fuel_l} L</span>
         {/if}
+      </div>
 
+      {#if s.leg?.crossesBreydon}<p class="flag tidal">⚓ This leg crosses Breydon Water — time it for slack water (~1 h after low water at Yarmouth).</p>{/if}
+      {#if s.leg?.marginalBridges?.length}<p class="flag amber">▲ Tight clearance at {s.leg.marginalBridges.join(', ')} — check the gauge board.</p>{/if}
+
+      <p class="why">{s.why}</p>
+
+      {#if s.activities.length}
+        <ul class="acts">
+          {#each s.activities as a (a.poiId)}
+            <li>
+              <button class="act" onclick={() => app.select({ kind: 'poi', id: a.poiId })} title="Open details">
+                <span class="ic">{KIND_ICON[a.kind] ?? '•'}</span>
+                <span class="act-body">
+                  <span class="act-name">{a.name}{a.dog ? ' · 🐾' : ''}{a.kind === 'walk' && a.length_mi ? ` · ${a.length_mi} mi route` : ''}{a.dist_m != null ? ` · ${fmtDist(a.dist_m, app.units)} away` : ''}</span>
+                  <span class="act-what">{a.what}</span>
+                  {#if a.opening_hours}<span class="act-hours">Hours: {a.opening_hours}</span>{/if}
+                </span>
+                <span class="chev">›</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      {#if !s.isReturn}
         <div class="mooring-info">
           <span class="mi"><strong>{s.mooring.charge}</strong></span>
           {#if s.mooring.shorePower}<span class="mi pill">⚡ Shore power</span>{/if}
@@ -71,9 +79,27 @@
           {#if s.mooring.capacityCaveat}<span class="mi caveat">small / first-come</span>{/if}
           <span class="mi verified">verified {s.mooring.lastVerified}</span>
         </div>
-      </li>
+      {/if}
+    </li>
+  {/snippet}
+
+  {#if isMulti}
+    {#each dayList as day (day)}
+      <div class="day-group">
+        <div class="day-head">
+          <span class="day-label">Day {day}{day === plan.days ? ' · home' : ''}</span>
+          {#if dayTotals(day).t}<span class="day-meta">{fmtTime(dayTotals(day).t)} · {fmtDist(dayTotals(day).d, app.units)}</span>{/if}
+        </div>
+        <ol class="stops">
+          {#each dayStops(day) as s (s.mooringId)}{@render stopItem(s, s.isReturn ? '🏁' : String(day))}{/each}
+        </ol>
+      </div>
     {/each}
-  </ol>
+  {:else}
+    <ol class="stops">
+      {#each plan.stops as s, i (s.mooringId)}{@render stopItem(s, String(i + 1))}{/each}
+    </ol>
+  {/if}
 
   <div class="totals">
     <span><span class="tl">Total cruising</span><strong>{fmtTime(plan.totals.time_s)}</strong></span>
@@ -100,6 +126,12 @@
   .warn { margin: 0; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: color-mix(in srgb, var(--warn) 14%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 0.4rem; padding: 0.45rem 0.6rem; }
 
   .stops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .day-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .day-group + .day-group { margin-top: 0.6rem; }
+  .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; border-bottom: 1.5px solid var(--accent); padding-bottom: 0.2rem; }
+  .day-label { font-family: var(--font-display); text-transform: uppercase; font-size: 0.82rem; letter-spacing: 0.03em; color: var(--accent); }
+  .day-meta { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
+  .num.home { background: #1a1008; }
   .stop { border: 1px solid var(--card-border); border-radius: 0.5rem; padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.4rem; }
   .stop-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 0.72rem; display: grid; place-items: center; }

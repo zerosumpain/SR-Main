@@ -8,9 +8,9 @@
 
   let { onClose, onApply }: { onClose: () => void; onApply: (stopNodeIds: string[]) => void } = $props();
 
-  const DURATIONS = [
-    { label: 'Short hop · ~1 hr', value: 1 }, { label: 'Half day · 2–3 hrs', value: 2.5 },
-    { label: 'Most of the day · ~4 hrs', value: 4 }, { label: 'Full day', value: 7 }, { label: 'Not fussed', value: null },
+  const TRIP = [
+    { label: 'Just today', days: 1 }, { label: 'A weekend · 2 days', days: 2 },
+    { label: 'A few days · 3–4', days: 4 }, { label: 'A full week · 7 days', days: 7 },
   ];
   const ACTIVITIES = [
     { label: '🐾 Dog walk', value: 'dog_walk' }, { label: '🍺 Pub lunch', value: 'pub' }, { label: '🎣 Fishing', value: 'fishing' },
@@ -19,8 +19,8 @@
 
   type Phase = 'duration' | 'activities' | 'free' | 'planning' | 'done';
   let phase = $state<Phase>('duration');
-  let durationHours = $state<number | null>(null);
-  let durationLabel = $state('');
+  let days = $state(1);
+  let tripLabel = $state('');
   let activities = $state<string[]>([]);
   let freeText = $state('');
   let followUp = $state('');
@@ -28,9 +28,9 @@
   let error = $state<string | null>(null);
   let log = $state<{ role: 'bot' | 'me'; text: string }[]>([]);
 
-  function pick(d: typeof DURATIONS[number]) {
-    durationHours = d.value; durationLabel = d.label;
-    log = [...log, { role: 'me', text: d.label }];
+  function pickTrip(t: typeof TRIP[number]) {
+    days = t.days; tripLabel = t.label;
+    log = [...log, { role: 'me', text: t.label }];
     phase = 'activities';
   }
   function toggleAct(v: string) { activities = activities.includes(v) ? activities.filter((a) => a !== v) : [...activities, v]; }
@@ -51,7 +51,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           boat: app.boat?.slug, originNode: app.origin?.nodeId ?? 'staithe-stalham',
-          objectives: { durationHours, activities, freeText: freeText.trim(), days: 1 },
+          objectives: { days, activities, freeText: freeText.trim() },
           followUp: followUpText, previousPlan: followUpText ? plan : undefined,
         }),
       });
@@ -88,12 +88,12 @@
     <div class="guide-body">
       <p class="bubble bot">Hi! I'll plan a day for your <strong>{app.boat?.name ?? 'boat'}</strong> from <strong>{app.origin?.label ?? 'your start'}</strong>. A couple of quick questions…</p>
 
-      <p class="bubble bot">How long do you want to be on the water today?</p>
+      <p class="bubble bot">How long is your trip?</p>
       {#each log as m}<p class="bubble {m.role}">{m.text}</p>{/each}
 
       {#if phase === 'duration'}
         <div class="chips">
-          {#each DURATIONS as d}<button class="chip" onclick={() => pick(d)}>{d.label}</button>{/each}
+          {#each TRIP as t}<button class="chip" onclick={() => pickTrip(t)}>{t.label}</button>{/each}
         </div>
       {:else if phase === 'activities'}
         <p class="bubble bot">What are you in the mood for? Pick any — or none for a relaxed cruise.</p>

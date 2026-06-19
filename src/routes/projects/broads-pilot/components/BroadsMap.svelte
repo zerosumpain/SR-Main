@@ -20,6 +20,11 @@
   const POI_COLOR: Record<string, string> = { pub: '#b8860b', walk: '#2e7d32', attraction: '#7b4fb0', shop: '#8d6e63', fuel: '#555' };
   const BASE = ['network', 'zones', 'moorings', 'pois', 'restrictions', 'origin'];
 
+  // Speed-limit overlay: higher limit = greener (more open water), slower = redder.
+  function limitColor(mph: number): string {
+    return mph >= 6 ? '#2e7d32' : mph >= 5 ? '#7cb342' : mph >= 4 ? '#e69500' : mph >= 3 ? '#d2602a' : '#c62828';
+  }
+
   onMount(() => {
     L = (window as any).L;
     if (!L || !mapEl) return;
@@ -85,6 +90,11 @@
         if (t === Infinity) L.polyline(e.geometry, { color: '#6d4c41', weight: 1, opacity: 0.15 }).addTo(groups.network);
         else L.polyline(e.geometry, { color: timeBand(t), weight: 3.4, opacity: 0.85 }).addTo(groups.network);
       }
+    } else if (app.layers.speed) {
+      // colour the channel by its posted speed limit; tap a stretch for the number.
+      for (const e of data.graph.edges)
+        L.polyline(e.geometry, { color: limitColor(e.limit_mph), weight: 3.6, opacity: 0.9 })
+          .bindTooltip(`${e.limit_mph} mph`, { sticky: true }).addTo(groups.network);
     } else {
       for (const e of data.graph.edges)
         L.polyline(e.geometry, { color: '#6d4c41', weight: 1.6, opacity: 0.3 }).addTo(groups.network);
@@ -110,8 +120,10 @@
           .addTo(groups.moorings);
     }
 
-    // --- POIs (pubs / walks / attractions), per-kind toggle + dog filter ---
+    // --- POIs (pubs / walks / attractions), per-kind toggle + dog filter.
+    // Fuel is a practical service → rendered in the Services block below. ---
     for (const p of data.pois) {
+      if (p.kind === 'fuel') continue;
       const on = p.kind === 'pub' ? app.layers.pubs : p.kind === 'walk' ? app.layers.walks : app.layers.attractions;
       if (!shown(on)) continue;
       if (app.dogOnly && (p.kind === 'pub' || p.kind === 'walk') && p.dog_friendly === false) continue;
@@ -120,6 +132,30 @@
         .bindTooltip(p.name, { direction: 'top' })
         .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'poi', id: p.id }); })
         .addTo(groups.pois);
+    }
+
+    // --- practical SERVICES: fuel pumps + moorings with pump-out / water /
+    // shore power, badged so you can see at a glance where to top up ---
+    if (app.layers.services) {
+      for (const p of data.pois) {
+        if (p.kind !== 'fuel') continue;
+        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin">⛽</span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
+          .bindTooltip(`${p.name} — fuel`, { direction: 'top' })
+          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'poi', id: p.id }); })
+          .addTo(groups.pois);
+      }
+      for (const m of data.moorings) {
+        const svc: string[] = [];
+        if (m.facilities.pump_out) svc.push('P');
+        if (m.facilities.water) svc.push('W');
+        if (m.facilities.shore_power) svc.push('⚡');
+        if (!svc.length) continue;
+        const tip = [m.facilities.pump_out && 'pump-out', m.facilities.water && 'water', m.facilities.shore_power && 'shore power'].filter(Boolean).join(' · ');
+        L.marker([m.lat, m.lng], { icon: L.divIcon({ className: 'bp-svc', html: `<span class="bp-svc-badge">${svc.join('')}</span>`, iconSize: [0, 0], iconAnchor: [-7, 18] }) })
+          .bindTooltip(`${m.name} — ${tip}`, { direction: 'top' })
+          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'mooring', id: m.id }); })
+          .addTo(groups.pois);
+      }
     }
 
     // --- bridges (verdict-coloured) + the lock ---
@@ -243,6 +279,9 @@
   :global(.bp-schematic-tiles) { filter: grayscale(0.7) sepia(0.25) brightness(1.12) contrast(0.85); }
   :global(.bp-bridge-pin) { color: var(--c); font-size: 15px; line-height: 1; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
   :global(.bp-lock-pin) { color: #4527a0; font-size: 15px; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
+  /* practical services: fuel glyph + mooring service badge */
+  :global(.bp-svc-pin) { font-size: 15px; line-height: 1; filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff); }
+  :global(.bp-svc-badge) { display: inline-block; white-space: nowrap; background: #00695c; color: #fff; font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 4px; border-radius: 4px; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(26, 16, 8, 0.5); }
   /* START marker: a high-contrast bullseye with a pulsing ring + permanent label. */
   :global(.bp-start-core) {
     position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
