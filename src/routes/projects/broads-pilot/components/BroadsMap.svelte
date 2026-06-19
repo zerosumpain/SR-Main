@@ -135,10 +135,15 @@
       lm.setOpacity(o);
     }
 
-    // --- origin ---
+    // --- origin (START) — deliberately prominent: pulsing bullseye + a
+    // permanent label, so it never gets lost in the network/markers ---
     if (app.origin)
-      L.marker([app.origin.lat, app.origin.lng], { icon: L.divIcon({ className: 'bp-origin', html: '<span class="bp-origin-pin">◉</span>', iconSize: [22, 22] }), zIndexOffset: 1000 })
-        .bindTooltip(app.origin.label, { direction: 'top' }).addTo(groups.origin);
+      L.marker([app.origin.lat, app.origin.lng], {
+        icon: L.divIcon({ className: 'bp-start', html: '<div class="bp-start-ring"></div><div class="bp-start-core"></div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
+        zIndexOffset: 2000, interactive: false,
+      })
+        .bindTooltip(`Start · ${app.origin.label}`, { permanent: true, direction: 'top', offset: [0, -12], className: 'bp-start-tip' })
+        .addTo(groups.origin);
   }
 
   // Draw just the planned route (cheap; updates as the destination changes).
@@ -150,6 +155,16 @@
       L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.55, lineCap: 'round' }).addTo(groups.route);
     for (const e of app.route.edges)
       L.polyline(e.geometry, { color: '#ffcf4a', weight: 3.4, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
+    // destination flag + permanent label at the route end node
+    const dnId = app.destinationNode;
+    const dn = dnId ? app.data?.graph.nodes.find((n) => n.id === dnId) : null;
+    if (dn)
+      L.marker([dn.lat, dn.lng], {
+        icon: L.divIcon({ className: 'bp-dest', html: '<div class="bp-dest-pin">⚑</div>', iconSize: [30, 30], iconAnchor: [6, 26] }),
+        zIndexOffset: 1900, interactive: false,
+      })
+        .bindTooltip(`Destination · ${app.nodeLabel(dnId!)}`, { permanent: true, direction: 'top', offset: [6, -22], className: 'bp-dest-tip' })
+        .addTo(groups.route);
   }
 
   // effects: applyTheme only on theme change (no tile flicker on layer toggles);
@@ -171,7 +186,27 @@
   :global(.bp-schematic-tiles) { filter: grayscale(0.7) sepia(0.25) brightness(1.12) contrast(0.85); }
   :global(.bp-bridge-pin) { color: var(--c); font-size: 15px; line-height: 1; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
   :global(.bp-lock-pin) { color: #4527a0; font-size: 15px; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
-  :global(.bp-origin-pin) { color: #c4570a; font-size: 20px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+  /* START marker: a high-contrast bullseye with a pulsing ring + permanent label. */
+  :global(.bp-start-core) {
+    position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    background: #fff; border: 3px solid #1a1008; border-radius: 50%; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.55);
+  }
+  :global(.bp-start-core)::after { content: ''; position: absolute; inset: 3px; background: var(--accent); border-radius: 50%; }
+  :global(.bp-start-ring) {
+    position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    border: 2.5px solid var(--accent); border-radius: 50%; animation: bp-pulse 1.8s ease-out infinite;
+  }
+  @keyframes bp-pulse { 0% { transform: scale(0.7); opacity: 0.9; } 100% { transform: scale(3); opacity: 0; } }
+  :global(.bp-start-tip), :global(.bp-dest-tip) {
+    border: none; font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; box-shadow: 0 2px 6px rgba(26, 16, 8, 0.3);
+  }
+  :global(.bp-start-tip) { background: #1a1008; color: #fff; }
+  :global(.bp-start-tip)::before { border-top-color: #1a1008 !important; }
+  :global(.bp-dest-tip) { background: var(--accent); color: #fff; }
+  :global(.bp-dest-tip)::before { border-top-color: var(--accent) !important; }
+  :global(.bp-dest-pin) { font-size: 22px; color: var(--accent); line-height: 1; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 1px 2px rgba(0, 0, 0, 0.4); }
+  @media (prefers-reduced-motion: reduce) { :global(.bp-start-ring) { animation: none; opacity: 0.55; } }
   :global(.leaflet-container) { font-family: var(--font-mono, monospace); background: #ece3d2; }
   :global(.leaflet-tooltip) { font-family: var(--font-mono, monospace); font-size: 11px; }
 </style>
