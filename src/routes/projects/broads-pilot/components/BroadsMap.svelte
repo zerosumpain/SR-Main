@@ -11,6 +11,16 @@
   let warmTiles: any, nauticalBase: any, seamark: any, schematicTiles: any;
   const groups: Record<string, any> = {};
   let initialized = false;
+  // Canvas markers (preferCanvas) fire their click, but the native
+  // stopPropagation() we call does NOT set Leaflet's internal _stopped flag, so
+  // the map's own click (which drops a new origin pin) still fires. Guard it: a
+  // feature click sets this flag, and the map click handler skips one click.
+  let suppressOriginClick = false;
+  function featureClick(ev: any, sel: any) {
+    suppressOriginClick = true;
+    ev?.originalEvent?.stopPropagation?.();
+    app.select(sel);
+  }
 
   const TIER_COLOR: Record<string, string> = {
     ba_free: '#2e7d32', ba_staffed: '#558b2f', yacht_station: '#00695c',
@@ -42,7 +52,10 @@
     seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, opacity: 0.9 });
     schematicTiles = L.tileLayer(OSM, { maxZoom: 18, opacity: 0.12, className: 'bp-schematic-tiles', attribution: ATTR });
     for (const k of [...BASE, 'route', 'user']) groups[k] = L.layerGroup().addTo(map);
-    map.on('click', (e: any) => app.setOrigin(e.latlng.lat, e.latlng.lng, 'Dropped pin'));
+    map.on('click', (e: any) => {
+      if (suppressOriginClick) { suppressOriginClick = false; return; }
+      app.setOrigin(e.latlng.lat, e.latlng.lng, 'Dropped pin');
+    });
     initialized = true;
     applyTheme();
   });
@@ -83,8 +96,8 @@
         else
           L.polyline(e.geometry, { color: '#c4570a', weight: v === 'marginal' ? 2.5 : 3.6, opacity: 0.92 }).addTo(groups.network);
       }
-    } else if (app.showRangeRings && app.reachable) {
-      const reach = app.reachable;
+    } else if (app.showRangeRings && app.reachableActive) {
+      const reach = app.reachableActive;
       for (const e of data.graph.edges) {
         const t = Math.min(reach.get(e.from)?.time_s ?? Infinity, reach.get(e.to)?.time_s ?? Infinity);
         if (t === Infinity) L.polyline(e.geometry, { color: '#6d4c41', weight: 1, opacity: 0.15 }).addTo(groups.network);
@@ -116,7 +129,7 @@
       for (const m of data.moorings)
         L.circleMarker([m.lat, m.lng], { radius: 6, fillColor: TIER_COLOR[m.tier] ?? '#6d4c41', color: '#1a1008', weight: 1, fillOpacity: 0.95 * o, opacity: 0.9 * o })
           .bindTooltip(m.name, { direction: 'top' })
-          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'mooring', id: m.id }); })
+          .on('click', (ev: any) => featureClick(ev, { kind: 'mooring', id: m.id }))
           .addTo(groups.moorings);
     }
 
@@ -130,7 +143,7 @@
       const o = op(on);
       L.circleMarker([p.lat, p.lng], { radius: 4, fillColor: POI_COLOR[p.kind] ?? '#555', color: POI_COLOR[p.kind] ?? '#555', weight: 0, fillOpacity: 0.92 * o, opacity: 0.92 * o })
         .bindTooltip(p.name, { direction: 'top' })
-        .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'poi', id: p.id }); })
+        .on('click', (ev: any) => featureClick(ev, { kind: 'poi', id: p.id }))
         .addTo(groups.pois);
     }
 
@@ -141,7 +154,7 @@
         if (p.kind !== 'fuel') continue;
         L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin">⛽</span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
           .bindTooltip(`${p.name} — fuel`, { direction: 'top' })
-          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'poi', id: p.id }); })
+          .on('click', (ev: any) => featureClick(ev, { kind: 'poi', id: p.id }))
           .addTo(groups.pois);
       }
       for (const m of data.moorings) {
@@ -153,7 +166,7 @@
         const tip = [m.facilities.pump_out && 'pump-out', m.facilities.water && 'water', m.facilities.shore_power && 'shore power'].filter(Boolean).join(' · ');
         L.marker([m.lat, m.lng], { icon: L.divIcon({ className: 'bp-svc', html: `<span class="bp-svc-badge">${svc.join('')}</span>`, iconSize: [0, 0], iconAnchor: [-7, 18] }) })
           .bindTooltip(`${m.name} — ${tip}`, { direction: 'top' })
-          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'mooring', id: m.id }); })
+          .on('click', (ev: any) => featureClick(ev, { kind: 'mooring', id: m.id }))
           .addTo(groups.pois);
       }
     }
@@ -165,14 +178,14 @@
         const v = bridgeVerdict(b, boat);
         const mk = L.marker([b.lat, b.lng], { icon: L.divIcon({ className: 'bp-bridge', html: `<span class="bp-bridge-pin" style="--c:${VERDICT_COLOR[v]}">▲</span>`, iconSize: [18, 18] }) })
           .bindTooltip(`${b.name} — ${v}`, { direction: 'top' })
-          .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'bridge', id: b.id }); })
+          .on('click', (ev: any) => featureClick(ev, { kind: 'bridge', id: b.id }))
           .addTo(groups.restrictions);
         mk.setOpacity(o);
       }
       const lk = data.restrictions.lock;
       const lm = L.marker([lk.lat, lk.lng], { icon: L.divIcon({ className: 'bp-lock', html: '<span class="bp-lock-pin">⚿</span>', iconSize: [18, 18] }) })
         .bindTooltip(lk.name, { direction: 'top' })
-        .on('click', (ev: any) => { ev.originalEvent?.stopPropagation?.(); app.select({ kind: 'lock', id: lk.id }); })
+        .on('click', (ev: any) => featureClick(ev, { kind: 'lock', id: lk.id }))
         .addTo(groups.restrictions);
       lm.setOpacity(o);
     }

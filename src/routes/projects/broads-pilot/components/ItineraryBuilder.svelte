@@ -56,6 +56,11 @@
       {/each}
     </ol>
 
+    <p class="add-hint">
+      <span class="plus">＋</span>
+      Tap any mooring on the map to add it after <strong>{app.lastStopLabel}</strong>.
+    </p>
+
     {#if app.itinerarySummary}
       {@const s = app.itinerarySummary}
       <dl class="totals">
@@ -148,6 +153,27 @@
     flex-direction: column;
     gap: 0.4rem;
   }
+
+  .add-hint {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px dashed var(--card-border);
+    border-radius: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+  }
+  .add-hint .plus {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-weight: 700;
+    flex: 0 0 auto;
+  }
+  .add-hint strong { color: var(--text-primary); }
 
   .stop {
     display: flex;

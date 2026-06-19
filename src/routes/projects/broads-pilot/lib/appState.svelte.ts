@@ -108,6 +108,34 @@ export class AppState {
     return computeReachable(this.data.graph, this.data.restrictions, this.boat, this.origin.nodeId, this.daylightSeconds);
   });
 
+  // The node a new stop would continue FROM: the last stop in the trip, or the
+  // origin when the trip is empty. Drives "add another stop from my last
+  // location" — reachability, candidate legs and labels are all measured here.
+  lastStopNodeId = $derived(this.itinerary.length ? this.itinerary[this.itinerary.length - 1] : (this.origin?.nodeId ?? null));
+  lastStopLabel = $derived(
+    this.itinerary.length ? this.nodeLabel(this.itinerary[this.itinerary.length - 1]) : (this.origin?.label ?? 'Start'),
+  );
+
+  // Reachability from the END of the trip (so range rings / exploration answer
+  // "where can I get to next?"). Falls back to origin reachability when empty.
+  reachableFromLast = $derived.by(() => {
+    if (!this.data || !this.boat) return null;
+    const from = this.lastStopNodeId;
+    if (!from) return null;
+    if (!this.itinerary.length) return this.reachable;
+    return computeReachable(this.data.graph, this.data.restrictions, this.boat, from, this.daylightSeconds);
+  });
+  // What the map's range rings should show: from the last stop while building a
+  // trip, otherwise from the origin.
+  reachableActive = $derived(this.itinerary.length ? this.reachableFromLast : this.reachable);
+
+  /** Compute the leg a node would add to the trip — from the current last stop. */
+  legFromLast(toNode: string): RouteLeg | null {
+    const from = this.lastStopNodeId;
+    if (!this.data || !this.boat || !from || from === toNode) return null;
+    return computeRoute(this.data.graph, this.data.restrictions, this.boat, from, toNode);
+  }
+
   // ---- live cruise derivations ----
   speedMph = $derived(this.userPosition?.speed != null && this.userPosition.speed >= 0 ? this.userPosition.speed * 2.236936 : 0);
 

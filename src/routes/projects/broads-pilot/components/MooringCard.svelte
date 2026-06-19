@@ -5,7 +5,7 @@
   // mooring→POI index (dog filter applied), and route/add-stop actions. Opaque
   // panel so it can float over the map.
   import { app } from '../lib/appState.svelte';
-  import { fmtRate, fmtDist } from '../lib/format';
+  import { fmtRate, fmtDist, fmtTime } from '../lib/format';
   import { getRating, type Rating } from '../lib/ratings';
   import type { Mooring, MooringTier, Poi, PoiKind } from '../lib/types';
 
@@ -142,9 +142,30 @@
     {/if}
 
     {#if m.node_id}
+      {@const inTrip = app.itinerary.length > 0}
+      {@const isLast = app.lastStopNodeId === m.node_id}
+      {@const already = app.itinerary.includes(m.node_id)}
+      {@const addLeg = inTrip && !isLast ? app.legFromLast(m.node_id) : null}
       <div class="actions">
-        <button class="btn btn-primary" onclick={() => app.routeTo(m.node_id!)}>Route here</button>
-        <button class="btn btn-ghost" onclick={() => app.addStop(m.node_id!)}>Add stop</button>
+        {#if inTrip}
+          <!-- continue the trip from the last stop -->
+          <button class="btn btn-primary add-next" disabled={isLast || already}
+            onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>
+            {#if isLast}This is your last stop
+            {:else if already}Already in your trip
+            {:else}
+              <span class="add-line">＋ Add after {app.lastStopLabel}</span>
+              {#if addLeg && addLeg.edges.length}
+                <span class="leg-meta">{fmtTime(addLeg.time_s)} · {fmtDist(addLeg.distance_m, app.units)}{addLeg.crossesBreydon ? ' · tidal' : ''}</span>
+              {:else if addLeg}
+                <span class="leg-meta blocked">not reachable for this boat</span>
+              {/if}
+            {/if}
+          </button>
+        {:else}
+          <button class="btn btn-primary" onclick={() => app.routeTo(m.node_id!)}>Route here</button>
+          <button class="btn btn-ghost" onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>＋ Start a trip</button>
+        {/if}
       </div>
     {/if}
   </aside>
@@ -280,6 +301,12 @@
   }
   .btn-primary { background: var(--accent); color: #fff; border: none; }
   .btn-primary:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  /* "Add after <last stop>" stacks the action over the leg it adds */
+  .add-next { flex: 1 1 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
+  .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
+  .leg-meta.blocked { color: #ffd9d0; }
   .btn-ghost { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
 </style>
