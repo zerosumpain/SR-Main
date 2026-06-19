@@ -36,3 +36,16 @@ export function nearestIndex(target: LatLng, pts: LatLng[]): number {
   }
   return best;
 }
+
+/** Distance (m) from point p to the segment a–b (local equirectangular projection). */
+export function distToSegment(p: LatLng, a: LatLng, b: LatLng): number {
+  const k = Math.cos((p[0] * Math.PI) / 180) * 111320;
+  const px = p[1] * k, py = p[0] * 111320;
+  const ax = a[1] * k, ay = a[0] * 111320;
+  const bx = b[1] * k, by = b[0] * 111320;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}

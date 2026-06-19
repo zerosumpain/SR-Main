@@ -30,7 +30,7 @@
     nauticalBase = L.tileLayer(OSM, { maxZoom: 18, attribution: ATTR });
     seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, opacity: 0.9 });
     schematicTiles = L.tileLayer(OSM, { maxZoom: 18, opacity: 0.12, className: 'bp-schematic-tiles', attribution: ATTR });
-    for (const k of [...BASE, 'route']) groups[k] = L.layerGroup().addTo(map);
+    for (const k of [...BASE, 'route', 'user']) groups[k] = L.layerGroup().addTo(map);
     map.on('click', (e: any) => app.setOrigin(e.latlng.lat, e.latlng.lng, 'Dropped pin'));
     initialized = true;
     applyTheme();
@@ -173,6 +173,23 @@
   $effect(() => { if (initialized) renderBase(); });
   $effect(() => { if (initialized) renderRoute(); });
 
+  // live "you are here" marker + optional follow (own group, off the base render
+  // path so a GPS fix doesn't redraw the whole network).
+  $effect(() => {
+    const u = app.userPosition;
+    if (!initialized) return;
+    groups.user.clearLayers();
+    if (!u) return;
+    if (u.accuracy && u.accuracy < 300)
+      L.circle([u.lat, u.lng], { radius: u.accuracy, color: '#c4570a', weight: 1, opacity: 0.35, fillColor: '#c4570a', fillOpacity: 0.06 }).addTo(groups.user);
+    const rot = u.heading == null ? 0 : u.heading;
+    L.marker([u.lat, u.lng], {
+      icon: L.divIcon({ className: 'bp-you', html: `<div class="bp-you-puck" style="transform:rotate(${rot}deg)"><span class="bp-you-arrow"></span></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
+      zIndexOffset: 3000, interactive: false,
+    }).addTo(groups.user);
+    if (app.followUser && app.cruiseActive) map.panTo([u.lat, u.lng], { animate: true, duration: 0.7 });
+  });
+
   export function flyTo(lat: number, lng: number, zoom = 13) { map?.flyTo([lat, lng], zoom); }
 </script>
 
@@ -206,6 +223,9 @@
   :global(.bp-dest-tip) { background: var(--accent); color: #fff; }
   :global(.bp-dest-tip)::before { border-top-color: var(--accent) !important; }
   :global(.bp-dest-pin) { font-size: 22px; color: var(--accent); line-height: 1; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 1px 2px rgba(0, 0, 0, 0.4); }
+  /* live position puck with a heading arrow */
+  :global(.bp-you-puck) { width: 18px; height: 18px; border-radius: 50%; background: #c4570a; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.6); position: relative; }
+  :global(.bp-you-arrow) { position: absolute; top: -8px; left: 50%; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid #c4570a; }
   @media (prefers-reduced-motion: reduce) { :global(.bp-start-ring) { animation: none; opacity: 0.55; } }
   :global(.leaflet-container) { font-family: var(--font-mono, monospace); background: #ece3d2; }
   :global(.leaflet-tooltip) { font-family: var(--font-mono, monospace); font-size: 11px; }

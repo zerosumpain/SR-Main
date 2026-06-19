@@ -1,13 +1,17 @@
 // Central rune-store for the Broads Pilot planner. Holds the loaded datasets,
 // the user's boat/origin/itinerary, map + layer UI state, and derives the route,
 // reachability and daylight budget from the engine. Instantiated once.
-import type { Datasets, Boat, Mooring, Poi, RouteLeg } from './types';
+import type { Datasets, Boat, Mooring, Poi, RouteLeg, PoiKind, LatLng } from './types';
 import { loadDatasets } from './data';
 import { buildAdjacency, nearestNode } from './graph';
 import { route as computeRoute, reachable as computeReachable } from './router';
 import { daylightHours } from './daylight';
 import { routeFuel } from './fuel';
+import { haversine, distToSegment } from './geo';
 import type { Units } from './format';
+
+export interface UserPosition { lat: number; lng: number; speed: number | null; heading: number | null; accuracy: number }
+export interface NearbyItem { id: string; sel: Selection; kind: 'mooring' | PoiKind; name: string; lat: number; lng: number; dist_m: number; dog: boolean | null }
 
 // Broads centroid for daylight (lat/lng barely affects sun times across the area).
 const BROADS_LAT = 52.62;
@@ -39,6 +43,13 @@ export class AppState {
   units = $state<Units>('imperial');
   date = $state<Date>(new Date());
   onboarded = $state(false);
+
+  // ---- live "cruise" mode ----
+  cruiseActive = $state(false);
+  userPosition = $state<UserPosition | null>(null);
+  followUser = $state(true);
+  geoError = $state<string | null>(null);
+  _lastFix: { lat: number; lng: number; t: number } | null = null; // plain (not reactive)
 
   // ---- derived ----
   adjacency = $derived(this.data ? buildAdjacency(this.data.graph) : null);
@@ -96,6 +107,33 @@ export class AppState {
     return computeReachable(this.data.graph, this.data.restrictions, this.boat, this.origin.nodeId, this.daylightSeconds);
   });
 
+  // ---- live cruise derivations ----
+  speedMph = $derived(this.userPosition?.speed != null && this.userPosition.speed >= 0 ? this.userPosition.speed * 2.236936 : 0);
+
+  // On the Broads = within the area bbox AND within ~800 m of the navigable channel.
+  onBroads = $derived.by(() => {
+    const u = this.userPosition;
+    if (!u || !this.data) return false;
+    if (u.lat < 52.26 || u.lat > 52.9 || u.lng < 1.22 || u.lng > 1.86) return false;
+    return this.distToNetwork(u.lat, u.lng) <= 800;
+  });
+
+  moving = $derived(this.speedMph >= 1.3); // ~1.3 mph — under way, not just GPS jitter
+  cruising = $derived(this.cruiseActive && this.onBroads && this.moving);
+
+  // Notable things within ~600 m of the live position, nearest first.
+  nearby = $derived.by((): NearbyItem[] => {
+    const u = this.userPosition;
+    if (!u || !this.data) return [];
+    const here: LatLng = [u.lat, u.lng];
+    const items: NearbyItem[] = [];
+    for (const m of this.data.moorings)
+      items.push({ id: m.id, sel: { kind: 'mooring', id: m.id }, kind: 'mooring', name: m.name, lat: m.lat, lng: m.lng, dist_m: haversine(here, [m.lat, m.lng]), dog: null });
+    for (const p of this.data.pois)
+      items.push({ id: p.id, sel: { kind: 'poi', id: p.id }, kind: p.kind, name: p.name, lat: p.lat, lng: p.lng, dist_m: haversine(here, [p.lat, p.lng]), dog: p.dog_friendly ?? null });
+    return items.filter((i) => i.dist_m <= 600).sort((a, b) => a.dist_m - b.dist_m).slice(0, 6);
+  });
+
   // ---- actions ----
   async load() {
     try {
@@ -143,6 +181,34 @@ export class AppState {
 
   select(sel: Selection) { this.selected = sel; }
   closeSelection() { this.selected = null; }
+
+  /** Min distance (m) from a point to the navigable channel (early-exits when close). */
+  distToNetwork(lat: number, lng: number): number {
+    if (!this.data) return Infinity;
+    const p: LatLng = [lat, lng];
+    let best = Infinity;
+    for (const e of this.data.graph.edges)
+      for (let i = 1; i < e.geometry.length; i++) {
+        const d = distToSegment(p, e.geometry[i - 1], e.geometry[i]);
+        if (d < 25) return d;
+        if (d < best) best = d;
+      }
+    return best;
+  }
+
+  setUserPosition(c: { latitude: number; longitude: number; speed: number | null; heading: number | null; accuracy: number | null }) {
+    let speed = c.speed;
+    const now = Date.now();
+    if ((speed == null || speed < 0) && this._lastFix) {
+      const dt = (now - this._lastFix.t) / 1000;
+      if (dt > 0.25) speed = haversine([this._lastFix.lat, this._lastFix.lng], [c.latitude, c.longitude]) / dt;
+    }
+    this._lastFix = { lat: c.latitude, lng: c.longitude, t: now };
+    this.userPosition = { lat: c.latitude, lng: c.longitude, speed: speed ?? null, heading: c.heading, accuracy: c.accuracy ?? 9999 };
+  }
+
+  startCruise() { this.cruiseActive = true; this.followUser = true; this.geoError = null; }
+  stopCruise() { this.cruiseActive = false; this.userPosition = null; this._lastFix = null; }
 
   nodeLabel(nodeId: string): string {
     const m = this.mooringsByNode.get(nodeId)?.[0];
