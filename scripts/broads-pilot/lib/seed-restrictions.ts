@@ -28,7 +28,7 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'potter-heigham-old', name: 'Potter Heigham (Old Road Bridge)', river: 'Thurne',
     attach_rivers: ['Thurne'],
-    clearance_ahw_m: 2.0, clearance_band_m: [1.98, 2.03], tide_dependent: true,
+    clearance_ahw_m: 2.03, clearance_band_m: [1.98, 2.03], tide_dependent: true,
     pilot: 'mandatory', opens_on_request: false, practically_closed: true, arch_width_m: 2.5,
     notes: 'Pilot mandatory (Phoenix Fleet, 01692 670460, ~£10). Low semicircular arch with steeply falling sides — effectively impassable for standard cruisers (0 boats through in 2024). Cross only near low water with the pilot.',
     lat: 52.7106, lng: 1.5818,
@@ -36,7 +36,7 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'wroxham-road', name: 'Wroxham (Road Bridge)', river: 'Bure',
     attach_rivers: ['Bure'],
-    clearance_ahw_m: 2.21, clearance_band_m: [2.21, 2.29], tide_dependent: true,
+    clearance_ahw_m: 2.29, clearance_band_m: [2.21, 2.29], tide_dependent: true,
     pilot: 'mandatory', opens_on_request: false, arch_width_m: 3.5,
     notes: 'Pilot mandatory for hire craft (07775 297 638, ~£15 return). 1619 arch, strong currents; height + tide affected.',
     lat: 52.7068, lng: 1.4072,
