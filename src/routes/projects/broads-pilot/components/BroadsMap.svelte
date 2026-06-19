@@ -173,8 +173,22 @@
     }
 
     // Otherwise a single ad-hoc destination route.
-    if (!app.route?.edges.length) return;
-    drawLegEdges([app.route]);
+    const r = app.route;
+    // Contextual hazard: a bridge that BLOCKS this route gets a red "!" marker.
+    if (r?.blockedAt) {
+      const b = r.blockedAt;
+      L.marker([b.lat, b.lng], { icon: L.divIcon({ className: 'bp-warn', html: '<div class="bp-warn-pin red">!</div>', iconSize: [26, 26], iconAnchor: [13, 13] }), zIndexOffset: 2200, interactive: false })
+        .bindTooltip(`Blocked: ${b.name}`, { permanent: true, direction: 'top', offset: [0, -14], className: 'bp-warn-tip red' }).addTo(groups.route);
+    }
+    if (!r?.edges.length) return;
+    drawLegEdges([r]);
+    // Tight (marginal) bridges: recolour their segment amber + amber "!" marker.
+    for (const { bridge, verdict } of r.bridges) {
+      if (verdict !== 'marginal') continue;
+      for (const e of r.edges) if (e.restriction_ids?.includes(bridge.id)) L.polyline(e.geometry, { color: '#e69500', weight: 5.5, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
+      L.marker([bridge.lat, bridge.lng], { icon: L.divIcon({ className: 'bp-warn', html: '<div class="bp-warn-pin amber">!</div>', iconSize: [24, 24], iconAnchor: [12, 12] }), zIndexOffset: 2100, interactive: false })
+        .bindTooltip(`Tight: ${bridge.name}`, { permanent: true, direction: 'top', offset: [0, -13], className: 'bp-warn-tip amber' }).addTo(groups.route);
+    }
     const dnId = app.destinationNode;
     const dn = dnId ? app.data?.graph.nodes.find((n) => n.id === dnId) : null;
     if (dn)
@@ -244,6 +258,15 @@
   :global(.bp-dest-tip)::before { border-top-color: var(--accent) !important; }
   :global(.bp-dest-pin) { font-size: 22px; color: var(--accent); line-height: 1; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 1px 2px rgba(0, 0, 0, 0.4); }
   :global(.bp-stop-pin) { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; border: 2px solid #fff; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(26, 16, 8, 0.5); }
+  /* contextual on-route bridge warnings */
+  :global(.bp-warn-pin) { width: 100%; height: 100%; border-radius: 50%; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 13px; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.6); }
+  :global(.bp-warn-pin.red) { background: #c62828; }
+  :global(.bp-warn-pin.amber) { background: #e69500; }
+  :global(.bp-warn-tip) { border: none; font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; color: #fff; }
+  :global(.bp-warn-tip.red) { background: #c62828; }
+  :global(.bp-warn-tip.red)::before { border-top-color: #c62828 !important; }
+  :global(.bp-warn-tip.amber) { background: #e69500; }
+  :global(.bp-warn-tip.amber)::before { border-top-color: #e69500 !important; }
   /* live position puck with a heading arrow */
   :global(.bp-you-puck) { width: 18px; height: 18px; border-radius: 50%; background: #c4570a; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.6); position: relative; }
   :global(.bp-you-arrow) { position: absolute; top: -8px; left: 50%; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid #c4570a; }

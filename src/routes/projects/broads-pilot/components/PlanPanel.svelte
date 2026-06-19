@@ -15,6 +15,8 @@
   const sortedBridges = $derived(
     app.route ? [...app.route.bridges].sort((a, b) => RANK[a.verdict] - RANK[b.verdict]) : [],
   );
+  // Only the bridges that need attention; a clear route shows nothing but a tick.
+  const issues = $derived(sortedBridges.filter((b) => b.verdict !== 'pass'));
 
   // A there-and-back day-trip won't fit if double the one-way time exceeds today's
   // daylight budget.
@@ -71,24 +73,22 @@
         {/if}
       </div>
 
-      {#if sortedBridges.length}
-        <div class="bridges">
-          <span class="kicker">Bridges en route</span>
+      {#if issues.length}
+        <div class="bridges" role="status">
+          <span class="kicker">Check these bridges</span>
           <ul class="bridge-list">
-            {#each sortedBridges as { bridge, verdict } (bridge.id)}
+            {#each issues as { bridge, verdict } (bridge.id)}
               <li class="bridge-row">
                 <span class="chip" style="--c:{VERDICT_COLOR[verdict]}">{VERDICT_LABEL[verdict]}</span>
                 <span class="bridge-name">{bridge.name}</span>
-                {#if bridge.pilot === 'mandatory'}
-                  <span class="tag tag-pilot">Pilot required</span>
-                {/if}
-                {#if bridge.opens_on_request}
-                  <span class="tag">Opens on request</span>
-                {/if}
+                {#if bridge.pilot === 'mandatory'}<span class="tag tag-pilot">Pilot required</span>{/if}
+                {#if bridge.opens_on_request}<span class="tag">Opens on request</span>{/if}
               </li>
             {/each}
           </ul>
         </div>
+      {:else}
+        <p class="all-clear">✓ All bridges clear for your boat.</p>
       {/if}
 
       {#if app.route.crossesBreydon}
@@ -225,6 +225,7 @@
     white-space: nowrap;
   }
   .tag-pilot { color: var(--accent); border-color: var(--accent); }
+  .all-clear { margin: 0; font-family: var(--font-body); font-size: 0.84rem; color: #2e7d32; }
 
   /* callouts */
   .callout {

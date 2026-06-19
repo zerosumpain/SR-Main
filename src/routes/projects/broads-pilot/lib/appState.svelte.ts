@@ -121,6 +121,14 @@ export class AppState {
   moving = $derived(this.speedMph >= 1.3); // ~1.3 mph — under way, not just GPS jitter
   cruising = $derived(this.cruiseActive && this.onBroads && this.moving);
 
+  // The one mode that drives the single info sheet (explore → route → trip → live).
+  mode = $derived<'live' | 'trip' | 'route' | 'explore'>(
+    this.cruiseActive ? 'live'
+      : this.itinerary.length > 0 ? 'trip'
+        : this.destinationNode ? 'route'
+          : 'explore',
+  );
+
   // Notable things within ~600 m of the live position, nearest first.
   nearby = $derived.by((): NearbyItem[] => {
     const u = this.userPosition;
