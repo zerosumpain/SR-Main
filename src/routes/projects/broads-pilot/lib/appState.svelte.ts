@@ -35,7 +35,7 @@ export class AppState {
   layers = $state({ restrictions: true, moorings: true, pubs: true, walks: true, attractions: false });
   dogOnly = $state(false);
   showRangeRings = $state(false);
-  mapTheme = $state<'warm' | 'nautical'>('warm');
+  mapTheme = $state<'warm' | 'nautical' | 'schematic'>('warm');
   units = $state<Units>('imperial');
   date = $state<Date>(new Date());
   onboarded = $state(false);
@@ -101,6 +101,10 @@ export class AppState {
     try {
       this.data = await loadDatasets(fetch);
       this.boat = this.data.fleet.find((b) => b.class === 'generic') ?? this.data.fleet[0] ?? null;
+      // Default the start to the Richardsons hire base at Stalham (most common
+      // trip origin). Restored URL/localStorage state overrides this afterwards.
+      if (!this.origin && this.data.graph.nodes.some((n) => n.id === 'staithe-stalham'))
+        this.setOriginNode('staithe-stalham', 'Stalham (Richardsons)');
       this.loading = false;
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Failed to load data';

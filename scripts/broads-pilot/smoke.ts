@@ -18,22 +18,31 @@ await page.waitForTimeout(400);
 
 // boat picker present?
 const hasBoat = await page.locator('select').first().count();
-// set origin by clicking the map (right side, away from the left panel)
-await page.mouse.click(900, 430);
-await page.waitForTimeout(1200);
-const reachTxt = await page.locator('body').innerText();
-const hasReach = /\bmin\b|\bh\b/.test(reachTxt);
+// default origin should be Stalham (Richardsons) — reachability shows w/o a click
+await page.waitForTimeout(800);
+const bodyTxt = await page.locator('body').innerText();
+const defaultOrigin = /Stalham/i.test(bodyTxt);
+const hasReach = /\bmin\b/.test(bodyTxt);
+await page.screenshot({ path: '/tmp/bp-desktop.png' });
 
 // click the first reachable destination row if present
 let hasPlan = false;
-const rows = page.locator('button', { hasText: /min|mi|km/ });
+const rows = page.locator('button', { hasText: /min/ });
 if (await rows.count()) {
   await rows.first().click().catch(() => {});
   await page.waitForTimeout(1000);
   const t = await page.locator('body').innerText();
   hasPlan = /Distance|Cruising|reachable/i.test(t);
 }
-await page.screenshot({ path: '/tmp/bp-desktop.png' });
+
+// switch to the Schematic theme and screenshot
+await page.getByRole('button', { name: 'Schematic' }).click().catch(() => {});
+await page.waitForTimeout(1200);
+await page.screenshot({ path: '/tmp/bp-schematic.png' });
+// toggle the Attractions layer (exercise layer rendering)
+await page.getByRole('button', { name: 'Attractions' }).click().catch(() => {});
+await page.waitForTimeout(600);
+await page.screenshot({ path: '/tmp/bp-schematic-attr.png' });
 
 // mobile
 const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -46,5 +55,5 @@ await mp.waitForTimeout(400);
 await mp.screenshot({ path: '/tmp/bp-mobile.png' });
 
 await browser.close();
-console.log(JSON.stringify({ hasBoatSelect: !!hasBoat, originClickReachable: hasReach, planPanelShown: hasPlan, consoleErrors: errors.length }, null, 2));
+console.log(JSON.stringify({ hasBoatSelect: !!hasBoat, defaultOriginStalham: defaultOrigin, reachableByDefault: hasReach, planPanelShown: hasPlan, consoleErrors: errors.length }, null, 2));
 errors.slice(0, 15).forEach((e) => console.log('  ⚠', e.slice(0, 180)));

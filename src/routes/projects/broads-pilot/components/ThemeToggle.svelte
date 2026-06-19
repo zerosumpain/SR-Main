@@ -5,9 +5,10 @@
   import { app } from '../lib/appState.svelte';
   import type { Units } from '../lib/format';
 
-  const THEMES: { value: 'warm' | 'nautical'; label: string }[] = [
+  const THEMES: { value: 'warm' | 'nautical' | 'schematic'; label: string }[] = [
     { value: 'warm', label: 'Warm' },
     { value: 'nautical', label: 'Nautical' },
+    { value: 'schematic', label: 'Schematic' },
   ];
   const UNITS: { value: Units; label: string }[] = [
     { value: 'imperial', label: 'mi / ft' },
@@ -70,6 +71,7 @@
   }
   .seg {
     display: inline-flex;
+    flex-wrap: wrap;
     border: 1px solid var(--card-border);
     border-radius: 0.4rem;
     overflow: hidden;
