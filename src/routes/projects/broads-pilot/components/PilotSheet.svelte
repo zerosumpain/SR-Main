@@ -53,7 +53,7 @@
 <aside class="sheet {snap}" class:dragging={liveH != null} style:height={heightStyle}>
   <button class="grip" onpointerdown={onDown} onpointermove={onMove} onpointerup={onUp} onclick={onGripClick}
     aria-label="Resize panel — drag or tap to expand"></button>
-  <div class="fixed">
+  <div class="sheet-head">
     {@render header?.()}
     {@render summary?.()}
   </div>
@@ -71,7 +71,7 @@
   .grip { display: block; width: 100%; height: 30px; border: none; background: transparent; cursor: grab; position: relative; flex: 0 0 auto; touch-action: none; z-index: 2; }
   .grip::before { content: ''; position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: 40px; height: 4px; border-radius: 2px; background: var(--card-border); }
   .grip:active { cursor: grabbing; }
-  .fixed { flex: 0 0 auto; padding: 0 0.7rem 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .sheet-head { flex: 0 0 auto; padding: 0 0.7rem 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .body { flex: 1 1 auto; overflow-y: auto; padding: 0.1rem 0.7rem 0.9rem; display: flex; flex-direction: column; gap: 0.7rem; }
   .sheet.peek .body { display: none; }
 
@@ -83,7 +83,7 @@
       border-radius: 0.7rem; box-shadow: 0 6px 24px rgba(26, 16, 8, 0.18);
     }
     .grip { display: none; }
-    .fixed { padding-top: 0.7rem; }
+    .sheet-head { padding-top: 0.7rem; }
     .sheet.peek .body { display: flex; }
   }
 </style>
