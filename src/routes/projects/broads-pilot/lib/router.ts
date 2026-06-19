@@ -16,7 +16,7 @@ import { groundSpeedMs, edgeVerdict, bridgeVerdict } from './passability';
 const RANK: Record<Verdict, number> = { pass: 0, marginal: 1, blocked: 2 };
 
 /** Time (s) to traverse an edge: capped at 6 mph, with a 0.9 real-world factor. */
-function edgeTimeS(edge: GraphEdge): number {
+export function edgeTimeS(edge: GraphEdge): number {
   const mph = Math.min(edge.limit_mph, 6);
   return edge.length_m / (groundSpeedMs(mph) * 0.9);
 }

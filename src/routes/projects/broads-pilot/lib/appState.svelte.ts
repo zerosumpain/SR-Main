@@ -40,6 +40,9 @@ export class AppState {
   dogOnly = $state(false);
   showRangeRings = $state(false);
   mapTheme = $state<'warm' | 'nautical' | 'schematic'>('warm');
+  // The map opens pinned on the start (the Richardsons hire base) until the
+  // skipper unlocks it to roam. Ephemeral — deliberately not persisted.
+  mapLocked = $state(true);
   units = $state<Units>('imperial');
   sheetPx = $state(142); // current mobile sheet height — so the FABs can ride with it
   date = $state<Date>(new Date());
@@ -191,15 +194,19 @@ export class AppState {
     try {
       this.data = await loadDatasets(fetch);
       this.boat = this.data.fleet.find((b) => b.class === 'generic') ?? this.data.fleet[0] ?? null;
-      // Default the start to the Richardsons hire base at Stalham (most common
-      // trip origin). Restored URL/localStorage state overrides this afterwards.
-      if (!this.origin && this.data.graph.nodes.some((n) => n.id === 'staithe-stalham'))
-        this.setOriginNode('staithe-stalham', 'Stalham (Richardsons)');
       this.loading = false;
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Failed to load data';
       this.loading = false;
     }
+  }
+
+  /** Fall back to the Richardsons hire base at Stalham as the start. Called
+   *  AFTER URL/localStorage restore so a saved origin wins — and so the locked
+   *  map pins once on the final origin (no Stalham→saved double jump). */
+  ensureDefaultOrigin() {
+    if (!this.origin && this.data?.graph.nodes.some((n) => n.id === 'staithe-stalham'))
+      this.setOriginNode('staithe-stalham', 'Stalham (Richardsons)');
   }
 
   selectBoat(slug: string) {
@@ -271,6 +278,13 @@ export class AppState {
   select(sel: Selection) { this.selected = sel; }
   closeSelection() { this.selected = null; }
 
+  /** Free the map to pan/zoom (e.g. when a search result or "my location"
+   *  flies the camera away from the home base). */
+  unlockMap() { this.mapLocked = false; }
+  /** Re-pin the map on the start; the map effect recentres on the origin. */
+  lockMap() { this.mapLocked = true; }
+  toggleLock() { this.mapLocked = !this.mapLocked; }
+
   /** Nearest navigable edge to a point, within `maxDist` metres (null if none). */
   nearestEdge(lat: number, lng: number, maxDist = 150): { edge: GraphEdge; dist_m: number } | null {
     if (!this.data) return null;
@@ -310,8 +324,11 @@ export class AppState {
     this.userPosition = { lat: c.latitude, lng: c.longitude, speed: speed ?? null, heading: c.heading, accuracy: c.accuracy ?? 9999 };
   }
 
-  startCruise() { this.cruiseActive = true; this.followUser = true; this.geoError = null; }
-  stopCruise() { this.cruiseActive = false; this.userPosition = null; this._lastFix = null; }
+  _preCruiseLocked = true; // plain (not reactive) — lock state to restore after a cruise
+  // Live mode owns the camera, so unlock on start; restore the prior lock on stop
+  // so going live then stopping returns you to the pinned-home view you had.
+  startCruise() { this.cruiseActive = true; this.followUser = true; this.geoError = null; this._preCruiseLocked = this.mapLocked; this.mapLocked = false; }
+  stopCruise() { this.cruiseActive = false; this.userPosition = null; this._lastFix = null; this.mapLocked = this._preCruiseLocked; }
 
   nodeLabel(nodeId: string): string {
     const m = this.mooringsByNode.get(nodeId)?.[0];
