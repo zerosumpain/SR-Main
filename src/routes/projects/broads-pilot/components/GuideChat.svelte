@@ -128,7 +128,7 @@
 
 <style>
   .guide-backdrop { position: absolute; inset: 0; z-index: 1000; background: rgba(26, 16, 8, 0.42); display: grid; place-items: center; padding: 0.6rem; }
-  .guide { width: min(34rem, 100%); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.7rem; box-shadow: 0 12px 40px rgba(26, 16, 8, 0.35); overflow: hidden; }
+  .guide { width: min(54rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.7rem; box-shadow: 0 12px 40px rgba(26, 16, 8, 0.35); overflow: hidden; }
   .guide-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
   .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
   .guide-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }
@@ -137,6 +137,8 @@
 
   .guide-body { overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.55rem; }
   .bubble { margin: 0; max-width: 90%; padding: 0.55rem 0.75rem; border-radius: 0.8rem; font-family: var(--font-body); font-size: 0.9rem; line-height: 1.45; }
+  /* keep the short Q&A bubbles readable even though the modal is wide; the plan uses the full width */
+  .bubble:not(.plan-bubble) { max-width: 36rem; }
   .bubble.bot { align-self: flex-start; background: var(--card-bg); color: var(--text-primary); border-bottom-left-radius: 0.2rem; }
   .bubble.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 0.2rem; }
   .bubble.err { background: rgba(198, 40, 40, 0.1); color: #a02020; }

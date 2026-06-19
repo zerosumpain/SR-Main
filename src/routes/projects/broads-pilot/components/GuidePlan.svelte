@@ -141,4 +141,11 @@
   .apply { background: var(--accent); color: #fff; border: none; border-radius: 0.45rem; padding: 0.7rem; font-family: var(--font-mono); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
   .apply:hover { background: var(--accent-hover); }
   .disclaimer { margin: 0; font-family: var(--font-body); font-size: 0.68rem; color: var(--text-ghost); line-height: 1.4; }
+
+  /* On the wider web modal, lay the stop cards in two columns so there's much
+     less to scroll. Numbers keep the order clear. */
+  @media (min-width: 720px) {
+    .stops { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; align-items: start; }
+    .summary { font-size: 1rem; }
+  }
 </style>
