@@ -1,7 +1,7 @@
 // Visual + functional smoke test for the Broads Pilot planner.
 import { chromium } from '@playwright/test';
 
-const URL = 'http://localhost:5180/projects/broads-pilot';
+const URL = process.env.BP_URL || 'http://localhost:5180/projects/broads-pilot';
 const errors: string[] = [];
 
 const browser = await chromium.launch();
