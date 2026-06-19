@@ -14,13 +14,30 @@
   import MooringCard from './components/MooringCard.svelte';
   import PoiCard from './components/PoiCard.svelte';
   import RestrictionCallout from './components/RestrictionCallout.svelte';
+  import GuideChat from './components/GuideChat.svelte';
 
   let mapComp = $state<ReturnType<typeof BroadsMap> | null>(null);
   let panelOpen = $state(false);
   let controlsOpen = $state(false);
+  let guideOpen = $state(false);
   let geoBusy = $state(false);
   let watchId: number | null = null;
   let firstFix = true;
+
+  function applyGuidePlan(stopNodeIds: string[]) {
+    app.itinerary = stopNodeIds;
+    app.destinationNode = null;
+    guideOpen = false;
+    panelOpen = true;
+    // fit the map to the origin + all stops
+    const pts: [number, number][] = [];
+    if (app.origin) pts.push([app.origin.lat, app.origin.lng]);
+    for (const id of stopNodeIds) {
+      const n = app.data?.graph.nodes.find((x) => x.id === id);
+      if (n) pts.push([n.lat, n.lng]);
+    }
+    mapComp?.fitTo(pts);
+  }
 
   onMount(async () => {
     panelOpen = !window.matchMedia('(max-width: 759px)').matches; // open on desktop, collapsed on phones
@@ -92,15 +109,18 @@
   <!-- top overlay: tools row + a banner slot (cruise companion or safety note) -->
   <div class="bp-top">
     <div class="bp-top-row">
-      <button class="bp-live-btn" class:on={app.cruiseActive} onclick={toggleCruise}
-        aria-pressed={app.cruiseActive}>
-        <span class="bp-live-dot" class:on={app.cruiseActive}></span>{app.cruiseActive ? 'Live' : 'Go live'}
-      </button>
-      <div class="bp-controls-wrap">
-        <button class="bp-options-btn" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}>⚙ Map</button>
-        <div class="bp-controls-pop" class:open={controlsOpen}>
-          <ThemeToggle />
-          <LayersControl />
+      <button class="bp-ai-btn" onclick={() => (guideOpen = true)}>✨ Plan my day</button>
+      <div class="bp-tools">
+        <button class="bp-live-btn" class:on={app.cruiseActive} onclick={toggleCruise}
+          aria-pressed={app.cruiseActive}>
+          <span class="bp-live-dot" class:on={app.cruiseActive}></span>{app.cruiseActive ? 'Live' : 'Go live'}
+        </button>
+        <div class="bp-controls-wrap">
+          <button class="bp-options-btn" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}>⚙ Map</button>
+          <div class="bp-controls-pop" class:open={controlsOpen}>
+            <ThemeToggle />
+            <LayersControl />
+          </div>
         </div>
       </div>
     </div>
@@ -146,6 +166,11 @@
     </div>
   {/if}
 
+  <!-- AI day planner -->
+  {#if guideOpen}
+    <GuideChat onClose={() => (guideOpen = false)} onApply={applyGuidePlan} />
+  {/if}
+
   <!-- first-run onboarding -->
   {#if !app.loading && !app.onboarded}
     <div class="bp-onboard">
@@ -173,7 +198,10 @@
   /* top overlay */
   .bp-top { position: absolute; top: 0; left: 0; right: 0; z-index: 500; padding: 0.55rem; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
   .bp-top > * { pointer-events: auto; }
-  .bp-top-row { display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.5rem; }
+  .bp-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .bp-tools { display: flex; gap: 0.5rem; align-items: flex-start; }
+  .bp-ai-btn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: 0.45rem; padding: 0.55rem 0.8rem; min-height: 40px; cursor: pointer; box-shadow: 0 2px 10px rgba(196, 87, 10, 0.4); }
+  .bp-ai-btn:hover { background: var(--accent-hover); }
   .bp-live-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); }
   .bp-live-btn.on { background: #2e7d32; color: #fff; border-color: #2e7d32; }
   .bp-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }

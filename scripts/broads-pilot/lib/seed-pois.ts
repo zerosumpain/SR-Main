@@ -27,3 +27,17 @@ export const WALKS: SeedWalk[] = [
   { id: 'walk-coltishall-common', name: 'Coltishall Common Riverside', lat: 52.7268, lng: 1.3760, dog_friendly: true, description: 'Open riverside common at the head of navigation — relaxed dog walk and paddling spot beside the Bure.' },
   { id: 'walk-thurne-windmill', name: 'Thurne Mill & Riverbank', lat: 52.6960, lng: 1.5290, dog_friendly: true, description: 'Walk to the white-sailed Thurne Dyke drainage mill and along the riverbank. From Thurne Staithe.' },
 ];
+
+// OSM tags no fishing/swimming for the Broads, so curate the well-known spots.
+export interface SimplePoi { id: string; name: string; lat: number; lng: number; description: string }
+export const FISHING: SimplePoi[] = [
+  { id: 'fish-rockland-broad', name: 'Rockland Broad', lat: 52.5872, lng: 1.4770, description: 'Renowned coarse-fishing broad off the Yare — pike, bream and roach. Moor at Rockland Staithe and fish the broad or the dyke.' },
+  { id: 'fish-womack-water', name: 'Womack Water (Ludham)', lat: 52.7052, lng: 1.5410, description: 'Quiet dyke off the Thurne with excellent bank fishing from the staithe moorings.' },
+  { id: 'fish-barton-broad', name: 'Barton Broad', lat: 52.7380, lng: 1.4930, description: 'The Broads’ second-largest broad — open-water angling for bream and pike. Moor nearby at Gay’s Staithe or Neatishead.' },
+  { id: 'fish-oulton-broad', name: 'Oulton Broad', lat: 52.4740, lng: 1.7000, description: 'Large broad at Lowestoft with mixed coarse fishing and easy moorings at Nicholas Everitt Park.' },
+  { id: 'fish-salhouse-broad', name: 'Salhouse Broad', lat: 52.6900, lng: 1.4320, description: 'Sheltered broad off the Bure, good for a relaxed afternoon’s float fishing from the moorings.' },
+];
+export const SWIM: SimplePoi[] = [
+  { id: 'swim-whitlingham', name: 'Whitlingham Great Broad', lat: 52.6190, lng: 1.3320, description: 'Supervised open-water swimming venue near Norwich (Whitlingham Outdoor Education Centre) — sessions must be booked; not free-swim. The only properly organised swim spot on the system.' },
+  { id: 'swim-salhouse', name: 'Salhouse Broad shallows', lat: 52.6905, lng: 1.4318, description: 'Shallow, sandy-edged broad sometimes used for paddling and a dip from the moorings — check for blue-green algae warnings and keep clear of the navigation channel.' },
+];

@@ -102,7 +102,7 @@ export interface Mooring {
 }
 
 // ---------- POIs ----------
-export type PoiKind = 'pub' | 'walk' | 'attraction' | 'shop' | 'fuel';
+export type PoiKind = 'pub' | 'walk' | 'attraction' | 'shop' | 'fuel' | 'fishing' | 'swim';
 export interface Poi {
   id: string;
   name: string;
@@ -112,6 +112,7 @@ export interface Poi {
   dog_friendly?: boolean | null;
   food?: boolean;
   description: string;
+  opening_hours?: string | null;
   place_id?: string | null;
   tripadvisor_url?: string | null;
   google_url?: string | null;

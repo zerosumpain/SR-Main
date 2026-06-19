@@ -13,6 +13,8 @@
     attraction: 'Attraction',
     shop: 'Shop',
     fuel: 'Fuel',
+    fishing: 'Fishing',
+    swim: 'Swimming',
   };
 
   const sel = $derived(app.selected);

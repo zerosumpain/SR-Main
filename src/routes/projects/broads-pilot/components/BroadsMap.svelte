@@ -147,15 +147,34 @@
   }
 
   // Draw just the planned route (cheap; updates as the destination changes).
+  function drawLegEdges(legs: { edges: { geometry: [number, number][] }[] }[]) {
+    for (const leg of legs) for (const e of leg.edges)
+      L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.5, lineCap: 'round' }).addTo(groups.route);
+    for (const leg of legs) for (const e of leg.edges)
+      L.polyline(e.geometry, { color: '#ffcf4a', weight: 3.4, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
+  }
+
   function renderRoute() {
     if (!initialized) return;
     groups.route.clearLayers();
+
+    // A multi-stop itinerary (e.g. from the AI planner) takes precedence.
+    if (app.itinerary.length && app.itineraryLegs.length) {
+      drawLegEdges(app.itineraryLegs);
+      app.itinerary.forEach((nid, i) => {
+        const n = app.data?.graph.nodes.find((x) => x.id === nid);
+        if (!n) return;
+        L.marker([n.lat, n.lng], {
+          icon: L.divIcon({ className: 'bp-stop', html: `<div class="bp-stop-pin">${i + 1}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+          zIndexOffset: 1800, interactive: false,
+        }).bindTooltip(`${i + 1}. ${app.nodeLabel(nid)}`, { permanent: true, direction: 'top', offset: [0, -12], className: 'bp-dest-tip' }).addTo(groups.route);
+      });
+      return;
+    }
+
+    // Otherwise a single ad-hoc destination route.
     if (!app.route?.edges.length) return;
-    for (const e of app.route.edges)
-      L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.55, lineCap: 'round' }).addTo(groups.route);
-    for (const e of app.route.edges)
-      L.polyline(e.geometry, { color: '#ffcf4a', weight: 3.4, opacity: 0.98, lineCap: 'round' }).addTo(groups.route);
-    // destination flag + permanent label at the route end node
+    drawLegEdges([app.route]);
     const dnId = app.destinationNode;
     const dn = dnId ? app.data?.graph.nodes.find((n) => n.id === dnId) : null;
     if (dn)
@@ -191,6 +210,7 @@
   });
 
   export function flyTo(lat: number, lng: number, zoom = 13) { map?.flyTo([lat, lng], zoom); }
+  export function fitTo(points: [number, number][]) { if (map && points.length) map.fitBounds(points as any, { padding: [55, 55], maxZoom: 13 }); }
 </script>
 
 <div class="bp-map" bind:this={mapEl}></div>
@@ -223,6 +243,7 @@
   :global(.bp-dest-tip) { background: var(--accent); color: #fff; }
   :global(.bp-dest-tip)::before { border-top-color: var(--accent) !important; }
   :global(.bp-dest-pin) { font-size: 22px; color: var(--accent); line-height: 1; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 1px 2px rgba(0, 0, 0, 0.4); }
+  :global(.bp-stop-pin) { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; border: 2px solid #fff; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(26, 16, 8, 0.5); }
   /* live position puck with a heading arrow */
   :global(.bp-you-puck) { width: 18px; height: 18px; border-radius: 50%; background: #c4570a; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.6); position: relative; }
   :global(.bp-you-arrow) { position: absolute; top: -8px; left: 50%; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid #c4570a; }

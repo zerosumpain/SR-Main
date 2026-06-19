@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { overpass, BROADS_BBOX, type OsmElement } from './lib/overpass.ts';
 import { haversine } from './lib/geo.ts';
-import { PUB_OVERLAY, WALKS } from './lib/seed-pois.ts';
+import { PUB_OVERLAY, WALKS, FISHING, SWIM } from './lib/seed-pois.ts';
 
 type LatLng = [number, number];
 const DIR = join(process.cwd(), 'static', 'broads-pilot');
@@ -53,7 +53,12 @@ async function main() {
       nwr["tourism"~"^(attraction|museum|viewpoint)$"](${BROADS_BBOX});
       nwr["leisure"="nature_reserve"](${BROADS_BBOX});
       nwr["historic"="windmill"](${BROADS_BBOX});
-      nwr["man_made"="windpump"](${BROADS_BBOX}); );
+      nwr["man_made"="windpump"](${BROADS_BBOX});
+      nwr["shop"~"^(supermarket|convenience)$"](${BROADS_BBOX});
+      nwr["leisure"="fishing"](${BROADS_BBOX});
+      nwr["fishing"="yes"](${BROADS_BBOX});
+      nwr["leisure"="swimming_area"](${BROADS_BBOX});
+      nwr["natural"="beach"](${BROADS_BBOX}); );
     out center tags;
   `);
 
@@ -66,13 +71,24 @@ async function main() {
     const lat = el.lat ?? (el as any).center?.lat;
     const lng = el.lon ?? (el as any).center?.lon;
     if (lat == null || lng == null) continue;
-    if (distToChannel(lat, lng) > 550) continue; // keep only waterside / walkable-from-mooring POIs
 
     const isPub = t.amenity === 'pub' || t.amenity === 'bar';
-    const kind: Poi['kind'] = isPub ? 'pub' : 'attraction';
+    const kind: Poi['kind'] =
+      isPub ? 'pub'
+      : (t.shop === 'supermarket' || t.shop === 'convenience') ? 'shop'
+      : (t.leisure === 'fishing' || t.fishing === 'yes') ? 'fishing'
+      : (t.leisure === 'swimming_area' || t.natural === 'beach' || t.sport === 'swimming') ? 'swim'
+      : 'attraction';
+    // Pubs must be genuinely waterside (avoids Norwich clutter); the sparser
+    // categories (shops/fishing/swim/attractions) allow a longer walk from a mooring.
+    if (distToChannel(lat, lng) > (isPub ? 550 : 900)) continue;
+
     const overlay = isPub ? PUB_OVERLAY.find((p) => p.match.test(name))?.meta : undefined;
     const desc = overlay?.description ||
-      (kind === 'pub' ? `${t.amenity === 'restaurant' ? 'Restaurant' : 'Pub'} near the water${t.cuisine ? ` (${t.cuisine})` : ''}.`
+      (kind === 'pub' ? `Pub near the water${t.cuisine ? ` (${t.cuisine})` : ''}.`
+        : kind === 'shop' ? `${t.shop === 'supermarket' ? 'Supermarket' : 'Convenience shop'} for stocking up.`
+        : kind === 'fishing' ? 'Angling spot on the Broads.'
+        : kind === 'swim' ? 'Swimming / bathing spot — check depth, currents and signage first.'
         : (t.historic === 'windmill' || t.man_made === 'windpump') ? 'Historic Broads drainage mill.'
         : t.leisure === 'nature_reserve' ? 'Broads nature reserve.' : 'Broads attraction.');
     pois.push({
@@ -80,21 +96,25 @@ async function main() {
       name, kind, lat, lng,
       dog_friendly: overlay?.dog_friendly ?? dogFromTag(t.dog),
       food: overlay?.food ?? (isPub ? t.food !== 'no' : false),
-      description: desc, place_id: null,
+      description: desc, opening_hours: t.opening_hours ?? null, place_id: null,
       tripadvisor_url: deepTripadvisor(name), google_url: deepGoogle(name, lat, lng),
       osm_id: `${el.type}/${el.id}`, source: 'osm',
     });
   }
   console.log(`  ${pois.length} OSM POIs near water`);
 
-  // Curated walks (OSM doesn't model these as points).
+  // Curated walks / fishing / swimming (OSM doesn't model these for the Broads).
   for (const w of WALKS) {
     pois.push({
       id: w.id, name: w.name, kind: 'walk', lat: w.lat, lng: w.lng,
-      dog_friendly: w.dog_friendly, food: false, description: w.description, place_id: null,
+      dog_friendly: w.dog_friendly, food: false, description: w.description, opening_hours: null, place_id: null,
       tripadvisor_url: deepTripadvisor(w.name), google_url: deepGoogle(w.name, w.lat, w.lng), source: 'curated',
     });
   }
+  for (const f of FISHING)
+    pois.push({ id: f.id, name: f.name, kind: 'fishing', lat: f.lat, lng: f.lng, dog_friendly: true, food: false, description: f.description, opening_hours: null, place_id: null, tripadvisor_url: deepTripadvisor(f.name), google_url: deepGoogle(f.name, f.lat, f.lng), source: 'curated' });
+  for (const s of SWIM)
+    pois.push({ id: s.id, name: s.name, kind: 'swim', lat: s.lat, lng: s.lng, dog_friendly: true, food: false, description: s.description, opening_hours: null, place_id: null, tripadvisor_url: deepTripadvisor(s.name), google_url: deepGoogle(s.name, s.lat, s.lng), source: 'curated' });
 
   // Precompute mooring → nearby POIs (within 1 km, sorted by distance).
   const adjacency: Record<string, { poi_id: string; dist_m: number; on_foot: boolean }[]> = {};
