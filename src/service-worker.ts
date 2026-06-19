@@ -39,6 +39,33 @@ registerRoute(
 	}),
 );
 
+// Broads Pilot (/projects/broads-pilot): cache the small static datasets so the
+// planner + routing work offline, the page navigations network-first, and map
+// tiles network-first (online-first, but last-viewed tiles survive offline).
+registerRoute(
+	({ url }) => url.pathname.startsWith('/broads-pilot/') && url.pathname.endsWith('.json'),
+	new StaleWhileRevalidate({
+		cacheName: 'broads-pilot-data',
+		plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+	}),
+);
+registerRoute(
+	({ request, url }) => request.mode === 'navigate' && url.pathname.startsWith('/projects/broads-pilot'),
+	new NetworkFirst({
+		cacheName: 'broads-pilot-nav',
+		networkTimeoutSeconds: 5,
+		plugins: [new ExpirationPlugin({ maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+	}),
+);
+registerRoute(
+	({ url }) => /(?:tile\.openstreetmap\.org|tiles\.openseamap\.org)/.test(url.hostname),
+	new NetworkFirst({
+		cacheName: 'broads-pilot-tiles',
+		networkTimeoutSeconds: 4,
+		plugins: [new ExpirationPlugin({ maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 14 })],
+	}),
+);
+
 self.addEventListener('push', (event) => {
 	const data: { title?: string; body?: string; url?: string } = (() => {
 		try { return event.data?.json() ?? {}; } catch { return {}; }

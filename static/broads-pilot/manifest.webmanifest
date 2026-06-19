@@ -1,0 +1,17 @@
+{
+  "id": "/projects/broads-pilot",
+  "name": "Broads Pilot — Norfolk Broads Route Planner",
+  "short_name": "Broads Pilot",
+  "description": "Plan a Norfolk Broads boating trip: pick your hire boat and see where you can safely reach — routing, bridge clearances, speed limits, moorings, pubs and dog-friendly walks.",
+  "start_url": "/projects/broads-pilot",
+  "scope": "/projects/broads-pilot",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ede4d4",
+  "theme_color": "#c4570a",
+  "categories": ["travel", "navigation", "sports"],
+  "icons": [
+    { "src": "/broads-pilot/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/broads-pilot/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#ede4d4"/>
+  <path d="M150 470 C 150 360, 300 340, 300 250 S 150 150, 150 60"
+        fill="none" stroke="#c4570a" stroke-width="34" stroke-linecap="round" opacity="0.92"/>
+  <path d="M150 470 C 150 360, 300 340, 300 250 S 150 150, 150 60"
+        fill="none" stroke="#1a1008" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 26" opacity="0.55"/>
+  <g transform="translate(322 196) rotate(28)">
+    <path d="M0 -46 L40 40 L0 22 L-40 40 Z" fill="#1a1008"/>
+  </g>
+  <text x="60" y="452" font-family="'DM Mono', monospace" font-size="58" font-weight="600" fill="#1a1008" opacity="0.85">sr.</text>
+</svg>
