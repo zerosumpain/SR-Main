@@ -38,6 +38,7 @@
           <span class="idx">{i + 1}</span>
           <span class="body">
             <span class="label">{app.nodeLabel(nodeId)}</span>
+            {#if app.stopNotes[nodeId]}<span class="for">for {app.stopNotes[nodeId]}</span>{/if}
             <span class="sub">
               {#if leg && leg.edges.length === 0}
                 <span class="bad">unreachable for this boat</span>
@@ -216,6 +217,16 @@
     font-family: var(--font-body);
     font-size: 0.85rem;
     color: var(--text-primary);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .for {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--accent);
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;

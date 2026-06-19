@@ -5,6 +5,7 @@
   // panel so it can float over the map.
   import { app } from '../lib/appState.svelte';
   import { getRating, type Rating } from '../lib/ratings';
+  import { fmtDist, fmtTime } from '../lib/format';
   import type { Poi, PoiKind } from '../lib/types';
 
   const KIND_LABEL: Record<PoiKind, string> = {
@@ -46,6 +47,22 @@
     const full = Math.floor(r);
     const half = r - full >= 0.5;
     return '★'.repeat(full) + (half ? '⯪' : '') + '☆'.repeat(5 - full - (half ? 1 : 0));
+  }
+
+  // A POI isn't a graph node, so a trip "stop" for it is the mooring you'd tie up
+  // at to reach it. Mirror the mooring add-flow: chain from the last stop.
+  const access = $derived(poi ? app.poiAccess(poi.id) : null);
+  const accessNode = $derived(access?.mooring.node_id ?? null);
+  const inTrip = $derived(app.itinerary.length > 0);
+  const isLast = $derived(!!accessNode && app.lastStopNodeId === accessNode);
+  const already = $derived(!!accessNode && app.itinerary.includes(accessNode));
+  const addLeg = $derived(inTrip && accessNode && !isLast ? app.legFromLast(accessNode) : null);
+  const walkBit = $derived(access && access.dist_m > 60 ? ` · ${fmtDist(access.dist_m, app.units)} walk` : '');
+
+  function addPoiStop() {
+    if (!poi || !accessNode) return;
+    app.addStopWithNote(accessNode, `${poi.name} · ${KIND_LABEL[poi.kind] ?? 'Place'}`);
+    app.closeSelection();
   }
 </script>
 
@@ -91,6 +108,29 @@
         {/if}
         {#if rating.lowlight}
           <p class="quote quote-down">“{rating.lowlight}”</p>
+        {/if}
+      </div>
+    {/if}
+
+    {#if accessNode && access}
+      <div class="actions">
+        {#if inTrip}
+          <button class="btn btn-primary add-next" disabled={isLast || already} onclick={addPoiStop}>
+            {#if isLast}You're already mooring here
+            {:else if already}Already in your trip
+            {:else}
+              <span class="add-line">＋ Add after {app.lastStopLabel}</span>
+              <span class="leg-meta">
+                {#if addLeg && addLeg.edges.length}{fmtTime(addLeg.time_s)} · {fmtDist(addLeg.distance_m, app.units)} · {:else if addLeg}not reachable · {/if}moor at {access.mooring.name}{walkBit}
+              </span>
+            {/if}
+          </button>
+        {:else}
+          <button class="btn btn-primary add-next" onclick={addPoiStop}>
+            <span class="add-line">＋ Add to a trip</span>
+            <span class="leg-meta">moor at {access.mooring.name}{walkBit}</span>
+          </button>
+          <button class="btn btn-ghost" onclick={() => app.routeTo(accessNode)}>Route here</button>
         {/if}
       </div>
     {/if}
@@ -219,4 +259,13 @@
   }
   .btn-ghost { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .actions .btn { cursor: pointer; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  .add-next { flex: 1 1 100%; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
+  .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.92; font-variant-numeric: tabular-nums; line-height: 1.3; }
 </style>

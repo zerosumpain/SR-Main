@@ -223,13 +223,50 @@ export class AppState {
     this.destinationNode = nodeId;
   }
 
+  // Per-stop note keyed by node id — e.g. "The Swan · Pub" when a stop was added
+  // to reach a pub / fuel berth rather than for the mooring itself.
+  stopNotes = $state<Record<string, string>>({});
+
   addStop(nodeId: string) {
     if (!this.itinerary.includes(nodeId)) this.itinerary = [...this.itinerary, nodeId];
   }
-  removeStop(i: number) {
-    this.itinerary = this.itinerary.filter((_, idx) => idx !== i);
+  /** Add a stop and note what it's for (a pub, fuel berth, walk…). */
+  addStopWithNote(nodeId: string, note: string) {
+    this.addStop(nodeId);
+    if (note) this.stopNotes = { ...this.stopNotes, [nodeId]: note };
   }
-  clearItinerary() { this.itinerary = []; }
+  removeStop(i: number) {
+    const node = this.itinerary[i];
+    this.itinerary = this.itinerary.filter((_, idx) => idx !== i);
+    if (node && !this.itinerary.includes(node) && this.stopNotes[node]) {
+      const { [node]: _drop, ...rest } = this.stopNotes;
+      this.stopNotes = rest;
+    }
+  }
+  clearItinerary() { this.itinerary = []; this.stopNotes = {}; }
+
+  /** The mooring you'd tie up at to reach a POI: the nearest mooring that lists
+   *  it as walkable (precomputed), else the nearest mooring by straight line.
+   *  POIs (pubs / fuel berths / walks) aren't graph nodes, so a trip "stop" for
+   *  one is really its access mooring. */
+  poiAccess(poiId: string): { mooring: Mooring; dist_m: number } | null {
+    if (!this.data) return null;
+    let best: { mooring: Mooring; dist_m: number } | null = null;
+    for (const m of this.data.moorings) {
+      if (!m.node_id) continue;
+      const ref = (this.data.mooringPois[m.id] ?? []).find((x) => x.poi_id === poiId);
+      if (ref && (!best || ref.dist_m < best.dist_m)) best = { mooring: m, dist_m: ref.dist_m };
+    }
+    if (best) return best;
+    const poi = this.data.pois.find((p) => p.id === poiId);
+    if (!poi) return null;
+    for (const m of this.data.moorings) {
+      if (!m.node_id) continue;
+      const d = Math.round(haversine([m.lat, m.lng], [poi.lat, poi.lng]));
+      if (!best || d < best.dist_m) best = { mooring: m, dist_m: d };
+    }
+    return best;
+  }
 
   select(sel: Selection) { this.selected = sel; }
   closeSelection() { this.selected = null; }
@@ -289,7 +326,7 @@ export class AppState {
   snapshot() {
     return {
       boat: this.boat?.slug, origin: this.origin, destinationNode: this.destinationNode,
-      itinerary: this.itinerary, mapTheme: this.mapTheme, units: this.units,
+      itinerary: this.itinerary, stopNotes: this.stopNotes, mapTheme: this.mapTheme, units: this.units,
       layers: this.layers, dogOnly: this.dogOnly, onboarded: this.onboarded,
     };
   }
@@ -298,6 +335,7 @@ export class AppState {
     if (s.origin) this.origin = s.origin;
     if (s.destinationNode) this.destinationNode = s.destinationNode;
     if (s.itinerary) this.itinerary = s.itinerary;
+    if (s.stopNotes) this.stopNotes = s.stopNotes;
     if (s.mapTheme) this.mapTheme = s.mapTheme;
     if (s.units) this.units = s.units;
     if (s.layers) this.layers = { ...this.layers, ...s.layers };
