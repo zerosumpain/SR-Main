@@ -39,6 +39,9 @@
     return n;
   });
 
+  // FABs ride up with the mobile sheet (desktop overrides to a fixed bottom).
+  const fabBottomPx = $derived(app.cruiseActive ? 168 : Math.min(app.sheetPx + 14, 520));
+
   onMount(async () => {
     sheetSnap = window.matchMedia('(max-width: 759px)').matches ? 'peek' : 'half';
     await app.load();
@@ -127,7 +130,7 @@
   </div>
 
   <!-- floating action stack -->
-  <div class="bp-fabs">
+  <div class="bp-fabs" style:--fab-bottom="{fabBottomPx}px">
     <button class="fab fab-primary" onclick={() => (guideOpen = true)} aria-label="Plan my day with AI">
       <span class="fab-ic">✨</span><span class="fab-lbl">Plan my day</span>
     </button>
@@ -235,7 +238,7 @@
   .bp-mapopts { display: flex; flex-direction: column; gap: 0.5rem; width: min(88vw, 22rem); }
 
   /* FAB stack (bottom-right, thumb zone) */
-  .bp-fabs { position: absolute; right: 0.7rem; bottom: 9.8rem; z-index: 600; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end; }
+  .bp-fabs { position: absolute; right: 0.7rem; bottom: var(--fab-bottom, 9.8rem); z-index: 600; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end; transition: bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1); }
   .fab { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 999px; min-height: 48px; min-width: 48px; padding: 0 0.85rem; cursor: pointer; box-shadow: 0 3px 12px rgba(26, 16, 8, 0.22); font-family: var(--font-mono); }
   .fab-primary { background: var(--accent); color: #fff; border: none; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
   .fab-primary:hover { background: var(--accent-hover); }

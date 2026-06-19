@@ -5,6 +5,7 @@
   // pannable behind at every height. Header + summary are always visible (peek);
   // the body shows at half/full (and always on desktop).
   import type { Snippet } from 'svelte';
+  import { app } from '../lib/appState.svelte';
 
   let {
     snap = $bindable('peek'),
@@ -19,6 +20,8 @@
 
   let liveH = $state<number | null>(null);
   const heightStyle = $derived(`${liveH ?? snapPx(snap)}px`);
+  // publish the height so the FABs can ride up with the sheet
+  $effect(() => { app.sheetPx = liveH ?? snapPx(snap); });
 
   let startY = 0, startH = 0, dragged = false;
   function onDown(e: PointerEvent) {
@@ -75,7 +78,7 @@
   @media (min-width: 760px) {
     .sheet {
       left: 0.6rem; right: auto; top: 0.6rem; bottom: auto; width: 23rem;
-      height: auto !important; max-height: calc(100% - 1.2rem);
+      height: auto !important; max-height: calc(100% - 5.5rem);
       border: 1px solid var(--card-border); border-top: 1px solid var(--card-border);
       border-radius: 0.7rem; box-shadow: 0 6px 24px rgba(26, 16, 8, 0.18);
     }

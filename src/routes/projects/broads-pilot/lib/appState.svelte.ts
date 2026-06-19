@@ -41,6 +41,7 @@ export class AppState {
   showRangeRings = $state(false);
   mapTheme = $state<'warm' | 'nautical' | 'schematic'>('warm');
   units = $state<Units>('imperial');
+  sheetPx = $state(142); // current mobile sheet height — so the FABs can ride with it
   date = $state<Date>(new Date());
   onboarded = $state(false);
 

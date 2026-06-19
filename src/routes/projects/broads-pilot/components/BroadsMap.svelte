@@ -24,6 +24,12 @@
     L = (window as any).L;
     if (!L || !mapEl) return;
     map = L.map(mapEl, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView([52.68, 1.46], 11);
+    // keep the +/- control clear of the docked sheet: bottom-left on desktop,
+    // top-left on mobile (where the sheet is a bottom sheet).
+    const mq = window.matchMedia('(min-width: 760px)');
+    const setZoomPos = () => map.zoomControl?.setPosition(mq.matches ? 'bottomleft' : 'topleft');
+    setZoomPos();
+    mq.addEventListener?.('change', setZoomPos);
     const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
     const ATTR = '&copy; OpenStreetMap contributors';
     warmTiles = L.tileLayer(OSM, { maxZoom: 18, className: 'bp-warm-tiles', attribution: ATTR });
