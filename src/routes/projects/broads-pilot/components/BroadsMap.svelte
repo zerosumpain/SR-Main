@@ -95,7 +95,7 @@
       const o = op(app.layers.restrictions);
       for (const z of data.restrictions.zones) {
         const col = z.type === 'conservation' ? '#c62828' : z.type === 'tidal' ? '#e69500' : '#8d6e63';
-        L.polygon(z.geometry, { color: col, weight: 1, opacity: 0.55 * o, fillColor: col, fillOpacity: 0.12 * o, dashArray: '4 4' })
+        L.polygon(z.geometry, { color: col, weight: 1.5, opacity: 0.75 * o, fillColor: col, fillOpacity: 0.18 * o, dashArray: '5 4' })
           .bindTooltip(z.notes.split(' — ')[0], { sticky: true }).addTo(groups.zones);
       }
     }
