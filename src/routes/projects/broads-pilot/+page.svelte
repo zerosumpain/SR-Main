@@ -21,6 +21,7 @@
   import SearchBar from './components/SearchBar.svelte';
   import RouteLegend from './components/RouteLegend.svelte';
   import { logbook } from './lib/logbook.svelte';
+  import { guide } from './lib/guide.svelte';
   import type { SearchEntry } from './lib/search';
   import type { Selection } from './lib/appState.svelte';
 
@@ -221,8 +222,10 @@
 
   <!-- floating action stack -->
   <div class="bp-fabs" style:--fab-bottom="{fabBottomPx}px">
-    <button class="fab fab-primary" onclick={() => (guideOpen = true)} aria-label="Plan my day with AI">
-      <span class="fab-ic">✨</span><span class="fab-lbl">Plan my day</span>
+    <button class="fab fab-primary" class:planning={guide.planning} onclick={() => (guideOpen = true)}
+      aria-label={guide.planning ? 'Planner is working — tap to view' : 'Plan my day with AI'}>
+      <span class="fab-ic">✨</span><span class="fab-lbl">{guide.planning ? 'Planning…' : 'Plan my day'}</span>
+      {#if !guideOpen && guide.unseenPlan}<span class="fab-ready" aria-hidden="true"></span>{/if}
     </button>
     <button class="fab" onclick={useMyLocation} disabled={geoBusy} aria-label="Centre on my location" title="My location">◉</button>
     <button class="fab fab-live" class:on={app.cruiseActive} onclick={toggleCruise} aria-pressed={app.cruiseActive} aria-label={app.cruiseActive ? 'Stop live mode' : 'Go live'} title={app.cruiseActive ? 'Live' : 'Go live'}>
@@ -377,8 +380,12 @@
   /* FAB stack (bottom-right, thumb zone) */
   .bp-fabs { position: absolute; right: 0.7rem; bottom: var(--fab-bottom, 9.8rem); z-index: 600; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end; transition: bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1); }
   .fab { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 999px; min-height: 48px; min-width: 48px; padding: 0 0.85rem; cursor: pointer; box-shadow: 0 3px 12px rgba(26, 16, 8, 0.22); font-family: var(--font-mono); }
-  .fab-primary { background: var(--accent); color: #fff; border: none; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  .fab-primary { background: var(--accent); color: #fff; border: none; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; position: relative; }
   .fab-primary:hover { background: var(--accent-hover); }
+  .fab-primary.planning .fab-ic { display: inline-block; animation: fab-spin 1.1s linear infinite; }
+  @keyframes fab-spin { to { transform: rotate(360deg); } }
+  /* a small green dot when a plan finished while the modal was closed */
+  .fab-ready { position: absolute; top: 4px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #2e7d32; border: 1.5px solid #fff; }
   .fab-ic { font-size: 1rem; }
   .fab:disabled { opacity: 0.6; }
   .fab-live.on { background: #2e7d32; border-color: #2e7d32; }

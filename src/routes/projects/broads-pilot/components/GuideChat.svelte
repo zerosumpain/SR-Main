@@ -1,124 +1,74 @@
 <script lang="ts">
-  // The AI day-planner concierge. A short guided Q&A (≤3 questions, clickable
-  // answers + free text), then it calls /api/broads-pilot/guide and renders an
-  // interactive plan. After that, free-text follow-ups revise the plan.
+  // The AI day-planner concierge — a thin view over the persistent `guide` store
+  // so closing/reopening (or an accidental click-away) never loses the
+  // conversation or an in-flight plan. A short guided Q&A (≤3 questions), then it
+  // calls /api/broads-pilot/guide and renders an interactive plan; free-text
+  // follow-ups revise it.
   import { app } from '../lib/appState.svelte';
+  import { guide, TRIP_OPTIONS, ACTIVITY_OPTIONS } from '../lib/guide.svelte';
   import GuidePlan from './GuidePlan.svelte';
-  import type { Plan } from '../lib/guide-types';
 
   let { onClose, onApply }: { onClose: () => void; onApply: (stopNodeIds: string[]) => void } = $props();
 
-  const TRIP = [
-    { label: 'Just today', days: 1 }, { label: 'A weekend · 2 days', days: 2 },
-    { label: 'A few days · 3–4', days: 4 }, { label: 'A full week · 7 days', days: 7 },
-  ];
-  const ACTIVITIES = [
-    { label: '🐾 Dog walk', value: 'dog_walk' }, { label: '🍺 Pub lunch', value: 'pub' }, { label: '🎣 Fishing', value: 'fishing' },
-    { label: '🏊 Swimming', value: 'swim' }, { label: '🛒 Supermarket', value: 'supermarket' }, { label: '🦢 Wildlife & quiet', value: 'wildlife' }, { label: '📷 Sightseeing', value: 'sights' },
-  ];
-
-  type Phase = 'duration' | 'activities' | 'free' | 'planning' | 'done';
-  let phase = $state<Phase>('duration');
-  let days = $state(1);
-  let tripLabel = $state('');
-  let activities = $state<string[]>([]);
-  let freeText = $state('');
-  let followUp = $state('');
-  let plan = $state<Plan | null>(null);
-  let error = $state<string | null>(null);
-  let log = $state<{ role: 'bot' | 'me'; text: string }[]>([]);
-
-  function pickTrip(t: typeof TRIP[number]) {
-    days = t.days; tripLabel = t.label;
-    log = [...log, { role: 'me', text: t.label }];
-    phase = 'activities';
-  }
-  function toggleAct(v: string) { activities = activities.includes(v) ? activities.filter((a) => a !== v) : [...activities, v]; }
-  function activitiesDone() {
-    const labels = ACTIVITIES.filter((a) => activities.includes(a.value)).map((a) => a.label).join(', ');
-    log = [...log, { role: 'me', text: labels || 'A relaxed cruise' }];
-    phase = 'free';
-  }
-  function freeDone(skip = false) {
-    if (!skip && freeText.trim()) log = [...log, { role: 'me', text: freeText.trim() }];
-    requestPlan();
-  }
-
-  async function requestPlan(followUpText?: string) {
-    phase = 'planning'; error = null;
-    try {
-      const res = await fetch('/api/broads-pilot/guide', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          boat: app.boat?.slug, originNode: app.origin?.nodeId ?? 'staithe-stalham',
-          objectives: { days, activities, freeText: freeText.trim() },
-          followUp: followUpText, previousPlan: followUpText ? plan : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) error = data.error; else plan = data.plan;
-    } catch {
-      error = 'Could not reach the planner — check your connection and try again.';
-    }
-    phase = 'done';
-  }
-
-  function sendFollowUp() {
-    const t = followUp.trim();
-    if (!t) return;
-    log = [...log, { role: 'me', text: t }];
-    followUp = '';
-    requestPlan(t);
-  }
-
   function apply() {
-    if (!plan) return;
-    onApply(plan.stops.map((s) => s.nodeId));
+    if (!guide.plan) return;
+    onApply(guide.plan.stops.map((s) => s.nodeId));
   }
+
+  // while the planner is open showing a finished plan, it's been seen — clear the
+  // FAB "ready" dot.
+  $effect(() => { if (guide.phase === 'done' && guide.plan) guide.markSeen(); });
 </script>
 
-<div class="guide-backdrop" onclick={onClose} role="presentation">
-  <div class="guide" role="dialog" aria-label="AI day planner" onclick={(e) => e.stopPropagation()}>
+<!-- backdrop no longer closes on click — only the ✕ does, so an accidental tap
+     outside can't dismiss the planner mid-plan -->
+<div class="guide-backdrop" role="presentation">
+  <div class="guide" role="dialog" aria-label="AI day planner">
     <header class="guide-head">
       <span class="kicker">AI day planner</span>
       <h2>Plan my day on the Broads</h2>
-      <button class="close" onclick={onClose} aria-label="Close">✕</button>
+      <div class="head-actions">
+        {#if guide.active}
+          <button class="head-btn" onclick={() => guide.reset()} aria-label="Start over">↺ Start over</button>
+        {/if}
+        <button class="close" onclick={onClose} aria-label="Close">✕</button>
+      </div>
     </header>
 
     <div class="guide-body">
       <p class="bubble bot">Hi! I'll plan a day for your <strong>{app.boat?.name ?? 'boat'}</strong> from <strong>{app.origin?.label ?? 'your start'}</strong>. A couple of quick questions…</p>
 
       <p class="bubble bot">How long is your trip?</p>
-      {#each log as m}<p class="bubble {m.role}">{m.text}</p>{/each}
+      {#each guide.log as m}<p class="bubble {m.role}">{m.text}</p>{/each}
 
-      {#if phase === 'duration'}
+      {#if guide.phase === 'duration'}
         <div class="chips">
-          {#each TRIP as t}<button class="chip" onclick={() => pickTrip(t)}>{t.label}</button>{/each}
+          {#each TRIP_OPTIONS as t}<button class="chip" onclick={() => guide.pickTrip(t.days, t.label)}>{t.label}</button>{/each}
         </div>
-      {:else if phase === 'activities'}
+      {:else if guide.phase === 'activities'}
         <p class="bubble bot">What are you in the mood for? Pick any — or none for a relaxed cruise.</p>
         <div class="chips">
-          {#each ACTIVITIES as a}<button class="chip" class:on={activities.includes(a.value)} onclick={() => toggleAct(a.value)} aria-pressed={activities.includes(a.value)}>{a.label}</button>{/each}
+          {#each ACTIVITY_OPTIONS as a}<button class="chip" class:on={guide.activities.includes(a.value)} onclick={() => guide.toggleActivity(a.value)} aria-pressed={guide.activities.includes(a.value)}>{a.label}</button>{/each}
         </div>
-        <button class="next" onclick={activitiesDone}>Next →</button>
-      {:else if phase === 'free'}
+        <button class="next" onclick={() => guide.activitiesDone()}>Next →</button>
+      {:else if guide.phase === 'free'}
         <p class="bubble bot">Anything specific? e.g. "best spot for fishing", "somewhere with a playground", "quiet moorings". Or skip.</p>
         <div class="free-row">
-          <input class="free" bind:value={freeText} placeholder="Type anything (optional)…" onkeydown={(e) => e.key === 'Enter' && freeDone()} />
-          <button class="next" onclick={() => freeDone()}>Plan it</button>
-          <button class="skip" onclick={() => freeDone(true)}>Skip</button>
+          <input class="free" bind:value={guide.freeText} placeholder="Type anything (optional)…" onkeydown={(e) => e.key === 'Enter' && guide.freeDone()} />
+          <button class="next" onclick={() => guide.freeDone()}>Plan it</button>
+          <button class="skip" onclick={() => guide.freeDone(true)}>Skip</button>
         </div>
-      {:else if phase === 'planning'}
-        <p class="bubble bot planning"><span class="dots"><span></span><span></span><span></span></span> Charting the best day for you…</p>
-      {:else if phase === 'done'}
-        {#if error}
-          <p class="bubble bot err">{error}</p>
-          <button class="next" onclick={() => requestPlan()}>Try again</button>
-        {:else if plan}
-          <div class="bubble bot plan-bubble"><GuidePlan {plan} onApply={apply} /></div>
+      {:else if guide.phase === 'planning'}
+        <p class="bubble bot planning"><span class="dots"><span></span><span></span><span></span></span> Charting the best day for you… <span class="planning-note">(you can keep using the map — this stays as you left it)</span></p>
+      {:else if guide.phase === 'done'}
+        {#if guide.error}
+          <p class="bubble bot err">{guide.error}</p>
+          <button class="next" onclick={() => guide.requestPlan()}>Try again</button>
+        {:else if guide.plan}
+          <div class="bubble bot plan-bubble"><GuidePlan plan={guide.plan} onApply={apply} /></div>
           <div class="free-row followup">
-            <input class="free" bind:value={followUp} placeholder="Change anything? e.g. only 2 hrs, add a swim…" onkeydown={(e) => e.key === 'Enter' && sendFollowUp()} />
-            <button class="next" onclick={sendFollowUp}>Send</button>
+            <input class="free" bind:value={guide.followUp} placeholder="Change anything? e.g. only 2 hrs, add a swim…" onkeydown={(e) => e.key === 'Enter' && guide.sendFollowUp()} />
+            <button class="next" onclick={() => guide.sendFollowUp()}>Send</button>
           </div>
         {/if}
       {/if}
@@ -132,7 +82,10 @@
   .guide-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
   .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
   .guide-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }
-  .close { position: absolute; top: 0.6rem; right: 0.7rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.3rem; min-height: 36px; min-width: 36px; }
+  .head-actions { position: absolute; top: 0.6rem; right: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
+  .head-btn { background: transparent; border: 1px solid var(--card-border); border-radius: 0.4rem; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; padding: 0.35rem 0.55rem; min-height: 36px; }
+  .head-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .close { background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.3rem; min-height: 36px; min-width: 36px; }
   .close:hover { color: var(--text-primary); }
 
   .guide-body { overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.55rem; }
@@ -155,7 +108,8 @@
   .free { flex: 1 1 10rem; min-height: 40px; font-family: var(--font-body); font-size: 0.85rem; padding: 0.5rem 0.6rem; border: 1px solid var(--card-border); border-radius: 0.4rem; background: var(--bg); color: var(--text-primary); }
   .free:focus { outline: none; border-color: var(--accent); }
 
-  .planning { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); }
+  .planning { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); flex-wrap: wrap; }
+  .planning-note { font-size: 0.78rem; color: var(--text-muted); }
   .dots { display: inline-flex; gap: 3px; }
   .dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: gc-bounce 1.2s infinite ease-in-out; }
   .dots span:nth-child(2) { animation-delay: 0.15s; }
