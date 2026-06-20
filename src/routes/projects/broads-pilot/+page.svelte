@@ -388,5 +388,9 @@
   }
   @media (max-width: 759px) {
     .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: 0.7rem 0.7rem 0 0; z-index: 800; }
+    /* clear the top-right ⚙MAP / 📖LOG button stack so the search doesn't run
+       under it; drop the route key below that stack. */
+    .bp-topbar { right: 5.6rem; }
+    .bp-legend-wrap { top: 6.6rem; }
   }
 </style>
