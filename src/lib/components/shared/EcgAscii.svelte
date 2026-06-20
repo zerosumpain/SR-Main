@@ -10,8 +10,6 @@
     ampGain,
     nextRR,
     nextAmp,
-    fadeBand,
-    FADE_BANDS,
   } from './ecg-signal';
 
   let {
@@ -97,6 +95,7 @@
   ];
 
   let canvasEl: HTMLCanvasElement;
+  let cursorEl: HTMLDivElement;
 
   onMount(() => {
     refreshLiveHr();
@@ -135,16 +134,34 @@
       lineH = 14,
       fontPx = 13;
     let baselineRow = 0;
-    // Per-column trace state. colSet marks a column as drawn; colGap marks the
-    // first column of a new sweep (pen-up across the wrap); colT drives the fade.
+    // Per-column trace state. colSet marks a column as drawn; colT drives the
+    // linking of adjacent samples; colPx is the glyph size for that column.
     let colY = new Float32Array(1);
     let colT = new Float64Array(1);
     let colSet = new Uint8Array(1);
-    let colGap = new Uint8Array(1);
+    // Per-column glyph size in px — bigger where the signal deflects hardest, so
+    // the QRS peaks render in larger characters than the flat baseline.
+    let colPx = new Uint8Array(1);
     // The actual characters: one ASCII code per cell (COLS*ROWS, 0 = empty),
     // indexed col-major as charGrid[col * ROWS + row]. Each cell is picked ONCE
     // when the pen draws it and never changes again — the trail only fades.
     let charGrid = new Uint8Array(1);
+
+    // Columns committed since the last draw — the incremental renderer paints
+    // only these each frame, then fades the rest of the canvas (see draw()).
+    const pendingCols: number[] = [];
+    // Cache font strings by pixel size so per-column sizing never re-parses.
+    const fontByPx = new Map<number, string>();
+    const pxFont = (px: number) => {
+      let f = fontByPx.get(px);
+      if (!f) {
+        f = fontStack(px);
+        fontByPx.set(px, f);
+      }
+      return f;
+    };
+    // Per-frame phosphor decay (destination-out wipe). Recomputed in layout().
+    let fadeWipe = 'rgba(0,0,0,0.1)';
 
     function fontStack(px: number) {
       // 700 weight so the characters read boldly over the cream hero.
@@ -180,10 +197,16 @@
       colY = new Float32Array(COLS);
       colT = new Float64Array(COLS);
       colSet = new Uint8Array(COLS);
-      colGap = new Uint8Array(COLS);
+      colPx = new Uint8Array(COLS);
       charGrid = new Uint8Array(COLS * ROWS);
+      pendingCols.length = 0;
       lastCol = -1;
       if (cursorCol >= COLS) cursorCol = 0;
+
+      // Calibrate the per-frame alpha knock-down so a glyph fades to ~4% over
+      // one LIFETIME at the current redraw cadence (exponential phosphor decay).
+      const decayFrames = (LIFETIME * 1000) / DRAW_MS;
+      fadeWipe = `rgba(0,0,0,${(1 - Math.pow(0.04, 1 / decayFrames)).toFixed(3)})`;
     }
 
     const xMid = (col: number) => col * cellW + cellW / 2;
@@ -209,7 +232,7 @@
     // the previous sample to this one — that's what gives the spike its height)
     // with the next letters of the narrative, top-to-bottom. Stored in charGrid,
     // so a cell never changes after it's drawn; the trail only fades.
-    function commitColumn(c: number, yRow: number, wrapped: boolean, t: number) {
+    function commitColumn(c: number, yRow: number, sig: number, wrapped: boolean, t: number) {
       const base = c * ROWS;
       for (let r = 0; r < ROWS; r++) charGrid[base + r] = 0;
       const pc = (c - 1 + COLS) % COLS;
@@ -221,10 +244,13 @@
       for (let r = lo; r <= hi; r++) {
         charGrid[base + r] = nextGlyph();
       }
+      // Glyph size scales with the deflection magnitude: the flat baseline stays
+      // at the base size, the QRS spike comes out up to ~1.85× — that's the
+      // size fidelity on the peaks. Clamped to a byte for the Uint8Array.
+      colPx[c] = Math.min(255, Math.round(fontPx * (1 + Math.min(1.2, Math.abs(sig)) * 0.72)));
       colY[c] = yRow;
       colT[c] = t;
       colSet[c] = 1;
-      colGap[c] = wrapped ? 1 : 0;
     }
 
     // --- Clocks & beat state -------------------------------------------------
@@ -268,54 +294,54 @@
           const tau = cardiac - beatOnset;
           const sig = complex(tau) * beatAmp + baselineDrift(cardiac);
           const yRow = clampRow(baselineRow - sig * a);
-          commitColumn(c, yRow, wrapped, clock - (subSteps - 1 - s) * sub);
+          commitColumn(c, yRow, sig, wrapped, clock - (subSteps - 1 - s) * sub);
           lastCol = c;
           headCol = c;
+          pendingCols.push(c);
         }
       }
     }
 
     function draw() {
-      // Context text state (font/align/baseline) is set in layout() and only
-      // changes on resize, so it isn't re-set here every frame.
-      ctx.clearRect(0, 0, cssW, cssH);
+      // Phosphor decay: knock down the alpha of everything already on the canvas
+      // toward transparent — one fillRect, O(1) — instead of clearing and
+      // redrawing the whole trail every frame. THIS is the performance fix: the
+      // per-frame cost is now ~O(new columns), not O(every lit cell).
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = fadeWipe;
+      ctx.fillRect(0, 0, cssW, cssH);
+      ctx.globalCompositeOperation = 'source-over';
 
-      // Faint scan cursor — the live leading edge of the sweep.
-      ctx.globalAlpha = fullbleed ? 0.28 : 0.36;
-      ctx.fillStyle = accent;
-      ctx.fillRect(Math.round(xMid(headCol)) - 1, 0, 2, cssH);
-
-      // The fading phosphor trail. Each column's stored characters are redrawn
-      // at the opacity its age maps to; the leading column is hot + brighter.
-      // No per-glyph shadowBlur on the trail — blurred text per cell every frame
-      // was the mobile bottleneck. Only the single head column gets a light glow,
-      // and not on touch at all.
-      const headGlow = lite ? 0 : 8;
-      ctx.shadowColor = glow;
-      for (let c = 0; c < COLS; c++) {
-        if (!colSet[c]) continue;
-        const age = (clock - colT[c]) / LIFETIME;
-        if (age < 0 || age >= 1) continue;
-        const band = fadeBand(age);
-        if (band <= 0) continue;
-        const isHead = c === headCol;
-        ctx.globalAlpha = isHead ? 1 : band / FADE_BANDS;
-        ctx.fillStyle = isHead ? hot : accent;
-        ctx.shadowBlur = isHead ? headGlow : 0;
-        const base = c * ROWS;
-        for (let r = 0; r < ROWS; r++) {
-          const code = charGrid[base + r];
-          if (code) ctx.fillText(glyphStr(code), xMid(c), yMid(r));
+      // Paint only the columns committed since the last frame. Each is sized by
+      // its deflection (colPx), so peaks come out in big bold characters; the
+      // newest column is the hot leading edge, the rest fade behind it.
+      if (pendingCols.length) {
+        ctx.shadowColor = glow;
+        const headGlow = lite ? 0 : 8;
+        for (let i = 0; i < pendingCols.length; i++) {
+          const c = pendingCols[i];
+          const isHead = c === headCol;
+          ctx.font = pxFont(colPx[c]);
+          ctx.fillStyle = isHead ? hot : accent;
+          ctx.shadowBlur = isHead ? headGlow : 0;
+          const base = c * ROWS;
+          for (let r = 0; r < ROWS; r++) {
+            const code = charGrid[base + r];
+            if (code) ctx.fillText(glyphStr(code), xMid(c), yMid(r));
+          }
         }
+        ctx.shadowBlur = 0;
+        pendingCols.length = 0;
       }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
+
+      // Scan cursor — a cheap moved overlay rather than a per-frame full-height
+      // fill, so it doesn't streak under the destination-out fade.
+      if (cursorEl) cursorEl.style.transform = `translateX(${Math.round(xMid(headCol))}px)`;
     }
 
     function drawStatic() {
       // Reduced-motion: one deterministic screen of beats at full opacity.
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.font = fontStack(fontPx);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const colsPerSec = COLS / SWEEP_SEC;
@@ -326,15 +352,16 @@
         const t = c / colsPerSec;
         const tau = t - Math.floor(t / rr) * rr;
         const sig = complex(tau) + baselineDrift(t);
-        commitColumn(c, clampRow(baselineRow - sig * a), c === 0, 0);
+        commitColumn(c, clampRow(baselineRow - sig * a), sig, c === 0, 0);
       }
       ctx.globalAlpha = 1;
       ctx.fillStyle = accent;
       for (let c = 0; c < COLS; c++) {
         const base = c * ROWS;
+        ctx.font = pxFont(colPx[c]);
         for (let r = 0; r < ROWS; r++) {
           const code = charGrid[base + r];
-          if (code) ctx.fillText(String.fromCharCode(code), xMid(c), yMid(r));
+          if (code) ctx.fillText(glyphStr(code), xMid(c), yMid(r));
         }
       }
     }
@@ -345,6 +372,7 @@
     let interval: ReturnType<typeof setInterval> | undefined;
 
     if (prefersReducedMotion()) {
+      if (cursorEl) cursorEl.style.display = 'none'; // no live sweep ⇒ no cursor
       drawStatic();
       ro = new ResizeObserver(() => {
         layout();
@@ -437,6 +465,7 @@
     role="img"
     aria-label="Live heartbeat at {bpm} bpm, drawn in ASCII text spelling out the current vital signs"
   ></canvas>
+  <div class="h-ecg-ascii-cursor" bind:this={cursorEl} aria-hidden="true"></div>
 </div>
 
 <style>
@@ -454,5 +483,18 @@
   }
   .h-ecg-ascii.fullbleed .h-ecg-ascii-canvas {
     opacity: 0.9;
+  }
+  /* Live sweep cursor — moved via transform from the draw loop (cheap, GPU
+     composited) instead of being re-filled into the canvas every frame. */
+  .h-ecg-ascii-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 100%;
+    background: var(--accent, #c4570a);
+    opacity: 0.22;
+    pointer-events: none;
+    will-change: transform;
   }
 </style>
