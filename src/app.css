@@ -16,6 +16,18 @@
   --accent-tint-20: rgba(196, 87, 10, 0.2);
   --accent-tint-25: rgba(196, 87, 10, 0.25);
   --accent-tint-35: rgba(196, 87, 10, 0.35);
+
+  /* Counter-accent — deep petrol. Sits opposite burnt orange on the wheel at
+     the same depth. Editorial counterpoints only: inline links in long-form,
+     secondary outlines, data-viz second series, info/neutral status chrome.
+     NEVER a primary action — that stays --accent. */
+  --accent-ink: #0e5b66;
+  --accent-ink-hover: #094850;
+  --accent-ink-tint-06: rgba(14, 91, 102, 0.06);
+  --accent-ink-tint-12: rgba(14, 91, 102, 0.12);
+  --accent-ink-tint-22: rgba(14, 91, 102, 0.22);
+  --accent-ink-tint-35: rgba(14, 91, 102, 0.35);
+
   --bg: #ede4d4;            /* Warm cream, slightly darker */
   --bg-base: #ede4d4;       /* Alias of --bg for admin layout background */
   --bg-section: rgba(26, 16, 8, 0.04);  /* Subtle tinted sections */
@@ -41,14 +53,23 @@
   --warn: #b0892a;
   --warn-bg: rgba(176, 137, 42, 0.07);
   --warn-border: rgba(176, 137, 42, 0.5);
-  --info: #2d6cdf;
-  --info-bg: rgba(45, 108, 223, 0.07);
-  --info-border: rgba(45, 108, 223, 0.5);
+  /* "Info" routes to the petrol counter-accent — the palette has no blue. */
+  --info: var(--accent-ink);
+  --info-bg: var(--accent-ink-tint-06);
+  --info-border: var(--accent-ink-tint-35);
   --error: #c44;
   --error-bg: rgba(196, 68, 68, 0.07);
   --error-border: rgba(196, 68, 68, 0.5);
+  --error-hover: #a33;
   --status-error: var(--error);
   --status-success: var(--success);
+
+  /* Negative-trend — deep burnt brown for "down/worse" deltas. Warm-family
+     (not grey/blue); distinct from --error which is reserved for failures. */
+  --trend-down: #8a3a08;
+  /* Channel brand colour — WhatsApp. A sanctioned brand literal, tokenised so
+     it is referenced not hard-coded. Chrome only (dots/badges), never a CTA. */
+  --wa-green: #25d366;
 
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-brand: 'DM Mono', ui-monospace, monospace;
@@ -56,18 +77,18 @@
   --font-sans: var(--font-body);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Type scale */
-  --fs-display-xl: 120px;
-  --fs-display-lg: 96px;
-  --fs-display-md: 64px;
-  --fs-display-sm: 32px;
-  --fs-display-xs: 20px;
+  /* Type scale (v3 — display bumped, mono labels bumped) */
+  --fs-display-xl: 132px;
+  --fs-display-lg: 104px;
+  --fs-display-md: 72px;
+  --fs-display-sm: 36px;
+  --fs-display-xs: 22px;
   --fs-body-lg: 18px;
   --fs-body: 16px;
   --fs-body-sm: 14px;
-  --fs-label: 11px;
-  --fs-label-xs: 10px;
-  --fs-nav: 12px;
+  --fs-label: 12px;
+  --fs-label-xs: 11px;
+  --fs-nav: 13px;
 
   /* Layout */
   --site-nav-height: 56px;
@@ -76,10 +97,8 @@
   --radius-pill: 100px;
   --radius-round: 4px;
 
-  /* Shadow tokens — brutalist hard-offset and softer overlay */
-  --shadow-sm: 2px 2px 0 rgba(26, 16, 8, 0.06);
-  --shadow-md: 4px 4px 0 rgba(26, 16, 8, 0.10);
-  --shadow-lg: 0 8px 24px rgba(26, 16, 8, 0.18);
+  /* No elevation shadows — depth comes from borders + background tints.
+     The only sanctioned box-shadow is the live-dot glow (--accent-glow). */
 
   /* Motion tokens — the house tempo, previously scattered inline. Quiet and
      short: "polish, not flourish". Route JS durations through dur() in
@@ -88,7 +107,6 @@
   --t-base: 220ms;
   --t-slow: 360ms;
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.33, 1, 0.68, 1);
 
   /* Accent glow — a single lit-dot / focus treatment. Extends the live-dot
      box-shadow so CTAs and "live" indicators read as lit, not flat. */
@@ -350,7 +368,7 @@ a {
 .back-link::before {
   content: '←';
   display: inline-block;
-  transition: transform 0.22s cubic-bezier(0.33, 1, 0.68, 1);
+  transition: transform 0.2s var(--ease-out);
   font-size: 14px;
   line-height: 1;
 }
@@ -378,9 +396,9 @@ a {
 
 /* Subtle top chrome — used in sticky nav bars */
 .site-chrome {
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  backdrop-filter: blur(8px) saturate(1.1);
-  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
   border-bottom: 1px solid var(--divider);
 }
 

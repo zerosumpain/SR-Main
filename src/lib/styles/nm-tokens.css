@@ -22,8 +22,8 @@
 }
 
 .nm-sec-error {
-  background: rgba(196, 68, 68, 0.06);
-  border: 1px solid rgba(196, 68, 68, 0.3);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
   padding: 6px 8px;
 }
 
@@ -125,7 +125,6 @@
   width: 420px;
   background: var(--bg);
   border: 1.5px solid var(--accent);
-  box-shadow: var(--shadow-md);
   z-index: 40;
   display: flex;
   flex-direction: column;

@@ -236,7 +236,7 @@
   text-decoration: underline;
 }
 .nm-link-btn.danger { color: var(--error); }
-.nm-link-btn.danger:hover { color: #a33; }
+.nm-link-btn.danger:hover { color: var(--error-hover); }
 
 /* ---------- Card link tile (used on dashboard) ---------- */
 .nm-tile {
