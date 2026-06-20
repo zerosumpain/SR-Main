@@ -76,7 +76,7 @@
     <span class="flex items-center gap-2 relative z-10 ml-auto">
       {#if !isPub(key)}
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: rgba(180, 50, 50, 0.12); color: #b43232;"
         >
           Private
@@ -84,7 +84,7 @@
       {/if}
       <button
         onclick={() => (shareModal = { key, href, title })}
-        class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors"
+        class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
         style="border-color: var(--card-border); color: var(--text-secondary);"
         title="Create a secure share link — opens this project for a recipient even while private"
       >
@@ -93,7 +93,7 @@
       <button
         onclick={() => toggleVisibility(key)}
         disabled={toggling === key}
-        class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors"
+        class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
         style="border-color: var(--card-border); color: var(--text-secondary); opacity: {toggling === key ? 0.5 : 1};"
         title={isPub(key)
           ? 'Visible to the public — click to make private'
@@ -115,10 +115,7 @@
 
   <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
     {#if showCard('broads-pilot')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/broads-pilot" class="absolute inset-0 z-0" aria-label="Open Broads Pilot"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -146,7 +143,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           waterway routing · boat-aware · PWA
@@ -157,10 +154,7 @@
     {/if}
 
     {#if showCard('terminal-descent')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/terminal-descent/" class="absolute inset-0 z-0" aria-label="Play Terminal Descent"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -188,7 +182,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           Three.js · inertia · leaderboard
@@ -199,10 +193,7 @@
     {/if}
 
     {#if showCard('data-standard-designer')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/data-standard-designer" class="absolute inset-0 z-0" aria-label="Open the Data Standard Designer"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -230,7 +221,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           interoperability · assurance · JSON Schema · DCAT-AP
@@ -241,10 +232,7 @@
     {/if}
 
     {#if showCard('dfe-data-strategy')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/dfe-data-strategy" class="absolute inset-0 z-0" aria-label="Open Keystone"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -273,7 +261,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           pressures · trade-offs · maturity · cited
@@ -284,10 +272,7 @@
     {/if}
 
     {#if showCard('dfe-data-estate')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/dfe-data-estate" class="absolute inset-0 z-0" aria-label="Open The Data Estate"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -314,7 +299,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           live APIs · 16 services · OGL
@@ -325,10 +310,7 @@
     {/if}
 
     {#if showCard('policy-engine')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open Education Policy Modelling"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -356,7 +338,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           system dynamics · Monte-Carlo · cited
@@ -367,10 +349,7 @@
     {/if}
 
     {#if showCard('whitehall')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/whitehall/" class="absolute inset-0 z-0" aria-label="Play Whitehall"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -397,7 +376,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           Three.js · civil service · special projects
@@ -408,10 +387,7 @@
     {/if}
 
     {#if showCard('brass-and-rails')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/brass-and-rails/" class="absolute inset-0 z-0" aria-label="Play Brass & Rails"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -438,7 +414,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           Three.js · tilt-shift · learning AI
@@ -449,10 +425,7 @@
     {/if}
 
     {#if showCard('data-convergence')}
-    <div
-      class="group relative p-6 rounded-xl border transition-colors"
-      style="background: var(--card-bg); border-color: var(--card-border);"
-    >
+    <div class="project-card group">
       <a href="/projects/data-convergence" class="absolute inset-0 z-0" aria-label="Open The Spine"></a>
       <div class="flex items-start justify-between mb-3">
         <p
@@ -478,7 +451,7 @@
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
           Canvas · DAG · braid render
@@ -489,18 +462,12 @@
     {/if}
 
     {#if projects.length === 0}
-      <div
-        class="text-center py-16 rounded-xl border"
-        style="background: var(--card-bg); border-color: var(--card-border);"
-      >
+      <div class="project-empty text-center py-16">
         <p class="text-sm" style="color: var(--text-ghost);">No AI-built projects yet.</p>
       </div>
     {:else}
       {#each projects as project (project.id)}
-        <div
-          class="group relative p-6 rounded-xl border transition-colors"
-          style="background: var(--card-bg); border-color: var(--card-border);"
-        >
+        <div class="project-card group">
           <a href="/projects/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
 
           <div class="flex items-start justify-between mb-3">
@@ -529,7 +496,7 @@
           <div class="flex items-center justify-between relative z-10">
             <div class="flex gap-3 flex-wrap">
               <span
-                class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+                class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
                 style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
               >
                 {project.iterationsCompleted} iterations
@@ -542,7 +509,7 @@
                 <button
                   onclick={() => removeProject(project.id, project.publishedSlug!)}
                   disabled={removing === project.id}
-                  class="px-2 py-1 rounded text-[10px] uppercase tracking-wider border transition-colors hover:bg-red-500/10"
+                  class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors hover:bg-red-500/10"
                   style="border-color: #b43232; color: #b43232; opacity: {removing === project.id ? 0.5 : 1};"
                 >
                   {removing === project.id ? 'Removing...' : 'Remove'}
@@ -573,3 +540,26 @@
     onClose={() => (shareModal = null)}
   />
 {/if}
+
+<style>
+  /* Project cards adopt the /jkai/canvas card idiom: a sharp warm-brutalist
+     frame that sits flush on the page's warm-cream surface, defined by a thin
+     border that darkens to ink on hover (mirrors `.canvas-card`). */
+  .project-card {
+    position: relative;
+    padding: 1.5rem;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    transition: border-color 80ms ease;
+  }
+  .project-card:hover {
+    border-color: var(--text-primary);
+  }
+
+  .project-empty {
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+  }
+</style>
