@@ -110,6 +110,19 @@
     const glow = rgba(accentRgb, 0.55);
     const hot = rgba(lighten(accentRgb, 80), 1);
 
+    // Touch / small screens get a lighter render: lower DPR, coarser grid,
+    // fewer fps, and no per-glyph shadow blur. The full-bleed canvas at a
+    // phone's 2–3× DPR with shadowed text per cell was the source of the jank.
+    const lite =
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(pointer: coarse)').matches ||
+        Math.min(window.innerWidth, window.innerHeight) < 640);
+
+    // Cache code→char so the draw loop never allocates a string per cell/frame.
+    const glyphCache: string[] = new Array(256);
+    const glyphStr = (code: number) =>
+      glyphCache[code] ?? (glyphCache[code] = String.fromCharCode(code));
+
     // --- Character-grid layout (recomputed on resize) ------------------------
     // The canvas is sized to its real pixels (DPR-aware) and characters are laid
     // out on a true monospace grid, so glyphs stay square instead of being
@@ -139,16 +152,21 @@
     }
 
     function layout() {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      // Cap DPR lower on touch — a full-bleed canvas at 3× is a huge backing
+      // store to clear and composite every frame for a faint background trace.
+      const dpr = Math.min(lite ? 1.5 : 2, window.devicePixelRatio || 1);
       cssW = Math.max(1, canvasEl.clientWidth);
       cssH = Math.max(1, canvasEl.clientHeight);
       canvasEl.width = Math.round(cssW * dpr);
       canvasEl.height = Math.round(cssH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Small, dense cells — a fine field of characters rather than a few big
-      // glyphs. Smaller font ⇒ more columns/rows ⇒ more characters drawn.
-      fontPx = Math.max(9, Math.min(13, Math.round(cssW / 135)));
+      // Desktop: small, dense cells — a fine field of characters. Touch: bigger,
+      // fewer cells (far lighter to draw, and the vitals read better on a small
+      // screen). Fewer cells ⇒ fewer fillText calls per frame.
+      fontPx = lite
+        ? Math.max(12, Math.min(16, Math.round(cssW / 30)))
+        : Math.max(9, Math.min(13, Math.round(cssW / 135)));
       ctx.font = fontStack(fontPx);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -222,7 +240,7 @@
     let last = performance.now();
     let lastDraw = 0;
     let raf = 0;
-    const DRAW_MS = 33; // ~30fps redraw; physics still steps every frame
+    const DRAW_MS = lite ? 50 : 33; // ~20fps on touch, ~30fps on desktop
 
     function advance(dt: number) {
       const colsPerSec = COLS / SWEEP_SEC;
@@ -258,10 +276,9 @@
     }
 
     function draw() {
+      // Context text state (font/align/baseline) is set in layout() and only
+      // changes on resize, so it isn't re-set here every frame.
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.font = fontStack(fontPx);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
 
       // Faint scan cursor — the live leading edge of the sweep.
       ctx.globalAlpha = fullbleed ? 0.28 : 0.36;
@@ -270,6 +287,10 @@
 
       // The fading phosphor trail. Each column's stored characters are redrawn
       // at the opacity its age maps to; the leading column is hot + brighter.
+      // No per-glyph shadowBlur on the trail — blurred text per cell every frame
+      // was the mobile bottleneck. Only the single head column gets a light glow,
+      // and not on touch at all.
+      const headGlow = lite ? 0 : 8;
       ctx.shadowColor = glow;
       for (let c = 0; c < COLS; c++) {
         if (!colSet[c]) continue;
@@ -280,11 +301,11 @@
         const isHead = c === headCol;
         ctx.globalAlpha = isHead ? 1 : band / FADE_BANDS;
         ctx.fillStyle = isHead ? hot : accent;
-        ctx.shadowBlur = isHead ? 10 : 4;
+        ctx.shadowBlur = isHead ? headGlow : 0;
         const base = c * ROWS;
         for (let r = 0; r < ROWS; r++) {
           const code = charGrid[base + r];
-          if (code) ctx.fillText(String.fromCharCode(code), xMid(c), yMid(r));
+          if (code) ctx.fillText(glyphStr(code), xMid(c), yMid(r));
         }
       }
       ctx.shadowBlur = 0;
@@ -340,7 +361,22 @@
     ro = new ResizeObserver(() => layout());
     ro.observe(canvasEl);
 
+    // Only animate while the trace is actually on-screen and the tab is visible.
+    // On mobile the hero scrolls out of view almost immediately, so gating the
+    // rAF on visibility is the single biggest battery/CPU win — and it keeps
+    // scrolling smooth because we stop compositing a full-bleed canvas behind
+    // the fold. The clock freezes while paused, so it resumes seamlessly.
+    let running = false;
+    let inView = true;
+    let pageVisible = typeof document === 'undefined' || !document.hidden;
+    const canRun = () => inView && pageVisible;
+
     function tick(now: number) {
+      if (!canRun()) {
+        running = false;
+        raf = 0;
+        return;
+      }
       let dt = (now - last) / 1000;
       last = now;
       if (dt > 0.1) dt = 0.1; // guard against huge jumps after a tab refocus
@@ -352,11 +388,42 @@
       }
       raf = requestAnimationFrame(tick);
     }
-    raf = requestAnimationFrame(tick);
+    function start() {
+      if (running || !canRun()) return;
+      running = true;
+      last = performance.now(); // reset so the paused gap isn't one huge dt
+      raf = requestAnimationFrame(tick);
+    }
+    function stop() {
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    }
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        inView = entries[0]?.isIntersecting ?? true;
+        if (inView) start();
+        else stop();
+      },
+      { threshold: 0 },
+    );
+    io.observe(canvasEl);
+
+    function onVisibility() {
+      pageVisible = !document.hidden;
+      if (pageVisible) start();
+      else stop();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+
+    start();
     interval = setInterval(refreshLiveHr, 60_000);
 
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
+      io.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
       ro?.disconnect();
       if (interval) clearInterval(interval);
     };
