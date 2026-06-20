@@ -17,22 +17,64 @@
   let {
     rhr = 64,
     fullbleed = true,
-  }: { rhr?: number; fullbleed?: boolean } = $props();
+    steps = undefined,
+  }: { rhr?: number; fullbleed?: boolean; steps?: number } = $props();
 
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
+  // Live vitals woven into the heartbeat text. Seeded from /api/biome/state so
+  // the characters spell out real numbers, not lorem.
+  let recovery = $state<number | null>(null);
+  let strain = $state<number | null>(null);
+  let town = $state<string | null>(null);
+  let temp = $state<number | null>(null);
+  let condition = $state<string | null>(null);
 
-  // Same live-HR source as the line trace; fall back to the prop on failure.
+  // The narrative whose letters draw the trace: a looping ticker of the current
+  // vital signs. commitColumn() consumes it character-by-character in sweep
+  // order, so reading the heartbeat left-to-right spells out these stats. Ends
+  // with a separator so it wraps seamlessly back to the start.
+  function narrativeText(): string {
+    const segs: string[] = [`PULSE ${bpm} BPM`];
+    if (typeof steps === 'number' && steps > 0) segs.push(`${steps.toLocaleString('en-GB')} STEPS`);
+    if (recovery != null && recovery > 0) segs.push(`RECOVERY ${recovery}%`);
+    if (strain != null && strain > 0) segs.push(`STRAIN ${strain.toFixed(1)}`);
+    const place = [
+      town ? town.toUpperCase() : null,
+      temp != null ? `${temp}°C` : null,
+      condition ? condition.toUpperCase() : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    if (place) segs.push(place);
+    return segs.join(' · ') + ' · ';
+  }
+  let narrative = $derived(narrativeText());
+
+  // Same live-HR source as the line trace; also pulls the other vitals so the
+  // text stays current. Falls back to the prop / last value on failure.
   async function refreshLiveHr() {
     try {
       const res = await fetch('/api/biome/state');
       if (!res.ok) return;
-      const state = (await res.json()) as { pulse?: number; sources?: { heartRate?: boolean } };
+      const state = (await res.json()) as {
+        pulse?: number;
+        recovery?: number;
+        strain?: number;
+        town?: string;
+        weather?: { temp?: number; condition?: string };
+        sources?: { heartRate?: boolean };
+      };
       if (state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0) {
         bpm = Math.max(40, Math.min(220, Math.round(state.pulse)));
       }
+      if (typeof state.recovery === 'number') recovery = Math.round(state.recovery);
+      if (typeof state.strain === 'number') strain = state.strain;
+      if (typeof state.town === 'string') town = state.town;
+      if (typeof state.weather?.temp === 'number') temp = Math.round(state.weather.temp);
+      if (typeof state.weather?.condition === 'string') condition = state.weather.condition;
     } catch {
-      // ignore — keep last bpm
+      // ignore — keep last values
     }
   }
 
@@ -131,29 +173,25 @@
     const clampRow = (r: number) => Math.max(0, Math.min(ROWS - 1, r));
     const ampRows = () => ROWS * 0.34 * ampGain(bpm);
 
-    // Density tiers of ASCII characters, faint → bold. The waveform decides
-    // WHICH cells light up (so the heartbeat shape is unchanged); the tier
-    // decides how dense the character is — faint specks along the baseline,
-    // bold symbols where the signal is deflected hardest (the QRS spike).
-    const GLYPHS = [
-      ".':,;\"^",               // tier 0 — faint baseline specks
-      '-+=*~<>!?iltr',          // tier 1 — P / minor deflections
-      'ksvjzxctTYUFLaeon357',   // tier 2 — T wave / shoulders
-      '#@%&$8BMW0NX2569RGDQ4',  // tier 3 — the bold QRS spike
-    ];
-    function tierOf(absSig: number): number {
-      if (absSig >= 0.5) return 3;
-      if (absSig >= 0.22) return 2;
-      if (absSig >= 0.09) return 1;
-      return 0;
+    // Running read-head into the narrative. Each waveform cell consumes the
+    // next character, so the trace literally spells out the vitals as it sweeps;
+    // it loops the narrative forever. A space is stored as an empty cell, which
+    // reads as a word gap along the flat baseline.
+    let narrativeIdx = 0;
+    function nextGlyph(): number {
+      const text = narrative;
+      const len = text.length || 1;
+      const code = text.charCodeAt(narrativeIdx % len);
+      narrativeIdx++;
+      return code === 32 ? 0 : code; // 32 = space → blank cell
     }
 
     // Draw a column ONCE, when the pen first crosses into it: clear any old
     // glyphs there, then fill the waveform cells (the vertical run connecting
     // the previous sample to this one — that's what gives the spike its height)
-    // with random characters from the deflection's tier. Stored in charGrid, so
-    // a cell never changes after it's drawn; the trail only fades.
-    function commitColumn(c: number, yRow: number, sig: number, wrapped: boolean, t: number) {
+    // with the next letters of the narrative, top-to-bottom. Stored in charGrid,
+    // so a cell never changes after it's drawn; the trail only fades.
+    function commitColumn(c: number, yRow: number, wrapped: boolean, t: number) {
       const base = c * ROWS;
       for (let r = 0; r < ROWS; r++) charGrid[base + r] = 0;
       const pc = (c - 1 + COLS) % COLS;
@@ -162,9 +200,8 @@
       const rPrev = linked ? clampRow(Math.round(colY[pc])) : rCur;
       const lo = Math.min(rCur, rPrev);
       const hi = Math.max(rCur, rPrev);
-      const set = GLYPHS[tierOf(Math.abs(sig))];
       for (let r = lo; r <= hi; r++) {
-        charGrid[base + r] = set.charCodeAt((Math.random() * set.length) | 0);
+        charGrid[base + r] = nextGlyph();
       }
       colY[c] = yRow;
       colT[c] = t;
@@ -190,9 +227,9 @@
     function advance(dt: number) {
       const colsPerSec = COLS / SWEEP_SEC;
       const a = ampRows();
-      const steps = Math.max(1, Math.ceil(dt / 0.004));
-      const sub = dt / steps;
-      for (let s = 0; s < steps; s++) {
+      const subSteps = Math.max(1, Math.ceil(dt / 0.004));
+      const sub = dt / subSteps;
+      for (let s = 0; s < subSteps; s++) {
         cardiac += sub;
         while (cardiac - beatOnset >= beatRR) {
           beatOnset += beatRR;
@@ -213,7 +250,7 @@
           const tau = cardiac - beatOnset;
           const sig = complex(tau) * beatAmp + baselineDrift(cardiac);
           const yRow = clampRow(baselineRow - sig * a);
-          commitColumn(c, yRow, sig, wrapped, clock - (steps - 1 - s) * sub);
+          commitColumn(c, yRow, wrapped, clock - (subSteps - 1 - s) * sub);
           lastCol = c;
           headCol = c;
         }
@@ -263,11 +300,12 @@
       const colsPerSec = COLS / SWEEP_SEC;
       const rr = 60 / clampBpm(bpm);
       const a = ampRows();
+      narrativeIdx = 0; // deterministic text for the static frame
       for (let c = 0; c < COLS; c++) {
         const t = c / colsPerSec;
         const tau = t - Math.floor(t / rr) * rr;
         const sig = complex(tau) + baselineDrift(t);
-        commitColumn(c, clampRow(baselineRow - sig * a), sig, c === 0, 0);
+        commitColumn(c, clampRow(baselineRow - sig * a), c === 0, 0);
       }
       ctx.globalAlpha = 1;
       ctx.fillStyle = accent;
@@ -330,7 +368,7 @@
     class="h-ecg-ascii-canvas"
     bind:this={canvasEl}
     role="img"
-    aria-label="Live ECG trace rendered in ASCII at {bpm} bpm"
+    aria-label="Live heartbeat at {bpm} bpm, drawn in ASCII text spelling out the current vital signs"
   ></canvas>
 </div>
 
