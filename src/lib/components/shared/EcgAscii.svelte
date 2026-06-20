@@ -86,9 +86,13 @@
     let colT = new Float64Array(1);
     let colSet = new Uint8Array(1);
     let colGap = new Uint8Array(1);
+    // Density tier (0..3) per column — how far the signal is deflected from the
+    // baseline at that point. Picks how bold a character set the column draws.
+    let colTier = new Uint8Array(1);
 
     function fontStack(px: number) {
-      return `${px}px 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`;
+      // 700 weight so the characters read boldly over the cream hero.
+      return `700 ${px}px 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`;
     }
 
     function layout() {
@@ -99,7 +103,9 @@
       canvasEl.height = Math.round(cssH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      fontPx = Math.max(12, Math.min(17, Math.round(cssW / 100)));
+      // Larger cells than the line buffer — the trace is made of readable
+      // characters now, so bias toward legibility/boldness over fine detail.
+      fontPx = Math.max(13, Math.min(19, Math.round(cssW / 82)));
       ctx.font = fontStack(fontPx);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -114,6 +120,7 @@
       colT = new Float64Array(COLS);
       colSet = new Uint8Array(COLS);
       colGap = new Uint8Array(COLS);
+      colTier = new Uint8Array(COLS);
       if (cursorCol >= COLS) cursorCol = 0;
     }
 
@@ -122,32 +129,48 @@
     const clampRow = (r: number) => Math.max(0, Math.min(ROWS - 1, r));
     const ampRows = () => ROWS * 0.34 * ampGain(bpm);
 
-    // Slope → glyph. This is the whole point: the character itself encodes the
-    // wobble. A near-flat run draws the wobble as '~', a gentle climb/fall as
-    // '/' or '\', and the steep QRS spike as a solid column of '|'.
-    function drawColumn(c: number, alpha: number, color: string) {
+    // Density tiers of ASCII characters, faint → bold. The waveform decides
+    // WHICH cells light up (so the heartbeat shape is unchanged); these decide
+    // the character drawn there — denser symbols where the signal is deflected
+    // hardest (the QRS spike), faint specks along the baseline.
+    const GLYPHS = [
+      ".':,;\"",        // tier 0 — faint baseline specks
+      '-+=*~<>i!',      // tier 1 — P / minor deflections
+      'ksvjzxct?7',     // tier 2 — T wave / shoulders
+      '#@%&$8BMW0NX',   // tier 3 — the bold QRS spike
+    ];
+    function tierOf(absSig: number): number {
+      if (absSig >= 0.5) return 3;
+      if (absSig >= 0.22) return 2;
+      if (absSig >= 0.09) return 1;
+      return 0;
+    }
+    // Deterministic per (column,row,beat) pick — stable within a heartbeat, then
+    // re-shuffled when `beat` ticks, so the whole field of characters cycles on
+    // the pulse rather than flickering every frame.
+    function glyphFor(col: number, row: number, tier: number, beat: number): string {
+      const set = GLYPHS[tier];
+      let h = (col * 73856093) ^ (row * 19349663) ^ ((beat + 1) * 83492791);
+      h = (h ^ (h >>> 13)) >>> 0;
+      return set[h % set.length];
+    }
+
+    // Fill the column's waveform cells with random characters from its tier.
+    // The vertical run between the previous and current sample keeps the spike
+    // connected — now a bold column of cycling glyphs instead of '|' bars.
+    function drawColumn(c: number, alpha: number, color: string, beat: number) {
       const yCur = colY[c];
       const pc = (c - 1 + COLS) % COLS;
-      const linked =
-        !colGap[c] && colSet[pc] && (clock - colT[pc]) / LIFETIME < 1;
+      const linked = !colGap[c] && colSet[pc] && (clock - colT[pc]) / LIFETIME < 1;
       const yPrev = linked ? colY[pc] : yCur;
-      const rCur = clampRow(Math.round(yCur));
-      const rPrev = clampRow(Math.round(yPrev));
-      const dy = yCur - yPrev; // +ve = falling (down-screen)
-      const lo = Math.min(rCur, rPrev);
-      const hi = Math.max(rCur, rPrev);
-      const span = hi - lo;
+      const lo = clampRow(Math.round(Math.min(yCur, yPrev)));
+      const hi = clampRow(Math.round(Math.max(yCur, yPrev)));
+      const tier = colTier[c];
 
       ctx.globalAlpha = alpha;
       ctx.fillStyle = color;
-      if (!linked || span === 0) {
-        const ch = Math.abs(dy) < 0.5 ? '~' : dy < 0 ? '/' : '\\';
-        ctx.fillText(ch, xMid(c), yMid(rCur));
-      } else if (span === 1) {
-        ctx.fillText(dy < 0 ? '/' : '\\', xMid(c), yMid(rCur));
-      } else {
-        // Steep transition (the R spike): a connected vertical run of bars.
-        for (let r = lo; r <= hi; r++) ctx.fillText('|', xMid(c), yMid(r));
+      for (let r = lo; r <= hi; r++) {
+        ctx.fillText(glyphFor(c, r, tier, beat), xMid(c), yMid(r));
       }
     }
 
@@ -159,6 +182,7 @@
     let cursorCol = 0;
     let clock = 0;
     let headCol = 0;
+    let beatIndex = 0; // increments every heartbeat — the character cycle seed
 
     let last = performance.now();
     let lastDraw = 0;
@@ -176,6 +200,7 @@
           beatOnset += beatRR;
           beatRR = nextRR(bpm, beatOnset);
           beatAmp = nextAmp();
+          beatIndex++; // a new beat — cycle the character field
         }
         const tau = cardiac - beatOnset;
         const sig = complex(tau) * beatAmp + baselineDrift(cardiac);
@@ -191,6 +216,7 @@
         colT[c] = clock - (steps - 1 - s) * sub;
         colSet[c] = 1;
         colGap[c] = wrapped ? 1 : 0;
+        colTier[c] = tierOf(Math.abs(sig));
         headCol = c;
       }
     }
@@ -202,26 +228,26 @@
       ctx.textBaseline = 'middle';
 
       // Faint scan cursor — the live leading edge of the sweep.
-      ctx.globalAlpha = fullbleed ? 0.22 : 0.32;
+      ctx.globalAlpha = fullbleed ? 0.28 : 0.36;
       ctx.fillStyle = accent;
       ctx.fillRect(Math.round(xMid(headCol)) - 1, 0, 2, cssH);
 
       // The fading phosphor trail, column by column.
       ctx.shadowColor = glow;
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 5;
       for (let c = 0; c < COLS; c++) {
         if (!colSet[c] || c === headCol) continue;
         const age = (clock - colT[c]) / LIFETIME;
         if (age < 0 || age >= 1) continue;
         const band = fadeBand(age);
         if (band <= 0) continue;
-        drawColumn(c, band / FADE_BANDS, accent);
+        drawColumn(c, band / FADE_BANDS, accent, beatIndex);
       }
 
       // Hot leading character — the live pen tip.
       if (colSet[headCol]) {
-        ctx.shadowBlur = 10;
-        drawColumn(headCol, 1, hot);
+        ctx.shadowBlur = 12;
+        drawColumn(headCol, 1, hot, beatIndex);
       }
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
@@ -244,8 +270,9 @@
         colT[c] = 0;
         colSet[c] = 1;
         colGap[c] = c === 0 ? 1 : 0;
+        colTier[c] = tierOf(Math.abs(sig));
       }
-      for (let c = 0; c < COLS; c++) drawColumn(c, 1, accent);
+      for (let c = 0; c < COLS; c++) drawColumn(c, 1, accent, 0);
       ctx.globalAlpha = 1;
     }
 
@@ -317,6 +344,6 @@
     display: block;
   }
   .h-ecg-ascii.fullbleed .h-ecg-ascii-canvas {
-    opacity: 0.62;
+    opacity: 0.9;
   }
 </style>
