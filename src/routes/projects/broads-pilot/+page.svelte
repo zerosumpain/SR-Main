@@ -120,6 +120,20 @@
     );
   }
 
+  const TIER_LABEL: Record<string, string> = { hire_yard: 'Hire base', yacht_station: 'Yacht station', marina: 'Marina' };
+
+  // Set-start picker actions
+  function chooseStart(s: { nodeId: string; name: string; lat: number; lng: number }) {
+    app.setOriginNode(s.nodeId, s.name);
+    mapComp?.flyTo(s.lat, s.lng, 13);
+    startMenuOpen = false;
+  }
+  function pickOnMap() {
+    startMenuOpen = false;
+    app.beginPickStart(); // unlocks the map; the next tap sets the start
+    sheetSnap = window.matchMedia('(max-width: 759px)').matches ? 'peek' : sheetSnap;
+  }
+
   function toggleCruise() {
     if (app.cruiseActive) { stopWatch(); return; }
     if (!navigator.geolocation) { app.geoError = 'Geolocation is not available on this device.'; app.cruiseActive = true; return; }
@@ -259,13 +273,40 @@
     </PilotSheet>
   {/if}
 
-  <!-- start-location menu -->
+  <!-- start-location picker -->
   {#if startMenuOpen}
     <div class="bp-mini-backdrop" role="presentation" onclick={() => (startMenuOpen = false)}>
-      <div class="bp-mini" role="dialog" aria-label="Set start" onclick={(e) => e.stopPropagation()}>
-        <button class="bp-mini-act" onclick={useMyLocation} disabled={geoBusy}>{geoBusy ? 'Locating…' : '📍 Use my location'}</button>
-        <p>or tap anywhere on the map to drop your start. Currently: <strong>{app.origin?.label ?? 'not set'}</strong>.</p>
+      <div class="bp-start-menu" role="dialog" aria-label="Set start location" onclick={(e) => e.stopPropagation()}>
+        <header class="bp-start-head">
+          <span class="bp-start-kicker">Start location</span>
+          <span class="bp-start-cur">Now: <strong>{app.origin?.label ?? 'not set'}</strong></span>
+        </header>
+        <div class="bp-start-acts">
+          <button class="bp-start-act primary" onclick={useMyLocation} disabled={geoBusy}>{geoBusy ? 'Locating…' : '📍 Use my location'}</button>
+          <button class="bp-start-act" onclick={pickOnMap}>🗺️ Pick on map</button>
+        </div>
+        {#if app.startPoints.length}
+          <div class="bp-start-listlbl">Boatyards &amp; marinas</div>
+          <ul class="bp-start-list">
+            {#each app.startPoints as s (s.id)}
+              <li>
+                <button class="bp-start-row" class:active={s.nodeId === app.origin?.nodeId} onclick={() => chooseStart(s)}>
+                  <span class="nm">{s.name}</span>
+                  <span class="tier">{TIER_LABEL[s.tier] ?? 'Mooring'}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       </div>
+    </div>
+  {/if}
+
+  <!-- pick-a-point hint while arming the start tap -->
+  {#if app.pickingStart}
+    <div class="bp-pick-hint" role="status">
+      <span>Tap the map to set your start</span>
+      <button onclick={() => app.cancelPickStart()}>Cancel</button>
     </div>
   {/if}
 
@@ -296,7 +337,7 @@
         <h2>Plan your Broads trip</h2>
         <ol>
           <li>Tap the <strong>boat chip</strong> to set your boat — its air draft decides which bridges you can pass.</li>
-          <li>Your start is <strong>Stalham</strong> (the Richardsons base) — tap the start chip or the map to change it.</li>
+          <li>Your start is <strong>Stalham</strong> (the Richardsons base). Tap the <strong>◉ Start</strong> chip to use your location, choose a boatyard, or pick a point.</li>
           <li>Tap a destination, or hit <strong>✨ Plan my day</strong> to have the AI build an itinerary.</li>
           <li>On the water? Tap <strong>Live</strong> for nearby pubs, moorings &amp; walks as you cruise.</li>
         </ol>
@@ -362,9 +403,29 @@
 
   /* mini start menu */
   .bp-mini-backdrop { position: absolute; inset: 0; z-index: 950; background: rgba(26, 16, 8, 0.35); display: grid; place-items: center; padding: 1rem; }
-  .bp-mini { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.6rem; padding: 1rem; max-width: 22rem; display: flex; flex-direction: column; gap: 0.6rem; }
-  .bp-mini-act { background: var(--accent); color: #fff; border: none; border-radius: 0.4rem; padding: 0.6rem; font-family: var(--font-mono); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
-  .bp-mini p { margin: 0; font-family: var(--font-body); font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; }
+
+  /* set-start picker */
+  .bp-start-menu { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.6rem; padding: 1rem; width: min(24rem, 92vw); max-height: min(80vh, 34rem); display: flex; flex-direction: column; gap: 0.6rem; box-shadow: 0 10px 30px rgba(26, 16, 8, 0.3); }
+  .bp-start-head { display: flex; flex-direction: column; gap: 0.15rem; }
+  .bp-start-kicker { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
+  .bp-start-cur { font-family: var(--font-body); font-size: 0.82rem; color: var(--text-muted); }
+  .bp-start-cur strong { color: var(--text-primary); }
+  .bp-start-acts { display: flex; gap: 0.5rem; }
+  .bp-start-act { flex: 1; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.6rem 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; min-height: 44px; }
+  .bp-start-act:hover { border-color: var(--accent); }
+  .bp-start-act.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bp-start-act:disabled { opacity: 0.6; }
+  .bp-start-listlbl { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.2rem; }
+  .bp-start-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.3rem; }
+  .bp-start-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 0.4rem; cursor: pointer; text-align: left; color: var(--text-primary); min-height: 42px; }
+  .bp-start-row:hover { border-color: var(--text-muted); }
+  .bp-start-row.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-elevated)); }
+  .bp-start-row .nm { font-family: var(--font-body); font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bp-start-row .tier { flex: none; font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+
+  /* pick-a-point hint (while arming the start tap) */
+  .bp-pick-hint { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 620; display: flex; align-items: center; gap: 0.7rem; background: var(--accent); color: #fff; border-radius: 0.5rem; padding: 0.5rem 0.6rem 0.5rem 0.9rem; box-shadow: 0 4px 16px rgba(26, 16, 8, 0.3); font-family: var(--font-mono); font-size: 0.74rem; max-width: calc(100vw - 1.2rem); }
+  .bp-pick-hint button { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 0.35rem; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
 
   /* onboarding */
   .bp-onboard { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; background: rgba(26, 16, 8, 0.35); padding: 1rem; }

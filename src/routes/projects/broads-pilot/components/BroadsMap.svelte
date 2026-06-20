@@ -62,8 +62,9 @@
     for (const k of [...BASE, 'route', 'routeLive', 'user']) groups[k] = L.layerGroup().addTo(map);
     map.on('click', (e: any) => {
       if (suppressOriginClick) { suppressOriginClick = false; return; }
-      if (app.mapLocked) return; // pinned on home — no stray start pins
-      app.setOrigin(e.latlng.lat, e.latlng.lng, 'Dropped pin');
+      // Origin is set explicitly via the Set-start picker. A plain map tap only
+      // sets it when "pick a point" is armed — no surprise pin drops.
+      if (app.pickingStart) { app.setOrigin(e.latlng.lat, e.latlng.lng, 'Custom point'); app.pickingStart = false; }
     });
     initialized = true;
     applyTheme();
@@ -109,15 +110,18 @@
     const shown = (on: boolean) => schematic || on;
     const op = (on: boolean) => (schematic ? (on ? 1 : 0.1) : 1);
 
+    // Shared water palette so the broads + the navigable channels read as one
+    // bold blue water system on the warm/nautical themes.
+    const waterFill = app.mapTheme === 'nautical' ? '#1f8fd0' : '#2fa6cc';
+    const waterStroke = app.mapTheme === 'nautical' ? '#0a3d62' : '#0d5563';
+
     // --- the broads themselves: bold open-water highlight (warm + nautical;
     // drawn first so the network + markers sit on top). The schematic theme has
     // its own treatment, so skip it there. ---
     if (!schematic) {
-      const fill = app.mapTheme === 'nautical' ? '#1f8fd0' : '#2fa6cc';
-      const stroke = app.mapTheme === 'nautical' ? '#0a3d62' : '#0d5563';
       for (const b of data.broads)
         for (const ring of b.rings)
-          L.polygon(ring, { color: stroke, weight: 2.5, opacity: 0.95, fillColor: fill, fillOpacity: 0.55, lineJoin: 'round', interactive: false })
+          L.polygon(ring, { color: waterStroke, weight: 2.5, opacity: 0.95, fillColor: waterFill, fillOpacity: 0.55, lineJoin: 'round', interactive: false })
             .addTo(groups.broads);
     }
 
@@ -145,8 +149,19 @@
         L.polyline(e.geometry, { color: limitColor(e.limit_mph), weight: 3.6, opacity: 0.9 })
           .bindTooltip(`${e.limit_mph} mph`, { sticky: true }).addTo(groups.network);
     } else {
-      for (const e of data.graph.edges)
-        L.polyline(e.geometry, { color: '#6d4c41', weight: 1.6, opacity: 0.3 }).addTo(groups.network);
+      // default (warm/nautical): the navigable channels as bold blue water
+      // ribbons, matching the broads. Only reaches the SELECTED BOAT can pass are
+      // highlighted (a casing + blue fill); impassable reaches stay faint so you
+      // can still see the channel exists but read at a glance it's not for you.
+      for (const e of data.graph.edges) {
+        const v = boat ? edgeVerdict(e, data.restrictions, boat) : 'pass';
+        if (v === 'blocked') {
+          L.polyline(e.geometry, { color: '#6d4c41', weight: 1.6, opacity: 0.28 }).addTo(groups.network);
+        } else {
+          L.polyline(e.geometry, { color: waterStroke, weight: 5.5, opacity: 0.5, lineCap: 'round', lineJoin: 'round' }).addTo(groups.network);
+          L.polyline(e.geometry, { color: waterFill, weight: 3.4, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(groups.network);
+        }
+      }
     }
 
     // --- conservation / tidal zones (part of the Restrictions layer) ---

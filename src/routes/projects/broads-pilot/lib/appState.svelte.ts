@@ -43,6 +43,9 @@ export class AppState {
   // The map opens pinned on the start (the Richardsons hire base) until the
   // skipper unlocks it to roam. Ephemeral — deliberately not persisted.
   mapLocked = $state(true);
+  // "pick a point on the map" arming flag for the Set-start flow (the next map
+  // tap sets the origin). Ephemeral.
+  pickingStart = $state(false);
   units = $state<Units>('imperial');
   sheetPx = $state(142); // current mobile sheet height — so the FABs can ride with it
   date = $state<Date>(new Date());
@@ -284,6 +287,22 @@ export class AppState {
   /** Re-pin the map on the start; the map effect recentres on the origin. */
   lockMap() { this.mapLocked = true; }
   toggleLock() { this.mapLocked = !this.mapLocked; }
+
+  /** Arm "pick a point on the map" for the Set-start flow: unlock so the skipper
+   *  can pan/zoom, and let the next map tap set the origin. */
+  beginPickStart() { this.pickingStart = true; this.mapLocked = false; }
+  cancelPickStart() { this.pickingStart = false; }
+
+  // Sensible start points for the Set-start picker: hire bases, yacht stations
+  // and marinas (where you'd actually begin a trip), nearest-type first.
+  startPoints = $derived.by(() => {
+    if (!this.data) return [] as { id: string; name: string; tier: Mooring['tier']; nodeId: string; lat: number; lng: number }[];
+    const order: Record<string, number> = { hire_yard: 0, yacht_station: 1, marina: 2 };
+    return this.data.moorings
+      .filter((m) => m.node_id && (m.tier === 'hire_yard' || m.tier === 'yacht_station' || m.tier === 'marina'))
+      .map((m) => ({ id: m.id, name: m.name, tier: m.tier, nodeId: m.node_id!, lat: m.lat, lng: m.lng }))
+      .sort((a, b) => (order[a.tier] - order[b.tier]) || a.name.localeCompare(b.name));
+  });
 
   /** Nearest navigable edge to a point, within `maxDist` metres (null if none). */
   nearestEdge(lat: number, lng: number, maxDist = 150): { edge: GraphEdge; dist_m: number } | null {
