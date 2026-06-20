@@ -234,7 +234,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     padding: 0 6px;
     font: inherit;
     font-size: 10px;

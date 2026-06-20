@@ -178,14 +178,13 @@
     display: flex;
     flex-direction: column;
     min-width: 190px;
-    background: var(--bg);
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    box-shadow: 0 8px 24px rgba(26, 16, 8, 0.18);
   }
   .burger-link {
     font-family: var(--font-mono);
     font-size: 13px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-secondary);
     text-decoration: none;
@@ -199,7 +198,7 @@
     border-bottom: none;
   }
   .burger-link:hover {
-    background: rgba(196, 87, 10, 0.06);
+    background: var(--accent-tint-04);
     color: var(--text-primary);
   }
   .burger-link[aria-current='page'] {

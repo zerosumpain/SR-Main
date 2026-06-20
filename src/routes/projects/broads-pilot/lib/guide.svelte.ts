@@ -13,8 +13,8 @@ export const TRIP_OPTIONS = [
   { label: 'A few days · 3–4', days: 4 }, { label: 'A full week · 7 days', days: 7 },
 ] as const;
 export const ACTIVITY_OPTIONS = [
-  { label: '🐾 Dog walk', value: 'dog_walk' }, { label: '🍺 Pub lunch', value: 'pub' }, { label: '🎣 Fishing', value: 'fishing' },
-  { label: '🏊 Swimming', value: 'swim' }, { label: '🛒 Supermarket', value: 'supermarket' }, { label: '🦢 Wildlife & quiet', value: 'wildlife' }, { label: '📷 Sightseeing', value: 'sights' },
+  { label: 'Dog walk', value: 'dog_walk' }, { label: 'Pub lunch', value: 'pub' }, { label: 'Fishing', value: 'fishing' },
+  { label: 'Swimming', value: 'swim' }, { label: 'Supermarket', value: 'supermarket' }, { label: 'Wildlife & quiet', value: 'wildlife' }, { label: 'Sightseeing', value: 'sights' },
 ] as const;
 
 class GuideState {

@@ -68,7 +68,7 @@
   .flag.pii.on { background: var(--warn); border-color: var(--warn); color: #fff; }
   .flag.sc.on { background: var(--error); border-color: var(--error); color: #fff; }
   .fr-actions { display: inline-flex; gap: 2px; margin-left: auto; }
-  .ic { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px; padding: 3px 5px; border-radius: 3px; }
+  .ic { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px; padding: 3px 5px; border-radius: var(--radius-sharp); }
   .ic:hover:not(:disabled) { background: var(--accent-tint-08); color: var(--accent); }
   .ic:disabled { opacity: 0.3; cursor: default; }
   .ic.del:hover { color: var(--error); background: var(--error-bg); }

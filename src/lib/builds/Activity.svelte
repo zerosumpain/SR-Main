@@ -48,9 +48,9 @@
     top: 64px;
     z-index: 10;
     background: var(--bg, #ede4d4);
-    /* Soft shadow so the boundary between sticky pin and scrolling history
+    /* Border so the boundary between sticky pin and scrolling history
        is visible once the user has scrolled past. */
-    box-shadow: 0 6px 12px -8px color-mix(in srgb, var(--text-primary) 25%, transparent);
+    border-bottom: 1px solid var(--card-border);
   }
   .hist-hdr {
     margin-top: 0.5rem;

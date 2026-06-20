@@ -365,10 +365,10 @@
 <style>
   :global(html), :global(body) { margin: 0; }
   .page {
-    --paper: #f1ead6;
-    --paper-deep: #e7decc;
-    --ink: #1c1611;
-    --ink-soft: rgba(28, 22, 17, 0.62);
+    --paper: var(--bg);
+    --paper-deep: var(--surface-elevated);
+    --ink: var(--text-primary);
+    --ink-soft: var(--text-muted);
 
     position: fixed;
     inset: 0;
@@ -453,7 +453,7 @@
     color: var(--paper);
     border: none;
     padding: 8px 14px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     letter-spacing: 0.08em;
@@ -465,9 +465,9 @@
   .import-error {
     position: relative;
     z-index: 1;
-    background: rgba(177, 60, 48, 0.1);
-    color: #8a2d22;
-    border-left: 3px solid #b13c30;
+    background: var(--error-bg);
+    color: var(--error);
+    border-left: 3px solid var(--error);
     font-size: 12.5px;
     padding: 8px 14px;
   }
@@ -480,7 +480,7 @@
     background: rgba(28, 22, 17, 0.86);
     color: var(--paper);
     padding: 10px 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     letter-spacing: 0.08em;
@@ -511,9 +511,8 @@
     width: min(880px, 96vw);
     background: var(--paper-deep);
     border-left: 1px solid rgba(28, 22, 17, 0.1);
-    box-shadow: -24px 0 48px rgba(0, 0, 0, 0.12);
     transform: translateX(100%);
-    transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.2, 1);
+    transition: transform 0.2s var(--ease-out);
     z-index: 50;
     overflow: auto;
   }
@@ -541,7 +540,7 @@
     color: var(--ink-soft);
     background: rgba(28, 22, 17, 0.05);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
   }
 
   @media (max-width: 720px) {

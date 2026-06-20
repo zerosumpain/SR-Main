@@ -48,7 +48,7 @@
 <style>
   .cd { font-family: 'DM Sans', sans-serif; }
   .row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 0.7fr; gap: 3px; margin-bottom: 3px; }
-  .cell { display: flex; align-items: center; justify-content: center; padding: 7px 6px; border-radius: 5px; font-size: 12px; }
+  .cell { display: flex; align-items: center; justify-content: center; padding: 7px 6px; border-radius: var(--radius-round); font-size: 12px; }
   .cell.lab { justify-content: flex-start; font-weight: 600; color: rgba(28,22,17,0.78); font-size: 11.5px; }
   .col-h { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
   .val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }

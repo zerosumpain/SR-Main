@@ -100,20 +100,20 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(28,22,17,0.4); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .card { background: var(--paper, #f1ead6); border: 1px solid rgba(28,22,17,0.2); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: min(1180px, 95vw); max-height: 94vh; overflow-y: auto; padding: 18px 22px; font-family: 'DM Sans', system-ui, sans-serif; }
+  .card { background: var(--paper); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); width: min(1180px, 95vw); max-height: 94vh; overflow-y: auto; padding: 18px 22px; font-family: 'DM Sans', system-ui, sans-serif; }
   .m-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; margin: 0; color: var(--ink, #1c1611); }
+  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; margin: 0; color: var(--ink); }
   .m-unit { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
-  .m-close { background: none; border: 1px solid rgba(28,22,17,0.2); border-radius: 6px; width: 28px; height: 28px; cursor: pointer; color: var(--ink, #1c1611); font-size: 13px; flex-shrink: 0; }
+  .m-close { background: none; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); width: 28px; height: 28px; cursor: pointer; color: var(--ink); font-size: 13px; flex-shrink: 0; }
   .m-close:hover { background: rgba(28,22,17,0.06); }
   .m-chart { margin-bottom: 10px; }
-  .m-narrative { background: rgba(28,22,17,0.045); border-left: 3px solid var(--ink, #1c1611); border-radius: 5px; padding: 9px 12px; margin-bottom: 12px; }
+  .m-narrative { background: rgba(28,22,17,0.045); border-left: 3px solid var(--ink); border-radius: var(--radius-round); padding: 9px 12px; margin-bottom: 12px; }
   .m-nlabel { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
-  .m-narrative p { margin: 3px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink, #1c1611); }
+  .m-narrative p { margin: 3px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink); }
   .m-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .m-act { font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 6px 12px; border-radius: 7px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.5); color: var(--ink, #1c1611); cursor: pointer; }
+  .m-act { font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 6px 12px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.5); color: var(--ink); cursor: pointer; }
   .m-act:hover { background: rgba(28,22,17,0.06); }
-  .m-act.primary { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); border-color: var(--ink, #1c1611); }
+  .m-act.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .m-src { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.4); }
   @media (max-width: 560px) { .m-src { display: none; } }
 </style>

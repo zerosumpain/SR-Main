@@ -871,10 +871,10 @@
   .fail-list {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #c44;
+    color: var(--error);
     padding: 6px 8px;
-    background: rgba(196, 68, 68, 0.06);
-    border-left: 2px solid #c44;
+    background: var(--error-bg);
+    border-left: 2px solid var(--error);
   }
   .fail-list summary { cursor: pointer; }
   .fail-list ul { margin: 6px 0 0 1.2rem; padding: 0; }
@@ -919,10 +919,10 @@
   .err-line {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #c44;
+    color: var(--error);
     padding: 6px 8px;
-    background: rgba(196, 68, 68, 0.08);
-    border-left: 2px solid #c44;
+    background: var(--error-bg);
+    border-left: 2px solid var(--error);
   }
   .form-actions { display: flex; gap: 0.5rem; }
 
@@ -1044,8 +1044,8 @@
     text-decoration: none;
   }
   .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
-  .row-link.danger { color: #c44; }
-  .row-link.danger:hover { color: #a33; }
+  .row-link.danger { color: var(--error); }
+  .row-link.danger:hover { color: var(--error-hover); }
 
   .edit-grid { display: grid; gap: 0.9rem; }
   .edit-actions { display: flex; gap: 0.5rem; }

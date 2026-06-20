@@ -105,7 +105,7 @@
   .trip {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     padding: 0.9rem;
     display: flex;
     flex-direction: column;
@@ -138,7 +138,7 @@
     letter-spacing: 0.12em;
     padding: 0.45rem 0.7rem;
     min-height: 40px;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
   }
   .ghost:hover {
@@ -162,7 +162,7 @@
     gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     border: 1px dashed var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     font-family: var(--font-body);
     font-size: 0.78rem;
     line-height: 1.35;
@@ -181,7 +181,7 @@
     align-items: center;
     gap: 0.6rem;
     padding: 0.4rem 0.45rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     background: var(--card-bg);
     border: 1px solid var(--card-border);
   }
@@ -199,7 +199,7 @@
     font-size: 0.7rem;
     color: #fff;
     background: var(--accent);
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
   }
   .origin .idx {
     background: var(--text-muted);
@@ -257,7 +257,7 @@
     letter-spacing: 0.1em;
     color: var(--warn);
     border: 1px solid var(--warn);
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sharp);
     padding: 0.02rem 0.28rem;
   }
 
@@ -273,7 +273,7 @@
     font-size: 1.25rem;
     line-height: 1;
     cursor: pointer;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
   }
   .rm:hover {
     color: var(--error);
@@ -310,7 +310,7 @@
   .note {
     margin: 0;
     padding: 0.55rem 0.65rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     font-family: var(--font-body);
     font-size: 0.78rem;
     line-height: 1.35;
@@ -338,7 +338,7 @@
     letter-spacing: 0.12em;
     padding: 0.6rem 0.8rem;
     min-height: 40px;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
   }
   .share:hover {

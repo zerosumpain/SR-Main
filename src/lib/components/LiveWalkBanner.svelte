@@ -66,11 +66,11 @@
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    border-radius: 100px;
-    background: rgba(196, 87, 10, 0.08);
-    border: 1px solid rgba(196, 87, 10, 0.2);
+    border-radius: var(--radius-pill);
+    background: var(--accent-tint-08);
+    border: 1px solid var(--accent-tint-20);
     text-decoration: none;
-    color: var(--text-primary, #e8eaf0);
+    color: var(--text-primary);
     font-size: 11px;
     font-family: var(--font-mono, monospace);
     letter-spacing: 0.02em;
@@ -79,17 +79,17 @@
   }
 
   .live-banner:hover {
-    background: rgba(196, 87, 10, 0.14);
-    border-color: rgba(196, 87, 10, 0.35);
+    background: var(--accent-tint-14);
+    border-color: var(--accent-tint-35);
   }
 
   .live-dot {
     width: 6px;
     height: 6px;
-    background: var(--accent, #c4570a);
+    background: var(--accent);
     border-radius: 50%;
     animation: pulse-dot 1.5s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(196, 87, 10, 0.5);
+    box-shadow: var(--accent-glow);
     flex-shrink: 0;
   }
 
@@ -100,21 +100,21 @@
 
   .live-text {
     font-weight: 700;
-    color: var(--accent, #c4570a);
+    color: var(--accent);
     letter-spacing: 0.1em;
   }
 
   .live-sep {
-    color: var(--text-ghost, #555);
+    color: var(--text-ghost);
     opacity: 0.4;
   }
 
   .live-detail {
-    color: var(--text-secondary, #999);
+    color: var(--text-secondary);
   }
 
   .live-arrow {
-    color: var(--accent, #c4570a);
+    color: var(--accent);
     opacity: 0.6;
   }
 </style>

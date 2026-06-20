@@ -302,7 +302,6 @@
     color: var(--text-primary);
     border: 1px solid var(--text-primary);
     border-radius: 2px;
-    box-shadow: 6px 6px 0 var(--text-primary);
     z-index: 1000;
     display: flex;
     flex-direction: column;

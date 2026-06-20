@@ -276,8 +276,7 @@
     border: 3px solid var(--text-primary);
     box-shadow:
       inset 0 0 0 1.5px var(--bg),
-      0 0 0 1px rgba(26, 16, 8, 0.45),
-      0 4px 10px rgba(26, 16, 8, 0.25);
+      0 0 0 1px var(--divider);
     pointer-events: none;
     z-index: 3;
   }
@@ -308,10 +307,10 @@
     letter-spacing: 0.05em;
     white-space: nowrap;
     transform: translate(-50%, -120%);
-    box-shadow: 0 4px 14px rgba(26, 16, 8, 0.18);
+    border: 1px solid var(--divider);
   }
   .h-tip-key {
-    color: rgba(237, 228, 212, 0.6);
+    color: color-mix(in srgb, var(--bg) 60%, transparent);
     margin-right: 6px;
     text-transform: uppercase;
     letter-spacing: 0.15em;

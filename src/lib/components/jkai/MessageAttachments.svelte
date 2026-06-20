@@ -49,9 +49,23 @@
           href={`/api/jkai/attachments/${att.id}`}
           download={att.originalName ?? undefined}
           class="inline-flex items-center gap-2 px-3 py-2 rounded border max-w-xs"
-          style="border-color: var(--border); background: var(--bg-subtle, rgba(255,255,255,0.05));"
+          style="border-color: var(--border); background: var(--surface-overlay);"
         >
-          <span>{att.kind === 'pdf' ? '📄' : att.kind === 'document' ? '📎' : '📝'}</span>
+          <span aria-hidden="true">
+            {#if att.kind === 'pdf'}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 2.5h6l4 4V17a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 5 17z" /><path d="M11 2.5V6.5h4" />
+              </svg>
+            {:else if att.kind === 'document'}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 8.5 8.5 14a2.5 2.5 0 0 1-3.5-3.5l6-6a3.5 3.5 0 0 1 5 5l-6 6" />
+              </svg>
+            {:else}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 3.5h12v13H4z" /><path d="M6.5 7h7M6.5 10h7M6.5 13h4" />
+              </svg>
+            {/if}
+          </span>
           <span class="flex-1 min-w-0 truncate">{att.originalName ?? att.kind}</span>
           <span class="text-xs opacity-60">{fmtSize(att.sizeBytes)}</span>
         </a>

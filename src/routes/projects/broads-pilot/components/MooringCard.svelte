@@ -113,7 +113,7 @@
       <span class="kicker kicker-muted">Facilities</span>
       <div class="fac-list">
         <span class="fac" class:fac-on={m.facilities.shore_power} class:fac-off={!m.facilities.shore_power}>
-          ⚡ Shore power{m.facilities.shore_power ? '' : ' — none'}
+          <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5 4.5 11h5L9 17.5 15.5 9h-5z" /></svg> Shore power{m.facilities.shore_power ? '' : ' — none'}
         </span>
         {#each presentFacilities as f (f.key)}
           <span class="fac fac-plain">{f.label}</span>
@@ -204,9 +204,8 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -236,7 +235,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -271,9 +270,10 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.22rem 0.5rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
+  .fac { display: inline-flex; align-items: center; gap: 0.25rem; }
   .fac-plain { color: var(--text-secondary); border: 1px solid var(--card-border); }
   .fac-on { color: #fff; background: var(--success); border: 1px solid var(--success); font-weight: 700; }
   .fac-off { color: var(--text-muted); border: 1px dashed var(--card-border); }
@@ -297,7 +297,7 @@
     padding: 0.4rem 0.55rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     text-align: left;
   }
@@ -320,7 +320,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.9rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     min-height: 40px;
   }
@@ -334,7 +334,7 @@
   .add-next { flex: 1 1 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
   .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
   .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
-  .leg-meta.blocked { color: #c62828; }
+  .leg-meta.blocked { color: var(--error); }
   .btn-ghost { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
 </style>

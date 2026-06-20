@@ -96,9 +96,9 @@
 </div>
 
 <style>
-  .rc { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; padding: 8px 10px 6px; }
+  .rc { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); padding: 8px 10px 6px; }
   .rc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
-  .rc-title { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 13px; color: var(--ink, #1c1611); }
+  .rc-title { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 13px; color: var(--ink); }
   .rc-cur { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
   svg { display: block; }
   .grid { stroke: rgba(28,22,17,0.08); stroke-width: 1; }

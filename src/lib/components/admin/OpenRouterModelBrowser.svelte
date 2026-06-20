@@ -178,8 +178,8 @@
 </script>
 
 <section
-  class="rounded-lg p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border);"
+  class="p-5"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
 >
   <h2
     class="text-sm uppercase tracking-wider mb-4"
@@ -240,10 +240,10 @@
             {@const active = selectedProviders.has(p)}
             <button
               type="button"
-              class="rounded-full px-2.5 py-0.5 text-[11px] transition-colors"
+              class="px-2.5 py-0.5 text-[11px] transition-colors"
               style={active
-                ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
-                : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+                ? 'border-radius: var(--radius-pill); background: var(--accent); color: white; border: 1px solid var(--accent);'
+                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
               aria-pressed={active}
               onclick={() => toggleProvider(p)}
             >
@@ -273,10 +273,10 @@
             {@const active = selectedModalities.has(m)}
             <button
               type="button"
-              class="rounded-full px-2.5 py-0.5 text-[11px] transition-colors"
+              class="px-2.5 py-0.5 text-[11px] transition-colors"
               style={active
-                ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
-                : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+                ? 'border-radius: var(--radius-pill); background: var(--accent); color: white; border: 1px solid var(--accent);'
+                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
               aria-pressed={active}
               onclick={() => toggleModality(m)}
             >
@@ -294,7 +294,7 @@
       {#if loading}<span class="ml-2">· loading…</span>{/if}
     </span>
     {#if flash}
-      <span style="color: {flash.tone === 'ok' ? 'var(--accent)' : '#ef4444'};">{flash.text}</span>
+      <span style="color: {flash.tone === 'ok' ? 'var(--accent)' : 'var(--error)'};">{flash.text}</span>
     {/if}
   </div>
 

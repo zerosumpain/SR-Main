@@ -25,8 +25,8 @@
 
 <button
   onclick={toggle}
-  class="fixed bottom-4 left-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 transition-opacity hover:opacity-100"
-  style="background: var(--card-bg); border: 1px solid var(--card-border); opacity: 0.7;"
+  class="fixed bottom-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 transition-opacity hover:opacity-100"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-pill); opacity: 0.7;"
   title={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}
   aria-label={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}
 >

@@ -51,9 +51,9 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
 
 <style>
   .intro { max-width: 76ch; }
-  .formula { background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.6; color: rgba(28,22,17,0.8); overflow-x: auto; white-space: pre; }
+  .formula { background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.6; color: rgba(28,22,17,0.8); overflow-x: auto; white-space: pre; }
   .pe-prose { max-width: 80ch; }
-  .pe-prose code { background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.9em; }
+  .pe-prose code { background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: var(--radius-sharp); font-family: 'JetBrains Mono', monospace; font-size: 0.9em; }
   .coeffs { display: grid; gap: 8px; }
   .coeff { display: grid; grid-template-columns: 160px 48px 1fr; gap: 10px; align-items: baseline; }
   .coeff code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8a2d3a; }
@@ -63,6 +63,6 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
   .caveats li { font-size: 13.5px; line-height: 1.55; color: rgba(28,22,17,0.74); margin-bottom: 6px; }
   .sources { columns: 2; column-gap: 28px; padding-left: 18px; }
   .sources li { font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.7); margin-bottom: 4px; break-inside: avoid; }
-  .sources a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .sources a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
   @media (max-width: 700px) { .coeff { grid-template-columns: 1fr; } .sources { columns: 1; } }
 </style>

@@ -6,10 +6,6 @@
   let searching = $state(false);
   let debounceTimer: ReturnType<typeof setTimeout>;
 
-  const sourceIcon: Record<string, string> = {
-    web: '🌐', whatsapp: '💬', pwa: '📱', email: '📧',
-  };
-
   function onInput() {
     clearTimeout(debounceTimer);
     if (query.trim().length < 2) {
@@ -32,6 +28,20 @@
   }
 </script>
 
+{#snippet sourceIcon(source: string)}
+  {#if source === 'web'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c2 2.5 2 11.5 0 14M10 3c-2 2.5-2 11.5 0 14"/></svg>
+  {:else if source === 'whatsapp'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16l1-3a6 6 0 113 2.5L4 16z"/></svg>
+  {:else if source === 'pwa'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="1"/><line x1="9" y1="14.5" x2="11" y2="14.5"/></svg>
+  {:else if source === 'email'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="14" height="10" rx="1"/><path d="M3 6l7 5 7-5"/></svg>
+  {:else}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h7l3 3v11H5z"/><path d="M12 3v3h3"/><line x1="7.5" y1="10" x2="12.5" y2="10"/><line x1="7.5" y1="13" x2="12.5" y2="13"/></svg>
+  {/if}
+{/snippet}
+
 <PageHeader title="SEARCH" titleHref="/jkai/intel" />
 
 <div class="p-6 sm:p-10 max-w-4xl mx-auto">
@@ -40,7 +50,7 @@
     bind:value={query}
     oninput={onInput}
     placeholder="Search notes, entities, relationships..."
-    class="w-full rounded-lg px-4 py-3 text-sm focus:outline-none border mb-6"
+    class="w-full rounded-[var(--radius-round)] px-4 py-3 text-sm focus:outline-none border mb-6"
     style="background: var(--card-bg); border-color: var(--card-border);"
     autofocus
   />
@@ -52,10 +62,10 @@
   {:else}
     {#if results.entities.length > 0}
       <div class="mb-8">
-        <h2 class="text-sm font-semibold text-emerald-600 mb-3">Entities ({results.entities.length})</h2>
+        <h2 class="text-sm font-semibold mb-3" style="color: var(--success);">Entities ({results.entities.length})</h2>
         <div class="grid grid-cols-2 gap-2">
           {#each results.entities as entity}
-            <a href="/jkai/intel/entities/{entity.id}" class="rounded-lg p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
+            <a href="/jkai/intel/entities/{entity.id}" class="rounded-[var(--radius-round)] p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
               <div class="flex items-center gap-2 mb-1">
                 <span>{entity.typeIcon}</span>
                 <span class="font-medium text-sm">{entity.name}</span>
@@ -72,12 +82,12 @@
 
     {#if results.notes.length > 0}
       <div>
-        <h2 class="text-sm font-semibold text-sky-600 mb-3">Notes ({results.notes.length})</h2>
+        <h2 class="text-sm font-semibold mb-3" style="color: var(--accent-ink);">Notes ({results.notes.length})</h2>
         <div class="space-y-2">
           {#each results.notes as note}
-            <a href="/jkai/intel/notes/{note.id}" class="block rounded-lg p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
+            <a href="/jkai/intel/notes/{note.id}" class="block rounded-[var(--radius-round)] p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
               <div class="flex items-center gap-2 mb-1">
-                <span>{sourceIcon[note.source] ?? '📝'}</span>
+                <span class="inline-flex" style="color: var(--text-muted);">{@render sourceIcon(note.source)}</span>
                 <span class="font-medium text-sm">{note.title ?? 'Untitled'}</span>
               </div>
               {#if note.snippet}

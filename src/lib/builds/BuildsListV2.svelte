@@ -704,7 +704,7 @@
     background: var(--bg);
     border: 1px solid var(--card-border);
     min-height: 140px;
-    transition: border-color 80ms ease, box-shadow 80ms ease;
+    transition: border-color 80ms ease;
   }
   .build-card:hover { border-color: var(--text-primary); }
   .build-card.selected { border-color: var(--accent); }
@@ -712,8 +712,8 @@
      so users can tell at a glance which entries came in via the agent vs.
      were started manually from /jkai/builds/new. */
   .build-card.hermes {
-    border-left: 3px solid #5b8def;
-    box-shadow: inset 0 2px 0 #5b8def;
+    border-left: 3px solid var(--accent-ink);
+    border-top: 2px solid var(--accent-ink);
   }
 
   /* Top-of-card toolbar: select checkbox · origin flag · visible quick
@@ -734,7 +734,7 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 2px 6px;
-    background: #5b8def;
+    background: var(--accent-ink);
     color: white;
     border-radius: 2px;
     flex-shrink: 0;
@@ -822,7 +822,6 @@
     min-width: 160px;
     background: var(--bg);
     border: 1px solid var(--text-primary);
-    box-shadow: 4px 4px 0 var(--card-border);
     display: flex;
     flex-direction: column;
     z-index: 10;

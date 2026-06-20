@@ -30,7 +30,7 @@
       {#each data.posts as post}
         <a
           href="/blog/{post.slug}"
-          class="block py-5 group transition-colors hover:bg-[rgba(196,87,10,0.04)]"
+          class="block py-5 group transition-colors hover:bg-[var(--accent-tint-04)]"
           style="border-bottom: 1px solid var(--divider);"
         >
           <div class="flex gap-5">
@@ -38,7 +38,7 @@
               <img
                 src={post.coverImageUrl}
                 alt={post.title}
-                class="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded shrink-0 hidden sm:block"
+                class="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-[var(--radius-round)] shrink-0 hidden sm:block"
               />
             {/if}
             <div class="flex-1 min-w-0">
@@ -59,7 +59,7 @@
                 <div class="flex flex-wrap gap-1.5 mt-2">
                   {#each post.tags as tag}
                     <span
-                      class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full"
+                      class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
                       style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted);"
                     >
                       {tag}

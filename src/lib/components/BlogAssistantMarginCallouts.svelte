@@ -233,34 +233,32 @@
     position: fixed;
     /* `left` and `width` are set inline at recompute time so callouts anchor
        beside the article body rather than at the viewport's right edge. */
-    background: var(--bg-card, var(--bg-page, #fff));
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
     padding: 0.55rem 0.7rem;
     pointer-events: auto;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     font-size: 0.85rem;
     display: flex; flex-direction: column; gap: 0.4rem;
     cursor: pointer;
-    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+    transition: border-color 0.2s var(--ease-out);
     z-index: 1;
   }
   .callout:hover {
-    border-color: rgba(255, 184, 0, 0.7);
+    border-color: var(--accent-tint-35);
     z-index: 5;
   }
   .callout.active {
-    border-color: rgba(255, 184, 0, 1);
-    box-shadow: 0 6px 24px rgba(255, 184, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.18);
+    border-color: var(--accent);
+    background: var(--accent-tint-08);
     /* Lift the selected callout above all neighbours so action buttons are
        never hidden behind a stacked card below it. */
     z-index: 50;
-    transform: translateY(-1px);
   }
   .anchor-link {
     position: absolute; left: -22px; top: 6px;
     width: 18px; height: 18px;
     border: 1px solid var(--card-border);
-    background: var(--bg-card, #fff);
+    background: var(--surface-elevated);
     cursor: pointer; padding: 0;
     font-size: 0.7rem; line-height: 1;
     display: flex; align-items: center; justify-content: center;
@@ -268,9 +266,9 @@
   }
   .suggested {
     margin: 0; font-weight: 500;
-    background: rgba(34, 139, 34, 0.10);
+    background: var(--success-bg);
     padding: 0.35rem 0.45rem;
-    border-left: 3px solid rgba(34, 139, 34, 0.6);
+    border-left: 3px solid var(--success);
   }
   .reason { margin: 0; font-size: 0.78rem; color: var(--text-muted); }
   .acts { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
@@ -287,24 +285,22 @@
   }
   .drawer-toggle {
     border: 1px solid var(--card-border);
-    background: var(--bg-card, #fff);
+    background: var(--surface-elevated);
     color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 0.78rem;
     padding: 0.4rem 0.7rem;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     cursor: pointer;
     display: inline-flex; align-items: center; gap: 0.4rem;
   }
   .drawer-toggle .caret { color: var(--text-muted); font-size: 0.85rem; }
-  .drawer.open .drawer-toggle { border-color: rgba(255, 184, 0, 0.7); }
+  .drawer.open .drawer-toggle { border-color: var(--accent-tint-35); }
   .drawer-body {
     width: min(360px, calc(100vw - 32px));
     max-height: 60vh;
     overflow-y: auto;
-    background: var(--bg-card, #fff);
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
     padding: 0.6rem;
     display: flex; flex-direction: column; gap: 0.5rem;
   }

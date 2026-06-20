@@ -30,14 +30,14 @@
   .time-filter {
     height: 28px;
     padding: 0 8px;
-    border-radius: 6px;
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-    background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
-    color: var(--text-primary, #e6e6e6);
+    border-radius: var(--radius-round);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-primary);
     font: 11px / 1 ui-monospace, Menlo, monospace;
     cursor: pointer;
   }
   .time-filter:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.07));
+    background: var(--bg-section);
   }
 </style>

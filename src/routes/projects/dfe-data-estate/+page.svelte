@@ -223,11 +223,10 @@
     margin: 0;
   }
   .page {
-    --paper: #f1ead6;
-    --paper-deep: #e7decc;
-    --ink: #1c1611;
-    --ink-soft: rgba(28, 22, 17, 0.62);
-    --accent: #c4570a;
+    --paper: var(--bg);
+    --paper-deep: var(--surface-elevated);
+    --ink: var(--text-primary);
+    --ink-soft: var(--text-muted);
     position: relative;
     min-height: 100vh;
     background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255, 255, 255, 0.4), transparent 60%),
@@ -332,7 +331,7 @@
     border-bottom: 1px dashed currentColor;
   }
   .warn {
-    color: #8a2d22;
+    color: var(--error);
   }
 
   .stat-grid {
@@ -387,7 +386,7 @@
     display: inline-flex;
     background: rgba(28, 22, 17, 0.06);
     padding: 3px;
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     flex-wrap: wrap;
   }
   .chips button {
@@ -395,7 +394,7 @@
     border: none;
     color: var(--ink);
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     cursor: pointer;
@@ -412,7 +411,7 @@
     border: 1px solid rgba(28, 22, 17, 0.2);
     color: var(--ink-soft);
     padding: 6px 11px;
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', monospace;
     font-size: 10.5px;
     cursor: pointer;
@@ -420,7 +419,7 @@
   .toggle i {
     width: 9px;
     height: 9px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     border: 1px solid rgba(28, 22, 17, 0.4);
   }
   .toggle.on {
@@ -436,7 +435,7 @@
     margin-bottom: 22px;
   }
   .group-hd {
-    --tier: #2f7d4f;
+    --tier: var(--success);
     display: grid;
     grid-template-columns: auto auto 1fr;
     align-items: baseline;
@@ -445,9 +444,9 @@
     margin-bottom: 12px;
     border-bottom: 1px solid rgba(28, 22, 17, 0.1);
   }
-  .group-hd.tier-open { --tier: #2f7d4f; }
-  .group-hd.tier-secure { --tier: #b1455e; }
-  .group-hd.tier-gateway { --tier: #2f6f97; }
+  .group-hd.tier-open { --tier: var(--success); }
+  .group-hd.tier-secure { --tier: var(--error); }
+  .group-hd.tier-gateway { --tier: var(--accent-ink); }
   .group-hd h3 {
     margin: 0;
     font-family: 'Fraunces', serif;
@@ -461,7 +460,7 @@
     color: var(--paper);
     background: var(--tier);
     padding: 1px 7px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
   }
   .group-hd p {
     margin: 0;
@@ -534,7 +533,7 @@
   .foot-disc code {
     background: rgba(28, 22, 17, 0.06);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     font-family: 'JetBrains Mono', monospace;
   }
 

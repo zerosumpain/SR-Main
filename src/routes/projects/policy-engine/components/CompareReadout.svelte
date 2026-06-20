@@ -50,13 +50,13 @@
 </div>
 
 <style>
-  .cmp { border: 1px solid rgba(58,95,168,0.3); border-radius: 8px; background: rgba(58,95,168,0.04); padding: 9px 12px; }
+  .cmp { border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); background: var(--accent-ink-tint-06); padding: 9px 12px; }
   .cmp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-  .ch-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink, #1c1611); }
+  .ch-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); }
   .ch-key { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.6); display: inline-flex; align-items: center; }
-  .ch-key i { display: inline-block; width: 9px; height: 3px; border-radius: 2px; margin-right: 4px; }
+  .ch-key i { display: inline-block; width: 9px; height: 3px; border-radius: var(--radius-sharp); margin-right: 4px; }
   .ka { background: #9a3b2e; }
-  .kb { background: #3a5fa8; }
+  .kb { background: var(--accent-ink); }
   .cmp-scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; min-width: 340px; font-size: 12px; }
   @media (max-width: 560px) { .verdict { display: none; } }
@@ -65,10 +65,10 @@
   td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.06); color: rgba(28,22,17,0.82); }
   td.num { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   td.a { color: #9a3b2e; }
-  td.b { color: #3a5fa8; }
+  td.b { color: var(--accent-ink); }
   td small { font-size: 8.5px; opacity: 0.6; margin-left: 1px; }
   td.delta { font-weight: 600; }
-  td.delta.good { color: #2f7d4f; }
-  td.delta.bad { color: #b1455e; }
+  td.delta.good { color: var(--success); }
+  td.delta.bad { color: var(--error); }
   td.delta.neutral { color: rgba(28,22,17,0.5); font-weight: 500; }
 </style>

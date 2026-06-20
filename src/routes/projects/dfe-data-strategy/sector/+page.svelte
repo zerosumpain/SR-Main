@@ -63,16 +63,16 @@
 <style>
   .intro { max-width: 80ch; }
   .themes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 6px 0 8px; }
-  .theme { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid #8a2d3a; border-radius: 9px; background: rgba(255,255,255,0.42); padding: 12px 14px; }
+  .theme { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid #8a2d3a; border-radius: var(--radius-round); background: rgba(255,255,255,0.42); padding: 12px 14px; }
   .theme h3 { margin: 0 0 5px; font-family: 'Fraunces', serif; font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
   .theme p { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
-  .bg { margin: 26px 0 0; border: 1px solid rgba(28,22,17,0.12); border-radius: 10px; background: rgba(255,255,255,0.35); padding: 6px 14px; }
+  .bg { margin: 26px 0 0; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); padding: 6px 14px; }
   .bg summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft, rgba(28,22,17,0.6)); padding: 8px 0; }
   .bg-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding: 6px 0 12px; }
   .bg-grp h4 { margin: 0 0 5px; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); }
   .bg-grp ul { margin: 0; padding-left: 16px; }
   .bg-grp li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); margin-bottom: 4px; }
   .foot-link { margin: 26px 0 0; font-size: 13px; color: rgba(28,22,17,0.65); }
-  .foot-link a { color: #2f6f97; }
+  .foot-link a { color: var(--accent-ink); }
   @media (max-width: 820px) { .themes { grid-template-columns: 1fr; } }
 </style>

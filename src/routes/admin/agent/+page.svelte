@@ -201,7 +201,7 @@
   }
   .step-bar { display: flex; gap: 3px; }
   .step-seg { flex: 1; height: 3px; background: var(--card-border); }
-  .step-seg[data-state="done"] { background: #2d7a3a; }
+  .step-seg[data-state="done"] { background: var(--success); }
   .step-seg[data-state="current"] { background: var(--accent); }
 
   .feed {

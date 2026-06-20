@@ -265,7 +265,7 @@
     transition: background-color 0.2s ease-out;
   }
   .post-row:hover {
-    background-color: rgba(196, 87, 10, 0.04);
+    background-color: var(--accent-tint-04);
   }
   .post-num {
     font-family: var(--font-mono);

@@ -53,7 +53,7 @@
 
   {#if form?.error}
     <div
-      class="mb-6 p-4 rounded-lg text-sm"
+      class="mb-6 p-4 rounded-[var(--radius-round)] text-sm"
       style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);"
     >
       {form.error}
@@ -73,13 +73,13 @@
         name="topic"
         bind:value={topic}
         placeholder="Enter a research topic..."
-        class="w-full px-4 py-3 rounded-xl text-base"
+        class="w-full px-4 py-3 rounded-[var(--radius-round)] text-base"
         style="background: var(--card-bg); border: 2px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body);"
       />
     </div>
 
     <div
-      class="mb-6 p-5 rounded-xl border"
+      class="mb-6 p-5 rounded-[var(--radius-round)] border"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
       <p
@@ -95,7 +95,7 @@
             <input
               type="text"
               bind:value={goals[i]}
-              class="flex-1 px-3 py-2 rounded-lg text-sm"
+              class="flex-1 px-3 py-2 rounded-[var(--radius-round)] text-sm"
               style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
             />
             <button
@@ -113,7 +113,7 @@
       <button
         type="button"
         onclick={addGoal}
-        class="mt-3 text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
+        class="mt-3 text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-[var(--radius-round)]"
         style="color: var(--text-muted); font-family: var(--font-mono);"
       >
         + Add goal
@@ -126,7 +126,7 @@
       <button
         type="submit"
         disabled={!topic.trim()}
-        class="w-full py-4 rounded-xl text-sm uppercase tracking-[0.2em] transition-colors disabled:opacity-50"
+        class="w-full py-4 rounded-[var(--radius-round)] text-sm uppercase tracking-[0.2em] transition-colors disabled:opacity-50"
         style="background: var(--accent); color: white; font-family: var(--font-mono);"
       >
         Get Quick Answer
@@ -147,7 +147,7 @@
         {#each data.answers as answer}
           <a
             href="/quickanswer/{answer.id}"
-            class="block p-4 rounded-xl border transition-colors"
+            class="block p-4 rounded-[var(--radius-round)] border transition-colors"
             style="background: var(--card-bg); border-color: var(--card-border);"
           >
             <p class="text-sm truncate" style="color: var(--text-primary);">

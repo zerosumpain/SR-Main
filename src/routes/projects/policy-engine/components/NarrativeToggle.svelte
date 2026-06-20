@@ -15,7 +15,7 @@
 <style>
   .nt { display: inline-flex; align-items: center; gap: 6px; }
   .nt-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
-  .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 6px; }
-  .seg button { background: transparent; border: none; color: var(--ink, #1c1611); padding: 4px 9px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; }
-  .seg button.on { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); }
+  .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: var(--radius-round); }
+  .seg button { background: transparent; border: none; color: var(--ink); padding: 4px 9px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; }
+  .seg button.on { background: var(--ink); color: var(--paper); }
 </style>

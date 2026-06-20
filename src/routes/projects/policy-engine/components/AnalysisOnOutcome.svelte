@@ -59,18 +59,18 @@
 {/if}
 
 <style>
-  .aoo { border: 1px solid rgba(28,22,17,0.14); border-radius: 8px; background: rgba(255,255,255,0.35); padding: 9px 11px; margin: 10px 0; }
+  .aoo { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); padding: 9px 11px; margin: 10px 0; }
   .aoo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-  .aoo-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink, #1c1611); }
+  .aoo-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); }
   .aoo-count { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.45); }
   .aoo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .aoo-item { border-left: 2px solid rgba(28,22,17,0.12); padding-left: 9px; }
   .ai-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
-  .ai-org { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12.5px; color: var(--ink, #1c1611); }
+  .ai-org { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12.5px; color: var(--ink); }
   .ai-lean, .ai-strength { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
   .ai-year { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.4); margin-left: auto; }
   .ai-claim { margin: 2px 0 3px; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.82); }
-  .ai-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #2f6f97; text-decoration: none; }
+  .ai-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); text-decoration: none; }
   .ai-src:hover { text-decoration: underline; }
   .ai-src.plain { color: rgba(28,22,17,0.45); }
 </style>

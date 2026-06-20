@@ -56,7 +56,7 @@
     border: 1px solid var(--card-border);
   }
   .muted {
-    background: var(--nm-bg-muted, var(--bg));
+    background: var(--bg);
     color: var(--text-ghost);
     border-color: var(--card-border);
   }

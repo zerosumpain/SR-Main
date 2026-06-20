@@ -356,7 +356,7 @@
     }
   }
   .h-card.tinted {
-    background: rgba(26, 16, 8, 0.04);
+    background: var(--bg-section);
   }
   .h-card-head {
     display: flex;
@@ -387,8 +387,8 @@
     border-color: rgba(196, 87, 10, 0.4);
   }
   .h-card-tag.bad {
-    color: #8a3a08;
-    border-color: rgba(138, 58, 8, 0.4);
+    color: var(--trend-down);
+    border-color: color-mix(in srgb, var(--trend-down) 40%, transparent);
   }
   .h-card-tag.flat {
     color: var(--text-muted);

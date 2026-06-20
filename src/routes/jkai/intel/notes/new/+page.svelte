@@ -74,7 +74,7 @@
         type="text"
         bind:value={title}
         placeholder="e.g., 1:1 with Sarah — Platform concerns"
-        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border"
         style="background: var(--card-bg); border-color: var(--card-border);"
       />
     </div>
@@ -85,7 +85,7 @@
         bind:value={content}
         placeholder="Paste or type your notes, transcript, email, etc."
         rows={12}
-        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border resize-y"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border resize-y"
         style="background: var(--card-bg); border-color: var(--card-border);"
       ></textarea>
     </div>
@@ -94,7 +94,7 @@
       <label class="block text-sm mb-1" style="color: var(--text-secondary);">Format</label>
       <select
         bind:value={format}
-        class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none border"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border"
         style="background: var(--card-bg); border-color: var(--card-border);"
       >
         {#each formats as f}
@@ -109,7 +109,7 @@
         type="file"
         accept="image/*,audio/*"
         onchange={handleFileChange}
-        class="w-full rounded-lg px-3 py-2 text-sm border"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm border"
         style="background: var(--card-bg); border-color: var(--card-border);"
       />
       {#if file}
@@ -118,13 +118,13 @@
     </div>
 
     {#if error}
-      <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
+      <div class="text-sm border rounded px-3 py-2" style="color: var(--error); background: var(--error-bg); border-color: var(--error-border);">{error}</div>
     {/if}
 
     <button
       onclick={submit}
       disabled={submitting}
-      class="w-full disabled:opacity-50 rounded-lg py-3 font-medium text-sm"
+      class="w-full disabled:opacity-50 rounded-[var(--radius-round)] py-3 font-medium text-sm"
       style="background: var(--accent); color: white;"
     >
       {submitting ? 'Submitting...' : 'Submit Note'}

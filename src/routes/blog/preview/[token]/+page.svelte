@@ -28,7 +28,7 @@
 
 <PageHeader title={data.post.title.toUpperCase()} titleHref="/blog">
   {#snippet meta()}
-    <span class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded" style="font-family: var(--font-mono); background: rgba(196, 87, 10, 0.12); color: var(--accent); border: 1px solid var(--accent);">
+    <span class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-[var(--radius-round)]" style="font-family: var(--font-mono); background: var(--accent-tint-14); color: var(--accent); border: 1px solid var(--accent);">
       Draft
     </span>
   {/snippet}
@@ -36,7 +36,7 @@
 
 <article class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
   <!-- Draft banner -->
-  <div class="max-w-3xl mb-8 px-4 py-3 rounded-lg" style="background: rgba(196, 87, 10, 0.12); border: 1px solid var(--accent);">
+  <div class="max-w-3xl mb-8 px-4 py-3 rounded-[var(--radius-round)]" style="background: var(--accent-tint-14); border: 1px solid var(--accent);">
     <p class="text-sm font-medium" style="color: var(--accent);">
       Draft preview — this post has not been published
     </p>
@@ -52,7 +52,7 @@
       <div class="flex flex-wrap gap-1.5 mb-6">
         {#each data.post.tags as tag}
           <span
-            class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full"
+            class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
             style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted);"
           >
             {tag}
@@ -62,7 +62,7 @@
     {/if}
 
     {#if data.post.coverImageUrl}
-      <img src={data.post.coverImageUrl} alt={data.post.title} class="w-full max-h-[400px] object-cover rounded-lg mb-8" />
+      <img src={data.post.coverImageUrl} alt={data.post.title} class="w-full max-h-[400px] object-cover rounded-[var(--radius-round)] mb-8" />
     {/if}
 
     <hr class="rule mb-8" />

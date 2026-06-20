@@ -70,10 +70,10 @@
     opacity: 0.5;
   }
   .run-active {
-    color: #569cd6;
+    color: var(--accent);
   }
   .fail-active {
-    color: #b43232;
+    color: var(--error);
   }
   .spend {
     background: transparent;

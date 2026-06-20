@@ -323,7 +323,7 @@
     color: var(--text-secondary);
     padding: 4px 8px;
     border: 1px solid var(--card-border);
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     transition: color 0.15s, border-color 0.15s;
     white-space: nowrap;
   }

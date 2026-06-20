@@ -100,7 +100,7 @@
 <style>
   .drafts-panel {
     padding: 0.5rem;
-    border-top: 1px solid var(--nm-border, #d6cfc4);
+    border-top: 1px solid var(--divider);
   }
   .title {
     background: none;

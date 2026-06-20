@@ -22,7 +22,7 @@
 
 <style>
   .bs-backdrop { position: absolute; inset: 0; z-index: 1000; background: rgba(26, 16, 8, 0.42); display: grid; place-items: end center; padding: 0.6rem; }
-  .bs { width: min(34rem, 100%); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.7rem; box-shadow: 0 12px 40px rgba(26, 16, 8, 0.35); overflow: hidden; }
+  .bs { width: min(34rem, 100%); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); overflow: hidden; }
   .bs-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
   .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
   .bs-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }

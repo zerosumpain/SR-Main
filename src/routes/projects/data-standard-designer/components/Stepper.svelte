@@ -47,7 +47,7 @@
   .stepper { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 6px 18px 8px; }
   .step { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-pill); position: relative; }
   .step .dot {
-    width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; justify-content: center;
     font-family: var(--font-mono); font-size: 11px; border: 1.5px solid var(--card-border); color: var(--text-muted); background: var(--surface-elevated);
   }
   .step .lbl { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }

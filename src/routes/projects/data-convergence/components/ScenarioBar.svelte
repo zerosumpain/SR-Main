@@ -116,7 +116,7 @@
     border-bottom: 1px solid rgba(28, 22, 17, 0.08);
     background: rgba(28, 22, 17, 0.03);
     font-family: 'DM Sans', system-ui, sans-serif;
-    color: var(--ink, #1c1611);
+    color: var(--ink);
     flex-wrap: wrap;
   }
   .left { display: inline-flex; align-items: center; gap: 8px; }
@@ -132,7 +132,7 @@
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid rgba(28, 22, 17, 0.18);
     padding: 6px 12px;
-    border-radius: 5px;
+    border-radius: var(--radius-round);
     font-size: 12.5px;
     cursor: pointer;
     color: var(--ink);
@@ -148,10 +148,9 @@
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    background: var(--paper, #f1ead6);
+    background: var(--paper);
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-radius: var(--radius-round);
     min-width: 240px;
     z-index: 60;
     padding: 4px;
@@ -165,7 +164,7 @@
     border: none;
     background: transparent;
     color: var(--ink);
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     font-size: 12.5px;
     font-family: inherit;
     cursor: pointer;
@@ -173,7 +172,7 @@
   }
   .menu-item:hover { background: rgba(28, 22, 17, 0.07); }
   .menu-item.active { background: rgba(28, 22, 17, 0.1); font-weight: 500; }
-  .menu-item.danger { color: #b13c30; }
+  .menu-item.danger { color: var(--error); }
   .menu-item .name { flex: 1; }
   .menu-item .count {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -183,7 +182,7 @@
   .menu-item .dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: rgba(28, 22, 17, 0.3);
   }
   .menu-item.active .dot { background: var(--ink); }
@@ -210,7 +209,7 @@
     color: var(--ink);
     cursor: text;
     padding: 2px 4px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     border-bottom: 1px dashed transparent;
   }
   .name-display:hover { border-bottom-color: rgba(28, 22, 17, 0.3); }
@@ -228,7 +227,7 @@
     border: none;
     text-align: left;
     padding: 2px 4px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     cursor: text;
     font-family: inherit;
     white-space: nowrap;

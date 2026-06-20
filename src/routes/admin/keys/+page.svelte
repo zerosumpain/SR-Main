@@ -220,7 +220,7 @@
   }
   .link { color: var(--accent); text-decoration: underline; }
   .test-row { display: flex; gap: 0.7rem; align-items: center; }
-  .result-ok { font-family: var(--font-mono); font-size: 11px; color: #2d7a3a; }
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: #c44; }
+  .result-ok { font-family: var(--font-mono); font-size: 11px; color: var(--success); }
+  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
   .save-msg { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
 </style>

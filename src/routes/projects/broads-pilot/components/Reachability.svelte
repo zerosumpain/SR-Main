@@ -84,7 +84,7 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
   }
   .reach-head { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -141,7 +141,7 @@
     font-size: 0.62rem;
     color: var(--text-muted);
   }
-  .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--c); flex: none; }
+  .dot { width: 0.7rem; height: 0.7rem; border-radius: var(--radius-pill); background: var(--c); flex: none; }
 
   .empty {
     margin: 0;
@@ -161,7 +161,7 @@
     padding: 0.5rem 0.65rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 0.45rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     text-align: left;
     color: var(--text-primary);

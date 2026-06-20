@@ -639,8 +639,8 @@
     display: inline-block;
     flex-shrink: 0;
   }
-  .ps-dot-green { background: #3a8a56; box-shadow: 0 0 4px rgba(58, 138, 86, 0.55); }
-  .ps-dot-amber { background: #d97706; box-shadow: 0 0 4px rgba(217, 119, 6, 0.55); }
+  .ps-dot-green { background: var(--success); }
+  .ps-dot-amber { background: var(--warn); }
   .ps-playbook-actions {
     display: flex;
     gap: 10px;

@@ -53,10 +53,9 @@
     align-items: stretch;
     gap: 0;
     border: 1px solid rgba(26, 16, 8, 0.18);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--surface-elevated, #e8dece);
     padding: 3px;
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
   }
   .mode-toggle.disabled { opacity: 0.55; }
   .seg {
@@ -71,7 +70,7 @@
     color: var(--text-muted, rgba(26, 16, 8, 0.65));
     background: transparent;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 8px 16px;
     cursor: pointer;
     transition: background 160ms ease, color 160ms ease;
@@ -81,8 +80,9 @@
   .seg:disabled { cursor: default; }
   .seg.active {
     color: var(--text-primary, #1a1008);
-    background: var(--card, #faf6ee);
-    box-shadow: inset 0 0 0 1px rgba(26, 16, 8, 0.18);
+    background: var(--surface-elevated, #faf6ee);
+    outline: 1px solid rgba(26, 16, 8, 0.18);
+    outline-offset: -1px;
   }
   .seg.busy { color: var(--accent, #c4570a); }
   .dot {

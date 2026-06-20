@@ -58,7 +58,7 @@
     padding: 0.85rem 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
   }
   .control { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -73,7 +73,7 @@
     display: inline-flex;
     flex-wrap: wrap;
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     overflow: hidden;
     background: var(--card-bg);
   }

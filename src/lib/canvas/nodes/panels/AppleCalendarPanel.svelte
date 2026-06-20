@@ -124,9 +124,9 @@
 <style>
   .config-section { margin-bottom: 1rem; }
   .config-section h3 { margin: 0 0 0.25rem; font-size: 0.85rem; font-weight: 600; }
-  .section-intro { color: var(--nm-muted, #666); font-size: 0.85rem; margin: 0 0 0.5rem; }
+  .section-intro { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
   .field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.5rem; }
   .field label { font-size: 0.85rem; }
-  .req { color: var(--nm-status-error, #c0392b); }
-  .hint { font-size: 0.8rem; color: var(--nm-muted, #666); margin: 0; }
+  .req { color: var(--error); }
+  .hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
 </style>

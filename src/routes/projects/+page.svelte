@@ -77,7 +77,7 @@
       {#if !isPub(key)}
         <span
           class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: rgba(180, 50, 50, 0.12); color: #b43232;"
+          style="font-family: var(--font-mono); background: var(--error-bg); color: var(--error);"
         >
           Private
         </span>
@@ -510,8 +510,8 @@
                 <button
                   onclick={() => removeProject(project.id, project.publishedSlug!)}
                   disabled={removing === project.id}
-                  class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors hover:bg-red-500/10"
-                  style="border-color: #b43232; color: #b43232; opacity: {removing === project.id ? 0.5 : 1};"
+                  class="remove-btn px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
+                  style="border-color: var(--error); color: var(--error); opacity: {removing === project.id ? 0.5 : 1};"
                 >
                   {removing === project.id ? 'Removing...' : 'Remove'}
                 </button>
@@ -562,5 +562,9 @@
     background: var(--bg);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
+  }
+
+  .remove-btn:hover {
+    background: var(--error-bg);
   }
 </style>

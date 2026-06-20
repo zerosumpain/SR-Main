@@ -272,7 +272,13 @@
     style="left: {pos.x}px; bottom: {pos.y}px;"
     onclick={() => (open = true)}
     aria-label="Open jkai"
-  >🪶</button>
+  >
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M16 4c-1.5 4-5 7.5-9 9l-3 3" />
+      <path d="M16 4c-4 0-8 2-10 6-1 2-1.2 3.8-1 5 1.2.2 3 0 5-1 4-2 6-6 6-10z" />
+      <path d="M11 9l-3 3" />
+    </svg>
+  </button>
 {:else}
   <section class="widget" style="left: {pos.x}px; bottom: {pos.y}px;" role="region" aria-label="jkai blog assistant">
     <header class="bar">
@@ -361,16 +367,16 @@
 <style>
   .fab {
     position: fixed; z-index: 80; width: 44px; height: 44px;
-    border-radius: 50%; border: 1px solid var(--card-border);
-    background: var(--bg-section); cursor: pointer; font-size: 1.2rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    border-radius: var(--radius-pill); border: 1px solid var(--card-border);
+    background: var(--surface-elevated); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-secondary);
   }
   .widget {
     position: fixed; z-index: 80;
     width: 360px; height: 580px;
-    background: var(--bg-card, var(--bg-page, #fff));
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
     display: flex; flex-direction: column;
   }
   .bar {
@@ -389,14 +395,14 @@
     padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
     color: var(--text-muted);
   }
-  .clear:hover { color: var(--danger, #c33); border-color: var(--danger, #c33); }
+  .clear:hover { color: var(--error); border-color: var(--error); }
   .auto {
     border: 1px solid var(--card-border); background: transparent;
     padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
-  .auto.on { background: var(--accent-tint-08); color: var(--text-primary); border-color: var(--accent, var(--card-border)); }
+  .auto.on { background: var(--accent-tint-08); color: var(--text-primary); border-color: var(--accent); }
   .hist {
     border: 1px solid var(--card-border); background: transparent;
     padding: 0.1rem 0.45rem; font-size: 0.85rem; cursor: pointer;
@@ -408,7 +414,7 @@
     padding: 0.5rem 0.6rem;
     font-size: 0.8rem;
     max-height: 220px; overflow-y: auto;
-    background: var(--bg-section, transparent);
+    background: var(--bg-section);
   }
   .hist-hd {
     display: flex; justify-content: space-between; align-items: center;
@@ -462,7 +468,7 @@
                 radial-gradient(circle at 25% 50%, currentColor 25%, transparent 26%) 100% 0 / 33% 100%;
     background-repeat: no-repeat;
     animation: jkai-dots 1.1s infinite ease-in-out;
-    color: var(--accent, #888);
+    color: var(--accent);
   }
   @keyframes jkai-dots {
     0%, 100% { opacity: 0.3; }

@@ -285,7 +285,6 @@
     list-style: none;
     background: var(--bg);
     border: 1px solid var(--card-border);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-primary);

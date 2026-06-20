@@ -194,7 +194,7 @@
     flex-direction: column;
     background: var(--card-bg, #1a1a1a);
     border: 1px solid var(--card-border, #333);
-    border-radius: 0.75rem;
+    border-radius: var(--radius-round);
     overflow: hidden;
     width: min(calc(100vw - 2rem), 520px);
     max-height: calc(100vh - 3rem);

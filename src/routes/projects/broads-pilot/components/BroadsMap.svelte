@@ -203,7 +203,7 @@
     if (app.layers.services) {
       for (const p of data.pois) {
         if (p.kind !== 'fuel') continue;
-        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin">⛽</span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
+        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="7" height="13" rx="1"/><line x1="4.5" y1="8.5" x2="11.5" y2="8.5"/><path d="M11.5 7h2a1.5 1.5 0 0 1 1.5 1.5V13a1.3 1.3 0 0 0 2.6 0V8l-1.6-2"/></svg></span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
           .bindTooltip(`${p.name} — fuel`, { direction: 'top' })
           .on('click', (ev: any) => featureClick(ev, { kind: 'poi', id: p.id }))
           .addTo(groups.pois);
@@ -212,7 +212,7 @@
         const svc: string[] = [];
         if (m.facilities.pump_out) svc.push('P');
         if (m.facilities.water) svc.push('W');
-        if (m.facilities.shore_power) svc.push('⚡');
+        if (m.facilities.shore_power) svc.push('E');
         if (!svc.length) continue;
         const tip = [m.facilities.pump_out && 'pump-out', m.facilities.water && 'water', m.facilities.shore_power && 'shore power'].filter(Boolean).join(' · ');
         L.marker([m.lat, m.lng], { icon: L.divIcon({ className: 'bp-svc', html: `<span class="bp-svc-badge">${svc.join('')}</span>`, iconSize: [0, 0], iconAnchor: [-7, 18] }) })

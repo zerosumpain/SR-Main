@@ -36,8 +36,8 @@
 </script>
 
 <section
-  class="rounded-lg p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border);"
+  class="p-5"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
 >
   <h2
     class="text-sm uppercase tracking-wider mb-4"
@@ -61,7 +61,7 @@
       {:else}
         <span
           class="ml-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider"
-          style="background: rgba(239,68,68,0.15); color: #ef4444; font-family: var(--font-mono);"
+          style="background: var(--error-bg); color: var(--error); font-family: var(--font-mono);"
         >
           not configured
         </span>
@@ -111,7 +111,7 @@
         <span class="text-xs" style="color: var(--accent);">{msg}</span>
       {/if}
       {#if errorMsg}
-        <span class="text-xs" style="color: #ef4444;">{errorMsg}</span>
+        <span class="text-xs" style="color: var(--error);">{errorMsg}</span>
       {/if}
     </div>
   </div>

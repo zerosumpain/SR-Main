@@ -55,24 +55,24 @@
 </div>
 
 <style>
-  .lvs { margin: 6px 0; transition: background 0.3s; border-radius: 6px; }
-  .lvs.flash { background: rgba(177,69,94,0.14); box-shadow: 0 0 0 3px rgba(177,69,94,0.18); animation: flash 1.4s ease-out; }
-  @keyframes flash { 0% { background: rgba(177,69,94,0.28); } 100% { background: rgba(177,69,94,0); box-shadow: none; } }
+  .lvs { margin: 6px 0; transition: background 0.3s; border-radius: var(--radius-round); }
+  .lvs.flash { background: var(--accent-tint-20); animation: flash 1.4s ease-out; }
+  @keyframes flash { 0% { background: var(--accent-tint-20); } 100% { background: transparent; } }
   .lv-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 1px; }
-  .lv-name { font-size: 11.5px; color: var(--ink, #1c1611); line-height: 1.25; }
+  .lv-name { font-size: 11.5px; color: var(--ink); line-height: 1.25; }
   .lv-val { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
   .lv-val .u { font-style: normal; font-size: 8.5px; opacity: 0.6; margin-left: 2px; }
   .slider-wrap { position: relative; padding-top: 2px; display: flex; align-items: center; gap: 8px; }
   .compact .slider-wrap { padding-top: 0; }
   .lv-val-c { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; white-space: nowrap; min-width: 52px; text-align: right; }
   .slider {
-    -webkit-appearance: none; appearance: none; flex: 1; width: 100%; height: 4px; border-radius: 3px;
+    -webkit-appearance: none; appearance: none; flex: 1; width: 100%; height: 4px; border-radius: var(--radius-sharp);
     background: linear-gradient(to right, var(--col) 0%, var(--col) var(--fill), rgba(28,22,17,0.14) var(--fill), rgba(28,22,17,0.14) 100%);
     outline: none; cursor: pointer; margin: 5px 0;
   }
-  .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--paper, #f1ead6); border: 2px solid var(--col); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-  .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--paper, #f1ead6); border: 2px solid var(--col); cursor: pointer; }
-  .base-tick { position: absolute; top: 1px; width: 2px; height: 12px; background: rgba(28,22,17,0.4); transform: translateX(-50%); pointer-events: none; border-radius: 1px; }
+  .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: var(--radius-pill); background: var(--paper); border: 2px solid var(--col); cursor: pointer; }
+  .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: var(--radius-pill); background: var(--paper); border: 2px solid var(--col); cursor: pointer; }
+  .base-tick { position: absolute; top: 1px; width: 2px; height: 12px; background: rgba(28,22,17,0.4); transform: translateX(-50%); pointer-events: none; border-radius: var(--radius-sharp); }
   .policy-tick { position: absolute; top: 2px; width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid rgba(28,22,17,0.3); transform: translateX(-50%); pointer-events: none; }
   .lv-note { margin: 2px 0 0; font-size: 9.5px; line-height: 1.35; color: rgba(28,22,17,0.5); }
 </style>

@@ -520,7 +520,7 @@
     padding: 0.55rem 0.4rem;
     border-bottom: 1px solid var(--divider);
   }
-  .err-cell { color: #c44; max-width: 320px; word-break: break-word; }
+  .err-cell { color: var(--error); max-width: 320px; word-break: break-word; }
   .dot { color: var(--text-ghost); margin: 0 0.4rem; }
 
   .code {

@@ -20,5 +20,5 @@
   .up { max-width: 860px; }
   .intro { max-width: 76ch; margin-bottom: 18px; }
   .back { margin-top: 22px; font-size: 13px; }
-  .back a { color: #2f6f97; }
+  .back a { color: var(--accent-ink); }
 </style>

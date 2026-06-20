@@ -103,7 +103,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
     </button>
   {:else if previewMode && recording}
-    <button type="button" onclick={stopRecording} class="p-1.5" aria-label="stop" title="Stop recording" style="color: #ef4444;">
+    <button type="button" onclick={stopRecording} class="p-1.5" aria-label="stop" title="Stop recording" style="color: var(--error);">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
     </button>
     <span class="text-[10px] opacity-70 tabular-nums">{elapsed}s</span>

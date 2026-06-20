@@ -351,7 +351,6 @@
     width: 380px; max-width: 92vw;
     background: var(--surface-elevated);
     border-left: 1px solid var(--card-border);
-    box-shadow: -8px 0 24px rgba(26, 16, 8, 0.18);
     display: flex; flex-direction: column;
     pointer-events: auto;
     animation: slidein 0.18s ease-out;
@@ -411,10 +410,9 @@
     width: 100%; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
     padding: 10px; border: 1px solid var(--accent); border-radius: var(--radius-sharp);
     background: var(--accent); color: #faf6ee; cursor: pointer;
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
   }
   .d-explore:hover:not(:disabled) { background: var(--accent-hover); }
-  .d-explore:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+  .d-explore:disabled { opacity: 0.45; cursor: default; }
 
   /* In-drawer confirm card (reuses the drawer footer surface, not a new modal). */
   .d-confirm { display: flex; flex-direction: column; gap: 8px; }
@@ -439,7 +437,6 @@
     flex: 1; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
     padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sharp);
     background: var(--accent); color: #faf6ee; cursor: pointer;
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
   }
   .d-start:hover { background: var(--accent-hover); }
 

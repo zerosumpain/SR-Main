@@ -149,13 +149,13 @@
   .dsd-mode button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 14px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); }
   .dsd-mode button.on { background: var(--accent); color: #fff; }
 
-  .dsd-help { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
+  .dsd-help { width: 28px; height: 28px; border-radius: var(--radius-pill); border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
   .dsd-help:hover { border-color: var(--accent); color: var(--accent); }
 
   .dsd-menu-wrap { position: relative; }
   .dsd-menu-btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 12px; background: var(--surface-elevated); color: var(--text-primary); border: 1.5px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; }
   .dsd-menu-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .dsd-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 260px; background: var(--surface-elevated); border: 2px solid var(--text-primary); box-shadow: var(--shadow-md); z-index: 40; display: flex; flex-direction: column; }
+  .dsd-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 260px; background: var(--surface-elevated); border: 2px solid var(--text-primary); z-index: 40; display: flex; flex-direction: column; }
   .dsd-menu button, .dsd-menu a { text-align: left; padding: 10px 12px; background: transparent; border: none; border-bottom: 1px solid var(--divider); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
   .dsd-menu button:hover, .dsd-menu a:hover { background: var(--accent-tint-08); }
   .dsd-menu b { font-size: 13px; color: var(--text-primary); }
@@ -169,7 +169,7 @@
   .dsd-foot p { font-size: 12.5px; line-height: 1.55; max-width: 90ch; margin: 0 0 8px; }
   .dsd-foot b { color: var(--text-secondary); }
   .dsd-foot .path { font-size: 11px; color: var(--text-ghost); }
-  .dsd-foot code { font-family: var(--font-mono); background: var(--card-bg); padding: 1px 5px; border-radius: 3px; }
+  .dsd-foot code { font-family: var(--font-mono); background: var(--card-bg); padding: 1px 5px; border-radius: var(--radius-sharp); }
   .dsd-foot a { color: var(--accent); border-bottom: 1px dashed currentColor; }
 
   @media (max-width: 720px) {

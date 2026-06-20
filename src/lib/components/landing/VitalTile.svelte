@@ -74,15 +74,11 @@
     overflow: hidden;
     transition:
       border-color var(--t-base) var(--ease-out),
-      transform var(--t-base) var(--ease-out),
-      background var(--t-base) var(--ease-out),
-      box-shadow var(--t-base) var(--ease-out);
+      background var(--t-base) var(--ease-out);
   }
   .tile:hover {
     border-color: var(--accent);
     background: var(--accent-tint-04);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
   }
   /* Accent rail wipes in from the left on hover (brand `>` gesture). */
   .tile::before {
@@ -95,7 +91,7 @@
     background: var(--accent);
     transform: scaleY(0);
     transform-origin: top;
-    transition: transform var(--t-base) var(--ease-spring);
+    transition: transform var(--t-base) var(--ease-out);
   }
   .tile:hover::before {
     transform: scaleY(1);
@@ -147,7 +143,7 @@
   .num {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: 30px;
+    font-size: 36px;
     line-height: 1;
     letter-spacing: -0.02em;
     color: var(--text-primary);

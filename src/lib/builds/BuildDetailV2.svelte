@@ -411,8 +411,7 @@
     flex: 0 0 auto;
   }
   .preview-banner.ready .preview-dot {
-    background: var(--color-emerald, #10b981);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-emerald, #10b981) 25%, transparent);
+    background: var(--success);
   }
   .preview-banner.building .preview-dot {
     background: var(--accent);

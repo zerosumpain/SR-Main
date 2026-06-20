@@ -227,7 +227,7 @@
       <a class="bvn-link" href={previewLink} target="_blank" rel="noreferrer" title="Open in new tab">↗ open</a>
       <button class="bvn-act" type="button" onclick={manualRefresh} title="Reload iframe">⟳ reload</button>
       {#if expandable}
-        <button class="bvn-act" type="button" onclick={() => modalOpen = true} title="Expand to full-screen modal">⛶ expand</button>
+        <button class="bvn-act" type="button" onclick={() => modalOpen = true} title="Expand to full-screen modal"><svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px;"><path d="M8 3H3v5M12 3h5v5M8 17H3v-5M12 17h5v-5"/></svg> expand</button>
       {/if}
     {/if}
   </header>

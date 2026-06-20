@@ -155,42 +155,42 @@
     height: 100%;
     padding: 10px;
     gap: 8px;
-    background: var(--bg-card, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-    border-radius: 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
     font: 11px / 1.4 ui-monospace, Menlo, monospace;
-    color: var(--text-primary, #e6e6e6);
+    color: var(--text-primary);
     overflow: hidden;
   }
   header { display: flex; justify-content: space-between; align-items: center; }
   .title { font-weight: 600; font-size: 12px; }
   .refresh {
-    background: transparent; border: none; color: var(--text-muted, #888);
+    background: transparent; border: none; color: var(--text-muted);
     cursor: pointer; font-size: 14px; padding: 0 4px;
   }
-  .refresh:hover { color: var(--text-primary, #e6e6e6); }
+  .refresh:hover { color: var(--text-primary); }
   .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 6px; }
   .counter { display: flex; flex-direction: column; align-items: center; }
   .counter .v { font-size: 14px; font-weight: 600; }
-  .counter .v.ok { color: #3a8a56; }
-  .counter .v.fail { color: #c44; }
-  .counter .l { color: var(--text-muted, #888); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .spark-label { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; }
+  .counter .v.ok { color: var(--success); }
+  .counter .v.fail { color: var(--error); }
+  .counter .l { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .spark-label { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .spark { height: 96px; }
   .spark :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
   .spark :global(.tick) { stroke: var(--divider); }
   .spark :global(.rule line) { stroke: var(--divider); }
   .spark :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
-  .list h4 { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.5px; }
+  .list h4 { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
   .list li { display: flex; gap: 6px; align-items: center; font-size: 10px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted, #888); }
-  .dot.s-completed { background: #3a8a56; }
-  .dot.s-failed { background: #c44; }
-  .dot.s-running { background: #ffcf40; }
-  .dur { min-width: 40px; color: var(--text-muted, #888); }
-  .when { color: var(--text-muted, #888); }
-  .edit { color: var(--text-primary, #e6e6e6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty, .skel { color: var(--text-muted, #888); font-style: italic; font-size: 10px; }
-  .error-strip { color: #c44; font-size: 10px; padding: 4px; border: 1px solid #c44; border-radius: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+  .dot.s-completed { background: var(--success); }
+  .dot.s-failed { background: var(--error); }
+  .dot.s-running { background: var(--warn); }
+  .dur { min-width: 40px; color: var(--text-muted); }
+  .when { color: var(--text-muted); }
+  .edit { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty, .skel { color: var(--text-muted); font-style: italic; font-size: 10px; }
+  .error-strip { color: var(--error); font-size: 10px; padding: 4px; border: 1px solid var(--error); border-radius: var(--radius-round); }
 </style>

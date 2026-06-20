@@ -225,7 +225,7 @@
 <!-- Connection Tab -->
 {#if activeTab === 'connection'}
   <div class="space-y-4">
-    <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
       <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background: {statusColors[connectionStatus] || '#666'};"></div>
       <span class="text-xs font-medium" style="color: {statusColors[connectionStatus] || '#666'};">
         {statusLabels[connectionStatus] || connectionStatus}
@@ -237,7 +237,7 @@
 
     {#if connectionStatus === 'qr_pending' && qrDataUri}
       <div class="flex flex-col items-center gap-3">
-        <div class="rounded-lg overflow-hidden" style="background: white; padding: 8px;">
+        <div class="rounded-[var(--radius-round)] overflow-hidden" style="background: white; padding: 8px;">
           <img src={qrDataUri} alt="WhatsApp QR Code" width="200" height="200" />
         </div>
         <p class="text-[11px] text-center" style="color: var(--text-ghost);">

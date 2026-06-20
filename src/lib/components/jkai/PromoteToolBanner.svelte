@@ -66,9 +66,9 @@
     padding: 0.4rem 0.75rem;
     margin: 0.4rem 0;
     font-size: 0.85rem;
-    border: 1px dashed rgb(var(--border-rgb, 200 200 200) / 0.6);
-    border-radius: 6px;
-    background: rgb(var(--muted-rgb, 240 240 240) / 0.3);
+    border: 1px dashed var(--card-border);
+    border-radius: var(--radius-round);
+    background: var(--card-bg);
   }
   .promote-banner.saved {
     border-style: solid;
@@ -76,8 +76,8 @@
   }
   .primary {
     padding: 0.25rem 0.6rem;
-    border-radius: 4px;
-    background: rgb(var(--accent-rgb, 37 99 235));
+    border-radius: var(--radius-round);
+    background: var(--accent);
     color: white;
     border: none;
     cursor: pointer;
@@ -86,7 +86,7 @@
   .link {
     background: none;
     border: none;
-    color: rgb(var(--accent-rgb, 37 99 235));
+    color: var(--accent);
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
@@ -97,9 +97,9 @@
   }
   code {
     font-family: monospace;
-    background: rgb(var(--muted-rgb, 240 240 240) / 0.6);
+    background: var(--surface-overlay);
     padding: 0 0.3rem;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
   }
-  .error { color: #b00; }
+  .error { color: var(--error); }
 </style>

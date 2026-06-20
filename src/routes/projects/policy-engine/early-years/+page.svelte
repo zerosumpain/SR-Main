@@ -240,9 +240,9 @@
 
 <style>
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 6px 0 8px; }
-  .stat { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--c); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+  .stat { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--c); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
   .stat-v { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; color: var(--c); line-height: 1; }
-  .stat-l { font-size: 11.5px; color: var(--ink, #1c1611); line-height: 1.3; }
+  .stat-l { font-size: 11.5px; color: var(--ink); line-height: 1.3; }
   .stat-n { font-size: 9.5px; color: rgba(28,22,17,0.55); line-height: 1.35; }
 
   .panel { display: flex; flex-direction: column; gap: 12px; }
@@ -257,15 +257,15 @@
   .ev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   @media (max-width: 860px) { .ev-grid { grid-template-columns: 1fr; } }
   .ev-cards { display: flex; flex-direction: column; gap: 9px; }
-  .ev-card { border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.35); padding: 9px 11px; }
+  .ev-card { border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); padding: 9px 11px; }
   .ev-card header { display: flex; align-items: center; gap: 7px; justify-content: space-between; margin-bottom: 3px; }
-  .ev-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink, #1c1611); }
+  .ev-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); }
   .ev-card p { margin: 0 0 5px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.82); }
-  .ev-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #2f6f97; text-decoration: none; }
+  .ev-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); text-decoration: none; }
   .ev-src:hover { text-decoration: underline; }
 
-  .heck { margin: 0; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; }
-  .heck figcaption { font-family: 'Fraunces', serif; font-size: 12.5px; color: var(--ink, #1c1611); margin-bottom: 6px; }
+  .heck { margin: 0; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; }
+  .heck figcaption { font-family: 'Fraunces', serif; font-size: 12.5px; color: var(--ink); margin-bottom: 6px; }
   .heck svg { width: 100%; height: auto; }
   .heck .ax { stroke: rgba(28,22,17,0.3); stroke-width: 0.5; }
   .heck .early { fill: rgba(63,125,110,0.1); }
@@ -273,18 +273,18 @@
   .heck .hax { font-family: 'JetBrains Mono', monospace; font-size: 3.5px; fill: rgba(28,22,17,0.5); }
   .heck-note { display: block; font-size: 10px; color: rgba(28,22,17,0.55); line-height: 1.4; margin-top: 5px; }
 
-  .elig { margin: 0; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; }
-  .elig figcaption { font-family: 'Fraunces', serif; font-size: 12.5px; color: var(--ink, #1c1611); margin-bottom: 8px; }
+  .elig { margin: 0; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; }
+  .elig figcaption { font-family: 'Fraunces', serif; font-size: 12.5px; color: var(--ink); margin-bottom: 8px; }
   .elig-row { display: grid; grid-template-columns: 120px 1fr 34px; gap: 8px; align-items: center; margin-bottom: 6px; }
   .elig-l { font-size: 10.5px; color: rgba(28,22,17,0.75); text-align: right; }
-  .elig-track { height: 16px; background: rgba(28,22,17,0.06); border-radius: 4px; overflow: hidden; }
-  .elig-bar { display: block; height: 100%; background: #b4632e; border-radius: 4px; }
-  .elig-v { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ink, #1c1611); }
+  .elig-track { height: 16px; background: rgba(28,22,17,0.06); border-radius: var(--radius-round); overflow: hidden; }
+  .elig-bar { display: block; height: 100%; background: #b4632e; border-radius: var(--radius-round); }
+  .elig-v { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ink); }
   .elig-note { display: block; font-size: 10px; color: rgba(28,22,17,0.55); line-height: 1.4; margin-top: 6px; }
 
-  .best-start { margin-top: 12px; border: 1px solid rgba(63,125,110,0.3); border-left: 3px solid #3f7d6e; border-radius: 8px; background: rgba(63,125,110,0.05); padding: 10px 12px; }
+  .best-start { margin-top: 12px; border: 1px solid var(--accent-ink-tint-35); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: var(--accent-ink-tint-06); padding: 10px 12px; }
   .best-start header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .bs-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; color: #fff; background: #3f7d6e; padding: 1px 5px; border-radius: 3px; }
-  .bs-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; color: var(--ink, #1c1611); }
+  .bs-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; color: #fff; background: var(--accent-ink); padding: 1px 5px; border-radius: var(--radius-sharp); }
+  .bs-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; color: var(--ink); }
   .best-start p { margin: 0 0 5px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.82); }
 </style>

@@ -154,7 +154,7 @@
     <button
       onclick={forceSync}
       disabled={syncing}
-      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors border"
+      class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium transition-colors border"
       style="border-color: var(--card-border); color: var(--text-secondary); opacity: {syncing ? 0.7 : 1};"
     >
       {syncing ? 'Syncing...' : 'Sync from Disk'}
@@ -172,7 +172,7 @@
         {#each files as file}
           <button
             onclick={() => selectFile(file.name)}
-            class="w-full text-left px-3 py-2.5 rounded-lg transition-colors border"
+            class="w-full text-left px-3 py-2.5 rounded-[var(--radius-round)] transition-colors border"
             style="background: {selectedFile === file.name ? 'var(--accent)' : 'var(--card-bg)'}; border-color: {selectedFile === file.name ? 'var(--accent)' : 'var(--card-border)'}; color: {selectedFile === file.name ? 'white' : 'var(--text-primary)'};"
           >
             <div class="text-xs font-medium" style="font-family: var(--font-mono);">
@@ -201,7 +201,7 @@
               {#if saveStatus.text}
                 <span
                   class="text-xs"
-                  style="color: {saveStatus.kind === 'error' ? '#c44' : saveStatus.kind === 'ok' ? '#22c55e' : 'var(--text-ghost)'};"
+                  style="color: {saveStatus.kind === 'error' ? 'var(--error)' : saveStatus.kind === 'ok' ? 'var(--success)' : 'var(--text-ghost)'};"
                 >
                   {saveStatus.text}
                 </span>
@@ -220,7 +220,7 @@
           <textarea
             bind:value={editContent}
             onkeydown={handleKeydown}
-            class="flex-1 w-full px-4 py-3 rounded-lg border resize-none text-sm leading-relaxed"
+            class="flex-1 w-full px-4 py-3 rounded-[var(--radius-round)] border resize-none text-sm leading-relaxed"
             style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 500px;"
             spellcheck="false"
           ></textarea>

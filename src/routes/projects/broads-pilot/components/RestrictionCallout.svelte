@@ -6,7 +6,7 @@
   import { bridgeVerdict } from '../lib/passability';
   import type { Bridge, Lock, Verdict } from '../lib/types';
 
-  const VERDICT_COLOR: Record<Verdict, string> = { pass: '#2e7d32', marginal: '#e69500', blocked: '#c62828' };
+  const VERDICT_COLOR: Record<Verdict, string> = { pass: 'var(--success)', marginal: 'var(--warn)', blocked: 'var(--error)' };
   const VERDICT_LABEL: Record<Verdict, string> = {
     pass: 'Your boat passes',
     marginal: 'Marginal for your boat',
@@ -124,9 +124,8 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -155,7 +154,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -185,7 +184,7 @@
     color: var(--text-secondary);
     border: 1px solid var(--card-border);
     padding: 0.16rem 0.42rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
   .tag-accent { color: var(--accent); border-color: var(--accent); }
@@ -203,7 +202,7 @@
     letter-spacing: 0.04em;
     color: var(--c);
   }
-  .verdict-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--c); flex: none; }
+  .verdict-dot { width: 0.7rem; height: 0.7rem; border-radius: var(--radius-pill); background: var(--c); flex: none; }
   .verdict-muted { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
 
   .notes {
@@ -240,7 +239,7 @@
   .safety {
     margin: 0;
     padding: 0.6rem 0.7rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
     background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated));
     font-family: var(--font-body);

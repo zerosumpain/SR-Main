@@ -23,10 +23,9 @@
   .cat-header {
     width: 220px;
     box-sizing: border-box;
-    background: var(--card, #faf6ee);
+    background: var(--surface-elevated, #faf6ee);
     border: 1px solid rgba(26, 16, 8, 0.18);
-    border-radius: 4px;
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
+    border-radius: var(--radius-round);
     padding: 8px 10px 10px;
     overflow: hidden;
   }

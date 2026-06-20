@@ -7,7 +7,7 @@
   import { breydonAdvice } from '../lib/tide';
   import type { Verdict } from '../lib/types';
 
-  const VERDICT_COLOR: Record<Verdict, string> = { pass: '#2e7d32', marginal: '#e69500', blocked: '#c62828' };
+  const VERDICT_COLOR: Record<Verdict, string> = { pass: 'var(--success)', marginal: 'var(--warn)', blocked: 'var(--error)' };
   const VERDICT_LABEL: Record<Verdict, string> = { pass: 'Pass', marginal: 'Marginal', blocked: 'Blocked' };
 
   // Worst-first ordering so the bits that matter surface at the top of the list.
@@ -123,7 +123,7 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
   }
   .kicker {
@@ -157,7 +157,7 @@
     padding: 0.75rem;
     border: 1px solid var(--card-border);
     border-left: 3px solid var(--error);
-    border-radius: 0.45rem;
+    border-radius: var(--radius-round);
     background: var(--card-bg);
   }
   .blocked-tag {
@@ -169,7 +169,7 @@
     color: #fff;
     background: var(--error);
     padding: 0.18rem 0.45rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
   }
   .blocked-msg { margin: 0; font-family: var(--font-body); font-size: 0.9rem; }
   .blocked-detail { margin: 0; font-family: var(--font-body); font-size: 0.82rem; color: var(--text-secondary); }
@@ -209,7 +209,7 @@
     color: #fff;
     background: var(--c);
     padding: 0.16rem 0.42rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
   .bridge-name { font-family: var(--font-body); font-size: 0.88rem; color: var(--text-primary); }
@@ -221,16 +221,16 @@
     color: var(--text-secondary);
     border: 1px solid var(--card-border);
     padding: 0.12rem 0.36rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
   .tag-pilot { color: var(--accent); border-color: var(--accent); }
-  .all-clear { margin: 0; font-family: var(--font-body); font-size: 0.84rem; color: #2e7d32; }
+  .all-clear { margin: 0; font-family: var(--font-body); font-size: 0.84rem; color: var(--success); }
 
   /* callouts */
   .callout {
     padding: 0.7rem 0.75rem;
-    border-radius: 0.45rem;
+    border-radius: var(--radius-round);
     border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
     background: color-mix(in srgb, var(--warn) 14%, var(--surface-elevated));
   }
@@ -245,7 +245,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.9rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     min-height: 40px;
   }

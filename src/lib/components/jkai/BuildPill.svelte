@@ -53,12 +53,12 @@
 
   function statusColor(): string {
     if (!stage) return 'var(--text-secondary)';
-    if (stage.stage === 'completed') return 'var(--color-emerald, #10b981)';
-    if (stage.stage === 'failed') return 'var(--color-red, #ef4444)';
+    if (stage.stage === 'completed') return 'var(--success)';
+    if (stage.stage === 'failed') return 'var(--error)';
     if (stage.stage === 'paused' || stage.stage === 'awaiting_plan_approval' || stage.stage === 'awaiting_iter_approval') {
-      return 'var(--color-amber, #f59e0b)';
+      return 'var(--warn)';
     }
-    return 'var(--color-cyan, #06b6d4)';
+    return 'var(--accent)';
   }
 
   onMount(() => {
@@ -119,9 +119,9 @@
     align-items: center;
     gap: 0.55rem;
     padding: 0.4rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid var(--border-default, rgba(255,255,255,0.08));
-    background: var(--bg-elevated, rgba(255,255,255,0.04));
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--surface-elevated);
     font-family: var(--font-mono, 'DM Mono', ui-monospace, monospace);
     font-size: 0.75rem;
     color: var(--text-primary);
@@ -131,13 +131,13 @@
   }
   .build-pill.sticky {
     width: 100%;
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     justify-content: flex-start;
   }
   .dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     flex-shrink: 0;
   }
   .label {
@@ -148,7 +148,7 @@
   }
   .link {
     margin-left: auto;
-    color: var(--text-link, #60a5fa);
+    color: var(--accent);
     text-decoration: none;
   }
   .link:hover {

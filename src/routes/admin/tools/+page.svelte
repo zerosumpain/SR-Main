@@ -460,7 +460,7 @@
     margin-left: auto;
   }
   .run-num { color: var(--text-primary); font-weight: 500; }
-  .run-err { color: #c44; }
+  .run-err { color: var(--error); }
   .run-time { margin-left: 4px; }
 
   .meta-line {

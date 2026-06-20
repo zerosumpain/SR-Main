@@ -206,7 +206,7 @@
   .h-annot {
     border-left: 3px solid var(--accent);
     padding: 8px 14px;
-    background: rgba(196, 87, 10, 0.04);
+    background: var(--accent-tint-04);
   }
   .h-annot-when {
     font-family: var(--font-mono);
@@ -267,7 +267,7 @@
     height: 7px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 8px rgba(196, 87, 10, 0.6);
+    box-shadow: var(--accent-glow);
     animation: sr-pulse 1.5s ease-in-out infinite;
     display: inline-block;
     margin-right: 8px;

@@ -21,9 +21,9 @@
       <div class="text-sm" style="color: var(--text-secondary);">
         {entity.typeName}
         {#if entity.confirmed}
-          <span class="text-emerald-600 ml-2">confirmed</span>
+          <span class="ml-2" style="color: var(--success);">confirmed</span>
         {:else}
-          <span class="text-amber-600 ml-2">unconfirmed</span>
+          <span class="ml-2" style="color: var(--warn);">unconfirmed</span>
         {/if}
       </div>
     </div>
@@ -33,14 +33,14 @@
     <!-- Left Column -->
     <div class="space-y-4">
       {#if entity.summary}
-        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Summary</h2>
           <p class="text-sm leading-relaxed">{entity.summary}</p>
         </div>
       {/if}
 
       {#if propEntries.length > 0}
-        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Properties</h2>
           <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             {#each propEntries as [key, value]}
@@ -51,7 +51,7 @@
         </div>
       {/if}
 
-      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Appears in {data.notes.length} notes</h2>
         {#each data.notes as note}
           <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--card-border);">
@@ -67,7 +67,7 @@
 
     <!-- Right Column -->
     <div class="space-y-4">
-      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Relationships</h2>
         {#if data.relationships.length === 0}
           <p class="text-sm" style="color: var(--text-ghost);">No relationships yet.</p>
@@ -83,7 +83,7 @@
       </div>
 
       {#if data.timelineEvents.length > 0}
-        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Timeline</h2>
           <div class="border-l-2 pl-3 space-y-3" style="border-color: var(--card-border);">
             {#each data.timelineEvents as event}

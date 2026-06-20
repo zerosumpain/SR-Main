@@ -28,8 +28,8 @@
   .cb {
     display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
     font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
-    letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
+    letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: var(--radius-round);
   }
   .cb.small { font-size: 8px; padding: 1px 4px; }
-  .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .dot { width: 5px; height: 5px; border-radius: var(--radius-pill); display: inline-block; }
 </style>

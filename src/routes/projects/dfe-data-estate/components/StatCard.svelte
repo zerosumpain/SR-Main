@@ -34,7 +34,7 @@
     padding: 14px 15px 12px;
     background: rgba(255, 255, 255, 0.42);
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: 10px;
+    border-radius: var(--radius-round);
     min-width: 0;
   }
   .top {
@@ -53,22 +53,22 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
   }
   .tag.live {
-    color: #c4570a;
-    background: rgba(196, 87, 10, 0.1);
+    color: var(--accent);
+    background: var(--accent-tint-08);
   }
   .tag.live i {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
-    background: #c4570a;
-    box-shadow: 0 0 0 0 rgba(196, 87, 10, 0.5);
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    box-shadow: 0 0 0 0 var(--accent-tint-25);
     animation: pulse 1.8s ease-out infinite;
   }
   @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(196, 87, 10, 0.5); }
+    0% { box-shadow: 0 0 0 0 var(--accent-tint-25); }
     70% { box-shadow: 0 0 0 6px rgba(196, 87, 10, 0); }
     100% { box-shadow: 0 0 0 0 rgba(196, 87, 10, 0); }
   }
@@ -86,7 +86,7 @@
     text-overflow: ellipsis;
   }
   .api:hover {
-    color: #c4570a;
+    color: var(--accent);
   }
   .num {
     font-family: 'Fraunces', serif;
@@ -94,13 +94,13 @@
     font-size: clamp(28px, 4.2vw, 38px);
     line-height: 1;
     letter-spacing: -0.02em;
-    color: #1c1611;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
   .label {
     font-size: 12.5px;
     font-weight: 500;
-    color: #1c1611;
+    color: var(--ink);
     line-height: 1.25;
   }
   .detail {

@@ -17,7 +17,7 @@
   </div>
 
   <div
-    class="p-5 rounded-xl border"
+    class="p-5 rounded-[var(--radius-round)] border"
     style="background: var(--card-bg); border-color: var(--card-border);"
   >
     <WhatsAppChannelPanel channelId={data.channel.id} />

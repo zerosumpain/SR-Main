@@ -11,12 +11,12 @@
   let creating = $state(false);
 
   const STATUS_COLORS: Record<string, string> = {
-    connected: '#2d7d46',
-    ready: '#2d7d46',
-    connecting: '#b8860b',
-    qr_pending: '#b8860b',
-    unconfigured: '#b8860b',
-    disconnected: '#b43232',
+    connected: 'var(--success)',
+    ready: 'var(--success)',
+    connecting: 'var(--warn)',
+    qr_pending: 'var(--warn)',
+    unconfigured: 'var(--warn)',
+    disconnected: 'var(--error)',
     unknown: 'var(--text-ghost)',
   };
 
@@ -99,7 +99,7 @@
     <div class="flex items-center gap-3">
       <button
         onclick={() => { showAddDialog = true; }}
-        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium transition-colors"
         style="background: var(--accent); color: white;"
       >
         Add channel
@@ -109,7 +109,7 @@
 
   {#if channelList.length === 0}
     <div
-      class="text-center py-16 rounded-xl border"
+      class="text-center py-16 rounded-[var(--radius-round)] border"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
       <p class="text-lg mb-2" style="color: var(--text-secondary);">No channels yet</p>
@@ -119,7 +119,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       {#each channelList as ch}
         <div
-          class="group relative p-5 rounded-xl border transition-colors hover:border-[var(--accent)]"
+          class="group relative p-5 rounded-[var(--radius-round)] border transition-colors hover:border-[var(--accent)]"
           style="background: var(--card-bg); border-color: var(--card-border);"
         >
           <a href={configurePath(ch.kind, ch.id)} class="absolute inset-0 z-0" aria-label="Configure channel"></a>
@@ -149,8 +149,8 @@
               </label>
               <button
                 onclick={(e) => deleteChannel(ch.id, e)}
-                class="px-2.5 py-1 rounded-lg border opacity-0 group-hover:opacity-100 transition-all text-xs font-medium"
-                style="color: #b43232; border-color: #b43232; background: rgba(180, 50, 50, 0.08);"
+                class="px-2.5 py-1 rounded-[var(--radius-round)] border opacity-0 group-hover:opacity-100 transition-all text-xs font-medium"
+                style="color: var(--error); border-color: var(--error); background: var(--error-bg);"
                 title="Delete channel"
               >
                 Delete
@@ -196,7 +196,7 @@
     role="presentation"
   >
     <div
-      class="w-full max-w-md rounded-xl border p-6 shadow-xl"
+      class="w-full max-w-md rounded-[var(--radius-round)] border p-6 shadow-xl"
       style="background: var(--card-bg); border-color: var(--card-border);"
     >
       <h2 class="text-lg font-medium mb-4" style="color: var(--text-primary);">Add channel</h2>

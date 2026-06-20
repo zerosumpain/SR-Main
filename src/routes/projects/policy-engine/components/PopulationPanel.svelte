@@ -209,64 +209,64 @@
 
 <style>
   .pop { display: flex; flex-direction: column; gap: 14px; }
-  .banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 8px 12px; border-radius: 8px;
-    background: rgba(63,125,110,0.08); border: 1px solid rgba(63,125,110,0.25); }
-  .banner.cmp { background: rgba(58,95,168,0.08); border-color: rgba(58,95,168,0.3); }
-  .banner.cmp .b-tag { color: #3a5fa8; }
-  .banner.rgn { background: rgba(74,124,124,0.1); border-color: rgba(74,124,124,0.32); }
-  .banner.rgn .b-tag { color: #3a5f5f; }
-  .b-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.12em; color: #3f7d6e; }
+  .banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 8px 12px; border-radius: var(--radius-round);
+    background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-22); }
+  .banner.cmp { background: var(--accent-ink-tint-12); border-color: var(--accent-ink-tint-35); }
+  .banner.cmp .b-tag { color: var(--accent-ink); }
+  .banner.rgn { background: var(--accent-ink-tint-12); border-color: var(--accent-ink-tint-35); }
+  .banner.rgn .b-tag { color: var(--accent-ink); }
+  .b-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.12em; color: var(--accent-ink); }
   .b-text { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.72); flex: 1; min-width: 240px; }
-  .b-text b { color: #1c1611; }
+  .b-text b { color: var(--ink); }
 
   .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .chip { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 9px;
+  .chip { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius-round);
     background: rgba(255,255,255,0.45); border: 1px solid rgba(28,22,17,0.12); border-left-width: 3px; }
-  .chip.good { border-left-color: #2f7d4f; }
-  .chip.bad { border-left-color: #b1455e; }
-  .c-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 30px; line-height: 1; color: #1c1611; }
-  .chip.good .c-num { color: #2f7d4f; }
-  .chip.bad .c-num { color: #b1455e; }
+  .chip.good { border-left-color: var(--success); }
+  .chip.bad { border-left-color: var(--error); }
+  .c-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 30px; line-height: 1; color: var(--ink); }
+  .chip.good .c-num { color: var(--success); }
+  .chip.bad .c-num { color: var(--error); }
   .c-lab { font-size: 12px; line-height: 1.3; color: rgba(28,22,17,0.82); margin-top: 3px; }
   .c-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
 
   .block { display: flex; flex-direction: column; gap: 8px; }
   .block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: #1c1611; }
-  .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 6px; }
-  .seg button { background: transparent; border: none; color: var(--ink, #1c1611); padding: 4px 9px; border-radius: 4px;
+  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: var(--ink); }
+  .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: var(--radius-round); }
+  .seg button { background: transparent; border: none; color: var(--ink); padding: 4px 9px; border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', monospace; font-size: 9.5px; cursor: pointer; }
-  .seg button.active { background: #1c1611; color: #f1ead6; }
+  .seg button.active { background: var(--ink); color: var(--paper); }
 
-  .ledger { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; overflow: hidden; }
+  .ledger { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); overflow: hidden; }
   .lrow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px;
     border-left: 3px solid transparent; border-bottom: 1px solid rgba(28,22,17,0.06); background: rgba(255,255,255,0.3); }
   .lrow:last-child { border-bottom: none; }
-  .lrow.good { border-left-color: #2f7d4f; }
-  .lrow.bad { border-left-color: #b1455e; }
-  .lrow.neutral { border-left-color: #566a8c; }
+  .lrow.good { border-left-color: var(--success); }
+  .lrow.bad { border-left-color: var(--error); }
+  .lrow.neutral { border-left-color: var(--accent-ink); }
   .lrow.flat { border-left-color: rgba(28,22,17,0.2); }
   .l-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .l-count { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: #1c1611; white-space: nowrap; }
+  .l-count { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--ink); white-space: nowrap; }
   .l-label { font-size: 11.5px; line-height: 1.3; color: rgba(28,22,17,0.78); }
   .l-label em { font-style: normal; color: rgba(28,22,17,0.45); font-family: 'JetBrains Mono', monospace; font-size: 9px; }
   .spark { flex-shrink: 0; }
   .l-delta { text-align: right; min-width: 96px; }
   .d { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; white-space: nowrap; }
   .d small { font-weight: 400; color: rgba(28,22,17,0.45); }
-  .d.good { color: #2f7d4f; }
-  .d.bad { color: #b1455e; }
-  .d.neutral { color: #566a8c; }
+  .d.good { color: var(--success); }
+  .d.bad { color: var(--error); }
+  .d.neutral { color: var(--accent-ink); }
   .d.flat, .d.barred { color: rgba(28,22,17,0.45); font-weight: 400; }
 
   .py-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .py { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 8px;
+  .py { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: var(--radius-round);
     background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-left-width: 3px; }
-  .py.good { border-left-color: #2f7d4f; }
-  .py.bad { border-left-color: #b1455e; }
-  .py-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; line-height: 1; color: #1c1611; }
-  .py.good .py-num { color: #2f7d4f; }
-  .py.bad .py-num { color: #b1455e; }
+  .py.good { border-left-color: var(--success); }
+  .py.bad { border-left-color: var(--error); }
+  .py-num { font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; line-height: 1; color: var(--ink); }
+  .py.good .py-num { color: var(--success); }
+  .py.bad .py-num { color: var(--error); }
   .py-unit { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
   .py-lab { font-size: 11px; line-height: 1.3; color: rgba(28,22,17,0.7); margin-top: 2px; }
   .py-note { margin: 0; font-size: 10px; line-height: 1.45; color: rgba(28,22,17,0.55); }
@@ -277,7 +277,7 @@
 
   .calib { font-size: 11.5px; border-top: 1px solid rgba(28,22,17,0.1); padding-top: 6px; }
   .calib summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.6); padding: 4px 0; }
-  .calib summary:hover { color: #1c1611; }
+  .calib summary:hover { color: var(--ink); }
   .calib-body { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 11px; }
   th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 3px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
@@ -285,5 +285,5 @@
   td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.06); color: rgba(28,22,17,0.78); line-height: 1.35; }
   .rules { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
   .rules li { font-size: 10.5px; line-height: 1.4; color: rgba(28,22,17,0.65); }
-  .rules b { color: #1c1611; }
+  .rules b { color: var(--ink); }
 </style>

@@ -70,22 +70,22 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
   .card {
     background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12);
-    border-radius: 7px; padding: 9px 10px; border-left-width: 3px;
+    border-radius: var(--radius-round); padding: 9px 10px; border-left-width: 3px;
   }
-  .card.tone-good { border-left-color: #2f7d4f; }
-  .card.tone-bad { border-left-color: #b1455e; }
+  .card.tone-good { border-left-color: var(--success); }
+  .card.tone-bad { border-left-color: var(--error); }
   .card.tone-neutral { border-left-color: rgba(28,22,17,0.35); }
   .card { cursor: help; }
   .c-label { font-size: 11px; line-height: 1.3; color: rgba(28,22,17,0.72); min-height: 28px; display: flex; align-items: flex-start; gap: 4px; }
-  .c-q { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  .c-q { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: var(--radius-pill); flex-shrink: 0;
     border: 1px solid rgba(28,22,17,0.3); font-size: 8px; color: rgba(28,22,17,0.5); margin-top: 1px; }
   .c-main { display: flex; align-items: baseline; gap: 4px; margin: 3px 0 4px; }
-  .c-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 23px; color: var(--ink, #1c1611); line-height: 1; }
+  .c-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 23px; color: var(--ink); line-height: 1; }
   .c-unit { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.5); }
   .c-foot { display: flex; flex-direction: column; gap: 2px; }
   .c-delta { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; }
-  .c-delta.tone-good { color: #2f7d4f; }
-  .c-delta.tone-bad { color: #b1455e; }
+  .c-delta.tone-good { color: var(--success); }
+  .c-delta.tone-bad { color: var(--error); }
   .c-delta.neutral { color: rgba(28,22,17,0.5); font-weight: 500; }
   .c-start { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.4); }
 </style>

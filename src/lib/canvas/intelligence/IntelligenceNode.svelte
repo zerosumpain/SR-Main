@@ -688,7 +688,7 @@
   .intelligence-node {
     position: relative;
     background: var(--bg);
-    border: 1.5px solid #5dbea3;
+    border: 1.5px solid var(--accent);
     color: var(--text-primary);
     font-family: var(--font-mono);
     display: flex;
@@ -702,7 +702,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    border-bottom: 1px solid var(--divider, #1c1f27);
+    border-bottom: 1px solid var(--divider);
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.08em;
@@ -710,7 +710,7 @@
   .kind-bar {
     width: 3px;
     align-self: stretch;
-    background: #5dbea3;
+    background: var(--accent);
   }
   .query-wrap { padding: 6px 8px; }
   .query {
@@ -718,7 +718,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--divider);
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     padding: 6px;
     font: inherit;
     font-size: 11px;
@@ -736,7 +736,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     padding: 2px 7px;
     font: inherit;
     font-size: 10px;
@@ -748,9 +748,9 @@
     border-color: var(--text-muted);
   }
   .cat-pill.active {
-    background: #5dbea3;
+    background: var(--accent);
     color: var(--bg);
-    border-color: #5dbea3;
+    border-color: var(--accent);
   }
   /* View mode pill group + facets */
   .controls-row {
@@ -777,7 +777,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     padding: 3px 10px;
     font: inherit;
     font-size: 11px;
@@ -789,9 +789,9 @@
     border-color: var(--text-muted);
   }
   .view-pill.active {
-    background: #5dbea3;
+    background: var(--accent);
     color: var(--bg);
-    border-color: #5dbea3;
+    border-color: var(--accent);
   }
   .facet-chips {
     display: flex;
@@ -802,7 +802,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 12px;
+    border-radius: var(--radius-pill);
     padding: 2px 8px;
     font: inherit;
     font-size: 10px;
@@ -879,9 +879,9 @@
     color: var(--text-ghost);
   }
   .item-tag {
-    background: rgba(93, 190, 163, 0.1);
-    color: #5dbea3;
-    border-radius: 4px;
+    background: var(--accent-tint-08);
+    color: var(--accent);
+    border-radius: var(--radius-round);
     padding: 0 4px;
   }
   .item-date { color: var(--text-ghost); }
@@ -911,7 +911,7 @@
     align-items: center;
     justify-content: center;
     font-size: 11px;
-    color: #e05252;
+    color: var(--error);
     padding: 8px;
     text-align: center;
   }
@@ -932,9 +932,9 @@
   }
   .explore-btn {
     background: transparent;
-    color: #5dbea3;
-    border: 1px solid #5dbea3;
-    border-radius: 6px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-round);
     padding: 4px 10px;
     font: inherit;
     font-size: 11px;
@@ -946,7 +946,7 @@
     left: 8px;
     background: var(--bg);
     border: 1px solid var(--text-primary);
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     display: flex;
     flex-direction: column;
     min-width: 200px;

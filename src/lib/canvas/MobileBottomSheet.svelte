@@ -137,9 +137,9 @@
     right: 0;
     bottom: 0;
     pointer-events: auto;
-    background: var(--nm-surface, #fff);
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
+    background: var(--surface-elevated);
+    border-radius: var(--radius-round) var(--radius-round) 0 0;
+    border-top: 1px solid var(--card-border);
     display: flex;
     flex-direction: column;
     animation: slideUp 200ms ease-out;
@@ -157,14 +157,14 @@
     width: 40px;
     height: 4px;
     border-radius: 2px;
-    background: var(--nm-muted-border, #ccc);
+    background: var(--divider);
     margin: 0 auto 8px;
   }
   .title {
     text-align: center;
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--nm-text, #1a1008);
+    color: var(--text-primary);
   }
   .body {
     flex: 1 1 auto;

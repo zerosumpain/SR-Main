@@ -498,7 +498,7 @@
     font-weight: 600;
   }
   .bpn-conn { margin-left: auto; }
-  .bpn-conn.connected { color: var(--color-emerald, #10b981); }
+  .bpn-conn.connected { color: var(--success); }
 
   .bpn-acts { display: flex; gap: 0.25rem; flex-shrink: 0; flex-basis: 100%; }
   .bpn-act {

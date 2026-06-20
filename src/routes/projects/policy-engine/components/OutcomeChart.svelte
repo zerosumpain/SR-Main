@@ -238,13 +238,13 @@
   .chart {
     background: rgba(255,255,255,0.4);
     border: 1px solid rgba(28,22,17,0.12);
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     padding: 8px 10px 6px;
   }
   .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
   .chart-title {
     font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 13.5px;
-    color: var(--ink, #1c1611); line-height: 1.2;
+    color: var(--ink); line-height: 1.2;
   }
   .chart-unit {
     font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px;
@@ -267,8 +267,8 @@
     min-height: 18px;
   }
   .lg-item, .ro-item { display: inline-flex; align-items: center; gap: 4px; }
-  .lg-item i, .ro-item i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+  .lg-item i, .ro-item i { width: 10px; height: 3px; border-radius: var(--radius-sharp); display: inline-block; }
   .lg-item i.dash { background-image: none; opacity: 0.6; height: 2px; }
-  .ro-year { font-weight: 600; color: var(--ink, #1c1611); }
-  .ro-item b { color: var(--ink, #1c1611); }
+  .ro-year { font-weight: 600; color: var(--ink); }
+  .ro-item b { color: var(--ink); }
 </style>

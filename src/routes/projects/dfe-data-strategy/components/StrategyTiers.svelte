@@ -56,9 +56,9 @@
   .t-count { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(28,22,17,0.4); }
   .t-blurb { margin: 6px 0 14px; font-size: 14px; line-height: 1.55; color: rgba(28,22,17,0.7); max-width: 80ch; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
-  .card { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--c); border-radius: 10px; background: rgba(255,255,255,0.48); padding: 13px 15px; display: flex; flex-direction: column; }
+  .card { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--c); border-radius: var(--radius-round); background: rgba(255,255,255,0.48); padding: 13px 15px; display: flex; flex-direction: column; }
   .c-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .c-kind { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #fff; padding: 2px 6px; border-radius: 4px; }
+  .c-kind { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #fff; padding: 2px 6px; border-radius: var(--radius-round); }
   .c-status { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(28,22,17,0.5); margin-left: auto; }
   .c-name { margin: 0 0 7px; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.2; }
   .c-take { margin: 0 0 8px; font-size: 14px; line-height: 1.45; color: var(--ink); font-style: italic; font-weight: 500; }
@@ -66,10 +66,10 @@
   .c-voices { margin: 0 0 10px; padding-top: 8px; border-top: 1px dotted rgba(28,22,17,0.15); }
   .cv-l { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.45); margin-bottom: 3px; }
   .cv { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; cursor: help; }
-  .cv-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .cv-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); flex-shrink: 0; }
   .cv-who { font-size: 10.5px; color: rgba(28,22,17,0.66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .c-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
-  .c-src { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
-  .c-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.3); border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+  .c-src { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .c-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.3); border-radius: var(--radius-round); padding: 4px 8px; cursor: pointer; white-space: nowrap; }
   .c-draft:hover { background: rgba(138,45,58,0.14); }
 </style>

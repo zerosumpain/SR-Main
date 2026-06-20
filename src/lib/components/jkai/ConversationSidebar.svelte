@@ -161,7 +161,7 @@
           style="border-color: var(--card-border); background: {activeConversationId === 'whatsapp' ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
         >
           <div class="flex items-center gap-2 mb-1">
-            <span class="text-[10px] px-1.5 py-0.5 rounded" style="background: rgba(37, 211, 102, 0.15); color: #25d366;">
+            <span class="text-[10px] px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--wa-green) 15%, transparent); color: var(--wa-green);">
               WA
             </span>
             <span class="text-xs font-medium" style="color: var(--text-primary);">
@@ -225,7 +225,7 @@
                     <button
                       onclick={(e) => confirmAndDelete(e, conv)}
                       onkeydown={(e) => { if (e.key === 'Enter') confirmAndDelete(e, conv); }}
-                      class="text-[18px] leading-none w-7 h-7 flex items-center justify-center rounded shrink-0 transition-opacity hover:opacity-100 hover:bg-black/10"
+                      class="del-btn text-[18px] leading-none w-7 h-7 flex items-center justify-center rounded shrink-0 transition-opacity hover:opacity-100"
                       style="color: var(--text-ghost); opacity: 0.6;"
                       title="Delete conversation"
                       aria-label="Delete conversation"
@@ -259,14 +259,18 @@
       </div>
       <a
         href="/jkai/intel"
-        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium hover:opacity-80 transition-opacity"
+        class="sb-action flex items-center gap-2 w-full px-3 py-2 border text-xs font-medium hover:opacity-80 transition-opacity"
         style="border-color: var(--card-border); color: var(--accent);"
       >
-        <span>🔷</span> Intel Dashboard
+        <span aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M10 2 L17 6 V14 L10 18 L3 14 V6 Z" />
+          </svg>
+        </span> Intel Dashboard
       </a>
       <button
         onclick={onNew}
-        class="w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors border"
+        class="sb-action w-full px-3 py-2 text-xs font-medium transition-colors border"
         style="border-color: var(--card-border); color: var(--text-secondary);"
       >
         + New conversation
@@ -276,18 +280,24 @@
 {/if}
 
 <style>
+  .del-btn:hover {
+    background: var(--surface-overlay);
+  }
+  .sb-action {
+    border-radius: var(--radius-round);
+  }
   .live-dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
-    background: #25d366;
-    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6);
+    border-radius: var(--radius-pill);
+    background: var(--wa-green);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent);
     animation: live-pulse 1.6s ease-out infinite;
     flex-shrink: 0;
   }
   @keyframes live-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6); }
-    70%  { box-shadow: 0 0 0 6px rgba(37, 211, 102, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent); }
+    70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--wa-green) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 0%, transparent); }
   }
 </style>

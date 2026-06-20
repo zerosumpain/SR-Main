@@ -114,10 +114,10 @@
   .node { cursor: pointer; }
   .node circle { transition: r 0.12s ease, fill-opacity 0.12s ease; }
   .b-lab { font-family: 'DM Sans', sans-serif; font-size: 10.5px; fill: rgba(28,22,17,0.7); }
-  .b-lab.active { font-weight: 600; fill: var(--ink, #1c1611); }
-  .im-detail { align-self: center; border: 1px solid rgba(28,22,17,0.14); border-radius: 12px; background: rgba(255,255,255,0.55); padding: 14px 16px; min-height: 150px; }
+  .b-lab.active { font-weight: 600; fill: var(--ink); }
+  .im-detail { align-self: center; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.55); padding: 14px 16px; min-height: 150px; }
   .im-detail.show { background: rgba(255,255,255,0.75); }
-  .d-chip { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; padding: 2px 7px; border-radius: 4px; }
+  .d-chip { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; padding: 2px 7px; border-radius: var(--radius-round); }
   .d-tier { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; margin-left: 8px; font-weight: 600; }
   .d-name { margin: 8px 0 6px; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.15; }
   .d-take { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink); font-style: italic; }
@@ -126,16 +126,16 @@
   .d-voices { margin: 0 0 4px; padding-top: 8px; border-top: 1px dotted rgba(28,22,17,0.18); }
   .dv-l { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.45); margin-bottom: 4px; }
   .dv { display: flex; gap: 6px; margin-bottom: 5px; }
-  .dv-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .dv-dot { width: 7px; height: 7px; border-radius: var(--radius-pill); flex-shrink: 0; margin-top: 4px; }
   .dv-txt { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.7); }
   .dv-txt b { color: var(--ink); }
   .d-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
   .d-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
-  .d-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.35); border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+  .d-draft { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; background: rgba(138,45,58,0.06); border: 1px solid rgba(138,45,58,0.35); border-radius: var(--radius-round); padding: 5px 9px; cursor: pointer; white-space: nowrap; }
   .d-draft:hover { background: rgba(138,45,58,0.14); }
   .d-hint { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.55); }
   .im-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; }
   .lg { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.6); }
-  .lg i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .lg i { width: 11px; height: 11px; border-radius: var(--radius-pill); display: inline-block; }
   @media (max-width: 860px) { .im { grid-template-columns: 1fr; } }
 </style>

@@ -89,9 +89,12 @@
 
     const last = liveState.track[liveState.track.length - 1];
     if (posMarker) posMarker.remove();
+    // Leaflet can't read CSS vars, so resolve --accent at runtime.
+    const accent =
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c4570a';
     posMarker = L.circleMarker([last.lat, last.lng], {
       radius: 8,
-      fillColor: '#4285f4',
+      fillColor: accent,
       fillOpacity: 1,
       color: '#fff',
       weight: 2
@@ -228,7 +231,7 @@
     background: var(--accent);
     border-radius: 50%;
     animation: pulse-live 1.5s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(196, 87, 10, 0.5);
+    box-shadow: var(--accent-glow);
   }
 
   @keyframes pulse-live {
@@ -295,8 +298,8 @@
 
   .live-progress-bar {
     height: 4px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 2px;
+    background: var(--divider);
+    border-radius: var(--radius-sharp);
     overflow: hidden;
     margin-bottom: 6px;
   }
@@ -304,7 +307,7 @@
   .live-progress-fill {
     height: 100%;
     background: var(--accent);
-    border-radius: 2px;
+    border-radius: var(--radius-sharp);
     transition: width 0.5s ease;
   }
 

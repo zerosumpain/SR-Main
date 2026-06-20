@@ -134,7 +134,7 @@
     position: relative;
     transition:
       background var(--t-base) var(--ease-out),
-      padding-left var(--t-base) var(--ease-spring);
+      padding-left var(--t-base) var(--ease-out);
   }
   .row::before {
     content: '>';
@@ -146,7 +146,7 @@
     transform: translateX(-6px);
     transition:
       opacity var(--t-base) var(--ease-out),
-      transform var(--t-base) var(--ease-spring);
+      transform var(--t-base) var(--ease-out);
   }
   .row:hover {
     background: var(--accent-tint-04);
@@ -190,7 +190,7 @@
     transform: translateX(-4px);
     transition:
       opacity var(--t-base) var(--ease-out),
-      transform var(--t-base) var(--ease-spring);
+      transform var(--t-base) var(--ease-out);
     text-align: right;
   }
   .row:hover .row-arrow {

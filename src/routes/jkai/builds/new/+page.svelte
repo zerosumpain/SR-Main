@@ -84,12 +84,12 @@
         bind:value={prompt}
         rows={5}
         placeholder="Describe what you want to build..."
-        class="w-full rounded-lg border p-3 text-sm resize-y"
+        class="w-full rounded-[var(--radius-round)] border p-3 text-sm resize-y"
         style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
       ></textarea>
     </div>
 
-    <div class="mb-6 p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
       <h2 class="text-sm font-medium mb-4" style="color: var(--text-secondary);">Budget</h2>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -128,7 +128,7 @@
       <ModelPicker bind:value={builderModel} label="Model" />
     </div>
 
-    <div class="mb-6 p-4 rounded-lg border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
       <h2 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Strategy</h2>
       <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
         <input type="checkbox" bind:checked={enforceDesignSystem} />
@@ -149,11 +149,11 @@
     </div>
 
     {#if error}
-      <p class="text-sm mb-4" style="color: #b43232;">{error}</p>
+      <p class="text-sm mb-4" style="color: var(--error);">{error}</p>
     {/if}
 
     <button type="submit" disabled={!prompt.trim() || submitting}
-      class="px-6 py-2.5 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
+      class="px-6 py-2.5 rounded-[var(--radius-round)] text-sm font-medium transition-opacity disabled:opacity-50"
       style="background: var(--accent); color: white;">
       {submitting ? 'Starting...' : 'Start Build'}
     </button>

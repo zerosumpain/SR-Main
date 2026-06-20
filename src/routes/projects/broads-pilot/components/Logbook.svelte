@@ -69,7 +69,7 @@
 
       {#if !logbook.entries.length}
         <div class="empty">
-          <p class="empty-ic">⚓</p>
+          <p class="empty-ic" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="4" r="1.6" /><line x1="10" y1="5.6" x2="10" y2="17" /><line x1="6.5" y1="8.5" x2="13.5" y2="8.5" /><path d="M3.5 11.5a6.5 6.5 0 0 0 13 0" /><path d="M3.5 11.5l-1.4 1M16.5 11.5l1.4 1" /></svg></p>
           <p class="empty-t">No cruises logged yet</p>
           <p class="empty-d">Tap <strong>Live</strong> and start moving on the water — your track records automatically and lands here when you stop.</p>
         </div>
@@ -125,7 +125,7 @@
 
 <style>
   .lb-backdrop { position: absolute; inset: 0; z-index: 1000; background: rgba(26, 16, 8, 0.42); display: grid; place-items: center; padding: 0.6rem; }
-  .lb { width: min(48rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.7rem; box-shadow: 0 12px 40px rgba(26, 16, 8, 0.35); overflow: hidden; }
+  .lb { width: min(48rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); overflow: hidden; }
   .lb-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
   .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
   .lb-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }
@@ -133,9 +133,9 @@
   .close:hover { color: var(--text-primary); }
 
   .lb-body { overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.7rem; }
-  .rec { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-primary); background: color-mix(in srgb, #2e7d32 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, #2e7d32 40%, transparent); border-radius: 0.45rem; padding: 0.5rem 0.65rem; }
-  .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #c62828; flex: 0 0 auto; animation: lb-pulse 1.3s ease-out infinite; }
-  @keyframes lb-pulse { 0% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.5); } 100% { box-shadow: 0 0 0 7px rgba(198, 40, 40, 0); } }
+  .rec { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-primary); background: color-mix(in srgb, var(--success) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); border-radius: var(--radius-round); padding: 0.5rem 0.65rem; }
+  .rec-dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--error); flex: 0 0 auto; animation: lb-pulse 1.3s ease-out infinite; }
+  @keyframes lb-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 50%, transparent); } 100% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--error) 0%, transparent); } }
 
   .empty { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 2rem 1rem; text-align: center; }
   .empty-ic { font-size: 2rem; margin: 0; opacity: 0.5; }
@@ -143,11 +143,11 @@
   .empty-d { margin: 0; max-width: 26rem; font-family: var(--font-body); font-size: 0.86rem; line-height: 1.5; color: var(--text-secondary); }
 
   .logs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
-  .log { border: 1px solid var(--card-border); border-radius: 0.55rem; padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.55rem; }
+  .log { border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.55rem; }
   .log-top { display: flex; gap: 0.7rem; }
-  .mini { flex: 0 0 auto; width: 132px; height: 76px; background: var(--bg-section, var(--bg)); border: 1px solid var(--card-border); border-radius: 0.4rem; }
+  .mini { flex: 0 0 auto; width: 132px; height: 76px; background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-round); }
   .log-meta { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1 1 auto; }
-  .title-in { font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); background: transparent; border: 1px solid transparent; border-radius: 0.3rem; padding: 0.15rem 0.25rem; margin-left: -0.25rem; }
+  .title-in { font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-sharp); padding: 0.15rem 0.25rem; margin-left: -0.25rem; }
   .title-in:hover { border-color: var(--card-border); }
   .title-in:focus { outline: none; border-color: var(--accent); background: var(--surface-elevated); }
   .when { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -156,12 +156,12 @@
   .stats strong { font-family: var(--font-mono); font-size: 0.92rem; color: var(--text-primary); }
   .stats em { font-family: var(--font-mono); font-size: 0.54rem; font-style: normal; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
 
-  .notes { width: 100%; box-sizing: border-box; min-height: 2.2rem; resize: vertical; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.4rem; padding: 0.45rem 0.55rem; }
+  .notes { width: 100%; box-sizing: border-box; min-height: 2.2rem; resize: vertical; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.45rem 0.55rem; }
   .notes:focus { outline: none; border-color: var(--accent); }
 
   .log-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-  .mini-btn { font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: 0.35rem; min-height: 36px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
+  .mini-btn { font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: var(--radius-round); min-height: 36px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
   .mini-btn:hover { border-color: var(--accent); color: var(--text-primary); }
   .mini-btn.ghost { color: var(--text-muted); }
-  .mini-btn.danger { background: #c62828; border-color: #c62828; color: #fff; }
+  .mini-btn.danger { background: var(--error); border-color: var(--error); color: #fff; }
 </style>

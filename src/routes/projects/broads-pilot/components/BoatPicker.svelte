@@ -22,9 +22,9 @@
 
   // Pass-matrix: classify every bridge, blocked-first so hazards lead.
   const VERDICT_COLOR: Record<Verdict, string> = {
-    pass: '#2e7d32',
-    marginal: '#e69500',
-    blocked: '#c62828',
+    pass: 'var(--success)',
+    marginal: 'var(--warn)',
+    blocked: 'var(--error)',
   };
   const VERDICT_LABEL: Record<Verdict, string> = {
     pass: 'Pass',
@@ -172,7 +172,7 @@
     padding: 0.9rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     font-family: var(--font-body);
     color: var(--text-primary);
   }
@@ -210,7 +210,7 @@
     color: var(--text-primary);
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     appearance: none;
     cursor: pointer;
   }
@@ -232,7 +232,7 @@
   .spec-card {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
+    border-radius: var(--radius-round);
     padding: 0.7rem;
   }
   .spec-head {
@@ -255,7 +255,7 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 0.18rem 0.4rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
     border: 1px solid var(--card-border);
     color: var(--text-secondary);
@@ -346,7 +346,7 @@
     gap: 0.35rem;
     min-height: 2.05rem;
     padding: 0.3rem 0.55rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     background: var(--surface-elevated);
     border: 1px solid var(--vc);
     font-family: var(--font-mono);
@@ -359,7 +359,7 @@
   .dot {
     width: 0.55rem;
     height: 0.55rem;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--vc);
     flex: 0 0 auto;
   }
@@ -392,7 +392,7 @@
   .lg i {
     width: 0.5rem;
     height: 0.5rem;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     display: inline-block;
   }
 </style>

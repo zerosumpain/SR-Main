@@ -33,8 +33,8 @@
 <style>
   .jkai-root {
     min-height: 100vh;
-    background: var(--bg, #ede4d4);
-    color: var(--text-primary, #1a1008);
+    background: var(--bg);
+    color: var(--text-primary);
     font-family: var(--font-body);
   }
 </style>

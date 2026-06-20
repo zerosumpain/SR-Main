@@ -377,48 +377,48 @@
   .cf { margin: 0; }
   .cf-scroll { overflow-x: auto; }
   /* scoped to the diagram ONLY — must not hit the small legend swatch <svg>s below */
-  .cf-diagram { display: block; min-width: 760px; background: rgba(28,22,17,0.02); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; }
+  .cf-diagram { display: block; min-width: 760px; background: rgba(28,22,17,0.02); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); }
   .coltitle { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; fill: rgba(28,22,17,0.45); }
   .cf-div { stroke: rgba(74,124,124,0.5); stroke-width: 1; stroke-dasharray: 3 3; }
   .cf-divlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; fill: #4a7c7c; }
-  .nlabel { font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; fill: var(--ink, #1c1611); }
+  .nlabel { font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; fill: var(--ink); }
   .elabel { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.55); }
   .elabel.risk { fill: #b1455e; }
   .elabel.strong { fill: #2f7d4f; }
   figcaption { margin-top: 10px; }
   .cf-legtitle { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(28,22,17,0.5); margin-bottom: 7px; }
   .cf-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 10px 18px;
-    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; padding: 11px 14px; }
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 11px 14px; }
   .lg { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
   .sw { flex: 0 0 34px; width: 34px; height: 12px; display: block; margin-top: 2px; }
   .lg-txt { display: flex; flex-direction: column; gap: 1px; line-height: 1.3; min-width: 0; }
-  .lg-txt b { font-size: 11.5px; font-weight: 600; color: var(--ink, #1c1611); }
+  .lg-txt b { font-size: 11.5px; font-weight: 600; color: var(--ink); }
   .lg-txt i { font-style: normal; font-size: 9.5px; color: rgba(28,22,17,0.55); }
   .cf-note { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: rgba(28,22,17,0.6); }
 
   /* ---- click-to-inspect insight panel ---- */
-  .cf-insight { margin-top: 10px; border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; min-height: 52px; }
+  .cf-insight { margin-top: 10px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; min-height: 52px; }
   .cf-insight.active { border-color: rgba(28,22,17,0.3); border-left: 3px solid #b4632e; background: rgba(255,255,255,0.6); }
   .ci-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
-  .ci-kind { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: rgba(28,22,17,0.6); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
-  .ci-kind.kind-strong { background: #2f7d4f; }
+  .ci-kind { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: rgba(28,22,17,0.6); padding: 2px 6px; border-radius: var(--radius-round); white-space: nowrap; }
+  .ci-kind.kind-strong { background: var(--success); }
   .ci-kind.kind-weak { background: #9a7b1f; }
-  .ci-kind.kind-risk { background: #b1455e; }
-  .ci-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); flex: 1; }
+  .ci-kind.kind-risk { background: var(--error); }
+  .ci-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink); flex: 1; }
   .ci-title .arr { color: rgba(28,22,17,0.4); margin: 0 2px; }
   .ci-close { background: transparent; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; padding: 2px 4px; }
-  .ci-close:hover { color: var(--ink, #1c1611); }
+  .ci-close:hover { color: var(--ink); }
   .ci-desc { margin: 0 0 7px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.82); }
-  .ci-live { display: inline-flex; align-items: baseline; gap: 9px; background: rgba(28,22,17,0.04); border-radius: 6px; padding: 4px 9px; margin-bottom: 7px; }
+  .ci-live { display: inline-flex; align-items: baseline; gap: 9px; background: rgba(28,22,17,0.04); border-radius: var(--radius-round); padding: 4px 9px; margin-bottom: 7px; }
   .ci-live-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
-  .ci-live-v { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink, #1c1611); }
+  .ci-live-v { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink); }
   .ci-live-v i { font-style: normal; font-size: 9px; opacity: 0.55; margin-left: 1px; }
   .ci-live-d { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; }
   .ci-levers, .ci-conn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
   .ci-lev-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); margin-right: 2px; }
-  .ci-lev { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #b4632e; background: rgba(180,99,46,0.08); border: 1px solid rgba(180,99,46,0.3); border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+  .ci-lev { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #b4632e; background: rgba(180,99,46,0.08); border: 1px solid rgba(180,99,46,0.3); border-radius: var(--radius-round); padding: 2px 8px; cursor: pointer; }
   .ci-lev:hover { background: rgba(180,99,46,0.16); }
-  .ci-conn-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.7); background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.15); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
+  .ci-conn-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.7); background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.15); border-radius: var(--radius-round); padding: 2px 7px; cursor: pointer; }
   .ci-conn-btn:hover { background: rgba(28,22,17,0.1); }
   .ci-prompt { margin: 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.55); }
 </style>

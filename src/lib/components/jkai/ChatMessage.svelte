@@ -106,7 +106,8 @@
 
 <div class="msg-row flex flex-col {isUser ? 'items-end' : bubbled ? 'items-start' : 'items-stretch'} mb-3">
   <div
-    class="text-sm {bubbled ? 'max-w-[85%] rounded-lg px-3 py-2' : 'msg-plain w-full'}"
+    class="text-sm {bubbled ? 'max-w-[85%] px-3 py-2' : 'msg-plain w-full'}"
+    class:msg-bubble={bubbled}
     class:hb-msg={!!heartbeat}
     class:hb-msg-trigger={isHeartbeatTrigger}
     style={bubbled
@@ -168,6 +169,9 @@
 </div>
 
 <style>
+  .msg-bubble {
+    border-radius: var(--radius-round);
+  }
   .msg-timestamp {
     margin-top: 3px;
     font-family: var(--font-mono);
@@ -211,15 +215,15 @@
   .chat-markdown :global(code) {
     font-family: var(--font-mono);
     font-size: 0.85em;
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--surface-overlay);
     padding: 0.1em 0.35em;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
   }
   .chat-markdown :global(pre) {
     margin: 0.5em 0;
     padding: 0.6em 0.8em;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-round);
+    background: var(--bg-section);
     overflow-x: auto;
     font-size: 0.8em;
   }
@@ -263,8 +267,8 @@
 
   /* Heartbeat-source message styling */
   .hb-msg {
-    border-color: rgba(196, 60, 60, 0.18) !important;
-    background: linear-gradient(180deg, rgba(196, 60, 60, 0.04), var(--card-bg)) !important;
+    border-color: color-mix(in srgb, var(--error) 18%, transparent) !important;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--error) 4%, transparent), var(--card-bg)) !important;
   }
   .hb-msg-trigger {
     opacity: 0.7;
@@ -285,7 +289,7 @@
     border-bottom: 1px dotted var(--card-border);
   }
   .hb-pulse {
-    color: #c44;
+    color: var(--error);
     animation: hb-pulse-anim 2s ease-in-out infinite;
   }
   @keyframes hb-pulse-anim {

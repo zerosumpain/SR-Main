@@ -109,7 +109,7 @@
     50%  { transform: scale(1.012); }
   }
 
-  /* Fresh pulse — accent glow ring for ~1s after arrival (box-shadow + outline,
+  /* Fresh pulse — accent outline ring for ~1s after arrival (outline only,
      no transform, so it composes with the entrance/breathe transforms). */
   .desk-card-live.fresh {
     animation:
@@ -125,13 +125,16 @@
 
   @keyframes card-fresh-pulse {
     0% {
-      filter: drop-shadow(0 0 0 rgba(196, 87, 10, 0));
+      outline: 2px solid color-mix(in srgb, var(--accent) 0%, transparent);
+      outline-offset: 1px;
     }
     25% {
-      filter: drop-shadow(0 0 6px rgba(196, 87, 10, 0.55));
+      outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+      outline-offset: 1px;
     }
     100% {
-      filter: drop-shadow(0 0 0 rgba(196, 87, 10, 0));
+      outline: 2px solid color-mix(in srgb, var(--accent) 0%, transparent);
+      outline-offset: 1px;
     }
   }
 

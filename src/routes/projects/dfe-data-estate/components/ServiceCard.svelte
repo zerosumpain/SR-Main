@@ -42,7 +42,7 @@
 
 <style>
   .card {
-    --tier: #2f7d4f;
+    --tier: var(--success);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -50,12 +50,12 @@
     background: rgba(255, 255, 255, 0.4);
     border: 1px solid rgba(28, 22, 17, 0.13);
     border-left: 3px solid var(--tier);
-    border-radius: 9px;
+    border-radius: var(--radius-round);
     min-width: 0;
   }
-  .tier-open { --tier: #2f7d4f; }
-  .tier-secure { --tier: #b1455e; }
-  .tier-gateway { --tier: #2f6f97; }
+  .tier-open { --tier: var(--success); }
+  .tier-secure { --tier: var(--error); }
+  .tier-gateway { --tier: var(--accent-ink); }
 
   .hd {
     display: flex;
@@ -77,7 +77,7 @@
     font-size: 16px;
     line-height: 1.1;
     letter-spacing: -0.01em;
-    color: #1c1611;
+    color: var(--ink);
   }
   .acr {
     font-family: 'JetBrains Mono', monospace;
@@ -86,7 +86,7 @@
     color: rgba(28, 22, 17, 0.5);
     padding: 1px 5px;
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     white-space: nowrap;
   }
   .open-api {
@@ -94,10 +94,10 @@
     font-size: 8.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #c4570a;
-    background: rgba(196, 87, 10, 0.1);
+    color: var(--accent);
+    background: var(--accent-tint-08);
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -159,7 +159,7 @@
     border-bottom: 1px dashed rgba(28, 22, 17, 0.3);
   }
   .ft a:hover {
-    color: #c4570a;
-    border-bottom-color: #c4570a;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 </style>

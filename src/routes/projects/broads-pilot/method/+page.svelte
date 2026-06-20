@@ -117,12 +117,12 @@
   ul { padding-left: 1.1rem; }
   li { margin: 0.3rem 0; }
   strong { color: var(--text-primary); }
-  .bp-disclaimer { background: rgba(230, 149, 0, 0.12); border: 1px solid rgba(230, 149, 0, 0.4); border-radius: 0.5rem; padding: 0.9rem 1rem; font-family: var(--font-body); color: var(--text-secondary); line-height: 1.55; font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+  .bp-disclaimer { background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: var(--radius-round); padding: 0.9rem 1rem; font-family: var(--font-body); color: var(--text-secondary); line-height: 1.55; font-size: 0.9rem; margin: 1rem 0 0.5rem; }
   .bp-disclaimer strong { color: var(--text-primary); }
-  .v { font-family: var(--font-mono); font-size: 0.78rem; padding: 0.05rem 0.35rem; border-radius: 0.25rem; }
-  .v.pass { color: #2e7d32; background: rgba(46, 125, 50, 0.12); }
-  .v.marginal { color: #b06a00; background: rgba(230, 149, 0, 0.15); }
-  .v.blocked { color: #c62828; background: rgba(198, 40, 40, 0.12); }
+  .v { font-family: var(--font-mono); font-size: 0.78rem; padding: 0.05rem 0.35rem; border-radius: var(--radius-sharp); }
+  .v.pass { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+  .v.marginal { color: var(--trend-down); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+  .v.blocked { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
   .bp-credits { font-size: 0.82rem; color: var(--text-muted); }
   .bp-back { font-family: var(--font-mono); color: var(--accent); text-decoration: none; font-size: 0.85rem; }
 </style>

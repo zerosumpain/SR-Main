@@ -216,84 +216,84 @@
   .note { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.76); max-width: 96ch; }
 
   /* hero */
-  .heroA { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px;
-    border: 1.5px solid rgba(177,69,94,0.45); background: rgba(177,69,94,0.06); max-width: 96ch; }
+  .heroA { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 18px 22px; border-radius: var(--radius-round);
+    border: 1.5px solid var(--error-border); background: var(--error-bg); max-width: 96ch; }
   .hA-big { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(44px, 7.5vw, 80px); line-height: 0.9; color: #8a2d3a; }
   .hA-lab { margin: 0; flex: 1 1 320px; font-size: 15px; line-height: 1.55; color: rgba(28,22,17,0.8); }
   .hA-kicker { margin: 12px 0 0; font-size: 13.5px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 96ch; }
 
   /* dials */
   .dials { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
-  .dial { border: 1px solid rgba(28,22,17,0.14); border-radius: 12px; background: rgba(255,255,255,0.45); padding: 12px 14px; }
-  .dial.bad { border-color: rgba(177,69,94,0.45); background: rgba(177,69,94,0.04); }
+  .dial { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; }
+  .dial.bad { border-color: var(--error-border); background: var(--error-bg); }
   .dial-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-  .dial-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13.5px; color: var(--ink, #1c1611); }
-  .dial-trend { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: #2f7d4f; }
+  .dial-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13.5px; color: var(--ink); }
+  .dial-trend { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: var(--success); }
   .dial-trend.up { color: #8a2d3a; }
   .dial svg { display: block; width: 100%; height: auto; }
   .dbar { fill: rgba(28,22,17,0.35); }
   .dbar.first { fill: rgba(47,125,79,0.55); }
   .dbar.last { fill: rgba(138,45,58,0.75); }
-  .dval { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; fill: var(--ink, #1c1611); }
+  .dval { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; fill: var(--ink); }
   .dax { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; fill: rgba(28,22,17,0.55); }
   .dial-note { margin: 6px 0 0; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.66); }
 
   /* stat tiles */
   .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; margin-top: 4px; }
-  .st { border: 1px solid rgba(28,22,17,0.14); border-radius: 10px; background: rgba(255,255,255,0.45); padding: 12px 14px; }
-  .st.warn { border-color: rgba(177,69,94,0.4); background: rgba(177,69,94,0.04); }
-  .st-big { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(19px, 2.8vw, 25px); color: var(--ink, #1c1611); }
+  .st { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; }
+  .st.warn { border-color: var(--error-border); background: var(--error-bg); }
+  .st-big { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(19px, 2.8vw, 25px); color: var(--ink); }
   .st.warn .st-big { color: #8a2d3a; }
   .st-lab { margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.72); }
-  .st-link { display: inline-block; margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .st-link { display: inline-block; margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
 
   /* asides */
-  .aside { margin-top: 14px; border: 1px dashed rgba(28,22,17,0.35); border-radius: 10px; background: rgba(28,22,17,0.035); padding: 12px 15px; max-width: 96ch; }
+  .aside { margin-top: 14px; border: 1px dashed rgba(28,22,17,0.35); border-radius: var(--radius-round); background: rgba(28,22,17,0.035); padding: 12px 15px; max-width: 96ch; }
   .aside.warn { border-color: rgba(154,123,31,0.55); background: rgba(154,123,31,0.05); }
   .aside-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: rgba(28,22,17,0.6); margin-bottom: 5px; }
   .aside p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); }
 
   /* before/after */
   .ba { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; max-width: 96ch; }
-  .ba-col { border-radius: 12px; padding: 13px 16px; }
+  .ba-col { border-radius: var(--radius-round); padding: 13px 16px; }
   .ba-col.before { border: 1px solid rgba(28,22,17,0.2); background: rgba(28,22,17,0.04); }
-  .ba-col.after { border: 1.5px solid rgba(47,125,79,0.5); background: rgba(47,125,79,0.05); }
-  .ba-t { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); margin-bottom: 7px; }
+  .ba-col.after { border: 1.5px solid var(--success-border); background: var(--success-bg); }
+  .ba-t { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink); margin-bottom: 7px; }
   .ba-col ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
   .ba-col li { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.76); }
 
   /* verdict */
   .verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; max-width: 96ch; }
-  .v-col { border-radius: 12px; padding: 13px 16px; }
-  .v-col.claim { border: 1px solid rgba(47,111,151,0.4); background: rgba(47,111,151,0.05); }
-  .v-col.counter { border: 1.5px solid rgba(177,69,94,0.5); background: rgba(177,69,94,0.05); }
+  .v-col { border-radius: var(--radius-round); padding: 13px 16px; }
+  .v-col.claim { border: 1px solid var(--accent-ink-tint-35); background: var(--accent-ink-tint-06); }
+  .v-col.counter { border: 1.5px solid var(--error-border); background: var(--error-bg); }
   .v-t { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
-  .v-col.claim .v-t { color: #2f6f97; }
+  .v-col.claim .v-t { color: var(--accent-ink); }
   .v-col.counter .v-t { color: #8a2d3a; }
   .v-col p { margin: 0; font-size: 12.5px; line-height: 1.58; color: rgba(28,22,17,0.78); }
 
   /* comparators */
   .comp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 12px; }
-  .comp { border: 1px solid rgba(28,22,17,0.14); border-top: 3px solid #2f6f97; border-radius: 10px; background: rgba(255,255,255,0.42); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
-  .comp-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .comp { border: 1px solid rgba(28,22,17,0.14); border-top: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.42); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .comp-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink); }
   .comp-what { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
-  .comp-verdict { margin: 0; font-size: 11.5px; line-height: 1.45; font-weight: 600; color: #2f6f97; }
+  .comp-verdict { margin: 0; font-size: 11.5px; line-height: 1.45; font-weight: 600; color: var(--accent-ink); }
 
   /* asks + closer */
   .asks { display: flex; flex-direction: column; gap: 9px; max-width: 96ch; margin-bottom: 14px; }
-  .ask { display: flex; gap: 12px; align-items: flex-start; border: 1px solid rgba(47,125,79,0.3); border-radius: 10px; padding: 11px 14px; background: rgba(47,125,79,0.04); }
-  .ask-n { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: #2f7d4f; color: #fff;
+  .ask { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--success-border); border-radius: var(--radius-round); padding: 11px 14px; background: var(--success-bg); }
+  .ask-n { flex-shrink: 0; width: 26px; height: 26px; border-radius: var(--radius-pill); background: var(--success); color: #fff;
     font-family: 'JetBrains Mono', monospace; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
   .ask-body { display: flex; flex-direction: column; gap: 3px; }
-  .ask-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink, #1c1611); }
+  .ask-t { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; color: var(--ink); }
   .ask-w { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
-  .closer { border: 1px solid rgba(74,124,124,0.35); border-left: 3px solid #4a7c7c; border-radius: 10px;
-    background: rgba(74,124,124,0.06); padding: 13px 16px; max-width: 96ch; }
+  .closer { border: 1px solid var(--accent-ink-tint-35); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round);
+    background: var(--accent-ink-tint-06); padding: 13px 16px; max-width: 96ch; }
   .closer p { margin: 0; font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.78); }
 
   /* citation chips */
   .refrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
-  .refchip { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: #2f6f97; text-decoration: none;
-    border: 1px solid rgba(47,111,151,0.3); border-radius: 5px; padding: 2px 7px; background: rgba(47,111,151,0.05); }
-  .refchip:hover { border-color: #2f6f97; background: rgba(47,111,151,0.1); }
+  .refchip { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--accent-ink); text-decoration: none;
+    border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); padding: 2px 7px; background: var(--accent-ink-tint-06); }
+  .refchip:hover { border-color: var(--accent-ink); background: var(--accent-ink-tint-12); }
 </style>

@@ -144,7 +144,6 @@
     padding: 0 16px;
     background: var(--surface-elevated);
     border-bottom: 1px solid var(--card-border);
-    box-shadow: 0 2px 0 rgba(26, 16, 8, 0.06);
     z-index: 30;
     flex-shrink: 0;
   }
@@ -210,7 +209,6 @@
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-round);
-    box-shadow: var(--shadow-lg);
     padding: 4px;
     z-index: 40;
   }

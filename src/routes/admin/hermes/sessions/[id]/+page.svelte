@@ -89,12 +89,12 @@
   .kicker { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); }
   .page-hdr h1 { margin: 0.2rem 0 0; font-family: var(--font-brand, var(--font-display)); font-size: 1.4rem; font-weight: 500; word-break: break-word; }
   .sub { margin: 0.5rem 0 0; font-size: 0.9rem; color: var(--text-secondary); }
-  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg, var(--bg-section)); padding: 0.1em 0.35em; border-radius: 3px; }
+  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg, var(--bg-section)); padding: 0.1em 0.35em; border-radius: var(--radius-sharp); }
   .back-link { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
   .back-link:hover { text-decoration: underline; }
   .mono { font-family: var(--font-mono); }
 
-  .nm-sec { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .nm-sec { background: var(--card-bg); border: 1px solid var(--card-border); padding: 1rem 1.1rem; }
   .meta { margin-bottom: 1.25rem; }
   .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem 1.2rem; font-size: 12px; }
   .meta-grid > div { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -103,11 +103,11 @@
   .conv-link a { color: var(--accent); text-decoration: none; }
   .conv-link a:hover { text-decoration: underline; }
 
-  .err { font-size: 0.9rem; color: var(--status-error, #b54242); }
+  .err { font-size: 0.9rem; color: var(--error); }
   .empty { font-size: 0.9rem; color: var(--text-secondary); }
 
   .thread { display: flex; flex-direction: column; gap: 0.6rem; }
-  .msg { border: 1px solid var(--card-border); border-radius: 8px; padding: 0.55rem 0.75rem; background: var(--card-bg); }
+  .msg { border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.55rem 0.75rem; background: var(--card-bg); }
   .msg[data-role='user'] { border-left: 3px solid var(--accent); }
   .msg[data-role='assistant'] { border-left: 3px solid var(--text-muted); }
   .msg[data-role='tool'] { background: var(--bg-section); }
@@ -116,12 +116,12 @@
   .role-user { color: var(--accent); }
   .role-assistant { color: var(--text-primary); }
   .role-tool { color: var(--text-muted); }
-  .role-system { color: var(--status-error, #b54242); }
-  .tool-name { font-size: 10px; color: var(--text-secondary); background: var(--bg-section); padding: 0.1em 0.4em; border-radius: 3px; }
-  .ts { font-size: 10px; color: var(--text-ghost, var(--text-muted)); margin-left: auto; }
+  .role-system { color: var(--error); }
+  .tool-name { font-size: 10px; color: var(--text-secondary); background: var(--bg-section); padding: 0.1em 0.4em; border-radius: var(--radius-sharp); }
+  .ts { font-size: 10px; color: var(--text-ghost); margin-left: auto; }
   .msg-body { font-size: 0.9rem; line-height: 1.5; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
   .trunc { color: var(--text-muted); font-style: italic; }
   .tool-calls { margin-top: 0.4rem; }
   .tool-calls summary { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
-  .tool-calls pre { margin: 0.4rem 0 0; font-size: 11px; line-height: 1.4; color: var(--text-secondary); background: var(--bg-section); border-radius: 5px; padding: 0.5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .tool-calls pre { margin: 0.4rem 0 0; font-size: 11px; line-height: 1.4; color: var(--text-secondary); background: var(--bg-section); border-radius: var(--radius-round); padding: 0.5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
 </style>

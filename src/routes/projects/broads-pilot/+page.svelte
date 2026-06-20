@@ -178,6 +178,26 @@
   <meta name="description" content="Plan a Norfolk Broads boating trip: pick your hire boat and see where you can safely reach — true waterway routing, bridge clearances, speed limits, moorings, pubs and dog-friendly walks." />
 </svelte:head>
 
+{#snippet icoLock(locked: boolean)}
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="4.5" y="9" width="11" height="8" rx="1" />
+    {#if locked}<path d="M7 9V6.5a3 3 0 0 1 6 0V9" />{:else}<path d="M7 9V6.5a3 3 0 0 1 5.8-1.1" />{/if}
+    <circle cx="10" cy="12.6" r="1" />
+  </svg>
+{/snippet}
+{#snippet icoLog()}
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 4.5A1.5 1.5 0 0 1 5 3h6.5v14H5a1.5 1.5 0 0 0-1.5 1.5Z" /><path d="M16.5 4.5A1.5 1.5 0 0 0 15 3h-3.5v14H15a1.5 1.5 0 0 1 1.5 1.5Z" /></svg>
+{/snippet}
+{#snippet icoPlan()}
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5l1.4 5 5 1.4-5 1.4L10 15.3l-1.4-5-5-1.4 5-1.4z" /><path d="M15.5 13.5l.7 2 .7-2 .7 2" /></svg>
+{/snippet}
+{#snippet icoPin()}
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17.5s5.5-5 5.5-9a5.5 5.5 0 0 0-11 0c0 4 5.5 9 5.5 9Z" /><circle cx="10" cy="8.5" r="2" /></svg>
+{/snippet}
+{#snippet icoMap()}
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 3 3 5v12l4.5-2 5 2 4.5-2V3l-4.5 2z" /><line x1="7.5" y1="3" x2="7.5" y2="15" /><line x1="12.5" y1="5" x2="12.5" y2="17" /></svg>
+{/snippet}
+
 <div class="bp-planner">
   <BroadsMap bind:this={mapComp} />
 
@@ -195,7 +215,7 @@
           ? `Map pinned on ${app.origin?.label ?? 'home'} — tap to roam freely`
           : `Map free to roam — tap to re-pin on ${app.origin?.label ?? 'home'}`}
       >
-        <span class="bp-lock-ic" aria-hidden="true">{app.mapLocked ? '🔒' : '🔓'}</span>
+        <span class="bp-lock-ic" aria-hidden="true">{@render icoLock(app.mapLocked)}</span>
         <span class="bp-lock-lbl">{app.mapLocked ? 'Locked' : 'Free'}</span>
       </button>
     {/if}
@@ -208,9 +228,9 @@
 
   <!-- map options (layers + theme) behind one button, both breakpoints -->
   <div class="bp-mapbtn-wrap">
-    <button class="bp-mapbtn" onclick={() => (mapOptionsOpen = !mapOptionsOpen)} aria-expanded={mapOptionsOpen} aria-label="Map options">⚙ Map</button>
+    <button class="bp-mapbtn" onclick={() => (mapOptionsOpen = !mapOptionsOpen)} aria-expanded={mapOptionsOpen} aria-label="Map options"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2.5" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" /></svg> Map</button>
     <button class="bp-mapbtn" class:rec={logbook.recording} onclick={() => (logbookOpen = true)} aria-label="Open cruise logbook">
-      {#if logbook.recording}<span class="rec-dot"></span>{/if}📖 Log{#if logbook.entries.length}<span class="log-count">{logbook.entries.length}</span>{/if}
+      {#if logbook.recording}<span class="rec-dot"></span>{/if}{@render icoLog()} Log{#if logbook.entries.length}<span class="log-count">{logbook.entries.length}</span>{/if}
     </button>
     {#if mapOptionsOpen}
       <div class="bp-mapopts">
@@ -224,7 +244,7 @@
   <div class="bp-fabs" style:--fab-bottom="{fabBottomPx}px">
     <button class="fab fab-primary" class:planning={guide.planning} onclick={() => (guideOpen = true)}
       aria-label={guide.planning ? 'Planner is working — tap to view' : 'Plan my day with AI'}>
-      <span class="fab-ic">✨</span><span class="fab-lbl">{guide.planning ? 'Planning…' : 'Plan my day'}</span>
+      <span class="fab-ic">{@render icoPlan()}</span><span class="fab-lbl">{guide.planning ? 'Planning…' : 'Plan my day'}</span>
       {#if !guideOpen && guide.unseenPlan}<span class="fab-ready" aria-hidden="true"></span>{/if}
     </button>
     <button class="fab" onclick={useMyLocation} disabled={geoBusy} aria-label="Centre on my location" title="My location">◉</button>
@@ -266,7 +286,7 @@
             </span>
           </div>
         {:else}
-          <div class="bp-sum bp-sum-explore">Tap a destination on the map, or ✨ <strong>Plan my day</strong>.</div>
+          <div class="bp-sum bp-sum-explore">Tap a destination on the map, or <span class="inl-ic">{@render icoPlan()}</span> <strong>Plan my day</strong>.</div>
         {/if}
       {/snippet}
 
@@ -285,8 +305,8 @@
           <span class="bp-start-cur">Now: <strong>{app.origin?.label ?? 'not set'}</strong></span>
         </header>
         <div class="bp-start-acts">
-          <button class="bp-start-act primary" onclick={useMyLocation} disabled={geoBusy}>{geoBusy ? 'Locating…' : '📍 Use my location'}</button>
-          <button class="bp-start-act" onclick={pickOnMap}>🗺️ Pick on map</button>
+          <button class="bp-start-act primary" onclick={useMyLocation} disabled={geoBusy}>{#if !geoBusy}<span class="inl-ic">{@render icoPin()}</span> {/if}{geoBusy ? 'Locating…' : 'Use my location'}</button>
+          <button class="bp-start-act" onclick={pickOnMap}><span class="inl-ic">{@render icoMap()}</span> Pick on map</button>
         </div>
         {#if app.startPoints.length}
           <div class="bp-start-listlbl">Boatyards &amp; marinas</div>
@@ -341,7 +361,7 @@
         <ol>
           <li>Tap the <strong>boat chip</strong> to set your boat — its air draft decides which bridges you can pass.</li>
           <li>Your start is <strong>Stalham</strong> (the Richardsons base). Tap the <strong>◉ Start</strong> chip to use your location, choose a boatyard, or pick a point.</li>
-          <li>Tap a destination, or hit <strong>✨ Plan my day</strong> to have the AI build an itinerary.</li>
+          <li>Tap a destination, or hit <strong><span class="inl-ic">{@render icoPlan()}</span> Plan my day</strong> to have the AI build an itinerary.</li>
           <li>On the water? Tap <strong>Live</strong> for nearby pubs, moorings &amp; walks as you cruise.</li>
         </ol>
         <button class="bp-go" onclick={() => (app.onboarded = true)}>Start planning</button>
@@ -352,7 +372,7 @@
 
 <style>
   .bp-planner { position: absolute; inset: 0; overflow: hidden; }
-  .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
+  .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
 
   /* top-centre: search box + home-base lock toggle. Mobile-first = full-width
      bar; desktop centres it in the open map area (see the min-width rule, which
@@ -360,36 +380,37 @@
      600-level FABs/map-options so the search click-away backdrop never blocks them. */
   .bp-topbar { position: absolute; top: 0.6rem; left: 0.6rem; right: 0.6rem; z-index: 550; display: flex; align-items: flex-start; justify-content: center; gap: 0.4rem; }
   .bp-topbar :global(.bp-search) { flex: 1 1 auto; min-width: 0; }
-  .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+  .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
   .bp-lock.locked { border-color: var(--accent); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 12%, var(--surface-elevated)); }
-  .bp-lock-ic { font-size: 0.9rem; }
+  .bp-lock-ic { display: inline-flex; }
+  .inl-ic { display: inline-flex; vertical-align: middle; }
 
   /* route key — centred just beneath the search bar */
   .bp-legend-wrap { position: absolute; top: 3.7rem; left: 0.6rem; right: 0.6rem; z-index: 560; display: flex; justify-content: center; }
-  .bp-error { color: var(--error, #c62828); }
+  .bp-error { color: var(--error); }
 
   /* map options button + popover (top-right) */
   .bp-mapbtn-wrap { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 600; display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
-  .bp-mapbtn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); }
-  .bp-mapbtn.rec { border-color: #c62828; }
-  .bp-mapbtn .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #c62828; animation: bp-rec 1.3s ease-out infinite; }
-  @keyframes bp-rec { 0% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.5); } 100% { box-shadow: 0 0 0 6px rgba(198, 40, 40, 0); } }
-  .bp-mapbtn .log-count { background: var(--accent); color: #fff; border-radius: 999px; font-size: 0.58rem; padding: 0.05rem 0.35rem; min-width: 1.1rem; text-align: center; }
+  .bp-mapbtn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; }
+  .bp-mapbtn.rec { border-color: var(--error); }
+  .bp-mapbtn .rec-dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--error); animation: bp-rec 1.3s ease-out infinite; }
+  @keyframes bp-rec { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 50%, transparent); } 100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--error) 0%, transparent); } }
+  .bp-mapbtn .log-count { background: var(--accent); color: #fff; border-radius: var(--radius-pill); font-size: 0.58rem; padding: 0.05rem 0.35rem; min-width: 1.1rem; text-align: center; }
   .bp-mapopts { display: flex; flex-direction: column; gap: 0.5rem; width: min(88vw, 22rem); }
 
   /* FAB stack (bottom-right, thumb zone) */
-  .bp-fabs { position: absolute; right: 0.7rem; bottom: var(--fab-bottom, 9.8rem); z-index: 600; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end; transition: bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1); }
-  .fab { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 999px; min-height: 48px; min-width: 48px; padding: 0 0.85rem; cursor: pointer; box-shadow: 0 3px 12px rgba(26, 16, 8, 0.22); font-family: var(--font-mono); }
+  .bp-fabs { position: absolute; right: 0.7rem; bottom: var(--fab-bottom, 9.8rem); z-index: 600; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end; transition: bottom 0.2s var(--ease-out); }
+  .fab { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-pill); min-height: 48px; min-width: 48px; padding: 0 0.85rem; cursor: pointer; font-family: var(--font-mono); }
   .fab-primary { background: var(--accent); color: #fff; border: none; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; position: relative; }
   .fab-primary:hover { background: var(--accent-hover); }
   .fab-primary.planning .fab-ic { display: inline-block; animation: fab-spin 1.1s linear infinite; }
   @keyframes fab-spin { to { transform: rotate(360deg); } }
   /* a small green dot when a plan finished while the modal was closed */
-  .fab-ready { position: absolute; top: 4px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #2e7d32; border: 1.5px solid #fff; }
-  .fab-ic { font-size: 1rem; }
+  .fab-ready { position: absolute; top: 4px; right: 6px; width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--success); border: 1.5px solid #fff; }
+  .fab-ic { display: inline-flex; }
   .fab:disabled { opacity: 0.6; }
-  .fab-live.on { background: #2e7d32; border-color: #2e7d32; }
-  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .fab-live.on { background: var(--success); border-color: var(--success); }
+  .live-dot { width: 10px; height: 10px; border-radius: var(--radius-pill); background: var(--accent); }
   .fab-live.on .live-dot { background: #fff; animation: fab-pulse 1.4s ease-out infinite; }
   @keyframes fab-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); } 100% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); } }
 
@@ -397,8 +418,8 @@
   .bp-sum { display: flex; flex-direction: column; gap: 0.1rem; }
   .bp-sum .leg { font-family: var(--font-body); font-weight: 600; font-size: 0.92rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bp-sum .meta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); display: flex; gap: 0.5rem; align-items: center; }
-  .warn-dot { color: var(--warn, #e69500); }
-  .ok-dot { color: #2e7d32; }
+  .warn-dot { color: var(--warn); }
+  .ok-dot { color: var(--success); }
   .bp-sum-explore { font-family: var(--font-body); font-size: 0.88rem; color: var(--text-secondary); line-height: 1.4; }
 
   /* cruise strip (live mode) */
@@ -406,46 +427,46 @@
   @media (min-width: 760px) { .bp-cruise-strip { left: 0.6rem; right: auto; width: 24rem; } }
 
   /* selection drawer */
-  .bp-drawer { position: absolute; z-index: 700; background: var(--surface-elevated); border: 1px solid var(--card-border); box-shadow: 0 6px 24px rgba(26, 16, 8, 0.22); overflow-y: auto; }
+  .bp-drawer { position: absolute; z-index: 700; background: var(--surface-elevated); border: 1px solid var(--card-border); overflow-y: auto; }
 
   /* mini start menu */
   .bp-mini-backdrop { position: absolute; inset: 0; z-index: 950; background: rgba(26, 16, 8, 0.35); display: grid; place-items: center; padding: 1rem; }
 
   /* set-start picker */
-  .bp-start-menu { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.6rem; padding: 1rem; width: min(24rem, 92vw); max-height: min(80vh, 34rem); display: flex; flex-direction: column; gap: 0.6rem; box-shadow: 0 10px 30px rgba(26, 16, 8, 0.3); }
+  .bp-start-menu { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 1rem; width: min(24rem, 92vw); max-height: min(80vh, 34rem); display: flex; flex-direction: column; gap: 0.6rem; }
   .bp-start-head { display: flex; flex-direction: column; gap: 0.15rem; }
   .bp-start-kicker { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
   .bp-start-cur { font-family: var(--font-body); font-size: 0.82rem; color: var(--text-muted); }
   .bp-start-cur strong { color: var(--text-primary); }
   .bp-start-acts { display: flex; gap: 0.5rem; }
-  .bp-start-act { flex: 1; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 0.45rem; padding: 0.6rem 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; min-height: 44px; }
+  .bp-start-act { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.6rem 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; min-height: 44px; }
   .bp-start-act:hover { border-color: var(--accent); }
   .bp-start-act.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .bp-start-act:disabled { opacity: 0.6; }
   .bp-start-listlbl { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.2rem; }
   .bp-start-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.3rem; }
-  .bp-start-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 0.4rem; cursor: pointer; text-align: left; color: var(--text-primary); min-height: 42px; }
+  .bp-start-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; text-align: left; color: var(--text-primary); min-height: 42px; }
   .bp-start-row:hover { border-color: var(--text-muted); }
   .bp-start-row.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-elevated)); }
   .bp-start-row .nm { font-family: var(--font-body); font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bp-start-row .tier { flex: none; font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 
   /* pick-a-point hint (while arming the start tap) */
-  .bp-pick-hint { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 620; display: flex; align-items: center; gap: 0.7rem; background: var(--accent); color: #fff; border-radius: 0.5rem; padding: 0.5rem 0.6rem 0.5rem 0.9rem; box-shadow: 0 4px 16px rgba(26, 16, 8, 0.3); font-family: var(--font-mono); font-size: 0.74rem; max-width: calc(100vw - 1.2rem); }
-  .bp-pick-hint button { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 0.35rem; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+  .bp-pick-hint { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 620; display: flex; align-items: center; gap: 0.7rem; background: var(--accent); color: #fff; border-radius: var(--radius-round); padding: 0.5rem 0.6rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.74rem; max-width: calc(100vw - 1.2rem); }
+  .bp-pick-hint button { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: var(--radius-sharp); padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
 
   /* onboarding */
   .bp-onboard { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; background: rgba(26, 16, 8, 0.35); padding: 1rem; }
-  .bp-onboard-card { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.6rem; padding: 1.4rem; max-width: 27rem; }
+  .bp-onboard-card { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 1.4rem; max-width: 27rem; }
   .bp-kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.6rem; color: var(--accent); margin: 0 0 0.3rem; }
   .bp-onboard-card h2 { font-family: var(--font-display); text-transform: uppercase; font-size: 1.2rem; color: var(--text-primary); margin: 0 0 0.8rem; }
   .bp-onboard-card ol { margin: 0 0 1rem; padding-left: 1.2rem; }
   .bp-onboard-card li { font-family: var(--font-body); color: var(--text-secondary); line-height: 1.5; font-size: 0.9rem; margin: 0.35rem 0; }
   .bp-onboard-card strong { color: var(--text-primary); }
-  .bp-go { background: var(--accent); color: #fff; border: none; border-radius: 0.4rem; padding: 0.55rem 1rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; cursor: pointer; }
+  .bp-go { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-round); padding: 0.55rem 1rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; cursor: pointer; }
 
   @media (min-width: 760px) {
-    .bp-drawer { top: 0.6rem; right: 0.6rem; width: 23rem; max-height: calc(100% - 1.2rem); border-radius: 0.6rem; }
+    .bp-drawer { top: 0.6rem; right: 0.6rem; width: 23rem; max-height: calc(100% - 1.2rem); border-radius: var(--radius-round); }
     .bp-fabs { bottom: 0.9rem; }
     .bp-mapopts { width: 22rem; }
     /* centre the search/legend in the open map area: clear the left docked sheet
@@ -455,8 +476,8 @@
     .bp-legend-wrap { left: 24.2rem; right: 11rem; }
   }
   @media (max-width: 759px) {
-    .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: 0.7rem 0.7rem 0 0; z-index: 800; }
-    /* clear the top-right ⚙MAP / 📖LOG button stack so the search doesn't run
+    .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: var(--radius-round) var(--radius-round) 0 0; z-index: 800; }
+    /* clear the top-right map/log button stack so the search doesn't run
        under it; drop the route key below that stack. */
     .bp-topbar { right: 5.6rem; }
     .bp-legend-wrap { top: 6.6rem; }

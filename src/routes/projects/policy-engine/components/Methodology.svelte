@@ -300,20 +300,20 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
   /* deep-link targets land below the sticky top stack + section nav */
   .eqn[id], section[id] { scroll-margin-top: calc(var(--topH, 60px) + 64px); }
   section { display: flex; flex-direction: column; gap: 7px; }
-  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: var(--ink, #1c1611); }
+  h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; margin: 0; color: var(--ink); }
   p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.78); }
   .spine {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.7; white-space: pre-wrap;
-    background: rgba(28,22,17,0.045); padding: 10px 12px; border-radius: 6px; color: rgba(28,22,17,0.82);
-    border-left: 3px solid var(--ink, #1c1611); overflow-x: auto;
+    background: rgba(28,22,17,0.045); padding: 10px 12px; border-radius: var(--radius-round); color: rgba(28,22,17,0.82);
+    border-left: 3px solid var(--ink); overflow-x: auto;
   }
   .eqn { margin-bottom: 10px; }
-  .eq-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink, #1c1611); font-weight: 600; }
-  .eqn pre { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre-wrap; background: rgba(28,22,17,0.05); padding: 7px 10px; border-radius: 5px; margin: 3px 0 3px; color: rgba(28,22,17,0.85); border-left: 2px solid #7a5aa6; overflow-x: auto; }
+  .eq-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink); font-weight: 600; }
+  .eqn pre { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre-wrap; background: rgba(28,22,17,0.05); padding: 7px 10px; border-radius: var(--radius-round); margin: 3px 0 3px; color: rgba(28,22,17,0.85); border-left: 2px solid var(--accent-ink); overflow-x: auto; }
   .eq-note { margin: 0; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.62); }
   ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
   li { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.78); }
-  .tech li b { color: var(--ink, #1c1611); }
+  .tech li b { color: var(--ink); }
   .tbl-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
   th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
@@ -321,13 +321,13 @@ attainment ─▶ NEET (mostly the unemployed segment)                       (+ 
   td.num { font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; }
   td.src { color: rgba(28,22,17,0.55); font-size: 10.5px; }
   tr.avg td { font-weight: 600; border-top: 1px solid rgba(28,22,17,0.25); color: rgba(28,22,17,0.7); }
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
-  .conf { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
-  .conf-high { background: rgba(47,125,79,0.16); color: #2f7d4f; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: var(--radius-pill); margin-right: 5px; vertical-align: middle; }
+  .conf { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; border-radius: var(--radius-sharp); font-weight: 600; white-space: nowrap; }
+  .conf-high { background: var(--success-bg); color: var(--success); }
   .conf-medium { background: rgba(176,99,46,0.16); color: #b4632e; }
-  .conf-low { background: rgba(177,69,94,0.16); color: #b1455e; }
-  .conf-assumption { background: rgba(122,90,166,0.16); color: #7a5aa6; }
+  .conf-low { background: var(--error-border); color: var(--error); }
+  .conf-assumption { background: var(--accent-ink-tint-22); color: var(--accent-ink); }
   .srclist li { line-height: 1.5; }
-  .srclist a { color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
+  .srclist a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
   .caveat { margin-top: 8px; font-size: 11px; font-style: italic; color: rgba(28,22,17,0.6); line-height: 1.5; }
 </style>

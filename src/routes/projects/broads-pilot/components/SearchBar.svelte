@@ -16,7 +16,7 @@
   const results = $derived(query.trim() ? searchIndex(index, query, 12) : []);
   const show = $derived(open && results.length > 0);
 
-  const ICON: Record<SearchEntry['kind'], string> = { bridge: '▲', lock: '⚿', mooring: '⚓', poi: '◍' };
+  const ICON: Record<SearchEntry['kind'], string> = { bridge: '▲', lock: '⚿', mooring: '', poi: '◍' };
 
   function pick(e: SearchEntry) {
     onPick(e);
@@ -67,7 +67,7 @@
             onmouseenter={() => (active = i)}
             onclick={() => pick(r)}
           >
-            <span class="bp-search-glyph" data-kind={r.kind}>{ICON[r.kind]}</span>
+            <span class="bp-search-glyph" data-kind={r.kind}>{#if r.kind === 'mooring'}<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="4" r="1.6" /><line x1="10" y1="5.6" x2="10" y2="17" /><line x1="6.5" y1="8.5" x2="13.5" y2="8.5" /><path d="M3.5 11.5a6.5 6.5 0 0 0 13 0" /></svg>{:else}{ICON[r.kind]}{/if}</span>
             <span class="bp-search-text">
               <span class="bp-search-name">{r.name}</span>
               <span class="bp-search-sub">{r.sublabel}</span>
@@ -92,10 +92,9 @@
     gap: 0.4rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
+    border-radius: var(--radius-round);
     padding: 0 0.6rem;
     min-height: 44px;
-    box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15);
     z-index: 2; /* above the backdrop */
   }
   .bp-search.open { border-color: var(--accent); }
@@ -129,8 +128,7 @@
     list-style: none;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
-    box-shadow: 0 8px 26px rgba(26, 16, 8, 0.28);
+    border-radius: var(--radius-round);
     max-height: min(60vh, 22rem);
     overflow-y: auto;
   }
@@ -144,7 +142,7 @@
     background: transparent;
     cursor: pointer;
     padding: 0.5rem 0.55rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
   }
   .bp-search-item.active { background: color-mix(in srgb, var(--accent) 16%, var(--surface-elevated)); }
@@ -152,16 +150,16 @@
     flex: none;
     width: 1.5rem; height: 1.5rem;
     display: grid; place-items: center;
-    border-radius: 0.35rem;
+    border-radius: var(--radius-sharp);
     font-size: 0.8rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     color: var(--text-secondary);
   }
-  .bp-search-glyph[data-kind='bridge'] { color: #2e7d32; }
-  .bp-search-glyph[data-kind='lock'] { color: #4527a0; }
-  .bp-search-glyph[data-kind='mooring'] { color: #c4570a; }
-  .bp-search-glyph[data-kind='poi'] { color: #b8860b; }
+  .bp-search-glyph[data-kind='bridge'] { color: var(--success); }
+  .bp-search-glyph[data-kind='lock'] { color: var(--accent-ink); }
+  .bp-search-glyph[data-kind='mooring'] { color: var(--accent); }
+  .bp-search-glyph[data-kind='poi'] { color: var(--warn); }
   .bp-search-text { display: flex; flex-direction: column; min-width: 0; gap: 0.05rem; }
   .bp-search-name {
     font-family: var(--font-body); font-weight: 600; font-size: 0.86rem;

@@ -1688,7 +1688,7 @@
                 onexport={(kind) => handleExport(kind)}
               />
             {:else}
-              <span class="desk-node-bar" style:background={'#7a6cd4'}></span>
+              <span class="desk-node-bar" style:background={'var(--accent-ink)'}></span>
               <div class="desk-node-body">
                 <span class="desk-node-label">{byNodeType(n.type)?.label ?? n.type}</span>
                 <span class="desk-node-hint">{n.type}</span>
@@ -1906,7 +1906,7 @@
   .desk-card-host[data-kind='source']::before { background: var(--text-muted); }
   .desk-card-host[data-kind='fact']::before { background: var(--accent); }
   .desk-card-host[data-kind='entity']::before { background: var(--text-primary); }
-  .desk-card-host[data-kind='counterfactual']::before { background: #c44; }
+  .desk-card-host[data-kind='counterfactual']::before { background: var(--error); }
   /* Selection outline, matching .wf-node.is-selected. */
   .desk-card-host.is-selected {
     outline: 2px solid var(--accent);
@@ -1914,9 +1914,9 @@
     z-index: 3;
   }
 
-  /* Locked card: subtle top-right lock indicator so user knows it's pinned. */
+  /* Locked card: subtle top-right pin indicator so user knows it's pinned. */
   .desk-card-host.is-locked::after {
-    content: '⚑';
+    content: '◉';
     position: absolute;
     top: -10px;
     right: 2px;
@@ -2006,7 +2006,6 @@
     width: 146px;
     background: var(--surface-elevated);
     border: 1px solid rgba(26, 16, 8, 0.18);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     user-select: none;
   }
   .desk-minimap-head {
@@ -2035,7 +2034,6 @@
     align-items: center;
     border: 1px solid var(--card-border);
     background: var(--surface-elevated);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     font-family: var(--font-mono);
     font-size: 11px;
   }
@@ -2188,7 +2186,6 @@
     z-index: 9001;
     background: var(--surface-elevated);
     border: 1.5px solid var(--card-border);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.12);
     min-width: 120px;
     padding: 2px 0;
   }
@@ -2209,9 +2206,9 @@
     background: var(--card-bg);
   }
   .desk-node-ctx-delete {
-    color: #c44;
+    color: var(--error);
   }
   .desk-node-ctx-delete:hover {
-    background: rgba(204, 68, 68, 0.08);
+    background: var(--error-bg);
   }
 </style>

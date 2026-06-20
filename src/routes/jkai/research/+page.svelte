@@ -94,8 +94,8 @@
   }
 
   function statusColor(status: string): string {
-    if (status === 'complete') return '#2d7d46';
-    if (status === 'failed') return '#8b3a1a';
+    if (status === 'complete') return 'var(--success)';
+    if (status === 'failed') return 'var(--error)';
     if (status === 'draft') return 'var(--text-ghost)';
     return 'var(--accent)';
   }
@@ -224,26 +224,25 @@
     background: var(--surface-elevated, #e8dece);
     border: 1.5px solid rgba(26, 16, 8, 0.18);
     color: var(--text-primary);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     outline: none;
   }
   .prompt-input:focus { border-color: var(--accent); }
-  .seg { display: inline-flex; border: 1.5px solid rgba(26, 16, 8, 0.18); box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1); }
+  .seg { display: inline-flex; border: 1.5px solid rgba(26, 16, 8, 0.18); }
   .seg-btn {
     font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
-    padding: 0 1rem; background: var(--card, #faf6ee); color: var(--text-muted); border: none; cursor: pointer;
+    padding: 0 1rem; background: var(--surface-elevated, #faf6ee); color: var(--text-muted); border: none; cursor: pointer;
   }
   .seg-btn + .seg-btn { border-left: 1.5px solid rgba(26, 16, 8, 0.18); }
   .seg-btn.on { background: var(--accent); color: #fff; }
   .go-btn {
     font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em;
     padding: 0 1.25rem; background: var(--text-primary); color: var(--bg); border: 1.5px solid var(--text-primary);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1); cursor: pointer; white-space: nowrap;
+    cursor: pointer; white-space: nowrap;
   }
   .go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .mode-hint { margin: 0.7rem 0 0; font-size: 0.85rem; color: var(--text-secondary); }
   .mode-hint strong { color: var(--text-primary); }
-  .err-line { font-family: var(--font-mono); font-size: 11px; color: #c44; padding: 6px 8px; background: rgba(196, 68, 68, 0.08); border-left: 2px solid #c44; margin-top: 0.6rem; }
+  .err-line { font-family: var(--font-mono); font-size: 11px; color: var(--error); padding: 6px 8px; background: var(--error-bg); border-left: 2px solid var(--error); margin-top: 0.6rem; }
 
   .recent-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; }
   .sr-label-tight { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
@@ -252,11 +251,10 @@
   .run-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.6rem; }
   .run-card {
     display: block; padding: 0.8rem 0.95rem;
-    background: var(--card, #faf6ee); border: 1px solid rgba(26, 16, 8, 0.18);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
-    color: var(--text-primary); text-decoration: none; transition: transform 80ms ease;
+    background: var(--surface-elevated, #faf6ee); border: 1px solid rgba(26, 16, 8, 0.18);
+    color: var(--text-primary); text-decoration: none; transition: border-color 80ms ease;
   }
-  .run-card:hover { transform: translate(-1px, -1px); }
+  .run-card:hover { border-color: var(--accent); }
   .run-card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; }
   .run-mode { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; padding: 2px 6px; border: 1px solid rgba(26, 16, 8, 0.18); color: var(--text-muted); }
   .run-mode.quick { color: var(--accent); border-color: var(--accent); }
