@@ -81,14 +81,15 @@
       fontPx = 13;
     let baselineRow = 0;
     // Per-column trace state. colSet marks a column as drawn; colGap marks the
-    // first column of a new sweep (pen-up across the wrap).
+    // first column of a new sweep (pen-up across the wrap); colT drives the fade.
     let colY = new Float32Array(1);
     let colT = new Float64Array(1);
     let colSet = new Uint8Array(1);
     let colGap = new Uint8Array(1);
-    // Density tier (0..3) per column — how far the signal is deflected from the
-    // baseline at that point. Picks how bold a character set the column draws.
-    let colTier = new Uint8Array(1);
+    // The actual characters: one ASCII code per cell (COLS*ROWS, 0 = empty),
+    // indexed col-major as charGrid[col * ROWS + row]. Each cell is picked ONCE
+    // when the pen draws it and never changes again — the trail only fades.
+    let charGrid = new Uint8Array(1);
 
     function fontStack(px: number) {
       // 700 weight so the characters read boldly over the cream hero.
@@ -103,9 +104,9 @@
       canvasEl.height = Math.round(cssH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Larger cells than the line buffer — the trace is made of readable
-      // characters now, so bias toward legibility/boldness over fine detail.
-      fontPx = Math.max(13, Math.min(19, Math.round(cssW / 82)));
+      // Small, dense cells — a fine field of characters rather than a few big
+      // glyphs. Smaller font ⇒ more columns/rows ⇒ more characters drawn.
+      fontPx = Math.max(9, Math.min(13, Math.round(cssW / 135)));
       ctx.font = fontStack(fontPx);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -120,7 +121,8 @@
       colT = new Float64Array(COLS);
       colSet = new Uint8Array(COLS);
       colGap = new Uint8Array(COLS);
-      colTier = new Uint8Array(COLS);
+      charGrid = new Uint8Array(COLS * ROWS);
+      lastCol = -1;
       if (cursorCol >= COLS) cursorCol = 0;
     }
 
@@ -130,14 +132,14 @@
     const ampRows = () => ROWS * 0.34 * ampGain(bpm);
 
     // Density tiers of ASCII characters, faint → bold. The waveform decides
-    // WHICH cells light up (so the heartbeat shape is unchanged); these decide
-    // the character drawn there — denser symbols where the signal is deflected
-    // hardest (the QRS spike), faint specks along the baseline.
+    // WHICH cells light up (so the heartbeat shape is unchanged); the tier
+    // decides how dense the character is — faint specks along the baseline,
+    // bold symbols where the signal is deflected hardest (the QRS spike).
     const GLYPHS = [
-      ".':,;\"",        // tier 0 — faint baseline specks
-      '-+=*~<>i!',      // tier 1 — P / minor deflections
-      'ksvjzxct?7',     // tier 2 — T wave / shoulders
-      '#@%&$8BMW0NX',   // tier 3 — the bold QRS spike
+      ".':,;\"^",               // tier 0 — faint baseline specks
+      '-+=*~<>!?iltr',          // tier 1 — P / minor deflections
+      'ksvjzxctTYUFLaeon357',   // tier 2 — T wave / shoulders
+      '#@%&$8BMW0NX2569RGDQ4',  // tier 3 — the bold QRS spike
     ];
     function tierOf(absSig: number): number {
       if (absSig >= 0.5) return 3;
@@ -145,33 +147,29 @@
       if (absSig >= 0.09) return 1;
       return 0;
     }
-    // Deterministic per (column,row,beat) pick — stable within a heartbeat, then
-    // re-shuffled when `beat` ticks, so the whole field of characters cycles on
-    // the pulse rather than flickering every frame.
-    function glyphFor(col: number, row: number, tier: number, beat: number): string {
-      const set = GLYPHS[tier];
-      let h = (col * 73856093) ^ (row * 19349663) ^ ((beat + 1) * 83492791);
-      h = (h ^ (h >>> 13)) >>> 0;
-      return set[h % set.length];
-    }
 
-    // Fill the column's waveform cells with random characters from its tier.
-    // The vertical run between the previous and current sample keeps the spike
-    // connected — now a bold column of cycling glyphs instead of '|' bars.
-    function drawColumn(c: number, alpha: number, color: string, beat: number) {
-      const yCur = colY[c];
+    // Draw a column ONCE, when the pen first crosses into it: clear any old
+    // glyphs there, then fill the waveform cells (the vertical run connecting
+    // the previous sample to this one — that's what gives the spike its height)
+    // with random characters from the deflection's tier. Stored in charGrid, so
+    // a cell never changes after it's drawn; the trail only fades.
+    function commitColumn(c: number, yRow: number, sig: number, wrapped: boolean, t: number) {
+      const base = c * ROWS;
+      for (let r = 0; r < ROWS; r++) charGrid[base + r] = 0;
       const pc = (c - 1 + COLS) % COLS;
-      const linked = !colGap[c] && colSet[pc] && (clock - colT[pc]) / LIFETIME < 1;
-      const yPrev = linked ? colY[pc] : yCur;
-      const lo = clampRow(Math.round(Math.min(yCur, yPrev)));
-      const hi = clampRow(Math.round(Math.max(yCur, yPrev)));
-      const tier = colTier[c];
-
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
+      const linked = !wrapped && !!colSet[pc] && (t - colT[pc]) / LIFETIME < 1;
+      const rCur = clampRow(Math.round(yRow));
+      const rPrev = linked ? clampRow(Math.round(colY[pc])) : rCur;
+      const lo = Math.min(rCur, rPrev);
+      const hi = Math.max(rCur, rPrev);
+      const set = GLYPHS[tierOf(Math.abs(sig))];
       for (let r = lo; r <= hi; r++) {
-        ctx.fillText(glyphFor(c, r, tier, beat), xMid(c), yMid(r));
+        charGrid[base + r] = set.charCodeAt((Math.random() * set.length) | 0);
       }
+      colY[c] = yRow;
+      colT[c] = t;
+      colSet[c] = 1;
+      colGap[c] = wrapped ? 1 : 0;
     }
 
     // --- Clocks & beat state -------------------------------------------------
@@ -182,7 +180,7 @@
     let cursorCol = 0;
     let clock = 0;
     let headCol = 0;
-    let beatIndex = 0; // increments every heartbeat — the character cycle seed
+    let lastCol = -1; // last column committed — each column is committed only once
 
     let last = performance.now();
     let lastDraw = 0;
@@ -200,11 +198,7 @@
           beatOnset += beatRR;
           beatRR = nextRR(bpm, beatOnset);
           beatAmp = nextAmp();
-          beatIndex++; // a new beat — cycle the character field
         }
-        const tau = cardiac - beatOnset;
-        const sig = complex(tau) * beatAmp + baselineDrift(cardiac);
-        const yRow = clampRow(baselineRow - sig * a);
         cursorCol += colsPerSec * sub;
         let wrapped = false;
         if (cursorCol >= COLS) {
@@ -212,12 +206,17 @@
           wrapped = true;
         }
         const c = Math.min(COLS - 1, Math.floor(cursorCol));
-        colY[c] = yRow;
-        colT[c] = clock - (steps - 1 - s) * sub;
-        colSet[c] = 1;
-        colGap[c] = wrapped ? 1 : 0;
-        colTier[c] = tierOf(Math.abs(sig));
-        headCol = c;
+        // Commit a column only the first time the pen enters it, so its
+        // characters are fixed once drawn — no re-randomising while the pen
+        // lingers, no cycling on later beats.
+        if (c !== lastCol || wrapped) {
+          const tau = cardiac - beatOnset;
+          const sig = complex(tau) * beatAmp + baselineDrift(cardiac);
+          const yRow = clampRow(baselineRow - sig * a);
+          commitColumn(c, yRow, sig, wrapped, clock - (steps - 1 - s) * sub);
+          lastCol = c;
+          headCol = c;
+        }
       }
     }
 
@@ -232,22 +231,24 @@
       ctx.fillStyle = accent;
       ctx.fillRect(Math.round(xMid(headCol)) - 1, 0, 2, cssH);
 
-      // The fading phosphor trail, column by column.
+      // The fading phosphor trail. Each column's stored characters are redrawn
+      // at the opacity its age maps to; the leading column is hot + brighter.
       ctx.shadowColor = glow;
-      ctx.shadowBlur = 5;
       for (let c = 0; c < COLS; c++) {
-        if (!colSet[c] || c === headCol) continue;
+        if (!colSet[c]) continue;
         const age = (clock - colT[c]) / LIFETIME;
         if (age < 0 || age >= 1) continue;
         const band = fadeBand(age);
         if (band <= 0) continue;
-        drawColumn(c, band / FADE_BANDS, accent, beatIndex);
-      }
-
-      // Hot leading character — the live pen tip.
-      if (colSet[headCol]) {
-        ctx.shadowBlur = 12;
-        drawColumn(headCol, 1, hot, beatIndex);
+        const isHead = c === headCol;
+        ctx.globalAlpha = isHead ? 1 : band / FADE_BANDS;
+        ctx.fillStyle = isHead ? hot : accent;
+        ctx.shadowBlur = isHead ? 10 : 4;
+        const base = c * ROWS;
+        for (let r = 0; r < ROWS; r++) {
+          const code = charGrid[base + r];
+          if (code) ctx.fillText(String.fromCharCode(code), xMid(c), yMid(r));
+        }
       }
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
@@ -266,14 +267,17 @@
         const t = c / colsPerSec;
         const tau = t - Math.floor(t / rr) * rr;
         const sig = complex(tau) + baselineDrift(t);
-        colY[c] = clampRow(baselineRow - sig * a);
-        colT[c] = 0;
-        colSet[c] = 1;
-        colGap[c] = c === 0 ? 1 : 0;
-        colTier[c] = tierOf(Math.abs(sig));
+        commitColumn(c, clampRow(baselineRow - sig * a), sig, c === 0, 0);
       }
-      for (let c = 0; c < COLS; c++) drawColumn(c, 1, accent, 0);
       ctx.globalAlpha = 1;
+      ctx.fillStyle = accent;
+      for (let c = 0; c < COLS; c++) {
+        const base = c * ROWS;
+        for (let r = 0; r < ROWS; r++) {
+          const code = charGrid[base + r];
+          if (code) ctx.fillText(String.fromCharCode(code), xMid(c), yMid(r));
+        }
+      }
     }
 
     layout();
