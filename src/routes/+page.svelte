@@ -130,7 +130,7 @@
   {:else}
     <div class="absolute inset-0 pointer-events-none">
       {#if ecgStyle === 'ascii'}
-        <EcgAscii rhr={roundPulse(pulse)} />
+        <EcgAscii rhr={roundPulse(pulse)} steps={data.steps} />
       {:else}
         <Ecg rhr={roundPulse(pulse)} showGrid={false} />
       {/if}
@@ -233,7 +233,7 @@
     gap: 8px;
     padding: 4px 6px 4px 12px;
     border: 1px solid var(--card-border);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--card-bg);
     cursor: pointer;
     line-height: 1;
@@ -260,15 +260,15 @@
     min-width: 42px;
     text-align: center;
     padding: 3px 8px;
-    border-radius: 999px;
-    background: rgba(26, 16, 8, 0.05);
+    border-radius: var(--radius-pill);
+    background: var(--surface-overlay);
     transition:
       color 0.15s ease,
       background 0.15s ease;
   }
   .ecg-toggle-val.on {
     color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    background: var(--accent-tint-14);
   }
 
   /* Hero splits into copy (left) + live Vital Signs tiles (right) on wide
